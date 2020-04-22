@@ -1,0 +1,18 @@
+[package]
+name = "endbasic"
+version = "0.1.0"
+license = "Apache-2.0"
+authors = ["Julio Merino <julio@meroh.net>"]
+categories = ["development-tools", "parser-implementations"]
+keywords = ["basic", "interpreter", "learning", "programming"]
+description = "The EndBASIC programming language"
+homepage = "https://github.com/jmmv/endbasic"
+repository = "https://github.com/jmmv/endbasic"
+readme = "README.md"
+edition = "2018"
+
+[badges]
+travis-ci = { repository = "jmmv/endbasic", branch = "master" }
+
+[dependencies]
+failure = "~0.1"

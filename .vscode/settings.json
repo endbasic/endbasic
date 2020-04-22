@@ -1,0 +1,68 @@
+{
+    "editor.insertSpaces": true,
+    "editor.rulers": [80],
+    "editor.tabSize": 2,
+    "editor.wordWrapColumn": 80,
+
+    "files.associations": {
+        "*.1": "troff"
+    },
+    "files.exclude": {
+        "**/.DS_Store": true,
+        "**/.git": true
+    },
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+
+    "rust.cfg_test": true,
+    "rust.clippy_preference": "on",
+
+    "[markdown]": {
+        "editor.quickSuggestions": false
+    },
+
+    "markdownlint.config": {
+        "MD007": {
+            "indent": 4
+        },
+        "MD025": {
+            "level": 7
+        },
+        "MD026": {
+            "punctuation":  ".,:;'"
+        },
+        "MD030": {
+            "ol_single": 2,
+            "ol_multi": 2,
+            "ul_single": 3,
+            "ul_multi": 3
+        }
+    },
+
+    "[rust]": {
+        "editor.formatOnSave": true,
+        "editor.rulers": [100],
+        "editor.tabSize": 4,
+        "editor.wordWrapColumn": 100
+    },
+
+    "[troff]": {
+        "editor.quickSuggestions": false
+    },
+
+    "cSpell.words": [
+        "Amstrad",
+        "Amstrad's",
+        "builtins",
+        "clippy",
+        "endbasic",
+        "eval",
+        "jmmv",
+        "paren",
+        "peekable",
+        "stmt",
+        "stmts",
+        "tempfile",
+        "vref"
+    ]
+}
