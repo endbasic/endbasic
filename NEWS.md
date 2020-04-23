@@ -9,6 +9,8 @@
 *   Made `INPUT` recognize `yes/no` and `y/n` answers for boolean values
     on top of the already supported `true/false` values.
 
+*   Added the `MOD` operator to compute the remainder of an integer division.
+
 ## Changes in version 0.1.0
 
 **Released on 2020-04-22.**
