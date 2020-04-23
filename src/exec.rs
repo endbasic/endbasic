@@ -693,9 +693,9 @@ mod tests {
         // Ensure type errors from `Value` and `Vars` bubble up.
         do_error_test(
             "INPUT ; b?",
-            &[("? ", "yes")],
+            &[("? ", "0")],
             &[],
-            "Invalid boolean literal yes",
+            "Invalid boolean literal 0",
         );
         do_error_test(
             "a = 3\nINPUT ; a",

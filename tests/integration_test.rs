@@ -208,6 +208,11 @@ fn test_golden_utf8() {
 }
 
 #[test]
+fn test_golden_yes_no() {
+    do_golden_test("yes-no");
+}
+
+#[test]
 fn test_no_args() {
     check(&[], 1, "", "endbasic: E: No program specified\n");
 }
