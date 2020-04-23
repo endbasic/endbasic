@@ -34,9 +34,9 @@ impl Value {
             VarType::Auto => parse_i32(&s),
             VarType::Boolean => {
                 let raw = s.to_uppercase();
-                if raw == "TRUE" {
+                if raw == "TRUE" || raw == "YES" || raw == "Y" {
                     Ok(Value::Boolean(true))
-                } else if raw == "FALSE" {
+                } else if raw == "FALSE" || raw == "NO" || raw == "N" {
                     Ok(Value::Boolean(false))
                 } else {
                     bail!("Invalid boolean literal {}", s);
@@ -271,36 +271,26 @@ mod tests {
     fn test_value_parse_as_boolean() {
         use super::Value::*;
 
-        assert_eq!(
-            Boolean(true),
-            Value::parse_as(VarType::Boolean, "true").unwrap()
-        );
-        assert_eq!(
-            Boolean(true),
-            Value::parse_as(VarType::Boolean, "TrUe").unwrap()
-        );
-        assert_eq!(
-            Boolean(true),
-            Value::parse_as(VarType::Boolean, "TRUE").unwrap()
-        );
+        for s in &["true", "TrUe", "TRUE", "yes", "Yes", "y", "Y"] {
+            assert_eq!(
+                Boolean(true),
+                Value::parse_as(VarType::Boolean, *s).unwrap()
+            );
+        }
 
-        assert_eq!(
-            Boolean(false),
-            Value::parse_as(VarType::Boolean, "false").unwrap()
-        );
-        assert_eq!(
-            Boolean(false),
-            Value::parse_as(VarType::Boolean, "FaLsE").unwrap()
-        );
-        assert_eq!(
-            Boolean(false),
-            Value::parse_as(VarType::Boolean, "FALSE").unwrap()
-        );
+        for s in &["false", "FaLsE", "FALSE", "no", "No", "n", "N"] {
+            assert_eq!(
+                Boolean(false),
+                Value::parse_as(VarType::Boolean, *s).unwrap()
+            );
+        }
 
-        assert_eq!(
-            "Invalid boolean literal yes",
-            format!("{}", Value::parse_as(VarType::Boolean, "yes").unwrap_err())
-        );
+        for s in &["ye", "0", "1", " true"] {
+            assert_eq!(
+                format!("Invalid boolean literal {}", s),
+                format!("{}", Value::parse_as(VarType::Boolean, *s).unwrap_err())
+            );
+        }
     }
 
     #[test]

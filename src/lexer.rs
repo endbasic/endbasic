@@ -462,6 +462,25 @@ mod tests {
     }
 
     #[test]
+    fn test_boolean_literals() {
+        do_ok_test(
+            "true TRUE yes YES y false FALSE no NO n",
+            &[
+                Token::Boolean(true),
+                Token::Boolean(true),
+                new_auto_symbol("yes"),
+                new_auto_symbol("YES"),
+                new_auto_symbol("y"),
+                Token::Boolean(false),
+                Token::Boolean(false),
+                new_auto_symbol("no"),
+                new_auto_symbol("NO"),
+                new_auto_symbol("n"),
+            ],
+        );
+    }
+
+    #[test]
     fn test_utf8() {
         do_ok_test(
             "가 나=7 a다b \"라 마\"",
