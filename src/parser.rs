@@ -567,6 +567,19 @@ mod tests {
     }
 
     #[test]
+    fn test_statement_separators() {
+        do_ok_test(
+            "a=1\nb=2:c=3:' A comment: that follows\nd=4",
+            &[
+                Statement::Assignment(VarRef::new("a", VarType::Auto), Expr::Integer(1)),
+                Statement::Assignment(VarRef::new("b", VarType::Auto), Expr::Integer(2)),
+                Statement::Assignment(VarRef::new("c", VarType::Auto), Expr::Integer(3)),
+                Statement::Assignment(VarRef::new("d", VarType::Auto), Expr::Integer(4)),
+            ],
+        );
+    }
+
+    #[test]
     fn test_assignments() {
         do_ok_test(
             "a=1\nfoo$ = \"bar\"\nb$ = 3 + z",

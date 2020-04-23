@@ -1,5 +1,11 @@
 # Major changes between releases
 
+## Changes in version X.Y.Z
+
+**STILL UNDER DEVELOPMENT; NOT RELEASED YET.
+
+*   Added support for `:` as a statement delimiter.
+
 ## Changes in version 0.1.0
 
 **Released on 2020-04-22.**

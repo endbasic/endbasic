@@ -82,7 +82,9 @@ trait CharOps {
 impl CharOps for char {
     fn is_separator(&self) -> bool {
         match *self {
-            '\n' | '(' | ')' | '\'' | '=' | '<' | '>' | ';' | ',' | '+' | '-' | '*' | '/' => true,
+            '\n' | ':' | '(' | ')' | '\'' | '=' | '<' | '>' | ';' | ',' | '+' | '-' | '*' | '/' => {
+                true
+            }
             ch => ch.is_space(),
         }
     }
@@ -306,7 +308,7 @@ impl<'a> Lexer<'a> {
         }
         let ch = ch.unwrap();
         match ch {
-            '\n' => Ok(Token::Eol),
+            '\n' | ':' => Ok(Token::Eol),
             '\'' => self.consume_rest_of_line(),
 
             '"' => self.consume_text('"'),
@@ -432,6 +434,7 @@ mod tests {
     #[test]
     fn test_multiple_lines() {
         do_ok_test("   \n \t   \n  ", &[Token::Eol, Token::Eol]);
+        do_ok_test("   : \t   :  ", &[Token::Eol, Token::Eol]);
     }
 
     /// Syntactic sugar to instantiate a `VarRef` without an explicity type annotation.
@@ -442,7 +445,7 @@ mod tests {
     #[test]
     fn test_some_tokens() {
         do_ok_test(
-            "123 45 \n 6 abc a38z\na=3",
+            "123 45 \n 6 abc a38z: a=3",
             &[
                 Token::Integer(123),
                 Token::Integer(45),
@@ -479,6 +482,11 @@ mod tests {
             "REM This is a comment\nNOT 'This is another comment\n",
             &[Token::Eol, Token::Not, Token::Eol],
         );
+
+        do_ok_test(
+            "REM This is a comment: and the colon doesn't yield Eol\nNOT 'Another: comment\n",
+            &[Token::Eol, Token::Not, Token::Eol],
+        );
     }
 
     #[test]
@@ -502,6 +510,13 @@ mod tests {
                 Token::Text("this is a string".to_owned()),
                 Token::Integer(3),
             ],
+        );
+
+        do_ok_test(
+            " \"this is a string with ; special : characters in it\"",
+            &[Token::Text(
+                "this is a string with ; special : characters in it".to_owned(),
+            )],
         );
 
         do_ok_test(
