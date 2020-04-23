@@ -36,6 +36,7 @@ enum ExprOp {
     Subtract,
     Multiply,
     Divide,
+    Modulo,
     Negate,
 
     Equal,
@@ -64,6 +65,7 @@ impl ExprOp {
             Token::Plus => ExprOp::Add,
             Token::Multiply => ExprOp::Multiply,
             Token::Divide => ExprOp::Divide,
+            Token::Modulo => ExprOp::Modulo,
             Token::And => ExprOp::And,
             Token::Or => ExprOp::Or,
             Token::Xor => ExprOp::Xor,
@@ -83,6 +85,7 @@ impl ExprOp {
 
             ExprOp::Multiply => 3,
             ExprOp::Divide => 3,
+            ExprOp::Modulo => 3,
 
             ExprOp::Add => 2,
             ExprOp::Subtract => 2,
@@ -122,6 +125,7 @@ impl ExprOp {
             ExprOp::Subtract => apply2(exprs, Expr::Subtract),
             ExprOp::Multiply => apply2(exprs, Expr::Multiply),
             ExprOp::Divide => apply2(exprs, Expr::Divide),
+            ExprOp::Modulo => apply2(exprs, Expr::Modulo),
             ExprOp::Equal => apply2(exprs, Expr::Equal),
             ExprOp::NotEqual => apply2(exprs, Expr::NotEqual),
             ExprOp::Less => apply2(exprs, Expr::Less),
@@ -298,6 +302,7 @@ impl<'a> Parser<'a> {
                 | Token::Plus
                 | Token::Multiply
                 | Token::Divide
+                | Token::Modulo
                 | Token::And
                 | Token::Or
                 | Token::Xor => {
@@ -719,6 +724,10 @@ mod tests {
         do_expr_ok_test(
             "1 / 2",
             Divide(Box::from(Integer(1)), Box::from(Integer(2))),
+        );
+        do_expr_ok_test(
+            "1 MOD 2",
+            Modulo(Box::from(Integer(1)), Box::from(Integer(2))),
         );
     }
 

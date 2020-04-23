@@ -30,6 +30,7 @@ pub enum Expr {
     Subtract(Box<Expr>, Box<Expr>),
     Multiply(Box<Expr>, Box<Expr>),
     Divide(Box<Expr>, Box<Expr>),
+    Modulo(Box<Expr>, Box<Expr>),
     Negate(Box<Expr>),
 
     Equal(Box<Expr>, Box<Expr>),

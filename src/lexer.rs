@@ -46,6 +46,7 @@ pub enum Token {
     Minus,
     Multiply,
     Divide,
+    Modulo,
 
     Equal,
     NotEqual,
@@ -229,6 +230,7 @@ impl<'a> Lexer<'a> {
             "END" => Ok(Token::End),
             "FALSE" => Ok(Token::Boolean(false)),
             "IF" => Ok(Token::If),
+            "MOD" => Ok(Token::Modulo),
             "NOT" => Ok(Token::Not),
             "OR" => Ok(Token::Or),
             "REM" => self.consume_rest_of_line(),
@@ -605,6 +607,8 @@ mod tests {
         do_operator_test("-", Token::Minus);
         do_operator_test("*", Token::Multiply);
         do_operator_test("/", Token::Divide);
+        do_operator_test("MOD", Token::Modulo);
+        do_operator_test("mod", Token::Modulo);
     }
 
     #[test]

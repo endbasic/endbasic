@@ -193,6 +193,15 @@ impl Value {
         }
     }
 
+    /// Performs a modulo operation.
+    pub fn modulo(&self, other: &Self) -> Fallible<Self> {
+        match (self, other) {
+            (Value::Integer(_), Value::Integer(0)) => bail!("Modulo by zero"),
+            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(lhs % rhs)),
+            (_, _) => Err(format_err!("Cannot modulo {:?} by {:?}", self, other)),
+        }
+    }
+
     /// Performs an integer negation.
     pub fn neg(&self) -> Fallible<Self> {
         match self {
@@ -242,6 +251,7 @@ impl Expr {
             Expr::Subtract(lhs, rhs) => Value::sub(&lhs.eval(vars)?, &rhs.eval(vars)?),
             Expr::Multiply(lhs, rhs) => Value::mul(&lhs.eval(vars)?, &rhs.eval(vars)?),
             Expr::Divide(lhs, rhs) => Value::div(&lhs.eval(vars)?, &rhs.eval(vars)?),
+            Expr::Modulo(lhs, rhs) => Value::modulo(&lhs.eval(vars)?, &rhs.eval(vars)?),
             Expr::Negate(e) => Value::neg(&e.eval(vars)?),
         }
     }
@@ -728,6 +738,37 @@ mod tests {
             format!(
                 "{}",
                 Text("".to_owned()).div(&Text("a".to_owned())).unwrap_err()
+            )
+        );
+    }
+
+    #[test]
+    fn test_value_modulo() {
+        use super::Value::*;
+
+        assert_eq!(
+            "Cannot modulo Boolean(false) by Boolean(true)",
+            format!("{}", Boolean(false).modulo(&Boolean(true)).unwrap_err())
+        );
+
+        assert_eq!(Integer(0), Integer(10).modulo(&Integer(5)).unwrap());
+        assert_eq!(Integer(2), Integer(20).modulo(&Integer(3)).unwrap());
+        assert_eq!(
+            "Modulo by zero",
+            format!("{}", Integer(4).modulo(&Integer(0)).unwrap_err())
+        );
+        assert_eq!(
+            "Cannot modulo Integer(4) by Text(\"5\")",
+            format!("{}", Integer(4).modulo(&Text("5".to_owned())).unwrap_err())
+        );
+
+        assert_eq!(
+            "Cannot modulo Text(\"\") by Text(\"a\")",
+            format!(
+                "{}",
+                Text("".to_owned())
+                    .modulo(&Text("a".to_owned()))
+                    .unwrap_err()
             )
         );
     }
