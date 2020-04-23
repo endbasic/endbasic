@@ -13,14 +13,11 @@
 ' License for the specific language governing permissions and limitations
 ' under the License.
 
-bool1 = TRUE
-bool2? = FALSE
+bool1 = TRUE: bool2? = FALSE
 PRINT bool1, bool2
 
-num1 = 1
-num2% = 2
+num1 = 1: num2% = 2
 PRINT num1, num2
 
-string1 = "foo"
-string2$ = "bar"
+string1 = "foo": string2$ = "bar"
 PRINT string1, string2
