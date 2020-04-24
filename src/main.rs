@@ -25,7 +25,6 @@
 )]
 #![warn(unsafe_code)]
 
-use endbasic;
 use failure::Fallible;
 use std::env;
 use std::fs::File;
