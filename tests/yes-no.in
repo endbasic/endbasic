@@ -1,5 +1,6 @@
 true
 TRUE
+5
 yes
 YES
 y
@@ -9,6 +10,7 @@ false
 FALSE
 no
 NO
+foo
 n
 N
 y

@@ -11,6 +11,10 @@
 
 *   Added the `MOD` operator to compute the remainder of an integer division.
 
+*   Made `INPUT` resilient to invalid boolean and integer answers by asking
+    the user to input them again.  The caller has no means of determining
+    failure so we must do this (like other BASIC implementations do).
+
 ## Changes in version 0.1.0
 
 **Released on 2020-04-22.**
