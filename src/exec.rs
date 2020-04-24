@@ -138,11 +138,13 @@ impl<'a> Machine<'a> {
             _ => bail!("INPUT requires a variable reference"),
         };
 
-        // TODO(jmmv): Should retry on parse error instead of failing hard, just like QuickBasic
-        // does, as otherwise there is no way for the program to recover.
-        let answer = self.console.input(&prompt)?;
-        let value = Value::parse_as(vref.ref_type(), answer)?;
-        self.vars.set(vref, value)
+        loop {
+            let answer = self.console.input(&prompt)?;
+            match Value::parse_as(vref.ref_type(), answer) {
+                Ok(value) => return self.vars.set(vref, value),
+                Err(e) => self.console.print(&format!("Retry input: {}", e))?,
+            }
+        }
     }
 
     /// Prints a message to the console.
@@ -665,7 +667,9 @@ mod tests {
     #[test]
     fn test_input_ok() {
         do_ok_test("INPUT ; foo\nPRINT foo", &[("? ", "9")], &["9"]);
+        do_ok_test("INPUT ; foo\nPRINT foo", &[("? ", "-9")], &["-9"]);
         do_ok_test("INPUT , bar?\nPRINT bar", &[("", "true")], &["TRUE"]);
+        do_ok_test("INPUT ; foo$\nPRINT foo", &[("? ", "")], &[""]);
         do_ok_test(
             "INPUT \"With question mark\"; a$\nPRINT a$",
             &[("With question mark? ", "some long text")],
@@ -679,6 +683,30 @@ mod tests {
     }
 
     #[test]
+    fn test_input_retry() {
+        do_ok_test(
+            "INPUT ; b?",
+            &[("? ", ""), ("? ", "true")],
+            &["Retry input: Invalid boolean literal "],
+        );
+        do_ok_test(
+            "INPUT ; b?",
+            &[("? ", "0"), ("? ", "true")],
+            &["Retry input: Invalid boolean literal 0"],
+        );
+        do_ok_test(
+            "a = 3\nINPUT ; a",
+            &[("? ", ""), ("? ", "7")],
+            &["Retry input: Invalid integer literal "],
+        );
+        do_ok_test(
+            "a = 3\nINPUT ; a",
+            &[("? ", "x"), ("? ", "7")],
+            &["Retry input: Invalid integer literal x"],
+        );
+    }
+
+    #[test]
     fn test_input_errors() {
         do_simple_error_test("INPUT", "INPUT requires two arguments");
         do_simple_error_test("INPUT ; ,", "INPUT requires two arguments");
@@ -688,20 +716,6 @@ mod tests {
         do_simple_error_test(
             "INPUT \"a\" + TRUE; b?",
             "Cannot add Text(\"a\") and Boolean(true)",
-        );
-
-        // Ensure type errors from `Value` and `Vars` bubble up.
-        do_error_test(
-            "INPUT ; b?",
-            &[("? ", "0")],
-            &[],
-            "Invalid boolean literal 0",
-        );
-        do_error_test(
-            "a = 3\nINPUT ; a",
-            &[("? ", "x")],
-            &[],
-            "Invalid integer literal x",
         );
     }
 
