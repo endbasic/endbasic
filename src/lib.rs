@@ -29,10 +29,11 @@
 extern crate failure;
 
 mod ast;
+pub mod console;
 mod eval;
 mod exec;
 mod lexer;
 mod parser;
 mod reader;
 
-pub use exec::{Console, Machine};
+pub use exec::{Machine, MachineBuilder};

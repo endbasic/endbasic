@@ -17,6 +17,11 @@
     the user to input them again.  The caller has no means of determining
     failure so we must do this (like other BASIC implementations do).
 
+*   Split the `INPUT` and `PRINT` builtin commands out of the language's
+    core and into their own module.  This keeps the interpreter free from
+    side-effects if the caller so chooses, which makes it ideal for
+    embedding.
+
 ## Changes in version 0.1.0
 
 **Released on 2020-04-22.**

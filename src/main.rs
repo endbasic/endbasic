@@ -26,11 +26,13 @@
 #![warn(unsafe_code)]
 
 use failure::Fallible;
+use std::cell::RefCell;
 use std::env;
 use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::process;
+use std::rc::Rc;
 
 /// Consumes and returns the program name from `env::Args`.
 ///
@@ -53,8 +55,8 @@ fn program_name(mut args: env::Args, default_name: &'static str) -> (String, env
 #[derive(Default)]
 struct StdioConsole {}
 
-impl endbasic::Console for StdioConsole {
-    fn input(&mut self, prompt: &str) -> Fallible<String> {
+impl endbasic::console::Console for StdioConsole {
+    fn input(&mut self, prompt: &str) -> io::Result<String> {
         if !prompt.is_empty() {
             print!("{}", prompt);
             io::stdout().lock().flush()?;
@@ -69,7 +71,7 @@ impl endbasic::Console for StdioConsole {
         Ok(answer.trim_end().to_owned())
     }
 
-    fn print(&mut self, text: &str) -> Fallible<()> {
+    fn print(&mut self, text: &str) -> io::Result<()> {
         println!("{}", text);
         Ok(())
     }
@@ -77,8 +79,10 @@ impl endbasic::Console for StdioConsole {
 
 /// Executes the `path` program in a fresh machine.
 fn run<P: AsRef<Path>>(path: P) -> Fallible<()> {
-    let mut console = StdioConsole::default();
-    let mut machine = endbasic::Machine::new(&mut console);
+    let console = Rc::from(RefCell::from(StdioConsole::default()));
+    let mut machine = endbasic::MachineBuilder::default()
+        .add_builtins(endbasic::console::all_commands(console.clone()))
+        .build();
 
     let mut input = File::open(path)?;
     machine.exec(&mut input)
