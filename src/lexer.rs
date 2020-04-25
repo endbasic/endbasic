@@ -78,6 +78,9 @@ trait CharOps {
     /// Use this instead of `is_whitespace`, which accounts for newlines but we need to handle
     /// those explicitly.
     fn is_space(&self) -> bool;
+
+    /// Returns true if the character can be part of an identifier.
+    fn is_word(&self) -> bool;
 }
 
 impl CharOps for char {
@@ -96,6 +99,13 @@ impl CharOps for char {
         match *self {
             ' ' | '\t' | '\r' => true,
             _ => false,
+        }
+    }
+
+    fn is_word(&self) -> bool {
+        match *self {
+            '_' => true,
+            ch => ch.is_alphanumeric(),
         }
     }
 }
@@ -198,7 +208,7 @@ impl<'a> Lexer<'a> {
         let mut vtype = VarType::Auto;
         loop {
             match self.input.peek() {
-                Some(Ok(ch)) if ch.is_alphanumeric() => s.push(self.input.next().unwrap()?),
+                Some(Ok(ch)) if ch.is_word() => s.push(self.input.next().unwrap()?),
                 Some(Ok(ch)) if ch.is_separator() => break,
                 Some(Ok('?')) => {
                     vtype = VarType::Boolean;
@@ -330,7 +340,7 @@ impl<'a> Lexer<'a> {
             '<' | '>' => self.consume_operator(ch),
 
             ch if ch.is_digit(10) => self.consume_integer(ch),
-            ch if ch.is_alphabetic() => self.consume_symbol(ch),
+            ch if ch.is_word() => self.consume_symbol(ch),
             ch => self.handle_bad_read(format!("Unknown character: {}", ch)),
         }
     }
@@ -447,7 +457,7 @@ mod tests {
     #[test]
     fn test_some_tokens() {
         do_ok_test(
-            "123 45 \n 6 abc a38z: a=3",
+            "123 45 \n 6 abc a38z: a=3 with_underscores_1=_2",
             &[
                 Token::Integer(123),
                 Token::Integer(45),
@@ -459,6 +469,9 @@ mod tests {
                 new_auto_symbol("a"),
                 Token::Equal,
                 Token::Integer(3),
+                new_auto_symbol("with_underscores_1"),
+                Token::Equal,
+                new_auto_symbol("_2"),
             ],
         );
     }
@@ -681,10 +694,10 @@ mod tests {
         );
 
         do_ok_test(
-            "a b_d 5",
+            "a b|d 5",
             &[
                 new_auto_symbol("a"),
-                Token::Bad("Unexpected character in symbol: _".to_owned()),
+                Token::Bad("Unexpected character in symbol: |".to_owned()),
                 Token::Integer(5),
             ],
         );

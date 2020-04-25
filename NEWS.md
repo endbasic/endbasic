@@ -6,6 +6,8 @@
 
 *   Added support for `:` as a statement delimiter.
 
+*   Added support for `_` in identifiers.
+
 *   Made `INPUT` recognize `yes/no` and `y/n` answers for boolean values
     on top of the already supported `true/false` values.
 
