@@ -32,6 +32,12 @@ supports:
 *   `INPUT` and `PRINT` builtins.
 *   UTF-8 everywhere (I think).
 
+The EndBASIC core is minimal: the interpreter knows how to execute the logic
+of the language but, by default, it exposes no builtins to the scripts---not
+even `INPUT` or `PRINT`.  This makes EndBASIC ideal for embedding into other
+programs, as it is possible to execute external code without side-effects or
+by precisely controlling how such code interacts with the host program.
+
 ## Installation
 
 The latest version of EndBASIC is 0.1.0 and was released on 2020-04-22.

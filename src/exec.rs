@@ -21,17 +21,28 @@ use failure::Fallible;
 use std::collections::HashMap;
 use std::io;
 use std::mem;
+use std::rc::Rc;
 
-/// Hooks to implement the `INPUT` and `PRINT` builtins.
-pub trait Console {
-    /// Writes `prompt` to the console and returns a single line of text input by the user.
+/// A trait to define a command that is executed by a `Machine`.
+///
+/// The commands themselves are immutable but they can reference mutable state.  Given that
+/// EndBASIC is not threaded, it is sufficient for those references to be behind a `RefCell`
+/// and/or an `Rc`.
+pub trait BuiltinCommand {
+    /// Returns the name of the command, all in uppercase letters.
+    fn name(&self) -> &'static str;
+
+    /// Executes the command.
     ///
-    /// The text provided by the user should not be validated in any way before return, as type
-    /// validation and conversions happen within the `Machine`.
-    fn input(&mut self, prompt: &str) -> Fallible<String>;
-
-    /// Writes `text` to the console.
-    fn print(&mut self, text: &str) -> Fallible<()>;
+    /// `args` contains the arguments as provided in the invocation of the command.  Each entry in
+    /// this array contains an optional expression (to support things like `PRINT a, , b`) and the
+    /// separator that was used between that argument and the next.  The last entry in `args` always
+    /// has `ArgSep::End` as the separator.
+    ///
+    /// `machine` provides mutable access to the current state of the machine invoking the command.
+    ///
+    /// Commands cannot return any value except for errors.
+    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()>;
 }
 
 /// Storage for all variables that exist at runtime.
@@ -87,84 +98,68 @@ impl Vars {
     }
 }
 
+/// Builder pattern for a new machine.
+///
+/// The `default` constructor creates a new builder for a machine with no builtin commands.
+#[derive(Default)]
+pub struct MachineBuilder {
+    builtins: HashMap<&'static str, Rc<dyn BuiltinCommand>>,
+}
+
+impl MachineBuilder {
+    /// Registers the given builtin command, which must not yet be registered.
+    pub fn add_builtin(mut self, command: Rc<dyn BuiltinCommand>) -> Self {
+        assert!(
+            command.name() == command.name().to_ascii_uppercase(),
+            "Command name must be in uppercase"
+        );
+        assert!(
+            self.builtins.get(&command.name()).is_none(),
+            "Command with the same name already registered"
+        );
+        self.builtins.insert(command.name(), command);
+        self
+    }
+
+    /// Registers the given builtin commands.  See `add_builtin` for more details.
+    pub fn add_builtins(mut self, commands: Vec<Rc<dyn BuiltinCommand>>) -> Self {
+        for command in commands {
+            self = self.add_builtin(command);
+        }
+        self
+    }
+
+    /// Creates a new machine with the current configuration.
+    pub fn build(self) -> Machine {
+        Machine {
+            builtins: self.builtins,
+            vars: Vars::default(),
+        }
+    }
+}
+
 /// Executes an EndBASIC program and tracks its state.
-pub struct Machine<'a> {
-    console: &'a mut dyn Console,
+#[derive(Default)]
+pub struct Machine {
+    builtins: HashMap<&'static str, Rc<dyn BuiltinCommand>>,
     vars: Vars,
 }
 
-impl<'a> Machine<'a> {
-    /// Creates a new machine attached to the given `console`.
-    #[allow(clippy::redundant_field_names)]
-    pub fn new(console: &'a mut dyn Console) -> Self {
-        Self {
-            console: console,
-            vars: Vars::default(),
-        }
+impl Machine {
+    /// Obtains immutable access to the state of the variables.
+    pub fn get_vars(&self) -> &Vars {
+        &self.vars
+    }
+
+    /// Obtains mutable access to the state of the variables.
+    pub fn get_mut_vars(&mut self) -> &mut Vars {
+        &mut self.vars
     }
 
     /// Assigns the value of `expr` to the variable `vref`.
     fn assign(&mut self, vref: &VarRef, expr: &Expr) -> Fallible<()> {
         let value = expr.eval(&self.vars)?;
         self.vars.set(&vref, value)
-    }
-
-    /// Obtains user input from the console.
-    ///
-    /// The first expression to this function must be empty or evaluate to a string, and specifies
-    /// the prompt to print.  If this first argument is followed by the short `;` separator, the
-    /// prompt is extended with a question mark.
-    ///
-    /// The second expression to this function must be a bare variable reference and indicates the
-    /// variable to update with the obtained input.
-    fn builtin_input(&mut self, args: &[(Option<Expr>, ArgSep)]) -> Fallible<()> {
-        if args.len() != 2 {
-            bail!("INPUT requires two arguments");
-        }
-
-        let mut prompt = match &args[0].0 {
-            Some(e) => match e.eval(&self.vars)? {
-                Value::Text(t) => t,
-                _ => bail!("INPUT prompt must be a string"),
-            },
-            None => "".to_owned(),
-        };
-        if let ArgSep::Short = args[0].1 {
-            prompt += "? ";
-        }
-
-        let vref = match &args[1].0 {
-            Some(Expr::Symbol(vref)) => vref,
-            _ => bail!("INPUT requires a variable reference"),
-        };
-
-        loop {
-            let answer = self.console.input(&prompt)?;
-            match Value::parse_as(vref.ref_type(), answer) {
-                Ok(value) => return self.vars.set(vref, value),
-                Err(e) => self.console.print(&format!("Retry input: {}", e))?,
-            }
-        }
-    }
-
-    /// Prints a message to the console.
-    ///
-    /// The expressions given as arguments are all evaluated and converted to strings.  Arguments
-    /// separated by the short `;` separator are concatenated with a single space, while arguments
-    /// separated by the long `,` separator are concatenated with a tab character.
-    fn builtin_print(&mut self, args: &[(Option<Expr>, ArgSep)]) -> Fallible<()> {
-        let mut text = String::new();
-        for arg in args.iter() {
-            if let Some(expr) = arg.0.as_ref() {
-                text += &expr.eval(&self.vars)?.to_string();
-            }
-            match arg.1 {
-                ArgSep::End => break,
-                ArgSep::Short => text += " ",
-                ArgSep::Long => text += "\t",
-            }
-        }
-        self.console.print(&text)
     }
 
     /// Executes an `IF` statement.
@@ -204,9 +199,13 @@ impl<'a> Machine<'a> {
     fn exec_one(&mut self, stmt: &Statement) -> Fallible<()> {
         match stmt {
             Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
-            Statement::BuiltinCall(name, args) if name == "INPUT" => self.builtin_input(&args)?,
-            Statement::BuiltinCall(name, args) if name == "PRINT" => self.builtin_print(&args)?,
-            Statement::BuiltinCall(name, _) => bail!("Unknown builtin {}", name),
+            Statement::BuiltinCall(name, args) => {
+                let cmd = match self.builtins.get(name.as_str()) {
+                    Some(cmd) => cmd.clone(),
+                    None => bail!("Unknown builtin {}", name),
+                };
+                cmd.exec(&args, self)?
+            }
             Statement::If(branches) => self.do_if(branches)?,
             Statement::While(condition, body) => self.do_while(condition, body)?,
         }
@@ -230,6 +229,8 @@ impl<'a> Machine<'a> {
 mod tests {
     use super::*;
     use crate::ast::VarType;
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     #[test]
     fn test_vars_get_ok_with_explicit_type() {
@@ -478,79 +479,115 @@ mod tests {
         );
     }
 
-    /// A console that supplies golden input and captures all output.
-    struct MockConsole {
-        /// Sequence of expected prompts and the responses to feed to them.
-        golden_in: Box<dyn Iterator<Item = &'static (&'static str, &'static str)>>,
-
-        /// Sequence of all messages printed.
-        captured_out: Vec<String>,
+    /// Simplified version of `INPUT` to feed input values based on some golden `data`.
+    ///
+    /// Every time this command is invoked, it yields the next value from the `data` iterator and
+    /// assigns it to the variable provided as its only argument.
+    struct InCommand {
+        data: Box<RefCell<dyn Iterator<Item = &'static &'static str>>>,
     }
 
-    impl MockConsole {
-        /// Creates a new mock console with the given golden input.
-        fn new(golden_in: &'static [(&'static str, &'static str)]) -> Self {
-            Self {
-                golden_in: Box::from(golden_in.iter()),
-                captured_out: vec![],
-            }
-        }
-    }
-
-    impl Console for MockConsole {
-        fn input(&mut self, prompt: &str) -> Fallible<String> {
-            let (expected_prompt, answer) = self.golden_in.next().unwrap();
-            assert_eq!(expected_prompt, &prompt);
-            Ok((*answer).to_owned())
+    impl BuiltinCommand for InCommand {
+        fn name(&self) -> &'static str {
+            "IN"
         }
 
-        fn print(&mut self, text: &str) -> Fallible<()> {
-            self.captured_out.push(text.to_owned());
+        fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+            ensure!(args.len() == 1, "IN only takes one argument");
+            ensure!(args[0].1 == ArgSep::End, "Invalid separator");
+            let vref = match &args[0].0 {
+                Some(Expr::Symbol(vref)) => vref,
+                _ => bail!("IN requires a variable reference"),
+            };
+
+            let mut data = self.data.borrow_mut();
+            let raw_value = data.next().unwrap().to_owned();
+            let value = Value::parse_as(vref.ref_type(), raw_value)?;
+            machine.get_mut_vars().set(vref, value)?;
             Ok(())
         }
     }
 
-    /// Runs the `input` code on a new machine and verifies its output.
+    /// Simplified version of `PRINT` that captures all calls to it into `data`.
     ///
-    /// `golden_in` is a sequence of pairs each containing an expected prompt printed by `INPUT`
-    /// and the reply to feed to that prompt.
-    ///
-    /// `expected_out` is a sequence of expected calls to `PRINT`.
-    fn do_ok_test(
-        input: &str,
-        golden_in: &'static [(&'static str, &'static str)],
-        expected_out: &'static [&'static str],
-    ) {
-        let mut cursor = io::Cursor::new(input.as_bytes());
-        let mut console = MockConsole::new(golden_in);
-        let mut machine = Machine::new(&mut console);
-        machine.exec(&mut cursor).expect("Execution failed");
-        assert_eq!(expected_out, console.captured_out.as_slice());
+    /// This command only accepts arguments separated by the `;` short separator and concatenates
+    /// them with a single space.
+    struct OutCommand {
+        data: Rc<RefCell<Vec<String>>>,
     }
 
-    /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
+    impl BuiltinCommand for OutCommand {
+        fn name(&self) -> &'static str {
+            "OUT"
+        }
+
+        fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+            let mut text = String::new();
+            for arg in args.iter() {
+                if let Some(expr) = arg.0.as_ref() {
+                    text += &expr.eval(machine.get_vars())?.to_string();
+                }
+                match arg.1 {
+                    ArgSep::End => break,
+                    ArgSep::Short => text += " ",
+                    ArgSep::Long => bail!("Cannot use the ',' separator"),
+                }
+            }
+            self.data.borrow_mut().push(text);
+            Ok(())
+        }
+    }
+
+    /// Runs the `input` code on a new test machine.
+    ///
+    /// `golden_in` is the sequence of values to yield by `IN`.
+    /// `expected_out` is updated with the sequence of calls to `OUT`.
+    fn run(
+        input: &str,
+        golden_in: &'static [&'static str],
+        captured_out: Rc<RefCell<Vec<String>>>,
+    ) -> Fallible<()> {
+        let mut cursor = io::Cursor::new(input.as_bytes());
+        let in_cmd = InCommand {
+            data: Box::from(RefCell::from(golden_in.iter())),
+        };
+        let out_cmd = OutCommand { data: captured_out };
+        let mut machine = MachineBuilder::default()
+            .add_builtin(Rc::from(in_cmd))
+            .add_builtin(Rc::from(out_cmd))
+            .build();
+        machine.exec(&mut cursor)?;
+        Ok(())
+    }
+
+    /// Runs the `input` code on a new test machine and verifies its output.
+    ///
+    /// `golden_in` is the sequence of values to yield by `IN`.
+    /// `expected_out` is the sequence of expected calls to `OUT`.
+    fn do_ok_test(
+        input: &str,
+        golden_in: &'static [&'static str],
+        expected_out: &'static [&'static str],
+    ) {
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        run(input, golden_in, captured_out.clone()).expect("Execution failed");
+        assert_eq!(expected_out, captured_out.borrow().as_slice());
+    }
+
+    /// Runs the `input` code on a new test machine and verifies that it fails with `expected_err`.
     ///
     /// Given that the code has side-effects until it fails, this follows the same process as
     /// `do_ok_test` regarding `golden_in` and `expected_out`.
     fn do_error_test(
         input: &str,
-        golden_in: &'static [(&'static str, &'static str)],
+        golden_in: &'static [&'static str],
         expected_out: &'static [&'static str],
         expected_err: &str,
     ) {
-        let mut cursor = io::Cursor::new(input.as_bytes());
-        let mut console = MockConsole::new(golden_in);
-        let mut machine = Machine::new(&mut console);
-        assert_eq!(
-            expected_err,
-            format!(
-                "{}",
-                machine
-                    .exec(&mut cursor)
-                    .expect_err("Execution did not fail")
-            )
-        );
-        assert_eq!(expected_out, console.captured_out.as_slice());
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        let err = run(input, golden_in, captured_out.clone()).expect_err("Execution did not fail");
+        assert_eq!(expected_err, format!("{}", err));
+        assert_eq!(expected_out, captured_out.borrow().as_slice());
     }
 
     /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
@@ -563,29 +600,29 @@ mod tests {
 
     #[test]
     fn test_assignment_ok_types() {
-        do_ok_test("a = TRUE\nPRINT a; a?", &[], &["TRUE TRUE"]);
-        do_ok_test("a? = FALSE\nPRINT a; a?", &[], &["FALSE FALSE"]);
+        do_ok_test("a = TRUE\nOUT a; a?", &[], &["TRUE TRUE"]);
+        do_ok_test("a? = FALSE\nOUT a; a?", &[], &["FALSE FALSE"]);
 
-        do_ok_test("a = 3\nPRINT a; a%", &[], &["3 3"]);
-        do_ok_test("a% = 3\nPRINT a; a%", &[], &["3 3"]);
+        do_ok_test("a = 3\nOUT a; a%", &[], &["3 3"]);
+        do_ok_test("a% = 3\nOUT a; a%", &[], &["3 3"]);
 
         do_ok_test(
-            "a = \"some text\"\nPRINT a; a$",
+            "a = \"some text\"\nOUT a; a$",
             &[],
             &["some text some text"],
         );
         do_ok_test(
-            "a$ = \"some text\"\nPRINT a; a$",
+            "a$ = \"some text\"\nOUT a; a$",
             &[],
             &["some text some text"],
         );
 
-        do_ok_test("a = 1\na = a + 1\nPRINT a", &[], &["2"]);
+        do_ok_test("a = 1\na = a + 1\nOUT a", &[], &["2"]);
     }
 
     #[test]
     fn test_assignment_ok_case_insensitive() {
-        do_ok_test("foo = 32\nPRINT FOO", &[], &["32"]);
+        do_ok_test("foo = 32\nOUT FOO", &[], &["32"]);
     }
 
     #[test]
@@ -599,52 +636,47 @@ mod tests {
     #[test]
     fn test_if_ok() {
         let code = r#"
-            INPUT ; n
+            IN n
             IF n = 3 THEN
-                PRINT "match"
+                OUT "match"
             END IF
             IF n <> 3 THEN
-                PRINT "no match"
+                OUT "no match"
             END IF
         "#;
-        do_ok_test(code, &[("? ", "3")], &["match"]);
-        do_ok_test(code, &[("? ", "5")], &["no match"]);
+        do_ok_test(code, &["3"], &["match"]);
+        do_ok_test(code, &["5"], &["no match"]);
 
         let code = r#"
-            INPUT , n
+            IN n
             IF n = 1 THEN
-                PRINT "first"
+                OUT "first"
             ELSEIF n = 2 THEN
-                PRINT "second"
+                OUT "second"
             ELSEIF n = 3 THEN
-                PRINT "third"
+                OUT "third"
             ELSE
-                PRINT "fourth"
+                OUT "fourth"
             END IF
         "#;
-        do_ok_test(code, &[("", "1")], &["first"]);
-        do_ok_test(code, &[("", "2")], &["second"]);
-        do_ok_test(code, &[("", "3")], &["third"]);
-        do_ok_test(code, &[("", "4")], &["fourth"]);
+        do_ok_test(code, &["1"], &["first"]);
+        do_ok_test(code, &["2"], &["second"]);
+        do_ok_test(code, &["3"], &["third"]);
+        do_ok_test(code, &["4"], &["fourth"]);
     }
 
     #[test]
     fn test_if_ok_on_malformed_branch() {
         let code = r#"
-            INPUT ; n
+            IN n
             IF n = 3 THEN
-                PRINT "match"
+                OUT "match"
             ELSEIF "foo" THEN 'Invalid expression type but not evaluated.
-                PRINT "no match"
+                OUT "no match"
             END IF
         "#;
-        do_ok_test(code, &[("? ", "3")], &["match"]);
-        do_error_test(
-            code,
-            &[("? ", "5")],
-            &[],
-            "IF/ELSEIF require a boolean condition",
-        );
+        do_ok_test(code, &["3"], &["match"]);
+        do_error_test(code, &["5"], &[], "IF/ELSEIF require a boolean condition");
     }
 
     #[test]
@@ -654,7 +686,7 @@ mod tests {
             "IF TRUE THEN\nELSE IF TRUE THEN\nEND IF",
             "Expecting newline after ELSE",
         );
-        do_simple_error_test("IF TRUE\nEND IF\nPRINT 3", "No THEN in IF statement");
+        do_simple_error_test("IF TRUE\nEND IF\nOUT 3", "No THEN in IF statement");
 
         do_simple_error_test("IF 2\nEND IF", "No THEN in IF statement");
         do_simple_error_test("IF 2 THEN\nEND IF", "IF/ELSEIF require a boolean condition");
@@ -665,99 +697,18 @@ mod tests {
     }
 
     #[test]
-    fn test_input_ok() {
-        do_ok_test("INPUT ; foo\nPRINT foo", &[("? ", "9")], &["9"]);
-        do_ok_test("INPUT ; foo\nPRINT foo", &[("? ", "-9")], &["-9"]);
-        do_ok_test("INPUT , bar?\nPRINT bar", &[("", "true")], &["TRUE"]);
-        do_ok_test("INPUT ; foo$\nPRINT foo", &[("? ", "")], &[""]);
-        do_ok_test(
-            "INPUT \"With question mark\"; a$\nPRINT a$",
-            &[("With question mark? ", "some long text")],
-            &["some long text"],
-        );
-        do_ok_test(
-            "prompt$ = \"Indirectly without question mark\"\nINPUT prompt$, b\nPRINT b * 2",
-            &[("Indirectly without question mark", "42")],
-            &["84"],
-        );
-    }
-
-    #[test]
-    fn test_input_retry() {
-        do_ok_test(
-            "INPUT ; b?",
-            &[("? ", ""), ("? ", "true")],
-            &["Retry input: Invalid boolean literal "],
-        );
-        do_ok_test(
-            "INPUT ; b?",
-            &[("? ", "0"), ("? ", "true")],
-            &["Retry input: Invalid boolean literal 0"],
-        );
-        do_ok_test(
-            "a = 3\nINPUT ; a",
-            &[("? ", ""), ("? ", "7")],
-            &["Retry input: Invalid integer literal "],
-        );
-        do_ok_test(
-            "a = 3\nINPUT ; a",
-            &[("? ", "x"), ("? ", "7")],
-            &["Retry input: Invalid integer literal x"],
-        );
-    }
-
-    #[test]
-    fn test_input_errors() {
-        do_simple_error_test("INPUT", "INPUT requires two arguments");
-        do_simple_error_test("INPUT ; ,", "INPUT requires two arguments");
-        do_simple_error_test("INPUT ;", "INPUT requires a variable reference");
-        do_simple_error_test("INPUT 3 ; a", "INPUT prompt must be a string");
-        do_simple_error_test("INPUT ; a + 1", "INPUT requires a variable reference");
-        do_simple_error_test(
-            "INPUT \"a\" + TRUE; b?",
-            "Cannot add Text(\"a\") and Boolean(true)",
-        );
-    }
-
-    #[test]
-    fn test_print_ok() {
-        do_ok_test("PRINT", &[], &[""]);
-        do_ok_test("PRINT ;", &[], &[" "]);
-        do_ok_test("PRINT ,", &[], &["\t"]);
-        do_ok_test("PRINT ;,;,", &[], &[" \t \t"]);
-
-        do_ok_test("PRINT 3", &[], &["3"]);
-        do_ok_test("PRINT 3 = 5", &[], &["FALSE"]);
-        do_ok_test("PRINT true;123;\"foo bar\"", &[], &["TRUE 123 foo bar"]);
-        do_ok_test("PRINT 6,1;3,5", &[], &["6\t1 3\t5"]);
-
-        do_ok_test(
-            "word = \"foo\"\nPRINT word, word\nPRINT word + \"s\"",
-            &[],
-            &["foo\tfoo", "foos"],
-        );
-    }
-
-    #[test]
-    fn test_print_errors() {
-        // Ensure type errors from `Expr` and `Value` bubble up.
-        do_simple_error_test("PRINT a b", "Unexpected value in expression");
-        do_simple_error_test("PRINT 3 + TRUE", "Cannot add Integer(3) and Boolean(true)");
-    }
-
-    #[test]
     fn test_while_ok() {
         let code = r#"
-            INPUT ; n
+            IN n
             WHILE n > 0
-                PRINT "n is"; n
+                OUT "n is"; n
                 n = n - 1
             END WHILE
         "#;
-        do_ok_test(code, &[("? ", "0")], &[]);
-        do_ok_test(code, &[("? ", "3")], &["n is 3", "n is 2", "n is 1"]);
+        do_ok_test(code, &["0"], &[]);
+        do_ok_test(code, &["3"], &["n is 3", "n is 2", "n is 1"]);
 
-        do_ok_test("WHILE FALSE\nPRINT 1\nEND WHILE", &[], &[]);
+        do_ok_test("WHILE FALSE\nOUT 1\nEND WHILE", &[], &[]);
     }
 
     #[test]
@@ -774,11 +725,11 @@ mod tests {
         let code = r#"
             REM This is the start of the program.
 
-            PRINT "Hello" 'Some remark here.
+            OUT "Hello" 'Some remark here.
 
             IF TRUE THEN
 
-                PRINT "Bye" 'And another remark here after a blank line.
+                OUT "Bye" 'And another remark here after a blank line.
             END IF
         "#;
         do_ok_test(code, &[], &["Hello", "Bye"]);
@@ -788,7 +739,7 @@ mod tests {
     fn test_top_level_errors() {
         do_simple_error_test("FOO BAR", "Unknown builtin FOO");
         do_error_test(
-            "PRINT \"a\"\nFOO BAR\nPRINT \"b\"",
+            "OUT \"a\"\nFOO BAR\nOUT \"b\"",
             &[],
             &["a"],
             "Unknown builtin FOO",
@@ -796,7 +747,7 @@ mod tests {
 
         do_simple_error_test("+ b", "Unexpected token Plus in statement");
         do_error_test(
-            "PRINT \"a\"\n+ b\nPRINT \"b\"",
+            "OUT \"a\"\n+ b\nOUT \"b\"",
             &[],
             &["a"],
             "Unexpected token Plus in statement",
@@ -805,14 +756,12 @@ mod tests {
 
     #[test]
     fn test_exec_shares_state() {
-        let mut console = MockConsole::new(&[]);
-        let mut machine = Machine::new(&mut console);
+        let mut machine = Machine::default();
 
         let mut cursor = io::Cursor::new("a = 10");
         machine.exec(&mut cursor).expect("Execution failed");
 
-        let mut cursor = io::Cursor::new("PRINT a");
+        let mut cursor = io::Cursor::new("b = a");
         machine.exec(&mut cursor).expect("Execution failed");
-        assert_eq!(&["10"], console.captured_out.as_slice());
     }
 }
