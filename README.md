@@ -56,18 +56,32 @@ tested on CI).
 
 ## Usage
 
-At the moment, the `endbasic` binary does not yet provide an interactive
-interpreter so all you can do is give it files to execute:
+`endbasic` comes with a REPL command-line interface that offers fancy line
+editing features and built-in documentation for all available features.  You can
+start the interactive interface by typing:
+
+```shell
+endbasic
+```
+
+and you can exit it at any time by pressing CTRL+D.
+
+You can also give `endbasic` the name of a program to execute:
 
 ```shell
 endbasic some-program.bas
 ```
 
-You can peek into the `tests` subdirectory of this repository to see actual code
-samples.
+Note, however, that some features (like the `HELP` builtin command) are only
+available in the interactive interface.
 
-For now, the `examples` directory only contains sample code to show how to
-embed the EndBASIC interpreter into your own programs.
+## Examples
+
+You can peek into the `tests` subdirectory of this repository to see actual
+EndBASIC code samples.  Look for all files with a `.bas` extension.
+
+The `examples` directory contains sample code to show how to embed the EndBASIC
+interpreter into your own programs.
 
 ## Why EndBASIC?
 

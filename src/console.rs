@@ -28,7 +28,11 @@ pub trait Console {
     ///
     /// The text provided by the user should not be validated in any way before return, as type
     /// validation and conversions happen within the `Machine`.
-    fn input(&mut self, prompt: &str) -> io::Result<String>;
+    ///
+    /// If validation fails, this method is called again with `previous` set to the invalid answer
+    /// that caused the problem.  This can be used by the UI to pre-populate the new input field
+    /// with that data.
+    fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String>;
 
     /// Writes `text` to the console.
     fn print(&mut self, text: &str) -> io::Result<()>;
@@ -80,11 +84,20 @@ impl BuiltinCommand for InputCommand {
         };
 
         let mut console = self.console.borrow_mut();
+        let mut previous_answer = String::new();
         loop {
-            let answer = console.input(&prompt)?;
-            match Value::parse_as(vref.ref_type(), answer.trim_end()) {
-                Ok(value) => return machine.get_mut_vars().set(vref, value),
-                Err(e) => console.print(&format!("Retry input: {}", e))?,
+            match console.input(&prompt, &previous_answer) {
+                Ok(answer) => {
+                    match Value::parse_as(vref.ref_type(), answer.trim_end()) {
+                        Ok(value) => return machine.get_mut_vars().set(vref, value),
+                        Err(e) => console.print(&format!("Retry input: {}", e))?,
+                    }
+                    previous_answer = answer;
+                }
+                Err(e) if e.kind() == io::ErrorKind::InvalidData => {
+                    console.print(&format!("Retry input: {}", e))?
+                }
+                Err(e) => return Err(e.into()),
             }
         }
     }
@@ -144,8 +157,8 @@ mod tests {
 
     /// A console that supplies golden input and captures all output.
     struct MockConsole {
-        /// Sequence of expected prompts and the responses to feed to them.
-        golden_in: Box<dyn Iterator<Item = &'static (&'static str, &'static str)>>,
+        /// Sequence of expected prompts and previous values and the responses to feed to them.
+        golden_in: Box<dyn Iterator<Item = &'static (&'static str, &'static str, &'static str)>>,
 
         /// Sequence of all messages printed.
         captured_out: Vec<String>,
@@ -153,7 +166,7 @@ mod tests {
 
     impl MockConsole {
         /// Creates a new mock console with the given golden input.
-        fn new(golden_in: &'static [(&'static str, &'static str)]) -> Self {
+        fn new(golden_in: &'static [(&'static str, &'static str, &'static str)]) -> Self {
             Self {
                 golden_in: Box::from(golden_in.iter()),
                 captured_out: vec![],
@@ -162,9 +175,10 @@ mod tests {
     }
 
     impl Console for MockConsole {
-        fn input(&mut self, prompt: &str) -> io::Result<String> {
-            let (expected_prompt, answer) = self.golden_in.next().unwrap();
+        fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String> {
+            let (expected_prompt, expected_previous, answer) = self.golden_in.next().unwrap();
             assert_eq!(expected_prompt, &prompt);
+            assert_eq!(expected_previous, &previous);
             Ok((*answer).to_owned())
         }
 
@@ -182,7 +196,7 @@ mod tests {
     /// `expected_out` is a sequence of expected calls to `PRINT`.
     fn do_ok_test(
         input: &str,
-        golden_in: &'static [(&'static str, &'static str)],
+        golden_in: &'static [(&'static str, &'static str, &'static str)],
         expected_out: &'static [&'static str],
     ) {
         let mut cursor = io::Cursor::new(input.as_bytes());
@@ -200,7 +214,7 @@ mod tests {
     /// `do_ok_test` regarding `golden_in` and `expected_out`.
     fn do_error_test(
         input: &str,
-        golden_in: &'static [(&'static str, &'static str)],
+        golden_in: &'static [(&'static str, &'static str, &'static str)],
         expected_out: &'static [&'static str],
         expected_err: &str,
     ) {
@@ -231,18 +245,18 @@ mod tests {
 
     #[test]
     fn test_input_ok() {
-        do_ok_test("INPUT ; foo\nPRINT foo", &[("? ", "9")], &["9"]);
-        do_ok_test("INPUT ; foo\nPRINT foo", &[("? ", "-9")], &["-9"]);
-        do_ok_test("INPUT , bar?\nPRINT bar", &[("", "true")], &["TRUE"]);
-        do_ok_test("INPUT ; foo$\nPRINT foo", &[("? ", "")], &[""]);
+        do_ok_test("INPUT ; foo\nPRINT foo", &[("? ", "", "9")], &["9"]);
+        do_ok_test("INPUT ; foo\nPRINT foo", &[("? ", "", "-9")], &["-9"]);
+        do_ok_test("INPUT , bar?\nPRINT bar", &[("", "", "true")], &["TRUE"]);
+        do_ok_test("INPUT ; foo$\nPRINT foo", &[("? ", "", "")], &[""]);
         do_ok_test(
             "INPUT \"With question mark\"; a$\nPRINT a$",
-            &[("With question mark? ", "some long text")],
+            &[("With question mark? ", "", "some long text")],
             &["some long text"],
         );
         do_ok_test(
             "prompt$ = \"Indirectly without question mark\"\nINPUT prompt$, b\nPRINT b * 2",
-            &[("Indirectly without question mark", "42")],
+            &[("Indirectly without question mark", "", "42")],
             &["84"],
         );
     }
@@ -251,22 +265,22 @@ mod tests {
     fn test_input_retry() {
         do_ok_test(
             "INPUT ; b?",
-            &[("? ", ""), ("? ", "true")],
+            &[("? ", "", ""), ("? ", "", "true")],
             &["Retry input: Invalid boolean literal "],
         );
         do_ok_test(
             "INPUT ; b?",
-            &[("? ", "0"), ("? ", "true")],
+            &[("? ", "", "0"), ("? ", "0", "true")],
             &["Retry input: Invalid boolean literal 0"],
         );
         do_ok_test(
             "a = 3\nINPUT ; a",
-            &[("? ", ""), ("? ", "7")],
+            &[("? ", "", ""), ("? ", "", "7")],
             &["Retry input: Invalid integer literal "],
         );
         do_ok_test(
             "a = 3\nINPUT ; a",
-            &[("? ", "x"), ("? ", "7")],
+            &[("? ", "", "x"), ("? ", "x", "7")],
             &["Retry input: Invalid integer literal x"],
         );
     }

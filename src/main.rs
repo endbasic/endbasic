@@ -26,13 +26,10 @@
 #![warn(unsafe_code)]
 
 use failure::Fallible;
-use std::cell::RefCell;
 use std::env;
 use std::fs::File;
-use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::process;
-use std::rc::Rc;
 
 /// Consumes and returns the program name from `env::Args`.
 ///
@@ -55,31 +52,9 @@ fn program_name(mut args: env::Args, default_name: &'static str) -> (String, env
 #[derive(Default)]
 struct StdioConsole {}
 
-impl endbasic::console::Console for StdioConsole {
-    fn input(&mut self, prompt: &str) -> io::Result<String> {
-        if !prompt.is_empty() {
-            print!("{}", prompt);
-            io::stdout().lock().flush()?;
-        }
-
-        let mut answer = String::new();
-        {
-            let stdin = io::stdin();
-            let mut handle = stdin.lock();
-            handle.read_line(&mut answer)?;
-        }
-        Ok(answer.trim_end().to_owned())
-    }
-
-    fn print(&mut self, text: &str) -> io::Result<()> {
-        println!("{}", text);
-        Ok(())
-    }
-}
-
 /// Executes the `path` program in a fresh machine.
 fn run<P: AsRef<Path>>(path: P) -> Fallible<()> {
-    let console = Rc::from(RefCell::from(StdioConsole::default()));
+    let console = endbasic::repl::new_console();
     let mut machine = endbasic::exec::MachineBuilder::default()
         .add_builtins(endbasic::console::all_commands(console.clone()))
         .build();
@@ -93,6 +68,13 @@ fn main() {
     let args: Vec<String> = args.collect();
 
     match args.as_slice() {
+        [] => match endbasic::repl::run_repl_loop() {
+            Ok(()) => (),
+            Err(e) => {
+                eprintln!("{}: E: Fatal error: {}", progname, e);
+                process::exit(1);
+            }
+        },
         [file] => match run(file) {
             Ok(()) => (),
             Err(e) => {
@@ -102,10 +84,6 @@ fn main() {
         },
         [_, ..] => {
             eprintln!("{}: E: Too many arguments", progname);
-            process::exit(1);
-        }
-        [] => {
-            eprintln!("{}: E: No program specified", progname);
             process::exit(1);
         }
     }

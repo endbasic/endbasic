@@ -36,3 +36,4 @@ pub mod exec;
 mod lexer;
 mod parser;
 mod reader;
+pub mod repl;

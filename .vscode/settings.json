@@ -61,6 +61,8 @@
         "jmmv",
         "paren",
         "peekable",
+        "readline",
+        "rustyline",
         "stmt",
         "stmts",
         "tempfile",
