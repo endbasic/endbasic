@@ -28,12 +28,11 @@
 #[macro_use]
 extern crate failure;
 
-mod ast;
+// TODO(jmmv): Should narrow the exposed interface by 1.0.0.
+pub mod ast;
 pub mod console;
-mod eval;
-mod exec;
+pub mod eval;
+pub mod exec;
 mod lexer;
 mod parser;
 mod reader;
-
-pub use exec::{Machine, MachineBuilder};

@@ -40,7 +40,7 @@ fn get_test_dir() -> PathBuf {
 }
 
 /// Computes the path the tested binary.
-fn get_bin(bin: &str) -> PathBuf {
+fn get_bin<P: AsRef<Path>>(bin: P) -> PathBuf {
     let test_dir = get_test_dir();
     let debug_or_release_dir = test_dir.parent().expect("Failed to get parent directory");
     debug_or_release_dir
@@ -98,22 +98,6 @@ fn check_program<I: Into<process::Stdio>>(
     }
 }
 
-/// Runs the interpreter with `args` and compares its output against expected values.
-///
-/// `exp-code` specifies the expected exit code of the binary.  `exp_stdout` and `exp_stderr`
-/// specify the expected stdout and stderr contents.
-fn check(args: &[&str], exp_code: i32, exp_stdout: &str, exp_stderr: &str) {
-    let bin = get_bin("endbasic");
-    check_program(
-        &bin,
-        args,
-        exp_code,
-        process::Stdio::null(),
-        exp_stdout,
-        exp_stderr,
-    )
-}
-
 /// Reads the contents of a golden data file.
 fn read_golden(path: &Path) -> String {
     let mut f = File::open(path).expect("Failed to open golden data file");
@@ -128,18 +112,20 @@ fn read_golden(path: &Path) -> String {
     }
 }
 
-/// Runs the `name.bas` program and compares its output against golden data in files.
+/// Runs the program `bin_path` with `args` and compares its output against golden data files.
 ///
-/// A `name.in` file next to the source file, if present, is fed to the program as its stdin.
+/// A `data_dir/name.in` file, if present, is fed to the program as its stdin.
 ///
-/// The `name.out` and `name.err` files next to the source file, if present, contain the golden
-/// stdout and stderr for the program, respectively.  Furthermore, if `name.err` exists, the
+/// The `data_dir/name.out` and `data_dir/name.err` files, if present, contain the golden stdout
+/// and stderr for the program, respectively.  Furthermore, if `data_dir/name.err` exists, the
 /// program is expected to exit with an error; otherwise, it is expected to exit successfully.
-fn do_golden_test(name: &str) {
-    let bas_path = get_src_dir().join("tests").join(name).with_extension("bas");
-    let in_path = get_src_dir().join("tests").join(name).with_extension("in");
-    let out_path = get_src_dir().join("tests").join(name).with_extension("out");
-    let err_path = get_src_dir().join("tests").join(name).with_extension("err");
+fn check<P: AsRef<Path>>(bin_path: P, args: &[&str], name: &str, data_dir: P) {
+    let bin_path = bin_path.as_ref();
+    let data_dir = data_dir.as_ref();
+
+    let in_path = data_dir.join(name).with_extension("in");
+    let out_path = data_dir.join(name).with_extension("out");
+    let err_path = data_dir.join(name).with_extension("err");
 
     let input = if in_path.exists() {
         File::open(in_path).unwrap().into()
@@ -161,15 +147,49 @@ fn do_golden_test(name: &str) {
         "".to_owned()
     };
 
-    let bin = get_bin("endbasic");
     check_program(
-        &bin,
-        &[bas_path.to_str().unwrap()],
+        &bin_path,
+        args,
         golden_code,
         input,
         &golden_stdout,
         &golden_stderr,
     )
+}
+
+/// Runs the given example program and compares its output against golden data files.
+///
+/// The data files are expected to be in the `examples` subdirectory and have `name` as their
+/// basename.  See the description in `check` for more details.
+fn do_example_test(name: &str) {
+    // TODO(jmmv): This breaks if we run `cargo test --all-targets` because the binary we
+    // look for here ends up being the runner for the unit tests of the example, not the
+    // example itself.  Should find a better way of doing this so that we can reenable the
+    // usage of `--all-targets` in CI.
+    let bin_path = get_bin(PathBuf::from("examples").join(name));
+    let data_dir = get_src_dir().join("examples");
+    check(bin_path, &[], name, data_dir);
+}
+
+/// Runs the `name.bas` program and compares its output against golden data in files.
+///
+/// The data files are expected to be in the `tests` subdirectory and have `name` as their
+/// basename.  See the description in `check` for more details.
+fn do_golden_test(name: &str) {
+    let bin_path = get_bin("endbasic");
+    let data_dir = get_src_dir().join("tests");
+    let bas_path = data_dir.join(name).with_extension("bas");
+    check(bin_path, &[bas_path.to_str().unwrap()], name, data_dir);
+}
+
+#[test]
+fn test_example_custom_commands() {
+    do_example_test("custom-commands");
+}
+
+#[test]
+fn test_example_minimal() {
+    do_example_test("minimal");
 }
 
 #[test]
@@ -214,12 +234,26 @@ fn test_golden_yes_no() {
 
 #[test]
 fn test_no_args() {
-    check(&[], 1, "", "endbasic: E: No program specified\n");
+    check_program(
+        &get_bin("endbasic"),
+        &[],
+        1,
+        process::Stdio::null(),
+        "",
+        "endbasic: E: No program specified\n",
+    );
 }
 
 #[test]
 fn test_too_many_args() {
-    check(&["foo", "bar"], 1, "", "endbasic: E: Too many arguments\n");
+    check_program(
+        &get_bin("endbasic"),
+        &["foo", "bar"],
+        1,
+        process::Stdio::null(),
+        "",
+        "endbasic: E: Too many arguments\n",
+    );
 }
 
 // TODO(jmmv): This test fails almost always on Linux CI builds with `Text file busy` when

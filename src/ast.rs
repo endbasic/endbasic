@@ -21,28 +21,48 @@ use std::fmt;
 /// Represents an expression and provides mechanisms to evaluate it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Expr {
+    /// A literal boolean value.
     Boolean(bool),
+    /// A literal integer value.
     Integer(i32),
+    /// A reference to a variable.
     Symbol(VarRef),
+    /// A literal string value.
     Text(String),
 
+    /// Arithmetic addition of two expressions.
     Add(Box<Expr>, Box<Expr>),
+    /// Arithmetic subtraction of two expressions.
     Subtract(Box<Expr>, Box<Expr>),
+    /// Arithmetic multiplication of two expressions.
     Multiply(Box<Expr>, Box<Expr>),
+    /// Arithmetic division of two expressions.
     Divide(Box<Expr>, Box<Expr>),
+    /// Arithmetic modulo operation of two expressions.
     Modulo(Box<Expr>, Box<Expr>),
+    /// Arithmetic sign flip of an expression.
     Negate(Box<Expr>),
 
+    /// Relational equality comparison of two expressions.
     Equal(Box<Expr>, Box<Expr>),
+    /// Relational inequality comparison of two expressions.
     NotEqual(Box<Expr>, Box<Expr>),
+    /// Relational less-than comparison of two expressions.
     Less(Box<Expr>, Box<Expr>),
+    /// Relational less-than or equal-to comparison of two expressions.
     LessEqual(Box<Expr>, Box<Expr>),
+    /// Relational greater-than comparison of two expressions.
     Greater(Box<Expr>, Box<Expr>),
+    /// Relational greater-than or equal-to comparison of two expressions.
     GreaterEqual(Box<Expr>, Box<Expr>),
 
+    /// Logical and of two expressions.
     And(Box<Expr>, Box<Expr>),
+    /// Logical not of an expression.
     Not(Box<Expr>),
+    /// Logical or of two expressions.
     Or(Box<Expr>, Box<Expr>),
+    /// Logical xor of two expressions.
     Xor(Box<Expr>, Box<Expr>),
 }
 
