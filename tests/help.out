@@ -1,0 +1,44 @@
+
+    Welcome to EndBASIC 0.1.0.
+    Type HELP for interactive usage information.
+
+Output from HELP:
+
+    This is EndBASIC 0.1.0.
+
+    HELP     Prints interactive help.
+    INPUT    Obtains user input from the console.
+    PRINT    Prints a message to the console.
+
+    Type HELP followed by a command name for details on that command.
+    Press CTRL+D to exit.
+
+Output from HELP HELP:
+
+    HELP [commandname]
+
+    Prints interactive help.
+
+    Without arguments, shows a summary of all available commands.
+
+    With a single argument, shows detailed information about the given command.
+
+Output from HELP INPUT:
+
+    INPUT ["prompt"] <;|,> variableref
+
+    Obtains user input from the console.
+
+    The first expression to this function must be empty or evaluate to a string, and specifies the prompt to print.  If this first argument is followed by the short `;` separator, the prompt is extended with a question mark.
+
+    The second expression to this function must be a bare variable reference and indicates the variable to update with the obtained input.
+
+Output from HELP PRINT:
+
+    PRINT [expr1 [<;|,> .. exprN]]
+
+    Prints a message to the console.
+
+    The expressions given as arguments are all evaluated and converted to strings.  Arguments separated by the short `;` separator are concatenated with a single space, while arguments separated by the long `,` separator are concatenated with a tab character.
+
+End of input by CTRL-D

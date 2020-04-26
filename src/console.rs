@@ -38,14 +38,7 @@ pub trait Console {
     fn print(&mut self, text: &str) -> io::Result<()>;
 }
 
-/// Obtains user input from the console.
-///
-/// The first expression to this function must be empty or evaluate to a string, and specifies
-/// the prompt to print.  If this first argument is followed by the short `;` separator, the
-/// prompt is extended with a question mark.
-///
-/// The second expression to this function must be a bare variable reference and indicates the
-/// variable to update with the obtained input.
+/// The `INPUT` command.
 pub struct InputCommand {
     console: Rc<RefCell<dyn Console>>,
 }
@@ -60,6 +53,19 @@ impl InputCommand {
 impl BuiltinCommand for InputCommand {
     fn name(&self) -> &'static str {
         "INPUT"
+    }
+
+    fn syntax(&self) -> &'static str {
+        "[\"prompt\"] <;|,> variableref"
+    }
+
+    fn description(&self) -> &'static str {
+        "Obtains user input from the console.
+The first expression to this function must be empty or evaluate to a string, and specifies \
+the prompt to print.  If this first argument is followed by the short `;` separator, the \
+prompt is extended with a question mark.
+The second expression to this function must be a bare variable reference and indicates the \
+variable to update with the obtained input."
     }
 
     fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
@@ -103,11 +109,7 @@ impl BuiltinCommand for InputCommand {
     }
 }
 
-/// Prints a message to the console.
-///
-/// The expressions given as arguments are all evaluated and converted to strings.  Arguments
-/// separated by the short `;` separator are concatenated with a single space, while arguments
-/// separated by the long `,` separator are concatenated with a tab character.
+/// The `PRINT` command.
 pub struct PrintCommand {
     console: Rc<RefCell<dyn Console>>,
 }
@@ -122,6 +124,17 @@ impl PrintCommand {
 impl BuiltinCommand for PrintCommand {
     fn name(&self) -> &'static str {
         "PRINT"
+    }
+
+    fn syntax(&self) -> &'static str {
+        "[expr1 [<;|,> .. exprN]]"
+    }
+
+    fn description(&self) -> &'static str {
+        "Prints a message to the console.
+The expressions given as arguments are all evaluated and converted to strings.  Arguments \
+separated by the short `;` separator are concatenated with a single space, while arguments \
+separated by the long `,` separator are concatenated with a tab character."
     }
 
     fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {

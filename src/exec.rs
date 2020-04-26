@@ -32,6 +32,12 @@ pub trait BuiltinCommand {
     /// Returns the name of the command, all in uppercase letters.
     fn name(&self) -> &'static str;
 
+    /// Returns a specification of the command's syntax.
+    fn syntax(&self) -> &'static str;
+
+    /// Returns the usage message of the command.
+    fn description(&self) -> &'static str;
+
     /// Executes the command.
     ///
     /// `args` contains the arguments as provided in the invocation of the command.  Each entry in
@@ -117,6 +123,9 @@ impl MachineBuilder {
             self.builtins.get(&command.name()).is_none(),
             "Command with the same name already registered"
         );
+        for l in command.description().lines() {
+            assert!(!l.is_empty(), "Description cannot contain empty lines");
+        }
         self.builtins.insert(command.name(), command);
         self
     }
@@ -146,6 +155,11 @@ pub struct Machine {
 }
 
 impl Machine {
+    /// Obtains immutable access to the builtins supported by this machine.
+    pub fn get_builtins(&self) -> &HashMap<&'static str, Rc<dyn BuiltinCommand>> {
+        &self.builtins
+    }
+
     /// Obtains immutable access to the state of the variables.
     pub fn get_vars(&self) -> &Vars {
         &self.vars
@@ -600,6 +614,14 @@ mod tests {
             "IN"
         }
 
+        fn syntax(&self) -> &'static str {
+            "variableref"
+        }
+
+        fn description(&self) -> &'static str {
+            "See docstring for test code."
+        }
+
         fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
             ensure!(args.len() == 1, "IN only takes one argument");
             ensure!(args[0].1 == ArgSep::End, "Invalid separator");
@@ -627,6 +649,14 @@ mod tests {
     impl BuiltinCommand for OutCommand {
         fn name(&self) -> &'static str {
             "OUT"
+        }
+
+        fn syntax(&self) -> &'static str {
+            "[expr1 [; .. exprN]]"
+        }
+
+        fn description(&self) -> &'static str {
+            "See docstring for test code."
         }
 
         fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
