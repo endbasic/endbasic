@@ -223,6 +223,11 @@ fn test_golden_interactive() {
 }
 
 #[test]
+fn test_golden_help() {
+    do_golden_interactive_test("help");
+}
+
+#[test]
 fn test_golden_lexer_error() {
     do_golden_script_test("lexer-error");
 }
@@ -230,6 +235,11 @@ fn test_golden_lexer_error() {
 #[test]
 fn test_golden_parser_error() {
     do_golden_script_test("parser-error");
+}
+
+#[test]
+fn test_golden_script() {
+    do_golden_script_test("script");
 }
 
 #[test]

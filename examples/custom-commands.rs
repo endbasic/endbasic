@@ -38,7 +38,7 @@ STORE "some long text"
 RETRIEVE
 "#;
 
-/// Saves the string argument given to it in a Rust variable.
+/// The `STORE` command.
 struct StoreCommand {
     state: Rc<RefCell<String>>,
 }
@@ -46,6 +46,14 @@ struct StoreCommand {
 impl BuiltinCommand for StoreCommand {
     fn name(&self) -> &'static str {
         "STORE"
+    }
+
+    fn syntax(&self) -> &'static str {
+        "\"string to save\""
+    }
+
+    fn description(&self) -> &'static str {
+        "Saves the string argument given to it in a Rust variable."
     }
 
     fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
@@ -62,7 +70,7 @@ impl BuiltinCommand for StoreCommand {
     }
 }
 
-/// Retrieves the string saved by `StoreCommand` and prints it to the console.
+/// The `RETRIEVE` command.
 struct RetrieveCommand {
     state: Rc<RefCell<String>>,
 }
@@ -70,6 +78,14 @@ struct RetrieveCommand {
 impl BuiltinCommand for RetrieveCommand {
     fn name(&self) -> &'static str {
         "RETRIEVE"
+    }
+
+    fn syntax(&self) -> &'static str {
+        ""
+    }
+
+    fn description(&self) -> &'static str {
+        "Retrieves the string saved by `StoreCommand` and prints it to the console."
     }
 
     fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
