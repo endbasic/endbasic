@@ -30,12 +30,12 @@ do_package() {
 
 # Builds and runs all binaries and tests in release mode.
 do_release() {
-    cargo test --all-features --all-targets --verbose --release
+    cargo test --all-features --verbose --release
 }
 
 # Builds and runs all binaries and tests in dev mode.
 do_test() {
-    cargo test --all-features --all-targets --verbose
+    cargo test --all-features --verbose
 }
 
 if [ "${DO-unset}" = unset ]; then

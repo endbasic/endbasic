@@ -14,6 +14,7 @@
     "files.insertFinalNewline": true,
     "files.trimTrailingWhitespace": true,
 
+    "rust.all_targets": true,
     "rust.cfg_test": true,
     "rust.clippy_preference": "on",
 

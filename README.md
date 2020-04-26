@@ -66,6 +66,9 @@ endbasic some-program.bas
 You can peek into the `tests` subdirectory of this repository to see actual code
 samples.
 
+For now, the `examples` directory only contains sample code to show how to
+embed the EndBASIC interpreter into your own programs.
+
 ## Why EndBASIC?
 
 EndBASIC started as part of my desire to teach programming to my own kids.

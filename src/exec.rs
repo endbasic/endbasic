@@ -15,7 +15,7 @@
 
 //! Execution engine for EndBASIC programs.
 
-use crate::ast::{ArgSep, Expr, Statement, Value, VarRef};
+use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
 use crate::parser::Parser;
 use failure::Fallible;
 use std::collections::HashMap;
@@ -154,6 +154,33 @@ impl Machine {
     /// Obtains mutable access to the state of the variables.
     pub fn get_mut_vars(&mut self) -> &mut Vars {
         &mut self.vars
+    }
+
+    /// Retrieves the variable `name` as a boolean.  Fails if it is some other type or if it's not
+    /// defined.
+    pub fn get_var_as_bool(&self, name: &str) -> Fallible<bool> {
+        match self.vars.get(&VarRef::new(name, VarType::Boolean))? {
+            Value::Boolean(b) => Ok(*b),
+            _ => panic!("Invalid type check in get()"),
+        }
+    }
+
+    /// Retrieves the variable `name` as an integer.  Fails if it is some other type or if it's not
+    /// defined.
+    pub fn get_var_as_int(&self, name: &str) -> Fallible<i32> {
+        match self.vars.get(&VarRef::new(name, VarType::Integer))? {
+            Value::Integer(i) => Ok(*i),
+            _ => panic!("Invalid type check in get()"),
+        }
+    }
+
+    /// Retrieves the variable `name` as a string.  Fails if it is some other type or if it's not
+    /// defined.
+    pub fn get_var_as_string(&self, name: &str) -> Fallible<&str> {
+        match self.vars.get(&VarRef::new(name, VarType::Text))? {
+            Value::Text(s) => Ok(s),
+            _ => panic!("Invalid type check in get()"),
+        }
     }
 
     /// Assigns the value of `expr` to the variable `vref`.
@@ -476,6 +503,87 @@ mod tests {
         assert_eq!(
             Value::Integer(200),
             *vars.get(&VarRef::new("the_var", VarType::Auto)).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_get_var_as_bool() {
+        let mut machine = Machine::default();
+        let mut cursor = io::Cursor::new("a = TRUE: b = 1");
+        machine.exec(&mut cursor).expect("Execution failed");
+        assert!(machine.get_var_as_bool("a").expect("Failed to query a"));
+        assert_eq!(
+            "Incompatible types in b? reference",
+            format!(
+                "{}",
+                machine
+                    .get_var_as_bool("b")
+                    .expect_err("Querying b succeeded")
+            )
+        );
+        assert_eq!(
+            "Undefined variable c",
+            format!(
+                "{}",
+                machine
+                    .get_var_as_bool("c")
+                    .expect_err("Querying c succeeded")
+            )
+        );
+    }
+
+    #[test]
+    fn test_get_var_as_int() {
+        let mut machine = Machine::default();
+        let mut cursor = io::Cursor::new("a = 1: b = \"foo\"");
+        machine.exec(&mut cursor).expect("Execution failed");
+        assert_eq!(1, machine.get_var_as_int("a").expect("Failed to query a"));
+        assert_eq!(
+            "Incompatible types in b% reference",
+            format!(
+                "{}",
+                machine
+                    .get_var_as_int("b")
+                    .expect_err("Querying b succeeded")
+            )
+        );
+        assert_eq!(
+            "Undefined variable c",
+            format!(
+                "{}",
+                machine
+                    .get_var_as_int("c")
+                    .expect_err("Querying c succeeded")
+            )
+        );
+    }
+
+    #[test]
+    fn test_get_var_as_string() {
+        let mut machine = Machine::default();
+        let mut cursor = io::Cursor::new("a = \"foo\": b = FALSE");
+        machine.exec(&mut cursor).expect("Execution failed");
+        assert_eq!(
+            "foo",
+            machine.get_var_as_string("a").expect("Failed to query a")
+        );
+        assert_eq!(
+            "Incompatible types in b$ reference",
+            format!(
+                "{}",
+                machine
+                    .get_var_as_string("b")
+                    .expect_err("Querying b succeeded")
+            )
+        );
+        assert_eq!(
+            "Undefined variable c",
+            format!(
+                "{}",
+                machine
+                    .get_var_as_string("c")
+                    .expect_err("Querying c succeeded")
+            )
         );
     }
 

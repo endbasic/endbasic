@@ -80,7 +80,7 @@ impl endbasic::console::Console for StdioConsole {
 /// Executes the `path` program in a fresh machine.
 fn run<P: AsRef<Path>>(path: P) -> Fallible<()> {
     let console = Rc::from(RefCell::from(StdioConsole::default()));
-    let mut machine = endbasic::MachineBuilder::default()
+    let mut machine = endbasic::exec::MachineBuilder::default()
         .add_builtins(endbasic::console::all_commands(console.clone()))
         .build();
 

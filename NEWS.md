@@ -1,5 +1,10 @@
 # Major changes between releases
 
+**IMPORTANT: There currently are no guarantees regarding the stability of
+the EndBASIC language definition nor the API exposed by this crate.  Expect
+them to change at any time (especially the Rust API).  Version numbers will
+not adhere to semantic versioning until 1.0.0.**
+
 ## Changes in version X.Y.Z
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
