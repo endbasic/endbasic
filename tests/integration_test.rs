@@ -175,11 +175,21 @@ fn do_example_test(name: &str) {
 ///
 /// The data files are expected to be in the `tests` subdirectory and have `name` as their
 /// basename.  See the description in `check` for more details.
-fn do_golden_test(name: &str) {
+fn do_golden_script_test(name: &str) {
     let bin_path = get_bin("endbasic");
     let data_dir = get_src_dir().join("tests");
     let bas_path = data_dir.join(name).with_extension("bas");
     check(bin_path, &[bas_path.to_str().unwrap()], name, data_dir);
+}
+
+/// Feeds `name.in` to the interpreter and compares its output against golden data in files.
+///
+/// The data files are expected to be in the `tests` subdirectory and have `name` as their
+/// basename.  See the description in `check` for more details.
+fn do_golden_interactive_test(name: &str) {
+    let bin_path = get_bin("endbasic");
+    let data_dir = get_src_dir().join("tests");
+    check(bin_path, &[], name, data_dir);
 }
 
 #[test]
@@ -194,54 +204,47 @@ fn test_example_minimal() {
 
 #[test]
 fn test_golden_control_flow() {
-    do_golden_test("control-flow");
+    do_golden_script_test("control-flow");
 }
 
 #[test]
 fn test_golden_exec_error() {
-    do_golden_test("exec-error");
+    do_golden_script_test("exec-error");
 }
 
 #[test]
 fn test_golden_hello() {
-    do_golden_test("hello");
+    do_golden_script_test("hello");
+}
+
+#[test]
+fn test_golden_interactive() {
+    do_golden_interactive_test("interactive");
 }
 
 #[test]
 fn test_golden_lexer_error() {
-    do_golden_test("lexer-error");
+    do_golden_script_test("lexer-error");
 }
 
 #[test]
 fn test_golden_parser_error() {
-    do_golden_test("parser-error");
+    do_golden_script_test("parser-error");
 }
 
 #[test]
 fn test_golden_types() {
-    do_golden_test("types");
+    do_golden_script_test("types");
 }
 
 #[test]
 fn test_golden_utf8() {
-    do_golden_test("utf8");
+    do_golden_script_test("utf8");
 }
 
 #[test]
 fn test_golden_yes_no() {
-    do_golden_test("yes-no");
-}
-
-#[test]
-fn test_no_args() {
-    check_program(
-        &get_bin("endbasic"),
-        &[],
-        1,
-        process::Stdio::null(),
-        "",
-        "endbasic: E: No program specified\n",
-    );
+    do_golden_script_test("yes-no");
 }
 
 #[test]
@@ -282,10 +285,10 @@ fn test_program_name_uses_arg0() {
     fs::copy(&original, &custom).unwrap();
     check_program(
         &custom,
-        &[],
+        &["one", "two", "three"],
         1,
         process::Stdio::null(),
         "",
-        "custom-name: E: No program specified\n",
+        "custom-name: E: Too many arguments\n",
     );
 }

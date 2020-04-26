@@ -9,6 +9,8 @@ not adhere to semantic versioning until 1.0.0.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
+*   Added an interactive command-line interface (aka a REPL).
+
 *   Added support for `:` as a statement delimiter.
 
 *   Added support for `_` in identifiers.

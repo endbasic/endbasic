@@ -1,0 +1,7 @@
+
+    Welcome to EndBASIC 0.1.0
+
+? Got 123 from stdin
+ERROR: Unknown builtin FOOBAR
+Continuing
+End of input by CTRL-D

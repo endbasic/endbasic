@@ -16,3 +16,4 @@ travis-ci = { repository = "jmmv/endbasic", branch = "master" }
 
 [dependencies]
 failure = "~0.1"
+rustyline = "6.1.2"
