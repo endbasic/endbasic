@@ -26,11 +26,26 @@ HELP
 PRINT "Output from HELP CLEAR:"
 HELP CLEAR
 
+PRINT "Output from HELP EDIT:"
+HELP EDIT
+
 PRINT "Output from HELP HELP:"
 HELP HELP
 
 PRINT "Output from HELP INPUT:"
 HELP INPUT
 
+PRINT "Output from HELP LIST:"
+HELP LIST
+
+PRINT "Output from HELP NEW:"
+HELP NEW
+
 PRINT "Output from HELP PRINT:"
 HELP PRINT
+
+PRINT "Output from HELP RENUM:"
+HELP RENUM
+
+PRINT "Output from HELP RUN:"
+HELP RUN

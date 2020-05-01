@@ -18,6 +18,7 @@
 use crate::ast::{ArgSep, Expr, VarType};
 use crate::console;
 use crate::exec::{BuiltinCommand, Machine, MachineBuilder};
+use crate::program;
 use failure::Fallible;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -148,7 +149,7 @@ With a single argument, shows detailed information about the given command."
 }
 
 /// Converts a `ReadLine` error into an `io::Error`.
-fn readline_error_to_io_error(e: ReadlineError) -> io::Error {
+pub(crate) fn readline_error_to_io_error(e: ReadlineError) -> io::Error {
     let kind = match e {
         ReadlineError::Eof => io::ErrorKind::UnexpectedEof,
         ReadlineError::Interrupted => io::ErrorKind::Interrupted,
@@ -197,7 +198,7 @@ struct TtyConsole {}
 
 impl console::Console for TtyConsole {
     fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String> {
-        let mut rl = rustyline::Editor::<()>::new();
+        let mut rl = Editor::<()>::new();
         let answer = match rl.readline_with_initial(prompt, (previous, "")) {
             Ok(line) => line,
             Err(e) => return Err(readline_error_to_io_error(e)),
@@ -230,7 +231,8 @@ pub fn run_repl_loop() -> io::Result<()> {
         .add_builtin(Rc::from(HelpCommand {
             output: Rc::from(RefCell::from(io::stdout())),
         }))
-        .add_builtins(console::all_commands(console))
+        .add_builtins(console::all_commands(console.clone()))
+        .add_builtins(program::all_commands(console))
         .build();
 
     println!();

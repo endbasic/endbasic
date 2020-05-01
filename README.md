@@ -54,7 +54,7 @@ cargo install endbasic
 This should work on any Linux, macOS, and Windows system (all of which are
 tested on CI).
 
-## Usage
+## Interactive usage
 
 `endbasic` comes with a REPL command-line interface that offers fancy line
 editing features and built-in documentation for all available features.  You can
@@ -66,14 +66,36 @@ endbasic
 
 and you can exit it at any time by pressing CTRL+D.
 
-You can also give `endbasic` the name of a program to execute:
+The `HELP` command lets you obtain a list of all possible commands as well as
+detailed usage information for any of them.
+
+The interactive interface has support for manipulating a stored program: that
+is, a program that lives in the memory of the interpreter.  To get started, use
+the `EDIT` command to enter new lines into the program, `LIST` to inspect its
+contents and `RUN` to execute it.
+
+The lines that `EDIT` prints during program editing are not meaningful to the
+program and only exist to support interactive editing.  Line numbers are
+typically multiples of ten to allow you to insert lines in-between others.  For
+example: if your program previously had lines `20` and `30` but you forgot a
+statement between those, you can do `EDIT 15` to enter that statement.  If you
+run out of lines, or if you want to tidy up their numbers to be multiples of ten
+again, use the `RENUM` command.
+
+Finally, use `CLEAR` to erase all variables set in the interactive editor, and
+`NEW` to also erase the stored program from memory and start afresh.
+
+## Scripting usage
+
+You can give `endbasic` the name of a program to execute:
 
 ```shell
 endbasic some-program.bas
 ```
 
-Note, however, that some features (like the `HELP` builtin command) are only
-available in the interactive interface.
+It is important to note that some features (like the `HELP` builtin command or
+all stored program manipulation commands) are only available in the interactive
+interface.
 
 ## Examples
 

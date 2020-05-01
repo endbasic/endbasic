@@ -1,0 +1,58 @@
+
+    Welcome to EndBASIC 0.1.0.
+    Type HELP for interactive usage information.
+
+10 20 30 10 PRINT "Hello!"
+20 PRINT "Good bye."
+
+Hello!
+Good bye.
+10 PRINT "Hello!"
+20 PRINT "Good bye."
+
+20 This is not part of the program
+5 15 25 5 PRINT "Pre-hello"
+10 PRINT "Hello!"
+15 PRINT "Interlude"
+20 PRINT "Not yet"
+25 PRINT "Leaving"
+
+10 PRINT "Pre-hello"
+20 PRINT "Hello!"
+30 PRINT "Interlude"
+40 PRINT "Not yet"
+50 PRINT "Leaving"
+
+60 70 80 10 PRINT "Pre-hello"
+20 PRINT "Hello!"
+30 PRINT "Interlude"
+40 PRINT "Not yet"
+50 PRINT "Leaving"
+60 PRINT "One more thing"
+70 PRINT "Maybe not"
+
+30 10 PRINT "Pre-hello"
+20 PRINT "Hello!"
+40 PRINT "Not yet"
+50 PRINT "Leaving"
+60 PRINT "One more thing"
+70 PRINT "Maybe not"
+
+10 PRINT "Pre-hello"
+20 PRINT "Hello!"
+30 PRINT "Not yet"
+40 PRINT "Leaving"
+50 PRINT "One more thing"
+60 PRINT "Maybe not"
+
+Pre-hello
+Hello!
+Not yet
+Leaving
+One more thing
+Maybe not
+
+10 20 30 40 before
+ERROR: Unexpected value in expression
+Did not abort on RUN error!
+End of input by CTRL-D

@@ -208,6 +208,11 @@ fn test_golden_control_flow() {
 }
 
 #[test]
+fn test_golden_editor() {
+    do_golden_interactive_test("editor");
+}
+
+#[test]
 fn test_golden_exec_error() {
     do_golden_script_test("exec-error");
 }
@@ -240,6 +245,11 @@ fn test_golden_parser_error() {
 #[test]
 fn test_golden_script() {
     do_golden_script_test("script");
+}
+
+#[test]
+fn test_golden_state_sharing() {
+    do_golden_interactive_test("state-sharing");
 }
 
 #[test]
