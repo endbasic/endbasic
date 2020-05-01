@@ -266,7 +266,36 @@ pub fn run_repl_loop() -> io::Result<()> {
 }
 
 #[cfg(test)]
+pub(crate) mod testutils {
+    use super::*;
+
+    /// A command that does nothing.
+    pub(crate) struct DoNothingCommand {}
+
+    impl BuiltinCommand for DoNothingCommand {
+        fn name(&self) -> &'static str {
+            "DO_NOTHING"
+        }
+
+        fn syntax(&self) -> &'static str {
+            "this [would] <be|the> syntax \"specification\""
+        }
+
+        fn description(&self) -> &'static str {
+            "This is the blurb.
+First paragraph of the extended description.
+Second paragraph of the extended description."
+        }
+
+        fn exec(&self, _args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
+            Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
+    use super::testutils::*;
     use super::*;
 
     #[test]
@@ -289,29 +318,6 @@ mod tests {
             "CLEAR takes no arguments",
             format!("{}", machine.exec(&mut b"CLEAR 123".as_ref()).unwrap_err())
         );
-    }
-
-    /// A command that does nothing.
-    struct DoNothingCommand {}
-
-    impl BuiltinCommand for DoNothingCommand {
-        fn name(&self) -> &'static str {
-            "DO_NOTHING"
-        }
-
-        fn syntax(&self) -> &'static str {
-            "this [would] <be|the> syntax \"specification\""
-        }
-
-        fn description(&self) -> &'static str {
-            "This is the blurb.
-First paragraph of the extended description.
-Second paragraph of the extended description."
-        }
-
-        fn exec(&self, _args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
-            Ok(())
-        }
     }
 
     #[test]
