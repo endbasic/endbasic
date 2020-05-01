@@ -59,6 +59,11 @@ pub struct Vars {
 }
 
 impl Vars {
+    /// Clears all variables.
+    pub fn clear(&mut self) {
+        self.vars.clear()
+    }
+
     /// Obtains the value of a variable.
     ///
     /// Returns an error if the variable is not defined, or if the type annotation in the variable
@@ -74,6 +79,11 @@ impl Vars {
             vref
         );
         Ok(value)
+    }
+
+    /// Returns true if this contains no variables.
+    pub fn is_empty(&self) -> bool {
+        self.vars.is_empty()
     }
 
     /// Sets the value of a variable.
@@ -155,6 +165,11 @@ pub struct Machine {
 }
 
 impl Machine {
+    /// Resets the state of the machine by clearing all variable.
+    pub fn clear(&mut self) {
+        self.vars.clear()
+    }
+
     /// Obtains immutable access to the builtins supported by this machine.
     pub fn get_builtins(&self) -> &HashMap<&'static str, Rc<dyn BuiltinCommand>> {
         &self.builtins
@@ -272,6 +287,16 @@ mod tests {
     use crate::ast::VarType;
     use std::cell::RefCell;
     use std::rc::Rc;
+
+    #[test]
+    fn test_vars_clear() {
+        let mut raw_vars = HashMap::new();
+        raw_vars.insert("FOO".to_owned(), Value::Boolean(true));
+        let mut vars = Vars { vars: raw_vars };
+        assert!(!vars.is_empty());
+        vars.clear();
+        assert!(vars.is_empty());
+    }
 
     #[test]
     fn test_vars_get_ok_with_explicit_type() {
@@ -518,6 +543,18 @@ mod tests {
             Value::Integer(200),
             *vars.get(&VarRef::new("the_var", VarType::Auto)).unwrap()
         );
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut machine = Machine::default();
+        let mut cursor = io::Cursor::new("a = TRUE: b = 1");
+        machine.exec(&mut cursor).expect("Execution failed");
+        assert!(machine.get_var_as_bool("a").is_ok());
+        assert!(machine.get_var_as_int("b").is_ok());
+        machine.clear();
+        assert!(machine.get_var_as_bool("a").is_err());
+        assert!(machine.get_var_as_int("b").is_err());
     }
 
     #[test]
