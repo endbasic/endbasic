@@ -1,0 +1,40 @@
+' EndBASIC
+' Copyright 2020 Julio Merino
+'
+' Licensed under the Apache License, Version 2.0 (the "License"); you may not
+' use this file except in compliance with the License.  You may obtain a copy
+' of the License at:
+'
+'     http://www.apache.org/licenses/LICENSE-2.0
+'
+' Unless required by applicable law or agreed to in writing, software
+' distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+' WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+' License for the specific language governing permissions and limitations
+' under the License.
+
+' Tests interactions between the stored program and the machine state.
+
+a = 3
+PRINT a
+CLEAR
+PRINT a
+
+EDIT ' Insert stored program until empty line.
+PRINT "counter is"; counter
+counter = counter + 1
+
+counter = 100
+RUN
+RUN
+RUN
+
+CLEAR ' Reset variables but not the stored program.
+RUN
+counter = 20
+RUN
+
+PRINT "counter before reset is"; counter
+NEW ' Reset everything.
+PRINT "counter after reset is"; counter
+RUN ' Doesn't do anything.

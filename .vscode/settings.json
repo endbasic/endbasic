@@ -62,6 +62,7 @@
         "paren",
         "peekable",
         "readline",
+        "renum",
         "rustyline",
         "stmt",
         "stmts",
