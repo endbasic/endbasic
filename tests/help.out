@@ -6,12 +6,19 @@ Output from HELP:
 
     This is EndBASIC 0.1.0.
 
+    CLEAR    Clears all variables to restore initial state.
     HELP     Prints interactive help.
     INPUT    Obtains user input from the console.
     PRINT    Prints a message to the console.
 
     Type HELP followed by a command name for details on that command.
     Press CTRL+D to exit.
+
+Output from HELP CLEAR:
+
+    CLEAR
+
+    Clears all variables to restore initial state.
 
 Output from HELP HELP:
 

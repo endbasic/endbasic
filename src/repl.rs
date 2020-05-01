@@ -26,6 +26,29 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 use std::rc::Rc;
 
+/// The `CLEAR` command.
+struct ClearCommand {}
+
+impl BuiltinCommand for ClearCommand {
+    fn name(&self) -> &'static str {
+        "CLEAR"
+    }
+
+    fn syntax(&self) -> &'static str {
+        ""
+    }
+
+    fn description(&self) -> &'static str {
+        "Clears all variables to restore initial state."
+    }
+
+    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+        ensure!(args.is_empty(), "CLEAR takes no arguments");
+        machine.clear();
+        Ok(())
+    }
+}
+
 /// The `HELP` command.
 struct HelpCommand {
     output: Rc<RefCell<dyn Write>>,
@@ -203,6 +226,7 @@ pub fn new_console() -> Rc<RefCell<dyn console::Console>> {
 pub fn run_repl_loop() -> io::Result<()> {
     let console = new_console();
     let mut machine = MachineBuilder::default()
+        .add_builtin(Rc::from(ClearCommand {}))
         .add_builtin(Rc::from(HelpCommand {
             output: Rc::from(RefCell::from(io::stdout())),
         }))
@@ -244,6 +268,28 @@ pub fn run_repl_loop() -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_clear_ok() {
+        let mut machine = MachineBuilder::default()
+            .add_builtin(Rc::from(ClearCommand {}))
+            .build();
+        machine.exec(&mut b"a = 1".as_ref()).unwrap();
+        assert!(machine.get_var_as_int("a").is_ok());
+        machine.exec(&mut b"CLEAR".as_ref()).unwrap();
+        assert!(machine.get_var_as_int("a").is_err());
+    }
+
+    #[test]
+    fn test_clear_errors() {
+        let mut machine = MachineBuilder::default()
+            .add_builtin(Rc::from(ClearCommand {}))
+            .build();
+        assert_eq!(
+            "CLEAR takes no arguments",
+            format!("{}", machine.exec(&mut b"CLEAR 123".as_ref()).unwrap_err())
+        );
+    }
 
     /// A command that does nothing.
     struct DoNothingCommand {}
