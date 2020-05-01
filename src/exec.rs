@@ -282,7 +282,103 @@ impl Machine {
 }
 
 #[cfg(test)]
+pub(crate) mod testutils {
+    use super::*;
+    use std::cell::RefCell;
+
+    /// Simplified version of `INPUT` to feed input values based on some golden `data`.
+    ///
+    /// Every time this command is invoked, it yields the next value from the `data` iterator and
+    /// assigns it to the variable provided as its only argument.
+    pub(crate) struct InCommand {
+        data: Box<RefCell<dyn Iterator<Item = &'static &'static str>>>,
+    }
+
+    impl InCommand {
+        /// Creates a new command with the golden `data`.
+        pub(crate) fn from(data: Box<RefCell<dyn Iterator<Item = &'static &'static str>>>) -> Self {
+            Self { data }
+        }
+    }
+
+    impl BuiltinCommand for InCommand {
+        fn name(&self) -> &'static str {
+            "IN"
+        }
+
+        fn syntax(&self) -> &'static str {
+            "variableref"
+        }
+
+        fn description(&self) -> &'static str {
+            "See docstring for test code."
+        }
+
+        fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+            ensure!(args.len() == 1, "IN only takes one argument");
+            ensure!(args[0].1 == ArgSep::End, "Invalid separator");
+            let vref = match &args[0].0 {
+                Some(Expr::Symbol(vref)) => vref,
+                _ => bail!("IN requires a variable reference"),
+            };
+
+            let mut data = self.data.borrow_mut();
+            let raw_value = data.next().unwrap().to_owned();
+            let value = Value::parse_as(vref.ref_type(), raw_value)?;
+            machine.get_mut_vars().set(vref, value)?;
+            Ok(())
+        }
+    }
+
+    /// Simplified version of `PRINT` that captures all calls to it into `data`.
+    ///
+    /// This command only accepts arguments separated by the `;` short separator and concatenates
+    /// them with a single space.
+    pub(crate) struct OutCommand {
+        data: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl OutCommand {
+        /// Creates a new command that captures all calls into `data`.
+        pub(crate) fn from(data: Rc<RefCell<Vec<String>>>) -> Self {
+            Self { data }
+        }
+    }
+
+    impl BuiltinCommand for OutCommand {
+        fn name(&self) -> &'static str {
+            "OUT"
+        }
+
+        fn syntax(&self) -> &'static str {
+            "[expr1 [; .. exprN]]"
+        }
+
+        fn description(&self) -> &'static str {
+            "See docstring for test code."
+        }
+
+        fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+            let mut text = String::new();
+            for arg in args.iter() {
+                if let Some(expr) = arg.0.as_ref() {
+                    text += &expr.eval(machine.get_vars())?.to_string();
+                }
+                match arg.1 {
+                    ArgSep::End => break,
+                    ArgSep::Short => text += " ",
+                    ArgSep::Long => bail!("Cannot use the ',' separator"),
+                }
+            }
+            self.data.borrow_mut().push(text);
+            Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
+    use super::testutils::*;
     use super::*;
     use crate::ast::VarType;
     use std::cell::RefCell;
@@ -638,81 +734,6 @@ mod tests {
         );
     }
 
-    /// Simplified version of `INPUT` to feed input values based on some golden `data`.
-    ///
-    /// Every time this command is invoked, it yields the next value from the `data` iterator and
-    /// assigns it to the variable provided as its only argument.
-    struct InCommand {
-        data: Box<RefCell<dyn Iterator<Item = &'static &'static str>>>,
-    }
-
-    impl BuiltinCommand for InCommand {
-        fn name(&self) -> &'static str {
-            "IN"
-        }
-
-        fn syntax(&self) -> &'static str {
-            "variableref"
-        }
-
-        fn description(&self) -> &'static str {
-            "See docstring for test code."
-        }
-
-        fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
-            ensure!(args.len() == 1, "IN only takes one argument");
-            ensure!(args[0].1 == ArgSep::End, "Invalid separator");
-            let vref = match &args[0].0 {
-                Some(Expr::Symbol(vref)) => vref,
-                _ => bail!("IN requires a variable reference"),
-            };
-
-            let mut data = self.data.borrow_mut();
-            let raw_value = data.next().unwrap().to_owned();
-            let value = Value::parse_as(vref.ref_type(), raw_value)?;
-            machine.get_mut_vars().set(vref, value)?;
-            Ok(())
-        }
-    }
-
-    /// Simplified version of `PRINT` that captures all calls to it into `data`.
-    ///
-    /// This command only accepts arguments separated by the `;` short separator and concatenates
-    /// them with a single space.
-    struct OutCommand {
-        data: Rc<RefCell<Vec<String>>>,
-    }
-
-    impl BuiltinCommand for OutCommand {
-        fn name(&self) -> &'static str {
-            "OUT"
-        }
-
-        fn syntax(&self) -> &'static str {
-            "[expr1 [; .. exprN]]"
-        }
-
-        fn description(&self) -> &'static str {
-            "See docstring for test code."
-        }
-
-        fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
-            let mut text = String::new();
-            for arg in args.iter() {
-                if let Some(expr) = arg.0.as_ref() {
-                    text += &expr.eval(machine.get_vars())?.to_string();
-                }
-                match arg.1 {
-                    ArgSep::End => break,
-                    ArgSep::Short => text += " ",
-                    ArgSep::Long => bail!("Cannot use the ',' separator"),
-                }
-            }
-            self.data.borrow_mut().push(text);
-            Ok(())
-        }
-    }
-
     /// Runs the `input` code on a new test machine.
     ///
     /// `golden_in` is the sequence of values to yield by `IN`.
@@ -723,10 +744,8 @@ mod tests {
         captured_out: Rc<RefCell<Vec<String>>>,
     ) -> Fallible<()> {
         let mut cursor = io::Cursor::new(input.as_bytes());
-        let in_cmd = InCommand {
-            data: Box::from(RefCell::from(golden_in.iter())),
-        };
-        let out_cmd = OutCommand { data: captured_out };
+        let in_cmd = InCommand::from(Box::from(RefCell::from(golden_in.iter())));
+        let out_cmd = OutCommand::from(captured_out);
         let mut machine = MachineBuilder::default()
             .add_builtin(Rc::from(in_cmd))
             .add_builtin(Rc::from(out_cmd))

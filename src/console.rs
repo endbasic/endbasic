@@ -163,13 +163,12 @@ pub fn all_commands(console: Rc<RefCell<dyn Console>>) -> Vec<Rc<dyn BuiltinComm
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod testutils {
     use super::*;
-    use crate::exec::MachineBuilder;
     use std::io;
 
     /// A console that supplies golden input and captures all output.
-    struct MockConsole {
+    pub(crate) struct MockConsole {
         /// Sequence of expected prompts and previous values and the responses to feed to them.
         golden_in: Box<dyn Iterator<Item = &'static (&'static str, &'static str, &'static str)>>,
 
@@ -179,11 +178,18 @@ mod tests {
 
     impl MockConsole {
         /// Creates a new mock console with the given golden input.
-        fn new(golden_in: &'static [(&'static str, &'static str, &'static str)]) -> Self {
+        pub(crate) fn new(
+            golden_in: &'static [(&'static str, &'static str, &'static str)],
+        ) -> Self {
             Self {
                 golden_in: Box::from(golden_in.iter()),
                 captured_out: vec![],
             }
+        }
+
+        /// Obtains a reference to the captured output.
+        pub(crate) fn captured_out(&self) -> &[String] {
+            self.captured_out.as_slice()
         }
     }
 
@@ -200,6 +206,14 @@ mod tests {
             Ok(())
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::testutils::*;
+    use super::*;
+    use crate::exec::MachineBuilder;
+    use std::io;
 
     /// Runs the `input` code on a new machine and verifies its output.
     ///
@@ -218,7 +232,7 @@ mod tests {
             .add_builtins(all_commands(console.clone()))
             .build();
         machine.exec(&mut cursor).expect("Execution failed");
-        assert_eq!(expected_out, console.borrow().captured_out.as_slice());
+        assert_eq!(expected_out, console.borrow().captured_out());
     }
 
     /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
@@ -245,7 +259,7 @@ mod tests {
                     .expect_err("Execution did not fail")
             )
         );
-        assert_eq!(expected_out, console.borrow().captured_out.as_slice());
+        assert_eq!(expected_out, console.borrow().captured_out());
     }
 
     /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
