@@ -29,6 +29,7 @@
 extern crate failure;
 
 use failure::{Error, Fail, Fallible};
+use getopts::Options;
 use std::env;
 use std::fs::File;
 use std::path::Path;
@@ -79,6 +80,23 @@ fn program_name(mut args: env::Args, default_name: &'static str) -> (String, env
     (name, args)
 }
 
+/// Prints usage information for program `name` with `opts` following the GNU Standards format.
+fn help(name: &str, opts: &Options) -> Fallible<()> {
+    let brief = format!("Usage: {} [options] [program-file]", name);
+    println!("{}", opts.usage(&brief));
+    println!("Report bugs to: https://github.com/jmmv/endbasic/issues");
+    println!("EndBASIC home page: https://github.com/jmmv/endbasic");
+    Ok(())
+}
+
+/// Prints version information following the GNU Standards format.
+fn version() -> Fallible<()> {
+    println!("EndBASIC {}", env!("CARGO_PKG_VERSION"));
+    println!("Copyright 2020 Julio Merino");
+    println!("License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>");
+    Ok(())
+}
+
 /// Implementation of the EndBASIC console to interact with stdin and stdout.
 #[derive(Default)]
 struct StdioConsole {}
@@ -95,9 +113,23 @@ fn run<P: AsRef<Path>>(path: P) -> Fallible<()> {
 }
 
 /// Version of `main` that returns errors to the caller for reporting.
-fn safe_main(args: env::Args) -> Fallible<()> {
+fn safe_main(name: &str, args: env::Args) -> Fallible<()> {
     let args: Vec<String> = args.collect();
-    match args.as_slice() {
+
+    let mut opts = Options::new();
+    opts.optflag("h", "help", "show command-line usage information and exit");
+    opts.optflag("", "version", "show version information and exit");
+    let matches = opts.parse(args)?;
+
+    if matches.opt_present("help") {
+        return help(name, &opts);
+    }
+
+    if matches.opt_present("version") {
+        return version();
+    }
+
+    match matches.free.as_slice() {
         [] => Ok(endbasic::repl::run_repl_loop()?),
         [file] => run(file),
         [_, ..] => Err(UsageError::new("Too many arguments").into()),
@@ -106,9 +138,14 @@ fn safe_main(args: env::Args) -> Fallible<()> {
 
 fn main() {
     let (name, args) = program_name(env::args(), "endbasic");
-    if let Err(e) = safe_main(args) {
+    if let Err(e) = safe_main(&name, args) {
         if let Some(e) = e.downcast_ref::<UsageError>() {
-            eprintln!("{}: Usage error: {}", name, e);
+            eprintln!("Usage error: {}", e);
+            eprintln!("Type {} --help for more information", name);
+            process::exit(2);
+        } else if let Some(e) = e.downcast_ref::<getopts::Fail>() {
+            eprintln!("Usage error: {}", e);
+            eprintln!("Type {} --help for more information", name);
             process::exit(2);
         } else {
             eprintln!("{}: {}", name, flatten_causes(&e));

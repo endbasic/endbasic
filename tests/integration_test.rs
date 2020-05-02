@@ -153,6 +153,24 @@ fn check<P: AsRef<Path>>(
     }
 }
 
+#[test]
+fn test_cli_help() {
+    fn check_with_args(args: &[&str]) {
+        check(
+            &bin_path("endbasic"),
+            args,
+            0,
+            Behavior::Null,
+            Behavior::File(src_path("tests/cli/help.out")),
+            Behavior::Null,
+        );
+    }
+    check_with_args(&["-h"]);
+    check_with_args(&["--help"]);
+    check_with_args(&["--version", "--help"]);
+    check_with_args(&["the", "--help", "flag always wins"]);
+}
+
 // TODO(jmmv): This test fails almost always on Linux CI builds with `Text file busy` when
 // attempting to run the copied binary.  I've also gotten it to occasionally fail on a local Linux
 // installation in the same way, but that's much harder to trigger.  Investigate what's going on.
@@ -183,7 +201,10 @@ fn test_cli_program_name_uses_arg0() {
         2,
         Behavior::Null,
         Behavior::Null,
-        Behavior::Literal("custom-name: Usage error: Too many arguments\n".to_owned()),
+        Behavior::Literal(
+            "Usage error: Too many arguments\nType custom-name --help for more information\n"
+                .to_owned(),
+        ),
     );
 }
 
@@ -195,8 +216,42 @@ fn test_cli_too_many_args() {
         2,
         Behavior::Null,
         Behavior::Null,
-        Behavior::Literal("endbasic: Usage error: Too many arguments\n".to_owned()),
+        Behavior::Literal(
+            "Usage error: Too many arguments\nType endbasic --help for more information\n"
+                .to_owned(),
+        ),
     );
+}
+
+#[test]
+fn test_cli_unknown_option() {
+    check(
+        &bin_path("endbasic"),
+        &["-Z", "some-file"],
+        2,
+        Behavior::Null,
+        Behavior::Null,
+        Behavior::Literal(
+            "Usage error: Unrecognized option: 'Z'\nType endbasic --help for more information\n"
+                .to_owned(),
+        ),
+    );
+}
+
+#[test]
+fn test_cli_version() {
+    fn check_with_args(args: &[&str]) {
+        check(
+            &bin_path("endbasic"),
+            args,
+            0,
+            Behavior::Null,
+            Behavior::File(src_path("tests/cli/version.out")),
+            Behavior::Null,
+        );
+    }
+    check_with_args(&["--version"]);
+    check_with_args(&["the", "--version", "flag wins over arguments"]);
 }
 
 #[test]

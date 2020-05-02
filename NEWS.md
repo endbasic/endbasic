@@ -32,6 +32,8 @@ not adhere to semantic versioning until 1.0.0.**
     side-effects if the caller so chooses, which makes it ideal for
     embedding.
 
+*   Added `--help` and `--version` flags to the command-line interface.
+
 ## Changes in version 0.1.0
 
 **Released on 2020-04-22.**
