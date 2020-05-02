@@ -26,7 +26,7 @@
 #![warn(unsafe_code)]
 
 use std::env;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -177,8 +177,6 @@ fn test_cli_help() {
 #[cfg(not(target_os = "linux"))]
 #[test]
 fn test_cli_program_name_uses_arg0() {
-    use std::fs;
-
     struct DeleteOnDrop<'a> {
         path: &'a Path,
     }
@@ -420,6 +418,26 @@ fn test_repl_interactive() {
         Behavior::File(src_path("tests/repl/interactive.out")),
         Behavior::Null,
     );
+}
+
+#[test]
+fn test_load_save() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::copy(
+        &src_path("tests/lang/hello.bas"),
+        &dir.path().join("hello.bas"),
+    )
+    .unwrap();
+    assert!(!dir.path().join("hello2.bas").exists());
+    check(
+        bin_path("endbasic"),
+        &["--programs-dir", dir.path().to_str().unwrap()],
+        0,
+        Behavior::File(src_path("tests/repl/load-save.in")),
+        Behavior::File(src_path("tests/repl/load-save.out")),
+        Behavior::Null,
+    );
+    assert!(dir.path().join("hello2.bas").exists());
 }
 
 #[test]

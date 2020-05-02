@@ -11,8 +11,9 @@ not adhere to semantic versioning until 1.0.0.**
 
 *   Added an interactive command-line interface (aka a REPL) with builtin
     usage information via a new `HELP` command, the `CLEAR` command to
-    wipe machine state, and program editing via the `EDIT`, `LIST`, `NEW`,
-    `RENUM` and `RUN` commands.
+    wipe machine state, program editing via the `EDIT`, `LIST`, `NEW`,
+    `RENUM` and `RUN` commands, and program file manipulation via the
+    `LOAD` and `SAVE` commands.
 
 *   Added support for `:` as a statement delimiter.
 

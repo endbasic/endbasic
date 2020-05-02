@@ -21,7 +21,9 @@ use crate::exec::{BuiltinCommand, Machine};
 use failure::Fallible;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::io;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufRead, Write};
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 /// Representation of a stored program.
@@ -64,6 +66,71 @@ fn append(program: &mut ProgramImpl, console: &mut dyn Console) -> io::Result<()
     };
     while edit_one(program, last_n, console)? {
         last_n += 10;
+    }
+    Ok(())
+}
+
+/// Computes the path to a source file given the `dir` where it lives and a `basename`.
+fn to_filename(dir: &Path, basename: &str) -> Fallible<PathBuf> {
+    let mut basename = PathBuf::from(basename);
+
+    ensure!(
+        basename.components().fold(0, |count, _| count + 1) == 1,
+        "Filename must be a single path component"
+    );
+
+    if let Some(ext) = basename.extension() {
+        if ext != "bas" && ext != "BAS" {
+            bail!("Invalid filename extension");
+        }
+    } else {
+        // Attempt to determine a sensible extension based on the case of the basename, assuming
+        // that an all-uppercase basename wants an all-uppercase extension.  This is fragile on
+        // case-sensitive file systems, but there is not a lot we can do.
+        let mut ext = "BAS";
+        for ch in basename.to_string_lossy().chars() {
+            if ch.is_ascii_lowercase() {
+                ext = "bas";
+                break;
+            }
+        }
+        basename.set_extension(ext);
+    }
+    Ok(dir.join(basename))
+}
+
+/// Loads the contents of the program given by `path`.
+fn load_program(path: &Path) -> io::Result<BTreeMap<usize, String>> {
+    let input = File::open(path)?;
+    let reader = io::BufReader::new(input);
+    let mut n = 10;
+    let mut program = BTreeMap::new();
+    for line in reader.lines() {
+        let line = line?;
+        // TODO(jmmv): Support empty lines in editor.
+        if !line.is_empty() {
+            program.insert(n, line);
+            n += 10;
+        }
+    }
+    Ok(program)
+}
+
+/// Saves the in-memory program given by `lines` into `path`.
+fn save_program(lines: &BTreeMap<usize, String>, path: &Path) -> io::Result<()> {
+    let dir = path.parent().expect("Must be a filename with a directory");
+    fs::create_dir_all(&dir)?;
+
+    // TODO(jmmv): Should back up existing files.
+    let output = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(path)?;
+    let mut writer = io::BufWriter::new(output);
+    for l in lines.values() {
+        writer.write_all(l.as_bytes())?;
+        writer.write_all(b"\n")?;
     }
     Ok(())
 }
@@ -136,6 +203,42 @@ impl BuiltinCommand for ListCommand {
             console.print(&format!("{} {}", k, v))?;
         }
         console.print("")?;
+        Ok(())
+    }
+}
+
+/// The `LOAD` command.
+struct LoadCommand {
+    dir: PathBuf,
+    program: Program,
+}
+
+impl BuiltinCommand for LoadCommand {
+    fn name(&self) -> &'static str {
+        "LOAD"
+    }
+
+    fn syntax(&self) -> &'static str {
+        "filename"
+    }
+
+    fn description(&self) -> &'static str {
+        "Loads the given program.
+The filename must be a string and must be a basename (no directory components).  The .BAS \
+extension is optional, but if present, it must be .BAS."
+    }
+
+    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+        ensure!(args.len() == 1, "LOAD requires a filename");
+        let arg0 = args[0].0.as_ref().expect("Single argument must be present");
+        match arg0.eval(machine.get_vars())? {
+            Value::Text(t) => {
+                let path = to_filename(&self.dir, &t)?;
+                *self.program.borrow_mut() = load_program(&path)?;
+                machine.clear();
+            }
+            _ => bail!("LOAD requires a string as the filename"),
+        }
         Ok(())
     }
 }
@@ -233,10 +336,47 @@ and other state that may already be set."
     }
 }
 
-/// Instantiates all program editing commands against the stored `program`.
+/// The `SAVE` command.
+struct SaveCommand {
+    dir: PathBuf,
+    program: Program,
+}
+
+impl BuiltinCommand for SaveCommand {
+    fn name(&self) -> &'static str {
+        "SAVE"
+    }
+
+    fn syntax(&self) -> &'static str {
+        "filename"
+    }
+
+    fn description(&self) -> &'static str {
+        "Saves the current program in memory to the given filename.
+The filename must be a string and must be a basename (no directory components).  The .BAS \
+extension is optional, but if present, it must be .BAS."
+    }
+
+    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+        ensure!(args.len() == 1, "SAVE requires a filename");
+        let arg0 = args[0].0.as_ref().expect("Single argument must be present");
+        match arg0.eval(machine.get_vars())? {
+            Value::Text(t) => {
+                let path = to_filename(&self.dir, &t)?;
+                save_program(&self.program.borrow(), &path)?;
+            }
+            _ => bail!("SAVE requires a string as the filename"),
+        }
+        Ok(())
+    }
+}
+
+/// Instantiates all program editing commands against the stored `program`, using `console` for
+/// interactive editing, and using `dir` as the on-disk storage for the programs.
 fn all_commands_for(
     program: Program,
     console: Rc<RefCell<dyn Console>>,
+    dir: &Path,
 ) -> Vec<Rc<dyn BuiltinCommand>> {
     vec![
         Rc::from(EditCommand {
@@ -247,19 +387,30 @@ fn all_commands_for(
             console: console.clone(),
             program: program.clone(),
         }),
+        Rc::from(LoadCommand {
+            dir: dir.to_owned(),
+            program: program.clone(),
+        }),
         Rc::from(NewCommand {
             program: program.clone(),
         }),
         Rc::from(RenumCommand {
             program: program.clone(),
         }),
-        Rc::from(RunCommand { program: program }),
+        Rc::from(RunCommand {
+            program: program.clone(),
+        }),
+        Rc::from(SaveCommand {
+            dir: dir.to_owned(),
+            program: program,
+        }),
     ]
 }
 
-/// Instantiates all program editing commands against a new (empty) stored program.
-pub fn all_commands(console: Rc<RefCell<dyn Console>>) -> Vec<Rc<dyn BuiltinCommand>> {
-    all_commands_for(Program::default(), console)
+/// Instantiates all program editing commands against a new (empty) program, using `console` for
+/// interactive editing, and using `dir` as the on-disk storage for the programs.
+pub fn all_commands(console: Rc<RefCell<dyn Console>>, dir: &Path) -> Vec<Rc<dyn BuiltinCommand>> {
+    all_commands_for(Program::default(), console, dir)
 }
 
 #[cfg(test)]
@@ -269,7 +420,8 @@ mod tests {
     use crate::exec::testutils::*;
     use crate::exec::MachineBuilder;
 
-    /// Runs the `input` code on a new machine and verifies its output.
+    /// Runs the `input` code on a new machine that stores programs in `dir` and verifies its
+    /// output.
     ///
     /// `golden_in` is a sequence of pairs each containing an expected prompt printed by `INPUT`
     /// and the reply to feed to that prompt.
@@ -278,8 +430,9 @@ mod tests {
     ///
     /// `exp_program` is the expected state of `program` after execution, as a collection of line
     /// number and content pairs.
-    fn do_ok_test(
+    fn do_ok_test_with_dir(
         program: Program,
+        dir: &Path,
         input: &str,
         golden_in: &'static [(&'static str, &'static str, &'static str)],
         expected_out: &'static [&'static str],
@@ -287,7 +440,7 @@ mod tests {
     ) {
         let console = Rc::from(RefCell::from(MockConsole::new(golden_in)));
         let mut machine = MachineBuilder::default()
-            .add_builtins(all_commands_for(program.clone(), console.clone()))
+            .add_builtins(all_commands_for(program.clone(), console.clone(), dir))
             .build();
         machine
             .exec(&mut input.as_bytes())
@@ -300,13 +453,32 @@ mod tests {
         assert_eq!(exp_program, flat_program.as_slice());
     }
 
+    /// Same as `do_ok_test_with_dir` but with an automatic (and inaccessible) `dir`.
+    fn do_ok_test(
+        program: Program,
+        input: &str,
+        golden_in: &'static [(&'static str, &'static str, &'static str)],
+        expected_out: &'static [&'static str],
+        exp_program: &'static [(usize, &'static str)],
+    ) {
+        let dir = tempfile::tempdir().unwrap();
+        do_ok_test_with_dir(
+            program,
+            &dir.path(),
+            input,
+            golden_in,
+            expected_out,
+            exp_program,
+        )
+    }
+
     /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
     ///
     /// Ensures that this does not touch the console.
-    fn do_error_test(input: &str, expected_err: &str) {
+    fn do_error_test_with_dir(dir: &Path, input: &str, expected_err: &str) {
         let console = Rc::from(RefCell::from(MockConsole::new(&[])));
         let mut machine = MachineBuilder::default()
-            .add_builtins(all_commands_for(Program::default(), console.clone()))
+            .add_builtins(all_commands_for(Program::default(), console.clone(), dir))
             .build();
         assert_eq!(
             expected_err,
@@ -318,6 +490,36 @@ mod tests {
             )
         );
         assert!(console.borrow().captured_out().is_empty());
+    }
+
+    /// Same as `do_error_test_with_dir` but with an automatic (and inaccessible) `dir`.
+    fn do_error_test(input: &str, expected_err: &str) {
+        let dir = tempfile::tempdir().unwrap();
+        do_error_test_with_dir(&dir.path(), input, expected_err)
+    }
+
+    /// Reads `path` and checks that its contents match `exp_lines`.
+    fn check_file(path: &Path, exp_lines: &[&str]) {
+        let file = File::open(path).unwrap();
+        let reader = io::BufReader::new(file);
+        let mut lines = vec![];
+        for line in reader.lines() {
+            lines.push(line.unwrap());
+        }
+        assert_eq!(exp_lines, lines.as_slice());
+    }
+
+    /// Creates `path` with the contents in `lines`.
+    fn write_file(path: &Path, lines: &[&str]) {
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false) // Should not be creating the same file more than once.
+            .write(true)
+            .open(path)
+            .unwrap();
+        for line in lines {
+            file.write_fmt(format_args!("{}\n", line)).unwrap();
+        }
     }
 
     #[test]
@@ -444,6 +646,90 @@ mod tests {
     }
 
     #[test]
+    fn test_load_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        write_file(&dir.path().join("foo.bas"), &["line 1", "  line 2"]);
+        write_file(&dir.path().join("foo.bak"), &[]);
+        write_file(&dir.path().join("BAR.BAS"), &["line 1", "  line 2"]);
+        write_file(&dir.path().join("Baz.bas"), &["line 1", "  line 2"]);
+
+        for p in &["foo", "foo.bas", "BAR", "BAR.BAS", "Baz"] {
+            do_ok_test_with_dir(
+                Program::default(),
+                &dir.path(),
+                &("LOAD \"".to_owned() + p + "\""),
+                &[],
+                &[],
+                &[(10, "line 1"), (20, "  line 2")],
+            );
+        }
+    }
+
+    #[test]
+    fn test_load_skip_empty_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        write_file(&dir.path().join("data.bas"), &["a", "", "b", ""]);
+
+        do_ok_test_with_dir(
+            Program::default(),
+            &dir.path(),
+            &("LOAD \"data.bas\""),
+            &[],
+            &[],
+            &[(10, "a"), (20, "b")],
+        );
+    }
+
+    /// Checks errors that should be handled the same way by `LOAD` and `SAVE`.
+    fn check_load_save_common_errors(cmd: &str, dir: &Path) {
+        do_error_test_with_dir(&dir, &cmd, &format!("{} requires a filename", cmd));
+        do_error_test_with_dir(
+            &dir,
+            &format!("{} 3", cmd),
+            &format!("{} requires a string as the filename", cmd),
+        );
+
+        let mut non_basenames = vec!["./foo.bas", "a/b.bas", "a/b"];
+        if cfg!(target_os = "windows") {
+            non_basenames.push("c:foo.bas");
+        }
+        for p in non_basenames.as_slice() {
+            do_error_test_with_dir(
+                &dir,
+                &format!("{} \"{}\"", cmd, p),
+                "Filename must be a single path component",
+            );
+        }
+
+        for p in &["foo.bak", "foo.ba", "foo.basic"] {
+            do_error_test_with_dir(
+                &dir,
+                &format!("{} \"{}\"", cmd, p),
+                "Invalid filename extension",
+            );
+        }
+    }
+
+    #[test]
+    fn test_load_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        check_load_save_common_errors("LOAD", &dir.path());
+
+        // TODO(jmmv): This is very ugly... need better error reporting in general, not just for
+        // this one case.
+        let enoent_message = if cfg!(target_os = "windows") {
+            "The system cannot find the file specified. (os error 2)"
+        } else {
+            "No such file or directory (os error 2)"
+        };
+
+        do_error_test_with_dir(&dir.path(), "LOAD \"missing-file\"", enoent_message);
+
+        write_file(&dir.path().join("mismatched-extension.bat"), &[]);
+        do_error_test_with_dir(&dir.path(), "LOAD \"mismatched-extension\"", enoent_message);
+    }
+
+    #[test]
     fn test_new_nothing() {
         let program = Program::default();
         do_ok_test(program, "NEW", &[], &[], &[]);
@@ -558,5 +844,42 @@ mod tests {
     #[test]
     fn test_run_errors() {
         do_error_test("RUN 10", "RUN takes no arguments");
+    }
+
+    #[test]
+    fn test_save_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir = dir.path().join("subdir"); // Should be auto-created.
+
+        let program = Program::default();
+        program.borrow_mut().insert(10, "line 1".to_owned());
+        program.borrow_mut().insert(20, "  line 2".to_owned());
+
+        for p in &["first", "second.bas", "THIRD", "FOURTH.BAS", "Fifth"] {
+            do_ok_test_with_dir(
+                program.clone(),
+                &dir,
+                &("SAVE \"".to_owned() + p + "\""),
+                &[],
+                &[],
+                &[(10, "line 1"), (20, "  line 2")],
+            );
+        }
+
+        for p in &[
+            "first.bas",
+            "second.bas",
+            "THIRD.BAS",
+            "FOURTH.BAS",
+            "Fifth.bas",
+        ] {
+            check_file(&dir.join(p), &["line 1", "  line 2"]);
+        }
+    }
+
+    #[test]
+    fn test_save_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        check_load_save_common_errors("SAVE", &dir.path());
     }
 }

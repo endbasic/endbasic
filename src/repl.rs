@@ -25,6 +25,7 @@ use rustyline::Editor;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{self, Write};
+use std::path::Path;
 use std::rc::Rc;
 
 /// The `CLEAR` command.
@@ -224,7 +225,10 @@ pub fn new_console() -> Rc<RefCell<dyn console::Console>> {
 }
 
 /// Enters the interactive interpreter.
-pub fn run_repl_loop() -> io::Result<()> {
+///
+/// `dir` specifies the directory that the interpreter will use for any commands that manipulate
+/// files.
+pub fn run_repl_loop(dir: &Path) -> io::Result<()> {
     let console = new_console();
     let mut machine = MachineBuilder::default()
         .add_builtin(Rc::from(ClearCommand {}))
@@ -232,7 +236,7 @@ pub fn run_repl_loop() -> io::Result<()> {
             output: Rc::from(RefCell::from(io::stdout())),
         }))
         .add_builtins(console::all_commands(console.clone()))
-        .add_builtins(program::all_commands(console))
+        .add_builtins(program::all_commands(console, dir))
         .build();
 
     println!();

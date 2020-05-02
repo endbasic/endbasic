@@ -11,10 +11,12 @@ Output from HELP:
     HELP     Prints interactive help.
     INPUT    Obtains user input from the console.
     LIST     Lists the contents of the stored program.
+    LOAD     Loads the given program.
     NEW      Clears the stored program from memory.
     PRINT    Prints a message to the console.
     RENUM    Reassigns line numbers to make them all multiples of ten.
     RUN      Runs the stored program.
+    SAVE     Saves the current program in memory to the given filename.
 
     Type HELP followed by a command name for details on that command.
     Press CTRL+D to exit.
@@ -61,6 +63,14 @@ Output from HELP LIST:
 
     Lists the contents of the stored program.
 
+Output from HELP LOAD:
+
+    LOAD filename
+
+    Loads the given program.
+
+    The filename must be a string and must be a basename (no directory components).  The .BAS extension is optional, but if present, it must be .BAS.
+
 Output from HELP NEW:
 
     NEW
@@ -88,5 +98,13 @@ Output from HELP RUN:
     Runs the stored program.
 
     Note that the program runs in the context of the interpreter so it will pick up any variables and other state that may already be set.
+
+Output from HELP SAVE:
+
+    SAVE filename
+
+    Saves the current program in memory to the given filename.
+
+    The filename must be a string and must be a basename (no directory components).  The .BAS extension is optional, but if present, it must be .BAS.
 
 End of input by CTRL-D
