@@ -180,10 +180,10 @@ fn test_cli_program_name_uses_arg0() {
     check(
         &custom,
         &["one", "two", "three"],
-        1,
+        2,
         Behavior::Null,
         Behavior::Null,
-        Behavior::Literal("custom-name: E: Too many arguments\n".to_owned()),
+        Behavior::Literal("custom-name: Usage error: Too many arguments\n".to_owned()),
     );
 }
 
@@ -192,10 +192,10 @@ fn test_cli_too_many_args() {
     check(
         &bin_path("endbasic"),
         &["foo", "bar"],
-        1,
+        2,
         Behavior::Null,
         Behavior::Null,
-        Behavior::Literal("endbasic: E: Too many arguments\n".to_owned()),
+        Behavior::Literal("endbasic: Usage error: Too many arguments\n".to_owned()),
     );
 }
 
