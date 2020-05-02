@@ -2,6 +2,8 @@ Usage: endbasic [options] [program-file]
 
 Options:
     -h, --help          show command-line usage information and exit
+        --programs-dir PATH
+                        directory where user programs are stored
         --version       show version information and exit
 
 Report bugs to: https://github.com/jmmv/endbasic/issues

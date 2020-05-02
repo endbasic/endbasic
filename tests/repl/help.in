@@ -38,6 +38,9 @@ HELP INPUT
 PRINT "Output from HELP LIST:"
 HELP LIST
 
+PRINT "Output from HELP LOAD:"
+HELP LOAD
+
 PRINT "Output from HELP NEW:"
 HELP NEW
 
@@ -49,3 +52,6 @@ HELP RENUM
 
 PRINT "Output from HELP RUN:"
 HELP RUN
+
+PRINT "Output from HELP SAVE:"
+HELP SAVE

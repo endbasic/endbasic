@@ -1,0 +1,11 @@
+
+    Welcome to EndBASIC 0.1.0.
+    Type HELP for interactive usage information.
+
+Running loaded hello.bas
+Hello, world!
+Saved as hello2.bas
+Running empty program after NEW
+Running loaded hello2.bas
+Hello, world!
+End of input by CTRL-D

@@ -32,7 +32,7 @@ use failure::{Error, Fail, Fallible};
 use getopts::Options;
 use std::env;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process;
 
 /// Errors caused by the user when invoking this binary (invalid options or arguments).
@@ -97,6 +97,31 @@ fn version() -> Fallible<()> {
     Ok(())
 }
 
+/// Computes the path to the directory where user programs live if `flag` is none; otherwise
+/// just returns `flag`.
+fn get_programs_dir(flag: Option<String>) -> Fallible<PathBuf> {
+    let dir = flag.map(PathBuf::from).or_else(|| {
+        dirs::document_dir()
+            .map(|d| d.join("endbasic"))
+            .or_else(|| {
+                // On Linux, dirs::document_dir() seems to return None whenever user-dirs.dirs is
+                // not present... which is suboptimal.  Compute a reasonable default based on the
+                // home directory.
+                dirs::home_dir().map(|h| h.join("Documents/endbasic"))
+            })
+    });
+
+    // Instead of aborting on a missing programs directory, we could disable the LOAD/SAVE commands
+    // when we cannot compute this folder, but that seems like hiding a corner case that is unlikely
+    // to surface.  A good reason to do this, however, would be to allow the user to explicitly
+    // disable this functionality to keep the interpreter from touching the disk.
+    ensure!(
+        dir.is_some(),
+        "Cannot compute default path to the Documents folder"
+    );
+    Ok(dir.unwrap())
+}
+
 /// Implementation of the EndBASIC console to interact with stdin and stdout.
 #[derive(Default)]
 struct StdioConsole {}
@@ -118,6 +143,12 @@ fn safe_main(name: &str, args: env::Args) -> Fallible<()> {
 
     let mut opts = Options::new();
     opts.optflag("h", "help", "show command-line usage information and exit");
+    opts.optopt(
+        "",
+        "programs-dir",
+        "directory where user programs are stored",
+        "PATH",
+    );
     opts.optflag("", "version", "show version information and exit");
     let matches = opts.parse(args)?;
 
@@ -130,7 +161,10 @@ fn safe_main(name: &str, args: env::Args) -> Fallible<()> {
     }
 
     match matches.free.as_slice() {
-        [] => Ok(endbasic::repl::run_repl_loop()?),
+        [] => {
+            let programs_dir = get_programs_dir(matches.opt_str("programs-dir"))?;
+            Ok(endbasic::repl::run_repl_loop(&programs_dir)?)
+        }
         [file] => run(file),
         [_, ..] => Err(UsageError::new("Too many arguments").into()),
     }
