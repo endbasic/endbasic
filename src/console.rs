@@ -213,7 +213,6 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use crate::exec::MachineBuilder;
-    use std::io;
 
     /// Runs the `input` code on a new machine and verifies its output.
     ///
@@ -226,12 +225,13 @@ mod tests {
         golden_in: &'static [(&'static str, &'static str, &'static str)],
         expected_out: &'static [&'static str],
     ) {
-        let mut cursor = io::Cursor::new(input.as_bytes());
         let console = Rc::from(RefCell::from(MockConsole::new(golden_in)));
         let mut machine = MachineBuilder::default()
             .add_builtins(all_commands(console.clone()))
             .build();
-        machine.exec(&mut cursor).expect("Execution failed");
+        machine
+            .exec(&mut input.as_bytes())
+            .expect("Execution failed");
         assert_eq!(expected_out, console.borrow().captured_out());
     }
 
@@ -245,7 +245,6 @@ mod tests {
         expected_out: &'static [&'static str],
         expected_err: &str,
     ) {
-        let mut cursor = io::Cursor::new(input.as_bytes());
         let console = Rc::from(RefCell::from(MockConsole::new(golden_in)));
         let mut machine = MachineBuilder::default()
             .add_builtins(all_commands(console.clone()))
@@ -255,7 +254,7 @@ mod tests {
             format!(
                 "{}",
                 machine
-                    .exec(&mut cursor)
+                    .exec(&mut input.as_bytes())
                     .expect_err("Execution did not fail")
             )
         );

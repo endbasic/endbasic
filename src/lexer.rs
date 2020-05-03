@@ -410,8 +410,8 @@ mod tests {
     ///
     /// `Token::Eof` should not be provided in `exp_tokens` as this explicitly waits for that.
     fn do_ok_test(input: &str, exp_tokens: &[Token]) {
-        let mut cursor = io::Cursor::new(input.as_bytes());
-        let mut lexer = Lexer::from(&mut cursor);
+        let mut input = input.as_bytes();
+        let mut lexer = Lexer::from(&mut input);
 
         let mut tokens = vec![];
         loop {
@@ -427,8 +427,8 @@ mod tests {
 
     #[test]
     fn test_empty() {
-        let mut cursor = io::Cursor::new(b"");
-        let mut lexer = Lexer::from(&mut cursor);
+        let mut input = b"".as_ref();
+        let mut lexer = Lexer::from(&mut input);
         assert_eq!(Token::Eof, lexer.read().unwrap());
         assert_eq!(Token::Eof, lexer.read().unwrap());
     }
@@ -659,8 +659,8 @@ mod tests {
 
     #[test]
     fn test_peekable_lexer() {
-        let mut cursor = io::Cursor::new(b"a b 123");
-        let mut lexer = Lexer::from(&mut cursor).peekable();
+        let mut input = b"a b 123".as_ref();
+        let mut lexer = Lexer::from(&mut input).peekable();
         assert_eq!(&new_auto_symbol("a"), lexer.peek().unwrap());
         assert_eq!(&new_auto_symbol("a"), lexer.peek().unwrap());
         assert_eq!(new_auto_symbol("a"), lexer.read().unwrap());

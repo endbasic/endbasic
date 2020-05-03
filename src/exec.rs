@@ -644,8 +644,9 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut machine = Machine::default();
-        let mut cursor = io::Cursor::new("a = TRUE: b = 1");
-        machine.exec(&mut cursor).expect("Execution failed");
+        machine
+            .exec(&mut b"a = TRUE: b = 1".as_ref())
+            .expect("Execution failed");
         assert!(machine.get_var_as_bool("a").is_ok());
         assert!(machine.get_var_as_int("b").is_ok());
         machine.clear();
@@ -656,8 +657,9 @@ mod tests {
     #[test]
     fn test_get_var_as_bool() {
         let mut machine = Machine::default();
-        let mut cursor = io::Cursor::new("a = TRUE: b = 1");
-        machine.exec(&mut cursor).expect("Execution failed");
+        machine
+            .exec(&mut b"a = TRUE: b = 1".as_ref())
+            .expect("Execution failed");
         assert!(machine.get_var_as_bool("a").expect("Failed to query a"));
         assert_eq!(
             "Incompatible types in b? reference",
@@ -682,8 +684,9 @@ mod tests {
     #[test]
     fn test_get_var_as_int() {
         let mut machine = Machine::default();
-        let mut cursor = io::Cursor::new("a = 1: b = \"foo\"");
-        machine.exec(&mut cursor).expect("Execution failed");
+        machine
+            .exec(&mut b"a = 1: b = \"foo\"".as_ref())
+            .expect("Execution failed");
         assert_eq!(1, machine.get_var_as_int("a").expect("Failed to query a"));
         assert_eq!(
             "Incompatible types in b% reference",
@@ -708,8 +711,9 @@ mod tests {
     #[test]
     fn test_get_var_as_string() {
         let mut machine = Machine::default();
-        let mut cursor = io::Cursor::new("a = \"foo\": b = FALSE");
-        machine.exec(&mut cursor).expect("Execution failed");
+        machine
+            .exec(&mut b"a = \"foo\": b = FALSE".as_ref())
+            .expect("Execution failed");
         assert_eq!(
             "foo",
             machine.get_var_as_string("a").expect("Failed to query a")
@@ -743,14 +747,13 @@ mod tests {
         golden_in: &'static [&'static str],
         captured_out: Rc<RefCell<Vec<String>>>,
     ) -> Fallible<()> {
-        let mut cursor = io::Cursor::new(input.as_bytes());
         let in_cmd = InCommand::from(Box::from(RefCell::from(golden_in.iter())));
         let out_cmd = OutCommand::from(captured_out);
         let mut machine = MachineBuilder::default()
             .add_builtin(Rc::from(in_cmd))
             .add_builtin(Rc::from(out_cmd))
             .build();
-        machine.exec(&mut cursor)?;
+        machine.exec(&mut input.as_bytes())?;
         Ok(())
     }
 
@@ -951,11 +954,11 @@ mod tests {
     #[test]
     fn test_exec_shares_state() {
         let mut machine = Machine::default();
-
-        let mut cursor = io::Cursor::new("a = 10");
-        machine.exec(&mut cursor).expect("Execution failed");
-
-        let mut cursor = io::Cursor::new("b = a");
-        machine.exec(&mut cursor).expect("Execution failed");
+        machine
+            .exec(&mut b"a = 10".as_ref())
+            .expect("Execution failed");
+        machine
+            .exec(&mut b"b = a".as_ref())
+            .expect("Execution failed");
     }
 }

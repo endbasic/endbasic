@@ -101,15 +101,15 @@ mod tests {
 
     #[test]
     fn test_empty() {
-        let mut cursor = io::Cursor::new(b"");
-        let mut reader = CharReader::from(&mut cursor);
+        let mut input = b"".as_ref();
+        let mut reader = CharReader::from(&mut input);
         assert!(reader.next().is_none());
     }
 
     #[test]
     fn test_multibyte_chars() {
-        let mut cursor = io::Cursor::new("Hi 훌리오".as_bytes());
-        let mut reader = CharReader::from(&mut cursor);
+        let mut input = "Hi 훌리오".as_bytes();
+        let mut reader = CharReader::from(&mut input);
         assert_eq!('H', reader.next().unwrap().unwrap());
         assert_eq!('i', reader.next().unwrap().unwrap());
         assert_eq!(' ', reader.next().unwrap().unwrap());
@@ -121,8 +121,8 @@ mod tests {
 
     #[test]
     fn test_consecutive_newlines() {
-        let mut cursor = io::Cursor::new(b"a\n\nbc\n");
-        let mut reader = CharReader::from(&mut cursor);
+        let mut input = b"a\n\nbc\n".as_ref();
+        let mut reader = CharReader::from(&mut input);
         assert_eq!('a', reader.next().unwrap().unwrap());
         assert_eq!('\n', reader.next().unwrap().unwrap());
         assert_eq!('\n', reader.next().unwrap().unwrap());
@@ -134,8 +134,8 @@ mod tests {
 
     #[test]
     fn test_past_eof_returns_eof() {
-        let mut cursor = io::Cursor::new(b"a");
-        let mut reader = CharReader::from(&mut cursor);
+        let mut input = b"a".as_ref();
+        let mut reader = CharReader::from(&mut input);
         assert_eq!('a', reader.next().unwrap().unwrap());
         assert!(reader.next().is_none());
         assert!(reader.next().is_none());
