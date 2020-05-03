@@ -32,25 +32,25 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 /// Computes the path to the directory where this test's binary lives.
-fn get_test_dir() -> PathBuf {
+fn self_dir() -> PathBuf {
     let self_exe = env::current_exe().expect("Cannot get self's executable path");
     let dir = self_exe.parent().expect("Cannot get self's directory");
     assert!(dir.ends_with("target/debug/deps") || dir.ends_with("target/release/deps"));
     dir.to_owned()
 }
 
-/// Computes the path the tested binary.
-fn get_bin<P: AsRef<Path>>(bin: P) -> PathBuf {
-    let test_dir = get_test_dir();
+/// Computes the path to the built binary `name`.
+fn bin_path<P: AsRef<Path>>(name: P) -> PathBuf {
+    let test_dir = self_dir();
     let debug_or_release_dir = test_dir.parent().expect("Failed to get parent directory");
     debug_or_release_dir
-        .join(bin)
+        .join(name)
         .with_extension(env::consts::EXE_EXTENSION)
 }
 
-/// Computes the path to the root of the source tree.
-fn get_src_dir() -> PathBuf {
-    let test_dir = get_test_dir();
+/// Computes the path to the source file `name`.
+fn src_path(name: &str) -> PathBuf {
+    let test_dir = self_dir();
     let debug_or_release_dir = test_dir.parent().expect("Failed to get parent directory");
     let target_dir = debug_or_release_dir
         .parent()
@@ -60,42 +60,30 @@ fn get_src_dir() -> PathBuf {
     // Sanity-check that we landed in the right location.
     assert!(dir.join("Cargo.toml").exists());
 
-    dir.to_owned()
+    dir.join(name)
 }
 
-/// Runs the binary from `path` with `args` and compares its output against expected values.
-///
-/// `exp-code` specifies the expected exit code of the binary.  `golden_stdin` provides the input
-/// to feed to stdin.  `exp_stdout` and `exp_stderr` specify the expected stdout and stderr
-/// contents.
-fn check_program<I: Into<process::Stdio>>(
-    bin: &Path,
-    args: &[&str],
-    exp_code: i32,
-    golden_stdin: I,
-    exp_stdout: &str,
-    exp_stderr: &str,
-) {
-    let result = process::Command::new(bin)
-        .args(args)
-        .stdin(golden_stdin)
-        .output()
-        .expect("Failed to execute subprocess");
-    let code = result
-        .status
-        .code()
-        .expect("Subprocess didn't exit cleanly");
-    let stdout = String::from_utf8(result.stdout).expect("Actual stdout not is not valid UTF-8");
-    let stderr = String::from_utf8(result.stderr).expect("Actual stderr not is not valid UTF-8");
+/// Same as `src_path` but returns a string reference for the few places where we need this.
+fn src_str(p: &str) -> String {
+    src_path(p)
+        .to_str()
+        .expect("Need paths to be valid strings")
+        .to_owned()
+}
 
-    if exp_code != code || exp_stdout != stdout || exp_stderr != stderr {
-        eprintln!("Exit code: {}", code);
-        eprintln!("stdout:\n{}", stdout);
-        eprintln!("stderr:\n{}", stderr);
-        assert_eq!(exp_code, code);
-        assert_eq!(exp_stdout, stdout);
-        assert_eq!(exp_stderr, stderr);
-    }
+/// Describes the behavior for one of the three streams (stdin, stdout, stderr) connected to a
+/// program.
+enum Behavior {
+    /// Ensure the stream is silent.
+    Null,
+
+    /// If stdin, feed the given path as the program's input.  If stdout/stderr, expect the contents
+    /// of the stream to match this file.
+    File(PathBuf),
+
+    /// If stdin, this is not supported.  If stdout/stderr, expect the contents of the stream to
+    /// match this literal string.
+    Literal(String),
 }
 
 /// Reads the contents of a golden data file.
@@ -112,170 +100,248 @@ fn read_golden(path: &Path) -> String {
     }
 }
 
-/// Runs the program `bin_path` with `args` and compares its output against golden data files.
+/// Runs `bin` with arguments `args` and checks its behavior against expectations.
 ///
-/// A `data_dir/name.in` file, if present, is fed to the program as its stdin.
-///
-/// The `data_dir/name.out` and `data_dir/name.err` files, if present, contain the golden stdout
-/// and stderr for the program, respectively.  Furthermore, if `data_dir/name.err` exists, the
-/// program is expected to exit with an error; otherwise, it is expected to exit successfully.
-fn check<P: AsRef<Path>>(bin_path: P, args: &[&str], name: &str, data_dir: P) {
-    let bin_path = bin_path.as_ref();
-    let data_dir = data_dir.as_ref();
-
-    let in_path = data_dir.join(name).with_extension("in");
-    let out_path = data_dir.join(name).with_extension("out");
-    let err_path = data_dir.join(name).with_extension("err");
-
-    let input = if in_path.exists() {
-        File::open(in_path).unwrap().into()
-    } else {
-        process::Stdio::null()
+/// `exp_code` is the expected error code from the program.  `stdin_behavior` indicates what to feed
+/// to the program's stdin.  `stdout_behavior` and `stderr_behavior` indicate what to expect from
+/// the program's textual output.
+fn check<P: AsRef<Path>>(
+    bin: P,
+    args: &[&str],
+    exp_code: i32,
+    stdin_behavior: Behavior,
+    stdout_behavior: Behavior,
+    stderr_behavior: Behavior,
+) {
+    let golden_stdin = match stdin_behavior {
+        Behavior::Null => process::Stdio::null(),
+        Behavior::File(path) => File::open(path).unwrap().into(),
+        Behavior::Literal(_) => panic!("Literals not supported for stdin"),
     };
 
-    let golden_code = if err_path.exists() { 1 } else { 0 };
-
-    let golden_stdout = if out_path.exists() {
-        read_golden(&out_path)
-    } else {
-        "".to_owned()
+    let exp_stdout = match stdout_behavior {
+        Behavior::Null => "".to_owned(),
+        Behavior::File(path) => read_golden(&path),
+        Behavior::Literal(text) => text,
     };
 
-    let golden_stderr = if err_path.exists() {
-        read_golden(&err_path)
-    } else {
-        "".to_owned()
+    let exp_stderr = match stderr_behavior {
+        Behavior::Null => "".to_owned(),
+        Behavior::File(path) => read_golden(&path),
+        Behavior::Literal(text) => text,
     };
 
-    check_program(
-        &bin_path,
-        args,
-        golden_code,
-        input,
-        &golden_stdout,
-        &golden_stderr,
-    )
-}
+    let result = process::Command::new(bin.as_ref())
+        .args(args)
+        .stdin(golden_stdin)
+        .output()
+        .expect("Failed to execute subprocess");
+    let code = result
+        .status
+        .code()
+        .expect("Subprocess didn't exit cleanly");
+    let stdout = String::from_utf8(result.stdout).expect("Stdout not is not valid UTF-8");
+    let stderr = String::from_utf8(result.stderr).expect("Stderr not is not valid UTF-8");
 
-/// Runs the given example program and compares its output against golden data files.
-///
-/// The data files are expected to be in the `examples` subdirectory and have `name` as their
-/// basename.  See the description in `check` for more details.
-fn do_example_test(name: &str) {
-    // TODO(jmmv): This breaks if we run `cargo test --all-targets` because the binary we
-    // look for here ends up being the runner for the unit tests of the example, not the
-    // example itself.  Should find a better way of doing this so that we can reenable the
-    // usage of `--all-targets` in CI.
-    let bin_path = get_bin(PathBuf::from("examples").join(name));
-    let data_dir = get_src_dir().join("examples");
-    check(bin_path, &[], name, data_dir);
-}
-
-/// Runs the `name.bas` program and compares its output against golden data in files.
-///
-/// The data files are expected to be in the `tests` subdirectory and have `name` as their
-/// basename.  See the description in `check` for more details.
-fn do_golden_script_test(name: &str) {
-    let bin_path = get_bin("endbasic");
-    let data_dir = get_src_dir().join("tests");
-    let bas_path = data_dir.join(name).with_extension("bas");
-    check(bin_path, &[bas_path.to_str().unwrap()], name, data_dir);
-}
-
-/// Feeds `name.in` to the interpreter and compares its output against golden data in files.
-///
-/// The data files are expected to be in the `tests` subdirectory and have `name` as their
-/// basename.  See the description in `check` for more details.
-fn do_golden_interactive_test(name: &str) {
-    let bin_path = get_bin("endbasic");
-    let data_dir = get_src_dir().join("tests");
-    check(bin_path, &[], name, data_dir);
+    if exp_code != code || exp_stdout != stdout || exp_stderr != stderr {
+        eprintln!("Exit code: {}", code);
+        eprintln!("stdout:\n{}", stdout);
+        eprintln!("stderr:\n{}", stderr);
+        assert_eq!(exp_code, code);
+        assert_eq!(exp_stdout, stdout);
+        assert_eq!(exp_stderr, stderr);
+    }
 }
 
 #[test]
 fn test_example_custom_commands() {
-    do_example_test("custom-commands");
+    check(
+        bin_path("examples/custom-commands"),
+        &[],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("examples/custom-commands.out")),
+        Behavior::Null,
+    );
 }
 
 #[test]
 fn test_example_minimal() {
-    do_example_test("minimal");
+    check(
+        bin_path("examples/minimal"),
+        &[],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("examples/minimal.out")),
+        Behavior::Null,
+    );
 }
 
 #[test]
 fn test_golden_control_flow() {
-    do_golden_script_test("control-flow");
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/control-flow.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("tests/control-flow.out")),
+        Behavior::Null,
+    );
 }
 
 #[test]
 fn test_golden_editor() {
-    do_golden_interactive_test("editor");
+    check(
+        bin_path("endbasic"),
+        &[],
+        0,
+        Behavior::File(src_path("tests/editor.in")),
+        Behavior::File(src_path("tests/editor.out")),
+        Behavior::Null,
+    );
 }
 
 #[test]
 fn test_golden_exec_error() {
-    do_golden_script_test("exec-error");
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/exec-error.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("tests/exec-error.out")),
+        Behavior::File(src_path("tests/exec-error.err")),
+    );
 }
 
 #[test]
 fn test_golden_hello() {
-    do_golden_script_test("hello");
-}
-
-#[test]
-fn test_golden_interactive() {
-    do_golden_interactive_test("interactive");
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/hello.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("tests/hello.out")),
+        Behavior::Null,
+    );
 }
 
 #[test]
 fn test_golden_help() {
-    do_golden_interactive_test("help");
+    check(
+        bin_path("endbasic"),
+        &[],
+        0,
+        Behavior::File(src_path("tests/help.in")),
+        Behavior::File(src_path("tests/help.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_golden_interactive() {
+    check(
+        bin_path("endbasic"),
+        &[],
+        0,
+        Behavior::File(src_path("tests/interactive.in")),
+        Behavior::File(src_path("tests/interactive.out")),
+        Behavior::Null,
+    );
 }
 
 #[test]
 fn test_golden_lexer_error() {
-    do_golden_script_test("lexer-error");
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/lexer-error.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("tests/lexer-error.out")),
+        Behavior::File(src_path("tests/lexer-error.err")),
+    );
 }
 
 #[test]
 fn test_golden_parser_error() {
-    do_golden_script_test("parser-error");
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/parser-error.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("tests/parser-error.out")),
+        Behavior::File(src_path("tests/parser-error.err")),
+    );
 }
 
 #[test]
 fn test_golden_script() {
-    do_golden_script_test("script");
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/script.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("tests/script.out")),
+        Behavior::File(src_path("tests/script.err")),
+    );
 }
 
 #[test]
 fn test_golden_state_sharing() {
-    do_golden_interactive_test("state-sharing");
+    check(
+        bin_path("endbasic"),
+        &[],
+        0,
+        Behavior::File(src_path("tests/state-sharing.in")),
+        Behavior::File(src_path("tests/state-sharing.out")),
+        Behavior::Null,
+    );
 }
 
 #[test]
 fn test_golden_types() {
-    do_golden_script_test("types");
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/types.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("tests/types.out")),
+        Behavior::Null,
+    );
 }
 
 #[test]
 fn test_golden_utf8() {
-    do_golden_script_test("utf8");
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/utf8.bas")],
+        0,
+        Behavior::File(src_path("tests/utf8.in")),
+        Behavior::File(src_path("tests/utf8.out")),
+        Behavior::Null,
+    );
 }
 
 #[test]
 fn test_golden_yes_no() {
-    do_golden_script_test("yes-no");
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/yes-no.bas")],
+        0,
+        Behavior::File(src_path("tests/yes-no.in")),
+        Behavior::File(src_path("tests/yes-no.out")),
+        Behavior::Null,
+    );
 }
 
 #[test]
 fn test_too_many_args() {
-    check_program(
-        &get_bin("endbasic"),
+    check(
+        &bin_path("endbasic"),
         &["foo", "bar"],
         1,
-        process::Stdio::null(),
-        "",
-        "endbasic: E: Too many arguments\n",
+        Behavior::Null,
+        Behavior::Null,
+        Behavior::Literal("endbasic: E: Too many arguments\n".to_owned()),
     );
 }
 
@@ -297,18 +363,18 @@ fn test_program_name_uses_arg0() {
         }
     }
 
-    let original = get_bin("endbasic");
-    let custom = get_test_dir()
+    let original = bin_path("endbasic");
+    let custom = self_dir()
         .join("custom-name")
         .with_extension(env::consts::EXE_EXTENSION);
     let _delete_custom = DeleteOnDrop { path: &custom };
     fs::copy(&original, &custom).unwrap();
-    check_program(
+    check(
         &custom,
         &["one", "two", "three"],
         1,
-        process::Stdio::null(),
-        "",
-        "custom-name: E: Too many arguments\n",
+        Behavior::Null,
+        Behavior::Null,
+        Behavior::Literal("custom-name: E: Too many arguments\n".to_owned()),
     );
 }
