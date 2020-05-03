@@ -153,204 +153,12 @@ fn check<P: AsRef<Path>>(
     }
 }
 
-#[test]
-fn test_example_custom_commands() {
-    check(
-        bin_path("examples/custom-commands"),
-        &[],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("examples/custom-commands.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_example_minimal() {
-    check(
-        bin_path("examples/minimal"),
-        &[],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("examples/minimal.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_golden_control_flow() {
-    check(
-        bin_path("endbasic"),
-        &[&src_str("tests/control-flow.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("tests/control-flow.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_golden_editor() {
-    check(
-        bin_path("endbasic"),
-        &[],
-        0,
-        Behavior::File(src_path("tests/editor.in")),
-        Behavior::File(src_path("tests/editor.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_golden_exec_error() {
-    check(
-        bin_path("endbasic"),
-        &[&src_str("tests/exec-error.bas")],
-        1,
-        Behavior::Null,
-        Behavior::File(src_path("tests/exec-error.out")),
-        Behavior::File(src_path("tests/exec-error.err")),
-    );
-}
-
-#[test]
-fn test_golden_hello() {
-    check(
-        bin_path("endbasic"),
-        &[&src_str("tests/hello.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("tests/hello.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_golden_help() {
-    check(
-        bin_path("endbasic"),
-        &[],
-        0,
-        Behavior::File(src_path("tests/help.in")),
-        Behavior::File(src_path("tests/help.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_golden_interactive() {
-    check(
-        bin_path("endbasic"),
-        &[],
-        0,
-        Behavior::File(src_path("tests/interactive.in")),
-        Behavior::File(src_path("tests/interactive.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_golden_lexer_error() {
-    check(
-        bin_path("endbasic"),
-        &[&src_str("tests/lexer-error.bas")],
-        1,
-        Behavior::Null,
-        Behavior::File(src_path("tests/lexer-error.out")),
-        Behavior::File(src_path("tests/lexer-error.err")),
-    );
-}
-
-#[test]
-fn test_golden_parser_error() {
-    check(
-        bin_path("endbasic"),
-        &[&src_str("tests/parser-error.bas")],
-        1,
-        Behavior::Null,
-        Behavior::File(src_path("tests/parser-error.out")),
-        Behavior::File(src_path("tests/parser-error.err")),
-    );
-}
-
-#[test]
-fn test_golden_script() {
-    check(
-        bin_path("endbasic"),
-        &[&src_str("tests/script.bas")],
-        1,
-        Behavior::Null,
-        Behavior::File(src_path("tests/script.out")),
-        Behavior::File(src_path("tests/script.err")),
-    );
-}
-
-#[test]
-fn test_golden_state_sharing() {
-    check(
-        bin_path("endbasic"),
-        &[],
-        0,
-        Behavior::File(src_path("tests/state-sharing.in")),
-        Behavior::File(src_path("tests/state-sharing.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_golden_types() {
-    check(
-        bin_path("endbasic"),
-        &[&src_str("tests/types.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("tests/types.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_golden_utf8() {
-    check(
-        bin_path("endbasic"),
-        &[&src_str("tests/utf8.bas")],
-        0,
-        Behavior::File(src_path("tests/utf8.in")),
-        Behavior::File(src_path("tests/utf8.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_golden_yes_no() {
-    check(
-        bin_path("endbasic"),
-        &[&src_str("tests/yes-no.bas")],
-        0,
-        Behavior::File(src_path("tests/yes-no.in")),
-        Behavior::File(src_path("tests/yes-no.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_too_many_args() {
-    check(
-        &bin_path("endbasic"),
-        &["foo", "bar"],
-        1,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::Literal("endbasic: E: Too many arguments\n".to_owned()),
-    );
-}
-
 // TODO(jmmv): This test fails almost always on Linux CI builds with `Text file busy` when
 // attempting to run the copied binary.  I've also gotten it to occasionally fail on a local Linux
 // installation in the same way, but that's much harder to trigger.  Investigate what's going on.
 #[cfg(not(target_os = "linux"))]
 #[test]
-fn test_program_name_uses_arg0() {
+fn test_cli_program_name_uses_arg0() {
     use std::fs;
 
     struct DeleteOnDrop<'a> {
@@ -376,5 +184,197 @@ fn test_program_name_uses_arg0() {
         Behavior::Null,
         Behavior::Null,
         Behavior::Literal("custom-name: E: Too many arguments\n".to_owned()),
+    );
+}
+
+#[test]
+fn test_cli_too_many_args() {
+    check(
+        &bin_path("endbasic"),
+        &["foo", "bar"],
+        1,
+        Behavior::Null,
+        Behavior::Null,
+        Behavior::Literal("endbasic: E: Too many arguments\n".to_owned()),
+    );
+}
+
+#[test]
+fn test_example_custom_commands() {
+    check(
+        bin_path("examples/custom-commands"),
+        &[],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("examples/custom-commands.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_example_minimal() {
+    check(
+        bin_path("examples/minimal"),
+        &[],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("examples/minimal.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_lang_control_flow() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/lang/control-flow.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("tests/lang/control-flow.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_lang_exec_error() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/lang/exec-error.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("tests/lang/exec-error.out")),
+        Behavior::File(src_path("tests/lang/exec-error.err")),
+    );
+}
+
+#[test]
+fn test_lang_hello() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/lang/hello.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("tests/lang/hello.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_lang_lexer_error() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/lang/lexer-error.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("tests/lang/lexer-error.out")),
+        Behavior::File(src_path("tests/lang/lexer-error.err")),
+    );
+}
+
+#[test]
+fn test_lang_no_repl_commands() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/lang/no-repl-commands.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("tests/lang/no-repl-commands.out")),
+        Behavior::File(src_path("tests/lang/no-repl-commands.err")),
+    );
+}
+
+#[test]
+fn test_lang_parser_error() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/lang/parser-error.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("tests/lang/parser-error.out")),
+        Behavior::File(src_path("tests/lang/parser-error.err")),
+    );
+}
+
+#[test]
+fn test_lang_types() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/lang/types.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("tests/lang/types.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_lang_utf8() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/lang/utf8.bas")],
+        0,
+        Behavior::File(src_path("tests/lang/utf8.in")),
+        Behavior::File(src_path("tests/lang/utf8.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_lang_yes_no() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("tests/lang/yes-no.bas")],
+        0,
+        Behavior::File(src_path("tests/lang/yes-no.in")),
+        Behavior::File(src_path("tests/lang/yes-no.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_repl_editor() {
+    check(
+        bin_path("endbasic"),
+        &[],
+        0,
+        Behavior::File(src_path("tests/repl/editor.in")),
+        Behavior::File(src_path("tests/repl/editor.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_repl_help() {
+    check(
+        bin_path("endbasic"),
+        &[],
+        0,
+        Behavior::File(src_path("tests/repl/help.in")),
+        Behavior::File(src_path("tests/repl/help.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_repl_interactive() {
+    check(
+        bin_path("endbasic"),
+        &[],
+        0,
+        Behavior::File(src_path("tests/repl/interactive.in")),
+        Behavior::File(src_path("tests/repl/interactive.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_repl_state_sharing() {
+    check(
+        bin_path("endbasic"),
+        &[],
+        0,
+        Behavior::File(src_path("tests/repl/state-sharing.in")),
+        Behavior::File(src_path("tests/repl/state-sharing.out")),
+        Behavior::Null,
     );
 }
