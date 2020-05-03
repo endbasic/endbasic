@@ -526,8 +526,8 @@ mod tests {
     /// Runs the parser on the given `input` and expects the returned statements to match
     /// `exp_statements`.
     fn do_ok_test(input: &str, exp_statements: &[Statement]) {
-        let mut cursor = io::Cursor::new(input.as_bytes());
-        let mut parser = Parser::from(&mut cursor);
+        let mut input = input.as_bytes();
+        let mut parser = Parser::from(&mut input);
 
         let mut statements = vec![];
         loop {
@@ -543,8 +543,8 @@ mod tests {
 
     /// Runs the parser on the given `input` and expects the `err` error message.
     fn do_error_test(input: &str, expected_err: &str) {
-        let mut cursor = io::Cursor::new(input.as_bytes());
-        let mut parser = Parser::from(&mut cursor);
+        let mut input = input.as_bytes();
+        let mut parser = Parser::from(&mut input);
         assert_eq!(
             expected_err,
             format!("{}", parser.parse().expect_err("Parsing did not fail"))
@@ -558,8 +558,8 @@ mod tests {
     // TODO(jmmv): Need better testing to ensure the parser is reset to something that can be
     // parsed next.
     fn do_error_test_no_reset(input: &str, expected_err: &str) {
-        let mut cursor = io::Cursor::new(input.as_bytes());
-        let mut parser = Parser::from(&mut cursor);
+        let mut input = input.as_bytes();
+        let mut parser = Parser::from(&mut input);
         assert_eq!(
             expected_err,
             format!("{}", parser.parse().expect_err("Parsing did not fail"))

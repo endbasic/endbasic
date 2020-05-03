@@ -243,10 +243,9 @@ pub fn run_repl_loop() -> io::Result<()> {
     let mut rl = Editor::<()>::new();
     loop {
         match rl.readline("Ready\n") {
-            Ok(mut line) => {
+            Ok(line) => {
                 rl.add_history_entry(line.as_str());
-                let mut input = io::Cursor::new(&mut line);
-                match machine.exec(&mut input) {
+                match machine.exec(&mut line.as_bytes()) {
                     Ok(()) => (),
                     Err(e) => {
                         println!("ERROR: {}", e);
