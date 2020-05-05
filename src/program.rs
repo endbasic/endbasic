@@ -99,6 +99,91 @@ fn to_filename(dir: &Path, basename: &str) -> Fallible<PathBuf> {
     Ok(dir.join(basename))
 }
 
+/// Directory entry after processing all of its data.
+struct Entry {
+    file_type: fs::FileType,
+    date: time::OffsetDateTime,
+    len: u64,
+}
+
+/// Fully scans a directory, returning a sorted collection of processed `Entry`s.
+fn do_read_dir(path: &Path) -> io::Result<BTreeMap<String, Entry>> {
+    let mut entries = BTreeMap::default();
+    match fs::read_dir(&path) {
+        Ok(dirents) => {
+            for de in dirents {
+                let de = de?;
+
+                let file_type = de.file_type()?;
+
+                // TODO(jmmv): This follows symlinks for cross-platform simplicity, but it is ugly.
+                // I don't expect symlinks in the programs directory anyway.
+                let metadata = fs::metadata(de.path())?;
+                let date = time::OffsetDateTime::from(metadata.modified()?)
+                    .to_offset(time::UtcOffset::current_local_offset());
+                let len = metadata.len();
+
+                entries.insert(
+                    de.file_name().to_string_lossy().to_string(),
+                    Entry {
+                        file_type,
+                        date,
+                        len,
+                    },
+                );
+            }
+        }
+        Err(e) => {
+            if e.kind() != io::ErrorKind::NotFound {
+                return Err(e);
+            }
+        }
+    }
+    Ok(entries)
+}
+
+/// Shows the contents of directory `path`.
+fn show_dir(path: &Path, console: &mut dyn Console) -> io::Result<()> {
+    let entries = do_read_dir(path)?;
+
+    console.print("")?;
+    console.print("    Modified            Type       Size    Name")?;
+    let mut total_files = 0;
+    let mut total_bytes = 0;
+    for (name, details) in entries {
+        let type_name = {
+            if details.file_type.is_dir() {
+                continue; // LOAD/SAVE don't support directories so skip them.
+            } else if details.file_type.is_file() {
+                "     "
+            } else if details.file_type.is_symlink() {
+                "<LNK>"
+            } else {
+                "<UKN>"
+            }
+        };
+
+        console.print(&format!(
+            "    {}    {}    {:6}    {}",
+            details.date.format("%F %H:%M"),
+            type_name,
+            details.len,
+            name,
+        ))?;
+        total_files += 1;
+        total_bytes += details.len;
+    }
+    if total_files > 0 {
+        console.print("")?;
+    }
+    console.print(&format!(
+        "    {} file(s), {} bytes",
+        total_files, total_bytes
+    ))?;
+    console.print("")?;
+    Ok(())
+}
+
 /// Loads the contents of the program given by `path`.
 fn load_program(path: &Path) -> io::Result<BTreeMap<usize, String>> {
     let input = File::open(path)?;
@@ -133,6 +218,32 @@ fn save_program(lines: &BTreeMap<usize, String>, path: &Path) -> io::Result<()> 
         writer.write_all(b"\n")?;
     }
     Ok(())
+}
+
+/// The `DIR` command.
+struct DirCommand {
+    console: Rc<RefCell<dyn Console>>,
+    dir: PathBuf,
+}
+
+impl BuiltinCommand for DirCommand {
+    fn name(&self) -> &'static str {
+        "DIR"
+    }
+
+    fn syntax(&self) -> &'static str {
+        ""
+    }
+
+    fn description(&self) -> &'static str {
+        "Displays the list of files on disk."
+    }
+
+    fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
+        ensure!(args.is_empty(), "DIR takes no arguments");
+        show_dir(&self.dir, &mut *self.console.borrow_mut())?;
+        Ok(())
+    }
 }
 
 /// The `EDIT` command.
@@ -379,6 +490,10 @@ fn all_commands_for(
     dir: &Path,
 ) -> Vec<Rc<dyn BuiltinCommand>> {
     vec![
+        Rc::from(DirCommand {
+            console: console.clone(),
+            dir: dir.to_owned(),
+        }),
         Rc::from(EditCommand {
             console: console.clone(),
             program: program.clone(),
@@ -509,7 +624,7 @@ mod tests {
         assert_eq!(exp_lines, lines.as_slice());
     }
 
-    /// Creates `path` with the contents in `lines`.
+    /// Creates `path` with the contents in `lines` and with a deterministic modification time.
     fn write_file(path: &Path, lines: &[&str]) {
         let mut file = fs::OpenOptions::new()
             .create(true)
@@ -520,6 +635,143 @@ mod tests {
         for line in lines {
             file.write_fmt(format_args!("{}\n", line)).unwrap();
         }
+        drop(file);
+
+        let offset = time::UtcOffset::current_local_offset();
+        filetime::set_file_mtime(
+            path,
+            filetime::FileTime::from_unix_time(1_588_757_875 - (offset.as_seconds() as i64), 0),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_dir_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        do_ok_test_with_dir(
+            Program::default(),
+            &dir.path(),
+            "DIR",
+            &[],
+            &[
+                "",
+                "    Modified            Type       Size    Name",
+                "    0 file(s), 0 bytes",
+                "",
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_dir_treat_missing_as_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        do_ok_test_with_dir(
+            Program::default(),
+            &dir.path().join("does-not-exist"),
+            "DIR",
+            &[],
+            &[
+                "",
+                "    Modified            Type       Size    Name",
+                "    0 file(s), 0 bytes",
+                "",
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_dir_ignores_subdirs() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("will-be-ignored")).unwrap();
+
+        do_ok_test_with_dir(
+            Program::default(),
+            &dir.path(),
+            "DIR",
+            &[],
+            &[
+                "",
+                "    Modified            Type       Size    Name",
+                "    0 file(s), 0 bytes",
+                "",
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_dir_entries_are_sorted() {
+        let dir = tempfile::tempdir().unwrap();
+        write_file(&dir.path().join("empty.bas"), &[]);
+        write_file(&dir.path().join("some other file.bas"), &["not empty"]);
+        write_file(&dir.path().join("00AAA.BAS"), &["first", "file"]);
+        write_file(&dir.path().join("not a bas.txt"), &[]);
+
+        do_ok_test_with_dir(
+            Program::default(),
+            &dir.path(),
+            "DIR",
+            &[],
+            &[
+                "",
+                "    Modified            Type       Size    Name",
+                "    2020-05-06 09:37                 11    00AAA.BAS",
+                "    2020-05-06 09:37                  0    empty.bas",
+                "    2020-05-06 09:37                  0    not a bas.txt",
+                "    2020-05-06 09:37                 10    some other file.bas",
+                "",
+                "    4 file(s), 21 bytes",
+                "",
+            ],
+            &[],
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn test_dir_symlinks_are_followed() {
+        use std::os::unix::fs as unix_fs;
+
+        let dir = tempfile::tempdir().unwrap();
+        write_file(&dir.path().join("some file.bas"), &["this is not empty"]);
+        unix_fs::symlink(&Path::new("some file.bas"), &dir.path().join("a link.bas")).unwrap();
+
+        do_ok_test_with_dir(
+            Program::default(),
+            &dir.path(),
+            "DIR",
+            &[],
+            &[
+                "",
+                "    Modified            Type       Size    Name",
+                "    2020-05-06 09:37    <LNK>        18    a link.bas",
+                "    2020-05-06 09:37                 18    some file.bas",
+                "",
+                "    2 file(s), 36 bytes",
+                "",
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_dir_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        do_error_test_with_dir(&dir.path(), "DIR 2", "DIR takes no arguments");
+
+        // TODO(jmmv): This is very ugly... need better error reporting in general, not just for
+        // this one case.
+        let enotdir_message = if cfg!(target_os = "windows") {
+            "The directory name is invalid. (os error 267)"
+        } else {
+            "Not a directory (os error 20)"
+        };
+
+        let file = dir.path().join("not-a-dir");
+        write_file(&file, &[]);
+        do_error_test_with_dir(&file, "DIR", enotdir_message);
     }
 
     #[test]

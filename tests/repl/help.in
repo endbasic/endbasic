@@ -26,6 +26,9 @@ HELP
 PRINT "Output from HELP CLEAR:"
 HELP CLEAR
 
+PRINT "Output from HELP DIR:"
+HELP DIR
+
 PRINT "Output from HELP EDIT:"
 HELP EDIT
 

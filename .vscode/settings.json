@@ -66,6 +66,8 @@
         "rustyline",
         "stmt",
         "stmts",
+        "symlink",
+        "symlinks",
         "tempfile",
         "testutils",
         "vref"

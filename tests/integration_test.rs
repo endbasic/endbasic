@@ -31,6 +31,9 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process;
 
+/// Matches a formatted date.
+const DATE_RE: &str = "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-2][0-9]:[0-5][0-9]";
+
 /// Matches a version number.
 const VERSION_RE: &str = "[0-9]+\\.[0-9]+\\.[0-9]+";
 
@@ -110,6 +113,12 @@ fn read_golden(path: &Path) -> String {
         "Golden file {} contains a version number",
         path.display()
     );
+    let date_re = regex::Regex::new(DATE_RE).unwrap();
+    assert!(
+        !date_re.is_match(&golden),
+        "Golden file {} contains a date",
+        path.display()
+    );
 
     golden
 }
@@ -117,7 +126,10 @@ fn read_golden(path: &Path) -> String {
 /// Replaces the parts of the output that can change due to the environment with placeholders.
 fn apply_mocks(input: String) -> String {
     let version_re = regex::Regex::new(VERSION_RE).unwrap();
-    version_re.replace_all(&input, "X.Y.Z").into()
+    let input = version_re.replace_all(&input, "X.Y.Z").to_owned();
+
+    let date_re = regex::Regex::new(DATE_RE).unwrap();
+    date_re.replace_all(&input, "YYYY-MM-DD HH:MM").into()
 }
 
 /// Runs `bin` with arguments `args` and checks its behavior against expectations.
@@ -407,6 +419,20 @@ fn test_lang_yes_no() {
 }
 
 #[test]
+fn test_repl_dir() {
+    let dir = tempfile::tempdir().unwrap();
+    let subdir = dir.path().join("subdir"); // Start with a non-existent directory.
+    check(
+        bin_path("endbasic"),
+        &["--programs-dir", subdir.to_str().unwrap()],
+        0,
+        Behavior::File(src_path("tests/repl/dir.in")),
+        Behavior::File(src_path("tests/repl/dir.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_repl_editor() {
     check(
         bin_path("endbasic"),
@@ -443,7 +469,7 @@ fn test_repl_interactive() {
 }
 
 #[test]
-fn test_load_save() {
+fn test_repl_load_save() {
     let dir = tempfile::tempdir().unwrap();
     fs::copy(
         &src_path("tests/lang/hello.bas"),
