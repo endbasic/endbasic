@@ -21,4 +21,5 @@ getopts = "0.2"
 rustyline = "6.1.2"
 
 [dev-dependencies]
+regex = "1"
 tempfile = "3"

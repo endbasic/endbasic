@@ -31,6 +31,9 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process;
 
+/// Matches a version number.
+const VERSION_RE: &str = "[0-9]+\\.[0-9]+\\.[0-9]+";
+
 /// Computes the path to the directory where this test's binary lives.
 fn self_dir() -> PathBuf {
     let self_exe = env::current_exe().expect("Cannot get self's executable path");
@@ -93,11 +96,28 @@ fn read_golden(path: &Path) -> String {
     f.read_to_end(&mut golden)
         .expect("Failed to read golden data file");
     let raw = String::from_utf8(golden).expect("Golden data file is not valid UTF-8");
-    if cfg!(target_os = "windows") {
+    let golden = if cfg!(target_os = "windows") {
         raw.replace("\r\n", "\n")
     } else {
         raw
-    }
+    };
+
+    // This is the opposite of apply_mocks and ensures we don't leak actual values into the golden
+    // files by mistake.
+    let version_re = regex::Regex::new(VERSION_RE).unwrap();
+    assert!(
+        !version_re.is_match(&golden),
+        "Golden file {} contains a version number",
+        path.display()
+    );
+
+    golden
+}
+
+/// Replaces the parts of the output that can change due to the environment with placeholders.
+fn apply_mocks(input: String) -> String {
+    let version_re = regex::Regex::new(VERSION_RE).unwrap();
+    version_re.replace_all(&input, "X.Y.Z").into()
 }
 
 /// Runs `bin` with arguments `args` and checks its behavior against expectations.
@@ -140,8 +160,10 @@ fn check<P: AsRef<Path>>(
         .status
         .code()
         .expect("Subprocess didn't exit cleanly");
-    let stdout = String::from_utf8(result.stdout).expect("Stdout not is not valid UTF-8");
-    let stderr = String::from_utf8(result.stderr).expect("Stderr not is not valid UTF-8");
+    let stdout =
+        apply_mocks(String::from_utf8(result.stdout).expect("Stdout not is not valid UTF-8"));
+    let stderr =
+        apply_mocks(String::from_utf8(result.stderr).expect("Stderr not is not valid UTF-8"));
 
     if exp_code != code || exp_stdout != stdout || exp_stderr != stderr {
         eprintln!("Exit code: {}", code);

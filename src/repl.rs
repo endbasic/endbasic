@@ -336,9 +336,13 @@ mod tests {
             .build();
         machine.exec(&mut b"HELP".as_ref()).unwrap();
 
+        let output = output.borrow();
+        let text = std::str::from_utf8(&output).unwrap();
+        let version_re = regex::Regex::new("[0-9]+\\.[0-9]+\\.[0-9]+").unwrap();
+        let text = version_re.replace_all(&text, "X.Y.Z").to_owned();
         assert_eq!(
             "
-    This is EndBASIC 0.1.0.
+    This is EndBASIC X.Y.Z.
 
     DO_NOTHING    This is the blurb.
     HELP          Prints interactive help.
@@ -347,7 +351,7 @@ mod tests {
     Press CTRL+D to exit.
 
 ",
-            std::str::from_utf8(&output.borrow()).unwrap()
+            text
         );
     }
 

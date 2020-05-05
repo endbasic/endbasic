@@ -1,10 +1,10 @@
 
-    Welcome to EndBASIC 0.1.0.
+    Welcome to EndBASIC X.Y.Z.
     Type HELP for interactive usage information.
 
 Output from HELP:
 
-    This is EndBASIC 0.1.0.
+    This is EndBASIC X.Y.Z.
 
     CLEAR    Clears all variables to restore initial state.
     EDIT     Edits the stored program.
