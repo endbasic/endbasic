@@ -74,7 +74,8 @@ is, a program that lives in the memory of the interpreter.  To get started, use
 the `EDIT` command to enter new lines into the program, `LIST` to inspect its
 contents and `RUN` to execute it.  You can save and restore programs from disk
 by using the `SAVE` and `LOAD` commands respectively, which by default are
-backed by an `endbasic` subdirectory under your `Documents` folder.
+backed by an `endbasic` subdirectory under your `Documents` folder.  You can
+then inspect the contents of this directory with the `DIR` command.
 
 The lines that `EDIT` prints during program editing are not meaningful to the
 program and only exist to support interactive editing.  Line numbers are

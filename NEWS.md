@@ -13,7 +13,7 @@ not adhere to semantic versioning until 1.0.0.**
     usage information via a new `HELP` command, the `CLEAR` command to
     wipe machine state, program editing via the `EDIT`, `LIST`, `NEW`,
     `RENUM` and `RUN` commands, and program file manipulation via the
-    `LOAD` and `SAVE` commands.
+    `DIR`, `LOAD` and `SAVE` commands.
 
 *   Added support for `:` as a statement delimiter.
 

@@ -1,0 +1,22 @@
+
+    Welcome to EndBASIC X.Y.Z.
+    Type HELP for interactive usage information.
+
+
+    Modified            Type       Size    Name
+    0 file(s), 0 bytes
+
+
+    Modified            Type       Size    Name
+    YYYY-MM-DD HH:MM                  0    empty.bas
+
+    1 file(s), 0 bytes
+
+10 20 30 40 
+    Modified            Type       Size    Name
+    YYYY-MM-DD HH:MM                  0    empty.bas
+    YYYY-MM-DD HH:MM                 18    some lines and a long name.bas
+
+    2 file(s), 18 bytes
+
+End of input by CTRL-D

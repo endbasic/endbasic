@@ -19,7 +19,9 @@ dirs = "2.0"
 failure = "~0.1"
 getopts = "0.2"
 rustyline = "6.1.2"
+time = { version = "0.2", features = ["std"] }
 
 [dev-dependencies]
+filetime = "0.2"
 regex = "1"
 tempfile = "3"
