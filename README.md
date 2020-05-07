@@ -40,7 +40,7 @@ by precisely controlling how such code interacts with the host program.
 
 ## Installation
 
-The latest version of EndBASIC is 0.1.0 and was released on 2020-04-22.
+The latest version of EndBASIC is 0.2.0 and was released on 2020-05-07.
 
 There currently are no binary releases for EndBASIC.  To install, first get a
 Rust toolchain (either from your system's package manager, if any, or using
