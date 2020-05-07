@@ -5,15 +5,29 @@ the EndBASIC language definition nor the API exposed by this crate.  Expect
 them to change at any time (especially the Rust API).  Version numbers will
 not adhere to semantic versioning until 1.0.0.**
 
-## Changes in version X.Y.Z
+## Changes in version 0.2.0
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2020-05-07.**
 
-*   Added an interactive command-line interface (aka a REPL) with builtin
-    usage information via a new `HELP` command, the `CLEAR` command to
-    wipe machine state, program editing via the `EDIT`, `LIST`, `NEW`,
-    `RENUM` and `RUN` commands, and program file manipulation via the
-    `DIR`, `LOAD` and `SAVE` commands.
+This is the first release with an interactive command-line interface (aka
+a REPL).  You can start this by simply typing `endbasic` without any
+arguments.  Once in it, the following features are now available:
+
+*   The `HELP` command to provide interactive information.
+
+*   The `CLEAR` command to wipe machine state (variables).
+
+*   The stored program manipulation commands `EDIT`, `LIST`, `NEW`, `RENUM`
+    and `RUN`.
+
+*   The on-disk program manipulation commands `DIR`, `LOAD` and `SAVE`.
+
+Similarly, this is the first release that supports a nicer command-line
+invocation experience, including flag parsing.  As a result:
+
+*   Added the `--help` and `--version` flags to the command-line interface.
+
+Finally, these are the changes to the core interpreter and language:
 
 *   Added support for `:` as a statement delimiter.
 
@@ -32,8 +46,6 @@ not adhere to semantic versioning until 1.0.0.**
     core and into their own module.  This keeps the interpreter free from
     side-effects if the caller so chooses, which makes it ideal for
     embedding.
-
-*   Added `--help` and `--version` flags to the command-line interface.
 
 ## Changes in version 0.1.0
 
