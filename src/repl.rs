@@ -19,6 +19,7 @@ use crate::ast::{ArgSep, Expr, VarType};
 use crate::console;
 use crate::exec::{BuiltinCommand, Machine, MachineBuilder};
 use crate::program;
+use crossterm::tty::IsTty;
 use failure::Fallible;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -171,9 +172,9 @@ pub struct TextConsole {
 impl TextConsole {
     /// Creates a new console based on the properties of stdin/stdout.
     pub fn from_stdio() -> Self {
-        let mut rl = Editor::<()>::new();
-        let is_tty = rl.dimensions().is_some();
-        Self { is_tty }
+        Self {
+            is_tty: io::stdout().is_tty(),
+        }
     }
 }
 
