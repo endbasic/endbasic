@@ -13,7 +13,7 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-//! Execution engine for EndBASIC programs.
+//! Console representation and manipulation.
 
 use crate::ast::{ArgSep, Expr, Value};
 use crate::exec::{BuiltinCommand, Machine};
@@ -22,8 +22,11 @@ use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
 
-/// Hooks to implement the `INPUT` and `PRINT` builtins.
+/// Hooks to implement the commands that manipulate the console.
 pub trait Console {
+    /// Clears the console and moves the cursor to the top left.
+    fn clear(&mut self) -> io::Result<()>;
+
     /// Writes `prompt` to the console and returns a single line of text input by the user.
     ///
     /// The text provided by the user should not be validated in any way before return, as type
@@ -36,6 +39,31 @@ pub trait Console {
 
     /// Writes `text` to the console.
     fn print(&mut self, text: &str) -> io::Result<()>;
+}
+
+/// The `CLS` command.
+pub struct ClsCommand {
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl BuiltinCommand for ClsCommand {
+    fn name(&self) -> &'static str {
+        "CLS"
+    }
+
+    fn syntax(&self) -> &'static str {
+        ""
+    }
+
+    fn description(&self) -> &'static str {
+        "Clears the screen."
+    }
+
+    fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
+        ensure!(args.is_empty(), "CLS takes no arguments");
+        self.console.borrow_mut().clear()?;
+        Ok(())
+    }
 }
 
 /// The `INPUT` command.
@@ -157,6 +185,9 @@ separated by the long `,` separator are concatenated with a tab character."
 /// Adds all console-related commands for the given `console` to the `machine`.
 pub fn all_commands(console: Rc<RefCell<dyn Console>>) -> Vec<Rc<dyn BuiltinCommand>> {
     vec![
+        Rc::from(ClsCommand {
+            console: console.clone(),
+        }),
         Rc::from(InputCommand::new(console.clone())),
         Rc::from(PrintCommand::new(console)),
     ]
@@ -167,13 +198,20 @@ pub(crate) mod testutils {
     use super::*;
     use std::io;
 
+    /// A captured command or messages sent to the mock console.
+    #[derive(Debug, Eq, PartialEq)]
+    pub(crate) enum CapturedOut {
+        Clear,
+        Print(String),
+    }
+
     /// A console that supplies golden input and captures all output.
     pub(crate) struct MockConsole {
         /// Sequence of expected prompts and previous values and the responses to feed to them.
         golden_in: Box<dyn Iterator<Item = &'static (&'static str, &'static str, &'static str)>>,
 
         /// Sequence of all messages printed.
-        captured_out: Vec<String>,
+        captured_out: Vec<CapturedOut>,
     }
 
     impl MockConsole {
@@ -188,12 +226,17 @@ pub(crate) mod testutils {
         }
 
         /// Obtains a reference to the captured output.
-        pub(crate) fn captured_out(&self) -> &[String] {
+        pub(crate) fn captured_out(&self) -> &[CapturedOut] {
             self.captured_out.as_slice()
         }
     }
 
     impl Console for MockConsole {
+        fn clear(&mut self) -> io::Result<()> {
+            self.captured_out.push(CapturedOut::Clear);
+            Ok(())
+        }
+
         fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String> {
             let (expected_prompt, expected_previous, answer) = self.golden_in.next().unwrap();
             assert_eq!(expected_prompt, &prompt);
@@ -202,7 +245,7 @@ pub(crate) mod testutils {
         }
 
         fn print(&mut self, text: &str) -> io::Result<()> {
-            self.captured_out.push(text.to_owned());
+            self.captured_out.push(CapturedOut::Print(text.to_owned()));
             Ok(())
         }
     }
@@ -219,11 +262,11 @@ mod tests {
     /// `golden_in` is a sequence of pairs each containing an expected prompt printed by `INPUT`
     /// and the reply to feed to that prompt.
     ///
-    /// `expected_out` is a sequence of expected calls to `PRINT`.
-    fn do_ok_test(
+    /// `expected_out` is a sequence of expected commands or messages.
+    fn do_control_ok_test(
         input: &str,
         golden_in: &'static [(&'static str, &'static str, &'static str)],
-        expected_out: &'static [&'static str],
+        expected_out: &[CapturedOut],
     ) {
         let console = Rc::from(RefCell::from(MockConsole::new(golden_in)));
         let mut machine = MachineBuilder::default()
@@ -233,6 +276,20 @@ mod tests {
             .exec(&mut input.as_bytes())
             .expect("Execution failed");
         assert_eq!(expected_out, console.borrow().captured_out());
+    }
+
+    /// Same as `do_control_ok_test` but with `expected_out` being just a sequence of expected
+    /// `PRINT` calls.
+    fn do_ok_test(
+        input: &str,
+        golden_in: &'static [(&'static str, &'static str, &'static str)],
+        expected_out: &'static [&'static str],
+    ) {
+        let expected_out: Vec<CapturedOut> = expected_out
+            .iter()
+            .map(|x| CapturedOut::Print((*x).to_owned()))
+            .collect();
+        do_control_ok_test(input, golden_in, &expected_out)
     }
 
     /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
@@ -258,6 +315,10 @@ mod tests {
                     .expect_err("Execution did not fail")
             )
         );
+        let expected_out: Vec<CapturedOut> = expected_out
+            .iter()
+            .map(|x| CapturedOut::Print((*x).to_owned()))
+            .collect();
         assert_eq!(expected_out, console.borrow().captured_out());
     }
 
@@ -267,6 +328,16 @@ mod tests {
     /// expected to request any input nor generate any output.
     fn do_simple_error_test(input: &str, expected_err: &str) {
         do_error_test(input, &[], &[], expected_err);
+    }
+
+    #[test]
+    fn test_cls_ok() {
+        do_control_ok_test("CLS", &[], &[CapturedOut::Clear]);
+    }
+
+    #[test]
+    fn test_cls_errors() {
+        do_simple_error_test("CLS 1", "CLS takes no arguments");
     }
 
     #[test]

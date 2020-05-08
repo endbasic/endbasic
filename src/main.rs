@@ -128,7 +128,7 @@ fn get_programs_dir(flag: Option<String>) -> Fallible<PathBuf> {
 fn run<P: AsRef<Path>>(path: P) -> Fallible<()> {
     let console = Rc::from(RefCell::from(endbasic::repl::TextConsole::from_stdio()));
     let mut machine = endbasic::exec::MachineBuilder::default()
-        .add_builtins(endbasic::console::all_commands(console.clone()))
+        .add_builtins(endbasic::console::all_commands(console))
         .build();
 
     let mut input = File::open(path)?;

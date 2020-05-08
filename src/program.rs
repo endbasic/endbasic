@@ -560,6 +560,10 @@ mod tests {
         machine
             .exec(&mut input.as_bytes())
             .expect("Execution failed");
+        let expected_out: Vec<CapturedOut> = expected_out
+            .iter()
+            .map(|x| CapturedOut::Print((*x).to_owned()))
+            .collect();
         assert_eq!(expected_out, console.borrow().captured_out());
 
         let program = program.borrow();
