@@ -164,45 +164,37 @@ pub(crate) fn readline_error_to_io_error(e: ReadlineError) -> io::Error {
 }
 
 /// Implementation of the EndBASIC console to interact with stdin and stdout.
-///
-/// This is separate from `TtyConsole` to have full control on what gets written to stdout.  For
-/// example: we do not use `rustyline` here because it wouldn't print a prompt when not attached
-/// to the console---but we want to see it during `INPUT` calls.
-#[derive(Default)]
-struct RawConsole {}
+pub struct TextConsole {
+    is_tty: bool,
+}
 
-impl console::Console for RawConsole {
-    fn input(&mut self, prompt: &str, _previous: &str) -> io::Result<String> {
-        if !prompt.is_empty() {
-            let mut stdout = io::stdout();
-            stdout.write_all(prompt.as_bytes())?;
-            stdout.flush()?;
-        }
-
-        let mut answer = String::new();
-        io::stdin().read_line(&mut answer)?;
-        Ok(answer.trim_end().to_owned())
-    }
-
-    fn print(&mut self, text: &str) -> io::Result<()> {
-        println!("{}", text);
-        Ok(())
+impl TextConsole {
+    /// Creates a new console based on the properties of stdin/stdout.
+    pub fn from_stdio() -> Self {
+        let mut rl = Editor::<()>::new();
+        let is_tty = rl.dimensions().is_some();
+        Self { is_tty }
     }
 }
 
-/// Implementation of the EndBASIC console with fancier interactive support.
-///
-/// Uses `rustyline` to obtain input, which allows for better interactive editing when dealing with
-/// a console but falls back to simpler reads when dealing with a file.
-#[derive(Default)]
-struct TtyConsole {}
-
-impl console::Console for TtyConsole {
+impl console::Console for TextConsole {
     fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String> {
-        let mut rl = Editor::<()>::new();
-        let answer = match rl.readline_with_initial(prompt, (previous, "")) {
-            Ok(line) => line,
-            Err(e) => return Err(readline_error_to_io_error(e)),
+        let answer = if self.is_tty {
+            let mut rl = Editor::<()>::new();
+            match rl.readline_with_initial(prompt, (previous, "")) {
+                Ok(line) => line,
+                Err(e) => return Err(readline_error_to_io_error(e)),
+            }
+        } else {
+            if !prompt.is_empty() {
+                let mut stdout = io::stdout();
+                stdout.write_all(prompt.as_bytes())?;
+                stdout.flush()?;
+            }
+
+            let mut answer = String::new();
+            io::stdin().read_line(&mut answer)?;
+            answer
         };
         Ok(answer.trim_end().to_owned())
     }
@@ -213,23 +205,12 @@ impl console::Console for TtyConsole {
     }
 }
 
-/// Creates a new console for stdin/stdout depending on whether they are attached to a TTY or not.
-pub fn new_console() -> Rc<RefCell<dyn console::Console>> {
-    let mut rl = Editor::<()>::new();
-    let is_tty = rl.dimensions().is_some();
-    if is_tty {
-        Rc::from(RefCell::from(TtyConsole::default()))
-    } else {
-        Rc::from(RefCell::from(RawConsole::default()))
-    }
-}
-
 /// Enters the interactive interpreter.
 ///
 /// `dir` specifies the directory that the interpreter will use for any commands that manipulate
 /// files.
 pub fn run_repl_loop(dir: &Path) -> io::Result<()> {
-    let console = new_console();
+    let console = Rc::from(RefCell::from(TextConsole::from_stdio()));
     let mut machine = MachineBuilder::default()
         .add_builtin(Rc::from(ClearCommand {}))
         .add_builtin(Rc::from(HelpCommand {

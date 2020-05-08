@@ -30,10 +30,12 @@ extern crate failure;
 
 use failure::{Error, Fail, Fallible};
 use getopts::Options;
+use std::cell::RefCell;
 use std::env;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::rc::Rc;
 
 /// Errors caused by the user when invoking this binary (invalid options or arguments).
 #[derive(Debug, Fail)]
@@ -128,7 +130,7 @@ struct StdioConsole {}
 
 /// Executes the `path` program in a fresh machine.
 fn run<P: AsRef<Path>>(path: P) -> Fallible<()> {
-    let console = endbasic::repl::new_console();
+    let console = Rc::from(RefCell::from(endbasic::repl::TextConsole::from_stdio()));
     let mut machine = endbasic::exec::MachineBuilder::default()
         .add_builtins(endbasic::console::all_commands(console.clone()))
         .build();
