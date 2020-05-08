@@ -19,7 +19,7 @@ use crate::ast::{ArgSep, Expr, VarType};
 use crate::console;
 use crate::exec::{BuiltinCommand, Machine, MachineBuilder};
 use crate::program;
-use crossterm::tty::IsTty;
+use crossterm::{cursor, execute, terminal, tty::IsTty};
 use failure::Fallible;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -150,6 +150,17 @@ With a single argument, shows detailed information about the given command."
     }
 }
 
+//// Converts a `crossterm::ErrorKind` to an `io::Error`.
+fn crossterm_error_to_io_error(e: crossterm::ErrorKind) -> io::Error {
+    match e {
+        crossterm::ErrorKind::IoError(e) => e,
+        crossterm::ErrorKind::Utf8Error(e) => {
+            io::Error::new(io::ErrorKind::InvalidData, format!("{}", e))
+        }
+        _ => io::Error::new(io::ErrorKind::Other, format!("{}", e)),
+    }
+}
+
 /// Converts a `ReadLine` error into an `io::Error`.
 pub(crate) fn readline_error_to_io_error(e: ReadlineError) -> io::Error {
     let kind = match e {
@@ -179,6 +190,15 @@ impl TextConsole {
 }
 
 impl console::Console for TextConsole {
+    fn clear(&mut self) -> io::Result<()> {
+        execute!(
+            io::stdout(),
+            terminal::Clear(terminal::ClearType::All),
+            cursor::MoveTo(0, 0)
+        )
+        .map_err(crossterm_error_to_io_error)
+    }
+
     fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String> {
         let answer = if self.is_tty {
             let mut rl = Editor::<()>::new();

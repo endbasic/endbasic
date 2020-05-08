@@ -7,6 +7,7 @@ Output from HELP:
     This is EndBASIC X.Y.Z.
 
     CLEAR    Clears all variables to restore initial state.
+    CLS      Clears the screen.
     DIR      Displays the list of files on disk.
     EDIT     Edits the stored program.
     HELP     Prints interactive help.
@@ -27,6 +28,12 @@ Output from HELP CLEAR:
     CLEAR
 
     Clears all variables to restore initial state.
+
+Output from HELP CLS:
+
+    CLS
+
+    Clears the screen.
 
 Output from HELP DIR:
 
