@@ -8,6 +8,7 @@ Output from HELP:
 
     CLEAR     Clears all variables to restore initial state.
     CLS       Clears the screen.
+    COLOR     Sets the foreground, the background, or both colors.
     DIR       Displays the list of files on disk.
     EDIT      Edits the stored program.
     HELP      Prints interactive help.
@@ -35,6 +36,14 @@ Output from HELP CLS:
     CLS
 
     Clears the screen.
+
+Output from HELP COLOR:
+
+    COLOR [fg%][, bg%]
+
+    Sets the foreground, the background, or both colors.
+
+    Color numbers are given as ANSI numbers and can be between 0 and 255.  If a color number is not specified, then the color is left unchanged.
 
 Output from HELP DIR:
 
