@@ -9,7 +9,8 @@ not adhere to semantic versioning until 1.0.0.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
-*   Added the `CLS` and `LOCATE` commands for terminal manipulation.
+*   Added the `CLS`, `COLOR`, and `LOCATE` commands for terminal
+    manipulation.
 
 ## Changes in version 0.2.0
 

@@ -29,6 +29,9 @@ HELP CLEAR
 PRINT "Output from HELP CLS:"
 HELP CLS
 
+PRINT "Output from HELP COLOR:"
+HELP COLOR
+
 PRINT "Output from HELP DIR:"
 HELP DIR
 

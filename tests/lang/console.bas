@@ -22,16 +22,20 @@
 ' golden data file.
 
 PRINT "Before clearing the screen"
+COLOR 15, 4
 CLS
 PRINT "After clearing the screen"
 
 row = 0
+fg = 0
 WHILE row < 10
     column = 0
     WHILE column < 20
+        COLOR fg
         LOCATE row + 5, column + 10
         PRINT "#"
         column = column + 1
+        fg = (fg + 1) MOD 15
     END WHILE
     row = row + 1
 END WHILE

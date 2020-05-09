@@ -19,7 +19,7 @@ use crate::ast::{ArgSep, Expr, VarType};
 use crate::console;
 use crate::exec::{BuiltinCommand, Machine, MachineBuilder};
 use crate::program;
-use crossterm::{cursor, execute, terminal, tty::IsTty};
+use crossterm::{cursor, execute, style, terminal, tty::IsTty, QueueableCommand};
 use failure::Fallible;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -197,6 +197,22 @@ impl console::Console for TextConsole {
             cursor::MoveTo(0, 0)
         )
         .map_err(crossterm_error_to_io_error)
+    }
+
+    fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
+        let mut output = io::stdout();
+        if let Some(color) = fg {
+            output
+                .queue(style::SetForegroundColor(style::Color::AnsiValue(color)))
+                .map_err(crossterm_error_to_io_error)?;
+        }
+        if let Some(color) = bg {
+            output
+                .queue(style::SetBackgroundColor(style::Color::AnsiValue(color)))
+                .map_err(crossterm_error_to_io_error)?;
+        }
+        output.flush()?;
+        Ok(())
     }
 
     fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String> {

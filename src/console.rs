@@ -27,6 +27,11 @@ pub trait Console {
     /// Clears the console and moves the cursor to the top left.
     fn clear(&mut self) -> io::Result<()>;
 
+    /// Sets the console's foreground and background colors to `fg` and `bg`.
+    ///
+    /// If any of the colors is `None`, the color is left unchanged.
+    fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()>;
+
     /// Writes `prompt` to the console and returns a single line of text input by the user.
     ///
     /// The text provided by the user should not be validated in any way before return, as type
@@ -65,6 +70,52 @@ impl BuiltinCommand for ClsCommand {
     fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
         ensure!(args.is_empty(), "CLS takes no arguments");
         self.console.borrow_mut().clear()?;
+        Ok(())
+    }
+}
+
+/// The `COLOR` command.
+pub struct ColorCommand {
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl BuiltinCommand for ColorCommand {
+    fn name(&self) -> &'static str {
+        "COLOR"
+    }
+
+    fn syntax(&self) -> &'static str {
+        "[fg%][, bg%]"
+    }
+
+    fn description(&self) -> &'static str {
+        "Sets the foreground, the background, or both colors.
+Color numbers are given as ANSI numbers and can be between 0 and 255.  If a color number is not \
+specified, then the color is left unchanged."
+    }
+
+    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+        let (fg_expr, bg_expr): (&Option<Expr>, &Option<Expr>) = match args {
+            [(fg, ArgSep::End)] => (fg, &None),
+            [(fg, ArgSep::Long), (bg, ArgSep::End)] => (fg, bg),
+            _ => bail!("COLOR takes one or two arguments separated by a comma"),
+        };
+
+        fn get_color(e: &Option<Expr>, machine: &Machine) -> Fallible<Option<u8>> {
+            match e {
+                Some(e) => match e.eval(machine.get_vars())? {
+                    Value::Integer(i) if i >= 0 && i <= std::u8::MAX as i32 => Ok(Some(i as u8)),
+                    Value::Integer(_) => bail!("Color out of range"),
+                    _ => bail!("Color must be an integer"),
+                },
+                None => Ok(None),
+            }
+        }
+
+        let fg = get_color(fg_expr, machine)?;
+        let bg = get_color(bg_expr, machine)?;
+
+        self.console.borrow_mut().color(fg, bg)?;
         Ok(())
     }
 }
@@ -245,6 +296,9 @@ pub fn all_commands(console: Rc<RefCell<dyn Console>>) -> Vec<Rc<dyn BuiltinComm
         Rc::from(ClsCommand {
             console: console.clone(),
         }),
+        Rc::from(ColorCommand {
+            console: console.clone(),
+        }),
         Rc::from(InputCommand::new(console.clone())),
         Rc::from(LocateCommand {
             console: console.clone(),
@@ -262,6 +316,7 @@ pub(crate) mod testutils {
     #[derive(Debug, Eq, PartialEq)]
     pub(crate) enum CapturedOut {
         Clear,
+        Color(Option<u8>, Option<u8>),
         Locate(usize, usize),
         Print(String),
     }
@@ -295,6 +350,11 @@ pub(crate) mod testutils {
     impl Console for MockConsole {
         fn clear(&mut self) -> io::Result<()> {
             self.captured_out.push(CapturedOut::Clear);
+            Ok(())
+        }
+
+        fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
+            self.captured_out.push(CapturedOut::Color(fg, bg));
             Ok(())
         }
 
@@ -404,6 +464,39 @@ mod tests {
     #[test]
     fn test_cls_errors() {
         do_simple_error_test("CLS 1", "CLS takes no arguments");
+    }
+
+    #[test]
+    fn test_color_ok() {
+        do_control_ok_test("COLOR ,", &[], &[CapturedOut::Color(None, None)]);
+        do_control_ok_test("COLOR 1", &[], &[CapturedOut::Color(Some(1), None)]);
+        do_control_ok_test("COLOR 1,", &[], &[CapturedOut::Color(Some(1), None)]);
+        do_control_ok_test("COLOR , 1", &[], &[CapturedOut::Color(None, Some(1))]);
+        do_control_ok_test("COLOR 10, 5", &[], &[CapturedOut::Color(Some(10), Some(5))]);
+        do_control_ok_test("COLOR 0, 0", &[], &[CapturedOut::Color(Some(0), Some(0))]);
+        do_control_ok_test(
+            "COLOR 255, 255",
+            &[],
+            &[CapturedOut::Color(Some(255), Some(255))],
+        );
+    }
+
+    #[test]
+    fn test_color_errors() {
+        do_simple_error_test(
+            "COLOR",
+            "COLOR takes one or two arguments separated by a comma",
+        );
+        do_simple_error_test(
+            "COLOR 1, 2, 3",
+            "COLOR takes one or two arguments separated by a comma",
+        );
+
+        do_simple_error_test("COLOR 1000, 0", "Color out of range");
+        do_simple_error_test("COLOR 0, 1000", "Color out of range");
+
+        do_simple_error_test("COLOR TRUE, 0", "Color must be an integer");
+        do_simple_error_test("COLOR 0, TRUE", "Color must be an integer");
     }
 
     #[test]
