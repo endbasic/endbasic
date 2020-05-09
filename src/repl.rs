@@ -220,6 +220,20 @@ impl console::Console for TextConsole {
         Ok(answer.trim_end().to_owned())
     }
 
+    fn locate(&mut self, row: usize, column: usize) -> io::Result<()> {
+        if row > std::u16::MAX as usize {
+            return Err(io::Error::new(io::ErrorKind::Other, "Row out of range"));
+        }
+        let row = row as u16;
+
+        if column > std::u16::MAX as usize {
+            return Err(io::Error::new(io::ErrorKind::Other, "Column out of range"));
+        }
+        let column = column as u16;
+
+        execute!(io::stdout(), cursor::MoveTo(column, row)).map_err(crossterm_error_to_io_error)
+    }
+
     fn print(&mut self, text: &str) -> io::Result<()> {
         println!("{}", text);
         Ok(())

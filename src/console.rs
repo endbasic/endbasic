@@ -37,6 +37,9 @@ pub trait Console {
     /// with that data.
     fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String>;
 
+    /// Moves the cursor to the given position, which must be within the screen.
+    fn locate(&mut self, row: usize, column: usize) -> io::Result<()>;
+
     /// Writes `text` to the console.
     fn print(&mut self, text: &str) -> io::Result<()>;
 }
@@ -137,6 +140,60 @@ variable to update with the obtained input."
     }
 }
 
+/// The `LOCATE` command.
+pub struct LocateCommand {
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl BuiltinCommand for LocateCommand {
+    fn name(&self) -> &'static str {
+        "LOCATE"
+    }
+
+    fn syntax(&self) -> &'static str {
+        "row%, column%"
+    }
+
+    fn description(&self) -> &'static str {
+        "Moves the cursor to the given position."
+    }
+
+    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+        ensure!(args.len() == 2, "LOCATE takes two arguments");
+        let (row_arg, column_arg) = (&args[0], &args[1]);
+        ensure!(
+            row_arg.1 == ArgSep::Long,
+            "LOCATE expects arguments separated by a comma"
+        );
+        debug_assert!(column_arg.1 == ArgSep::End);
+
+        let row = match &row_arg.0 {
+            Some(arg) => match arg.eval(machine.get_vars())? {
+                Value::Integer(i) => {
+                    ensure!(i >= 0, "Row cannot be negative");
+                    i as usize
+                }
+                _ => bail!("Row must be an integer"),
+            },
+            None => bail!("Row cannot be empty"),
+        };
+
+        let column = match &column_arg.0 {
+            Some(arg) => match arg.eval(machine.get_vars())? {
+                Value::Integer(i) => {
+                    ensure!(i >= 0, "Column cannot be negative");
+                    i as usize
+                }
+                _ => bail!("Column must be an integer"),
+            },
+            None => bail!("Column cannot be empty"),
+        };
+
+        self.console.borrow_mut().locate(row, column)?;
+        Ok(())
+    }
+}
+
 /// The `PRINT` command.
 pub struct PrintCommand {
     console: Rc<RefCell<dyn Console>>,
@@ -189,6 +246,9 @@ pub fn all_commands(console: Rc<RefCell<dyn Console>>) -> Vec<Rc<dyn BuiltinComm
             console: console.clone(),
         }),
         Rc::from(InputCommand::new(console.clone())),
+        Rc::from(LocateCommand {
+            console: console.clone(),
+        }),
         Rc::from(PrintCommand::new(console)),
     ]
 }
@@ -202,6 +262,7 @@ pub(crate) mod testutils {
     #[derive(Debug, Eq, PartialEq)]
     pub(crate) enum CapturedOut {
         Clear,
+        Locate(usize, usize),
         Print(String),
     }
 
@@ -242,6 +303,11 @@ pub(crate) mod testutils {
             assert_eq!(expected_prompt, &prompt);
             assert_eq!(expected_previous, &previous);
             Ok((*answer).to_owned())
+        }
+
+        fn locate(&mut self, row: usize, column: usize) -> io::Result<()> {
+            self.captured_out.push(CapturedOut::Locate(row, column));
+            Ok(())
         }
 
         fn print(&mut self, text: &str) -> io::Result<()> {
@@ -393,6 +459,31 @@ mod tests {
             "INPUT \"a\" + TRUE; b?",
             "Cannot add Text(\"a\") and Boolean(true)",
         );
+    }
+
+    #[test]
+    fn test_locate_ok() {
+        do_control_ok_test("LOCATE 0, 0", &[], &[CapturedOut::Locate(0, 0)]);
+        do_control_ok_test("LOCATE 1000, 2000", &[], &[CapturedOut::Locate(1000, 2000)]);
+    }
+
+    #[test]
+    fn test_locate_errors() {
+        do_simple_error_test("LOCATE", "LOCATE takes two arguments");
+        do_simple_error_test("LOCATE 1", "LOCATE takes two arguments");
+        do_simple_error_test("LOCATE 1, 2, 3", "LOCATE takes two arguments");
+        do_simple_error_test(
+            "LOCATE 1; 2",
+            "LOCATE expects arguments separated by a comma",
+        );
+
+        do_simple_error_test("LOCATE -1, 2", "Row cannot be negative");
+        do_simple_error_test("LOCATE TRUE, 2", "Row must be an integer");
+        do_simple_error_test("LOCATE , 2", "Row cannot be empty");
+
+        do_simple_error_test("LOCATE 1, -2", "Column cannot be negative");
+        do_simple_error_test("LOCATE 1, TRUE", "Column must be an integer");
+        do_simple_error_test("LOCATE 1,", "Column cannot be empty");
     }
 
     #[test]

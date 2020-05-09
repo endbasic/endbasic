@@ -6,19 +6,20 @@ Output from HELP:
 
     This is EndBASIC X.Y.Z.
 
-    CLEAR    Clears all variables to restore initial state.
-    CLS      Clears the screen.
-    DIR      Displays the list of files on disk.
-    EDIT     Edits the stored program.
-    HELP     Prints interactive help.
-    INPUT    Obtains user input from the console.
-    LIST     Lists the contents of the stored program.
-    LOAD     Loads the given program.
-    NEW      Clears the stored program from memory.
-    PRINT    Prints a message to the console.
-    RENUM    Reassigns line numbers to make them all multiples of ten.
-    RUN      Runs the stored program.
-    SAVE     Saves the current program in memory to the given filename.
+    CLEAR     Clears all variables to restore initial state.
+    CLS       Clears the screen.
+    DIR       Displays the list of files on disk.
+    EDIT      Edits the stored program.
+    HELP      Prints interactive help.
+    INPUT     Obtains user input from the console.
+    LIST      Lists the contents of the stored program.
+    LOAD      Loads the given program.
+    LOCATE    Moves the cursor to the given position.
+    NEW       Clears the stored program from memory.
+    PRINT     Prints a message to the console.
+    RENUM     Reassigns line numbers to make them all multiples of ten.
+    RUN       Runs the stored program.
+    SAVE      Saves the current program in memory to the given filename.
 
     Type HELP followed by a command name for details on that command.
     Press CTRL+D to exit.
@@ -84,6 +85,12 @@ Output from HELP LOAD:
     Loads the given program.
 
     The filename must be a string and must be a basename (no directory components).  The .BAS extension is optional, but if present, it must be .BAS.
+
+Output from HELP LOCATE:
+
+    LOCATE row%, column%
+
+    Moves the cursor to the given position.
 
 Output from HELP NEW:
 
