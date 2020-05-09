@@ -24,3 +24,16 @@
 PRINT "Before clearing the screen"
 CLS
 PRINT "After clearing the screen"
+
+row = 0
+WHILE row < 10
+    column = 0
+    WHILE column < 20
+        LOCATE row + 5, column + 10
+        PRINT "#"
+        column = column + 1
+    END WHILE
+    row = row + 1
+END WHILE
+
+LOCATE 100, 0

@@ -47,6 +47,9 @@ HELP LIST
 PRINT "Output from HELP LOAD:"
 HELP LOAD
 
+PRINT "Output from HELP LOCATE:"
+HELP LOCATE
+
 PRINT "Output from HELP NEW:"
 HELP NEW
 
