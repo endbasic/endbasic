@@ -124,10 +124,6 @@ fn get_programs_dir(flag: Option<String>) -> Fallible<PathBuf> {
     Ok(dir.unwrap())
 }
 
-/// Implementation of the EndBASIC console to interact with stdin and stdout.
-#[derive(Default)]
-struct StdioConsole {}
-
 /// Executes the `path` program in a fresh machine.
 fn run<P: AsRef<Path>>(path: P) -> Fallible<()> {
     let console = Rc::from(RefCell::from(endbasic::repl::TextConsole::from_stdio()));
