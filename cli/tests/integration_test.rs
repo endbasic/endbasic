@@ -195,7 +195,7 @@ fn test_cli_help() {
             args,
             0,
             Behavior::Null,
-            Behavior::File(src_path("tests/cli/help.out")),
+            Behavior::File(src_path("cli/tests/cli/help.out")),
             Behavior::Null,
         );
     }
@@ -278,7 +278,7 @@ fn test_cli_version() {
             args,
             0,
             Behavior::Null,
-            Behavior::File(src_path("tests/cli/version.out")),
+            Behavior::File(src_path("cli/tests/cli/version.out")),
             Behavior::Null,
         );
     }
@@ -293,7 +293,7 @@ fn test_example_custom_commands() {
         &[],
         0,
         Behavior::Null,
-        Behavior::File(src_path("examples/custom-commands.out")),
+        Behavior::File(src_path("core/examples/custom-commands.out")),
         Behavior::Null,
     );
 }
@@ -305,7 +305,7 @@ fn test_example_minimal() {
         &[],
         0,
         Behavior::Null,
-        Behavior::File(src_path("examples/minimal.out")),
+        Behavior::File(src_path("core/examples/minimal.out")),
         Behavior::Null,
     );
 }
@@ -314,10 +314,10 @@ fn test_example_minimal() {
 fn test_lang_console() {
     check(
         bin_path("endbasic"),
-        &[&src_str("tests/lang/console.bas")],
+        &[&src_str("cli/tests/lang/console.bas")],
         0,
         Behavior::Null,
-        Behavior::File(src_path("tests/lang/console.out")),
+        Behavior::File(src_path("cli/tests/lang/console.out")),
         Behavior::Null,
     );
 }
@@ -326,10 +326,10 @@ fn test_lang_console() {
 fn test_lang_control_flow() {
     check(
         bin_path("endbasic"),
-        &[&src_str("tests/lang/control-flow.bas")],
+        &[&src_str("cli/tests/lang/control-flow.bas")],
         0,
         Behavior::Null,
-        Behavior::File(src_path("tests/lang/control-flow.out")),
+        Behavior::File(src_path("cli/tests/lang/control-flow.out")),
         Behavior::Null,
     );
 }
@@ -338,11 +338,11 @@ fn test_lang_control_flow() {
 fn test_lang_exec_error() {
     check(
         bin_path("endbasic"),
-        &[&src_str("tests/lang/exec-error.bas")],
+        &[&src_str("cli/tests/lang/exec-error.bas")],
         1,
         Behavior::Null,
-        Behavior::File(src_path("tests/lang/exec-error.out")),
-        Behavior::File(src_path("tests/lang/exec-error.err")),
+        Behavior::File(src_path("cli/tests/lang/exec-error.out")),
+        Behavior::File(src_path("cli/tests/lang/exec-error.err")),
     );
 }
 
@@ -350,10 +350,10 @@ fn test_lang_exec_error() {
 fn test_lang_hello() {
     check(
         bin_path("endbasic"),
-        &[&src_str("tests/lang/hello.bas")],
+        &[&src_str("cli/tests/lang/hello.bas")],
         0,
         Behavior::Null,
-        Behavior::File(src_path("tests/lang/hello.out")),
+        Behavior::File(src_path("cli/tests/lang/hello.out")),
         Behavior::Null,
     );
 }
@@ -362,11 +362,11 @@ fn test_lang_hello() {
 fn test_lang_lexer_error() {
     check(
         bin_path("endbasic"),
-        &[&src_str("tests/lang/lexer-error.bas")],
+        &[&src_str("cli/tests/lang/lexer-error.bas")],
         1,
         Behavior::Null,
-        Behavior::File(src_path("tests/lang/lexer-error.out")),
-        Behavior::File(src_path("tests/lang/lexer-error.err")),
+        Behavior::File(src_path("cli/tests/lang/lexer-error.out")),
+        Behavior::File(src_path("cli/tests/lang/lexer-error.err")),
     );
 }
 
@@ -374,11 +374,11 @@ fn test_lang_lexer_error() {
 fn test_lang_no_repl_commands() {
     check(
         bin_path("endbasic"),
-        &[&src_str("tests/lang/no-repl-commands.bas")],
+        &[&src_str("cli/tests/lang/no-repl-commands.bas")],
         1,
         Behavior::Null,
-        Behavior::File(src_path("tests/lang/no-repl-commands.out")),
-        Behavior::File(src_path("tests/lang/no-repl-commands.err")),
+        Behavior::File(src_path("cli/tests/lang/no-repl-commands.out")),
+        Behavior::File(src_path("cli/tests/lang/no-repl-commands.err")),
     );
 }
 
@@ -386,11 +386,11 @@ fn test_lang_no_repl_commands() {
 fn test_lang_parser_error() {
     check(
         bin_path("endbasic"),
-        &[&src_str("tests/lang/parser-error.bas")],
+        &[&src_str("cli/tests/lang/parser-error.bas")],
         1,
         Behavior::Null,
-        Behavior::File(src_path("tests/lang/parser-error.out")),
-        Behavior::File(src_path("tests/lang/parser-error.err")),
+        Behavior::File(src_path("cli/tests/lang/parser-error.out")),
+        Behavior::File(src_path("cli/tests/lang/parser-error.err")),
     );
 }
 
@@ -398,10 +398,10 @@ fn test_lang_parser_error() {
 fn test_lang_types() {
     check(
         bin_path("endbasic"),
-        &[&src_str("tests/lang/types.bas")],
+        &[&src_str("cli/tests/lang/types.bas")],
         0,
         Behavior::Null,
-        Behavior::File(src_path("tests/lang/types.out")),
+        Behavior::File(src_path("cli/tests/lang/types.out")),
         Behavior::Null,
     );
 }
@@ -410,10 +410,10 @@ fn test_lang_types() {
 fn test_lang_utf8() {
     check(
         bin_path("endbasic"),
-        &[&src_str("tests/lang/utf8.bas")],
+        &[&src_str("cli/tests/lang/utf8.bas")],
         0,
-        Behavior::File(src_path("tests/lang/utf8.in")),
-        Behavior::File(src_path("tests/lang/utf8.out")),
+        Behavior::File(src_path("cli/tests/lang/utf8.in")),
+        Behavior::File(src_path("cli/tests/lang/utf8.out")),
         Behavior::Null,
     );
 }
@@ -422,10 +422,10 @@ fn test_lang_utf8() {
 fn test_lang_yes_no() {
     check(
         bin_path("endbasic"),
-        &[&src_str("tests/lang/yes-no.bas")],
+        &[&src_str("cli/tests/lang/yes-no.bas")],
         0,
-        Behavior::File(src_path("tests/lang/yes-no.in")),
-        Behavior::File(src_path("tests/lang/yes-no.out")),
+        Behavior::File(src_path("cli/tests/lang/yes-no.in")),
+        Behavior::File(src_path("cli/tests/lang/yes-no.out")),
         Behavior::Null,
     );
 }
@@ -438,8 +438,8 @@ fn test_repl_dir() {
         bin_path("endbasic"),
         &["--programs-dir", subdir.to_str().unwrap()],
         0,
-        Behavior::File(src_path("tests/repl/dir.in")),
-        Behavior::File(src_path("tests/repl/dir.out")),
+        Behavior::File(src_path("cli/tests/repl/dir.in")),
+        Behavior::File(src_path("cli/tests/repl/dir.out")),
         Behavior::Null,
     );
 }
@@ -450,8 +450,8 @@ fn test_repl_editor() {
         bin_path("endbasic"),
         &[],
         0,
-        Behavior::File(src_path("tests/repl/editor.in")),
-        Behavior::File(src_path("tests/repl/editor.out")),
+        Behavior::File(src_path("cli/tests/repl/editor.in")),
+        Behavior::File(src_path("cli/tests/repl/editor.out")),
         Behavior::Null,
     );
 }
@@ -462,8 +462,8 @@ fn test_repl_help() {
         bin_path("endbasic"),
         &[],
         0,
-        Behavior::File(src_path("tests/repl/help.in")),
-        Behavior::File(src_path("tests/repl/help.out")),
+        Behavior::File(src_path("cli/tests/repl/help.in")),
+        Behavior::File(src_path("cli/tests/repl/help.out")),
         Behavior::Null,
     );
 }
@@ -474,8 +474,8 @@ fn test_repl_interactive() {
         bin_path("endbasic"),
         &[],
         0,
-        Behavior::File(src_path("tests/repl/interactive.in")),
-        Behavior::File(src_path("tests/repl/interactive.out")),
+        Behavior::File(src_path("cli/tests/repl/interactive.in")),
+        Behavior::File(src_path("cli/tests/repl/interactive.out")),
         Behavior::Null,
     );
 }
@@ -484,7 +484,7 @@ fn test_repl_interactive() {
 fn test_repl_load_save() {
     let dir = tempfile::tempdir().unwrap();
     fs::copy(
-        &src_path("tests/lang/hello.bas"),
+        &src_path("cli/tests/lang/hello.bas"),
         &dir.path().join("hello.bas"),
     )
     .unwrap();
@@ -493,8 +493,8 @@ fn test_repl_load_save() {
         bin_path("endbasic"),
         &["--programs-dir", dir.path().to_str().unwrap()],
         0,
-        Behavior::File(src_path("tests/repl/load-save.in")),
-        Behavior::File(src_path("tests/repl/load-save.out")),
+        Behavior::File(src_path("cli/tests/repl/load-save.in")),
+        Behavior::File(src_path("cli/tests/repl/load-save.out")),
         Behavior::Null,
     );
     assert!(dir.path().join("hello2.bas").exists());
@@ -506,8 +506,8 @@ fn test_repl_state_sharing() {
         bin_path("endbasic"),
         &[],
         0,
-        Behavior::File(src_path("tests/repl/state-sharing.in")),
-        Behavior::File(src_path("tests/repl/state-sharing.out")),
+        Behavior::File(src_path("cli/tests/repl/state-sharing.in")),
+        Behavior::File(src_path("cli/tests/repl/state-sharing.out")),
         Behavior::Null,
     );
 }

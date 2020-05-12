@@ -22,8 +22,8 @@
 #[macro_use]
 extern crate failure;
 
-use endbasic::ast::{ArgSep, Expr, Value};
-use endbasic::exec::{BuiltinCommand, Machine, MachineBuilder};
+use endbasic_core::ast::{ArgSep, Expr, Value};
+use endbasic_core::exec::{BuiltinCommand, Machine, MachineBuilder};
 use failure::Fallible;
 use std::cell::RefCell;
 use std::io;

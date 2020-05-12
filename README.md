@@ -1,8 +1,6 @@
 # The EndBASIC programming language
 
 [![Build Status](https://travis-ci.org/jmmv/endbasic.svg?branch=master)](https://travis-ci.org/jmmv/endbasic/)
-[![Crates.io](https://img.shields.io/crates/v/endbasic.svg)](https://crates.io/crates/endbasic/)
-[![Docs.rs](https://docs.rs/endbasic/badge.svg)](https://docs.rs/endbasic/)
 
 EndBASIC is an interpreter for a BASIC-like language and is inspired by
 Amstrad's Locomotive BASIC 1.1 and Microsoft's QuickBASIC 4.5.  Like the former,
@@ -19,28 +17,16 @@ likely won't disappoint.
 
 EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 
-## Features
-
-EndBASIC's features are inspired by other BASIC interpreters but the language
-does not intend to be fully compatible with them.  The language currently
-supports:
-
-*   Variable types: boolean (`?`), integer (`%`), and string (`$`).
-*   Strong typing with optional variable type annotations.
-*   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` statements.
-*   `WHILE ...` / `END WHILE` loops.
-*   `INPUT` and `PRINT` builtins.
-*   UTF-8 everywhere (I think).
-
-The EndBASIC core is minimal: the interpreter knows how to execute the logic
-of the language but, by default, it exposes no builtins to the scripts---not
-even `INPUT` or `PRINT`.  This makes EndBASIC ideal for embedding into other
-programs, as it is possible to execute external code without side-effects or
-by precisely controlling how such code interacts with the host program.
-
-## Installation
+## Overview
 
 The latest version of EndBASIC is 0.2.0 and was released on 2020-05-07.
+
+*   For language features, see [`core/README.md`](core/README.md).
+*   For usage details of the command-line interpreter, see
+    [`cli/README.md`](cli/README.md).
+*   For changes across versions, see [`NEWS.md`](NEWS.md).
+
+## Installation
 
 There currently are no binary releases for EndBASIC.  To install, first get a
 Rust toolchain (either from your system's package manager, if any, or using
@@ -54,59 +40,13 @@ cargo install endbasic
 This should work on any Linux, macOS, and Windows system (all of which are
 tested on CI).
 
-## Interactive usage
-
-`endbasic` comes with a REPL command-line interface that offers fancy line
-editing features and built-in documentation for all available features.  You can
-start the interactive interface by typing:
-
-```shell
-endbasic
-```
-
-and you can exit it at any time by pressing CTRL+D.
-
-The `HELP` command lets you obtain a list of all possible commands as well as
-detailed usage information for any of them.
-
-The interactive interface has support for manipulating a stored program: that
-is, a program that lives in the memory of the interpreter.  To get started, use
-the `EDIT` command to enter new lines into the program, `LIST` to inspect its
-contents and `RUN` to execute it.  You can save and restore programs from disk
-by using the `SAVE` and `LOAD` commands respectively, which by default are
-backed by an `endbasic` subdirectory under your `Documents` folder.  You can
-then inspect the contents of this directory with the `DIR` command.
-
-The lines that `EDIT` prints during program editing are not meaningful to the
-program and only exist to support interactive editing.  Line numbers are
-typically multiples of ten to allow you to insert lines in-between others.  For
-example: if your program previously had lines `20` and `30` but you forgot a
-statement between those, you can do `EDIT 15` to enter that statement.  If you
-run out of lines, or if you want to tidy up their numbers to be multiples of ten
-again, use the `RENUM` command.
-
-Finally, use `CLEAR` to erase all variables set in the interactive editor, and
-`NEW` to also erase the stored program from memory and start afresh.
-
-## Scripting usage
-
-You can give `endbasic` the name of a program to execute:
-
-```shell
-endbasic some-program.bas
-```
-
-It is important to note that some features (like the `HELP` builtin command or
-all stored program manipulation commands) are only available in the interactive
-interface.
-
 ## Examples
 
-You can peek into the `tests` subdirectory of this repository to see actual
+You can peek into the `*/tests` subdirectories of this repository to see actual
 EndBASIC code samples.  Look for all files with a `.bas` extension.
 
-The `examples` directory contains sample code to show how to embed the EndBASIC
-interpreter into your own programs.
+The `*/examples` subdirectories contain sample code to show how to embed the
+EndBASIC interpreter into your own programs.
 
 ## Why EndBASIC?
 
