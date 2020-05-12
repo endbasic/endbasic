@@ -19,7 +19,7 @@
 //! which makes parsing of any scripts free of side effects.  This could be used, for example, to
 //! parse a configuration file---which is what is shown here.
 
-use endbasic::exec::Machine;
+use endbasic_core::exec::Machine;
 use std::io;
 
 /// Sample code to parse in this example.

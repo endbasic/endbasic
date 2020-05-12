@@ -22,10 +22,18 @@ do_lint() {
     cargo fmt -- --check
 }
 
-# Ensures that the package is ready for publication, which also ensures it
-# builds in release mode.
+# Ensures that the package is ready for publication.
 do_package() {
-    cargo publish --dry-run
+    ( cd core && cargo publish --dry-run )
+
+    # If we aren't yet ready to release a new version, all crates that depend
+    # on others in the workspace cannot be built in publish mode.  Skip them
+    # until we can test them.
+    if grep 'Changes in' NEWS.md | head -n 1 | fgrep 'X.Y.Z'; then
+        echo "Skipping endbasic publish test in development version"
+    else
+        ( cd cli && cargo publish --dry-run )
+    fi
 }
 
 # Builds and runs all binaries and tests in release mode.

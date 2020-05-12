@@ -9,6 +9,12 @@ not adhere to semantic versioning until 1.0.0.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
+*   Split the language core (parser, interpreter, and command implementations)
+    out of the `endbasic` crate and moved them to a separate `endbasic-core`
+    crate.  This is to ensure that the language components stay free from
+    heavy dependencies that assume things about the environment (like terminal
+    or file system access).
+
 *   Added the `CLS`, `COLOR`, and `LOCATE` commands for terminal
     manipulation.
 

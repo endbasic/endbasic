@@ -1,0 +1,26 @@
+[package]
+name = "endbasic-core"
+version = "0.2.0"
+license = "Apache-2.0"
+authors = ["Julio Merino <julio@meroh.net>"]
+categories = ["development-tools", "parser-implementations"]
+keywords = ["basic", "interpreter", "learning", "programming"]
+description = "The EndBASIC programming language - core"
+homepage = "https://github.com/jmmv/endbasic"
+repository = "https://github.com/jmmv/endbasic"
+readme = "README.md"
+edition = "2018"
+
+[badges]
+travis-ci = { repository = "jmmv/endbasic", branch = "master" }
+
+[dependencies]
+crossterm = "0.17"
+failure = "~0.1"
+rustyline = "6.1.2"
+time = { version = "0.2", features = ["std"] }
+
+[dev-dependencies]
+filetime = "0.2"
+regex = "1"
+tempfile = "3"
