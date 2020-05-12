@@ -29,7 +29,7 @@
 #![warn(unsafe_code)]
 
 use std::env;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -72,6 +72,14 @@ fn src_path(name: &str) -> PathBuf {
     dir.join(name)
 }
 
+/// Same as `src_path` but returns a string reference for the few places where we need this.
+fn src_str(p: &str) -> String {
+    src_path(p)
+        .to_str()
+        .expect("Need paths to be valid strings")
+        .to_owned()
+}
+
 /// Describes the behavior for one of the three streams (stdin, stdout, stderr) connected to a
 /// program.
 enum Behavior {
@@ -81,10 +89,6 @@ enum Behavior {
     /// If stdin, feed the given path as the program's input.  If stdout/stderr, expect the contents
     /// of the stream to match this file.
     File(PathBuf),
-
-    /// If stdin, this is not supported.  If stdout/stderr, expect the contents of the stream to
-    /// match this literal string.
-    Literal(String),
 }
 
 /// Reads the contents of a golden data file.
@@ -143,19 +147,16 @@ fn check<P: AsRef<Path>>(
     let golden_stdin = match stdin_behavior {
         Behavior::Null => process::Stdio::null(),
         Behavior::File(path) => File::open(path).unwrap().into(),
-        Behavior::Literal(_) => panic!("Literals not supported for stdin"),
     };
 
     let exp_stdout = match stdout_behavior {
         Behavior::Null => "".to_owned(),
         Behavior::File(path) => read_golden(&path),
-        Behavior::Literal(text) => text,
     };
 
     let exp_stderr = match stderr_behavior {
         Behavior::Null => "".to_owned(),
         Behavior::File(path) => read_golden(&path),
-        Behavior::Literal(text) => text,
     };
 
     let result = process::Command::new(bin.as_ref())
@@ -183,182 +184,150 @@ fn check<P: AsRef<Path>>(
 }
 
 #[test]
-fn test_cli_help() {
-    fn check_with_args(args: &[&str]) {
-        check(
-            &bin_path("endbasic"),
-            args,
-            0,
-            Behavior::Null,
-            Behavior::File(src_path("cli/tests/cli/help.out")),
-            Behavior::Null,
-        );
-    }
-    check_with_args(&["-h"]);
-    check_with_args(&["--help"]);
-    check_with_args(&["--version", "--help"]);
-    check_with_args(&["the", "--help", "flag always wins"]);
+fn test_example_complete() {
+    // Nothing to do.  We use this example program to run all language tests below.
 }
 
-// TODO(jmmv): This test fails almost always on Linux CI builds with `Text file busy` when
-// attempting to run the copied binary.  I've also gotten it to occasionally fail on a local Linux
-// installation in the same way, but that's much harder to trigger.  Investigate what's going on.
-#[cfg(not(target_os = "linux"))]
 #[test]
-fn test_cli_program_name_uses_arg0() {
-    struct DeleteOnDrop<'a> {
-        path: &'a Path,
-    }
-
-    impl<'a> Drop for DeleteOnDrop<'a> {
-        fn drop(&mut self) {
-            let _best_effort_removal = fs::remove_file(self.path);
-        }
-    }
-
-    let original = bin_path("endbasic");
-    let custom = self_dir()
-        .join("custom-name")
-        .with_extension(env::consts::EXE_EXTENSION);
-    let _delete_custom = DeleteOnDrop { path: &custom };
-    fs::copy(&original, &custom).unwrap();
+fn test_example_custom_commands() {
     check(
-        &custom,
-        &["one", "two", "three"],
-        2,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::Literal(
-            "Usage error: Too many arguments\nType custom-name --help for more information\n"
-                .to_owned(),
-        ),
-    );
-}
-
-#[test]
-fn test_cli_too_many_args() {
-    check(
-        &bin_path("endbasic"),
-        &["foo", "bar"],
-        2,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::Literal(
-            "Usage error: Too many arguments\nType endbasic --help for more information\n"
-                .to_owned(),
-        ),
-    );
-}
-
-#[test]
-fn test_cli_unknown_option() {
-    check(
-        &bin_path("endbasic"),
-        &["-Z", "some-file"],
-        2,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::Literal(
-            "Usage error: Unrecognized option: 'Z'\nType endbasic --help for more information\n"
-                .to_owned(),
-        ),
-    );
-}
-
-#[test]
-fn test_cli_version() {
-    fn check_with_args(args: &[&str]) {
-        check(
-            &bin_path("endbasic"),
-            args,
-            0,
-            Behavior::Null,
-            Behavior::File(src_path("cli/tests/cli/version.out")),
-            Behavior::Null,
-        );
-    }
-    check_with_args(&["--version"]);
-    check_with_args(&["the", "--version", "flag wins over arguments"]);
-}
-
-#[test]
-fn test_repl_dir() {
-    let dir = tempfile::tempdir().unwrap();
-    let subdir = dir.path().join("subdir"); // Start with a non-existent directory.
-    check(
-        bin_path("endbasic"),
-        &["--programs-dir", subdir.to_str().unwrap()],
-        0,
-        Behavior::File(src_path("cli/tests/repl/dir.in")),
-        Behavior::File(src_path("cli/tests/repl/dir.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_repl_editor() {
-    check(
-        bin_path("endbasic"),
+        bin_path("examples/custom-commands"),
         &[],
         0,
-        Behavior::File(src_path("cli/tests/repl/editor.in")),
-        Behavior::File(src_path("cli/tests/repl/editor.out")),
+        Behavior::Null,
+        Behavior::File(src_path("core/examples/custom-commands.out")),
         Behavior::Null,
     );
 }
 
 #[test]
-fn test_repl_help() {
+fn test_example_minimal() {
     check(
-        bin_path("endbasic"),
+        bin_path("examples/minimal"),
         &[],
         0,
-        Behavior::File(src_path("cli/tests/repl/help.in")),
-        Behavior::File(src_path("cli/tests/repl/help.out")),
+        Behavior::Null,
+        Behavior::File(src_path("core/examples/minimal.out")),
         Behavior::Null,
     );
 }
 
 #[test]
-fn test_repl_interactive() {
+fn test_lang_console() {
     check(
-        bin_path("endbasic"),
-        &[],
+        bin_path("examples/complete"),
+        &[&src_str("core/tests/console.bas")],
         0,
-        Behavior::File(src_path("cli/tests/repl/interactive.in")),
-        Behavior::File(src_path("cli/tests/repl/interactive.out")),
+        Behavior::Null,
+        Behavior::File(src_path("core/tests/console.out")),
         Behavior::Null,
     );
 }
 
 #[test]
-fn test_repl_load_save() {
-    let dir = tempfile::tempdir().unwrap();
-    fs::copy(
-        &src_path("cli/tests/repl/hello.bas"),
-        &dir.path().join("hello.bas"),
-    )
-    .unwrap();
-    assert!(!dir.path().join("hello2.bas").exists());
+fn test_lang_control_flow() {
     check(
-        bin_path("endbasic"),
-        &["--programs-dir", dir.path().to_str().unwrap()],
+        bin_path("examples/complete"),
+        &[&src_str("core/tests/control-flow.bas")],
         0,
-        Behavior::File(src_path("cli/tests/repl/load-save.in")),
-        Behavior::File(src_path("cli/tests/repl/load-save.out")),
+        Behavior::Null,
+        Behavior::File(src_path("core/tests/control-flow.out")),
         Behavior::Null,
     );
-    assert!(dir.path().join("hello2.bas").exists());
 }
 
 #[test]
-fn test_repl_state_sharing() {
+fn test_lang_exec_error() {
     check(
-        bin_path("endbasic"),
-        &[],
+        bin_path("examples/complete"),
+        &[&src_str("core/tests/exec-error.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("core/tests/exec-error.out")),
+        Behavior::File(src_path("core/tests/exec-error.err")),
+    );
+}
+
+#[test]
+fn test_lang_hello() {
+    check(
+        bin_path("examples/complete"),
+        &[&src_str("core/tests/hello.bas")],
         0,
-        Behavior::File(src_path("cli/tests/repl/state-sharing.in")),
-        Behavior::File(src_path("cli/tests/repl/state-sharing.out")),
+        Behavior::Null,
+        Behavior::File(src_path("core/tests/hello.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_lang_lexer_error() {
+    check(
+        bin_path("examples/complete"),
+        &[&src_str("core/tests/lexer-error.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("core/tests/lexer-error.out")),
+        Behavior::File(src_path("core/tests/lexer-error.err")),
+    );
+}
+
+#[test]
+fn test_lang_no_repl_commands() {
+    check(
+        bin_path("examples/complete"),
+        &[&src_str("core/tests/no-repl-commands.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("core/tests/no-repl-commands.out")),
+        Behavior::File(src_path("core/tests/no-repl-commands.err")),
+    );
+}
+
+#[test]
+fn test_lang_parser_error() {
+    check(
+        bin_path("examples/complete"),
+        &[&src_str("core/tests/parser-error.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("core/tests/parser-error.out")),
+        Behavior::File(src_path("core/tests/parser-error.err")),
+    );
+}
+
+#[test]
+fn test_lang_types() {
+    check(
+        bin_path("examples/complete"),
+        &[&src_str("core/tests/types.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("core/tests/types.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_lang_utf8() {
+    check(
+        bin_path("examples/complete"),
+        &[&src_str("core/tests/utf8.bas")],
+        0,
+        Behavior::File(src_path("core/tests/utf8.in")),
+        Behavior::File(src_path("core/tests/utf8.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_lang_yes_no() {
+    check(
+        bin_path("examples/complete"),
+        &[&src_str("core/tests/yes-no.bas")],
+        0,
+        Behavior::File(src_path("core/tests/yes-no.in")),
+        Behavior::File(src_path("core/tests/yes-no.out")),
         Behavior::Null,
     );
 }
