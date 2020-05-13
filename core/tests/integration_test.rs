@@ -20,12 +20,7 @@
 
 // Keep these in sync with other top-level files.
 #![warn(anonymous_parameters, bad_style, missing_docs)]
-#![warn(
-    unused,
-    unused_extern_crates,
-    unused_import_braces,
-    unused_qualifications
-)]
+#![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
 use std::env;
@@ -52,18 +47,14 @@ fn self_dir() -> PathBuf {
 fn bin_path<P: AsRef<Path>>(name: P) -> PathBuf {
     let test_dir = self_dir();
     let debug_or_release_dir = test_dir.parent().expect("Failed to get parent directory");
-    debug_or_release_dir
-        .join(name)
-        .with_extension(env::consts::EXE_EXTENSION)
+    debug_or_release_dir.join(name).with_extension(env::consts::EXE_EXTENSION)
 }
 
 /// Computes the path to the source file `name`.
 fn src_path(name: &str) -> PathBuf {
     let test_dir = self_dir();
     let debug_or_release_dir = test_dir.parent().expect("Failed to get parent directory");
-    let target_dir = debug_or_release_dir
-        .parent()
-        .expect("Failed to get parent directory");
+    let target_dir = debug_or_release_dir.parent().expect("Failed to get parent directory");
     let dir = target_dir.parent().expect("Failed to get parent directory");
 
     // Sanity-check that we landed in the right location.
@@ -74,10 +65,7 @@ fn src_path(name: &str) -> PathBuf {
 
 /// Same as `src_path` but returns a string reference for the few places where we need this.
 fn src_str(p: &str) -> String {
-    src_path(p)
-        .to_str()
-        .expect("Need paths to be valid strings")
-        .to_owned()
+    src_path(p).to_str().expect("Need paths to be valid strings").to_owned()
 }
 
 /// Describes the behavior for one of the three streams (stdin, stdout, stderr) connected to a
@@ -95,14 +83,9 @@ enum Behavior {
 fn read_golden(path: &Path) -> String {
     let mut f = File::open(path).expect("Failed to open golden data file");
     let mut golden = vec![];
-    f.read_to_end(&mut golden)
-        .expect("Failed to read golden data file");
+    f.read_to_end(&mut golden).expect("Failed to read golden data file");
     let raw = String::from_utf8(golden).expect("Golden data file is not valid UTF-8");
-    let golden = if cfg!(target_os = "windows") {
-        raw.replace("\r\n", "\n")
-    } else {
-        raw
-    };
+    let golden = if cfg!(target_os = "windows") { raw.replace("\r\n", "\n") } else { raw };
 
     // This is the opposite of apply_mocks and ensures we don't leak actual values into the golden
     // files by mistake.
@@ -113,11 +96,7 @@ fn read_golden(path: &Path) -> String {
         path.display()
     );
     let date_re = regex::Regex::new(DATE_RE).unwrap();
-    assert!(
-        !date_re.is_match(&golden),
-        "Golden file {} contains a date",
-        path.display()
-    );
+    assert!(!date_re.is_match(&golden), "Golden file {} contains a date", path.display());
 
     golden
 }
@@ -164,10 +143,7 @@ fn check<P: AsRef<Path>>(
         .stdin(golden_stdin)
         .output()
         .expect("Failed to execute subprocess");
-    let code = result
-        .status
-        .code()
-        .expect("Subprocess didn't exit cleanly");
+    let code = result.status.code().expect("Subprocess didn't exit cleanly");
     let stdout =
         apply_mocks(String::from_utf8(result.stdout).expect("Stdout not is not valid UTF-8"));
     let stderr =

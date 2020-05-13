@@ -17,12 +17,7 @@
 
 // Keep these in sync with other top-level files.
 #![warn(anonymous_parameters, bad_style, missing_docs)]
-#![warn(
-    unused,
-    unused_extern_crates,
-    unused_import_braces,
-    unused_qualifications
-)]
+#![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
 #[macro_use]

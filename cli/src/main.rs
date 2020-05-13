@@ -17,12 +17,7 @@
 
 // Keep these in sync with other top-level files.
 #![warn(anonymous_parameters, bad_style, missing_docs)]
-#![warn(
-    unused,
-    unused_extern_crates,
-    unused_import_braces,
-    unused_qualifications
-)]
+#![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
 #[macro_use]
@@ -47,20 +42,14 @@ struct UsageError {
 impl UsageError {
     /// Creates a new usage error with `message`.
     fn new<T: Into<String>>(message: T) -> Self {
-        Self {
-            message: message.into(),
-        }
+        Self { message: message.into() }
     }
 }
 
 /// Flattens all causes of an error into a single string.
 fn flatten_causes(err: &Error) -> String {
     err.iter_chain().fold(String::new(), |flattened, cause| {
-        let flattened = if flattened.is_empty() {
-            flattened
-        } else {
-            flattened + ": "
-        };
+        let flattened = if flattened.is_empty() { flattened } else { flattened + ": " };
         flattened + &format!("{}", cause)
     })
 }
@@ -103,24 +92,19 @@ fn version() -> Fallible<()> {
 /// just returns `flag`.
 fn get_programs_dir(flag: Option<String>) -> Fallible<PathBuf> {
     let dir = flag.map(PathBuf::from).or_else(|| {
-        dirs::document_dir()
-            .map(|d| d.join("endbasic"))
-            .or_else(|| {
-                // On Linux, dirs::document_dir() seems to return None whenever user-dirs.dirs is
-                // not present... which is suboptimal.  Compute a reasonable default based on the
-                // home directory.
-                dirs::home_dir().map(|h| h.join("Documents/endbasic"))
-            })
+        dirs::document_dir().map(|d| d.join("endbasic")).or_else(|| {
+            // On Linux, dirs::document_dir() seems to return None whenever user-dirs.dirs is
+            // not present... which is suboptimal.  Compute a reasonable default based on the
+            // home directory.
+            dirs::home_dir().map(|h| h.join("Documents/endbasic"))
+        })
     });
 
     // Instead of aborting on a missing programs directory, we could disable the LOAD/SAVE commands
     // when we cannot compute this folder, but that seems like hiding a corner case that is unlikely
     // to surface.  A good reason to do this, however, would be to allow the user to explicitly
     // disable this functionality to keep the interpreter from touching the disk.
-    ensure!(
-        dir.is_some(),
-        "Cannot compute default path to the Documents folder"
-    );
+    ensure!(dir.is_some(), "Cannot compute default path to the Documents folder");
     Ok(dir.unwrap())
 }
 
@@ -141,12 +125,7 @@ fn safe_main(name: &str, args: env::Args) -> Fallible<()> {
 
     let mut opts = Options::new();
     opts.optflag("h", "help", "show command-line usage information and exit");
-    opts.optopt(
-        "",
-        "programs-dir",
-        "directory where user programs are stored",
-        "PATH",
-    );
+    opts.optopt("", "programs-dir", "directory where user programs are stored", "PATH");
     opts.optflag("", "version", "show version information and exit");
     let matches = opts.parse(args)?;
 

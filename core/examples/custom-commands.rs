@@ -58,10 +58,7 @@ impl BuiltinCommand for StoreCommand {
 
     fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         ensure!(args.len() == 1, "STORE takes one argument only");
-        let expr = args[0]
-            .0
-            .as_ref()
-            .expect("A single argument can never be empty");
+        let expr = args[0].0.as_ref().expect("A single argument can never be empty");
         match expr.eval(machine.get_vars())? {
             Value::Text(t) => *self.state.borrow_mut() = t,
             _ => bail!("Mismatched expression type"),
@@ -99,9 +96,7 @@ fn main() {
     // Create an empty machine.
     let state = Rc::from(RefCell::from(String::new()));
     let mut machine = MachineBuilder::default()
-        .add_builtin(Rc::from(StoreCommand {
-            state: state.clone(),
-        }))
+        .add_builtin(Rc::from(StoreCommand { state: state.clone() }))
         .add_builtin(Rc::from(RetrieveCommand { state }))
         .build();
 

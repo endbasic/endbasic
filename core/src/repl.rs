@@ -71,20 +71,13 @@ impl HelpCommand {
         names.sort();
 
         let mut output = self.output.borrow_mut();
-        output.write_fmt(format_args!(
-            "\n    This is EndBASIC {}.\n\n",
-            env!("CARGO_PKG_VERSION")
-        ))?;
+        output
+            .write_fmt(format_args!("\n    This is EndBASIC {}.\n\n", env!("CARGO_PKG_VERSION")))?;
         for name in names {
             let filler = " ".repeat(max_length - name.len());
             let builtin = builtins.get(name).unwrap();
             let blurb = builtin.description().lines().next().unwrap();
-            output.write_fmt(format_args!(
-                "    {}{}    {}\n",
-                builtin.name(),
-                filler,
-                blurb
-            ))?;
+            output.write_fmt(format_args!("    {}{}    {}\n", builtin.name(), filler, blurb))?;
         }
         output.write_all(
             b"\n    Type HELP followed by a command name for details on that command.",
@@ -100,11 +93,7 @@ impl HelpCommand {
         if builtin.syntax().is_empty() {
             output.write_fmt(format_args!("    {}\n", builtin.name()))?;
         } else {
-            output.write_fmt(format_args!(
-                "    {} {}\n",
-                builtin.name(),
-                builtin.syntax()
-            ))?;
+            output.write_fmt(format_args!("    {} {}\n", builtin.name(), builtin.syntax()))?;
         }
         for line in builtin.description().lines() {
             output.write_all(b"\n")?;
@@ -183,20 +172,14 @@ pub struct TextConsole {
 impl TextConsole {
     /// Creates a new console based on the properties of stdin/stdout.
     pub fn from_stdio() -> Self {
-        Self {
-            is_tty: io::stdout().is_tty(),
-        }
+        Self { is_tty: io::stdout().is_tty() }
     }
 }
 
 impl console::Console for TextConsole {
     fn clear(&mut self) -> io::Result<()> {
-        execute!(
-            io::stdout(),
-            terminal::Clear(terminal::ClearType::All),
-            cursor::MoveTo(0, 0)
-        )
-        .map_err(crossterm_error_to_io_error)
+        execute!(io::stdout(), terminal::Clear(terminal::ClearType::All), cursor::MoveTo(0, 0))
+            .map_err(crossterm_error_to_io_error)
     }
 
     fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
@@ -264,9 +247,7 @@ pub fn run_repl_loop(dir: &Path) -> io::Result<()> {
     let console = Rc::from(RefCell::from(TextConsole::from_stdio()));
     let mut machine = MachineBuilder::default()
         .add_builtin(Rc::from(ClearCommand {}))
-        .add_builtin(Rc::from(HelpCommand {
-            output: Rc::from(RefCell::from(io::stdout())),
-        }))
+        .add_builtin(Rc::from(HelpCommand { output: Rc::from(RefCell::from(io::stdout())) }))
         .add_builtins(console::all_commands(console.clone()))
         .add_builtins(program::all_commands(console, dir))
         .build();
@@ -337,9 +318,7 @@ mod tests {
 
     #[test]
     fn test_clear_ok() {
-        let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(ClearCommand {}))
-            .build();
+        let mut machine = MachineBuilder::default().add_builtin(Rc::from(ClearCommand {})).build();
         machine.exec(&mut b"a = 1".as_ref()).unwrap();
         assert!(machine.get_var_as_int("a").is_ok());
         machine.exec(&mut b"CLEAR".as_ref()).unwrap();
@@ -348,9 +327,7 @@ mod tests {
 
     #[test]
     fn test_clear_errors() {
-        let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(ClearCommand {}))
-            .build();
+        let mut machine = MachineBuilder::default().add_builtin(Rc::from(ClearCommand {})).build();
         assert_eq!(
             "CLEAR takes no arguments",
             format!("{}", machine.exec(&mut b"CLEAR 123".as_ref()).unwrap_err())
@@ -361,9 +338,7 @@ mod tests {
     fn test_help_summary() {
         let output = Rc::from(RefCell::from(vec![]));
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(HelpCommand {
-                output: output.clone(),
-            }))
+            .add_builtin(Rc::from(HelpCommand { output: output.clone() }))
             .add_builtin(Rc::from(DoNothingCommand {}))
             .build();
         machine.exec(&mut b"HELP".as_ref()).unwrap();
@@ -391,9 +366,7 @@ mod tests {
     fn test_help_describe() {
         let output = Rc::from(RefCell::from(vec![]));
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(HelpCommand {
-                output: output.clone(),
-            }))
+            .add_builtin(Rc::from(HelpCommand { output: output.clone() }))
             .add_builtin(Rc::from(DoNothingCommand {}))
             .build();
         machine.exec(&mut b"help Do_Nothing".as_ref()).unwrap();

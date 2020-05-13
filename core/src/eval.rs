@@ -85,11 +85,7 @@ impl Value {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(lhs == rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs == rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs == rhs)),
-            (_, _) => Err(format_err!(
-                "Cannot compare {:?} and {:?} with =",
-                self,
-                other
-            )),
+            (_, _) => Err(format_err!("Cannot compare {:?} and {:?} with =", self, other)),
         }
     }
 
@@ -99,11 +95,7 @@ impl Value {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(lhs != rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs != rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs != rhs)),
-            (_, _) => Err(format_err!(
-                "Cannot compare {:?} and {:?} with <>",
-                self,
-                other
-            )),
+            (_, _) => Err(format_err!("Cannot compare {:?} and {:?} with <>", self, other)),
         }
     }
 
@@ -112,11 +104,7 @@ impl Value {
         match (self, other) {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs < rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs < rhs)),
-            (_, _) => Err(format_err!(
-                "Cannot compare {:?} and {:?} with <",
-                self,
-                other
-            )),
+            (_, _) => Err(format_err!("Cannot compare {:?} and {:?} with <", self, other)),
         }
     }
 
@@ -125,11 +113,7 @@ impl Value {
         match (self, other) {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
-            (_, _) => Err(format_err!(
-                "Cannot compare {:?} and {:?} with <=",
-                self,
-                other
-            )),
+            (_, _) => Err(format_err!("Cannot compare {:?} and {:?} with <=", self, other)),
         }
     }
 
@@ -138,11 +122,7 @@ impl Value {
         match (self, other) {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs > rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs > rhs)),
-            (_, _) => Err(format_err!(
-                "Cannot compare {:?} and {:?} with >",
-                self,
-                other
-            )),
+            (_, _) => Err(format_err!("Cannot compare {:?} and {:?} with >", self, other)),
         }
     }
 
@@ -151,11 +131,7 @@ impl Value {
         match (self, other) {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
-            (_, _) => Err(format_err!(
-                "Cannot compare {:?} and {:?} with >=",
-                self,
-                other
-            )),
+            (_, _) => Err(format_err!("Cannot compare {:?} and {:?} with >=", self, other)),
         }
     }
 
@@ -282,17 +258,11 @@ mod tests {
         use super::Value::*;
 
         for s in &["true", "TrUe", "TRUE", "yes", "Yes", "y", "Y"] {
-            assert_eq!(
-                Boolean(true),
-                Value::parse_as(VarType::Boolean, *s).unwrap()
-            );
+            assert_eq!(Boolean(true), Value::parse_as(VarType::Boolean, *s).unwrap());
         }
 
         for s in &["false", "FaLsE", "FALSE", "no", "No", "n", "N"] {
-            assert_eq!(
-                Boolean(false),
-                Value::parse_as(VarType::Boolean, *s).unwrap()
-            );
+            assert_eq!(Boolean(false), Value::parse_as(VarType::Boolean, *s).unwrap());
         }
 
         for s in &["ye", "0", "1", " true"] {
@@ -307,15 +277,9 @@ mod tests {
     fn test_value_parse_as_integer() {
         use super::Value::*;
 
-        assert_eq!(
-            Integer(10),
-            Value::parse_as(VarType::Integer, "10").unwrap()
-        );
+        assert_eq!(Integer(10), Value::parse_as(VarType::Integer, "10").unwrap());
         assert_eq!(Integer(0), Value::parse_as(VarType::Integer, "0").unwrap());
-        assert_eq!(
-            Integer(-21),
-            Value::parse_as(VarType::Integer, "-21").unwrap()
-        );
+        assert_eq!(Integer(-21), Value::parse_as(VarType::Integer, "-21").unwrap());
 
         assert_eq!(
             "Invalid integer literal ",
@@ -327,10 +291,7 @@ mod tests {
         );
         assert_eq!(
             "Invalid integer literal 34ab3",
-            format!(
-                "{}",
-                Value::parse_as(VarType::Integer, "34ab3").unwrap_err()
-            )
+            format!("{}", Value::parse_as(VarType::Integer, "34ab3").unwrap_err())
         );
     }
 
@@ -338,22 +299,10 @@ mod tests {
     fn test_value_parse_as_text() {
         use super::Value::*;
 
-        assert_eq!(
-            Text("".to_owned()),
-            Value::parse_as(VarType::Text, "").unwrap()
-        );
-        assert_eq!(
-            Text("true".to_owned()),
-            Value::parse_as(VarType::Text, "true").unwrap()
-        );
-        assert_eq!(
-            Text("32".to_owned()),
-            Value::parse_as(VarType::Text, "32").unwrap()
-        );
-        assert_eq!(
-            Text("a b".to_owned()),
-            Value::parse_as(VarType::Text, "a b").unwrap()
-        );
+        assert_eq!(Text("".to_owned()), Value::parse_as(VarType::Text, "").unwrap());
+        assert_eq!(Text("true".to_owned()), Value::parse_as(VarType::Text, "true").unwrap());
+        assert_eq!(Text("32".to_owned()), Value::parse_as(VarType::Text, "32").unwrap());
+        assert_eq!(Text("a b".to_owned()), Value::parse_as(VarType::Text, "a b").unwrap());
     }
 
     #[test]
@@ -371,16 +320,10 @@ mod tests {
         use super::Value::*;
 
         let v = Boolean(false);
-        assert_eq!(
-            v,
-            Value::parse_as(VarType::Boolean, &v.to_string()).unwrap()
-        );
+        assert_eq!(v, Value::parse_as(VarType::Boolean, &v.to_string()).unwrap());
 
         let v = Integer(9);
-        assert_eq!(
-            v,
-            Value::parse_as(VarType::Integer, &v.to_string()).unwrap()
-        );
+        assert_eq!(v, Value::parse_as(VarType::Integer, &v.to_string()).unwrap());
 
         let v = Text("Some long text".to_owned());
         assert_eq!(v, Value::parse_as(VarType::Text, &v.to_string()).unwrap());
@@ -438,10 +381,7 @@ mod tests {
         assert_eq!(Boolean(true), Boolean(false).not().unwrap());
         assert_eq!(Boolean(false), Boolean(true).not().unwrap());
 
-        assert_eq!(
-            "Cannot apply NOT to Integer(5)",
-            format!("{}", Integer(5).not().unwrap_err())
-        );
+        assert_eq!("Cannot apply NOT to Integer(5)", format!("{}", Integer(5).not().unwrap_err()));
     }
 
     #[test]
@@ -462,14 +402,8 @@ mod tests {
             format!("{}", Integer(4).eq(&Text("5".to_owned())).unwrap_err())
         );
 
-        assert_eq!(
-            Boolean(true),
-            Text("a".to_owned()).eq(&Text("a".to_owned())).unwrap()
-        );
-        assert_eq!(
-            Boolean(false),
-            Text("b".to_owned()).eq(&Text("c".to_owned())).unwrap()
-        );
+        assert_eq!(Boolean(true), Text("a".to_owned()).eq(&Text("a".to_owned())).unwrap());
+        assert_eq!(Boolean(false), Text("b".to_owned()).eq(&Text("c".to_owned())).unwrap());
         assert_eq!(
             "Cannot compare Text(\"\") and Boolean(false) with =",
             format!("{}", Text("".to_owned()).eq(&Boolean(false)).unwrap_err())
@@ -494,14 +428,8 @@ mod tests {
             format!("{}", Integer(4).ne(&Text("5".to_owned())).unwrap_err())
         );
 
-        assert_eq!(
-            Boolean(false),
-            Text("a".to_owned()).ne(&Text("a".to_owned())).unwrap()
-        );
-        assert_eq!(
-            Boolean(true),
-            Text("b".to_owned()).ne(&Text("c".to_owned())).unwrap()
-        );
+        assert_eq!(Boolean(false), Text("a".to_owned()).ne(&Text("a".to_owned())).unwrap());
+        assert_eq!(Boolean(true), Text("b".to_owned()).ne(&Text("c".to_owned())).unwrap());
         assert_eq!(
             "Cannot compare Text(\"\") and Boolean(false) with <>",
             format!("{}", Text("".to_owned()).ne(&Boolean(false)).unwrap_err())
@@ -524,14 +452,8 @@ mod tests {
             format!("{}", Integer(4).lt(&Text("5".to_owned())).unwrap_err())
         );
 
-        assert_eq!(
-            Boolean(false),
-            Text("a".to_owned()).lt(&Text("a".to_owned())).unwrap()
-        );
-        assert_eq!(
-            Boolean(true),
-            Text("a".to_owned()).lt(&Text("c".to_owned())).unwrap()
-        );
+        assert_eq!(Boolean(false), Text("a".to_owned()).lt(&Text("a".to_owned())).unwrap());
+        assert_eq!(Boolean(true), Text("a".to_owned()).lt(&Text("c".to_owned())).unwrap());
         assert_eq!(
             "Cannot compare Text(\"\") and Boolean(false) with <",
             format!("{}", Text("".to_owned()).lt(&Boolean(false)).unwrap_err())
@@ -555,18 +477,9 @@ mod tests {
             format!("{}", Integer(4).le(&Text("5".to_owned())).unwrap_err())
         );
 
-        assert_eq!(
-            Boolean(false),
-            Text("b".to_owned()).le(&Text("a".to_owned())).unwrap()
-        );
-        assert_eq!(
-            Boolean(true),
-            Text("a".to_owned()).le(&Text("a".to_owned())).unwrap()
-        );
-        assert_eq!(
-            Boolean(true),
-            Text("a".to_owned()).le(&Text("c".to_owned())).unwrap()
-        );
+        assert_eq!(Boolean(false), Text("b".to_owned()).le(&Text("a".to_owned())).unwrap());
+        assert_eq!(Boolean(true), Text("a".to_owned()).le(&Text("a".to_owned())).unwrap());
+        assert_eq!(Boolean(true), Text("a".to_owned()).le(&Text("c".to_owned())).unwrap());
         assert_eq!(
             "Cannot compare Text(\"\") and Boolean(false) with <=",
             format!("{}", Text("".to_owned()).le(&Boolean(false)).unwrap_err())
@@ -589,14 +502,8 @@ mod tests {
             format!("{}", Integer(4).gt(&Text("5".to_owned())).unwrap_err())
         );
 
-        assert_eq!(
-            Boolean(false),
-            Text("a".to_owned()).gt(&Text("a".to_owned())).unwrap()
-        );
-        assert_eq!(
-            Boolean(true),
-            Text("c".to_owned()).gt(&Text("a".to_owned())).unwrap()
-        );
+        assert_eq!(Boolean(false), Text("a".to_owned()).gt(&Text("a".to_owned())).unwrap());
+        assert_eq!(Boolean(true), Text("c".to_owned()).gt(&Text("a".to_owned())).unwrap());
         assert_eq!(
             "Cannot compare Text(\"\") and Boolean(false) with >",
             format!("{}", Text("".to_owned()).gt(&Boolean(false)).unwrap_err())
@@ -620,18 +527,9 @@ mod tests {
             format!("{}", Integer(4).ge(&Text("5".to_owned())).unwrap_err())
         );
 
-        assert_eq!(
-            Boolean(false),
-            Text("".to_owned()).ge(&Text("b".to_owned())).unwrap()
-        );
-        assert_eq!(
-            Boolean(true),
-            Text("a".to_owned()).ge(&Text("a".to_owned())).unwrap()
-        );
-        assert_eq!(
-            Boolean(true),
-            Text("c".to_owned()).ge(&Text("a".to_owned())).unwrap()
-        );
+        assert_eq!(Boolean(false), Text("".to_owned()).ge(&Text("b".to_owned())).unwrap());
+        assert_eq!(Boolean(true), Text("a".to_owned()).ge(&Text("a".to_owned())).unwrap());
+        assert_eq!(Boolean(true), Text("c".to_owned()).ge(&Text("a".to_owned())).unwrap());
         assert_eq!(
             "Cannot compare Text(\"\") and Boolean(false) with >=",
             format!("{}", Text("".to_owned()).ge(&Boolean(false)).unwrap_err())
@@ -653,10 +551,7 @@ mod tests {
             format!("{}", Integer(4).add(&Text("5".to_owned())).unwrap_err())
         );
 
-        assert_eq!(
-            Text("ab".to_owned()),
-            Text("a".to_owned()).add(&Text("b".to_owned())).unwrap()
-        );
+        assert_eq!(Text("ab".to_owned()), Text("a".to_owned()).add(&Text("b".to_owned())).unwrap());
         assert_eq!(
             "Cannot add Text(\"\") and Boolean(false)",
             format!("{}", Text("".to_owned()).add(&Boolean(false)).unwrap_err())
@@ -680,12 +575,7 @@ mod tests {
 
         assert_eq!(
             "Cannot subtract Text(\"a\") from Text(\"ab\")",
-            format!(
-                "{}",
-                Text("ab".to_owned())
-                    .sub(&Text("a".to_owned()))
-                    .unwrap_err()
-            )
+            format!("{}", Text("ab".to_owned()).sub(&Text("a".to_owned())).unwrap_err())
         );
     }
 
@@ -706,10 +596,7 @@ mod tests {
 
         assert_eq!(
             "Cannot multiply Text(\"\") by Text(\"a\")",
-            format!(
-                "{}",
-                Text("".to_owned()).mul(&Text("a".to_owned())).unwrap_err()
-            )
+            format!("{}", Text("".to_owned()).mul(&Text("a".to_owned())).unwrap_err())
         );
     }
 
@@ -724,10 +611,7 @@ mod tests {
 
         assert_eq!(Integer(2), Integer(10).div(&Integer(5)).unwrap());
         assert_eq!(Integer(6), Integer(20).div(&Integer(3)).unwrap());
-        assert_eq!(
-            "Division by zero",
-            format!("{}", Integer(4).div(&Integer(0)).unwrap_err())
-        );
+        assert_eq!("Division by zero", format!("{}", Integer(4).div(&Integer(0)).unwrap_err()));
         assert_eq!(
             "Cannot divide Integer(4) by Text(\"5\")",
             format!("{}", Integer(4).div(&Text("5".to_owned())).unwrap_err())
@@ -735,10 +619,7 @@ mod tests {
 
         assert_eq!(
             "Cannot divide Text(\"\") by Text(\"a\")",
-            format!(
-                "{}",
-                Text("".to_owned()).div(&Text("a".to_owned())).unwrap_err()
-            )
+            format!("{}", Text("".to_owned()).div(&Text("a".to_owned())).unwrap_err())
         );
     }
 
@@ -753,10 +634,7 @@ mod tests {
 
         assert_eq!(Integer(0), Integer(10).modulo(&Integer(5)).unwrap());
         assert_eq!(Integer(2), Integer(20).modulo(&Integer(3)).unwrap());
-        assert_eq!(
-            "Modulo by zero",
-            format!("{}", Integer(4).modulo(&Integer(0)).unwrap_err())
-        );
+        assert_eq!("Modulo by zero", format!("{}", Integer(4).modulo(&Integer(0)).unwrap_err()));
         assert_eq!(
             "Cannot modulo Integer(4) by Text(\"5\")",
             format!("{}", Integer(4).modulo(&Text("5".to_owned())).unwrap_err())
@@ -764,12 +642,7 @@ mod tests {
 
         assert_eq!(
             "Cannot modulo Text(\"\") by Text(\"a\")",
-            format!(
-                "{}",
-                Text("".to_owned())
-                    .modulo(&Text("a".to_owned()))
-                    .unwrap_err()
-            )
+            format!("{}", Text("".to_owned()).modulo(&Text("a".to_owned())).unwrap_err())
         );
     }
 
@@ -777,10 +650,7 @@ mod tests {
     fn test_value_neg() {
         use super::Value::*;
 
-        assert_eq!(
-            "Cannot negate Boolean(true)",
-            format!("{}", Boolean(true).neg().unwrap_err())
-        );
+        assert_eq!("Cannot negate Boolean(true)", format!("{}", Boolean(true).neg().unwrap_err()));
 
         assert_eq!(Integer(-6), Integer(6).neg().unwrap());
         assert_eq!(Integer(5), Integer(-5).neg().unwrap());
@@ -803,18 +673,14 @@ mod tests {
     fn test_varref_into_unannotated_string() {
         assert_eq!(
             "print",
-            &VarRef::new("print", VarType::Auto)
-                .into_unannotated_string()
-                .unwrap()
+            &VarRef::new("print", VarType::Auto).into_unannotated_string().unwrap()
         );
 
         assert_eq!(
             "Type annotation not allowed in print$",
             format!(
                 "{}",
-                &VarRef::new("print", VarType::Text)
-                    .into_unannotated_string()
-                    .unwrap_err()
+                &VarRef::new("print", VarType::Text).into_unannotated_string().unwrap_err()
             )
         );
     }
@@ -845,15 +711,9 @@ mod tests {
     #[test]
     fn test_expr_literals() {
         let vars = Vars::default();
-        assert_eq!(
-            Value::Boolean(true),
-            Expr::Boolean(true).eval(&vars).unwrap()
-        );
+        assert_eq!(Value::Boolean(true), Expr::Boolean(true).eval(&vars).unwrap());
         assert_eq!(Value::Integer(0), Expr::Integer(0).eval(&vars).unwrap());
-        assert_eq!(
-            Value::Text("z".to_owned()),
-            Expr::Text("z".to_owned()).eval(&vars).unwrap()
-        );
+        assert_eq!(Value::Text("z".to_owned()), Expr::Text("z".to_owned()).eval(&vars).unwrap());
     }
 
     #[test]
@@ -876,12 +736,7 @@ mod tests {
 
         assert_eq!(
             "Undefined variable x",
-            format!(
-                "{}",
-                Expr::Symbol(VarRef::new("x", VarType::Auto))
-                    .eval(&vars)
-                    .unwrap_err()
-            )
+            format!("{}", Expr::Symbol(VarRef::new("x", VarType::Auto)).eval(&vars).unwrap_err())
         );
     }
 
@@ -897,28 +752,15 @@ mod tests {
         let vars = Vars::default();
         assert_eq!(
             "Cannot AND Boolean(false) and Integer(0)",
-            format!(
-                "{}",
-                Expr::And(a_bool.clone(), an_int.clone())
-                    .eval(&vars)
-                    .unwrap_err()
-            )
+            format!("{}", Expr::And(a_bool.clone(), an_int.clone()).eval(&vars).unwrap_err())
         );
         assert_eq!(
             "Cannot OR Boolean(false) and Integer(0)",
-            format!(
-                "{}",
-                Expr::Or(a_bool.clone(), an_int.clone())
-                    .eval(&vars)
-                    .unwrap_err()
-            )
+            format!("{}", Expr::Or(a_bool.clone(), an_int.clone()).eval(&vars).unwrap_err())
         );
         assert_eq!(
             "Cannot XOR Boolean(false) and Integer(0)",
-            format!(
-                "{}",
-                Expr::Xor(a_bool, an_int.clone()).eval(&vars).unwrap_err()
-            )
+            format!("{}", Expr::Xor(a_bool, an_int.clone()).eval(&vars).unwrap_err())
         );
         assert_eq!(
             "Cannot apply NOT to Integer(0)",
@@ -938,55 +780,27 @@ mod tests {
         let vars = Vars::default();
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with =",
-            format!(
-                "{}",
-                Expr::Equal(a_bool.clone(), an_int.clone())
-                    .eval(&vars)
-                    .unwrap_err()
-            )
+            format!("{}", Expr::Equal(a_bool.clone(), an_int.clone()).eval(&vars).unwrap_err())
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with <>",
-            format!(
-                "{}",
-                Expr::NotEqual(a_bool.clone(), an_int.clone())
-                    .eval(&vars)
-                    .unwrap_err()
-            )
+            format!("{}", Expr::NotEqual(a_bool.clone(), an_int.clone()).eval(&vars).unwrap_err())
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with <",
-            format!(
-                "{}",
-                Expr::Less(a_bool.clone(), an_int.clone())
-                    .eval(&vars)
-                    .unwrap_err()
-            )
+            format!("{}", Expr::Less(a_bool.clone(), an_int.clone()).eval(&vars).unwrap_err())
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with <=",
-            format!(
-                "{}",
-                Expr::LessEqual(a_bool.clone(), an_int.clone())
-                    .eval(&vars)
-                    .unwrap_err()
-            )
+            format!("{}", Expr::LessEqual(a_bool.clone(), an_int.clone()).eval(&vars).unwrap_err())
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with >",
-            format!(
-                "{}",
-                Expr::Greater(a_bool.clone(), an_int.clone())
-                    .eval(&vars)
-                    .unwrap_err()
-            )
+            format!("{}", Expr::Greater(a_bool.clone(), an_int.clone()).eval(&vars).unwrap_err())
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with >=",
-            format!(
-                "{}",
-                Expr::GreaterEqual(a_bool, an_int).eval(&vars).unwrap_err()
-            )
+            format!("{}", Expr::GreaterEqual(a_bool, an_int).eval(&vars).unwrap_err())
         );
     }
 
@@ -1002,39 +816,19 @@ mod tests {
         let vars = Vars::default();
         assert_eq!(
             "Cannot add Boolean(false) and Integer(0)",
-            format!(
-                "{}",
-                Expr::Add(a_bool.clone(), an_int.clone())
-                    .eval(&vars)
-                    .unwrap_err()
-            )
+            format!("{}", Expr::Add(a_bool.clone(), an_int.clone()).eval(&vars).unwrap_err())
         );
         assert_eq!(
             "Cannot subtract Integer(0) from Boolean(false)",
-            format!(
-                "{}",
-                Expr::Subtract(a_bool.clone(), an_int.clone())
-                    .eval(&vars)
-                    .unwrap_err()
-            )
+            format!("{}", Expr::Subtract(a_bool.clone(), an_int.clone()).eval(&vars).unwrap_err())
         );
         assert_eq!(
             "Cannot multiply Boolean(false) by Integer(0)",
-            format!(
-                "{}",
-                Expr::Multiply(a_bool.clone(), an_int.clone())
-                    .eval(&vars)
-                    .unwrap_err()
-            )
+            format!("{}", Expr::Multiply(a_bool.clone(), an_int.clone()).eval(&vars).unwrap_err())
         );
         assert_eq!(
             "Cannot divide Boolean(false) by Integer(0)",
-            format!(
-                "{}",
-                Expr::Divide(a_bool.clone(), an_int)
-                    .eval(&vars)
-                    .unwrap_err()
-            )
+            format!("{}", Expr::Divide(a_bool.clone(), an_int).eval(&vars).unwrap_err())
         );
         assert_eq!(
             "Cannot negate Boolean(false)",
@@ -1068,10 +862,7 @@ mod tests {
             Value::Boolean(true),
             Expr::Equal(
                 Box::from(Expr::Symbol(xref)),
-                Box::from(Expr::Add(
-                    Box::from(Expr::Integer(7)),
-                    Box::from(Expr::Symbol(yref))
-                ))
+                Box::from(Expr::Add(Box::from(Expr::Integer(7)), Box::from(Expr::Symbol(yref))))
             )
             .eval(&vars)
             .unwrap()

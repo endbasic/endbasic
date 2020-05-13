@@ -48,10 +48,7 @@ pub struct CharReader<'a> {
 impl<'a> CharReader<'a> {
     /// Constructs a new character reader from an `io::Read`.
     pub fn from(reader: &'a mut dyn io::Read) -> Self {
-        Self {
-            reader: io::BufReader::new(reader),
-            pending: Pending::Unknown,
-        }
+        Self { reader: io::BufReader::new(reader), pending: Pending::Unknown }
     }
 
     /// Replenishes `pending` with the next line to process.
@@ -155,10 +152,7 @@ mod tests {
         /// Creates a new reader that will fail at the `fail_at_read`th operation.
         fn new(fail_at_read: usize) -> Self {
             let current_read = 0;
-            FaultyReader {
-                current_read,
-                fail_at_read,
-            }
+            FaultyReader { current_read, fail_at_read }
         }
     }
 
@@ -184,17 +178,8 @@ mod tests {
         assert_eq!('\n', reader.next().unwrap().unwrap());
         assert_eq!('1', reader.next().unwrap().unwrap());
         assert_eq!('\n', reader.next().unwrap().unwrap());
-        assert_eq!(
-            io::ErrorKind::InvalidInput,
-            reader.next().unwrap().unwrap_err().kind()
-        );
-        assert_eq!(
-            io::ErrorKind::Other,
-            reader.next().unwrap().unwrap_err().kind()
-        );
-        assert_eq!(
-            io::ErrorKind::Other,
-            reader.next().unwrap().unwrap_err().kind()
-        );
+        assert_eq!(io::ErrorKind::InvalidInput, reader.next().unwrap().unwrap_err().kind());
+        assert_eq!(io::ErrorKind::Other, reader.next().unwrap().unwrap_err().kind());
+        assert_eq!(io::ErrorKind::Other, reader.next().unwrap().unwrap_err().kind());
     }
 }

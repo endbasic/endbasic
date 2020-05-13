@@ -101,21 +101,14 @@ impl VarRef {
     /// Creates a new reference to the variable with `name` and the optional `vtype` type.
     #[allow(clippy::redundant_field_names)]
     pub fn new<T: Into<String>>(name: T, ref_type: VarType) -> Self {
-        Self {
-            name: name.into(),
-            ref_type: ref_type,
-        }
+        Self { name: name.into(), ref_type: ref_type }
     }
 
     /// Transforms this reference into an unannotated name.
     ///
     /// This is only valid for references that have no annotations in them.
     pub fn into_unannotated_string(self) -> Fallible<String> {
-        ensure!(
-            self.ref_type == VarType::Auto,
-            "Type annotation not allowed in {}",
-            self
-        );
+        ensure!(self.ref_type == VarType::Auto, "Type annotation not allowed in {}", self);
         Ok(self.name)
     }
 
