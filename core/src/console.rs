@@ -212,10 +212,7 @@ impl BuiltinCommand for LocateCommand {
     fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         ensure!(args.len() == 2, "LOCATE takes two arguments");
         let (row_arg, column_arg) = (&args[0], &args[1]);
-        ensure!(
-            row_arg.1 == ArgSep::Long,
-            "LOCATE expects arguments separated by a comma"
-        );
+        ensure!(row_arg.1 == ArgSep::Long, "LOCATE expects arguments separated by a comma");
         debug_assert!(column_arg.1 == ArgSep::End);
 
         let row = match &row_arg.0 {
@@ -293,16 +290,10 @@ separated by the long `,` separator are concatenated with a tab character."
 /// Adds all console-related commands for the given `console` to the `machine`.
 pub fn all_commands(console: Rc<RefCell<dyn Console>>) -> Vec<Rc<dyn BuiltinCommand>> {
     vec![
-        Rc::from(ClsCommand {
-            console: console.clone(),
-        }),
-        Rc::from(ColorCommand {
-            console: console.clone(),
-        }),
+        Rc::from(ClsCommand { console: console.clone() }),
+        Rc::from(ColorCommand { console: console.clone() }),
         Rc::from(InputCommand::new(console.clone())),
-        Rc::from(LocateCommand {
-            console: console.clone(),
-        }),
+        Rc::from(LocateCommand { console: console.clone() }),
         Rc::from(PrintCommand::new(console)),
     ]
 }
@@ -335,10 +326,7 @@ pub(crate) mod testutils {
         pub(crate) fn new(
             golden_in: &'static [(&'static str, &'static str, &'static str)],
         ) -> Self {
-            Self {
-                golden_in: Box::from(golden_in.iter()),
-                captured_out: vec![],
-            }
+            Self { golden_in: Box::from(golden_in.iter()), captured_out: vec![] }
         }
 
         /// Obtains a reference to the captured output.
@@ -395,12 +383,9 @@ mod tests {
         expected_out: &[CapturedOut],
     ) {
         let console = Rc::from(RefCell::from(MockConsole::new(golden_in)));
-        let mut machine = MachineBuilder::default()
-            .add_builtins(all_commands(console.clone()))
-            .build();
-        machine
-            .exec(&mut input.as_bytes())
-            .expect("Execution failed");
+        let mut machine =
+            MachineBuilder::default().add_builtins(all_commands(console.clone())).build();
+        machine.exec(&mut input.as_bytes()).expect("Execution failed");
         assert_eq!(expected_out, console.borrow().captured_out());
     }
 
@@ -411,10 +396,8 @@ mod tests {
         golden_in: &'static [(&'static str, &'static str, &'static str)],
         expected_out: &'static [&'static str],
     ) {
-        let expected_out: Vec<CapturedOut> = expected_out
-            .iter()
-            .map(|x| CapturedOut::Print((*x).to_owned()))
-            .collect();
+        let expected_out: Vec<CapturedOut> =
+            expected_out.iter().map(|x| CapturedOut::Print((*x).to_owned())).collect();
         do_control_ok_test(input, golden_in, &expected_out)
     }
 
@@ -429,22 +412,14 @@ mod tests {
         expected_err: &str,
     ) {
         let console = Rc::from(RefCell::from(MockConsole::new(golden_in)));
-        let mut machine = MachineBuilder::default()
-            .add_builtins(all_commands(console.clone()))
-            .build();
+        let mut machine =
+            MachineBuilder::default().add_builtins(all_commands(console.clone())).build();
         assert_eq!(
             expected_err,
-            format!(
-                "{}",
-                machine
-                    .exec(&mut input.as_bytes())
-                    .expect_err("Execution did not fail")
-            )
+            format!("{}", machine.exec(&mut input.as_bytes()).expect_err("Execution did not fail"))
         );
-        let expected_out: Vec<CapturedOut> = expected_out
-            .iter()
-            .map(|x| CapturedOut::Print((*x).to_owned()))
-            .collect();
+        let expected_out: Vec<CapturedOut> =
+            expected_out.iter().map(|x| CapturedOut::Print((*x).to_owned())).collect();
         assert_eq!(expected_out, console.borrow().captured_out());
     }
 
@@ -474,19 +449,12 @@ mod tests {
         do_control_ok_test("COLOR , 1", &[], &[CapturedOut::Color(None, Some(1))]);
         do_control_ok_test("COLOR 10, 5", &[], &[CapturedOut::Color(Some(10), Some(5))]);
         do_control_ok_test("COLOR 0, 0", &[], &[CapturedOut::Color(Some(0), Some(0))]);
-        do_control_ok_test(
-            "COLOR 255, 255",
-            &[],
-            &[CapturedOut::Color(Some(255), Some(255))],
-        );
+        do_control_ok_test("COLOR 255, 255", &[], &[CapturedOut::Color(Some(255), Some(255))]);
     }
 
     #[test]
     fn test_color_errors() {
-        do_simple_error_test(
-            "COLOR",
-            "COLOR takes one or two arguments separated by a comma",
-        );
+        do_simple_error_test("COLOR", "COLOR takes one or two arguments separated by a comma");
         do_simple_error_test(
             "COLOR 1, 2, 3",
             "COLOR takes one or two arguments separated by a comma",
@@ -548,10 +516,7 @@ mod tests {
         do_simple_error_test("INPUT ;", "INPUT requires a variable reference");
         do_simple_error_test("INPUT 3 ; a", "INPUT prompt must be a string");
         do_simple_error_test("INPUT ; a + 1", "INPUT requires a variable reference");
-        do_simple_error_test(
-            "INPUT \"a\" + TRUE; b?",
-            "Cannot add Text(\"a\") and Boolean(true)",
-        );
+        do_simple_error_test("INPUT \"a\" + TRUE; b?", "Cannot add Text(\"a\") and Boolean(true)");
     }
 
     #[test]
@@ -565,10 +530,7 @@ mod tests {
         do_simple_error_test("LOCATE", "LOCATE takes two arguments");
         do_simple_error_test("LOCATE 1", "LOCATE takes two arguments");
         do_simple_error_test("LOCATE 1, 2, 3", "LOCATE takes two arguments");
-        do_simple_error_test(
-            "LOCATE 1; 2",
-            "LOCATE expects arguments separated by a comma",
-        );
+        do_simple_error_test("LOCATE 1; 2", "LOCATE expects arguments separated by a comma");
 
         do_simple_error_test("LOCATE -1, 2", "Row cannot be negative");
         do_simple_error_test("LOCATE TRUE, 2", "Row must be an integer");

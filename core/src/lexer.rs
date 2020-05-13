@@ -119,9 +119,7 @@ pub struct Lexer<'a> {
 impl<'a> Lexer<'a> {
     /// Creates a new lexer from the given readable.
     pub fn from(input: &'a mut dyn io::Read) -> Self {
-        Self {
-            input: CharReader::from(input).peekable(),
-        }
+        Self { input: CharReader::from(input).peekable() }
     }
 
     /// Handles a `input.read()` call that returned an unexpected character.
@@ -347,10 +345,7 @@ impl<'a> Lexer<'a> {
 
     /// Returns a peekable adaptor for this lexer.
     pub fn peekable(self) -> PeekableLexer<'a> {
-        PeekableLexer {
-            lexer: self,
-            peeked: None,
-        }
+        PeekableLexer { lexer: self, peeked: None }
     }
 }
 
@@ -540,25 +535,17 @@ mod tests {
     fn test_strings() {
         do_ok_test(
             " \"this is a string\"  3",
-            &[
-                Token::Text("this is a string".to_owned()),
-                Token::Integer(3),
-            ],
+            &[Token::Text("this is a string".to_owned()), Token::Integer(3)],
         );
 
         do_ok_test(
             " \"this is a string with ; special : characters in it\"",
-            &[Token::Text(
-                "this is a string with ; special : characters in it".to_owned(),
-            )],
+            &[Token::Text("this is a string with ; special : characters in it".to_owned())],
         );
 
         do_ok_test(
             "\"this \\\"is escaped\\\" \\\\ \\a\" 1",
-            &[
-                Token::Text("this \"is escaped\" \\ a".to_owned()),
-                Token::Integer(1),
-            ],
+            &[Token::Text("this \"is escaped\" \\ a".to_owned()), Token::Integer(1)],
         );
     }
 
@@ -566,26 +553,12 @@ mod tests {
     fn test_if() {
         do_ok_test(
             "IF THEN ELSEIF ELSE END IF",
-            &[
-                Token::If,
-                Token::Then,
-                Token::Elseif,
-                Token::Else,
-                Token::End,
-                Token::If,
-            ],
+            &[Token::If, Token::Then, Token::Elseif, Token::Else, Token::End, Token::If],
         );
 
         do_ok_test(
             "if then elseif else end if",
-            &[
-                Token::If,
-                Token::Then,
-                Token::Elseif,
-                Token::Else,
-                Token::End,
-                Token::If,
-            ],
+            &[Token::If, Token::Then, Token::Elseif, Token::Else, Token::End, Token::If],
         );
     }
 
@@ -598,10 +571,7 @@ mod tests {
 
     /// Syntactic sugar to instantiate a test that verifies the parsing of an operator.
     fn do_operator_test(op: &str, t: Token) {
-        do_ok_test(
-            format!("a {} 2", op).as_ref(),
-            &[new_auto_symbol("a"), t, Token::Integer(2)],
-        );
+        do_ok_test(format!("a {} 2", op).as_ref(), &[new_auto_symbol("a"), t, Token::Integer(2)]);
     }
 
     #[test]
@@ -735,9 +705,7 @@ mod tests {
         /// `good` must be newline-terminated to prevent the caller from reading too much in one go.
         fn new(good: &str) -> Self {
             assert!(good.ends_with('\n'));
-            Self {
-                good: Some(good.as_bytes().to_owned()),
-            }
+            Self { good: Some(good.as_bytes().to_owned()) }
         }
     }
 

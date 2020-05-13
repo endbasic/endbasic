@@ -73,11 +73,7 @@ impl Vars {
             Some(v) => v,
             None => bail!("Undefined variable {}", vref.name()),
         };
-        ensure!(
-            vref.accepts(&value),
-            "Incompatible types in {} reference",
-            vref
-        );
+        ensure!(vref.accepts(&value), "Incompatible types in {} reference", vref);
         Ok(value)
     }
 
@@ -95,11 +91,7 @@ impl Vars {
     /// the existing variable.  In other words: a variable cannot change types while it's alive.
     pub fn set(&mut self, vref: &VarRef, value: Value) -> Fallible<()> {
         let name = vref.name().to_ascii_uppercase();
-        ensure!(
-            vref.accepts(&value),
-            "Incompatible types in {} assignment",
-            vref
-        );
+        ensure!(vref.accepts(&value), "Incompatible types in {} assignment", vref);
         if let Some(old_value) = self.vars.get_mut(&name) {
             ensure!(
                 mem::discriminant(&value) == mem::discriminant(old_value),
@@ -150,10 +142,7 @@ impl MachineBuilder {
 
     /// Creates a new machine with the current configuration.
     pub fn build(self) -> Machine {
-        Machine {
-            builtins: self.builtins,
-            vars: Vars::default(),
-        }
+        Machine { builtins: self.builtins, vars: Vars::default() }
     }
 }
 
@@ -404,15 +393,11 @@ mod tests {
 
         assert_eq!(
             Value::Boolean(true),
-            *vars
-                .get(&VarRef::new("a_boolean", VarType::Boolean))
-                .unwrap()
+            *vars.get(&VarRef::new("a_boolean", VarType::Boolean)).unwrap()
         );
         assert_eq!(
             Value::Integer(3),
-            *vars
-                .get(&VarRef::new("an_integer", VarType::Integer))
-                .unwrap()
+            *vars.get(&VarRef::new("an_integer", VarType::Integer)).unwrap()
         );
         assert_eq!(
             Value::Text("some text".to_owned()),
@@ -450,11 +435,7 @@ mod tests {
 
         assert_eq!(
             "Undefined variable a_str",
-            format!(
-                "{}",
-                vars.get(&VarRef::new("a_str", VarType::Integer))
-                    .unwrap_err()
-            )
+            format!("{}", vars.get(&VarRef::new("a_str", VarType::Integer)).unwrap_err())
         );
     }
 
@@ -468,29 +449,17 @@ mod tests {
 
         assert_eq!(
             "Incompatible types in a_boolean$ reference",
-            format!(
-                "{}",
-                vars.get(&VarRef::new("a_boolean", VarType::Text))
-                    .unwrap_err()
-            )
+            format!("{}", vars.get(&VarRef::new("a_boolean", VarType::Text)).unwrap_err())
         );
 
         assert_eq!(
             "Incompatible types in an_integer? reference",
-            format!(
-                "{}",
-                vars.get(&VarRef::new("an_integer", VarType::Boolean))
-                    .unwrap_err()
-            )
+            format!("{}", vars.get(&VarRef::new("an_integer", VarType::Boolean)).unwrap_err())
         );
 
         assert_eq!(
             "Incompatible types in a_string% reference",
-            format!(
-                "{}",
-                vars.get(&VarRef::new("a_string", VarType::Integer))
-                    .unwrap_err()
-            )
+            format!("{}", vars.get(&VarRef::new("a_string", VarType::Integer)).unwrap_err())
         );
     }
 
@@ -498,31 +467,19 @@ mod tests {
     fn test_vars_set_ok_with_explicit_type() {
         let mut vars = Vars::default();
 
-        vars.set(
-            &VarRef::new("a_boolean", VarType::Boolean),
-            Value::Boolean(true),
-        )
-        .unwrap();
+        vars.set(&VarRef::new("a_boolean", VarType::Boolean), Value::Boolean(true)).unwrap();
         assert_eq!(
             Value::Boolean(true),
             *vars.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
         );
 
-        vars.set(
-            &VarRef::new("an_integer", VarType::Integer),
-            Value::Integer(0),
-        )
-        .unwrap();
+        vars.set(&VarRef::new("an_integer", VarType::Integer), Value::Integer(0)).unwrap();
         assert_eq!(
             Value::Integer(0),
             *vars.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
         );
 
-        vars.set(
-            &VarRef::new("a_string", VarType::Text),
-            Value::Text("x".to_owned()),
-        )
-        .unwrap();
+        vars.set(&VarRef::new("a_string", VarType::Text), Value::Text("x".to_owned())).unwrap();
         assert_eq!(
             Value::Text("x".to_owned()),
             *vars.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
@@ -533,28 +490,19 @@ mod tests {
     fn test_vars_set_ok_with_auto_type() {
         let mut vars = Vars::default();
 
-        vars.set(
-            &VarRef::new("a_boolean", VarType::Auto),
-            Value::Boolean(true),
-        )
-        .unwrap();
+        vars.set(&VarRef::new("a_boolean", VarType::Auto), Value::Boolean(true)).unwrap();
         assert_eq!(
             Value::Boolean(true),
             *vars.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
         );
 
-        vars.set(&VarRef::new("an_integer", VarType::Auto), Value::Integer(0))
-            .unwrap();
+        vars.set(&VarRef::new("an_integer", VarType::Auto), Value::Integer(0)).unwrap();
         assert_eq!(
             Value::Integer(0),
             *vars.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
         );
 
-        vars.set(
-            &VarRef::new("a_string", VarType::Auto),
-            Value::Text("x".to_owned()),
-        )
-        .unwrap();
+        vars.set(&VarRef::new("a_string", VarType::Auto), Value::Text("x".to_owned())).unwrap();
         assert_eq!(
             Value::Text("x".to_owned()),
             *vars.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
@@ -616,37 +564,23 @@ mod tests {
     #[test]
     fn test_vars_get_set_case_insensitivity() {
         let mut vars = Vars::default();
-        vars.set(&VarRef::new("SomeName", VarType::Auto), Value::Integer(6))
-            .unwrap();
-        assert_eq!(
-            Value::Integer(6),
-            *vars.get(&VarRef::new("somename", VarType::Auto)).unwrap()
-        );
+        vars.set(&VarRef::new("SomeName", VarType::Auto), Value::Integer(6)).unwrap();
+        assert_eq!(Value::Integer(6), *vars.get(&VarRef::new("somename", VarType::Auto)).unwrap());
     }
 
     #[test]
     fn test_vars_get_set_replace_value() {
         let mut vars = Vars::default();
-        vars.set(&VarRef::new("the_var", VarType::Auto), Value::Integer(100))
-            .unwrap();
-        assert_eq!(
-            Value::Integer(100),
-            *vars.get(&VarRef::new("the_var", VarType::Auto)).unwrap()
-        );
-        vars.set(&VarRef::new("the_var", VarType::Auto), Value::Integer(200))
-            .unwrap();
-        assert_eq!(
-            Value::Integer(200),
-            *vars.get(&VarRef::new("the_var", VarType::Auto)).unwrap()
-        );
+        vars.set(&VarRef::new("the_var", VarType::Auto), Value::Integer(100)).unwrap();
+        assert_eq!(Value::Integer(100), *vars.get(&VarRef::new("the_var", VarType::Auto)).unwrap());
+        vars.set(&VarRef::new("the_var", VarType::Auto), Value::Integer(200)).unwrap();
+        assert_eq!(Value::Integer(200), *vars.get(&VarRef::new("the_var", VarType::Auto)).unwrap());
     }
 
     #[test]
     fn test_clear() {
         let mut machine = Machine::default();
-        machine
-            .exec(&mut b"a = TRUE: b = 1".as_ref())
-            .expect("Execution failed");
+        machine.exec(&mut b"a = TRUE: b = 1".as_ref()).expect("Execution failed");
         assert!(machine.get_var_as_bool("a").is_ok());
         assert!(machine.get_var_as_int("b").is_ok());
         machine.clear();
@@ -657,84 +591,45 @@ mod tests {
     #[test]
     fn test_get_var_as_bool() {
         let mut machine = Machine::default();
-        machine
-            .exec(&mut b"a = TRUE: b = 1".as_ref())
-            .expect("Execution failed");
+        machine.exec(&mut b"a = TRUE: b = 1".as_ref()).expect("Execution failed");
         assert!(machine.get_var_as_bool("a").expect("Failed to query a"));
         assert_eq!(
             "Incompatible types in b? reference",
-            format!(
-                "{}",
-                machine
-                    .get_var_as_bool("b")
-                    .expect_err("Querying b succeeded")
-            )
+            format!("{}", machine.get_var_as_bool("b").expect_err("Querying b succeeded"))
         );
         assert_eq!(
             "Undefined variable c",
-            format!(
-                "{}",
-                machine
-                    .get_var_as_bool("c")
-                    .expect_err("Querying c succeeded")
-            )
+            format!("{}", machine.get_var_as_bool("c").expect_err("Querying c succeeded"))
         );
     }
 
     #[test]
     fn test_get_var_as_int() {
         let mut machine = Machine::default();
-        machine
-            .exec(&mut b"a = 1: b = \"foo\"".as_ref())
-            .expect("Execution failed");
+        machine.exec(&mut b"a = 1: b = \"foo\"".as_ref()).expect("Execution failed");
         assert_eq!(1, machine.get_var_as_int("a").expect("Failed to query a"));
         assert_eq!(
             "Incompatible types in b% reference",
-            format!(
-                "{}",
-                machine
-                    .get_var_as_int("b")
-                    .expect_err("Querying b succeeded")
-            )
+            format!("{}", machine.get_var_as_int("b").expect_err("Querying b succeeded"))
         );
         assert_eq!(
             "Undefined variable c",
-            format!(
-                "{}",
-                machine
-                    .get_var_as_int("c")
-                    .expect_err("Querying c succeeded")
-            )
+            format!("{}", machine.get_var_as_int("c").expect_err("Querying c succeeded"))
         );
     }
 
     #[test]
     fn test_get_var_as_string() {
         let mut machine = Machine::default();
-        machine
-            .exec(&mut b"a = \"foo\": b = FALSE".as_ref())
-            .expect("Execution failed");
-        assert_eq!(
-            "foo",
-            machine.get_var_as_string("a").expect("Failed to query a")
-        );
+        machine.exec(&mut b"a = \"foo\": b = FALSE".as_ref()).expect("Execution failed");
+        assert_eq!("foo", machine.get_var_as_string("a").expect("Failed to query a"));
         assert_eq!(
             "Incompatible types in b$ reference",
-            format!(
-                "{}",
-                machine
-                    .get_var_as_string("b")
-                    .expect_err("Querying b succeeded")
-            )
+            format!("{}", machine.get_var_as_string("b").expect_err("Querying b succeeded"))
         );
         assert_eq!(
             "Undefined variable c",
-            format!(
-                "{}",
-                machine
-                    .get_var_as_string("c")
-                    .expect_err("Querying c succeeded")
-            )
+            format!("{}", machine.get_var_as_string("c").expect_err("Querying c succeeded"))
         );
     }
 
@@ -803,16 +698,8 @@ mod tests {
         do_ok_test("a = 3\nOUT a; a%", &[], &["3 3"]);
         do_ok_test("a% = 3\nOUT a; a%", &[], &["3 3"]);
 
-        do_ok_test(
-            "a = \"some text\"\nOUT a; a$",
-            &[],
-            &["some text some text"],
-        );
-        do_ok_test(
-            "a$ = \"some text\"\nOUT a; a$",
-            &[],
-            &["some text some text"],
-        );
+        do_ok_test("a = \"some text\"\nOUT a; a$", &[], &["some text some text"]);
+        do_ok_test("a$ = \"some text\"\nOUT a; a$", &[], &["some text some text"]);
 
         do_ok_test("a = 1\na = a + 1\nOUT a", &[], &["2"]);
     }
@@ -935,12 +822,7 @@ mod tests {
     #[test]
     fn test_top_level_errors() {
         do_simple_error_test("FOO BAR", "Unknown builtin FOO");
-        do_error_test(
-            "OUT \"a\"\nFOO BAR\nOUT \"b\"",
-            &[],
-            &["a"],
-            "Unknown builtin FOO",
-        );
+        do_error_test("OUT \"a\"\nFOO BAR\nOUT \"b\"", &[], &["a"], "Unknown builtin FOO");
 
         do_simple_error_test("+ b", "Unexpected token Plus in statement");
         do_error_test(
@@ -954,11 +836,7 @@ mod tests {
     #[test]
     fn test_exec_shares_state() {
         let mut machine = Machine::default();
-        machine
-            .exec(&mut b"a = 10".as_ref())
-            .expect("Execution failed");
-        machine
-            .exec(&mut b"b = a".as_ref())
-            .expect("Execution failed");
+        machine.exec(&mut b"a = 10".as_ref()).expect("Execution failed");
+        machine.exec(&mut b"b = a".as_ref()).expect("Execution failed");
     }
 }

@@ -152,9 +152,7 @@ pub struct Parser<'a> {
 impl<'a> Parser<'a> {
     /// Creates a new parser from the given readable.
     pub fn from(input: &'a mut dyn io::Read) -> Self {
-        Self {
-            lexer: Lexer::from(input).peekable(),
-        }
+        Self { lexer: Lexer::from(input).peekable() }
     }
 
     /// Expects the peeked token to be `t` and consumes it.  Otherwise, leaves the token in the
@@ -351,10 +349,7 @@ impl<'a> Parser<'a> {
         self.expect_and_consume(Token::Eol, "Expecting newline after THEN")?;
 
         let mut branches = vec![];
-        branches.push((
-            expr,
-            self.parse_until(&[Token::Elseif, Token::Else, Token::End])?,
-        ));
+        branches.push((expr, self.parse_until(&[Token::Elseif, Token::Else, Token::End])?));
         loop {
             let peeked = self.lexer.peek()?;
             match peeked {
@@ -545,10 +540,7 @@ mod tests {
     fn do_error_test(input: &str, expected_err: &str) {
         let mut input = input.as_bytes();
         let mut parser = Parser::from(&mut input);
-        assert_eq!(
-            expected_err,
-            format!("{}", parser.parse().expect_err("Parsing did not fail"))
-        );
+        assert_eq!(expected_err, format!("{}", parser.parse().expect_err("Parsing did not fail")));
         assert!(parser.parse().unwrap().is_none());
     }
 
@@ -560,10 +552,7 @@ mod tests {
     fn do_error_test_no_reset(input: &str, expected_err: &str) {
         let mut input = input.as_bytes();
         let mut parser = Parser::from(&mut input);
-        assert_eq!(
-            expected_err,
-            format!("{}", parser.parse().expect_err("Parsing did not fail"))
-        );
+        assert_eq!(expected_err, format!("{}", parser.parse().expect_err("Parsing did not fail")));
     }
 
     #[test]
@@ -622,20 +611,14 @@ mod tests {
             &[
                 Statement::BuiltinCall(
                     "PRINT".to_owned(),
-                    vec![(
-                        Some(Expr::Symbol(VarRef::new("a", VarType::Auto))),
-                        ArgSep::End,
-                    )],
+                    vec![(Some(Expr::Symbol(VarRef::new("a", VarType::Auto))), ArgSep::End)],
                 ),
                 Statement::BuiltinCall(
                     "PRINT".to_owned(),
                     vec![
                         (None, ArgSep::Short),
                         (Some(Expr::Integer(3)), ArgSep::Long),
-                        (
-                            Some(Expr::Symbol(VarRef::new("c", VarType::Text))),
-                            ArgSep::End,
-                        ),
+                        (Some(Expr::Symbol(VarRef::new("c", VarType::Text))), ArgSep::End),
                     ],
                 ),
                 Statement::BuiltinCall("NOARGS".to_owned(), vec![]),
@@ -649,10 +632,7 @@ mod tests {
         do_error_test("INPUT$ a\n", "Type annotation not allowed in INPUT$");
         do_error_test("PRINT IF 1\n", "Unexpected keyword in expression");
         do_error_test("PRINT 3, IF 1\n", "Unexpected keyword in expression");
-        do_error_test(
-            "PRINT 3 THEN\n",
-            "Expected comma, semicolon, or end of statement",
-        );
+        do_error_test("PRINT 3 THEN\n", "Expected comma, semicolon, or end of statement");
     }
 
     /// Wrapper around `do_ok_test` to parse an expression.  Given that expressions alone are not
@@ -663,10 +643,7 @@ mod tests {
             &format!("PRINT {}, 1", input),
             &[Statement::BuiltinCall(
                 "PRINT".to_owned(),
-                vec![
-                    (Some(expr), ArgSep::Long),
-                    (Some(Expr::Integer(1)), ArgSep::End),
-                ],
+                vec![(Some(expr), ArgSep::Long), (Some(Expr::Integer(1)), ArgSep::End)],
             )],
         );
     }
@@ -713,45 +690,21 @@ mod tests {
     fn test_expr_arith_ops() {
         use Expr::*;
         do_expr_ok_test("1 + 2", Add(Box::from(Integer(1)), Box::from(Integer(2))));
-        do_expr_ok_test(
-            "1 - 2",
-            Subtract(Box::from(Integer(1)), Box::from(Integer(2))),
-        );
-        do_expr_ok_test(
-            "1 * 2",
-            Multiply(Box::from(Integer(1)), Box::from(Integer(2))),
-        );
-        do_expr_ok_test(
-            "1 / 2",
-            Divide(Box::from(Integer(1)), Box::from(Integer(2))),
-        );
-        do_expr_ok_test(
-            "1 MOD 2",
-            Modulo(Box::from(Integer(1)), Box::from(Integer(2))),
-        );
+        do_expr_ok_test("1 - 2", Subtract(Box::from(Integer(1)), Box::from(Integer(2))));
+        do_expr_ok_test("1 * 2", Multiply(Box::from(Integer(1)), Box::from(Integer(2))));
+        do_expr_ok_test("1 / 2", Divide(Box::from(Integer(1)), Box::from(Integer(2))));
+        do_expr_ok_test("1 MOD 2", Modulo(Box::from(Integer(1)), Box::from(Integer(2))));
     }
 
     #[test]
     fn test_expr_rel_ops() {
         use Expr::*;
         do_expr_ok_test("1 = 2", Equal(Box::from(Integer(1)), Box::from(Integer(2))));
-        do_expr_ok_test(
-            "1 <> 2",
-            NotEqual(Box::from(Integer(1)), Box::from(Integer(2))),
-        );
+        do_expr_ok_test("1 <> 2", NotEqual(Box::from(Integer(1)), Box::from(Integer(2))));
         do_expr_ok_test("1 < 2", Less(Box::from(Integer(1)), Box::from(Integer(2))));
-        do_expr_ok_test(
-            "1 <= 2",
-            LessEqual(Box::from(Integer(1)), Box::from(Integer(2))),
-        );
-        do_expr_ok_test(
-            "1 > 2",
-            Greater(Box::from(Integer(1)), Box::from(Integer(2))),
-        );
-        do_expr_ok_test(
-            "1 >= 2",
-            GreaterEqual(Box::from(Integer(1)), Box::from(Integer(2))),
-        );
+        do_expr_ok_test("1 <= 2", LessEqual(Box::from(Integer(1)), Box::from(Integer(2))));
+        do_expr_ok_test("1 > 2", Greater(Box::from(Integer(1)), Box::from(Integer(2))));
+        do_expr_ok_test("1 >= 2", GreaterEqual(Box::from(Integer(1)), Box::from(Integer(2))));
     }
 
     #[test]
@@ -767,10 +720,7 @@ mod tests {
         use Expr::*;
         do_expr_ok_test("NOT TRUE", Not(Box::from(Boolean(true))));
         do_expr_ok_test("NOT 6", Not(Box::from(Integer(6))));
-        do_expr_ok_test(
-            "NOT NOT TRUE",
-            Not(Box::from(Not(Box::from(Boolean(true))))),
-        );
+        do_expr_ok_test("NOT NOT TRUE", Not(Box::from(Not(Box::from(Boolean(true))))));
         do_expr_ok_test(
             "1 - NOT 4",
             Subtract(Box::from(Integer(1)), Box::from(Not(Box::from(Integer(4))))),
@@ -795,10 +745,7 @@ mod tests {
                         )),
                         Box::from(Equal(Box::from(Integer(1)), Box::from(Integer(3)))),
                     )),
-                    Box::from(Multiply(
-                        Box::from(Boolean(false)),
-                        Box::from(Text("a".to_owned())),
-                    )),
+                    Box::from(Multiply(Box::from(Boolean(false)), Box::from(Text("a".to_owned())))),
                 )),
             ),
         );
@@ -807,23 +754,14 @@ mod tests {
     #[test]
     fn test_expr_integer_signs() {
         use Expr::*;
-        do_expr_ok_test(
-            "-a",
-            Negate(Box::from(Symbol(VarRef::new("a", VarType::Auto)))),
-        );
+        do_expr_ok_test("-a", Negate(Box::from(Symbol(VarRef::new("a", VarType::Auto)))));
         do_expr_ok_test(
             "1 - -3",
-            Subtract(
-                Box::from(Integer(1)),
-                Box::from(Negate(Box::from(Integer(3)))),
-            ),
+            Subtract(Box::from(Integer(1)), Box::from(Negate(Box::from(Integer(3))))),
         );
         do_expr_ok_test(
             "5 + -1",
-            Add(
-                Box::from(Integer(5)),
-                Box::from(Negate(Box::from(Integer(1)))),
-            ),
+            Add(Box::from(Integer(5)), Box::from(Negate(Box::from(Integer(1))))),
         );
         do_expr_ok_test("NOT -3", Not(Box::from(Negate(Box::from(Integer(3))))));
     }
@@ -843,39 +781,27 @@ mod tests {
         use Expr::*;
         do_expr_ok_test(
             "1 + PRINT",
-            Add(
-                Box::from(Integer(1)),
-                Box::from(Symbol(VarRef::new("PRINT", VarType::Auto))),
-            ),
+            Add(Box::from(Integer(1)), Box::from(Symbol(VarRef::new("PRINT", VarType::Auto)))),
         );
     }
 
     #[test]
     fn test_expr_errors_due_to_keywords() {
         for kw in &["IF", "ELSEIF", "ELSE", "END", "WHILE"] {
-            do_expr_error_test(
-                &format!("2 + {} - 1", kw),
-                "Unexpected keyword in expression",
-            );
+            do_expr_error_test(&format!("2 + {} - 1", kw), "Unexpected keyword in expression");
         }
     }
 
     #[test]
     fn test_if_empty_branches() {
-        do_ok_test(
-            "IF 1 THEN\nEND IF",
-            &[Statement::If(vec![(Expr::Integer(1), vec![])])],
-        );
+        do_ok_test("IF 1 THEN\nEND IF", &[Statement::If(vec![(Expr::Integer(1), vec![])])]);
         do_ok_test(
             "IF 1 THEN\nREM Some comment to skip over\n\nEND IF",
             &[Statement::If(vec![(Expr::Integer(1), vec![])])],
         );
         do_ok_test(
             "IF 1 THEN\nELSEIF 2 THEN\nEND IF",
-            &[Statement::If(vec![
-                (Expr::Integer(1), vec![]),
-                (Expr::Integer(2), vec![]),
-            ])],
+            &[Statement::If(vec![(Expr::Integer(1), vec![]), (Expr::Integer(2), vec![])])],
         );
         do_ok_test(
             "IF 1 THEN\nELSEIF 2 THEN\nELSE\nEND IF",
@@ -887,10 +813,7 @@ mod tests {
         );
         do_ok_test(
             "IF 1 THEN\nELSE\nEND IF",
-            &[Statement::If(vec![
-                (Expr::Integer(1), vec![]),
-                (Expr::Boolean(true), vec![]),
-            ])],
+            &[Statement::If(vec![(Expr::Integer(1), vec![]), (Expr::Boolean(true), vec![])])],
         );
     }
 
@@ -907,10 +830,7 @@ mod tests {
             "IF 1 THEN\nREM foo\nELSEIF 2 THEN\nPRINT\nEND IF",
             &[Statement::If(vec![
                 (Expr::Integer(1), vec![]),
-                (
-                    Expr::Integer(2),
-                    vec![Statement::BuiltinCall("PRINT".to_owned(), vec![])],
-                ),
+                (Expr::Integer(2), vec![Statement::BuiltinCall("PRINT".to_owned(), vec![])]),
             ])],
         );
         do_ok_test(
@@ -918,20 +838,14 @@ mod tests {
             &[Statement::If(vec![
                 (Expr::Integer(1), vec![]),
                 (Expr::Integer(2), vec![]),
-                (
-                    Expr::Boolean(true),
-                    vec![Statement::BuiltinCall("PRINT".to_owned(), vec![])],
-                ),
+                (Expr::Boolean(true), vec![Statement::BuiltinCall("PRINT".to_owned(), vec![])]),
             ])],
         );
         do_ok_test(
             "IF 1 THEN\n\n\nELSE\nPRINT\nEND IF",
             &[Statement::If(vec![
                 (Expr::Integer(1), vec![]),
-                (
-                    Expr::Boolean(true),
-                    vec![Statement::BuiltinCall("PRINT".to_owned(), vec![])],
-                ),
+                (Expr::Boolean(true), vec![Statement::BuiltinCall("PRINT".to_owned(), vec![])]),
             ])],
         );
     }
@@ -1002,10 +916,7 @@ mod tests {
         do_ok_test(
             code,
             &[Statement::If(vec![
-                (
-                    Expr::Integer(1),
-                    vec![Statement::BuiltinCall("A".to_owned(), vec![])],
-                ),
+                (Expr::Integer(1), vec![Statement::BuiltinCall("A".to_owned(), vec![])]),
                 (
                     Expr::Integer(2),
                     vec![Statement::If(vec![(
@@ -1033,18 +944,9 @@ mod tests {
         do_error_test("IF 1 THEN\nELSEIF\n", "No expression in ELSEIF statement");
         do_error_test("IF 1 THEN\nELSEIF 3 + 1", "No THEN in ELSEIF statement");
         do_error_test("IF 1 THEN\nELSEIF 3 + 1\n", "No THEN in ELSEIF statement");
-        do_error_test(
-            "IF 1 THEN\nELSEIF 3 + 1 PRINT foo\n",
-            "Unexpected value in expression",
-        );
-        do_error_test(
-            "IF 1 THEN\nELSEIF 3 + 1\nPRINT foo\n",
-            "No THEN in ELSEIF statement",
-        );
-        do_error_test(
-            "IF 1 THEN\nELSEIF 3 + 1 THEN",
-            "Expecting newline after THEN",
-        );
+        do_error_test("IF 1 THEN\nELSEIF 3 + 1 PRINT foo\n", "Unexpected value in expression");
+        do_error_test("IF 1 THEN\nELSEIF 3 + 1\nPRINT foo\n", "No THEN in ELSEIF statement");
+        do_error_test("IF 1 THEN\nELSEIF 3 + 1 THEN", "Expecting newline after THEN");
 
         do_error_test("IF 1 THEN\nELSE", "Expecting newline after ELSE");
         do_error_test("IF 1 THEN\nELSE foo", "Expecting newline after ELSE");
@@ -1057,15 +959,9 @@ mod tests {
             "IF 1 THEN\nELSE\nELSEIF 2 THEN\nEND IF",
             "Unexpected token Elseif in statement",
         );
-        do_error_test(
-            "IF 1 THEN\nELSE\nELSE\nEND IF",
-            "Unexpected token Else in statement",
-        );
+        do_error_test("IF 1 THEN\nELSE\nELSE\nEND IF", "Unexpected token Else in statement");
 
-        do_error_test_no_reset(
-            "ELSEIF 1 THEN\nEND IF",
-            "Unexpected token Elseif in statement",
-        );
+        do_error_test_no_reset("ELSEIF 1 THEN\nEND IF", "Unexpected token Elseif in statement");
         do_error_test_no_reset("ELSE 1\nEND IF", "Unexpected token Else in statement");
     }
 

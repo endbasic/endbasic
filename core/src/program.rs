@@ -125,11 +125,7 @@ fn do_read_dir(path: &Path) -> io::Result<BTreeMap<String, Entry>> {
 
                 entries.insert(
                     de.file_name().to_string_lossy().to_string(),
-                    Entry {
-                        file_type,
-                        date,
-                        len,
-                    },
+                    Entry { file_type, date, len },
                 );
             }
         }
@@ -176,10 +172,7 @@ fn show_dir(path: &Path, console: &mut dyn Console) -> io::Result<()> {
     if total_files > 0 {
         console.print("")?;
     }
-    console.print(&format!(
-        "    {} file(s), {} bytes",
-        total_files, total_bytes
-    ))?;
+    console.print(&format!("    {} file(s), {} bytes", total_files, total_bytes))?;
     console.print("")?;
     Ok(())
 }
@@ -207,11 +200,7 @@ fn save_program(lines: &BTreeMap<usize, String>, path: &Path) -> io::Result<()> 
     fs::create_dir_all(&dir)?;
 
     // TODO(jmmv): Should back up existing files.
-    let output = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(path)?;
+    let output = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
     let mut writer = io::BufWriter::new(output);
     for l in lines.values() {
         writer.write_all(l.as_bytes())?;
@@ -490,35 +479,14 @@ fn all_commands_for(
     dir: &Path,
 ) -> Vec<Rc<dyn BuiltinCommand>> {
     vec![
-        Rc::from(DirCommand {
-            console: console.clone(),
-            dir: dir.to_owned(),
-        }),
-        Rc::from(EditCommand {
-            console: console.clone(),
-            program: program.clone(),
-        }),
-        Rc::from(ListCommand {
-            console: console.clone(),
-            program: program.clone(),
-        }),
-        Rc::from(LoadCommand {
-            dir: dir.to_owned(),
-            program: program.clone(),
-        }),
-        Rc::from(NewCommand {
-            program: program.clone(),
-        }),
-        Rc::from(RenumCommand {
-            program: program.clone(),
-        }),
-        Rc::from(RunCommand {
-            program: program.clone(),
-        }),
-        Rc::from(SaveCommand {
-            dir: dir.to_owned(),
-            program: program,
-        }),
+        Rc::from(DirCommand { console: console.clone(), dir: dir.to_owned() }),
+        Rc::from(EditCommand { console: console.clone(), program: program.clone() }),
+        Rc::from(ListCommand { console: console.clone(), program: program.clone() }),
+        Rc::from(LoadCommand { dir: dir.to_owned(), program: program.clone() }),
+        Rc::from(NewCommand { program: program.clone() }),
+        Rc::from(RenumCommand { program: program.clone() }),
+        Rc::from(RunCommand { program: program.clone() }),
+        Rc::from(SaveCommand { dir: dir.to_owned(), program: program }),
     ]
 }
 
@@ -557,13 +525,9 @@ mod tests {
         let mut machine = MachineBuilder::default()
             .add_builtins(all_commands_for(program.clone(), console.clone(), dir))
             .build();
-        machine
-            .exec(&mut input.as_bytes())
-            .expect("Execution failed");
-        let expected_out: Vec<CapturedOut> = expected_out
-            .iter()
-            .map(|x| CapturedOut::Print((*x).to_owned()))
-            .collect();
+        machine.exec(&mut input.as_bytes()).expect("Execution failed");
+        let expected_out: Vec<CapturedOut> =
+            expected_out.iter().map(|x| CapturedOut::Print((*x).to_owned())).collect();
         assert_eq!(expected_out, console.borrow().captured_out());
 
         let program = program.borrow();
@@ -581,14 +545,7 @@ mod tests {
         exp_program: &'static [(usize, &'static str)],
     ) {
         let dir = tempfile::tempdir().unwrap();
-        do_ok_test_with_dir(
-            program,
-            &dir.path(),
-            input,
-            golden_in,
-            expected_out,
-            exp_program,
-        )
+        do_ok_test_with_dir(program, &dir.path(), input, golden_in, expected_out, exp_program)
     }
 
     /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
@@ -601,12 +558,7 @@ mod tests {
             .build();
         assert_eq!(
             expected_err,
-            format!(
-                "{}",
-                machine
-                    .exec(&mut input.as_bytes())
-                    .expect_err("Execution did not fail")
-            )
+            format!("{}", machine.exec(&mut input.as_bytes()).expect_err("Execution did not fail"))
         );
         assert!(console.borrow().captured_out().is_empty());
     }
@@ -657,12 +609,7 @@ mod tests {
             &dir.path(),
             "DIR",
             &[],
-            &[
-                "",
-                "    Modified            Type       Size    Name",
-                "    0 file(s), 0 bytes",
-                "",
-            ],
+            &["", "    Modified            Type       Size    Name", "    0 file(s), 0 bytes", ""],
             &[],
         );
     }
@@ -675,12 +622,7 @@ mod tests {
             &dir.path().join("does-not-exist"),
             "DIR",
             &[],
-            &[
-                "",
-                "    Modified            Type       Size    Name",
-                "    0 file(s), 0 bytes",
-                "",
-            ],
+            &["", "    Modified            Type       Size    Name", "    0 file(s), 0 bytes", ""],
             &[],
         );
     }
@@ -695,12 +637,7 @@ mod tests {
             &dir.path(),
             "DIR",
             &[],
-            &[
-                "",
-                "    Modified            Type       Size    Name",
-                "    0 file(s), 0 bytes",
-                "",
-            ],
+            &["", "    Modified            Type       Size    Name", "    0 file(s), 0 bytes", ""],
             &[],
         );
     }
@@ -884,9 +821,7 @@ mod tests {
     fn test_list_something() {
         let program = Program::default();
         program.borrow_mut().insert(10, "first".to_owned());
-        program
-            .borrow_mut()
-            .insert(1023, "    second line".to_owned());
+        program.borrow_mut().insert(1023, "    second line".to_owned());
         do_ok_test(
             program,
             "LIST",
@@ -997,9 +932,7 @@ mod tests {
         program.borrow_mut().insert(10, "some stuff".to_owned());
 
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(NewCommand {
-                program: program.clone(),
-            }))
+            .add_builtin(Rc::from(NewCommand { program: program.clone() }))
             .build();
 
         machine.exec(&mut b"NEW".as_ref()).unwrap();
@@ -1018,13 +951,7 @@ mod tests {
         program.borrow_mut().insert(10, "one".to_owned());
         program.borrow_mut().insert(20, "two".to_owned());
         program.borrow_mut().insert(30, "three".to_owned());
-        do_ok_test(
-            program,
-            "RENUM",
-            &[],
-            &[],
-            &[(10, "one"), (20, "two"), (30, "three")],
-        );
+        do_ok_test(program, "RENUM", &[], &[], &[(10, "one"), (20, "two"), (30, "three")]);
     }
 
     #[test]
@@ -1033,13 +960,7 @@ mod tests {
         program.borrow_mut().insert(10, "one".to_owned());
         program.borrow_mut().insert(15, "two".to_owned());
         program.borrow_mut().insert(20, "three".to_owned());
-        do_ok_test(
-            program,
-            "RENUM",
-            &[],
-            &[],
-            &[(10, "one"), (20, "two"), (30, "three")],
-        );
+        do_ok_test(program, "RENUM", &[], &[], &[(10, "one"), (20, "two"), (30, "three")]);
     }
 
     #[test]
@@ -1056,13 +977,7 @@ mod tests {
         program.borrow_mut().insert(10, "one".to_owned());
         program.borrow_mut().insert(78, "two".to_owned());
         program.borrow_mut().insert(1294, "three".to_owned());
-        do_ok_test(
-            program,
-            "RENUM",
-            &[],
-            &[],
-            &[(10, "one"), (20, "two"), (30, "three")],
-        );
+        do_ok_test(program, "RENUM", &[], &[], &[(10, "one"), (20, "two"), (30, "three")]);
     }
 
     #[test]
@@ -1122,13 +1037,7 @@ mod tests {
             );
         }
 
-        for p in &[
-            "first.bas",
-            "second.bas",
-            "THIRD.BAS",
-            "FOURTH.BAS",
-            "Fifth.bas",
-        ] {
+        for p in &["first.bas", "second.bas", "THIRD.BAS", "FOURTH.BAS", "Fifth.bas"] {
             check_file(&dir.join(p), &["line 1", "  line 2"]);
         }
     }
