@@ -63,6 +63,11 @@ fn src_path(name: &str) -> PathBuf {
     dir.join(name)
 }
 
+/// Same as `src_path` but returns a string reference for the few places where we need this.
+fn src_str(p: &str) -> String {
+    src_path(p).to_str().expect("Need paths to be valid strings").to_owned()
+}
+
 /// Describes the behavior for one of the three streams (stdin, stdout, stderr) connected to a
 /// program.
 enum Behavior {
@@ -256,6 +261,18 @@ fn test_cli_version() {
     }
     check_with_args(&["--version"]);
     check_with_args(&["the", "--version", "flag wins over arguments"]);
+}
+
+#[test]
+fn test_repl_console() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/repl/console.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/repl/console.out")),
+        Behavior::Null,
+    );
 }
 
 #[test]

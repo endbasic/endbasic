@@ -110,7 +110,7 @@ fn get_programs_dir(flag: Option<String>) -> Fallible<PathBuf> {
 
 /// Executes the `path` program in a fresh machine.
 fn run<P: AsRef<Path>>(path: P) -> Fallible<()> {
-    let console = Rc::from(RefCell::from(endbasic_core::repl::TextConsole::from_stdio()));
+    let console = Rc::from(RefCell::from(endbasic::TextConsole::from_stdio()));
     let mut machine = endbasic_core::exec::MachineBuilder::default()
         .add_builtins(endbasic_core::console::all_commands(console))
         .build();
@@ -140,7 +140,7 @@ fn safe_main(name: &str, args: env::Args) -> Fallible<()> {
     match matches.free.as_slice() {
         [] => {
             let programs_dir = get_programs_dir(matches.opt_str("programs-dir"))?;
-            Ok(endbasic_core::repl::run_repl_loop(&programs_dir)?)
+            Ok(endbasic::run_repl_loop(&programs_dir)?)
         }
         [file] => run(file),
         [_, ..] => Err(UsageError::new("Too many arguments").into()),

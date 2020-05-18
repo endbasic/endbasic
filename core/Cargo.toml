@@ -15,9 +15,7 @@ edition = "2018"
 travis-ci = { repository = "jmmv/endbasic", branch = "master" }
 
 [dependencies]
-crossterm = "0.17"
 failure = "~0.1"
-rustyline = "6.1.2"
 time = { version = "0.2", features = ["std"] }
 
 [dev-dependencies]
