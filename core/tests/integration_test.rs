@@ -189,18 +189,6 @@ fn test_example_minimal() {
 }
 
 #[test]
-fn test_lang_console() {
-    check(
-        bin_path("examples/complete"),
-        &[&src_str("core/tests/console.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("core/tests/console.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
 fn test_lang_control_flow() {
     check(
         bin_path("examples/complete"),

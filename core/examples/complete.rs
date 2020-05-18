@@ -18,11 +18,50 @@
 //! This example sets up a complete EndBASIC interpreter: that is, one with all available commands,
 //! and processes the given file.
 
+use endbasic_core::console::Console;
 use std::cell::RefCell;
 use std::env;
 use std::fs;
+use std::io::{self, Write};
 use std::process;
 use std::rc::Rc;
+
+/// Incomplete implementation of the EndBASIC console.
+struct IncompleteConsole {}
+
+impl Console for IncompleteConsole {
+    fn clear(&mut self) -> io::Result<()> {
+        eprintln!("Clearing the screen not implemented");
+        Ok(())
+    }
+
+    fn color(&mut self, _fg: Option<u8>, _bg: Option<u8>) -> io::Result<()> {
+        eprintln!("Changing colors not implemented");
+        Ok(())
+    }
+
+    fn input(&mut self, prompt: &str, _previous: &str) -> io::Result<String> {
+        if !prompt.is_empty() {
+            let mut stdout = io::stdout();
+            stdout.write_all(prompt.as_bytes())?;
+            stdout.flush()?;
+        }
+
+        let mut answer = String::new();
+        io::stdin().read_line(&mut answer)?;
+        Ok(answer.trim_end().to_owned())
+    }
+
+    fn locate(&mut self, _row: usize, _column: usize) -> io::Result<()> {
+        eprintln!("Moving the cursor not implemented");
+        Ok(())
+    }
+
+    fn print(&mut self, text: &str) -> io::Result<()> {
+        println!("{}", text);
+        Ok(())
+    }
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -35,7 +74,7 @@ fn main() {
     };
 
     // TODO(jmmv): Truly add all commands in the core library and test for them.
-    let console = Rc::from(RefCell::from(endbasic_core::repl::TextConsole::from_stdio()));
+    let console = Rc::from(RefCell::from(IncompleteConsole {}));
     let mut machine = endbasic_core::exec::MachineBuilder::default()
         .add_builtins(endbasic_core::console::all_commands(console))
         .build();
