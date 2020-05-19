@@ -18,6 +18,8 @@ not adhere to semantic versioning until 1.0.0.**
 *   Added the `CLS`, `COLOR`, and `LOCATE` commands for terminal
     manipulation.
 
+*   Added a barebones web interface.
+
 ## Changes in version 0.2.0
 
 **Released on 2020-05-07.**

@@ -1,7 +1,7 @@
 {
     "editor.insertSpaces": true,
     "editor.rulers": [80],
-    "editor.tabSize": 2,
+    "editor.tabSize": 4,
     "editor.wordWrapColumn": 80,
 
     "files.associations": {
@@ -17,6 +17,16 @@
     "rust.all_targets": true,
     "rust.cfg_test": true,
     "rust.clippy_preference": "on",
+
+    "[html]": {
+        "editor.rulers": [100],
+        "editor.wordWrapColumn": 100
+    },
+
+    "[javascript]": {
+        "editor.rulers": [100],
+        "editor.wordWrapColumn": 100
+    },
 
     "[markdown]": {
         "editor.quickSuggestions": false
@@ -54,6 +64,7 @@
     "cSpell.words": [
         "Amstrad",
         "Amstrad's",
+        "bindgen",
         "builtins",
         "clippy",
         "endbasic",
@@ -70,6 +81,7 @@
         "symlinks",
         "tempfile",
         "testutils",
-        "vref"
+        "vref",
+        "wasm"
     ]
 }

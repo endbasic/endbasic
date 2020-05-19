@@ -20,6 +20,13 @@ set -eux
 do_lint() {
     cargo clippy --all-features --all-targets -- -D warnings
     cargo fmt -- --check
+
+    local web_version="$(grep ^version web/Cargo.toml | cut -d '"' -f 2)"
+    local json_version="$(grep version web/www/package.json | cut -d '"' -f 4)"
+    if [ "${web_version}" != "${json_version}" ]; then
+        echo "Versions in Cargo.toml and package.json are inconsistent" 1>&2
+        return 1
+    fi
 }
 
 # Ensures that the package is ready for publication.
@@ -46,12 +53,23 @@ do_test() {
     cargo test --all-features --verbose
 }
 
+# Builds the web interface.
+do_web() {
+    cd web
+    wasm-pack build
+    cd -
+
+    cd web/www
+    npm ci
+    cd -
+}
+
 if [ "${DO-unset}" = unset ]; then
     echo "DO must be set in the environment" 1>&2
     exit 1
 fi
 case "${DO}" in
-    lint|package|release|test)
+    lint|package|release|test|web)
         "do_${DO}"
         ;;
 

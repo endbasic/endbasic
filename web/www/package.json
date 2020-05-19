@@ -1,0 +1,40 @@
+{
+    "name": "endbasic-www",
+    "version": "0.2.0",
+    "description": "The EndBASIC programming language - web interface",
+    "main": "index.js",
+    "private": true,
+    "bin": {
+        "endbasic-www": ".bin/endbasic-www.js"
+    },
+    "scripts": {
+        "build": "webpack --config webpack.config.js",
+        "start": "webpack-dev-server"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/jmmv/endbasic.git"
+    },
+    "keywords": [
+        "basic",
+        "interpreter",
+        "learning",
+        "programming"
+    ],
+    "author": "Julio Merino <julio@meroh.net>",
+    "license": "Apache-2.0",
+    "bugs": {
+        "url": "https://github.com/jmmv/endbasic/issues"
+    },
+    "homepage": "https://github.com/jmmv/endbasic",
+    "dependencies": {
+        "endbasic-web": "file:../pkg",
+        "xterm": "4.5.0"
+    },
+    "devDependencies": {
+        "copy-webpack-plugin": "^5.0.0",
+        "webpack": "^4.29.3",
+        "webpack-cli": "^3.1.0",
+        "webpack-dev-server": "^3.11.0"
+    }
+}
