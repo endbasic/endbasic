@@ -14,7 +14,10 @@
 # under the License.
 
 language: rust
-cache: cargo
+
+cache:
+    - cargo: true
+    - npm: true
 
 os:
     - linux
@@ -26,6 +29,7 @@ env:
     - DO=package
     - DO=release
     - DO=test
+    - DO=web
 
 matrix:
     exclude:
@@ -41,8 +45,11 @@ matrix:
         - env: DO=package
           os: windows
 
-before_install:
-    - rustup component add clippy
-    - rustup component add rustfmt
+        # Web sanity checks only need to be performed on one platform.
+        - env: DO=web
+          os: osx
+        - env: DO=web
+          os: windows
 
+before_install: ./admin/travis-install.sh
 script: ./admin/travis-build.sh

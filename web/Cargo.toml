@@ -1,0 +1,28 @@
+[package]
+name = "endbasic-web"
+version = "0.2.0"
+license = "Apache-2.0"
+authors = ["Julio Merino <julio@meroh.net>"]
+categories = ["development-tools", "parser-implementations"]
+keywords = ["basic", "interpreter", "learning", "programming"]
+description = "The EndBASIC programming language - web interface"
+homepage = "https://github.com/jmmv/endbasic"
+repository = "https://github.com/jmmv/endbasic"
+readme = "README.md"
+edition = "2018"
+publish = false
+
+[badges]
+travis-ci = { repository = "jmmv/endbasic", branch = "master" }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies]
+console_error_panic_hook = { version = "0.1.6", optional = true }
+endbasic-core = { version = "0.2.0", path = "../core" }
+wasm-bindgen = "0.2"
+xterm-js-rs = "0.1.1"
