@@ -96,7 +96,14 @@ impl Interpreter {
 
         let mut console = console.borrow_mut();
         console.print("").unwrap();
-        console.print(&format!("    Welcome to EndBASIC {}.", env!("CARGO_PKG_VERSION"))).unwrap();
+        console.print("    Welcome to EndBASIC.").unwrap();
+        console
+            .print(&format!(
+                "    Built on {} from revision {}.",
+                env!("VERGEN_BUILD_DATE"),
+                env!("VERGEN_SHA_SHORT")
+            ))
+            .unwrap();
         console.print("").unwrap();
 
         Self { machine, last_error: "".to_owned() }
