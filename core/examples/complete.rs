@@ -18,6 +18,7 @@
 //! This example sets up a complete EndBASIC interpreter: that is, one with all available commands,
 //! and processes the given file.
 
+use async_trait::async_trait;
 use endbasic_core::console::Console;
 use std::cell::RefCell;
 use std::env;
@@ -29,6 +30,7 @@ use std::rc::Rc;
 /// Incomplete implementation of the EndBASIC console.
 struct IncompleteConsole {}
 
+#[async_trait(?Send)]
 impl Console for IncompleteConsole {
     fn clear(&mut self) -> io::Result<()> {
         eprintln!("Clearing the screen not implemented");
@@ -40,7 +42,7 @@ impl Console for IncompleteConsole {
         Ok(())
     }
 
-    fn input(&mut self, prompt: &str, _previous: &str) -> io::Result<String> {
+    async fn input(&mut self, prompt: &str, _previous: &str) -> io::Result<String> {
         if !prompt.is_empty() {
             let mut stdout = io::stdout();
             stdout.write_all(prompt.as_bytes())?;

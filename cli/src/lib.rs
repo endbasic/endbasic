@@ -20,6 +20,7 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
+use async_trait::async_trait;
 use crossterm::{cursor, execute, style, terminal, tty::IsTty, QueueableCommand};
 use endbasic_core::console;
 use endbasic_core::exec::{ClearCommand, MachineBuilder};
@@ -69,6 +70,7 @@ impl TextConsole {
     }
 }
 
+#[async_trait(?Send)]
 impl console::Console for TextConsole {
     fn clear(&mut self) -> io::Result<()> {
         execute!(io::stdout(), terminal::Clear(terminal::ClearType::All), cursor::MoveTo(0, 0))
@@ -91,7 +93,7 @@ impl console::Console for TextConsole {
         Ok(())
     }
 
-    fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String> {
+    async fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String> {
         let answer = if self.is_tty {
             let mut rl = Editor::<()>::new();
             match rl.readline_with_initial(prompt, (previous, "")) {

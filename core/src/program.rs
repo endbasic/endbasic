@@ -39,7 +39,11 @@ type Program = Rc<RefCell<ProgramImpl>>;
 /// Interactively edits line `n` of the stored `program` via the `console`.
 ///
 /// Returns true if the entered line was empty and false otherwise.
-fn edit_one(program: &mut ProgramImpl, n: usize, console: &mut dyn Console) -> io::Result<bool> {
+async fn edit_one(
+    program: &mut ProgramImpl,
+    n: usize,
+    console: &mut dyn Console,
+) -> io::Result<bool> {
     let prompt = format!("{} ", n);
 
     let previous = match program.get(&n) {
@@ -47,7 +51,7 @@ fn edit_one(program: &mut ProgramImpl, n: usize, console: &mut dyn Console) -> i
         None => "",
     };
 
-    let line = console.input(&prompt, &previous)?;
+    let line = console.input(&prompt, &previous).await?;
     debug_assert!(!line.ends_with('\n'));
     if line.is_empty() {
         program.remove(&n);
@@ -60,12 +64,12 @@ fn edit_one(program: &mut ProgramImpl, n: usize, console: &mut dyn Console) -> i
 
 /// Starts interactive editing after the last line of the program and ends on the first empty line.
 /// Uses the `console` for input/output.
-fn append(program: &mut ProgramImpl, console: &mut dyn Console) -> io::Result<()> {
+async fn append(program: &mut ProgramImpl, console: &mut dyn Console) -> io::Result<()> {
     let mut last_n = match program.iter().next_back() {
         Some((k, _)) => (*k / 10) * 10 + 10,
         None => 10,
     };
-    while edit_one(program, last_n, console)? {
+    while edit_one(program, last_n, console).await? {
         last_n += 10;
     }
     Ok(())
@@ -265,11 +269,11 @@ editing.  Editing terminates upon an ENTER key press."
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         let mut console = self.console.borrow_mut();
         match args {
-            [] => append(&mut self.program.borrow_mut(), &mut *console)?,
+            [] => append(&mut self.program.borrow_mut(), &mut *console).await?,
             [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_vars())? {
                 Value::Integer(n) => {
                     ensure!(n > 0, "Line numbers must be a positive integer");
-                    edit_one(&mut self.program.borrow_mut(), n as usize, &mut *console)?;
+                    edit_one(&mut self.program.borrow_mut(), n as usize, &mut *console).await?;
                 }
                 _ => bail!("Line numbers must be a positive integer"),
             },
