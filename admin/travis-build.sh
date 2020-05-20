@@ -21,6 +21,15 @@ do_lint() {
     cargo clippy --all-features --all-targets -- -D warnings
     cargo fmt -- --check
 
+    local core_version="$(grep ^version core/Cargo.toml | cut -d '"' -f 2)"
+    for pkg in */Cargo.toml; do
+        local other_version="$(grep ^version "${pkg}" | cut -d '"' -f 2)"
+        if [ "${core_version}" != "${other_version}" ]; then
+            echo "Inconsistent version number in ${pkg}" 1>&2
+            return 1
+        fi
+    done
+
     local web_version="$(grep ^version web/Cargo.toml | cut -d '"' -f 2)"
     local json_version="$(grep version web/www/package.json | cut -d '"' -f 4)"
     if [ "${web_version}" != "${json_version}" ]; then
