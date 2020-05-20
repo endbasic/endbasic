@@ -21,18 +21,9 @@ EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 
 ## What's in this crate?
 
-`endbasic-core` provides the language parser and interpreter.  These components
-are minimal: the interpreter knows how to execute the logic of the language but,
-by default, it exposes no builtins to the scripts—not even `INPUT` or `PRINT`.
-This makes EndBASIC ideal for embedding into other programs, as it is possible
-to execute external code without side-effects or by precisely controlling how
-such code interacts with the host program.
-
-`endbasic-core` also provides the language's standard library.  Similarly to
-the parser and interpreter, this library is minimal: it provides the logic for
-all built-in commands, but each command can be individually installed into the
-parser, and all interactions with the environment (e.g. the console, or the file
-system) are exposed via hooks that the caller needs to implement.
+`endbasic-core` provides the language parser and interpreter, as well as the
+standard library.  Note that exposing the standard library via the interpreter
+is optional, and this can be done on a command-by-command basis.
 
 ## Language features
 
@@ -46,6 +37,24 @@ currently supports:
 *   `WHILE ...` / `END WHILE` loops.
 *   `INPUT` and `PRINT` builtins.
 *   UTF-8 everywhere (I think).
+
+## Implementation features
+
+Some highlights about the EndBASIC implementation are:
+
+*   Minimalist core.  The interpreter knows how to execute the logic of the
+    language but, by default, it exposes no builtins to the scripts—not even
+    `INPUT` or `PRINT`.  This makes EndBASIC ideal for embedding into other
+    programs, as it is possible to execute external code without side-effects or
+    by precisely controlling how such code interacts with the host program.
+
+*   Minimalist library.  The standard library provides the logic for all
+    built-in commands, but each command can be individually installed into the
+    parser, and all interactions with the environment (e.g. the console, or the
+    file system) are exposed via hooks that the caller needs to implement.
+
+*   Async support.  The interpreter is async-compatible, making it trivial to
+    embed it into Javascript via WASM.
 
 ## Examples
 

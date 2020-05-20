@@ -17,6 +17,7 @@
 
 use crate::ast::{ArgSep, Expr, Value};
 use crate::exec::{BuiltinCommand, Machine};
+use async_trait::async_trait;
 use failure::Fallible;
 use std::cell::RefCell;
 use std::io;
@@ -54,6 +55,7 @@ pub struct ClsCommand {
     console: Rc<RefCell<dyn Console>>,
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for ClsCommand {
     fn name(&self) -> &'static str {
         "CLS"
@@ -67,7 +69,7 @@ impl BuiltinCommand for ClsCommand {
         "Clears the screen."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
         ensure!(args.is_empty(), "CLS takes no arguments");
         self.console.borrow_mut().clear()?;
         Ok(())
@@ -79,6 +81,7 @@ pub struct ColorCommand {
     console: Rc<RefCell<dyn Console>>,
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for ColorCommand {
     fn name(&self) -> &'static str {
         "COLOR"
@@ -94,7 +97,7 @@ Color numbers are given as ANSI numbers and can be between 0 and 255.  If a colo
 specified, then the color is left unchanged."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         let (fg_expr, bg_expr): (&Option<Expr>, &Option<Expr>) = match args {
             [(fg, ArgSep::End)] => (fg, &None),
             [(fg, ArgSep::Long), (bg, ArgSep::End)] => (fg, bg),
@@ -132,6 +135,7 @@ impl InputCommand {
     }
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for InputCommand {
     fn name(&self) -> &'static str {
         "INPUT"
@@ -150,7 +154,7 @@ The second expression to this function must be a bare variable reference and ind
 variable to update with the obtained input."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         if args.len() != 2 {
             bail!("INPUT requires two arguments");
         }
@@ -196,6 +200,7 @@ pub struct LocateCommand {
     console: Rc<RefCell<dyn Console>>,
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for LocateCommand {
     fn name(&self) -> &'static str {
         "LOCATE"
@@ -209,7 +214,7 @@ impl BuiltinCommand for LocateCommand {
         "Moves the cursor to the given position."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         ensure!(args.len() == 2, "LOCATE takes two arguments");
         let (row_arg, column_arg) = (&args[0], &args[1]);
         ensure!(row_arg.1 == ArgSep::Long, "LOCATE expects arguments separated by a comma");
@@ -254,6 +259,7 @@ impl PrintCommand {
     }
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for PrintCommand {
     fn name(&self) -> &'static str {
         "PRINT"
@@ -270,7 +276,7 @@ separated by the short `;` separator are concatenated with a single space, while
 separated by the long `,` separator are concatenated with a tab character."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         let mut text = String::new();
         for arg in args.iter() {
             if let Some(expr) = arg.0.as_ref() {

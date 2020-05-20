@@ -20,6 +20,8 @@ not adhere to semantic versioning until 1.0.0.**
 
 *   Added a barebones web interface.
 
+*   Made the language interpreter `async`-compatible.
+
 ## Changes in version 0.2.0
 
 **Released on 2020-05-07.**

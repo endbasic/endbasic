@@ -15,7 +15,9 @@ edition = "2018"
 travis-ci = { repository = "jmmv/endbasic", branch = "master" }
 
 [dependencies]
+async-trait = "0.1"
 failure = "~0.1"
+futures = "0.3"
 time = { version = "0.2", features = ["std"] }
 
 [dev-dependencies]

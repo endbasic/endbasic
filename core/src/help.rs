@@ -17,6 +17,7 @@
 
 use crate::ast::{ArgSep, Expr, VarType};
 use crate::exec::{BuiltinCommand, Machine};
+use async_trait::async_trait;
 use failure::Fallible;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -81,6 +82,7 @@ impl HelpCommand {
     }
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for HelpCommand {
     fn name(&self) -> &'static str {
         "HELP"
@@ -96,7 +98,7 @@ Without arguments, shows a summary of all available commands.
 With a single argument, shows detailed information about the given command."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         let builtins = machine.get_builtins();
         match args {
             [] => {
@@ -123,6 +125,7 @@ pub(crate) mod testutils {
     /// A command that does nothing.
     pub(crate) struct DoNothingCommand {}
 
+    #[async_trait(?Send)]
     impl BuiltinCommand for DoNothingCommand {
         fn name(&self) -> &'static str {
             "DO_NOTHING"
@@ -138,7 +141,11 @@ First paragraph of the extended description.
 Second paragraph of the extended description."
         }
 
-        fn exec(&self, _args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
+        async fn exec(
+            &self,
+            _args: &[(Option<Expr>, ArgSep)],
+            _machine: &mut Machine,
+        ) -> Fallible<()> {
             Ok(())
         }
     }
