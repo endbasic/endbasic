@@ -20,6 +20,7 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
+use async_trait::async_trait;
 use endbasic_core::console::Console;
 use std::cell::RefCell;
 use std::io;
@@ -31,6 +32,7 @@ struct XtermJsConsole {
     terminal: xterm_js_rs::Terminal,
 }
 
+#[async_trait(?Send)]
 impl Console for XtermJsConsole {
     fn clear(&mut self) -> io::Result<()> {
         self.terminal.write("\u{001b}[2J");
@@ -49,7 +51,7 @@ impl Console for XtermJsConsole {
         Ok(())
     }
 
-    fn input(&mut self, _prompt: &str, _previous: &str) -> io::Result<String> {
+    async fn input(&mut self, _prompt: &str, _previous: &str) -> io::Result<String> {
         Err(io::Error::new(io::ErrorKind::Other, "Not yet implemented"))
     }
 

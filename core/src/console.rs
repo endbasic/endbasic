@@ -24,6 +24,7 @@ use std::io;
 use std::rc::Rc;
 
 /// Hooks to implement the commands that manipulate the console.
+#[async_trait(?Send)]
 pub trait Console {
     /// Clears the console and moves the cursor to the top left.
     fn clear(&mut self) -> io::Result<()>;
@@ -41,7 +42,7 @@ pub trait Console {
     /// If validation fails, this method is called again with `previous` set to the invalid answer
     /// that caused the problem.  This can be used by the UI to pre-populate the new input field
     /// with that data.
-    fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String>;
+    async fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String>;
 
     /// Moves the cursor to the given position, which must be within the screen.
     fn locate(&mut self, row: usize, column: usize) -> io::Result<()>;
@@ -178,7 +179,7 @@ variable to update with the obtained input."
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
         loop {
-            match console.input(&prompt, &previous_answer) {
+            match console.input(&prompt, &previous_answer).await {
                 Ok(answer) => {
                     match Value::parse_as(vref.ref_type(), answer.trim_end()) {
                         Ok(value) => return machine.get_mut_vars().set(vref, value),
@@ -341,6 +342,7 @@ pub(crate) mod testutils {
         }
     }
 
+    #[async_trait(?Send)]
     impl Console for MockConsole {
         fn clear(&mut self) -> io::Result<()> {
             self.captured_out.push(CapturedOut::Clear);
@@ -352,7 +354,7 @@ pub(crate) mod testutils {
             Ok(())
         }
 
-        fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String> {
+        async fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String> {
             let (expected_prompt, expected_previous, answer) = self.golden_in.next().unwrap();
             assert_eq!(expected_prompt, &prompt);
             assert_eq!(expected_previous, &previous);
