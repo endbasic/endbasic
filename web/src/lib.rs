@@ -22,14 +22,17 @@
 
 use async_trait::async_trait;
 use endbasic_core::console::Console;
+use js_sys::{Function, Promise};
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::JsFuture;
 
 /// Implementation of a console that talks directly to an xterm.js terminal.
 struct XtermJsConsole {
     terminal: xterm_js_rs::Terminal,
+    read_line: Function,
 }
 
 #[async_trait(?Send)]
@@ -51,8 +54,12 @@ impl Console for XtermJsConsole {
         Ok(())
     }
 
-    async fn input(&mut self, _prompt: &str, _previous: &str) -> io::Result<String> {
-        Err(io::Error::new(io::ErrorKind::Other, "Not yet implemented"))
+    async fn input(&mut self, prompt: &str, _previous: &str) -> io::Result<String> {
+        self.terminal.write(prompt);
+        let this = JsValue::NULL;
+        let promise = Promise::from(self.read_line.call0(&this).expect("Did not get a future"));
+        let result = JsFuture::from(promise).await.expect("Failed to wait for read_line");
+        Ok(result.as_string().expect("read_line expected to return a string"))
     }
 
     fn locate(&mut self, row: usize, column: usize) -> io::Result<()> {
@@ -71,14 +78,15 @@ impl Console for XtermJsConsole {
 #[wasm_bindgen]
 pub struct Interpreter {
     machine: endbasic_core::exec::Machine,
+    last_error: String,
 }
 
 #[wasm_bindgen]
 impl Interpreter {
     /// Constructs a new interpreter attached to `terminal` for console output.
     #[wasm_bindgen(constructor)]
-    pub fn new(terminal: xterm_js_rs::Terminal) -> Self {
-        let console = Rc::from(RefCell::from(XtermJsConsole { terminal }));
+    pub fn new(terminal: xterm_js_rs::Terminal, read_line: Function) -> Self {
+        let console = Rc::from(RefCell::from(XtermJsConsole { terminal, read_line }));
         // TODO(jmmv): Register all commands.  Need to parameterize the program-related commands to
         // not try to do any I/O.
         let machine = endbasic_core::exec::MachineBuilder::default()
@@ -91,15 +99,30 @@ impl Interpreter {
         console.print(&format!("    Welcome to EndBASIC {}.", env!("CARGO_PKG_VERSION"))).unwrap();
         console.print("").unwrap();
 
-        Self { machine }
+        Self { machine, last_error: "".to_owned() }
     }
 
     /// Executes a single line of input.
-    pub fn run(&mut self, code: &str) -> String {
-        match self.machine.exec(&mut code.as_bytes()) {
-            Ok(()) => "".to_owned(),
-            Err(e) => format!("{}", e),
+    ///
+    /// Because this is async, it has to return itself to preserve all state while the call is
+    /// ongoing.
+    // TODO(jmmv): Would be nice to also return here any error information to avoid the separate
+    // last_error method... but I haven't figured out how to do that.
+    pub async fn run(mut self, code: String) -> Interpreter {
+        match self.machine.exec_async(&mut code.as_bytes()).await {
+            Ok(()) => {
+                self.last_error = "".to_owned();
+            }
+            Err(e) => self.last_error = format!("{}", e),
         }
+        self
+    }
+
+    /// Returns and consumes the error from the previous `run` invocation, if any.
+    pub fn last_error(&mut self) -> String {
+        let error = self.last_error.clone();
+        self.last_error = "".to_owned();
+        error
     }
 }
 

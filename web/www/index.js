@@ -20,8 +20,12 @@ var term = new xterm.Terminal();
 term.setOption("fontSize", 20);
 term.open(document.getElementById('terminal'));
 
-var interpreter = new endbasic_web.Interpreter(term);
-var prompt = "Ready\n\r";
+var queue = [];
+function readLine() {
+    return new Promise(resolve => { queue.push(resolve); });
+}
+
+var interpreter = new endbasic_web.Interpreter(term, readLine);
 
 var line = "";
 term.onKey(e => {
@@ -35,17 +39,26 @@ term.onKey(e => {
         }
     } else if (e.domEvent.keyCode === 13) {
         term.write("\n\r");
-        let error = interpreter.run(line);
-        if (error.length != 0) {
-            term.write("ERROR: " + error + "\n\r");
-        }
+        var resolveReadLine = queue.shift();
+        resolveReadLine(line);
         line = "";
-        term.write(prompt);
     } else if (printable) {
         term.write(e.key);
         line += e.key;
     }
 });
 
-term.write(prompt);
+async function next(term, readLine, interpreter) {
+    term.write("Ready\n\r");
+    let line = await readLine();
+    interpreter = await interpreter.run(line);
+    let error = interpreter.last_error();
+    if (error.length != 0) {
+        term.write("ERROR: " + error + "\n\r");
+    }
+    setImmediate(next, term, readLine, interpreter);
+}
+
+next(term, readLine, interpreter);
+
 term.focus();
