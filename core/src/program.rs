@@ -18,6 +18,7 @@
 use crate::ast::{ArgSep, Expr, Value};
 use crate::console::Console;
 use crate::exec::{BuiltinCommand, Machine};
+use async_trait::async_trait;
 use failure::Fallible;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -215,6 +216,7 @@ struct DirCommand {
     dir: PathBuf,
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for DirCommand {
     fn name(&self) -> &'static str {
         "DIR"
@@ -228,7 +230,7 @@ impl BuiltinCommand for DirCommand {
         "Displays the list of files on disk."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
         ensure!(args.is_empty(), "DIR takes no arguments");
         show_dir(&self.dir, &mut *self.console.borrow_mut())?;
         Ok(())
@@ -241,6 +243,7 @@ struct EditCommand {
     program: Program,
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for EditCommand {
     fn name(&self) -> &'static str {
         "EDIT"
@@ -259,7 +262,7 @@ only.  Otherwise, if the line already exists, presents the contents of that line
 editing.  Editing terminates upon an ENTER key press."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         let mut console = self.console.borrow_mut();
         match args {
             [] => append(&mut self.program.borrow_mut(), &mut *console)?,
@@ -282,6 +285,7 @@ struct ListCommand {
     program: Program,
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for ListCommand {
     fn name(&self) -> &'static str {
         "LIST"
@@ -295,7 +299,7 @@ impl BuiltinCommand for ListCommand {
         "Lists the contents of the stored program."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
         ensure!(args.is_empty(), "LIST takes no arguments");
         let mut console = self.console.borrow_mut();
         let program = self.program.borrow();
@@ -313,6 +317,7 @@ struct LoadCommand {
     program: Program,
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for LoadCommand {
     fn name(&self) -> &'static str {
         "LOAD"
@@ -328,7 +333,7 @@ The filename must be a string and must be a basename (no directory components). 
 extension is optional, but if present, it must be .BAS."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         ensure!(args.len() == 1, "LOAD requires a filename");
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_vars())? {
@@ -348,6 +353,7 @@ struct NewCommand {
     program: Program,
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for NewCommand {
     fn name(&self) -> &'static str {
         "NEW"
@@ -361,7 +367,7 @@ impl BuiltinCommand for NewCommand {
         "Clears the stored program from memory."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         ensure!(args.is_empty(), "NEW takes no arguments");
         *self.program.borrow_mut() = BTreeMap::default();
         machine.clear();
@@ -374,6 +380,7 @@ struct RenumCommand {
     program: Program,
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for RenumCommand {
     fn name(&self) -> &'static str {
         "RENUM"
@@ -387,7 +394,7 @@ impl BuiltinCommand for RenumCommand {
         "Reassigns line numbers to make them all multiples of ten."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
         ensure!(args.is_empty(), "RENUM takes no arguments");
         let mut program = self.program.borrow_mut();
         let numbers: Vec<usize> = program.keys().cloned().collect();
@@ -409,6 +416,7 @@ struct RunCommand {
     program: Program,
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for RunCommand {
     fn name(&self) -> &'static str {
         "RUN"
@@ -424,7 +432,7 @@ Note that the program runs in the context of the interpreter so it will pick up 
 and other state that may already be set."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         ensure!(args.is_empty(), "RUN takes no arguments");
         let program = self.program.borrow();
         let mut text = String::new();
@@ -432,7 +440,7 @@ and other state that may already be set."
             text += v;
             text += "\n";
         }
-        machine.exec(&mut text.as_bytes())
+        machine.exec_async(&mut text.as_bytes()).await
     }
 }
 
@@ -442,6 +450,7 @@ struct SaveCommand {
     program: Program,
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for SaveCommand {
     fn name(&self) -> &'static str {
         "SAVE"
@@ -457,7 +466,7 @@ The filename must be a string and must be a basename (no directory components). 
 extension is optional, but if present, it must be .BAS."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         ensure!(args.len() == 1, "SAVE requires a filename");
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_vars())? {

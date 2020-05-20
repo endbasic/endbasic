@@ -17,7 +17,10 @@
 
 use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
 use crate::parser::Parser;
+use async_trait::async_trait;
 use failure::Fallible;
+use futures::executor::block_on;
+use futures::future::{FutureExt, LocalBoxFuture};
 use std::collections::HashMap;
 use std::io;
 use std::mem;
@@ -28,6 +31,7 @@ use std::rc::Rc;
 /// The commands themselves are immutable but they can reference mutable state.  Given that
 /// EndBASIC is not threaded, it is sufficient for those references to be behind a `RefCell`
 /// and/or an `Rc`.
+#[async_trait(?Send)]
 pub trait BuiltinCommand {
     /// Returns the name of the command, all in uppercase letters.
     fn name(&self) -> &'static str;
@@ -48,7 +52,7 @@ pub trait BuiltinCommand {
     /// `machine` provides mutable access to the current state of the machine invoking the command.
     ///
     /// Commands cannot return any value except for errors.
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()>;
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()>;
 }
 
 /// Storage for all variables that exist at runtime.
@@ -208,65 +212,89 @@ impl Machine {
     }
 
     /// Executes an `IF` statement.
-    fn do_if(&mut self, branches: &[(Expr, Vec<Statement>)]) -> Fallible<()> {
-        for (expr, stmts) in branches {
-            match expr.eval(&self.vars)? {
-                Value::Boolean(true) => {
-                    for s in stmts {
-                        self.exec_one(s)?;
+    fn do_if<'a>(
+        &'a mut self,
+        branches: &'a [(Expr, Vec<Statement>)],
+    ) -> LocalBoxFuture<'a, Fallible<()>> {
+        async move {
+            for (expr, stmts) in branches {
+                match expr.eval(&self.vars)? {
+                    Value::Boolean(true) => {
+                        for s in stmts {
+                            self.exec_one(s).await?;
+                        }
+                        break;
                     }
-                    break;
-                }
-                Value::Boolean(false) => (),
-                _ => bail!("IF/ELSEIF require a boolean condition"),
-            };
+                    Value::Boolean(false) => (),
+                    _ => bail!("IF/ELSEIF require a boolean condition"),
+                };
+            }
+            Ok(())
         }
-        Ok(())
+        .boxed_local()
     }
 
     /// Executes a `WHILE` loop.
-    fn do_while(&mut self, condition: &Expr, body: &[Statement]) -> Fallible<()> {
-        loop {
-            match condition.eval(&self.vars)? {
-                Value::Boolean(true) => {
-                    for s in body {
-                        self.exec_one(s)?;
+    fn do_while<'a>(
+        &'a mut self,
+        condition: &'a Expr,
+        body: &'a [Statement],
+    ) -> LocalBoxFuture<'a, Fallible<()>> {
+        async move {
+            loop {
+                match condition.eval(&self.vars)? {
+                    Value::Boolean(true) => {
+                        for s in body {
+                            self.exec_one(s).await?;
+                        }
                     }
+                    Value::Boolean(false) => break,
+                    _ => bail!("WHILE requires a boolean condition"),
                 }
-                Value::Boolean(false) => break,
-                _ => bail!("WHILE requires a boolean condition"),
             }
+            Ok(())
         }
-        Ok(())
+        .boxed_local()
     }
 
     /// Executes a single statement.
-    fn exec_one(&mut self, stmt: &Statement) -> Fallible<()> {
-        match stmt {
-            Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
-            Statement::BuiltinCall(name, args) => {
-                let cmd = match self.builtins.get(name.as_str()) {
-                    Some(cmd) => cmd.clone(),
-                    None => bail!("Unknown builtin {}", name),
-                };
-                cmd.exec(&args, self)?
+    fn exec_one<'a>(&'a mut self, stmt: &'a Statement) -> LocalBoxFuture<'a, Fallible<()>> {
+        async move {
+            match stmt {
+                Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
+                Statement::BuiltinCall(name, args) => {
+                    let cmd = match self.builtins.get(name.as_str()) {
+                        Some(cmd) => cmd.clone(),
+                        None => bail!("Unknown builtin {}", name),
+                    };
+                    cmd.exec(&args, self).await?
+                }
+                Statement::If(branches) => self.do_if(branches).await?,
+                Statement::While(condition, body) => self.do_while(condition, body).await?,
             }
-            Statement::If(branches) => self.do_if(branches)?,
-            Statement::While(condition, body) => self.do_while(condition, body)?,
+            Ok(())
+        }
+        .boxed_local()
+    }
+
+    /// Executes a program extracted from the `input` readable in an asynchronous manner.
+    ///
+    /// Note that this does not consume `self`.  As a result, it is possible to execute multiple
+    /// different programs on the same machine, all sharing state.
+    pub async fn exec_async(&mut self, input: &mut dyn io::Read) -> Fallible<()> {
+        let mut parser = Parser::from(input);
+        while let Some(stmt) = parser.parse()? {
+            self.exec_one(&stmt).await?;
         }
         Ok(())
     }
 
-    /// Executes a program extracted from the `input` readable.
+    /// Executes a program extracted from the `input` readable and waits until completion.
     ///
     /// Note that this does not consume `self`.  As a result, it is possible to execute multiple
     /// different programs on the same machine, all sharing state.
     pub fn exec<'b>(&mut self, input: &'b mut dyn io::Read) -> Fallible<()> {
-        let mut parser = Parser::from(input);
-        while let Some(stmt) = parser.parse()? {
-            self.exec_one(&stmt)?;
-        }
-        Ok(())
+        block_on(self.exec_async(input))
     }
 }
 
@@ -274,6 +302,7 @@ impl Machine {
 #[derive(Default)]
 pub struct ClearCommand {}
 
+#[async_trait(?Send)]
 impl BuiltinCommand for ClearCommand {
     fn name(&self) -> &'static str {
         "CLEAR"
@@ -287,7 +316,7 @@ impl BuiltinCommand for ClearCommand {
         "Clears all variables to restore initial state."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         ensure!(args.is_empty(), "CLEAR takes no arguments");
         machine.clear();
         Ok(())
@@ -314,6 +343,7 @@ pub(crate) mod testutils {
         }
     }
 
+    #[async_trait(?Send)]
     impl BuiltinCommand for InCommand {
         fn name(&self) -> &'static str {
             "IN"
@@ -327,7 +357,11 @@ pub(crate) mod testutils {
             "See docstring for test code."
         }
 
-        fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+        async fn exec(
+            &self,
+            args: &[(Option<Expr>, ArgSep)],
+            machine: &mut Machine,
+        ) -> Fallible<()> {
             ensure!(args.len() == 1, "IN only takes one argument");
             ensure!(args[0].1 == ArgSep::End, "Invalid separator");
             let vref = match &args[0].0 {
@@ -358,6 +392,7 @@ pub(crate) mod testutils {
         }
     }
 
+    #[async_trait(?Send)]
     impl BuiltinCommand for OutCommand {
         fn name(&self) -> &'static str {
             "OUT"
@@ -371,7 +406,11 @@ pub(crate) mod testutils {
             "See docstring for test code."
         }
 
-        fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+        async fn exec(
+            &self,
+            args: &[(Option<Expr>, ArgSep)],
+            machine: &mut Machine,
+        ) -> Fallible<()> {
             let mut text = String::new();
             for arg in args.iter() {
                 if let Some(expr) = arg.0.as_ref() {

@@ -22,6 +22,7 @@
 #[macro_use]
 extern crate failure;
 
+use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value};
 use endbasic_core::exec::{BuiltinCommand, Machine, MachineBuilder};
 use failure::Fallible;
@@ -43,6 +44,7 @@ struct StoreCommand {
     state: Rc<RefCell<String>>,
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for StoreCommand {
     fn name(&self) -> &'static str {
         "STORE"
@@ -56,7 +58,7 @@ impl BuiltinCommand for StoreCommand {
         "Saves the string argument given to it in a Rust variable."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
         ensure!(args.len() == 1, "STORE takes one argument only");
         let expr = args[0].0.as_ref().expect("A single argument can never be empty");
         match expr.eval(machine.get_vars())? {
@@ -72,6 +74,7 @@ struct RetrieveCommand {
     state: Rc<RefCell<String>>,
 }
 
+#[async_trait(?Send)]
 impl BuiltinCommand for RetrieveCommand {
     fn name(&self) -> &'static str {
         "RETRIEVE"
@@ -85,7 +88,7 @@ impl BuiltinCommand for RetrieveCommand {
         "Retrieves the string saved by `StoreCommand` and prints it to the console."
     }
 
-    fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
         ensure!(args.is_empty(), "RETRIEVE takes no arguments");
         println!("The stored value was: {}", self.state.borrow());
         Ok(())
