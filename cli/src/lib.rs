@@ -142,7 +142,7 @@ pub fn run_repl_loop(dir: &Path) -> io::Result<()> {
     let console = Rc::from(RefCell::from(TextConsole::from_stdio()));
     let mut machine = MachineBuilder::default()
         .add_builtin(Rc::from(ClearCommand::default()))
-        .add_builtin(Rc::from(HelpCommand::new(Rc::from(RefCell::from(io::stdout())))))
+        .add_builtin(Rc::from(HelpCommand::new(console.clone())))
         .add_builtins(console::all_commands(console.clone()))
         .add_builtins(program::all_commands(console, dir))
         .build();
