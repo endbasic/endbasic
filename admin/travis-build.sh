@@ -70,6 +70,7 @@ do_web() {
 
     cd web/www
     npm ci
+    npm run-script build
     cd -
 }
 

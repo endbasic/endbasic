@@ -12,6 +12,11 @@ module.exports = {
         new CopyWebpackPlugin(
             [
                 {
+                    from: '.nojekyll',
+                    to: '.nojekyll',
+                    toType: 'file',
+                },
+                {
                     from: 'index.html',
                     to: 'index.html',
                 },
