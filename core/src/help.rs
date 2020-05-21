@@ -16,23 +16,23 @@
 //! Interactive help support.
 
 use crate::ast::{ArgSep, Expr, VarType};
+use crate::console::Console;
 use crate::exec::{BuiltinCommand, Machine};
 use async_trait::async_trait;
 use failure::Fallible;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::Write;
 use std::rc::Rc;
 
 /// The `HELP` command.
 pub struct HelpCommand {
-    output: Rc<RefCell<dyn Write>>,
+    console: Rc<RefCell<dyn Console>>,
 }
 
 impl HelpCommand {
     /// Creates a new command that writes help messages to `output`.
-    pub fn new(output: Rc<RefCell<dyn Write>>) -> Self {
-        Self { output }
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Self {
+        Self { console }
     }
 
     /// Prints a summary of all available commands.
@@ -47,37 +47,38 @@ impl HelpCommand {
         }
         names.sort();
 
-        let mut output = self.output.borrow_mut();
-        output
-            .write_fmt(format_args!("\n    This is EndBASIC {}.\n\n", env!("CARGO_PKG_VERSION")))?;
+        let mut console = self.console.borrow_mut();
+        console.print("")?;
+        console.print(&format!("    This is EndBASIC {}.", env!("CARGO_PKG_VERSION")))?;
+        console.print("")?;
         for name in names {
             let filler = " ".repeat(max_length - name.len());
             let builtin = builtins.get(name).unwrap();
             let blurb = builtin.description().lines().next().unwrap();
-            output.write_fmt(format_args!("    {}{}    {}\n", builtin.name(), filler, blurb))?;
+            console.print(&format!("    {}{}    {}", builtin.name(), filler, blurb))?;
         }
-        output.write_all(
-            b"\n    Type HELP followed by a command name for details on that command.",
-        )?;
+        console.print("")?;
+        console.print("    Type HELP followed by a command name for details on that command.")?;
         // TODO(jmmv): Replace with an EXIT command.
-        output.write_all(b"\n    Press CTRL+D to exit.\n\n")?;
+        console.print("    Press CTRL+D to exit.")?;
+        console.print("")?;
         Ok(())
     }
 
     /// Prints details about a single command.
     fn describe(&self, builtin: &Rc<dyn BuiltinCommand>) -> Fallible<()> {
-        let mut output = self.output.borrow_mut();
-        output.write_all(b"\n")?;
+        let mut console = self.console.borrow_mut();
+        console.print("")?;
         if builtin.syntax().is_empty() {
-            output.write_fmt(format_args!("    {}\n", builtin.name()))?;
+            console.print(&format!("    {}", builtin.name()))?;
         } else {
-            output.write_fmt(format_args!("    {} {}\n", builtin.name(), builtin.syntax()))?;
+            console.print(&format!("    {} {}", builtin.name(), builtin.syntax()))?;
         }
         for line in builtin.description().lines() {
-            output.write_all(b"\n")?;
-            output.write_fmt(format_args!("    {}\n", line))?;
+            console.print("")?;
+            console.print(&format!("    {}", line))?;
         }
-        output.write_all(b"\n")?;
+        console.print("")?;
         Ok(())
     }
 }
@@ -155,20 +156,29 @@ Second paragraph of the extended description."
 mod tests {
     use super::testutils::*;
     use super::*;
+    use crate::console::testutils::*;
     use crate::exec::MachineBuilder;
     use std::cell::RefCell;
 
+    /// Expects the output to the console to be just print calls and concatenates them all as they
+    /// would have been printed on screen.
+    fn flatten_captured_out(output: &[CapturedOut]) -> String {
+        output.iter().fold(String::new(), |result, o| match o {
+            CapturedOut::Print(text) => result + &text + "\n",
+            _ => panic!("Unexpected element in output"),
+        })
+    }
+
     #[test]
     fn test_help_summary() {
-        let output = Rc::from(RefCell::from(vec![]));
+        let console = Rc::from(RefCell::from(MockConsole::new(&[])));
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(HelpCommand { output: output.clone() }))
+            .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
             .add_builtin(Rc::from(DoNothingCommand {}))
             .build();
         machine.exec(&mut b"HELP".as_ref()).unwrap();
 
-        let output = output.borrow();
-        let text = std::str::from_utf8(&output).unwrap();
+        let text = flatten_captured_out(console.borrow().captured_out());
         let version_re = regex::Regex::new("[0-9]+\\.[0-9]+\\.[0-9]+").unwrap();
         let text = version_re.replace_all(&text, "X.Y.Z").to_owned();
         assert_eq!(
@@ -188,13 +198,14 @@ mod tests {
 
     #[test]
     fn test_help_describe() {
-        let output = Rc::from(RefCell::from(vec![]));
+        let console = Rc::from(RefCell::from(MockConsole::new(&[])));
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(HelpCommand { output: output.clone() }))
+            .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
             .add_builtin(Rc::from(DoNothingCommand {}))
             .build();
         machine.exec(&mut b"help Do_Nothing".as_ref()).unwrap();
 
+        let text = flatten_captured_out(console.borrow().captured_out());
         assert_eq!(
             "
     DO_NOTHING this [would] <be|the> syntax \"specification\"
@@ -206,7 +217,7 @@ mod tests {
     Second paragraph of the extended description.
 
 ",
-            std::str::from_utf8(&output.borrow()).unwrap()
+            &text
         );
     }
 }
