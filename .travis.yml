@@ -53,3 +53,12 @@ matrix:
 
 before_install: ./admin/travis-install.sh
 script: ./admin/travis-build.sh
+
+deploy:
+    provider: pages
+    skip_cleanup: true
+    github_token: $GITHUB_TOKEN
+    local_dir: web/www/dist
+    on:
+        branch: master
+        condition: "$DO = web"
