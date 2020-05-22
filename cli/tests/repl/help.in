@@ -38,6 +38,9 @@ HELP DIR
 PRINT "Output from HELP EDIT:"
 HELP EDIT
 
+PRINT "Output from HELP EXIT:"
+HELP EXIT
+
 PRINT "Output from HELP HELP:"
 HELP HELP
 

@@ -28,6 +28,7 @@ use getopts::Options;
 use std::cell::RefCell;
 use std::env;
 use std::fs::File;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::rc::Rc;
@@ -72,20 +73,20 @@ fn program_name(mut args: env::Args, default_name: &'static str) -> (String, env
 }
 
 /// Prints usage information for program `name` with `opts` following the GNU Standards format.
-fn help(name: &str, opts: &Options) -> Fallible<()> {
+fn help(name: &str, opts: &Options) -> Fallible<i32> {
     let brief = format!("Usage: {} [options] [program-file]", name);
     println!("{}", opts.usage(&brief));
     println!("Report bugs to: https://github.com/jmmv/endbasic/issues");
     println!("EndBASIC home page: https://github.com/jmmv/endbasic");
-    Ok(())
+    Ok(0)
 }
 
 /// Prints version information following the GNU Standards format.
-fn version() -> Fallible<()> {
+fn version() -> Fallible<i32> {
     println!("EndBASIC {}", env!("CARGO_PKG_VERSION"));
     println!("Copyright 2020 Julio Merino");
     println!("License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>");
-    Ok(())
+    Ok(0)
 }
 
 /// Computes the path to the directory where user programs live if `flag` is none; otherwise
@@ -109,18 +110,33 @@ fn get_programs_dir(flag: Option<String>) -> Fallible<PathBuf> {
 }
 
 /// Executes the `path` program in a fresh machine.
-fn run<P: AsRef<Path>>(path: P) -> Fallible<()> {
+fn run<P: AsRef<Path>>(path: P) -> Fallible<i32> {
     let console = Rc::from(RefCell::from(endbasic::TextConsole::from_stdio()));
+    let exit_code = Rc::from(RefCell::from(None));
     let mut machine = endbasic_core::exec::MachineBuilder::default()
+        .add_builtin(Rc::from(endbasic::ExitCommand::new(exit_code.clone())))
         .add_builtins(endbasic_core::console::all_commands(console))
         .build();
 
     let mut input = File::open(path)?;
-    machine.exec(&mut input)
+    match machine.exec(&mut input) {
+        Ok(()) => (),
+        Err(e) => {
+            if exit_code.borrow().is_some() {
+                if let Some(e) = e.downcast_ref::<io::Error>() {
+                    debug_assert!(e.kind() == io::ErrorKind::UnexpectedEof);
+                }
+            } else {
+                return Err(e);
+            }
+        }
+    }
+    let exit_code = exit_code.borrow();
+    Ok(exit_code.unwrap_or(0))
 }
 
 /// Version of `main` that returns errors to the caller for reporting.
-fn safe_main(name: &str, args: env::Args) -> Fallible<()> {
+fn safe_main(name: &str, args: env::Args) -> Fallible<i32> {
     let args: Vec<String> = args.collect();
 
     let mut opts = Options::new();
@@ -149,18 +165,21 @@ fn safe_main(name: &str, args: env::Args) -> Fallible<()> {
 
 fn main() {
     let (name, args) = program_name(env::args(), "endbasic");
-    if let Err(e) = safe_main(&name, args) {
-        if let Some(e) = e.downcast_ref::<UsageError>() {
-            eprintln!("Usage error: {}", e);
-            eprintln!("Type {} --help for more information", name);
-            process::exit(2);
-        } else if let Some(e) = e.downcast_ref::<getopts::Fail>() {
-            eprintln!("Usage error: {}", e);
-            eprintln!("Type {} --help for more information", name);
-            process::exit(2);
-        } else {
-            eprintln!("{}: {}", name, flatten_causes(&e));
-            process::exit(1);
+    match safe_main(&name, args) {
+        Ok(code) => process::exit(code),
+        Err(e) => {
+            if let Some(e) = e.downcast_ref::<UsageError>() {
+                eprintln!("Usage error: {}", e);
+                eprintln!("Type {} --help for more information", name);
+                process::exit(2);
+            } else if let Some(e) = e.downcast_ref::<getopts::Fail>() {
+                eprintln!("Usage error: {}", e);
+                eprintln!("Type {} --help for more information", name);
+                process::exit(2);
+            } else {
+                eprintln!("{}: {}", name, flatten_causes(&e));
+                process::exit(1);
+            }
         }
     }
 }

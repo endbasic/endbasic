@@ -11,6 +11,7 @@ Output from HELP:
     COLOR     Sets the foreground, the background, or both colors.
     DIR       Displays the list of files on disk.
     EDIT      Edits the stored program.
+    EXIT      Exits the interpreter.
     HELP      Prints interactive help.
     INPUT     Obtains user input from the console.
     LIST      Lists the contents of the stored program.
@@ -23,7 +24,6 @@ Output from HELP:
     SAVE      Saves the current program in memory to the given filename.
 
     Type HELP followed by a command name for details on that command.
-    Press CTRL+D to exit.
 
 Output from HELP CLEAR:
 
@@ -60,6 +60,14 @@ Output from HELP EDIT:
     Without a line number, starts interactive editing at the last line of the stored program (or the first line if there is no program yet).  Editing ends on the first empty line.
 
     With a line number, and if the line does not yet exist, enters interactive editing for that line only.  Otherwise, if the line already exists, presents the contents of that line for interactive editing.  Editing terminates upon an ENTER key press.
+
+Output from HELP EXIT:
+
+    EXIT [code%]
+
+    Exits the interpreter.
+
+    The optional code indicates the return value to return to the system.
 
 Output from HELP HELP:
 
