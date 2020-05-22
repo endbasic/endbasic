@@ -49,8 +49,6 @@ impl HelpCommand {
 
         let mut console = self.console.borrow_mut();
         console.print("")?;
-        console.print(&format!("    This is EndBASIC {}.", env!("CARGO_PKG_VERSION")))?;
-        console.print("")?;
         for name in names {
             let filler = " ".repeat(max_length - name.len());
             let builtin = builtins.get(name).unwrap();
@@ -177,12 +175,8 @@ mod tests {
         machine.exec(&mut b"HELP".as_ref()).unwrap();
 
         let text = flatten_captured_out(console.borrow().captured_out());
-        let version_re = regex::Regex::new("[0-9]+\\.[0-9]+\\.[0-9]+").unwrap();
-        let text = version_re.replace_all(&text, "X.Y.Z").to_owned();
         assert_eq!(
             "
-    This is EndBASIC X.Y.Z.
-
     DO_NOTHING    This is the blurb.
     HELP          Prints interactive help.
 

@@ -4,8 +4,6 @@
 
 Output from HELP:
 
-    This is EndBASIC X.Y.Z.
-
     CLEAR     Clears all variables to restore initial state.
     CLS       Clears the screen.
     COLOR     Sets the foreground, the background, or both colors.
