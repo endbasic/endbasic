@@ -92,6 +92,7 @@ impl Interpreter {
         let machine = endbasic_core::exec::MachineBuilder::default()
             .add_builtins(endbasic_core::console::all_commands(console.clone()))
             .add_builtin(Rc::from(endbasic_core::exec::ClearCommand::default()))
+            .add_builtin(Rc::from(endbasic_core::help::HelpCommand::new(console.clone())))
             .build();
 
         let mut console = console.borrow_mut();
