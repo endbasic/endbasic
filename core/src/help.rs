@@ -59,8 +59,6 @@ impl HelpCommand {
         }
         console.print("")?;
         console.print("    Type HELP followed by a command name for details on that command.")?;
-        // TODO(jmmv): Replace with an EXIT command.
-        console.print("    Press CTRL+D to exit.")?;
         console.print("")?;
         Ok(())
     }
@@ -189,7 +187,6 @@ mod tests {
     HELP          Prints interactive help.
 
     Type HELP followed by a command name for details on that command.
-    Press CTRL+D to exit.
 
 ",
             text

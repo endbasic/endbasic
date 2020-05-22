@@ -302,6 +302,27 @@ fn test_repl_editor() {
 }
 
 #[test]
+fn test_repl_exit() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/repl/exit.bas")],
+        78,
+        Behavior::Null,
+        Behavior::Null,
+        Behavior::Null,
+    );
+
+    check(
+        bin_path("endbasic"),
+        &[],
+        78,
+        Behavior::File(src_path("cli/tests/repl/exit.bas")),
+        Behavior::File(src_path("cli/tests/repl/exit.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_repl_help() {
     check(
         bin_path("endbasic"),
