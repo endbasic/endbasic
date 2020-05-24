@@ -14,8 +14,16 @@
 // under the License.
 
 import * as endbasic_web from "endbasic-web";
+import $ from "jquery";
 import * as xterm from "xterm";
 import * as xterm_fit_addon from "xterm-addon-fit";
+
+var buildId = endbasic_web.get_build_id();
+$('#build-id').text(buildId);
+
+var template = "Build ID: " + buildId;
+$('#report-issue').attr(
+    "href", "https://github.com/jmmv/endbasic/issues/new?body=" + template);
 
 var term = new xterm.Terminal();
 term.setOption("fontSize", 20);

@@ -32,6 +32,24 @@ body > * {
     flex-shrink: 0;
 }
 
+footer {
+    background-color: purple;
+    color: white;
+    font-family: Arial;
+    font-size: 10pt;
+    height: 25pt;
+    padding-right: 10pt;
+    padding-left: 10pt;
+
+    display: flex;
+    align-items: center;
+    justify-content: left;
+}
+
+footer a {
+    color: white;
+}
+
 #terminal {
     flex-grow: 1;
     overflow: hidden;

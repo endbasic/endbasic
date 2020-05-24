@@ -98,13 +98,7 @@ impl Interpreter {
         let mut console = console.borrow_mut();
         console.print("").unwrap();
         console.print("    Welcome to EndBASIC.").unwrap();
-        console
-            .print(&format!(
-                "    Built on {} from revision {}.",
-                env!("VERGEN_BUILD_DATE"),
-                env!("VERGEN_SHA_SHORT")
-            ))
-            .unwrap();
+        console.print("    Type HELP for interactive usage information.").unwrap();
         console.print("").unwrap();
 
         Self { machine, last_error: "".to_owned() }
@@ -132,6 +126,12 @@ impl Interpreter {
         self.last_error = "".to_owned();
         error
     }
+}
+
+/// Gets the build details for display on the interface.
+#[wasm_bindgen]
+pub fn get_build_id() -> String {
+    format!("{} built on {}", env!("VERGEN_SHA_SHORT"), env!("VERGEN_BUILD_DATE"))
 }
 
 /// Module initialization.
