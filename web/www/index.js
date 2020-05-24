@@ -15,10 +15,14 @@
 
 import * as endbasic_web from "endbasic-web";
 import * as xterm from "xterm";
+import * as xterm_fit_addon from "xterm-addon-fit";
 
 var term = new xterm.Terminal();
 term.setOption("fontSize", 20);
+const fitAddon = new xterm_fit_addon.FitAddon();
+term.loadAddon(fitAddon);
 term.open(document.getElementById('terminal'));
+fitAddon.fit();
 
 var queue = [];
 function readLine() {

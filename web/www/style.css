@@ -15,13 +15,25 @@
  * under the License.
  */
 
+html {
+    height: 100%;
+}
+
 body {
     background-color: #000000;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
     margin: 0;
+    width: 100%;
+}
+
+body > * {
+    flex-shrink: 0;
 }
 
 #terminal {
+    flex-grow: 1;
     overflow: hidden;
-    width: 100%;
     padding: 20pt;
 }
