@@ -18,8 +18,10 @@ set -eux
 
 # Runs code sanity checks.
 do_lint() {
-    cargo clippy --all-features --all-targets -- -D warnings
-    cargo fmt -- --check
+    if grep -R '[D]O NOT SUBMIT' *; then
+        echo "Submit blocked by" "DO" "NOT" "SUBMIT" 1>&2
+        return 1
+    fi
 
     local core_version="$(grep ^version core/Cargo.toml | cut -d '"' -f 2)"
     for pkg in */Cargo.toml; do
@@ -36,6 +38,11 @@ do_lint() {
         echo "Versions in Cargo.toml and package.json are inconsistent" 1>&2
         return 1
     fi
+
+    # These checks must come last to avoid creating artifacts in the source
+    # directory.
+    cargo clippy --all-features --all-targets -- -D warnings
+    cargo fmt -- --check
 }
 
 # Ensures that the package is ready for publication.
