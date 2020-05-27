@@ -21,6 +21,7 @@
 #![warn(unsafe_code)]
 
 mod exit;
+mod store;
 
 use async_trait::async_trait;
 use crossterm::{cursor, execute, style, terminal, tty::IsTty, QueueableCommand};
@@ -35,6 +36,7 @@ use std::cell::RefCell;
 use std::io::{self, Write};
 use std::path::Path;
 use std::rc::Rc;
+use store::FileStore;
 
 //// Converts a `crossterm::ErrorKind` to an `io::Error`.
 fn crossterm_error_to_io_error(e: crossterm::ErrorKind) -> io::Error {
@@ -143,13 +145,14 @@ impl console::Console for TextConsole {
 /// files.
 pub fn run_repl_loop(dir: &Path) -> io::Result<i32> {
     let console = Rc::from(RefCell::from(TextConsole::from_stdio()));
+    let store = Rc::from(RefCell::from(FileStore::new(dir)));
     let exit_code = Rc::from(RefCell::from(None));
     let mut machine = MachineBuilder::default()
         .add_builtin(Rc::from(ClearCommand::default()))
         .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
         .add_builtin(Rc::from(HelpCommand::new(console.clone())))
         .add_builtins(console::all_commands(console.clone()))
-        .add_builtins(program::all_commands(console, dir))
+        .add_builtins(program::all_commands(console, store))
         .build();
 
     println!();

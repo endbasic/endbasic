@@ -22,9 +22,8 @@ use async_trait::async_trait;
 use failure::Fallible;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, Write};
-use std::path::{Path, PathBuf};
+use std::io;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 /// Representation of a stored program.
@@ -35,6 +34,28 @@ type ProgramImpl = BTreeMap<usize, String>;
 
 /// Mutable reference to a `ProgramImpl` to serve as the state of all commands.
 type Program = Rc<RefCell<ProgramImpl>>;
+
+/// Metadata of an entry in the store.
+#[derive(Debug, Eq, PartialEq)]
+pub struct Metadata {
+    /// Last modification time of the entry.
+    pub date: time::OffsetDateTime,
+
+    /// Total size of the entry.
+    pub length: u64,
+}
+
+/// Abstract operations to load and store programs on persistent storage.
+pub trait Store {
+    /// Returns a sorted list of the entries in the store and their metadata.
+    fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>>;
+
+    /// Loads the contents of the program given by `name`.
+    fn get(&self, name: &str) -> io::Result<String>;
+
+    /// Saves the in-memory program given by `content` into `name`.
+    fn put(&mut self, name: &str, content: &str) -> io::Result<()>;
+}
 
 /// Interactively edits line `n` of the stored `program` via the `console`.
 ///
@@ -76,17 +97,19 @@ async fn append(program: &mut ProgramImpl, console: &mut dyn Console) -> io::Res
 }
 
 /// Computes the path to a source file given the `dir` where it lives and a `basename`.
-fn to_filename(dir: &Path, basename: &str) -> Fallible<PathBuf> {
-    let mut basename = PathBuf::from(basename);
+fn to_filename<S: Into<PathBuf>>(basename: S) -> io::Result<String> {
+    let mut basename = basename.into();
 
-    ensure!(
-        basename.components().fold(0, |count, _| count + 1) == 1,
-        "Filename must be a single path component"
-    );
+    if basename.components().fold(0, |count, _| count + 1) != 1 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Filename must be a single path component",
+        ));
+    }
 
     if let Some(ext) = basename.extension() {
         if ext != "bas" && ext != "BAS" {
-            bail!("Invalid filename extension");
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid filename extension"));
         }
     } else {
         // Attempt to determine a sensible extension based on the case of the basename, assuming
@@ -101,51 +124,12 @@ fn to_filename(dir: &Path, basename: &str) -> Fallible<PathBuf> {
         }
         basename.set_extension(ext);
     }
-    Ok(dir.join(basename))
-}
-
-/// Directory entry after processing all of its data.
-struct Entry {
-    date: time::OffsetDateTime,
-    len: u64,
-}
-
-/// Fully scans a directory, returning a sorted collection of processed `Entry`s.
-fn do_read_dir(path: &Path) -> io::Result<BTreeMap<String, Entry>> {
-    let mut entries = BTreeMap::default();
-    match fs::read_dir(&path) {
-        Ok(dirents) => {
-            for de in dirents {
-                let de = de?;
-
-                let file_type = de.file_type()?;
-                if !file_type.is_file() && !file_type.is_symlink() {
-                    // Silently ignore entries we cannot handle.
-                    continue;
-                }
-
-                // TODO(jmmv): This follows symlinks for cross-platform simplicity, but it is ugly.
-                // I don't expect symlinks in the programs directory anyway.
-                let metadata = fs::metadata(de.path())?;
-                let date = time::OffsetDateTime::from(metadata.modified()?)
-                    .to_offset(time::UtcOffset::current_local_offset());
-                let len = metadata.len();
-
-                entries.insert(de.file_name().to_string_lossy().to_string(), Entry { date, len });
-            }
-        }
-        Err(e) => {
-            if e.kind() != io::ErrorKind::NotFound {
-                return Err(e);
-            }
-        }
-    }
-    Ok(entries)
+    Ok(basename.to_str().expect("Path came from a String").to_owned())
 }
 
 /// Shows the contents of directory `path`.
-fn show_dir(path: &Path, console: &mut dyn Console) -> io::Result<()> {
-    let entries = do_read_dir(path)?;
+fn show_dir(store: &dyn Store, console: &mut dyn Console) -> io::Result<()> {
+    let entries = store.enumerate()?;
 
     console.print("")?;
     console.print("    Modified              Size    Name")?;
@@ -155,11 +139,11 @@ fn show_dir(path: &Path, console: &mut dyn Console) -> io::Result<()> {
         console.print(&format!(
             "    {}    {:6}    {}",
             details.date.format("%F %H:%M"),
-            details.len,
+            details.length,
             name,
         ))?;
         total_files += 1;
-        total_bytes += details.len;
+        total_bytes += details.length;
     }
     if total_files > 0 {
         console.print("")?;
@@ -169,42 +153,10 @@ fn show_dir(path: &Path, console: &mut dyn Console) -> io::Result<()> {
     Ok(())
 }
 
-/// Loads the contents of the program given by `path`.
-fn load_program(path: &Path) -> io::Result<BTreeMap<usize, String>> {
-    let input = File::open(path)?;
-    let reader = io::BufReader::new(input);
-    let mut n = 10;
-    let mut program = BTreeMap::new();
-    for line in reader.lines() {
-        let line = line?;
-        // TODO(jmmv): Support empty lines in editor.
-        if !line.is_empty() {
-            program.insert(n, line);
-            n += 10;
-        }
-    }
-    Ok(program)
-}
-
-/// Saves the in-memory program given by `lines` into `path`.
-fn save_program(lines: &BTreeMap<usize, String>, path: &Path) -> io::Result<()> {
-    let dir = path.parent().expect("Must be a filename with a directory");
-    fs::create_dir_all(&dir)?;
-
-    // TODO(jmmv): Should back up existing files.
-    let output = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
-    let mut writer = io::BufWriter::new(output);
-    for l in lines.values() {
-        writer.write_all(l.as_bytes())?;
-        writer.write_all(b"\n")?;
-    }
-    Ok(())
-}
-
 /// The `DIR` command.
 struct DirCommand {
     console: Rc<RefCell<dyn Console>>,
-    dir: PathBuf,
+    store: Rc<RefCell<dyn Store>>,
 }
 
 #[async_trait(?Send)]
@@ -223,7 +175,7 @@ impl BuiltinCommand for DirCommand {
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
         ensure!(args.is_empty(), "DIR takes no arguments");
-        show_dir(&self.dir, &mut *self.console.borrow_mut())?;
+        show_dir(&*self.store.borrow(), &mut *self.console.borrow_mut())?;
         Ok(())
     }
 }
@@ -304,7 +256,7 @@ impl BuiltinCommand for ListCommand {
 
 /// The `LOAD` command.
 struct LoadCommand {
-    dir: PathBuf,
+    store: Rc<RefCell<dyn Store>>,
     program: Program,
 }
 
@@ -329,8 +281,20 @@ extension is optional, but if present, it must be .BAS."
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_vars())? {
             Value::Text(t) => {
-                let path = to_filename(&self.dir, &t)?;
-                *self.program.borrow_mut() = load_program(&path)?;
+                let name = to_filename(t)?;
+                let content = self.store.borrow().get(&name)?;
+
+                let mut n = 10;
+                let mut program = BTreeMap::new();
+                for line in content.lines() {
+                    // TODO(jmmv): Support empty lines in editor.
+                    if !line.is_empty() {
+                        program.insert(n, line.to_owned());
+                        n += 10;
+                    }
+                }
+
+                *self.program.borrow_mut() = program;
                 machine.clear();
             }
             _ => bail!("LOAD requires a string as the filename"),
@@ -437,7 +401,7 @@ and other state that may already be set."
 
 /// The `SAVE` command.
 struct SaveCommand {
-    dir: PathBuf,
+    store: Rc<RefCell<dyn Store>>,
     program: Program,
 }
 
@@ -462,8 +426,13 @@ extension is optional, but if present, it must be .BAS."
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_vars())? {
             Value::Text(t) => {
-                let path = to_filename(&self.dir, &t)?;
-                save_program(&self.program.borrow(), &path)?;
+                let name = to_filename(t)?;
+                let content = self
+                    .program
+                    .borrow()
+                    .values()
+                    .fold(String::new(), |contents, line| contents + line + "\n");
+                self.store.borrow_mut().put(&name, &content)?;
             }
             _ => bail!("SAVE requires a string as the filename"),
         }
@@ -476,34 +445,73 @@ extension is optional, but if present, it must be .BAS."
 fn all_commands_for(
     program: Program,
     console: Rc<RefCell<dyn Console>>,
-    dir: &Path,
+    store: Rc<RefCell<dyn Store>>,
 ) -> Vec<Rc<dyn BuiltinCommand>> {
     vec![
-        Rc::from(DirCommand { console: console.clone(), dir: dir.to_owned() }),
+        Rc::from(DirCommand { console: console.clone(), store: store.clone() }),
         Rc::from(EditCommand { console: console.clone(), program: program.clone() }),
         Rc::from(ListCommand { console: console.clone(), program: program.clone() }),
-        Rc::from(LoadCommand { dir: dir.to_owned(), program: program.clone() }),
+        Rc::from(LoadCommand { store: store.clone(), program: program.clone() }),
         Rc::from(NewCommand { program: program.clone() }),
         Rc::from(RenumCommand { program: program.clone() }),
         Rc::from(RunCommand { program: program.clone() }),
-        Rc::from(SaveCommand { dir: dir.to_owned(), program: program }),
+        Rc::from(SaveCommand { store: store.clone(), program: program }),
     ]
 }
 
 /// Instantiates all program editing commands against a new (empty) program, using `console` for
 /// interactive editing, and using `dir` as the on-disk storage for the programs.
-pub fn all_commands(console: Rc<RefCell<dyn Console>>, dir: &Path) -> Vec<Rc<dyn BuiltinCommand>> {
-    all_commands_for(Program::default(), console, dir)
+pub fn all_commands(
+    console: Rc<RefCell<dyn Console>>,
+    store: Rc<RefCell<dyn Store>>,
+) -> Vec<Rc<dyn BuiltinCommand>> {
+    all_commands_for(Program::default(), console, store)
+}
+
+#[cfg(test)]
+mod testutils {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[derive(Default)]
+    pub(crate) struct InMemoryStore {
+        programs: HashMap<String, String>,
+    }
+
+    impl Store for InMemoryStore {
+        fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
+            let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875);
+
+            let mut entries = BTreeMap::new();
+            for (name, contents) in &self.programs {
+                entries.insert(name.clone(), Metadata { date, length: contents.len() as u64 });
+            }
+            Ok(entries)
+        }
+
+        fn get(&self, name: &str) -> io::Result<String> {
+            match self.programs.get(name) {
+                Some(content) => Ok(content.to_owned()),
+                None => Err(io::Error::new(io::ErrorKind::NotFound, "Entry not found")),
+            }
+        }
+
+        fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
+            self.programs.insert(name.to_owned(), content.to_owned());
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::testutils::*;
     use super::*;
     use crate::console::testutils::*;
     use crate::exec::testutils::*;
     use crate::exec::MachineBuilder;
 
-    /// Runs the `input` code on a new machine that stores programs in `dir` and verifies its
+    /// Runs the `input` code on a new machine that stores programs in `store` and verifies its
     /// output.
     ///
     /// `golden_in` is a sequence of pairs each containing an expected prompt printed by `INPUT`
@@ -513,9 +521,9 @@ mod tests {
     ///
     /// `exp_program` is the expected state of `program` after execution, as a collection of line
     /// number and content pairs.
-    fn do_ok_test_with_dir(
+    fn do_ok_test_with_store(
         program: Program,
-        dir: &Path,
+        store: Rc<RefCell<dyn Store>>,
         input: &str,
         golden_in: &'static [(&'static str, &'static str, &'static str)],
         expected_out: &'static [&'static str],
@@ -523,7 +531,7 @@ mod tests {
     ) {
         let console = Rc::from(RefCell::from(MockConsole::new(golden_in)));
         let mut machine = MachineBuilder::default()
-            .add_builtins(all_commands_for(program.clone(), console.clone(), dir))
+            .add_builtins(all_commands_for(program.clone(), console.clone(), store))
             .build();
         machine.exec(&mut input.as_bytes()).expect("Execution failed");
         let expected_out: Vec<CapturedOut> =
@@ -536,7 +544,7 @@ mod tests {
         assert_eq!(exp_program, flat_program.as_slice());
     }
 
-    /// Same as `do_ok_test_with_dir` but with an automatic (and inaccessible) `dir`.
+    /// Same as `do_ok_test_with_store` but with an automatic `store`.
     fn do_ok_test(
         program: Program,
         input: &str,
@@ -544,17 +552,17 @@ mod tests {
         expected_out: &'static [&'static str],
         exp_program: &'static [(usize, &'static str)],
     ) {
-        let dir = tempfile::tempdir().unwrap();
-        do_ok_test_with_dir(program, &dir.path(), input, golden_in, expected_out, exp_program)
+        let store = Rc::from(RefCell::from(InMemoryStore::default()));
+        do_ok_test_with_store(program, store, input, golden_in, expected_out, exp_program)
     }
 
     /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
     ///
     /// Ensures that this does not touch the console.
-    fn do_error_test_with_dir(dir: &Path, input: &str, expected_err: &str) {
+    fn do_error_test_with_store(store: Rc<RefCell<dyn Store>>, input: &str, expected_err: &str) {
         let console = Rc::from(RefCell::from(MockConsole::new(&[])));
         let mut machine = MachineBuilder::default()
-            .add_builtins(all_commands_for(Program::default(), console.clone(), dir))
+            .add_builtins(all_commands_for(Program::default(), console.clone(), store))
             .build();
         assert_eq!(
             expected_err,
@@ -563,78 +571,18 @@ mod tests {
         assert!(console.borrow().captured_out().is_empty());
     }
 
-    /// Same as `do_error_test_with_dir` but with an automatic (and inaccessible) `dir`.
+    /// Same as `do_error_test_with_store` but with an automatic (and inaccessible) `dir`.
     fn do_error_test(input: &str, expected_err: &str) {
-        let dir = tempfile::tempdir().unwrap();
-        do_error_test_with_dir(&dir.path(), input, expected_err)
-    }
-
-    /// Reads `path` and checks that its contents match `exp_lines`.
-    fn check_file(path: &Path, exp_lines: &[&str]) {
-        let file = File::open(path).unwrap();
-        let reader = io::BufReader::new(file);
-        let mut lines = vec![];
-        for line in reader.lines() {
-            lines.push(line.unwrap());
-        }
-        assert_eq!(exp_lines, lines.as_slice());
-    }
-
-    /// Creates `path` with the contents in `lines` and with a deterministic modification time.
-    fn write_file(path: &Path, lines: &[&str]) {
-        let mut file = fs::OpenOptions::new()
-            .create(true)
-            .truncate(false) // Should not be creating the same file more than once.
-            .write(true)
-            .open(path)
-            .unwrap();
-        for line in lines {
-            file.write_fmt(format_args!("{}\n", line)).unwrap();
-        }
-        drop(file);
-
-        let offset = time::UtcOffset::current_local_offset();
-        filetime::set_file_mtime(
-            path,
-            filetime::FileTime::from_unix_time(1_588_757_875 - (offset.as_seconds() as i64), 0),
-        )
-        .unwrap();
+        let store = Rc::from(RefCell::from(InMemoryStore::default()));
+        do_error_test_with_store(store, input, expected_err)
     }
 
     #[test]
     fn test_dir_empty() {
-        let dir = tempfile::tempdir().unwrap();
-        do_ok_test_with_dir(
+        let store = Rc::from(RefCell::from(InMemoryStore::default()));
+        do_ok_test_with_store(
             Program::default(),
-            &dir.path(),
-            "DIR",
-            &[],
-            &["", "    Modified              Size    Name", "    0 file(s), 0 bytes", ""],
-            &[],
-        );
-    }
-
-    #[test]
-    fn test_dir_treat_missing_as_empty() {
-        let dir = tempfile::tempdir().unwrap();
-        do_ok_test_with_dir(
-            Program::default(),
-            &dir.path().join("does-not-exist"),
-            "DIR",
-            &[],
-            &["", "    Modified              Size    Name", "    0 file(s), 0 bytes", ""],
-            &[],
-        );
-    }
-
-    #[test]
-    fn test_dir_ignores_subdirs() {
-        let dir = tempfile::tempdir().unwrap();
-        fs::create_dir(dir.path().join("will-be-ignored")).unwrap();
-
-        do_ok_test_with_dir(
-            Program::default(),
-            &dir.path(),
+            store,
             "DIR",
             &[],
             &["", "    Modified              Size    Name", "    0 file(s), 0 bytes", ""],
@@ -644,15 +592,16 @@ mod tests {
 
     #[test]
     fn test_dir_entries_are_sorted() {
-        let dir = tempfile::tempdir().unwrap();
-        write_file(&dir.path().join("empty.bas"), &[]);
-        write_file(&dir.path().join("some other file.bas"), &["not empty"]);
-        write_file(&dir.path().join("00AAA.BAS"), &["first", "file"]);
-        write_file(&dir.path().join("not a bas.txt"), &[]);
+        let mut store = InMemoryStore::default();
+        store.put("empty.bas", "").unwrap();
+        store.put("some other file.bas", "not empty\n").unwrap();
+        store.put("00AAA.BAS", "first\nfile\n").unwrap();
+        store.put("not a bas.txt", "").unwrap();
+        let store = Rc::from(RefCell::from(store));
 
-        do_ok_test_with_dir(
+        do_ok_test_with_store(
             Program::default(),
-            &dir.path(),
+            store,
             "DIR",
             &[],
             &[
@@ -670,49 +619,10 @@ mod tests {
         );
     }
 
-    #[cfg(not(target_os = "windows"))]
-    #[test]
-    fn test_dir_symlinks_are_followed() {
-        use std::os::unix::fs as unix_fs;
-
-        let dir = tempfile::tempdir().unwrap();
-        write_file(&dir.path().join("some file.bas"), &["this is not empty"]);
-        unix_fs::symlink(&Path::new("some file.bas"), &dir.path().join("a link.bas")).unwrap();
-
-        do_ok_test_with_dir(
-            Program::default(),
-            &dir.path(),
-            "DIR",
-            &[],
-            &[
-                "",
-                "    Modified              Size    Name",
-                "    2020-05-06 09:37        18    a link.bas",
-                "    2020-05-06 09:37        18    some file.bas",
-                "",
-                "    2 file(s), 36 bytes",
-                "",
-            ],
-            &[],
-        );
-    }
-
     #[test]
     fn test_dir_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        do_error_test_with_dir(&dir.path(), "DIR 2", "DIR takes no arguments");
-
-        // TODO(jmmv): This is very ugly... need better error reporting in general, not just for
-        // this one case.
-        let enotdir_message = if cfg!(target_os = "windows") {
-            "The directory name is invalid. (os error 267)"
-        } else {
-            "Not a directory (os error 20)"
-        };
-
-        let file = dir.path().join("not-a-dir");
-        write_file(&file, &[]);
-        do_error_test_with_dir(&file, "DIR", enotdir_message);
+        let store = Rc::from(RefCell::from(InMemoryStore::default()));
+        do_error_test_with_store(store, "DIR 2", "DIR takes no arguments");
     }
 
     #[test]
@@ -838,16 +748,17 @@ mod tests {
 
     #[test]
     fn test_load_ok() {
-        let dir = tempfile::tempdir().unwrap();
-        write_file(&dir.path().join("foo.bas"), &["line 1", "  line 2"]);
-        write_file(&dir.path().join("foo.bak"), &[]);
-        write_file(&dir.path().join("BAR.BAS"), &["line 1", "  line 2"]);
-        write_file(&dir.path().join("Baz.bas"), &["line 1", "  line 2"]);
+        let mut store = InMemoryStore::default();
+        store.put("foo.bas", "line 1\n  line 2\n").unwrap();
+        store.put("foo.bak", "").unwrap();
+        store.put("BAR.BAS", "line 1\n  line 2\n").unwrap();
+        store.put("Baz.bas", "line 1\n  line 2\n").unwrap();
+        let store = Rc::from(RefCell::from(store));
 
         for p in &["foo", "foo.bas", "BAR", "BAR.BAS", "Baz"] {
-            do_ok_test_with_dir(
+            do_ok_test_with_store(
                 Program::default(),
-                &dir.path(),
+                store.clone(),
                 &("LOAD \"".to_owned() + p + "\""),
                 &[],
                 &[],
@@ -858,12 +769,13 @@ mod tests {
 
     #[test]
     fn test_load_skip_empty_lines() {
-        let dir = tempfile::tempdir().unwrap();
-        write_file(&dir.path().join("data.bas"), &["a", "", "b", ""]);
+        let mut store = InMemoryStore::default();
+        store.put("data.bas", "a\n\nb\n\n").unwrap();
+        let store = Rc::from(RefCell::from(store));
 
-        do_ok_test_with_dir(
+        do_ok_test_with_store(
             Program::default(),
-            &dir.path(),
+            store,
             &("LOAD \"data.bas\""),
             &[],
             &[],
@@ -872,10 +784,10 @@ mod tests {
     }
 
     /// Checks errors that should be handled the same way by `LOAD` and `SAVE`.
-    fn check_load_save_common_errors(cmd: &str, dir: &Path) {
-        do_error_test_with_dir(&dir, &cmd, &format!("{} requires a filename", cmd));
-        do_error_test_with_dir(
-            &dir,
+    fn check_load_save_common_errors(cmd: &str, store: Rc<RefCell<dyn Store>>) {
+        do_error_test_with_store(store.clone(), &cmd, &format!("{} requires a filename", cmd));
+        do_error_test_with_store(
+            store.clone(),
             &format!("{} 3", cmd),
             &format!("{} requires a string as the filename", cmd),
         );
@@ -885,16 +797,16 @@ mod tests {
             non_basenames.push("c:foo.bas");
         }
         for p in non_basenames.as_slice() {
-            do_error_test_with_dir(
-                &dir,
+            do_error_test_with_store(
+                store.clone(),
                 &format!("{} \"{}\"", cmd, p),
                 "Filename must be a single path component",
             );
         }
 
         for p in &["foo.bak", "foo.ba", "foo.basic"] {
-            do_error_test_with_dir(
-                &dir,
+            do_error_test_with_store(
+                store.clone(),
                 &format!("{} \"{}\"", cmd, p),
                 "Invalid filename extension",
             );
@@ -903,21 +815,13 @@ mod tests {
 
     #[test]
     fn test_load_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        check_load_save_common_errors("LOAD", &dir.path());
+        let store = Rc::from(RefCell::from(InMemoryStore::default()));
+        check_load_save_common_errors("LOAD", store.clone());
 
-        // TODO(jmmv): This is very ugly... need better error reporting in general, not just for
-        // this one case.
-        let enoent_message = if cfg!(target_os = "windows") {
-            "The system cannot find the file specified. (os error 2)"
-        } else {
-            "No such file or directory (os error 2)"
-        };
+        do_error_test_with_store(store.clone(), "LOAD \"missing-file\"", "Entry not found");
 
-        do_error_test_with_dir(&dir.path(), "LOAD \"missing-file\"", enoent_message);
-
-        write_file(&dir.path().join("mismatched-extension.bat"), &[]);
-        do_error_test_with_dir(&dir.path(), "LOAD \"mismatched-extension\"", enoent_message);
+        store.borrow_mut().put("mismatched-extension.bat", "").unwrap();
+        do_error_test_with_store(store, "LOAD \"mismatched-extension\"", "Entry not found");
     }
 
     #[test]
@@ -1019,17 +923,16 @@ mod tests {
 
     #[test]
     fn test_save_ok() {
-        let dir = tempfile::tempdir().unwrap();
-        let dir = dir.path().join("subdir"); // Should be auto-created.
+        let store = Rc::from(RefCell::from(InMemoryStore::default()));
 
         let program = Program::default();
         program.borrow_mut().insert(10, "line 1".to_owned());
         program.borrow_mut().insert(20, "  line 2".to_owned());
 
         for p in &["first", "second.bas", "THIRD", "FOURTH.BAS", "Fifth"] {
-            do_ok_test_with_dir(
+            do_ok_test_with_store(
                 program.clone(),
-                &dir,
+                store.clone(),
                 &("SAVE \"".to_owned() + p + "\""),
                 &[],
                 &[],
@@ -1038,13 +941,14 @@ mod tests {
         }
 
         for p in &["first.bas", "second.bas", "THIRD.BAS", "FOURTH.BAS", "Fifth.bas"] {
-            check_file(&dir.join(p), &["line 1", "  line 2"]);
+            let content = store.borrow().get(p).unwrap();
+            assert_eq!(content, "line 1\n  line 2\n");
         }
     }
 
     #[test]
     fn test_save_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        check_load_save_common_errors("SAVE", &dir.path());
+        let store = Rc::from(RefCell::from(InMemoryStore::default()));
+        check_load_save_common_errors("SAVE", store);
     }
 }
