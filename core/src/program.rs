@@ -106,7 +106,6 @@ fn to_filename(dir: &Path, basename: &str) -> Fallible<PathBuf> {
 
 /// Directory entry after processing all of its data.
 struct Entry {
-    file_type: fs::FileType,
     date: time::OffsetDateTime,
     len: u64,
 }
@@ -120,6 +119,10 @@ fn do_read_dir(path: &Path) -> io::Result<BTreeMap<String, Entry>> {
                 let de = de?;
 
                 let file_type = de.file_type()?;
+                if !file_type.is_file() && !file_type.is_symlink() {
+                    // Silently ignore entries we cannot handle.
+                    continue;
+                }
 
                 // TODO(jmmv): This follows symlinks for cross-platform simplicity, but it is ugly.
                 // I don't expect symlinks in the programs directory anyway.
@@ -128,10 +131,7 @@ fn do_read_dir(path: &Path) -> io::Result<BTreeMap<String, Entry>> {
                     .to_offset(time::UtcOffset::current_local_offset());
                 let len = metadata.len();
 
-                entries.insert(
-                    de.file_name().to_string_lossy().to_string(),
-                    Entry { file_type, date, len },
-                );
+                entries.insert(de.file_name().to_string_lossy().to_string(), Entry { date, len });
             }
         }
         Err(e) => {
@@ -148,26 +148,13 @@ fn show_dir(path: &Path, console: &mut dyn Console) -> io::Result<()> {
     let entries = do_read_dir(path)?;
 
     console.print("")?;
-    console.print("    Modified            Type       Size    Name")?;
+    console.print("    Modified              Size    Name")?;
     let mut total_files = 0;
     let mut total_bytes = 0;
     for (name, details) in entries {
-        let type_name = {
-            if details.file_type.is_dir() {
-                continue; // LOAD/SAVE don't support directories so skip them.
-            } else if details.file_type.is_file() {
-                "     "
-            } else if details.file_type.is_symlink() {
-                "<LNK>"
-            } else {
-                "<UKN>"
-            }
-        };
-
         console.print(&format!(
-            "    {}    {}    {:6}    {}",
+            "    {}    {:6}    {}",
             details.date.format("%F %H:%M"),
-            type_name,
             details.len,
             name,
         ))?;
@@ -622,7 +609,7 @@ mod tests {
             &dir.path(),
             "DIR",
             &[],
-            &["", "    Modified            Type       Size    Name", "    0 file(s), 0 bytes", ""],
+            &["", "    Modified              Size    Name", "    0 file(s), 0 bytes", ""],
             &[],
         );
     }
@@ -635,7 +622,7 @@ mod tests {
             &dir.path().join("does-not-exist"),
             "DIR",
             &[],
-            &["", "    Modified            Type       Size    Name", "    0 file(s), 0 bytes", ""],
+            &["", "    Modified              Size    Name", "    0 file(s), 0 bytes", ""],
             &[],
         );
     }
@@ -650,7 +637,7 @@ mod tests {
             &dir.path(),
             "DIR",
             &[],
-            &["", "    Modified            Type       Size    Name", "    0 file(s), 0 bytes", ""],
+            &["", "    Modified              Size    Name", "    0 file(s), 0 bytes", ""],
             &[],
         );
     }
@@ -670,11 +657,11 @@ mod tests {
             &[],
             &[
                 "",
-                "    Modified            Type       Size    Name",
-                "    2020-05-06 09:37                 11    00AAA.BAS",
-                "    2020-05-06 09:37                  0    empty.bas",
-                "    2020-05-06 09:37                  0    not a bas.txt",
-                "    2020-05-06 09:37                 10    some other file.bas",
+                "    Modified              Size    Name",
+                "    2020-05-06 09:37        11    00AAA.BAS",
+                "    2020-05-06 09:37         0    empty.bas",
+                "    2020-05-06 09:37         0    not a bas.txt",
+                "    2020-05-06 09:37        10    some other file.bas",
                 "",
                 "    4 file(s), 21 bytes",
                 "",
@@ -699,9 +686,9 @@ mod tests {
             &[],
             &[
                 "",
-                "    Modified            Type       Size    Name",
-                "    2020-05-06 09:37    <LNK>        18    a link.bas",
-                "    2020-05-06 09:37                 18    some file.bas",
+                "    Modified              Size    Name",
+                "    2020-05-06 09:37        18    a link.bas",
+                "    2020-05-06 09:37        18    some file.bas",
                 "",
                 "    2 file(s), 36 bytes",
                 "",
