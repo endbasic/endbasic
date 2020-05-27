@@ -20,14 +20,15 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
+mod exit;
+
 use async_trait::async_trait;
 use crossterm::{cursor, execute, style, terminal, tty::IsTty, QueueableCommand};
-use endbasic_core::ast::{ArgSep, Expr, Value};
 use endbasic_core::console;
-use endbasic_core::exec::{BuiltinCommand, ClearCommand, Machine, MachineBuilder};
+use endbasic_core::exec::{ClearCommand, MachineBuilder};
 use endbasic_core::help::HelpCommand;
 use endbasic_core::program;
-use failure::{bail, ensure, Fallible};
+pub use exit::ExitCommand;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::cell::RefCell;
@@ -58,57 +59,6 @@ pub(crate) fn readline_error_to_io_error(e: ReadlineError) -> io::Error {
         _ => io::ErrorKind::Other,
     };
     io::Error::new(kind, format!("{}", e))
-}
-
-/// The `EXIT` command.
-pub struct ExitCommand {
-    code: Rc<RefCell<Option<i32>>>,
-}
-
-impl ExitCommand {
-    /// Creates a new command that updates `code` with the exit code once called.
-    pub fn new(code: Rc<RefCell<Option<i32>>>) -> Self {
-        Self { code }
-    }
-}
-
-#[async_trait(?Send)]
-impl BuiltinCommand for ExitCommand {
-    fn name(&self) -> &'static str {
-        "EXIT"
-    }
-
-    fn syntax(&self) -> &'static str {
-        "[code%]"
-    }
-
-    fn description(&self) -> &'static str {
-        "Exits the interpreter.
-The optional code indicates the return value to return to the system."
-    }
-
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
-        let arg = match args {
-            [] => 0,
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_vars())? {
-                Value::Integer(n) => {
-                    ensure!(n > 0, "Exit code must be a positive integer");
-                    ensure!(n < 128, "Exit code cannot be larger than 127");
-                    n
-                }
-                _ => bail!("Exit code must be a positive integer"),
-            },
-            _ => bail!("EXIT takes zero or one argument"),
-        };
-        let mut code = self.code.borrow_mut();
-        debug_assert!(code.is_none(), "EXIT called multiple times without exiting");
-        *code = Some(arg);
-
-        // TODO(jmmv): This is ugly, but we need a way to abort execution when we feed a line with
-        // multiple statements to the interpreter.  Maybe this will be nicer with custom error
-        // codes.
-        Err(io::Error::new(io::ErrorKind::UnexpectedEof, "").into())
-    }
 }
 
 /// Implementation of the EndBASIC console to interact with stdin and stdout.
@@ -239,49 +189,4 @@ pub fn run_repl_loop(dir: &Path) -> io::Result<i32> {
     }
     let exit_code = exit_code.borrow();
     Ok(exit_code.expect("Some code path above did not set an exit code"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Runs the code `input` and expects it to fail with `expected_err`.
-    fn do_error_test(input: &str, expected_err: &str) {
-        let exit_code = Rc::from(RefCell::from(None));
-        let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
-            .build();
-        let err = machine.exec(&mut input.as_bytes()).unwrap_err();
-        assert_eq!(expected_err, format!("{}", err));
-        assert!(exit_code.borrow().is_none());
-    }
-
-    #[test]
-    fn test_exit_no_code() {
-        let exit_code = Rc::from(RefCell::from(None));
-        let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
-            .build();
-        machine.exec(&mut b"a = 3: EXIT: a = 4".as_ref()).unwrap_err();
-        assert_eq!(0, exit_code.borrow().unwrap());
-        assert_eq!(3, machine.get_var_as_int("a").unwrap());
-    }
-
-    #[test]
-    fn test_exit_with_code() {
-        let exit_code = Rc::from(RefCell::from(None));
-        let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
-            .build();
-        machine.exec(&mut b"a = 3: EXIT 42: a = 4".as_ref()).unwrap_err();
-        assert_eq!(42, exit_code.borrow().unwrap());
-        assert_eq!(3, machine.get_var_as_int("a").unwrap());
-    }
-
-    #[test]
-    fn test_exit_errors() {
-        do_error_test("EXIT 1, 2", "EXIT takes zero or one argument");
-        do_error_test("EXIT -3", "Exit code must be a positive integer");
-        do_error_test("EXIT 128", "Exit code cannot be larger than 127");
-    }
 }
