@@ -37,6 +37,11 @@ impl FileStore {
 }
 
 impl Store for FileStore {
+    fn delete(&mut self, name: &str) -> io::Result<()> {
+        let path = self.dir.join(name);
+        fs::remove_file(path)
+    }
+
     fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
         let mut entries = BTreeMap::default();
         match fs::read_dir(&self.dir) {
@@ -126,6 +131,34 @@ mod tests {
 
         filetime::set_file_mtime(path, filetime::FileTime::from_unix_time(1_588_757_875, 0))
             .unwrap();
+    }
+
+    #[test]
+    fn test_delete_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        write_file(&dir.path().join("a.bas"), &[]);
+        write_file(&dir.path().join("a.bat"), &[]);
+
+        let mut store = FileStore::new(&dir.path());
+        store.delete("a.bas").unwrap();
+        assert!(!dir.path().join("a.bas").exists());
+        assert!(dir.path().join("a.bat").exists());
+    }
+
+    #[test]
+    fn test_delete_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // TODO(jmmv): This is very ugly... need better error reporting in general, not just for
+        // this one case.
+        let enoent_message = if cfg!(target_os = "windows") {
+            "The system cannot find the file specified. (os error 2)"
+        } else {
+            "No such file or directory (os error 2)"
+        };
+
+        let mut store = FileStore::new(&dir.path());
+        assert_eq!(enoent_message, format!("{}", store.delete("a.bas").unwrap_err()));
     }
 
     #[test]
