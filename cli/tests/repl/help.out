@@ -23,6 +23,7 @@ Output from HELP:
     SAVE      Saves the current program in memory to the given filename.
 
     Type HELP followed by a command name for details on that command.
+    Type HELP LANG for a quick reference guide about the language.
 
 Output from HELP CLEAR:
 

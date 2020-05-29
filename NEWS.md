@@ -20,6 +20,8 @@ not adhere to semantic versioning until 1.0.0.**
 
 *   Added the `DEL` command to delete a saved program.
 
+*   Added a language cheat sheet via `HELP LANG`.
+
 *   Added a barebones web interface.
 
 *   Made the language interpreter `async`-compatible.
