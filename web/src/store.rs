@@ -144,6 +144,25 @@ impl WebStore {
 }
 
 impl Store for WebStore {
+    fn delete(&mut self, name: &str) -> io::Result<()> {
+        let key = Key::for_name(name);
+        let key = key.serialized();
+
+        match self.storage.get(key) {
+            Ok(Some(_)) => (), // File exists.
+            Ok(None) => return Err(io::Error::new(io::ErrorKind::NotFound, "File not found")),
+            Err(_) => (), // Fall through to try deletion anyway.
+        }
+
+        match self.storage.delete(key) {
+            Ok(()) => Ok(()),
+            Err(e) => Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to put remove storage entry with key {}: {:?}", key, e),
+            )),
+        }
+    }
+
     fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
         let mut entries = BTreeMap::new();
 
@@ -247,6 +266,26 @@ mod tests {
     #[wasm_bindgen_test]
     fn test_key_serialized() {
         assert_eq!("endbasic-program:hello.bas", Key::for_name("hello.bas").serialized());
+    }
+
+    #[wasm_bindgen_test]
+    fn test_webstore_delete_ok() {
+        let mut webstore = WebStore::from_window();
+        webstore.storage.clear().unwrap();
+        webstore.storage.set("endbasic-program:first.bas", "").unwrap();
+        webstore.storage.set("endbasic-program:first.bat", "").unwrap();
+
+        webstore.delete("first.bas").unwrap();
+        assert!(webstore.storage.get("endbasic-program:first.bas").unwrap().is_none());
+        webstore.storage.get("endbasic-program:first.bat").unwrap();
+    }
+
+    #[wasm_bindgen_test]
+    fn test_webstore_delete_missing_file() {
+        let mut webstore = WebStore::from_window();
+        webstore.storage.clear().unwrap();
+
+        assert_eq!("File not found", format!("{}", webstore.delete("first.bas").unwrap_err()));
     }
 
     #[wasm_bindgen_test]

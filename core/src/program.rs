@@ -47,6 +47,9 @@ pub struct Metadata {
 
 /// Abstract operations to load and store programs on persistent storage.
 pub trait Store {
+    /// Deletes the program given by `name`.
+    fn delete(&mut self, name: &str) -> io::Result<()>;
+
     /// Returns a sorted list of the entries in the store and their metadata.
     fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>>;
 
@@ -151,6 +154,41 @@ fn show_dir(store: &dyn Store, console: &mut dyn Console) -> io::Result<()> {
     console.print(&format!("    {} file(s), {} bytes", total_files, total_bytes))?;
     console.print("")?;
     Ok(())
+}
+
+/// The `DEL` command.
+struct DelCommand {
+    store: Rc<RefCell<dyn Store>>,
+}
+
+#[async_trait(?Send)]
+impl BuiltinCommand for DelCommand {
+    fn name(&self) -> &'static str {
+        "DEL"
+    }
+
+    fn syntax(&self) -> &'static str {
+        "filename"
+    }
+
+    fn description(&self) -> &'static str {
+        "Deletes the given program.
+The filename must be a string and must be a basename (no directory components).  The .BAS \
+extension is optional, but if present, it must be .BAS."
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+        ensure!(args.len() == 1, "DEL requires a filename");
+        let arg0 = args[0].0.as_ref().expect("Single argument must be present");
+        match arg0.eval(machine.get_vars())? {
+            Value::Text(t) => {
+                let name = to_filename(t)?;
+                self.store.borrow_mut().delete(&name)?;
+            }
+            _ => bail!("DEL requires a string as the filename"),
+        }
+        Ok(())
+    }
 }
 
 /// The `DIR` command.
@@ -448,6 +486,7 @@ fn all_commands_for(
     store: Rc<RefCell<dyn Store>>,
 ) -> Vec<Rc<dyn BuiltinCommand>> {
     vec![
+        Rc::from(DelCommand { store: store.clone() }),
         Rc::from(DirCommand { console: console.clone(), store: store.clone() }),
         Rc::from(EditCommand { console: console.clone(), program: program.clone() }),
         Rc::from(ListCommand { console: console.clone(), program: program.clone() }),
@@ -479,6 +518,13 @@ mod testutils {
     }
 
     impl Store for InMemoryStore {
+        fn delete(&mut self, name: &str) -> io::Result<()> {
+            match self.programs.remove(name) {
+                Some(_) => Ok(()),
+                None => Err(io::Error::new(io::ErrorKind::NotFound, "Entry not found")),
+            }
+        }
+
         fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
             let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875);
 
@@ -575,6 +621,41 @@ mod tests {
     fn do_error_test(input: &str, expected_err: &str) {
         let store = Rc::from(RefCell::from(InMemoryStore::default()));
         do_error_test_with_store(store, input, expected_err)
+    }
+
+    #[test]
+    fn test_del_ok() {
+        let mut store = InMemoryStore::default();
+        store.put("bar.bas", "").unwrap();
+        let store = Rc::from(RefCell::from(store));
+
+        let program = Program::default();
+        program.borrow_mut().insert(10, "Leave me alone".to_owned());
+
+        for p in &["foo", "foo.bas"] {
+            store.borrow_mut().put("foo.bas", "line 1\n  line 2\n").unwrap();
+            do_ok_test_with_store(
+                program.clone(),
+                store.clone(),
+                &("DEL \"".to_owned() + p + "\""),
+                &[],
+                &[],
+                &[(10, "Leave me alone")],
+            );
+        }
+
+        store.borrow().get("bar.bas").unwrap(); // Check that unrelated entries were not touched.
+    }
+
+    #[test]
+    fn test_del_errors() {
+        let store = Rc::from(RefCell::from(InMemoryStore::default()));
+        check_load_save_common_errors("DEL", store.clone());
+
+        do_error_test_with_store(store.clone(), "DEL \"missing-file\"", "Entry not found");
+
+        store.borrow_mut().put("mismatched-extension.bat", "").unwrap();
+        do_error_test_with_store(store, "DEL \"mismatched-extension\"", "Entry not found");
     }
 
     #[test]

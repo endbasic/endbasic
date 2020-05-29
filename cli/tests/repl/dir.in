@@ -27,3 +27,6 @@ thid
 
 SAVE "some lines and a long name.bas"
 DIR ' Two files.
+
+DEL "empty.bas"
+DIR ' One file again.

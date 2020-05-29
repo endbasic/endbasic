@@ -7,6 +7,7 @@ Output from HELP:
     CLEAR     Clears all variables to restore initial state.
     CLS       Clears the screen.
     COLOR     Sets the foreground, the background, or both colors.
+    DEL       Deletes the given program.
     DIR       Displays the list of files on disk.
     EDIT      Edits the stored program.
     EXIT      Exits the interpreter.
@@ -42,6 +43,14 @@ Output from HELP COLOR:
     Sets the foreground, the background, or both colors.
 
     Color numbers are given as ANSI numbers and can be between 0 and 255.  If a color number is not specified, then the color is left unchanged.
+
+Output from HELP DEL:
+
+    DEL filename
+
+    Deletes the given program.
+
+    The filename must be a string and must be a basename (no directory components).  The .BAS extension is optional, but if present, it must be .BAS.
 
 Output from HELP DIR:
 

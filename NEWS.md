@@ -18,6 +18,8 @@ not adhere to semantic versioning until 1.0.0.**
 *   Added the `CLS`, `COLOR`, and `LOCATE` commands for terminal
     manipulation.
 
+*   Added the `DEL` command to delete a saved program.
+
 *   Added a barebones web interface.
 
 *   Made the language interpreter `async`-compatible.
