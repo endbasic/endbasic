@@ -20,6 +20,11 @@ os:
     - osx
     - windows
 
+addons:
+    apt:
+        packages:
+        - firefox
+
 env:
     - DO=lint
     - DO=package

@@ -20,6 +20,13 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
+#[cfg(test)]
+use wasm_bindgen_test::wasm_bindgen_test_configure;
+#[cfg(test)]
+wasm_bindgen_test_configure!(run_in_browser);
+
+mod store;
+
 use async_trait::async_trait;
 use endbasic_core::console::Console;
 use js_sys::{Function, Promise};
@@ -87,12 +94,14 @@ impl Interpreter {
     #[wasm_bindgen(constructor)]
     pub fn new(terminal: xterm_js_rs::Terminal, read_line: Function) -> Self {
         let console = Rc::from(RefCell::from(XtermJsConsole { terminal, read_line }));
+        let store = Rc::from(RefCell::from(store::WebStore::from_window()));
         // TODO(jmmv): Register all commands.  Need to parameterize the program-related commands to
         // not try to do any I/O.
         let machine = endbasic_core::exec::MachineBuilder::default()
             .add_builtins(endbasic_core::console::all_commands(console.clone()))
             .add_builtin(Rc::from(endbasic_core::exec::ClearCommand::default()))
             .add_builtin(Rc::from(endbasic_core::help::HelpCommand::new(console.clone())))
+            .add_builtins(endbasic_core::program::all_commands(console.clone(), store))
             .build();
 
         let mut console = console.borrow_mut();

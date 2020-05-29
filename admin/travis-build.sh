@@ -23,17 +23,21 @@ do_lint() {
         return 1
     fi
 
-    local core_version="$(grep ^version core/Cargo.toml | cut -d '"' -f 2)"
+    local core_version="$(grep ^version core/Cargo.toml \
+        | head -n 1 | cut -d '"' -f 2)"
     for pkg in */Cargo.toml; do
-        local other_version="$(grep ^version "${pkg}" | cut -d '"' -f 2)"
+        local other_version="$(grep ^version "${pkg}" \
+            | head -n 1 | cut -d '"' -f 2)"
         if [ "${core_version}" != "${other_version}" ]; then
             echo "Inconsistent version number in ${pkg}" 1>&2
             return 1
         fi
     done
 
-    local web_version="$(grep ^version web/Cargo.toml | cut -d '"' -f 2)"
-    local json_version="$(grep version web/www/package.json | cut -d '"' -f 4)"
+    local web_version="$(grep ^version web/Cargo.toml \
+        | head -n 1 | cut -d '"' -f 2)"
+    local json_version="$(grep version web/www/package.json \
+        | head -n 1 | cut -d '"' -f 4)"
     if [ "${web_version}" != "${json_version}" ]; then
         echo "Versions in Cargo.toml and package.json are inconsistent" 1>&2
         return 1
@@ -73,6 +77,7 @@ do_test() {
 do_web() {
     cd web
     wasm-pack build
+    wasm-pack test --headless --firefox
     cd -
 
     cd web/www
