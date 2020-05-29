@@ -27,6 +27,15 @@ The latest version of EndBASIC is 0.2.0 and was released on 2020-05-07.
 *   For the web interface, see [`web/README.md`](web/README.md).
 *   For changes across versions, see [`NEWS.md`](NEWS.md).
 
+## Quick start
+
+Simply open EndBASIC right in your browser by visiting:
+
+> https://jmmv.github.io/endbasic/
+
+The whole interpreter runs locally.  Any programs you write are persisted in
+your browser's local storage and not uploaded to the cloud.
+
 ## Installation
 
 There currently are no binary releases for EndBASIC.  To install, first get a
@@ -37,9 +46,6 @@ source using `cargo`:
 ```shell
 cargo install endbasic
 ```
-
-This should work on any Linux, macOS, and Windows system (all of which are
-tested on CI).
 
 ## Examples
 

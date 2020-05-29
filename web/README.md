@@ -21,3 +21,9 @@ EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 
 `endbasic-web` provides a WASM target for the EndBASIC interpreter, as well as
 a minimal web interface to it.
+
+## Trying it out
+
+Visit the following address for a live deployment of the EndBASIC interpreter!
+
+> https://jmmv.github.io/endbasic/
