@@ -24,6 +24,35 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+/// Cheat-sheet for the language syntax.
+const LANG_REFERENCE: &str = r"
+    Variable types and references:
+        name?    Boolean variable (TRUE and FALSE).
+        name%    Integer variable (32 bits).
+        name$    String variable.
+        name     Automatic variable (type determined by its value).
+
+    Assignments:
+        varref = expr
+
+    Expressions:
+        a + b      a - b       a * b     a / b      a MOD b    -a
+        a AND b    NOT a       a OR b    a XOR b
+        a = b      a <> b      a < b     a <= b     a > b      a >= b
+        (a)        varref
+
+    Flow control:
+        IF expr THEN: ...: ELSE IF expr THEN: ...: ELSE: ...: END IF
+        WHILE expr: ...: END WHILE
+
+    Misc:
+        st1: st2    Separates statements (same as a newline).
+        REM text    Comment until end of line.
+        ' text      Comment until end of line.
+        ,           Long separator for arguments to builtin call.
+        ;           Short separator for arguments to builtin call.
+";
+
 /// The `HELP` command.
 pub struct HelpCommand {
     console: Rc<RefCell<dyn Console>>,
@@ -57,6 +86,7 @@ impl HelpCommand {
         }
         console.print("")?;
         console.print("    Type HELP followed by a command name for details on that command.")?;
+        console.print("    Type HELP LANG for a quick reference guide about the language.")?;
         console.print("")?;
         Ok(())
     }
@@ -73,6 +103,16 @@ impl HelpCommand {
         for line in builtin.description().lines() {
             console.print("")?;
             console.print(&format!("    {}", line))?;
+        }
+        console.print("")?;
+        Ok(())
+    }
+
+    fn describe_lang(&self) -> Fallible<()> {
+        let mut console = self.console.borrow_mut();
+        for line in LANG_REFERENCE.lines() {
+            // Print line by line to honor any possible differences in line feeds.
+            console.print(line)?;
         }
         console.print("")?;
         Ok(())
@@ -104,9 +144,13 @@ With a single argument, shows detailed information about the given command."
             [(Some(Expr::Symbol(vref)), ArgSep::End)] => {
                 ensure!(vref.ref_type() == VarType::Auto);
                 let name = vref.name().to_ascii_uppercase();
-                match &builtins.get(name.as_str()) {
-                    Some(builtin) => self.describe(builtin)?,
-                    None => bail!("Cannot describe unknown builtin {}", name),
+                if name == "LANG" {
+                    self.describe_lang()?;
+                } else {
+                    match &builtins.get(name.as_str()) {
+                        Some(builtin) => self.describe(builtin)?,
+                        None => bail!("Cannot describe unknown builtin {}", name),
+                    }
                 }
             }
             _ => bail!("HELP takes zero or only one argument"),
@@ -181,6 +225,7 @@ mod tests {
     HELP          Prints interactive help.
 
     Type HELP followed by a command name for details on that command.
+    Type HELP LANG for a quick reference guide about the language.
 
 ",
             text
@@ -210,5 +255,18 @@ mod tests {
 ",
             &text
         );
+    }
+
+    #[test]
+    fn test_help_lang() {
+        let console = Rc::from(RefCell::from(MockConsole::new(&[])));
+        let mut machine = MachineBuilder::default()
+            .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
+            .add_builtin(Rc::from(DoNothingCommand {}))
+            .build();
+        machine.exec(&mut b"help lang".as_ref()).unwrap();
+
+        let text = flatten_captured_out(console.borrow().captured_out());
+        assert_eq!(String::from(LANG_REFERENCE) + "\n", text);
     }
 }
