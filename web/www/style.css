@@ -55,3 +55,7 @@ footer a {
     overflow: hidden;
     padding: 20pt;
 }
+
+#terminal .xterm-viewport {
+    visibility: hidden;
+}
