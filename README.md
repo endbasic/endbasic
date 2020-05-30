@@ -36,6 +36,11 @@ Simply open EndBASIC right in your browser by visiting:
 The whole interpreter runs locally.  Any programs you write are persisted in
 your browser's local storage and not uploaded to the cloud.
 
+You can also read blog posts on EndBASIC, which cover the motivation behind the
+project, guided tours, etc. by visiting:
+
+> https://jmmv.dev/tags/endbasic/
+
 ## Installation
 
 There currently are no binary releases for EndBASIC.  To install, first get a
