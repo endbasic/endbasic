@@ -26,7 +26,7 @@ $('#report-issue').attr(
     "href", "https://github.com/jmmv/endbasic/issues/new?body=" + template);
 
 var term = new xterm.Terminal();
-term.setOption("fontSize", 20);
+term.setOption("fontSize", 18);
 const fitAddon = new xterm_fit_addon.FitAddon();
 term.loadAddon(fitAddon);
 term.open(document.getElementById('terminal'));
