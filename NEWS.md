@@ -26,6 +26,8 @@ not adhere to semantic versioning until 1.0.0.**
 
 *   Made the language interpreter `async`-compatible.
 
+*   Fixed arithmetic operators to capture overflow conditions.
+
 ## Changes in version 0.2.0
 
 **Released on 2020-05-07.**

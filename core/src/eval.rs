@@ -138,7 +138,10 @@ impl Value {
     /// Performs an addition operation.
     pub fn add(&self, other: &Self) -> Fallible<Self> {
         match (self, other) {
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(lhs + rhs)),
+            (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_add(*rhs) {
+                Some(i) => Ok(Value::Integer(i)),
+                None => Err(format_err!("Overflow adding {} and {}", lhs, rhs)),
+            },
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Text(lhs.to_owned() + rhs)),
             (_, _) => Err(format_err!("Cannot add {:?} and {:?}", self, other)),
         }
@@ -147,7 +150,10 @@ impl Value {
     /// Performs a subtraction operation.
     pub fn sub(&self, other: &Self) -> Fallible<Self> {
         match (self, other) {
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(lhs - rhs)),
+            (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_sub(*rhs) {
+                Some(i) => Ok(Value::Integer(i)),
+                None => Err(format_err!("Overflow subtracting {} from {}", rhs, lhs)),
+            },
             (_, _) => Err(format_err!("Cannot subtract {:?} from {:?}", other, self)),
         }
     }
@@ -155,7 +161,10 @@ impl Value {
     /// Performs a multiplication.
     pub fn mul(&self, other: &Self) -> Fallible<Self> {
         match (self, other) {
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(lhs * rhs)),
+            (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_mul(*rhs) {
+                Some(i) => Ok(Value::Integer(i)),
+                None => Err(format_err!("Overflow multiplying {} by {}", lhs, rhs)),
+            },
             (_, _) => Err(format_err!("Cannot multiply {:?} by {:?}", self, other)),
         }
     }
@@ -164,7 +173,10 @@ impl Value {
     pub fn div(&self, other: &Self) -> Fallible<Self> {
         match (self, other) {
             (Value::Integer(_), Value::Integer(0)) => bail!("Division by zero"),
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(lhs / rhs)),
+            (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_div(*rhs) {
+                Some(i) => Ok(Value::Integer(i)),
+                None => Err(format_err!("Overflow dividing {} by {}", lhs, rhs)),
+            },
             (_, _) => Err(format_err!("Cannot divide {:?} by {:?}", self, other)),
         }
     }
@@ -173,7 +185,10 @@ impl Value {
     pub fn modulo(&self, other: &Self) -> Fallible<Self> {
         match (self, other) {
             (Value::Integer(_), Value::Integer(0)) => bail!("Modulo by zero"),
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(lhs % rhs)),
+            (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_rem(*rhs) {
+                Some(i) => Ok(Value::Integer(i)),
+                None => Err(format_err!("Overflow modulo {} by {}", lhs, rhs)),
+            },
             (_, _) => Err(format_err!("Cannot modulo {:?} by {:?}", self, other)),
         }
     }
@@ -181,7 +196,10 @@ impl Value {
     /// Performs an integer negation.
     pub fn neg(&self) -> Fallible<Self> {
         match self {
-            Value::Integer(i) => Ok(Value::Integer(-i)),
+            Value::Integer(i) => match i.checked_neg() {
+                Some(i) => Ok(Value::Integer(i)),
+                None => Err(format_err!("Overflow negating {}", i)),
+            },
             _ => Err(format_err!("Cannot negate {:?}", self)),
         }
     }
@@ -546,6 +564,11 @@ mod tests {
         );
 
         assert_eq!(Integer(5), Integer(2).add(&Integer(3)).unwrap());
+        assert_eq!(Integer(i32::MAX), Integer(i32::MAX).add(&Integer(0)).unwrap());
+        assert_eq!(
+            format!("Overflow adding {} and 1", i32::MAX),
+            format!("{}", Integer(i32::MAX).add(&Integer(1)).unwrap_err())
+        );
         assert_eq!(
             "Cannot add Integer(4) and Text(\"5\")",
             format!("{}", Integer(4).add(&Text("5".to_owned())).unwrap_err())
@@ -568,6 +591,11 @@ mod tests {
         );
 
         assert_eq!(Integer(-1), Integer(2).sub(&Integer(3)).unwrap());
+        assert_eq!(Integer(i32::MIN), Integer(i32::MIN).sub(&Integer(0)).unwrap());
+        assert_eq!(
+            format!("Overflow subtracting 1 from {}", i32::MIN),
+            format!("{}", Integer(i32::MIN).sub(&Integer(1)).unwrap_err())
+        );
         assert_eq!(
             "Cannot subtract Text(\"5\") from Integer(4)",
             format!("{}", Integer(4).sub(&Text("5".to_owned())).unwrap_err())
@@ -589,6 +617,11 @@ mod tests {
         );
 
         assert_eq!(Integer(6), Integer(2).mul(&Integer(3)).unwrap());
+        assert_eq!(Integer(i32::MAX), Integer(i32::MAX).mul(&Integer(1)).unwrap());
+        assert_eq!(
+            format!("Overflow multiplying {} by 2", i32::MAX),
+            format!("{}", Integer(i32::MAX).mul(&Integer(2)).unwrap_err())
+        );
         assert_eq!(
             "Cannot multiply Integer(4) by Text(\"5\")",
             format!("{}", Integer(4).mul(&Text("5".to_owned())).unwrap_err())
@@ -611,7 +644,12 @@ mod tests {
 
         assert_eq!(Integer(2), Integer(10).div(&Integer(5)).unwrap());
         assert_eq!(Integer(6), Integer(20).div(&Integer(3)).unwrap());
+        assert_eq!(Integer(i32::MIN), Integer(i32::MIN).div(&Integer(1)).unwrap());
         assert_eq!("Division by zero", format!("{}", Integer(4).div(&Integer(0)).unwrap_err()));
+        assert_eq!(
+            format!("Overflow dividing {} by -1", i32::MIN),
+            format!("{}", Integer(i32::MIN).div(&Integer(-1)).unwrap_err())
+        );
         assert_eq!(
             "Cannot divide Integer(4) by Text(\"5\")",
             format!("{}", Integer(4).div(&Text("5".to_owned())).unwrap_err())
@@ -636,6 +674,10 @@ mod tests {
         assert_eq!(Integer(2), Integer(20).modulo(&Integer(3)).unwrap());
         assert_eq!("Modulo by zero", format!("{}", Integer(4).modulo(&Integer(0)).unwrap_err()));
         assert_eq!(
+            format!("Overflow modulo {} by -1", i32::MIN),
+            format!("{}", Integer(i32::MIN).modulo(&Integer(-1)).unwrap_err())
+        );
+        assert_eq!(
             "Cannot modulo Integer(4) by Text(\"5\")",
             format!("{}", Integer(4).modulo(&Text("5".to_owned())).unwrap_err())
         );
@@ -654,6 +696,10 @@ mod tests {
 
         assert_eq!(Integer(-6), Integer(6).neg().unwrap());
         assert_eq!(Integer(5), Integer(-5).neg().unwrap());
+        assert_eq!(
+            format!("Overflow negating {}", i32::MIN),
+            format!("{}", Integer(i32::MIN).neg().unwrap_err())
+        );
 
         assert_eq!(
             "Cannot negate Text(\"\")",
