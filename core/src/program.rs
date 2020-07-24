@@ -494,7 +494,7 @@ fn all_commands_for(
         Rc::from(NewCommand { program: program.clone() }),
         Rc::from(RenumCommand { program: program.clone() }),
         Rc::from(RunCommand { program: program.clone() }),
-        Rc::from(SaveCommand { store: store.clone(), program: program }),
+        Rc::from(SaveCommand { store: store.clone(), program }),
     ]
 }
 

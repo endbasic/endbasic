@@ -179,8 +179,8 @@ mod tests {
         let entries = store.enumerate().unwrap();
         assert_eq!(2, entries.len());
         let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875);
-        assert_eq!(&Metadata { date: date, length: 0 }, entries.get("empty.bas").unwrap());
-        assert_eq!(&Metadata { date: date, length: 18 }, entries.get("some file.bas").unwrap());
+        assert_eq!(&Metadata { date, length: 0 }, entries.get("empty.bas").unwrap());
+        assert_eq!(&Metadata { date, length: 18 }, entries.get("some file.bas").unwrap());
     }
 
     #[test]
