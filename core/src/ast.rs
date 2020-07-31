@@ -15,7 +15,7 @@
 
 //! Abstract Syntax Tree (AST) for the EndBASIC language.
 
-use failure::Fallible;
+use crate::parser::{Error, Result};
 use std::fmt;
 
 /// Represents an expression and provides mechanisms to evaluate it.
@@ -107,8 +107,10 @@ impl VarRef {
     /// Transforms this reference into an unannotated name.
     ///
     /// This is only valid for references that have no annotations in them.
-    pub fn into_unannotated_string(self) -> Fallible<String> {
-        ensure!(self.ref_type == VarType::Auto, "Type annotation not allowed in {}", self);
+    pub fn into_unannotated_string(self) -> Result<String> {
+        if self.ref_type != VarType::Auto {
+            return Err(Error::Bad(format!("Type annotation not allowed in {}", self)));
+        }
         Ok(self.name)
     }
 
