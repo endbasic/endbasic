@@ -17,8 +17,22 @@
 
 use crate::ast::{ArgSep, Expr, Statement, VarRef};
 use crate::lexer::{Lexer, PeekableLexer, Token};
-use failure::Fallible;
 use std::io;
+
+/// Parser errors.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Bad syntax in the input program.
+    #[error("{0}")]
+    Bad(String),
+
+    /// I/O error while parsing the input program.
+    #[error("read error")]
+    Io(#[from] io::Error),
+}
+
+/// Result for parser return values.
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Operators that can appear within an expression.
 ///
@@ -104,16 +118,20 @@ impl ExprOp {
     }
 
     /// Pops operands from the `expr` stack, applies this operation, and pushes the result back.
-    fn apply(&self, exprs: &mut Vec<Expr>) -> Fallible<()> {
-        fn apply1(exprs: &mut Vec<Expr>, f: fn(Box<Expr>) -> Expr) -> Fallible<()> {
-            ensure!(!exprs.is_empty(), "Not enough values to apply operator");
+    fn apply(&self, exprs: &mut Vec<Expr>) -> Result<()> {
+        fn apply1(exprs: &mut Vec<Expr>, f: fn(Box<Expr>) -> Expr) -> Result<()> {
+            if exprs.is_empty() {
+                return Err(Error::Bad("Not enough values to apply operator".to_owned()));
+            }
             let v1 = Box::from(exprs.pop().unwrap());
             exprs.push(f(v1));
             Ok(())
         }
 
-        fn apply2(exprs: &mut Vec<Expr>, f: fn(Box<Expr>, Box<Expr>) -> Expr) -> Fallible<()> {
-            ensure!(exprs.len() >= 2, "Not enough values to apply operator");
+        fn apply2(exprs: &mut Vec<Expr>, f: fn(Box<Expr>, Box<Expr>) -> Expr) -> Result<()> {
+            if exprs.len() < 2 {
+                return Err(Error::Bad("Not enough values to apply operator".to_owned()));
+            }
             let v2 = Box::from(exprs.pop().unwrap());
             let v1 = Box::from(exprs.pop().unwrap());
             exprs.push(f(v1, v2));
@@ -157,10 +175,10 @@ impl<'a> Parser<'a> {
 
     /// Expects the peeked token to be `t` and consumes it.  Otherwise, leaves the token in the
     /// stream and fails with error `err`.
-    fn expect_and_consume(&mut self, t: Token, err: &'static str) -> Fallible<()> {
+    fn expect_and_consume(&mut self, t: Token, err: &'static str) -> Result<()> {
         let peeked = self.lexer.peek()?;
         if *peeked != t {
-            bail!(err);
+            return Err(Error::Bad(err.to_owned()));
         }
         self.lexer.consume_peeked();
         Ok(())
@@ -168,7 +186,7 @@ impl<'a> Parser<'a> {
 
     /// Reads statements until one of the `delims` keywords is found.  The delimiter is not
     /// consumed.
-    fn parse_until(&mut self, delims: &[Token]) -> Fallible<Vec<Statement>> {
+    fn parse_until(&mut self, delims: &[Token]) -> Result<Vec<Statement>> {
         let mut stmts = vec![];
         loop {
             let peeked = self.lexer.peek()?;
@@ -187,23 +205,26 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses an assignment for the variable reference `varref` already read.
-    fn parse_assignment(&mut self, vref: VarRef) -> Fallible<Statement> {
+    fn parse_assignment(&mut self, vref: VarRef) -> Result<Statement> {
         let expr = match self.parse_expr()? {
             Some(expr) => expr,
-            None => bail!("Missing expression in assignment"),
+            None => return Err(Error::Bad("Missing expression in assignment".to_owned())),
         };
 
         let next = self.lexer.peek()?;
         match next {
             Token::Eof | Token::Eol => (),
-            _ => bail!("Unexpected token in assignment"),
+            _ => return Err(Error::Bad("Unexpected token in assignment".to_owned())),
         }
         Ok(Statement::Assignment(vref, expr))
     }
 
     /// Parses a builtin call (things of the form `INPUT a`).
-    fn parse_builtin_call(&mut self, vref: VarRef) -> Fallible<Statement> {
-        let mut name = vref.into_unannotated_string()?;
+    fn parse_builtin_call(&mut self, vref: VarRef) -> Result<Statement> {
+        let mut name = match vref.into_unannotated_string() {
+            Ok(name) => name,
+            Err(e) => return Err(Error::Bad(format!("{}", e))),
+        };
         name.make_ascii_uppercase();
 
         let mut args = vec![];
@@ -226,7 +247,11 @@ impl<'a> Parser<'a> {
                     self.lexer.consume_peeked();
                     args.push((expr, ArgSep::Long));
                 }
-                _ => bail!("Expected comma, semicolon, or end of statement"),
+                _ => {
+                    return Err(Error::Bad(
+                        "Expected comma, semicolon, or end of statement".to_owned(),
+                    ))
+                }
             }
         }
         Ok(Statement::BuiltinCall(name, args))
@@ -239,14 +264,16 @@ impl<'a> Parser<'a> {
     /// arguments to statements, as is the case in `PRINT a , , b`.
     ///
     /// This is an implementation of the Shunting Yard Algorithm by Edgar Dijkstra.
-    fn parse_expr(&mut self) -> Fallible<Option<Expr>> {
+    fn parse_expr(&mut self) -> Result<Option<Expr>> {
         let mut exprs: Vec<Expr> = vec![];
         let mut ops: Vec<ExprOp> = vec![];
 
         let mut need_operand = true; // Also tracks whether an upcoming minus is unary.
         loop {
             let mut handle_operand = |e| {
-                ensure!(need_operand, "Unexpected value in expression");
+                if !need_operand {
+                    return Err(Error::Bad("Unexpected value in expression".to_owned()));
+                }
                 need_operand = false;
                 exprs.push(e);
                 Ok(())
@@ -264,7 +291,9 @@ impl<'a> Parser<'a> {
                 Token::Symbol(vref) => handle_operand(Expr::Symbol(vref))?,
 
                 Token::LeftParen => {
-                    ensure!(need_operand, "Unexpected value in expression");
+                    if !need_operand {
+                        return Err(Error::Bad("Unexpected value in expression".to_owned()));
+                    }
                     ops.push(ExprOp::LeftParen);
                     need_operand = true;
                 }
@@ -316,14 +345,14 @@ impl<'a> Parser<'a> {
                     need_operand = true;
                 }
 
-                Token::Bad(e) => bail!("{}", e),
+                Token::Bad(e) => return Err(Error::Bad(e)),
 
                 Token::Eof | Token::Eol | Token::Comma | Token::Semicolon | Token::Then => {
                     panic!("Field separators handled above")
                 }
 
                 Token::If | Token::Else | Token::Elseif | Token::End | Token::While => {
-                    bail!("Unexpected keyword in expression")
+                    return Err(Error::Bad("Unexpected keyword in expression".to_owned()));
                 }
             };
         }
@@ -340,10 +369,10 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses an `IF` statement.
-    fn parse_if(&mut self) -> Fallible<Statement> {
+    fn parse_if(&mut self) -> Result<Statement> {
         let expr = match self.parse_expr()? {
             Some(expr) => expr,
-            None => bail!("No expression in IF statement"),
+            None => return Err(Error::Bad("No expression in IF statement".to_owned())),
         };
         self.expect_and_consume(Token::Then, "No THEN in IF statement")?;
         self.expect_and_consume(Token::Eol, "Expecting newline after THEN")?;
@@ -357,22 +386,33 @@ impl<'a> Parser<'a> {
                     self.lexer.consume_peeked();
                     let expr = match self.parse_expr()? {
                         Some(expr) => expr,
-                        None => bail!("No expression in ELSEIF statement"),
+                        None => {
+                            return Err(Error::Bad("No expression in ELSEIF statement".to_owned()))
+                        }
                     };
                     self.expect_and_consume(Token::Then, "No THEN in ELSEIF statement")?;
                     self.expect_and_consume(Token::Eol, "Expecting newline after THEN")?;
                     let stmts2 = self.parse_until(&[Token::Elseif, Token::Else, Token::End])?;
                     branches.push((expr, stmts2));
                 }
-                Token::Else => {
-                    self.lexer.consume_peeked();
-                    self.expect_and_consume(Token::Eol, "Expecting newline after ELSE")?;
-                    let stmts2 = self.parse_until(&[Token::End])?;
-                    branches.push((Expr::Boolean(true), stmts2));
-                }
                 _ => break,
             }
         }
+
+        let peeked = self.lexer.peek()?;
+        if *peeked == Token::Else {
+            self.lexer.consume_peeked();
+            self.expect_and_consume(Token::Eol, "Expecting newline after ELSE")?;
+            let stmts2 = self.parse_until(&[Token::Elseif, Token::Else, Token::End])?;
+            let peeked = self.lexer.peek()?;
+            match *peeked {
+                Token::Elseif => return Err(Error::Bad("Unexpected ELSEIF after ELSE".to_owned())),
+                Token::Else => return Err(Error::Bad("Duplicate ELSE after ELSE".to_owned())),
+                _ => (),
+            }
+            branches.push((Expr::Boolean(true), stmts2));
+        }
+
         self.expect_and_consume(Token::End, "IF without END IF")?;
         self.expect_and_consume(Token::If, "IF without END IF")?;
 
@@ -380,7 +420,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Advances until the next statement after failing to parse an `IF` statement.
-    fn reset_if(&mut self) -> Fallible<()> {
+    fn reset_if(&mut self) -> Result<()> {
         loop {
             match self.lexer.peek()? {
                 Token::Eof => break,
@@ -398,10 +438,10 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses a `WHILE` statement.
-    fn parse_while(&mut self) -> Fallible<Statement> {
+    fn parse_while(&mut self) -> Result<Statement> {
         let expr = match self.parse_expr()? {
             Some(expr) => expr,
-            None => bail!("No expression in WHILE statement"),
+            None => return Err(Error::Bad("No expression in WHILE statement".to_owned())),
         };
         self.expect_and_consume(Token::Eol, "Expecting newline after WHILE")?;
 
@@ -413,7 +453,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Advances until the next statement after failing to parse a `WHILE` statement.
-    fn reset_while(&mut self) -> Fallible<()> {
+    fn reset_while(&mut self) -> Result<()> {
         loop {
             match self.lexer.peek()? {
                 Token::Eof => break,
@@ -434,7 +474,7 @@ impl<'a> Parser<'a> {
     ///
     /// On success, the stream is left in a position where the next statement can be extracted.
     /// On failure, the caller must advance the stream to the next statement by calling `reset`.
-    fn parse_one(&mut self) -> Fallible<Option<Statement>> {
+    fn parse_one(&mut self) -> Result<Option<Statement>> {
         loop {
             match self.lexer.peek()? {
                 Token::Eol => {
@@ -470,7 +510,7 @@ impl<'a> Parser<'a> {
                 }
                 Ok(Some(result?))
             }
-            t => bail!("Unexpected token {:?} in statement", t),
+            t => return Err(Error::Bad(format!("Unexpected token {:?} in statement", t))),
         };
 
         match self.lexer.peek()? {
@@ -478,14 +518,14 @@ impl<'a> Parser<'a> {
             Token::Eol => {
                 self.lexer.consume_peeked();
             }
-            _ => bail!("Expected newline"),
+            _ => return Err(Error::Bad("Expected newline".to_owned())),
         };
 
         res
     }
 
     /// Advances until the next statement after failing to parse a single statement.
-    fn reset(&mut self) -> Fallible<()> {
+    fn reset(&mut self) -> Result<()> {
         loop {
             match self.lexer.peek()? {
                 Token::Eof => break,
@@ -504,7 +544,7 @@ impl<'a> Parser<'a> {
     /// Extracts the next available statement from the input stream, or `None` if none is available.
     ///
     /// The stream is always left in a position where the next statement extraction can be tried.
-    pub fn parse(&mut self) -> Fallible<Option<Statement>> {
+    pub fn parse(&mut self) -> Result<Option<Statement>> {
         let result = self.parse_one();
         if result.is_err() {
             self.reset()?;
@@ -955,11 +995,8 @@ mod tests {
         do_error_test("IF 1 THEN\nEND\n", "IF without END IF");
         do_error_test("IF 1 THEN\nEND IF foo", "Expected newline");
 
-        do_error_test(
-            "IF 1 THEN\nELSE\nELSEIF 2 THEN\nEND IF",
-            "Unexpected token Elseif in statement",
-        );
-        do_error_test("IF 1 THEN\nELSE\nELSE\nEND IF", "Unexpected token Else in statement");
+        do_error_test("IF 1 THEN\nELSE\nELSEIF 2 THEN\nEND IF", "Unexpected ELSEIF after ELSE");
+        do_error_test("IF 1 THEN\nELSE\nELSE\nEND IF", "Duplicate ELSE after ELSE");
 
         do_error_test_no_reset("ELSEIF 1 THEN\nEND IF", "Unexpected token Elseif in statement");
         do_error_test_no_reset("ELSE 1\nEND IF", "Unexpected token Else in statement");
