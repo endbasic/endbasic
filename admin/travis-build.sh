@@ -77,7 +77,7 @@ do_test() {
 do_web() {
     cd web
     wasm-pack build
-    wasm-pack test --headless --firefox
+    wasm-pack test --headless --chrome
     cd -
 
     cd web/www
