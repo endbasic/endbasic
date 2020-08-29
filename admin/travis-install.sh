@@ -35,10 +35,6 @@ case "${DO}" in
         [ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
         nvm install --lts
 
-        # The contents of ~/.cargo/ are cached across builds, and the wasm-pack
-        # installed asks for confirmation before overwriting files.  Avoid that
-        # by removing the offending files upfront.
-        rm -f ~/.cargo/bin/wasm-pack
         curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
         ;;
 

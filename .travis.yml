@@ -21,9 +21,7 @@ os:
     - windows
 
 addons:
-    apt:
-        packages:
-        - firefox
+    chrome: stable
 
 env:
     - DO=lint
