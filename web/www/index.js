@@ -40,23 +40,23 @@ function readLine() {
 var interpreter = new endbasic_web.Interpreter(term, readLine);
 
 var line = "";
-term.onKey(e => {
-    const printable = !e.domEvent.altKey && !e.domEvent.altGraphKey && !e.domEvent.ctrlKey
-        && !e.domEvent.metaKey;
-
-    if (e.domEvent.keyCode === 8) {
-        if (line.length > 0) {
-            term.write('\b \b');
-            line = line.substring(0, line.length - 1);
+term.onData(e => {
+    for (var i = 0; i < e.length; i++) {
+        let ch = e.charAt(i);
+        if (ch === "\x7f") {
+            if (line.length > 0) {
+                term.write('\b \b');
+                line = line.substring(0, line.length - 1);
+            }
+        } else if (ch === "\x0d") {
+            term.write("\n\r");
+            var resolveReadLine = queue.shift();
+            resolveReadLine(line);
+            line = "";
+        } else {
+            term.write(ch);
+            line += ch;
         }
-    } else if (e.domEvent.keyCode === 13) {
-        term.write("\n\r");
-        var resolveReadLine = queue.shift();
-        resolveReadLine(line);
-        line = "";
-    } else if (printable) {
-        term.write(e.key);
-        line += e.key;
     }
 });
 
