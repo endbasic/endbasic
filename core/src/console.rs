@@ -182,7 +182,10 @@ variable to update with the obtained input."
             match console.input(&prompt, &previous_answer).await {
                 Ok(answer) => {
                     match Value::parse_as(vref.ref_type(), answer.trim_end()) {
-                        Ok(value) => return machine.get_mut_vars().set(vref, value),
+                        Ok(value) => {
+                            machine.get_mut_vars().set(vref, value)?;
+                            return Ok(());
+                        }
                         Err(e) => console.print(&format!("Retry input: {}", e))?,
                     }
                     previous_answer = answer;

@@ -16,17 +16,33 @@
 //! Evaluator for EndBASIC expressions.
 
 use crate::ast::{Expr, Value, VarRef, VarType};
-use failure::Fallible;
 use std::collections::HashMap;
 use std::mem;
 
+/// Evaluation errors.
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
+pub struct Error {
+    message: String,
+}
+
+impl Error {
+    /// Constructs a new evaluation error from a textual `message`.
+    fn new<S: Into<String>>(message: S) -> Self {
+        Self { message: message.into() }
+    }
+}
+
+/// Result for evaluation return values.
+pub type Result<T> = std::result::Result<T, Error>;
+
 impl Value {
     /// Parses a string `s` and constructs a `Value` that matches a given `VarType`.
-    pub fn parse_as<T: Into<String>>(vtype: VarType, s: T) -> Fallible<Value> {
-        fn parse_i32(s: &str) -> Fallible<Value> {
+    pub fn parse_as<T: Into<String>>(vtype: VarType, s: T) -> Result<Value> {
+        fn parse_i32(s: &str) -> Result<Value> {
             match s.parse::<i32>() {
                 Ok(i) => Ok(Value::Integer(i)),
-                Err(_) => bail!("Invalid integer literal {}", s),
+                Err(_) => Err(Error::new(format!("Invalid integer literal {}", s))),
             }
         }
 
@@ -40,7 +56,7 @@ impl Value {
                 } else if raw == "FALSE" || raw == "NO" || raw == "N" {
                     Ok(Value::Boolean(false))
                 } else {
-                    bail!("Invalid boolean literal {}", s);
+                    Err(Error::new(format!("Invalid boolean literal {}", s)))
                 }
             }
             VarType::Integer => parse_i32(&s),
@@ -49,159 +65,159 @@ impl Value {
     }
 
     /// Performs a logical "and" operation.
-    pub fn and(&self, other: &Self) -> Fallible<Self> {
+    pub fn and(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs && *rhs)),
-            (_, _) => Err(format_err!("Cannot AND {:?} and {:?}", self, other)),
+            (_, _) => Err(Error::new(format!("Cannot AND {:?} and {:?}", self, other))),
         }
     }
 
     /// Performs a logical "or" operation.
-    pub fn or(&self, other: &Self) -> Fallible<Self> {
+    pub fn or(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs || *rhs)),
-            (_, _) => Err(format_err!("Cannot OR {:?} and {:?}", self, other)),
+            (_, _) => Err(Error::new(format!("Cannot OR {:?} and {:?}", self, other))),
         }
     }
 
     /// Performs a logical "xor" operation.
-    pub fn xor(&self, other: &Self) -> Fallible<Self> {
+    pub fn xor(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs ^ *rhs)),
-            (_, _) => Err(format_err!("Cannot XOR {:?} and {:?}", self, other)),
+            (_, _) => Err(Error::new(format!("Cannot XOR {:?} and {:?}", self, other))),
         }
     }
 
     /// Performs a logical "not" operation.
-    pub fn not(&self) -> Fallible<Self> {
+    pub fn not(&self) -> Result<Self> {
         match self {
             Value::Boolean(b) => Ok(Value::Boolean(!b)),
-            _ => Err(format_err!("Cannot apply NOT to {:?}", self)),
+            _ => Err(Error::new(format!("Cannot apply NOT to {:?}", self))),
         }
     }
 
     /// Performs an equality check.
-    pub fn eq(&self, other: &Self) -> Fallible<Self> {
+    pub fn eq(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(lhs == rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs == rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs == rhs)),
-            (_, _) => Err(format_err!("Cannot compare {:?} and {:?} with =", self, other)),
+            (_, _) => Err(Error::new(format!("Cannot compare {:?} and {:?} with =", self, other))),
         }
     }
 
     /// Performs an inequality check.
-    pub fn ne(&self, other: &Self) -> Fallible<Self> {
+    pub fn ne(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(lhs != rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs != rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs != rhs)),
-            (_, _) => Err(format_err!("Cannot compare {:?} and {:?} with <>", self, other)),
+            (_, _) => Err(Error::new(format!("Cannot compare {:?} and {:?} with <>", self, other))),
         }
     }
 
     /// Performs a less-than check.
-    pub fn lt(&self, other: &Self) -> Fallible<Self> {
+    pub fn lt(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs < rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs < rhs)),
-            (_, _) => Err(format_err!("Cannot compare {:?} and {:?} with <", self, other)),
+            (_, _) => Err(Error::new(format!("Cannot compare {:?} and {:?} with <", self, other))),
         }
     }
 
     /// Performs a less-than or equal-to check.
-    pub fn le(&self, other: &Self) -> Fallible<Self> {
+    pub fn le(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
-            (_, _) => Err(format_err!("Cannot compare {:?} and {:?} with <=", self, other)),
+            (_, _) => Err(Error::new(format!("Cannot compare {:?} and {:?} with <=", self, other))),
         }
     }
 
     /// Performs a greater-than check.
-    pub fn gt(&self, other: &Self) -> Fallible<Self> {
+    pub fn gt(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs > rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs > rhs)),
-            (_, _) => Err(format_err!("Cannot compare {:?} and {:?} with >", self, other)),
+            (_, _) => Err(Error::new(format!("Cannot compare {:?} and {:?} with >", self, other))),
         }
     }
 
     /// Performs a greater-than or equal to check.
-    pub fn ge(&self, other: &Self) -> Fallible<Self> {
+    pub fn ge(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
-            (_, _) => Err(format_err!("Cannot compare {:?} and {:?} with >=", self, other)),
+            (_, _) => Err(Error::new(format!("Cannot compare {:?} and {:?} with >=", self, other))),
         }
     }
 
     /// Performs an addition operation.
-    pub fn add(&self, other: &Self) -> Fallible<Self> {
+    pub fn add(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_add(*rhs) {
                 Some(i) => Ok(Value::Integer(i)),
-                None => Err(format_err!("Overflow adding {} and {}", lhs, rhs)),
+                None => Err(Error::new(format!("Overflow adding {} and {}", lhs, rhs))),
             },
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Text(lhs.to_owned() + rhs)),
-            (_, _) => Err(format_err!("Cannot add {:?} and {:?}", self, other)),
+            (_, _) => Err(Error::new(format!("Cannot add {:?} and {:?}", self, other))),
         }
     }
 
     /// Performs a subtraction operation.
-    pub fn sub(&self, other: &Self) -> Fallible<Self> {
+    pub fn sub(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_sub(*rhs) {
                 Some(i) => Ok(Value::Integer(i)),
-                None => Err(format_err!("Overflow subtracting {} from {}", rhs, lhs)),
+                None => Err(Error::new(format!("Overflow subtracting {} from {}", rhs, lhs))),
             },
-            (_, _) => Err(format_err!("Cannot subtract {:?} from {:?}", other, self)),
+            (_, _) => Err(Error::new(format!("Cannot subtract {:?} from {:?}", other, self))),
         }
     }
 
     /// Performs a multiplication.
-    pub fn mul(&self, other: &Self) -> Fallible<Self> {
+    pub fn mul(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_mul(*rhs) {
                 Some(i) => Ok(Value::Integer(i)),
-                None => Err(format_err!("Overflow multiplying {} by {}", lhs, rhs)),
+                None => Err(Error::new(format!("Overflow multiplying {} by {}", lhs, rhs))),
             },
-            (_, _) => Err(format_err!("Cannot multiply {:?} by {:?}", self, other)),
+            (_, _) => Err(Error::new(format!("Cannot multiply {:?} by {:?}", self, other))),
         }
     }
 
     /// Performs an integer division.
-    pub fn div(&self, other: &Self) -> Fallible<Self> {
+    pub fn div(&self, other: &Self) -> Result<Self> {
         match (self, other) {
-            (Value::Integer(_), Value::Integer(0)) => bail!("Division by zero"),
+            (Value::Integer(_), Value::Integer(0)) => Err(Error::new("Division by zero")),
             (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_div(*rhs) {
                 Some(i) => Ok(Value::Integer(i)),
-                None => Err(format_err!("Overflow dividing {} by {}", lhs, rhs)),
+                None => Err(Error::new(format!("Overflow dividing {} by {}", lhs, rhs))),
             },
-            (_, _) => Err(format_err!("Cannot divide {:?} by {:?}", self, other)),
+            (_, _) => Err(Error::new(format!("Cannot divide {:?} by {:?}", self, other))),
         }
     }
 
     /// Performs a modulo operation.
-    pub fn modulo(&self, other: &Self) -> Fallible<Self> {
+    pub fn modulo(&self, other: &Self) -> Result<Self> {
         match (self, other) {
-            (Value::Integer(_), Value::Integer(0)) => bail!("Modulo by zero"),
+            (Value::Integer(_), Value::Integer(0)) => Err(Error::new("Modulo by zero")),
             (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_rem(*rhs) {
                 Some(i) => Ok(Value::Integer(i)),
-                None => Err(format_err!("Overflow modulo {} by {}", lhs, rhs)),
+                None => Err(Error::new(format!("Overflow modulo {} by {}", lhs, rhs))),
             },
-            (_, _) => Err(format_err!("Cannot modulo {:?} by {:?}", self, other)),
+            (_, _) => Err(Error::new(format!("Cannot modulo {:?} by {:?}", self, other))),
         }
     }
 
     /// Performs an integer negation.
-    pub fn neg(&self) -> Fallible<Self> {
+    pub fn neg(&self) -> Result<Self> {
         match self {
             Value::Integer(i) => match i.checked_neg() {
                 Some(i) => Ok(Value::Integer(i)),
-                None => Err(format_err!("Overflow negating {}", i)),
+                None => Err(Error::new(format!("Overflow negating {}", i))),
             },
-            _ => Err(format_err!("Cannot negate {:?}", self)),
+            _ => Err(Error::new(format!("Cannot negate {:?}", self))),
         }
     }
 }
@@ -234,12 +250,14 @@ impl Vars {
     ///
     /// Returns an error if the variable is not defined, or if the type annotation in the variable
     /// reference does not match the type of the value that the variable contains.
-    pub fn get(&self, vref: &VarRef) -> Fallible<&Value> {
+    pub fn get(&self, vref: &VarRef) -> Result<&Value> {
         let value = match self.vars.get(&vref.name().to_ascii_uppercase()) {
             Some(v) => v,
-            None => bail!("Undefined variable {}", vref.name()),
+            None => return Err(Error::new(format!("Undefined variable {}", vref.name()))),
         };
-        ensure!(vref.accepts(&value), "Incompatible types in {} reference", vref);
+        if !vref.accepts(&value) {
+            return Err(Error::new(format!("Incompatible types in {} reference", vref)));
+        }
         Ok(value)
     }
 
@@ -255,15 +273,15 @@ impl Vars {
     ///
     /// If the variable is already defined, then the type of the new value must be compatible with
     /// the existing variable.  In other words: a variable cannot change types while it's alive.
-    pub fn set(&mut self, vref: &VarRef, value: Value) -> Fallible<()> {
+    pub fn set(&mut self, vref: &VarRef, value: Value) -> Result<()> {
         let name = vref.name().to_ascii_uppercase();
-        ensure!(vref.accepts(&value), "Incompatible types in {} assignment", vref);
+        if !vref.accepts(&value) {
+            return Err(Error::new(format!("Incompatible types in {} assignment", vref)));
+        }
         if let Some(old_value) = self.vars.get_mut(&name) {
-            ensure!(
-                mem::discriminant(&value) == mem::discriminant(old_value),
-                "Incompatible types in {} assignment",
-                vref
-            );
+            if mem::discriminant(&value) != mem::discriminant(old_value) {
+                return Err(Error::new(format!("Incompatible types in {} assignment", vref)));
+            }
             *old_value = value;
         } else {
             self.vars.insert(name, value);
@@ -277,7 +295,7 @@ impl Expr {
     ///
     /// Variable references are resolved by querying `vars`.  Errors in the computation are returned
     /// via the special `Value::Bad` type.
-    pub fn eval(&self, vars: &Vars) -> Fallible<Value> {
+    pub fn eval(&self, vars: &Vars) -> Result<Value> {
         match self {
             Expr::Boolean(b) => Ok(Value::Boolean(*b)),
             Expr::Integer(i) => Ok(Value::Integer(*i)),

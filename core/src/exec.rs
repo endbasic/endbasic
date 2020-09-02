@@ -153,7 +153,8 @@ impl Machine {
     /// Assigns the value of `expr` to the variable `vref`.
     fn assign(&mut self, vref: &VarRef, expr: &Expr) -> Fallible<()> {
         let value = expr.eval(&self.vars)?;
-        self.vars.set(&vref, value)
+        self.vars.set(&vref, value)?;
+        Ok(())
     }
 
     /// Executes an `IF` statement.
