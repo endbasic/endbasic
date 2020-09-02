@@ -19,13 +19,9 @@
 //! how to hook up native Rust code into the interpreter.  These commands share some out-of-band
 //! state not represented within the variables of the machine.
 
-#[macro_use]
-extern crate failure;
-
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value};
-use endbasic_core::exec::{BuiltinCommand, Machine, MachineBuilder};
-use failure::Fallible;
+use endbasic_core::exec::{self, BuiltinCommand, Machine, MachineBuilder};
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -58,12 +54,18 @@ impl BuiltinCommand for StoreCommand {
         "Saves the string argument given to it in a Rust variable."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
-        ensure!(args.len() == 1, "STORE takes one argument only");
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        machine: &mut Machine,
+    ) -> exec::Result<()> {
+        if args.len() != 1 {
+            return exec::new_usage_error("STORE takes one argument only");
+        }
         let expr = args[0].0.as_ref().expect("A single argument can never be empty");
         match expr.eval(machine.get_vars())? {
             Value::Text(t) => *self.state.borrow_mut() = t,
-            _ => bail!("Mismatched expression type"),
+            _ => return exec::new_usage_error("Mismatched expression type"),
         }
         Ok(())
     }
@@ -88,8 +90,14 @@ impl BuiltinCommand for RetrieveCommand {
         "Retrieves the string saved by `StoreCommand` and prints it to the console."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
-        ensure!(args.is_empty(), "RETRIEVE takes no arguments");
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        _machine: &mut Machine,
+    ) -> exec::Result<()> {
+        if !args.is_empty() {
+            return exec::new_usage_error("RETRIEVE takes no arguments");
+        }
         println!("The stored value was: {}", self.state.borrow());
         Ok(())
     }

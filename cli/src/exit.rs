@@ -17,8 +17,7 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value};
-use endbasic_core::exec::{BuiltinCommand, Machine};
-use failure::{bail, ensure, Fallible};
+use endbasic_core::exec::{self, BuiltinCommand, Machine};
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -50,18 +49,26 @@ impl BuiltinCommand for ExitCommand {
 The optional code indicates the return value to return to the system."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        machine: &mut Machine,
+    ) -> exec::Result<()> {
         let arg = match args {
             [] => 0,
             [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_vars())? {
                 Value::Integer(n) => {
-                    ensure!(n >= 0, "Exit code must be a positive integer");
-                    ensure!(n < 128, "Exit code cannot be larger than 127");
+                    if n < 0 {
+                        return exec::new_usage_error("Exit code must be a positive integer");
+                    }
+                    if n >= 128 {
+                        return exec::new_usage_error("Exit code cannot be larger than 127");
+                    }
                     n
                 }
-                _ => bail!("Exit code must be a positive integer"),
+                _ => return exec::new_usage_error("Exit code must be a positive integer"),
             },
-            _ => bail!("EXIT takes zero or one argument"),
+            _ => return exec::new_usage_error("EXIT takes zero or one argument"),
         };
         let mut code = self.code.borrow_mut();
         debug_assert!(code.is_none(), "EXIT called multiple times without exiting");

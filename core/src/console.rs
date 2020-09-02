@@ -16,9 +16,8 @@
 //! Console representation and manipulation.
 
 use crate::ast::{ArgSep, Expr, Value};
-use crate::exec::{BuiltinCommand, Machine};
+use crate::exec::{self, BuiltinCommand, Machine};
 use async_trait::async_trait;
-use failure::Fallible;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -70,8 +69,14 @@ impl BuiltinCommand for ClsCommand {
         "Clears the screen."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
-        ensure!(args.is_empty(), "CLS takes no arguments");
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        _machine: &mut Machine,
+    ) -> exec::Result<()> {
+        if !args.is_empty() {
+            return exec::new_usage_error("CLS takes no arguments");
+        }
         self.console.borrow_mut().clear()?;
         Ok(())
     }
@@ -98,19 +103,27 @@ Color numbers are given as ANSI numbers and can be between 0 and 255.  If a colo
 specified, then the color is left unchanged."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        machine: &mut Machine,
+    ) -> exec::Result<()> {
         let (fg_expr, bg_expr): (&Option<Expr>, &Option<Expr>) = match args {
             [(fg, ArgSep::End)] => (fg, &None),
             [(fg, ArgSep::Long), (bg, ArgSep::End)] => (fg, bg),
-            _ => bail!("COLOR takes one or two arguments separated by a comma"),
+            _ => {
+                return exec::new_usage_error(
+                    "COLOR takes one or two arguments separated by a comma",
+                )
+            }
         };
 
-        fn get_color(e: &Option<Expr>, machine: &Machine) -> Fallible<Option<u8>> {
+        fn get_color(e: &Option<Expr>, machine: &Machine) -> exec::Result<Option<u8>> {
             match e {
                 Some(e) => match e.eval(machine.get_vars())? {
                     Value::Integer(i) if i >= 0 && i <= std::u8::MAX as i32 => Ok(Some(i as u8)),
-                    Value::Integer(_) => bail!("Color out of range"),
-                    _ => bail!("Color must be an integer"),
+                    Value::Integer(_) => exec::new_usage_error("Color out of range"),
+                    _ => exec::new_usage_error("Color must be an integer"),
                 },
                 None => Ok(None),
             }
@@ -155,15 +168,19 @@ The second expression to this function must be a bare variable reference and ind
 variable to update with the obtained input."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        machine: &mut Machine,
+    ) -> exec::Result<()> {
         if args.len() != 2 {
-            bail!("INPUT requires two arguments");
+            return exec::new_usage_error("INPUT requires two arguments");
         }
 
         let mut prompt = match &args[0].0 {
             Some(e) => match e.eval(machine.get_vars())? {
                 Value::Text(t) => t,
-                _ => bail!("INPUT prompt must be a string"),
+                _ => return exec::new_usage_error("INPUT prompt must be a string"),
             },
             None => "".to_owned(),
         };
@@ -173,7 +190,7 @@ variable to update with the obtained input."
 
         let vref = match &args[1].0 {
             Some(Expr::Symbol(vref)) => vref,
-            _ => bail!("INPUT requires a variable reference"),
+            _ => return exec::new_usage_error("INPUT requires a variable reference"),
         };
 
         let mut console = self.console.borrow_mut();
@@ -218,32 +235,44 @@ impl BuiltinCommand for LocateCommand {
         "Moves the cursor to the given position."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
-        ensure!(args.len() == 2, "LOCATE takes two arguments");
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        machine: &mut Machine,
+    ) -> exec::Result<()> {
+        if args.len() != 2 {
+            return exec::new_usage_error("LOCATE takes two arguments");
+        }
         let (row_arg, column_arg) = (&args[0], &args[1]);
-        ensure!(row_arg.1 == ArgSep::Long, "LOCATE expects arguments separated by a comma");
+        if row_arg.1 != ArgSep::Long {
+            return exec::new_usage_error("LOCATE expects arguments separated by a comma");
+        }
         debug_assert!(column_arg.1 == ArgSep::End);
 
         let row = match &row_arg.0 {
             Some(arg) => match arg.eval(machine.get_vars())? {
                 Value::Integer(i) => {
-                    ensure!(i >= 0, "Row cannot be negative");
+                    if i < 0 {
+                        return exec::new_usage_error("Row cannot be negative");
+                    }
                     i as usize
                 }
-                _ => bail!("Row must be an integer"),
+                _ => return exec::new_usage_error("Row must be an integer"),
             },
-            None => bail!("Row cannot be empty"),
+            None => return exec::new_usage_error("Row cannot be empty"),
         };
 
         let column = match &column_arg.0 {
             Some(arg) => match arg.eval(machine.get_vars())? {
                 Value::Integer(i) => {
-                    ensure!(i >= 0, "Column cannot be negative");
+                    if i < 0 {
+                        return exec::new_usage_error("Column cannot be negative");
+                    }
                     i as usize
                 }
-                _ => bail!("Column must be an integer"),
+                _ => return exec::new_usage_error("Column must be an integer"),
             },
-            None => bail!("Column cannot be empty"),
+            None => return exec::new_usage_error("Column cannot be empty"),
         };
 
         self.console.borrow_mut().locate(row, column)?;
@@ -280,7 +309,11 @@ separated by the short `;` separator are concatenated with a single space, while
 separated by the long `,` separator are concatenated with a tab character."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        machine: &mut Machine,
+    ) -> exec::Result<()> {
         let mut text = String::new();
         for arg in args.iter() {
             if let Some(expr) = arg.0.as_ref() {

@@ -17,9 +17,8 @@
 
 use crate::ast::{ArgSep, Expr, VarType};
 use crate::console::Console;
-use crate::exec::{BuiltinCommand, Machine};
+use crate::exec::{self, BuiltinCommand, Machine};
 use async_trait::async_trait;
-use failure::Fallible;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -65,7 +64,10 @@ impl HelpCommand {
     }
 
     /// Prints a summary of all available commands.
-    fn summary(&self, builtins: &HashMap<&'static str, Rc<dyn BuiltinCommand>>) -> Fallible<()> {
+    fn summary(
+        &self,
+        builtins: &HashMap<&'static str, Rc<dyn BuiltinCommand>>,
+    ) -> exec::Result<()> {
         let mut names = vec![];
         let mut max_length = 0;
         for name in builtins.keys() {
@@ -92,7 +94,7 @@ impl HelpCommand {
     }
 
     /// Prints details about a single command.
-    fn describe(&self, builtin: &Rc<dyn BuiltinCommand>) -> Fallible<()> {
+    fn describe(&self, builtin: &Rc<dyn BuiltinCommand>) -> exec::Result<()> {
         let mut console = self.console.borrow_mut();
         console.print("")?;
         if builtin.syntax().is_empty() {
@@ -108,7 +110,7 @@ impl HelpCommand {
         Ok(())
     }
 
-    fn describe_lang(&self) -> Fallible<()> {
+    fn describe_lang(&self) -> exec::Result<()> {
         let mut console = self.console.borrow_mut();
         for line in LANG_REFERENCE.lines() {
             // Print line by line to honor any possible differences in line feeds.
@@ -135,28 +137,36 @@ Without arguments, shows a summary of all available commands.
 With a single argument, shows detailed information about the given command."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        machine: &mut Machine,
+    ) -> exec::Result<()> {
         let builtins = machine.get_builtins();
         match args {
             [] => {
                 self.summary(builtins)?;
             }
             [(Some(Expr::Symbol(vref)), ArgSep::End)] => {
-                ensure!(
-                    vref.ref_type() == VarType::Auto,
-                    "Command name cannot have a type annotation"
-                );
+                if vref.ref_type() != VarType::Auto {
+                    return exec::new_usage_error("Command name cannot have a type annotation");
+                }
                 let name = vref.name().to_ascii_uppercase();
                 if name == "LANG" {
                     self.describe_lang()?;
                 } else {
                     match &builtins.get(name.as_str()) {
                         Some(builtin) => self.describe(builtin)?,
-                        None => bail!("Cannot describe unknown builtin {}", name),
+                        None => {
+                            return exec::new_usage_error(format!(
+                                "Cannot describe unknown builtin {}",
+                                name
+                            ))
+                        }
                     }
                 }
             }
-            _ => bail!("HELP takes zero or only one argument"),
+            _ => return exec::new_usage_error("HELP takes zero or only one argument"),
         }
         Ok(())
     }
@@ -189,7 +199,7 @@ Second paragraph of the extended description."
             &self,
             _args: &[(Option<Expr>, ArgSep)],
             _machine: &mut Machine,
-        ) -> Fallible<()> {
+        ) -> exec::Result<()> {
             Ok(())
         }
     }
