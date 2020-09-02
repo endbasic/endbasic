@@ -20,10 +20,7 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
-#[macro_use]
-extern crate failure;
-
-use failure::{Error, Fail, Fallible};
+use anyhow::{anyhow, Error, Result};
 use getopts::Options;
 use std::cell::RefCell;
 use std::env;
@@ -34,8 +31,8 @@ use std::process;
 use std::rc::Rc;
 
 /// Errors caused by the user when invoking this binary (invalid options or arguments).
-#[derive(Debug, Fail)]
-#[fail(display = "{}", message)]
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
 struct UsageError {
     message: String,
 }
@@ -49,7 +46,7 @@ impl UsageError {
 
 /// Flattens all causes of an error into a single string.
 fn flatten_causes(err: &Error) -> String {
-    err.iter_chain().fold(String::new(), |flattened, cause| {
+    err.chain().fold(String::new(), |flattened, cause| {
         let flattened = if flattened.is_empty() { flattened } else { flattened + ": " };
         flattened + &format!("{}", cause)
     })
@@ -73,7 +70,7 @@ fn program_name(mut args: env::Args, default_name: &'static str) -> (String, env
 }
 
 /// Prints usage information for program `name` with `opts` following the GNU Standards format.
-fn help(name: &str, opts: &Options) -> Fallible<i32> {
+fn help(name: &str, opts: &Options) -> Result<i32> {
     let brief = format!("Usage: {} [options] [program-file]", name);
     println!("{}", opts.usage(&brief));
     println!("Report bugs to: https://github.com/jmmv/endbasic/issues");
@@ -82,7 +79,7 @@ fn help(name: &str, opts: &Options) -> Fallible<i32> {
 }
 
 /// Prints version information following the GNU Standards format.
-fn version() -> Fallible<i32> {
+fn version() -> Result<i32> {
     println!("EndBASIC {}", env!("CARGO_PKG_VERSION"));
     println!("Copyright 2020 Julio Merino");
     println!("License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>");
@@ -91,7 +88,7 @@ fn version() -> Fallible<i32> {
 
 /// Computes the path to the directory where user programs live if `flag` is none; otherwise
 /// just returns `flag`.
-fn get_programs_dir(flag: Option<String>) -> Fallible<PathBuf> {
+fn get_programs_dir(flag: Option<String>) -> Result<PathBuf> {
     let dir = flag.map(PathBuf::from).or_else(|| {
         dirs::document_dir().map(|d| d.join("endbasic")).or_else(|| {
             // On Linux, dirs::document_dir() seems to return None whenever user-dirs.dirs is
@@ -105,12 +102,14 @@ fn get_programs_dir(flag: Option<String>) -> Fallible<PathBuf> {
     // when we cannot compute this folder, but that seems like hiding a corner case that is unlikely
     // to surface.  A good reason to do this, however, would be to allow the user to explicitly
     // disable this functionality to keep the interpreter from touching the disk.
-    ensure!(dir.is_some(), "Cannot compute default path to the Documents folder");
+    if dir.is_none() {
+        return Err(anyhow!("Cannot compute default path to the Documents folder"));
+    }
     Ok(dir.unwrap())
 }
 
 /// Executes the `path` program in a fresh machine.
-fn run<P: AsRef<Path>>(path: P) -> Fallible<i32> {
+fn run<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
     let console = Rc::from(RefCell::from(endbasic::TextConsole::from_stdio()));
     let exit_code = Rc::from(RefCell::from(None));
     let mut machine = endbasic_core::exec::MachineBuilder::default()
@@ -123,7 +122,7 @@ fn run<P: AsRef<Path>>(path: P) -> Fallible<i32> {
         Ok(()) => (),
         Err(e) => {
             if exit_code.borrow().is_some() {
-                if let Some(e) = e.downcast_ref::<io::Error>() {
+                if let endbasic_core::exec::Error::IoError(e) = e {
                     debug_assert!(e.kind() == io::ErrorKind::UnexpectedEof);
                 }
             } else {
@@ -136,7 +135,7 @@ fn run<P: AsRef<Path>>(path: P) -> Fallible<i32> {
 }
 
 /// Version of `main` that returns errors to the caller for reporting.
-fn safe_main(name: &str, args: env::Args) -> Fallible<i32> {
+fn safe_main(name: &str, args: env::Args) -> Result<i32> {
     let args: Vec<String> = args.collect();
 
     let mut opts = Options::new();
@@ -158,7 +157,7 @@ fn safe_main(name: &str, args: env::Args) -> Fallible<i32> {
             let programs_dir = get_programs_dir(matches.opt_str("programs-dir"))?;
             Ok(endbasic::run_repl_loop(&programs_dir)?)
         }
-        [file] => run(file),
+        [file] => Ok(run(file)?),
         [_, ..] => Err(UsageError::new("Too many arguments").into()),
     }
 }
@@ -190,12 +189,12 @@ mod tests {
 
     #[test]
     fn flatten_causes_one() {
-        assert_eq!("the error", flatten_causes(&format_err!("the error")));
+        assert_eq!("the error", flatten_causes(&anyhow!("the error")));
     }
 
     #[test]
     fn flatten_causes_several() {
-        let err = Error::from(format_err!("first").context("second").context("and last"));
+        let err = anyhow!("first").context("second").context("and last");
         assert_eq!("and last: second: first", flatten_causes(&err));
     }
 }

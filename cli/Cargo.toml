@@ -15,13 +15,14 @@ edition = "2018"
 travis-ci = { repository = "jmmv/endbasic", branch = "master" }
 
 [dependencies]
+anyhow = "1.0"
 async-trait = "0.1"
 crossterm = "0.17"
 dirs = "2.0"
 endbasic-core = { version = "0.2.0", path = "../core" }
-failure = "~0.1"
 getopts = "0.2"
 rustyline = "6.1.2"
+thiserror = "1.0"
 time = { version = "0.2", features = ["std"] }
 
 [dev-dependencies]

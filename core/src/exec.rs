@@ -16,15 +16,51 @@
 //! Execution engine for EndBASIC programs.
 
 use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
-use crate::eval::Vars;
-use crate::parser::Parser;
+use crate::eval::{self, Vars};
+use crate::parser::{self, Parser};
 use async_trait::async_trait;
-use failure::Fallible;
 use futures::executor::block_on;
 use futures::future::{FutureExt, LocalBoxFuture};
 use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
+
+/// Execution errors.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Evaluation error during execution.
+    #[error("{0}")]
+    EvalError(#[from] eval::Error),
+
+    /// I/O error during execution.
+    #[error("{0}")]
+    IoError(#[from] io::Error),
+
+    /// Parsing error during execution.
+    #[error("{0}")]
+    ParseError(#[from] parser::Error),
+
+    /// Syntax error.
+    #[error("{0}")]
+    SyntaxError(String),
+
+    /// Execution of a builtin command failed due to a user call error.
+    #[error("{0}")]
+    UsageError(String),
+}
+
+/// Result for execution return values.
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// Instantiates a new `Err(Error::SyntaxError(...))` from a message.  Syntactic sugar.
+fn new_syntax_error<T, S: Into<String>>(message: S) -> Result<T> {
+    Err(Error::SyntaxError(message.into()))
+}
+
+/// Instantiates a new `Err(Error::UsageError(...))` from a message.  Syntactic sugar.
+pub fn new_usage_error<T, S: Into<String>>(message: S) -> Result<T> {
+    Err(Error::UsageError(message.into()))
+}
 
 /// A trait to define a command that is executed by a `Machine`.
 ///
@@ -52,7 +88,7 @@ pub trait BuiltinCommand {
     /// `machine` provides mutable access to the current state of the machine invoking the command.
     ///
     /// Commands cannot return any value except for errors.
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()>;
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()>;
 }
 
 /// Builder pattern for a new machine.
@@ -125,7 +161,7 @@ impl Machine {
 
     /// Retrieves the variable `name` as a boolean.  Fails if it is some other type or if it's not
     /// defined.
-    pub fn get_var_as_bool(&self, name: &str) -> Fallible<bool> {
+    pub fn get_var_as_bool(&self, name: &str) -> Result<bool> {
         match self.vars.get(&VarRef::new(name, VarType::Boolean))? {
             Value::Boolean(b) => Ok(*b),
             _ => panic!("Invalid type check in get()"),
@@ -134,7 +170,7 @@ impl Machine {
 
     /// Retrieves the variable `name` as an integer.  Fails if it is some other type or if it's not
     /// defined.
-    pub fn get_var_as_int(&self, name: &str) -> Fallible<i32> {
+    pub fn get_var_as_int(&self, name: &str) -> Result<i32> {
         match self.vars.get(&VarRef::new(name, VarType::Integer))? {
             Value::Integer(i) => Ok(*i),
             _ => panic!("Invalid type check in get()"),
@@ -143,7 +179,7 @@ impl Machine {
 
     /// Retrieves the variable `name` as a string.  Fails if it is some other type or if it's not
     /// defined.
-    pub fn get_var_as_string(&self, name: &str) -> Fallible<&str> {
+    pub fn get_var_as_string(&self, name: &str) -> Result<&str> {
         match self.vars.get(&VarRef::new(name, VarType::Text))? {
             Value::Text(s) => Ok(s),
             _ => panic!("Invalid type check in get()"),
@@ -151,7 +187,7 @@ impl Machine {
     }
 
     /// Assigns the value of `expr` to the variable `vref`.
-    fn assign(&mut self, vref: &VarRef, expr: &Expr) -> Fallible<()> {
+    fn assign(&mut self, vref: &VarRef, expr: &Expr) -> Result<()> {
         let value = expr.eval(&self.vars)?;
         self.vars.set(&vref, value)?;
         Ok(())
@@ -161,7 +197,7 @@ impl Machine {
     fn do_if<'a>(
         &'a mut self,
         branches: &'a [(Expr, Vec<Statement>)],
-    ) -> LocalBoxFuture<'a, Fallible<()>> {
+    ) -> LocalBoxFuture<'a, Result<()>> {
         async move {
             for (expr, stmts) in branches {
                 match expr.eval(&self.vars)? {
@@ -172,7 +208,7 @@ impl Machine {
                         break;
                     }
                     Value::Boolean(false) => (),
-                    _ => bail!("IF/ELSEIF require a boolean condition"),
+                    _ => return new_syntax_error("IF/ELSEIF require a boolean condition"),
                 };
             }
             Ok(())
@@ -185,7 +221,7 @@ impl Machine {
         &'a mut self,
         condition: &'a Expr,
         body: &'a [Statement],
-    ) -> LocalBoxFuture<'a, Fallible<()>> {
+    ) -> LocalBoxFuture<'a, Result<()>> {
         async move {
             loop {
                 match condition.eval(&self.vars)? {
@@ -195,7 +231,7 @@ impl Machine {
                         }
                     }
                     Value::Boolean(false) => break,
-                    _ => bail!("WHILE requires a boolean condition"),
+                    _ => return new_syntax_error("WHILE requires a boolean condition"),
                 }
             }
             Ok(())
@@ -204,14 +240,14 @@ impl Machine {
     }
 
     /// Executes a single statement.
-    fn exec_one<'a>(&'a mut self, stmt: &'a Statement) -> LocalBoxFuture<'a, Fallible<()>> {
+    fn exec_one<'a>(&'a mut self, stmt: &'a Statement) -> LocalBoxFuture<'a, Result<()>> {
         async move {
             match stmt {
                 Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
                 Statement::BuiltinCall(name, args) => {
                     let cmd = match self.builtins.get(name.as_str()) {
                         Some(cmd) => cmd.clone(),
-                        None => bail!("Unknown builtin {}", name),
+                        None => return new_syntax_error(format!("Unknown builtin {}", name)),
                     };
                     cmd.exec(&args, self).await?
                 }
@@ -227,7 +263,7 @@ impl Machine {
     ///
     /// Note that this does not consume `self`.  As a result, it is possible to execute multiple
     /// different programs on the same machine, all sharing state.
-    pub async fn exec_async(&mut self, input: &mut dyn io::Read) -> Fallible<()> {
+    pub async fn exec_async(&mut self, input: &mut dyn io::Read) -> Result<()> {
         let mut parser = Parser::from(input);
         while let Some(stmt) = parser.parse()? {
             self.exec_one(&stmt).await?;
@@ -239,7 +275,7 @@ impl Machine {
     ///
     /// Note that this does not consume `self`.  As a result, it is possible to execute multiple
     /// different programs on the same machine, all sharing state.
-    pub fn exec<'b>(&mut self, input: &'b mut dyn io::Read) -> Fallible<()> {
+    pub fn exec<'b>(&mut self, input: &'b mut dyn io::Read) -> Result<()> {
         block_on(self.exec_async(input))
     }
 }
@@ -262,8 +298,10 @@ impl BuiltinCommand for ClearCommand {
         "Clears all variables to restore initial state."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
-        ensure!(args.is_empty(), "CLEAR takes no arguments");
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
+        if !args.is_empty() {
+            return new_usage_error("CLEAR takes no arguments");
+        }
         machine.clear();
         Ok(())
     }
@@ -303,16 +341,16 @@ pub(crate) mod testutils {
             "See docstring for test code."
         }
 
-        async fn exec(
-            &self,
-            args: &[(Option<Expr>, ArgSep)],
-            machine: &mut Machine,
-        ) -> Fallible<()> {
-            ensure!(args.len() == 1, "IN only takes one argument");
-            ensure!(args[0].1 == ArgSep::End, "Invalid separator");
+        async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
+            if args.len() != 1 {
+                return new_usage_error("IN only takes one argument");
+            }
+            if args[0].1 != ArgSep::End {
+                return new_usage_error("Invalid separator");
+            }
             let vref = match &args[0].0 {
                 Some(Expr::Symbol(vref)) => vref,
-                _ => bail!("IN requires a variable reference"),
+                _ => return new_usage_error("IN requires a variable reference"),
             };
 
             let mut data = self.data.borrow_mut();
@@ -352,11 +390,7 @@ pub(crate) mod testutils {
             "See docstring for test code."
         }
 
-        async fn exec(
-            &self,
-            args: &[(Option<Expr>, ArgSep)],
-            machine: &mut Machine,
-        ) -> Fallible<()> {
+        async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
             let mut text = String::new();
             for arg in args.iter() {
                 if let Some(expr) = arg.0.as_ref() {
@@ -365,7 +399,7 @@ pub(crate) mod testutils {
                 match arg.1 {
                     ArgSep::End => break,
                     ArgSep::Short => text += " ",
-                    ArgSep::Long => bail!("Cannot use the ',' separator"),
+                    ArgSep::Long => return new_usage_error("Cannot use the ',' separator"),
                 }
             }
             self.data.borrow_mut().push(text);
@@ -445,15 +479,14 @@ mod tests {
         input: &str,
         golden_in: &'static [&'static str],
         captured_out: Rc<RefCell<Vec<String>>>,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         let in_cmd = InCommand::from(Box::from(RefCell::from(golden_in.iter())));
         let out_cmd = OutCommand::from(captured_out);
         let mut machine = MachineBuilder::default()
             .add_builtin(Rc::from(in_cmd))
             .add_builtin(Rc::from(out_cmd))
             .build();
-        machine.exec(&mut input.as_bytes())?;
-        Ok(())
+        machine.exec(&mut input.as_bytes())
     }
 
     /// Runs the `input` code on a new test machine and verifies its output.

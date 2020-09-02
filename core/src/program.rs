@@ -17,9 +17,8 @@
 
 use crate::ast::{ArgSep, Expr, Value};
 use crate::console::Console;
-use crate::exec::{BuiltinCommand, Machine};
+use crate::exec::{self, BuiltinCommand, Machine};
 use async_trait::async_trait;
-use failure::Fallible;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::io;
@@ -177,15 +176,21 @@ The filename must be a string and must be a basename (no directory components). 
 extension is optional, but if present, it must be .BAS."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
-        ensure!(args.len() == 1, "DEL requires a filename");
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        machine: &mut Machine,
+    ) -> exec::Result<()> {
+        if args.len() != 1 {
+            return exec::new_usage_error("DEL requires a filename");
+        }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_vars())? {
             Value::Text(t) => {
                 let name = to_filename(t)?;
                 self.store.borrow_mut().delete(&name)?;
             }
-            _ => bail!("DEL requires a string as the filename"),
+            _ => return exec::new_usage_error("DEL requires a string as the filename"),
         }
         Ok(())
     }
@@ -211,8 +216,14 @@ impl BuiltinCommand for DirCommand {
         "Displays the list of files on disk."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
-        ensure!(args.is_empty(), "DIR takes no arguments");
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        _machine: &mut Machine,
+    ) -> exec::Result<()> {
+        if !args.is_empty() {
+            return exec::new_usage_error("DIR takes no arguments");
+        }
         show_dir(&*self.store.borrow(), &mut *self.console.borrow_mut())?;
         Ok(())
     }
@@ -243,18 +254,24 @@ only.  Otherwise, if the line already exists, presents the contents of that line
 editing.  Editing terminates upon an ENTER key press."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        machine: &mut Machine,
+    ) -> exec::Result<()> {
         let mut console = self.console.borrow_mut();
         match args {
             [] => append(&mut self.program.borrow_mut(), &mut *console).await?,
             [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_vars())? {
                 Value::Integer(n) => {
-                    ensure!(n > 0, "Line numbers must be a positive integer");
+                    if n <= 0 {
+                        return exec::new_usage_error("Line numbers must be a positive integer");
+                    }
                     edit_one(&mut self.program.borrow_mut(), n as usize, &mut *console).await?;
                 }
-                _ => bail!("Line numbers must be a positive integer"),
+                _ => return exec::new_usage_error("Line numbers must be a positive integer"),
             },
-            _ => bail!("EDIT takes no arguments or a line number"),
+            _ => return exec::new_usage_error("EDIT takes no arguments or a line number"),
         }
         Ok(())
     }
@@ -280,8 +297,14 @@ impl BuiltinCommand for ListCommand {
         "Lists the contents of the stored program."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
-        ensure!(args.is_empty(), "LIST takes no arguments");
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        _machine: &mut Machine,
+    ) -> exec::Result<()> {
+        if !args.is_empty() {
+            return exec::new_usage_error("LIST takes no arguments");
+        }
         let mut console = self.console.borrow_mut();
         let program = self.program.borrow();
         for (k, v) in program.iter() {
@@ -314,8 +337,14 @@ The filename must be a string and must be a basename (no directory components). 
 extension is optional, but if present, it must be .BAS."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
-        ensure!(args.len() == 1, "LOAD requires a filename");
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        machine: &mut Machine,
+    ) -> exec::Result<()> {
+        if args.len() != 1 {
+            return exec::new_usage_error("LOAD requires a filename");
+        }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_vars())? {
             Value::Text(t) => {
@@ -335,7 +364,7 @@ extension is optional, but if present, it must be .BAS."
                 *self.program.borrow_mut() = program;
                 machine.clear();
             }
-            _ => bail!("LOAD requires a string as the filename"),
+            _ => return exec::new_usage_error("LOAD requires a string as the filename"),
         }
         Ok(())
     }
@@ -360,8 +389,14 @@ impl BuiltinCommand for NewCommand {
         "Clears the stored program from memory."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
-        ensure!(args.is_empty(), "NEW takes no arguments");
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        machine: &mut Machine,
+    ) -> exec::Result<()> {
+        if !args.is_empty() {
+            return exec::new_usage_error("NEW takes no arguments");
+        }
         *self.program.borrow_mut() = BTreeMap::default();
         machine.clear();
         Ok(())
@@ -387,8 +422,14 @@ impl BuiltinCommand for RenumCommand {
         "Reassigns line numbers to make them all multiples of ten."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> Fallible<()> {
-        ensure!(args.is_empty(), "RENUM takes no arguments");
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        _machine: &mut Machine,
+    ) -> exec::Result<()> {
+        if !args.is_empty() {
+            return exec::new_usage_error("RENUM takes no arguments");
+        }
         let mut program = self.program.borrow_mut();
         let numbers: Vec<usize> = program.keys().cloned().collect();
         let mut lines = numbers.len();
@@ -425,8 +466,14 @@ Note that the program runs in the context of the interpreter so it will pick up 
 and other state that may already be set."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
-        ensure!(args.is_empty(), "RUN takes no arguments");
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        machine: &mut Machine,
+    ) -> exec::Result<()> {
+        if !args.is_empty() {
+            return exec::new_usage_error("RUN takes no arguments");
+        }
         let program = self.program.borrow();
         let mut text = String::new();
         for (_, v) in program.iter() {
@@ -459,8 +506,14 @@ The filename must be a string and must be a basename (no directory components). 
 extension is optional, but if present, it must be .BAS."
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()> {
-        ensure!(args.len() == 1, "SAVE requires a filename");
+    async fn exec(
+        &self,
+        args: &[(Option<Expr>, ArgSep)],
+        machine: &mut Machine,
+    ) -> exec::Result<()> {
+        if args.len() != 1 {
+            return exec::new_usage_error("SAVE requires a filename");
+        }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_vars())? {
             Value::Text(t) => {
@@ -472,7 +525,7 @@ extension is optional, but if present, it must be .BAS."
                     .fold(String::new(), |contents, line| contents + line + "\n");
                 self.store.borrow_mut().put(&name, &content)?;
             }
-            _ => bail!("SAVE requires a string as the filename"),
+            _ => return exec::new_usage_error("SAVE requires a string as the filename"),
         }
         Ok(())
     }

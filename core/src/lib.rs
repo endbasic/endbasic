@@ -20,9 +20,6 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
-#[macro_use]
-extern crate failure;
-
 // TODO(jmmv): Should narrow the exposed interface by 1.0.0.
 pub mod ast;
 pub mod console;

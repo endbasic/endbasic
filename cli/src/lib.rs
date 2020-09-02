@@ -26,7 +26,7 @@ mod store;
 use async_trait::async_trait;
 use crossterm::{cursor, execute, style, terminal, tty::IsTty, QueueableCommand};
 use endbasic_core::console;
-use endbasic_core::exec::{ClearCommand, MachineBuilder};
+use endbasic_core::exec::{self, ClearCommand, MachineBuilder};
 use endbasic_core::help::HelpCommand;
 use endbasic_core::program;
 pub use exit::ExitCommand;
@@ -169,7 +169,7 @@ pub fn run_repl_loop(dir: &Path) -> io::Result<i32> {
                     Ok(()) => (),
                     Err(e) => {
                         if exit_code.borrow().is_some() {
-                            if let Some(e) = e.downcast_ref::<io::Error>() {
+                            if let exec::Error::IoError(e) = e {
                                 debug_assert!(e.kind() == io::ErrorKind::UnexpectedEof);
                             }
                         } else {
