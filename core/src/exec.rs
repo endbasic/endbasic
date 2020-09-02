@@ -16,6 +16,7 @@
 //! Execution engine for EndBASIC programs.
 
 use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
+use crate::eval::Vars;
 use crate::parser::Parser;
 use async_trait::async_trait;
 use failure::Fallible;
@@ -23,7 +24,6 @@ use futures::executor::block_on;
 use futures::future::{FutureExt, LocalBoxFuture};
 use std::collections::HashMap;
 use std::io;
-use std::mem;
 use std::rc::Rc;
 
 /// A trait to define a command that is executed by a `Machine`.
@@ -53,61 +53,6 @@ pub trait BuiltinCommand {
     ///
     /// Commands cannot return any value except for errors.
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Fallible<()>;
-}
-
-/// Storage for all variables that exist at runtime.
-#[derive(Default)]
-pub struct Vars {
-    /// Map of variable names (without type annotations) to their values.
-    vars: HashMap<String, Value>,
-}
-
-impl Vars {
-    /// Clears all variables.
-    pub fn clear(&mut self) {
-        self.vars.clear()
-    }
-
-    /// Obtains the value of a variable.
-    ///
-    /// Returns an error if the variable is not defined, or if the type annotation in the variable
-    /// reference does not match the type of the value that the variable contains.
-    pub fn get(&self, vref: &VarRef) -> Fallible<&Value> {
-        let value = match self.vars.get(&vref.name().to_ascii_uppercase()) {
-            Some(v) => v,
-            None => bail!("Undefined variable {}", vref.name()),
-        };
-        ensure!(vref.accepts(&value), "Incompatible types in {} reference", vref);
-        Ok(value)
-    }
-
-    /// Returns true if this contains no variables.
-    pub fn is_empty(&self) -> bool {
-        self.vars.is_empty()
-    }
-
-    /// Sets the value of a variable.
-    ///
-    /// If `vref` contains a type annotation, the type of the value must be compatible with that
-    /// type annotation.
-    ///
-    /// If the variable is already defined, then the type of the new value must be compatible with
-    /// the existing variable.  In other words: a variable cannot change types while it's alive.
-    pub fn set(&mut self, vref: &VarRef, value: Value) -> Fallible<()> {
-        let name = vref.name().to_ascii_uppercase();
-        ensure!(vref.accepts(&value), "Incompatible types in {} assignment", vref);
-        if let Some(old_value) = self.vars.get_mut(&name) {
-            ensure!(
-                mem::discriminant(&value) == mem::discriminant(old_value),
-                "Incompatible types in {} assignment",
-                vref
-            );
-            *old_value = value;
-        } else {
-            self.vars.insert(name, value);
-        }
-        Ok(())
-    }
 }
 
 /// Builder pattern for a new machine.
@@ -432,213 +377,8 @@ pub(crate) mod testutils {
 mod tests {
     use super::testutils::*;
     use super::*;
-    use crate::ast::VarType;
     use std::cell::RefCell;
     use std::rc::Rc;
-
-    #[test]
-    fn test_vars_clear() {
-        let mut raw_vars = HashMap::new();
-        raw_vars.insert("FOO".to_owned(), Value::Boolean(true));
-        let mut vars = Vars { vars: raw_vars };
-        assert!(!vars.is_empty());
-        vars.clear();
-        assert!(vars.is_empty());
-    }
-
-    #[test]
-    fn test_vars_get_ok_with_explicit_type() {
-        let mut raw_vars = HashMap::new();
-        raw_vars.insert("A_BOOLEAN".to_owned(), Value::Boolean(true));
-        raw_vars.insert("AN_INTEGER".to_owned(), Value::Integer(3));
-        raw_vars.insert("A_STRING".to_owned(), Value::Text("some text".to_owned()));
-        let vars = Vars { vars: raw_vars };
-
-        assert_eq!(
-            Value::Boolean(true),
-            *vars.get(&VarRef::new("a_boolean", VarType::Boolean)).unwrap()
-        );
-        assert_eq!(
-            Value::Integer(3),
-            *vars.get(&VarRef::new("an_integer", VarType::Integer)).unwrap()
-        );
-        assert_eq!(
-            Value::Text("some text".to_owned()),
-            *vars.get(&VarRef::new("a_string", VarType::Text)).unwrap()
-        );
-    }
-
-    #[test]
-    fn test_vars_get_ok_with_auto_type() {
-        let mut raw_vars = HashMap::new();
-        raw_vars.insert("A_BOOLEAN".to_owned(), Value::Boolean(true));
-        raw_vars.insert("AN_INTEGER".to_owned(), Value::Integer(3));
-        raw_vars.insert("A_STRING".to_owned(), Value::Text("some text".to_owned()));
-        let vars = Vars { vars: raw_vars };
-
-        assert_eq!(
-            Value::Boolean(true),
-            *vars.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
-        );
-        assert_eq!(
-            Value::Integer(3),
-            *vars.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
-        );
-        assert_eq!(
-            Value::Text("some text".to_owned()),
-            *vars.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
-        );
-    }
-
-    #[test]
-    fn test_vars_get_undefined_error() {
-        let mut raw_vars = HashMap::new();
-        raw_vars.insert("a_string".to_owned(), Value::Text("some text".to_owned()));
-        let vars = Vars { vars: raw_vars };
-
-        assert_eq!(
-            "Undefined variable a_str",
-            format!("{}", vars.get(&VarRef::new("a_str", VarType::Integer)).unwrap_err())
-        );
-    }
-
-    #[test]
-    fn test_vars_get_mismatched_type_error() {
-        let mut raw_vars = HashMap::new();
-        raw_vars.insert("A_BOOLEAN".to_owned(), Value::Boolean(true));
-        raw_vars.insert("AN_INTEGER".to_owned(), Value::Integer(3));
-        raw_vars.insert("A_STRING".to_owned(), Value::Text("some text".to_owned()));
-        let vars = Vars { vars: raw_vars };
-
-        assert_eq!(
-            "Incompatible types in a_boolean$ reference",
-            format!("{}", vars.get(&VarRef::new("a_boolean", VarType::Text)).unwrap_err())
-        );
-
-        assert_eq!(
-            "Incompatible types in an_integer? reference",
-            format!("{}", vars.get(&VarRef::new("an_integer", VarType::Boolean)).unwrap_err())
-        );
-
-        assert_eq!(
-            "Incompatible types in a_string% reference",
-            format!("{}", vars.get(&VarRef::new("a_string", VarType::Integer)).unwrap_err())
-        );
-    }
-
-    #[test]
-    fn test_vars_set_ok_with_explicit_type() {
-        let mut vars = Vars::default();
-
-        vars.set(&VarRef::new("a_boolean", VarType::Boolean), Value::Boolean(true)).unwrap();
-        assert_eq!(
-            Value::Boolean(true),
-            *vars.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
-        );
-
-        vars.set(&VarRef::new("an_integer", VarType::Integer), Value::Integer(0)).unwrap();
-        assert_eq!(
-            Value::Integer(0),
-            *vars.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
-        );
-
-        vars.set(&VarRef::new("a_string", VarType::Text), Value::Text("x".to_owned())).unwrap();
-        assert_eq!(
-            Value::Text("x".to_owned()),
-            *vars.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
-        );
-    }
-
-    #[test]
-    fn test_vars_set_ok_with_auto_type() {
-        let mut vars = Vars::default();
-
-        vars.set(&VarRef::new("a_boolean", VarType::Auto), Value::Boolean(true)).unwrap();
-        assert_eq!(
-            Value::Boolean(true),
-            *vars.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
-        );
-
-        vars.set(&VarRef::new("an_integer", VarType::Auto), Value::Integer(0)).unwrap();
-        assert_eq!(
-            Value::Integer(0),
-            *vars.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
-        );
-
-        vars.set(&VarRef::new("a_string", VarType::Auto), Value::Text("x".to_owned())).unwrap();
-        assert_eq!(
-            Value::Text("x".to_owned()),
-            *vars.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
-        );
-    }
-
-    #[test]
-    fn test_vars_set_mismatched_type_with_existing_value() {
-        let bool_ref = VarRef::new("a_boolean", VarType::Auto);
-        let bool_val = Value::Boolean(true);
-        let int_ref = VarRef::new("an_integer", VarType::Auto);
-        let int_val = Value::Integer(0);
-        let text_ref = VarRef::new("a_string", VarType::Auto);
-        let text_val = Value::Text("x".to_owned());
-
-        let mut vars = Vars::default();
-        vars.set(&bool_ref, bool_val.clone()).unwrap();
-        vars.set(&int_ref, int_val.clone()).unwrap();
-        vars.set(&text_ref, text_val).unwrap();
-
-        assert_eq!(
-            "Incompatible types in a_boolean assignment",
-            format!("{}", vars.set(&bool_ref, int_val.clone()).unwrap_err())
-        );
-        assert_eq!(
-            "Incompatible types in an_integer assignment",
-            format!("{}", vars.set(&int_ref, bool_val).unwrap_err())
-        );
-        assert_eq!(
-            "Incompatible types in a_string assignment",
-            format!("{}", vars.set(&text_ref, int_val).unwrap_err())
-        );
-    }
-
-    #[test]
-    fn test_vars_set_mismatched_type_for_annotation() {
-        let bool_ref = VarRef::new("a_boolean", VarType::Boolean);
-        let bool_val = Value::Boolean(true);
-        let int_ref = VarRef::new("an_integer", VarType::Integer);
-        let int_val = Value::Integer(0);
-        let text_ref = VarRef::new("a_string", VarType::Text);
-        let text_val = Value::Text("x".to_owned());
-
-        let mut vars = Vars::default();
-        assert_eq!(
-            "Incompatible types in a_boolean? assignment",
-            format!("{}", vars.set(&bool_ref, int_val).unwrap_err())
-        );
-        assert_eq!(
-            "Incompatible types in an_integer% assignment",
-            format!("{}", vars.set(&int_ref, text_val).unwrap_err())
-        );
-        assert_eq!(
-            "Incompatible types in a_string$ assignment",
-            format!("{}", vars.set(&text_ref, bool_val).unwrap_err())
-        );
-    }
-
-    #[test]
-    fn test_vars_get_set_case_insensitivity() {
-        let mut vars = Vars::default();
-        vars.set(&VarRef::new("SomeName", VarType::Auto), Value::Integer(6)).unwrap();
-        assert_eq!(Value::Integer(6), *vars.get(&VarRef::new("somename", VarType::Auto)).unwrap());
-    }
-
-    #[test]
-    fn test_vars_get_set_replace_value() {
-        let mut vars = Vars::default();
-        vars.set(&VarRef::new("the_var", VarType::Auto), Value::Integer(100)).unwrap();
-        assert_eq!(Value::Integer(100), *vars.get(&VarRef::new("the_var", VarType::Auto)).unwrap());
-        vars.set(&VarRef::new("the_var", VarType::Auto), Value::Integer(200)).unwrap();
-        assert_eq!(Value::Integer(200), *vars.get(&VarRef::new("the_var", VarType::Auto)).unwrap());
-    }
 
     #[test]
     fn test_clear() {
