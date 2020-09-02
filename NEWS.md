@@ -28,6 +28,8 @@ not adhere to semantic versioning until 1.0.0.**
 
 *   Fixed arithmetic operators to capture overflow conditions.
 
+*   Fixed `EXIT` to accept `0` as the exit code.
+
 ## Changes in version 0.2.0
 
 **Released on 2020-05-07.**

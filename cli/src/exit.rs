@@ -55,7 +55,7 @@ The optional code indicates the return value to return to the system."
             [] => 0,
             [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_vars())? {
                 Value::Integer(n) => {
-                    ensure!(n > 0, "Exit code must be a positive integer");
+                    ensure!(n >= 0, "Exit code must be a positive integer");
                     ensure!(n < 128, "Exit code cannot be larger than 127");
                     n
                 }
@@ -101,15 +101,22 @@ mod tests {
         assert_eq!(3, machine.get_var_as_int("a").unwrap());
     }
 
-    #[test]
-    fn test_exit_with_code() {
+    fn do_exit_with_code_test(code: i32) {
         let exit_code = Rc::from(RefCell::from(None));
         let mut machine = MachineBuilder::default()
             .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
             .build();
-        machine.exec(&mut b"a = 3: EXIT 42: a = 4".as_ref()).unwrap_err();
-        assert_eq!(42, exit_code.borrow().unwrap());
+        machine.exec(&mut format!("a = 3: EXIT {}: a = 4", code).as_bytes()).unwrap_err();
+        assert_eq!(code, exit_code.borrow().unwrap());
         assert_eq!(3, machine.get_var_as_int("a").unwrap());
+    }
+
+    #[test]
+    fn text_exit_with_code() {
+        do_exit_with_code_test(0);
+        do_exit_with_code_test(1);
+        do_exit_with_code_test(42);
+        do_exit_with_code_test(127);
     }
 
     #[test]
