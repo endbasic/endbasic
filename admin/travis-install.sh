@@ -14,7 +14,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-set -eux
+set -ex
 
 if [ "${DO-unset}" = unset ]; then
     echo "DO must be set in the environment" 1>&2
@@ -33,7 +33,9 @@ case "${DO}" in
 
         export NVM_DIR="${HOME}/.nvm"
         [ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
+        set +ux
         nvm install --lts
+        set -ux
 
         curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
         ;;

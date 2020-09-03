@@ -8,8 +8,9 @@
         "endbasic-www": ".bin/endbasic-www.js"
     },
     "scripts": {
-        "build": "webpack --config webpack.config.js",
-        "start": "webpack-dev-server"
+        "build": "rimraf dist pkg && webpack",
+        "start": "rimraf dist pkg && webpack-dev-server --open -d",
+        "test": "cargo test && wasm-pack test --headless --chrome"
     },
     "repository": {
         "type": "git",
@@ -30,13 +31,15 @@
     "dependencies": {
         "endbasic-web": "file:../pkg",
         "jquery": "3.5.1",
-        "xterm": "4.5.0",
+        "xterm": "4.8.1",
         "xterm-addon-fit": "0.4.0"
     },
     "devDependencies": {
-        "copy-webpack-plugin": "^5.0.0",
-        "webpack": "^4.29.3",
-        "webpack-cli": "^3.1.0",
-        "webpack-dev-server": "^3.11.0"
+        "@wasm-tool/wasm-pack-plugin": "^1.1.0",
+        "copy-webpack-plugin": "^6.1.0",
+        "webpack": "^4.44.1",
+        "webpack-cli": "^3.3.12",
+        "webpack-dev-server": "^3.11.0",
+        "rimraf": "^3.0.0"
     }
 }
