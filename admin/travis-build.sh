@@ -75,14 +75,20 @@ do_test() {
 
 # Builds the web interface.
 do_web() {
+    export NVM_DIR="${HOME}/.nvm"
+    [ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
+    set +ux
+    nvm use --lts
+    set -ux
+
     cd web
     wasm-pack build
-    wasm-pack test --headless --chrome
     cd -
 
     cd web/www
-    npm ci
-    npm run-script build
+    npm ci --verbose
+    npm run-script build --verbose
+    npm run-script test --verbose
     cd -
 }
 

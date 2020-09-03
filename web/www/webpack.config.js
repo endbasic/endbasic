@@ -1,34 +1,43 @@
+const path = require("path");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
-const path = require('path');
+const WasmPackPlugin = require("@wasm-tool/wasm-pack-plugin");
+
+const distDir = path.resolve(__dirname, "dist");
 
 module.exports = {
-    entry: "./bootstrap.js",
-    output: {
-        path: path.resolve(__dirname, "dist"),
-        filename: "bootstrap.js",
+    mode: "production",
+    entry: {
+        index: "./bootstrap.js",
     },
-    mode: "development",
+    output: {
+        path: distDir,
+        filename: "[name].js",
+    },
+    module: {
+        rules: [
+            { test: /\.css$/, use: "css-loader" },
+        ],
+    },
+    devServer: {
+        contentBase: distDir,
+    },
     plugins: [
-        new CopyWebpackPlugin(
-            [
+        new CopyWebpackPlugin({
+            patterns: [
+                path.resolve(__dirname, ".nojekyll"),
+                path.resolve(__dirname, "bootstrap.js"),
+                path.resolve(__dirname, "index.html"),
+                path.resolve(__dirname, "index.js"),
+                path.resolve(__dirname, "style.css"),
                 {
-                    from: '.nojekyll',
-                    to: '.nojekyll',
-                    toType: 'file',
-                },
-                {
-                    from: 'index.html',
-                    to: 'index.html',
-                },
-                {
-                    from: 'node_modules/xterm/css/xterm.css',
-                    to: 'node_modules/xterm/css/xterm.css',
-                },
-                {
-                    from: 'style.css',
-                    to: 'style.css',
+                    from: path.resolve(__dirname, "node_modules/xterm/css/xterm.css"),
+                    to: "xterm.css",
                 },
             ],
-        ),
+        }),
+
+        new WasmPackPlugin({
+            crateDirectory: __dirname,
+        }),
     ],
 };
