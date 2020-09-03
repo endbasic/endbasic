@@ -142,7 +142,10 @@ With a single argument, shows detailed information about the given command."
                 self.summary(builtins)?;
             }
             [(Some(Expr::Symbol(vref)), ArgSep::End)] => {
-                ensure!(vref.ref_type() == VarType::Auto);
+                ensure!(
+                    vref.ref_type() == VarType::Auto,
+                    "Command name cannot have a type annotation"
+                );
                 let name = vref.name().to_ascii_uppercase();
                 if name == "LANG" {
                     self.describe_lang()?;
@@ -209,6 +212,20 @@ mod tests {
         })
     }
 
+    /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
+    fn do_error_test(input: &str, expected_err: &str) {
+        let console = Rc::from(RefCell::from(MockConsole::new(&[])));
+        let mut machine = MachineBuilder::default()
+            .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
+            .add_builtin(Rc::from(DoNothingCommand {}))
+            .build();
+        assert_eq!(
+            expected_err,
+            format!("{}", machine.exec(&mut input.as_bytes()).expect_err("Execution did not fail"))
+        );
+        assert!(console.borrow().captured_out().is_empty());
+    }
+
     #[test]
     fn test_help_summary() {
         let console = Rc::from(RefCell::from(MockConsole::new(&[])));
@@ -268,5 +285,15 @@ mod tests {
 
         let text = flatten_captured_out(console.borrow().captured_out());
         assert_eq!(String::from(LANG_REFERENCE) + "\n", text);
+    }
+
+    #[test]
+    fn test_help_errors() {
+        do_error_test("HELP foo bar", "Unexpected value in expression");
+        do_error_test("HELP foo, bar", "HELP takes zero or only one argument");
+
+        do_error_test("HELP foo$", "Command name cannot have a type annotation");
+        do_error_test("HELP lang%", "Command name cannot have a type annotation");
+        do_error_test("HELP foo", "Cannot describe unknown builtin FOO");
     }
 }
