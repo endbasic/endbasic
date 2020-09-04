@@ -19,11 +19,16 @@ use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
 use crate::eval::{self, Vars};
 use crate::parser::{self, Parser};
 use async_trait::async_trait;
-use futures::executor::block_on;
-use futures::future::{FutureExt, LocalBoxFuture};
+use futures_lite::future::{block_on, Future};
 use std::collections::HashMap;
 use std::io;
+use std::pin::Pin;
 use std::rc::Rc;
+
+/// An owned dynamically typed `Future` for use in cases where you can't statically type your result
+/// or need to add some indirection. Like `BoxFuture` but without the `Send` requirement.
+// TODO(https://github.com/stjepang/futures-lite/issues/18): Use BoxedLocal instead.
+type LocalBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
 /// Execution errors.
 #[derive(Debug, thiserror::Error)]
@@ -198,7 +203,7 @@ impl Machine {
         &'a mut self,
         branches: &'a [(Expr, Vec<Statement>)],
     ) -> LocalBoxFuture<'a, Result<()>> {
-        async move {
+        Box::pin(async move {
             for (expr, stmts) in branches {
                 match expr.eval(&self.vars)? {
                     Value::Boolean(true) => {
@@ -212,8 +217,7 @@ impl Machine {
                 };
             }
             Ok(())
-        }
-        .boxed_local()
+        })
     }
 
     /// Executes a `WHILE` loop.
@@ -222,7 +226,7 @@ impl Machine {
         condition: &'a Expr,
         body: &'a [Statement],
     ) -> LocalBoxFuture<'a, Result<()>> {
-        async move {
+        Box::pin(async move {
             loop {
                 match condition.eval(&self.vars)? {
                     Value::Boolean(true) => {
@@ -235,13 +239,12 @@ impl Machine {
                 }
             }
             Ok(())
-        }
-        .boxed_local()
+        })
     }
 
     /// Executes a single statement.
     fn exec_one<'a>(&'a mut self, stmt: &'a Statement) -> LocalBoxFuture<'a, Result<()>> {
-        async move {
+        Box::pin(async move {
             match stmt {
                 Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
                 Statement::BuiltinCall(name, args) => {
@@ -255,8 +258,7 @@ impl Machine {
                 Statement::While(condition, body) => self.do_while(condition, body).await?,
             }
             Ok(())
-        }
-        .boxed_local()
+        })
     }
 
     /// Executes a program extracted from the `input` readable in an asynchronous manner.
