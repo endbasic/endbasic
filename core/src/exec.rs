@@ -19,16 +19,10 @@ use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
 use crate::eval::{self, Vars};
 use crate::parser::{self, Parser};
 use async_trait::async_trait;
-use futures_lite::future::{block_on, Future};
+use futures_lite::future::{block_on, FutureExt};
 use std::collections::HashMap;
 use std::io;
-use std::pin::Pin;
 use std::rc::Rc;
-
-/// An owned dynamically typed `Future` for use in cases where you can't statically type your result
-/// or need to add some indirection. Like `BoxFuture` but without the `Send` requirement.
-// TODO(https://github.com/stjepang/futures-lite/issues/18): Use BoxedLocal instead.
-type LocalBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
 /// Execution errors.
 #[derive(Debug, thiserror::Error)]
@@ -199,66 +193,59 @@ impl Machine {
     }
 
     /// Executes an `IF` statement.
-    fn do_if<'a>(
-        &'a mut self,
-        branches: &'a [(Expr, Vec<Statement>)],
-    ) -> LocalBoxFuture<'a, Result<()>> {
-        Box::pin(async move {
-            for (expr, stmts) in branches {
-                match expr.eval(&self.vars)? {
-                    Value::Boolean(true) => {
-                        for s in stmts {
-                            self.exec_one(s).await?;
-                        }
-                        break;
+    async fn do_if(&mut self, branches: &[(Expr, Vec<Statement>)]) -> Result<()> {
+        for (expr, stmts) in branches {
+            match expr.eval(&self.vars)? {
+                Value::Boolean(true) => {
+                    for s in stmts {
+                        self.exec_one(s).await?;
                     }
-                    Value::Boolean(false) => (),
-                    _ => return new_syntax_error("IF/ELSEIF require a boolean condition"),
-                };
-            }
-            Ok(())
-        })
+                    break;
+                }
+                Value::Boolean(false) => (),
+                _ => return new_syntax_error("IF/ELSEIF require a boolean condition"),
+            };
+        }
+        Ok(())
     }
 
     /// Executes a `WHILE` loop.
-    fn do_while<'a>(
-        &'a mut self,
-        condition: &'a Expr,
-        body: &'a [Statement],
-    ) -> LocalBoxFuture<'a, Result<()>> {
-        Box::pin(async move {
-            loop {
-                match condition.eval(&self.vars)? {
-                    Value::Boolean(true) => {
-                        for s in body {
-                            self.exec_one(s).await?;
-                        }
+    async fn do_while(&mut self, condition: &Expr, body: &[Statement]) -> Result<()> {
+        loop {
+            match condition.eval(&self.vars)? {
+                Value::Boolean(true) => {
+                    for s in body {
+                        self.exec_one(s).await?;
                     }
-                    Value::Boolean(false) => break,
-                    _ => return new_syntax_error("WHILE requires a boolean condition"),
                 }
+                Value::Boolean(false) => break,
+                _ => return new_syntax_error("WHILE requires a boolean condition"),
             }
-            Ok(())
-        })
+        }
+        Ok(())
     }
 
     /// Executes a single statement.
-    fn exec_one<'a>(&'a mut self, stmt: &'a Statement) -> LocalBoxFuture<'a, Result<()>> {
-        Box::pin(async move {
-            match stmt {
-                Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
-                Statement::BuiltinCall(name, args) => {
-                    let cmd = match self.builtins.get(name.as_str()) {
-                        Some(cmd) => cmd.clone(),
-                        None => return new_syntax_error(format!("Unknown builtin {}", name)),
-                    };
-                    cmd.exec(&args, self).await?
-                }
-                Statement::If(branches) => self.do_if(branches).await?,
-                Statement::While(condition, body) => self.do_while(condition, body).await?,
+    async fn exec_one<'a>(&'a mut self, stmt: &'a Statement) -> Result<()> {
+        match stmt {
+            Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
+            Statement::BuiltinCall(name, args) => {
+                let cmd = match self.builtins.get(name.as_str()) {
+                    Some(cmd) => cmd.clone(),
+                    None => return new_syntax_error(format!("Unknown builtin {}", name)),
+                };
+                cmd.exec(&args, self).await?
             }
-            Ok(())
-        })
+            Statement::If(branches) => {
+                let f = self.do_if(branches).boxed_local();
+                f.await?;
+            }
+            Statement::While(condition, body) => {
+                let f = self.do_while(condition, body).boxed_local();
+                f.await?;
+            }
+        }
+        Ok(())
     }
 
     /// Executes a program extracted from the `input` readable in an asynchronous manner.
