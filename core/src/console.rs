@@ -22,6 +22,33 @@ use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
 
+/// Decoded key presses as returned by the console.
+pub enum Key {
+    /// Deletes the previous character.
+    Backspace,
+
+    /// Accepts the current line.
+    CarriageReturn,
+
+    /// A printable character.
+    Char(char),
+
+    /// Indicates a request for termination (e.g. `Ctrl-D`).
+    Eof,
+
+    /// Indicates a request for interrupt (e.g. `Ctrl-C`).
+    // TODO(jmmv): This (and maybe Eof too) should probably be represented as a more generic
+    // Control(char) value so that we can represent other control sequences and allow the logic in
+    // here to determine what to do with each.
+    Interrupt,
+
+    /// Accepts the current line.
+    NewLine,
+
+    /// An unknown character or sequence. The text describes what went wrong.
+    Unknown(String),
+}
+
 /// Hooks to implement the commands that manipulate the console.
 #[async_trait(?Send)]
 pub trait Console {
@@ -33,21 +60,81 @@ pub trait Console {
     /// If any of the colors is `None`, the color is left unchanged.
     fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()>;
 
-    /// Writes `prompt` to the console and returns a single line of text input by the user.
-    ///
-    /// The text provided by the user should not be validated in any way before return, as type
-    /// validation and conversions happen within the `Machine`.
-    ///
-    /// If validation fails, this method is called again with `previous` set to the invalid answer
-    /// that caused the problem.  This can be used by the UI to pre-populate the new input field
-    /// with that data.
-    async fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String>;
+    /// Returns true if the console is attached to an interactive terminal.  This controls whether
+    /// reading a line echoes back user input, for example.
+    fn is_interactive(&self) -> bool;
 
     /// Moves the cursor to the given position, which must be within the screen.
     fn locate(&mut self, row: usize, column: usize) -> io::Result<()>;
 
-    /// Writes `text` to the console.
+    /// Writes `text` to the console, followed by a newline or CRLF pair depending on the needs of
+    /// the console to advance a line.
+    // TODO(jmmv): Remove this in favor of write?
     fn print(&mut self, text: &str) -> io::Result<()>;
+
+    /// Waits for and returns the next key press.
+    async fn read_key(&mut self) -> io::Result<Key>;
+
+    /// Writes the raw `bytes` into the console.
+    fn write(&mut self, bytes: &[u8]) -> io::Result<()>;
+}
+
+/// Reads a line of text interactively from the console, using the given `prompt` and pre-filling
+/// the input with `previous`.
+pub async fn read_line(
+    console: &mut dyn Console,
+    prompt: &str,
+    previous: &str,
+) -> io::Result<String> {
+    let echo = console.is_interactive();
+    let mut line;
+    if echo {
+        line = String::from(previous);
+        console.write(format!("{}{}", prompt, line).as_bytes())?;
+    } else {
+        line = String::new();
+    }
+    loop {
+        match console.read_key().await? {
+            Key::Backspace => {
+                if !line.is_empty() {
+                    line.pop();
+                    if echo {
+                        console.write(&[8 as u8, 32 as u8, 8 as u8])?;
+                    }
+                }
+            }
+            Key::CarriageReturn => {
+                // TODO(jmmv): This is here because the integration tests may be checked out with
+                // CRLF line endings on Windows, which means we'd see two characters to end a line
+                // instead of one.  Not sure if we should do this or if instead we should ensure
+                // the golden data we feed to the tests has single-character line endings.
+                if cfg!(not(target_os = "windows")) {
+                    if echo {
+                        console.write(&[10 as u8, 13 as u8])?;
+                    }
+                    break;
+                }
+            }
+            Key::NewLine => {
+                if echo {
+                    console.write(&[10 as u8, 13 as u8])?;
+                }
+                break;
+            }
+            Key::Eof => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
+            Key::Interrupt => return Err(io::Error::new(io::ErrorKind::Interrupted, "Ctrl+C")),
+            Key::Char(ch) => {
+                if echo {
+                    console.write(&[ch as u8])?;
+                }
+                line.push(ch);
+            }
+            // TODO(jmmv): Should do something smarter with unknown keys.
+            Key::Unknown(_) => (),
+        }
+    }
+    Ok(line)
 }
 
 /// The `CLS` command.
@@ -198,17 +285,17 @@ variable to update with the obtained input."
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
         loop {
-            match console.input(&prompt, &previous_answer).await {
-                Ok(answer) => {
-                    match Value::parse_as(vref.ref_type(), answer.trim_end()) {
-                        Ok(value) => {
-                            machine.get_mut_vars().set(vref, value)?;
-                            return Ok(());
-                        }
-                        Err(e) => console.print(&format!("Retry input: {}", e))?,
+            match read_line(&mut *console, &prompt, &previous_answer).await {
+                Ok(answer) => match Value::parse_as(vref.ref_type(), answer.trim_end()) {
+                    Ok(value) => {
+                        machine.get_mut_vars().set(vref, value)?;
+                        return Ok(());
                     }
-                    previous_answer = answer;
-                }
+                    Err(e) => {
+                        console.print(&format!("Retry input: {}", e))?;
+                        previous_answer = answer;
+                    }
+                },
                 Err(e) if e.kind() == io::ErrorKind::InvalidData => {
                     console.print(&format!("Retry input: {}", e))?
                 }
@@ -346,6 +433,7 @@ pub fn all_commands(console: Rc<RefCell<dyn Console>>) -> Vec<Rc<dyn BuiltinComm
 #[cfg(test)]
 pub(crate) mod testutils {
     use super::*;
+    use std::collections::VecDeque;
     use std::io;
 
     /// A captured command or messages sent to the mock console.
@@ -355,12 +443,13 @@ pub(crate) mod testutils {
         Color(Option<u8>, Option<u8>),
         Locate(usize, usize),
         Print(String),
+        Write(Vec<u8>),
     }
 
     /// A console that supplies golden input and captures all output.
     pub(crate) struct MockConsole {
-        /// Sequence of expected prompts and previous values and the responses to feed to them.
-        golden_in: Box<dyn Iterator<Item = &'static (&'static str, &'static str, &'static str)>>,
+        /// Sequence of keys to yield on `read_key` calls.
+        golden_in: VecDeque<Key>,
 
         /// Sequence of all messages printed.
         captured_out: Vec<CapturedOut>,
@@ -368,15 +457,31 @@ pub(crate) mod testutils {
 
     impl MockConsole {
         /// Creates a new mock console with the given golden input.
-        pub(crate) fn new(
-            golden_in: &'static [(&'static str, &'static str, &'static str)],
-        ) -> Self {
-            Self { golden_in: Box::from(golden_in.iter()), captured_out: vec![] }
+        pub(crate) fn new(golden_in: &'static str) -> Self {
+            let mut keys = VecDeque::new();
+            for ch in golden_in.chars() {
+                match ch {
+                    '\n' => keys.push_back(Key::NewLine),
+                    '\r' => keys.push_back(Key::CarriageReturn),
+                    ch => keys.push_back(Key::Char(ch)),
+                }
+            }
+            Self { golden_in: keys, captured_out: vec![] }
         }
 
         /// Obtains a reference to the captured output.
         pub(crate) fn captured_out(&self) -> &[CapturedOut] {
             self.captured_out.as_slice()
+        }
+    }
+
+    impl Drop for MockConsole {
+        fn drop(&mut self) {
+            assert!(
+                self.golden_in.is_empty(),
+                "Not all golden input chars were consumed; {} left",
+                self.golden_in.len()
+            );
         }
     }
 
@@ -392,11 +497,8 @@ pub(crate) mod testutils {
             Ok(())
         }
 
-        async fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String> {
-            let (expected_prompt, expected_previous, answer) = self.golden_in.next().unwrap();
-            assert_eq!(expected_prompt, &prompt);
-            assert_eq!(expected_previous, &previous);
-            Ok((*answer).to_owned())
+        fn is_interactive(&self) -> bool {
+            false
         }
 
         fn locate(&mut self, row: usize, column: usize) -> io::Result<()> {
@@ -406,6 +508,18 @@ pub(crate) mod testutils {
 
         fn print(&mut self, text: &str) -> io::Result<()> {
             self.captured_out.push(CapturedOut::Print(text.to_owned()));
+            Ok(())
+        }
+
+        async fn read_key(&mut self) -> io::Result<Key> {
+            match self.golden_in.pop_front() {
+                Some(ch) => Ok(ch),
+                None => Ok(Key::Eof),
+            }
+        }
+
+        fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+            self.captured_out.push(CapturedOut::Write(bytes.to_owned()));
             Ok(())
         }
     }
@@ -420,15 +534,10 @@ mod tests {
 
     /// Runs the `input` code on a new machine and verifies its output.
     ///
-    /// `golden_in` is a sequence of pairs each containing an expected prompt printed by `INPUT`
-    /// and the reply to feed to that prompt.
+    /// `golden_in` is a sequence of keys to feed to the commands that request console input.
     ///
     /// `expected_out` is a sequence of expected commands or messages.
-    fn do_control_ok_test(
-        input: &str,
-        golden_in: &'static [(&'static str, &'static str, &'static str)],
-        expected_out: &[CapturedOut],
-    ) {
+    fn do_control_ok_test(input: &str, golden_in: &'static str, expected_out: &[CapturedOut]) {
         let console = Rc::from(RefCell::from(MockConsole::new(golden_in)));
         let mut machine =
             MachineBuilder::default().add_builtins(all_commands(console.clone())).build();
@@ -438,11 +547,7 @@ mod tests {
 
     /// Same as `do_control_ok_test` but with `expected_out` being just a sequence of expected
     /// `PRINT` calls.
-    fn do_ok_test(
-        input: &str,
-        golden_in: &'static [(&'static str, &'static str, &'static str)],
-        expected_out: &'static [&'static str],
-    ) {
+    fn do_ok_test(input: &str, golden_in: &'static str, expected_out: &'static [&'static str]) {
         let expected_out: Vec<CapturedOut> =
             expected_out.iter().map(|x| CapturedOut::Print((*x).to_owned())).collect();
         do_control_ok_test(input, golden_in, &expected_out)
@@ -454,7 +559,7 @@ mod tests {
     /// `do_ok_test` regarding `golden_in` and `expected_out`.
     fn do_error_test(
         input: &str,
-        golden_in: &'static [(&'static str, &'static str, &'static str)],
+        golden_in: &'static str,
         expected_out: &'static [&'static str],
         expected_err: &str,
     ) {
@@ -478,12 +583,12 @@ mod tests {
     /// This is a syntactic wrapper over `do_error_test` to simplify those tests that are not
     /// expected to request any input nor generate any output.
     fn do_simple_error_test(input: &str, expected_err: &str) {
-        do_error_test(input, &[], &[], expected_err);
+        do_error_test(input, "", &[], expected_err);
     }
 
     #[test]
     fn test_cls_ok() {
-        do_control_ok_test("CLS", &[], &[CapturedOut::Clear]);
+        do_control_ok_test("CLS", "", &[CapturedOut::Clear]);
     }
 
     #[test]
@@ -493,14 +598,14 @@ mod tests {
 
     #[test]
     fn test_color_ok() {
-        do_control_ok_test("COLOR", &[], &[CapturedOut::Color(None, None)]);
-        do_control_ok_test("COLOR ,", &[], &[CapturedOut::Color(None, None)]);
-        do_control_ok_test("COLOR 1", &[], &[CapturedOut::Color(Some(1), None)]);
-        do_control_ok_test("COLOR 1,", &[], &[CapturedOut::Color(Some(1), None)]);
-        do_control_ok_test("COLOR , 1", &[], &[CapturedOut::Color(None, Some(1))]);
-        do_control_ok_test("COLOR 10, 5", &[], &[CapturedOut::Color(Some(10), Some(5))]);
-        do_control_ok_test("COLOR 0, 0", &[], &[CapturedOut::Color(Some(0), Some(0))]);
-        do_control_ok_test("COLOR 255, 255", &[], &[CapturedOut::Color(Some(255), Some(255))]);
+        do_control_ok_test("COLOR", "", &[CapturedOut::Color(None, None)]);
+        do_control_ok_test("COLOR ,", "", &[CapturedOut::Color(None, None)]);
+        do_control_ok_test("COLOR 1", "", &[CapturedOut::Color(Some(1), None)]);
+        do_control_ok_test("COLOR 1,", "", &[CapturedOut::Color(Some(1), None)]);
+        do_control_ok_test("COLOR , 1", "", &[CapturedOut::Color(None, Some(1))]);
+        do_control_ok_test("COLOR 10, 5", "", &[CapturedOut::Color(Some(10), Some(5))]);
+        do_control_ok_test("COLOR 0, 0", "", &[CapturedOut::Color(Some(0), Some(0))]);
+        do_control_ok_test("COLOR 255, 255", "", &[CapturedOut::Color(Some(255), Some(255))]);
     }
 
     #[test]
@@ -519,44 +624,28 @@ mod tests {
 
     #[test]
     fn test_input_ok() {
-        do_ok_test("INPUT ; foo\nPRINT foo", &[("? ", "", "9")], &["9"]);
-        do_ok_test("INPUT ; foo\nPRINT foo", &[("? ", "", "-9")], &["-9"]);
-        do_ok_test("INPUT , bar?\nPRINT bar", &[("", "", "true")], &["TRUE"]);
-        do_ok_test("INPUT ; foo$\nPRINT foo", &[("? ", "", "")], &[""]);
+        do_ok_test("INPUT ; foo\nPRINT foo", "9\n", &["9"]);
+        do_ok_test("INPUT ; foo\nPRINT foo", "-9\n", &["-9"]);
+        do_ok_test("INPUT , bar?\nPRINT bar", "true\n", &["TRUE"]);
+        do_ok_test("INPUT ; foo$\nPRINT foo", "\n", &[""]);
         do_ok_test(
             "INPUT \"With question mark\"; a$\nPRINT a$",
-            &[("With question mark? ", "", "some long text")],
+            "some long text\n",
             &["some long text"],
         );
         do_ok_test(
             "prompt$ = \"Indirectly without question mark\"\nINPUT prompt$, b\nPRINT b * 2",
-            &[("Indirectly without question mark", "", "42")],
+            "42\n",
             &["84"],
         );
     }
 
     #[test]
     fn test_input_retry() {
-        do_ok_test(
-            "INPUT ; b?",
-            &[("? ", "", ""), ("? ", "", "true")],
-            &["Retry input: Invalid boolean literal "],
-        );
-        do_ok_test(
-            "INPUT ; b?",
-            &[("? ", "", "0"), ("? ", "0", "true")],
-            &["Retry input: Invalid boolean literal 0"],
-        );
-        do_ok_test(
-            "a = 3\nINPUT ; a",
-            &[("? ", "", ""), ("? ", "", "7")],
-            &["Retry input: Invalid integer literal "],
-        );
-        do_ok_test(
-            "a = 3\nINPUT ; a",
-            &[("? ", "", "x"), ("? ", "x", "7")],
-            &["Retry input: Invalid integer literal x"],
-        );
+        do_ok_test("INPUT ; b?", "\ntrue\n", &["Retry input: Invalid boolean literal "]);
+        do_ok_test("INPUT ; b?", "0\ntrue\n", &["Retry input: Invalid boolean literal 0"]);
+        do_ok_test("a = 3\nINPUT ; a", "\n7\n", &["Retry input: Invalid integer literal "]);
+        do_ok_test("a = 3\nINPUT ; a", "x\n7\n", &["Retry input: Invalid integer literal x"]);
     }
 
     #[test]
@@ -571,8 +660,8 @@ mod tests {
 
     #[test]
     fn test_locate_ok() {
-        do_control_ok_test("LOCATE 0, 0", &[], &[CapturedOut::Locate(0, 0)]);
-        do_control_ok_test("LOCATE 1000, 2000", &[], &[CapturedOut::Locate(1000, 2000)]);
+        do_control_ok_test("LOCATE 0, 0", "", &[CapturedOut::Locate(0, 0)]);
+        do_control_ok_test("LOCATE 1000, 2000", "", &[CapturedOut::Locate(1000, 2000)]);
     }
 
     #[test]
@@ -593,19 +682,19 @@ mod tests {
 
     #[test]
     fn test_print_ok() {
-        do_ok_test("PRINT", &[], &[""]);
-        do_ok_test("PRINT ;", &[], &[" "]);
-        do_ok_test("PRINT ,", &[], &["\t"]);
-        do_ok_test("PRINT ;,;,", &[], &[" \t \t"]);
+        do_ok_test("PRINT", "", &[""]);
+        do_ok_test("PRINT ;", "", &[" "]);
+        do_ok_test("PRINT ,", "", &["\t"]);
+        do_ok_test("PRINT ;,;,", "", &[" \t \t"]);
 
-        do_ok_test("PRINT 3", &[], &["3"]);
-        do_ok_test("PRINT 3 = 5", &[], &["FALSE"]);
-        do_ok_test("PRINT true;123;\"foo bar\"", &[], &["TRUE 123 foo bar"]);
-        do_ok_test("PRINT 6,1;3,5", &[], &["6\t1 3\t5"]);
+        do_ok_test("PRINT 3", "", &["3"]);
+        do_ok_test("PRINT 3 = 5", "", &["FALSE"]);
+        do_ok_test("PRINT true;123;\"foo bar\"", "", &["TRUE 123 foo bar"]);
+        do_ok_test("PRINT 6,1;3,5", "", &["6\t1 3\t5"]);
 
         do_ok_test(
             "word = \"foo\"\nPRINT word, word\nPRINT word + \"s\"",
-            &[],
+            "",
             &["foo\tfoo", "foos"],
         );
     }

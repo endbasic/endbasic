@@ -20,20 +20,14 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
-mod exit;
 mod store;
 
 use async_trait::async_trait;
-use crossterm::{cursor, execute, style, terminal, tty::IsTty, QueueableCommand};
+use crossterm::{cursor, event, execute, style, terminal, tty::IsTty, QueueableCommand};
 use endbasic_core::console;
-use endbasic_core::exec::{self, ClearCommand, MachineBuilder};
-use endbasic_core::help::HelpCommand;
-use endbasic_core::program;
-pub use exit::ExitCommand;
 use futures_lite::future::block_on;
-use rustyline::error::ReadlineError;
-use rustyline::Editor;
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::io::{self, Write};
 use std::path::Path;
 use std::rc::Rc;
@@ -50,29 +44,88 @@ fn crossterm_error_to_io_error(e: crossterm::ErrorKind) -> io::Error {
     }
 }
 
-/// Converts a `ReadLine` error into an `io::Error`.
-pub(crate) fn readline_error_to_io_error(e: ReadlineError) -> io::Error {
-    let kind = match e {
-        ReadlineError::Eof => io::ErrorKind::UnexpectedEof,
-        ReadlineError::Interrupted => io::ErrorKind::Interrupted,
-        #[cfg(unix)]
-        ReadlineError::Utf8Error => io::ErrorKind::InvalidData,
-        #[cfg(windows)]
-        ReadlineError::Decode(_) => io::ErrorKind::InvalidData,
-        _ => io::ErrorKind::Other,
-    };
-    io::Error::new(kind, format!("{}", e))
-}
-
 /// Implementation of the EndBASIC console to interact with stdin and stdout.
 pub struct TextConsole {
+    /// Whether stdin and stdout are attached to a TTY.  When this is true, the console is put in
+    /// raw mode for finer-grained control.
     is_tty: bool,
+
+    /// Line-oriented buffer to hold input when not operating in raw mode.
+    buffer: VecDeque<console::Key>,
 }
 
 impl TextConsole {
     /// Creates a new console based on the properties of stdin/stdout.
-    pub fn from_stdio() -> Self {
-        Self { is_tty: io::stdout().is_tty() }
+    pub fn from_stdio() -> io::Result<Self> {
+        let is_tty = io::stdin().is_tty() && io::stdout().is_tty();
+        if is_tty {
+            terminal::enable_raw_mode().map_err(crossterm_error_to_io_error)?;
+        }
+        Ok(Self { is_tty, buffer: VecDeque::default() })
+    }
+}
+
+impl Drop for TextConsole {
+    fn drop(&mut self) {
+        if self.is_tty {
+            terminal::disable_raw_mode().unwrap();
+        }
+    }
+}
+
+impl TextConsole {
+    /// Converts a line of text read from stdin into a sequence of key presses.
+    fn line_to_keys(s: String) -> VecDeque<console::Key> {
+        let mut keys = VecDeque::default();
+        for ch in s.chars() {
+            if ch == '\n' {
+                keys.push_back(console::Key::NewLine);
+            } else if ch == '\r' {
+                keys.push_back(console::Key::CarriageReturn);
+            } else if !ch.is_control() {
+                keys.push_back(console::Key::Char(ch));
+            } else {
+                keys.push_back(console::Key::Unknown(format!("{}", ch)));
+            }
+        }
+        keys
+    }
+
+    /// Reads a single key from stdin when not attached to a TTY.  Because characters are not
+    /// visible to us until a newline is received, this reads complete lines and buffers them in
+    /// memory.
+    fn read_key_from_stdin(&mut self) -> io::Result<console::Key> {
+        if self.buffer.is_empty() {
+            let mut line = String::new();
+            if io::stdin().read_line(&mut line)? == 0 {
+                return Ok(console::Key::Eof);
+            }
+            self.buffer = TextConsole::line_to_keys(line);
+        }
+        match self.buffer.pop_front() {
+            Some(key) => Ok(key),
+            None => Ok(console::Key::Eof),
+        }
+    }
+
+    /// Reads a single key from the connected TTY.  This assumes the TTY is in raw mode.
+    fn read_key_from_tty(&mut self) -> io::Result<console::Key> {
+        loop {
+            if let event::Event::Key(ev) = event::read().map_err(crossterm_error_to_io_error)? {
+                match ev.code {
+                    event::KeyCode::Backspace => return Ok(console::Key::Backspace),
+                    event::KeyCode::Char('c') if ev.modifiers == event::KeyModifiers::CONTROL => {
+                        return Ok(console::Key::Interrupt)
+                    }
+                    event::KeyCode::Char('d') if ev.modifiers == event::KeyModifiers::CONTROL => {
+                        return Ok(console::Key::Eof)
+                    }
+                    event::KeyCode::Char(ch) => return Ok(console::Key::Char(ch)),
+                    event::KeyCode::Enter => return Ok(console::Key::NewLine),
+                    _ => return Ok(console::Key::Unknown(format!("{:?}", ev))),
+                }
+            }
+        }
     }
 }
 
@@ -99,25 +152,8 @@ impl console::Console for TextConsole {
         Ok(())
     }
 
-    async fn input(&mut self, prompt: &str, previous: &str) -> io::Result<String> {
-        let answer = if self.is_tty {
-            let mut rl = Editor::<()>::new();
-            match rl.readline_with_initial(prompt, (previous, "")) {
-                Ok(line) => line,
-                Err(e) => return Err(readline_error_to_io_error(e)),
-            }
-        } else {
-            if !prompt.is_empty() {
-                let mut stdout = io::stdout();
-                stdout.write_all(prompt.as_bytes())?;
-                stdout.flush()?;
-            }
-
-            let mut answer = String::new();
-            io::stdin().read_line(&mut answer)?;
-            answer
-        };
-        Ok(answer.trim_end().to_owned())
+    fn is_interactive(&self) -> bool {
+        self.is_tty
     }
 
     fn locate(&mut self, row: usize, column: usize) -> io::Result<()> {
@@ -135,8 +171,27 @@ impl console::Console for TextConsole {
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
-        println!("{}", text);
+        if self.is_tty {
+            print!("{}\r\n", text);
+        } else {
+            println!("{}", text);
+        }
         Ok(())
+    }
+
+    async fn read_key(&mut self) -> io::Result<console::Key> {
+        if self.is_tty {
+            self.read_key_from_tty()
+        } else {
+            self.read_key_from_stdin()
+        }
+    }
+
+    fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
+        stdout.write_all(bytes)?;
+        stdout.flush()
     }
 }
 
@@ -145,52 +200,7 @@ impl console::Console for TextConsole {
 /// `dir` specifies the directory that the interpreter will use for any commands that manipulate
 /// files.
 pub fn run_repl_loop(dir: &Path) -> io::Result<i32> {
-    let console = Rc::from(RefCell::from(TextConsole::from_stdio()));
+    let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
     let store = Rc::from(RefCell::from(FileStore::new(dir)));
-    let exit_code = Rc::from(RefCell::from(None));
-    let mut machine = MachineBuilder::default()
-        .add_builtin(Rc::from(ClearCommand::default()))
-        .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
-        .add_builtin(Rc::from(HelpCommand::new(console.clone())))
-        .add_builtins(console::all_commands(console.clone()))
-        .add_builtins(program::all_commands(console, store))
-        .build();
-
-    println!();
-    println!("    Welcome to EndBASIC {}.", env!("CARGO_PKG_VERSION"));
-    println!("    Type HELP for interactive usage information.");
-    println!();
-
-    let mut rl = Editor::<()>::new();
-    while exit_code.borrow().is_none() {
-        match rl.readline("Ready\n") {
-            Ok(line) => {
-                rl.add_history_entry(line.as_str());
-                match block_on(machine.exec(&mut line.as_bytes())) {
-                    Ok(()) => (),
-                    Err(e) => {
-                        if exit_code.borrow().is_some() {
-                            if let exec::Error::IoError(e) = e {
-                                debug_assert!(e.kind() == io::ErrorKind::UnexpectedEof);
-                            }
-                        } else {
-                            println!("ERROR: {}", e);
-                        }
-                    }
-                }
-            }
-            Err(ReadlineError::Interrupted) => {
-                println!("Interrupted by CTRL-C");
-                // TODO(jmmv): This should cause the interpreter to exit with a signal.
-                *exit_code.borrow_mut() = Some(1);
-            }
-            Err(ReadlineError::Eof) => {
-                println!("End of input by CTRL-D");
-                *exit_code.borrow_mut() = Some(0);
-            }
-            Err(e) => return Err(readline_error_to_io_error(e)),
-        }
-    }
-    let exit_code = exit_code.borrow();
-    Ok(exit_code.expect("Some code path above did not set an exit code"))
+    block_on(endbasic_core::repl::run_repl_loop(console, store))
 }

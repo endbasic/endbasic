@@ -30,3 +30,4 @@ mod lexer;
 mod parser;
 pub mod program;
 mod reader;
+pub mod repl;

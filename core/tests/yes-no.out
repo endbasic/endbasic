@@ -1,3 +1,2 @@
-Should we continue? Should we continue? Should we continue? Retry input: Invalid boolean literal 5
-Should we continue? Should we continue? Should we continue? Should we continue? Should we continue? Should we exit? Should we exit? Should we exit? Should we exit? Should we exit? Retry input: Invalid boolean literal foo
-Should we exit? Should we exit? Should we exit? 
+Retry input: Invalid boolean literal 5
+Retry input: Invalid boolean literal foo
