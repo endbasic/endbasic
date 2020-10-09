@@ -111,10 +111,10 @@ fn get_programs_dir(flag: Option<String>) -> Result<PathBuf> {
 
 /// Executes the `path` program in a fresh machine.
 fn run<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
-    let console = Rc::from(RefCell::from(endbasic::TextConsole::from_stdio()));
+    let console = Rc::from(RefCell::from(endbasic::TextConsole::from_stdio()?));
     let exit_code = Rc::from(RefCell::from(None));
     let mut machine = endbasic_core::exec::MachineBuilder::default()
-        .add_builtin(Rc::from(endbasic::ExitCommand::new(exit_code.clone())))
+        .add_builtin(Rc::from(endbasic_core::repl::ExitCommand::new(exit_code.clone())))
         .add_builtins(endbasic_core::console::all_commands(console))
         .build();
 

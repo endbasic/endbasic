@@ -16,7 +16,7 @@
 //! Stored program manipulation and interactive editor.
 
 use crate::ast::{ArgSep, Expr, Value};
-use crate::console::Console;
+use crate::console::{self, Console};
 use crate::exec::{self, BuiltinCommand, Machine};
 use async_trait::async_trait;
 use std::cell::RefCell;
@@ -74,7 +74,7 @@ async fn edit_one(
         None => "",
     };
 
-    let line = console.input(&prompt, &previous).await?;
+    let line = console::read_line(console, &prompt, &previous).await?;
     debug_assert!(!line.ends_with('\n'));
     if line.is_empty() {
         program.remove(&n);
@@ -614,8 +614,7 @@ mod tests {
     /// Runs the `input` code on a new machine that stores programs in `store` and verifies its
     /// output.
     ///
-    /// `golden_in` is a sequence of pairs each containing an expected prompt printed by `INPUT`
-    /// and the reply to feed to that prompt.
+    /// `golden_in` is a sequence of keys to feed to the commands that request console input.
     ///
     /// `expected_out` is a sequence of expected calls to `PRINT`.
     ///
@@ -625,7 +624,7 @@ mod tests {
         program: Program,
         store: Rc<RefCell<dyn Store>>,
         input: &str,
-        golden_in: &'static [(&'static str, &'static str, &'static str)],
+        golden_in: &'static str,
         expected_out: &'static [&'static str],
         exp_program: &'static [(usize, &'static str)],
     ) {
@@ -648,7 +647,7 @@ mod tests {
     fn do_ok_test(
         program: Program,
         input: &str,
-        golden_in: &'static [(&'static str, &'static str, &'static str)],
+        golden_in: &'static str,
         expected_out: &'static [&'static str],
         exp_program: &'static [(usize, &'static str)],
     ) {
@@ -660,7 +659,7 @@ mod tests {
     ///
     /// Ensures that this does not touch the console.
     fn do_error_test_with_store(store: Rc<RefCell<dyn Store>>, input: &str, expected_err: &str) {
-        let console = Rc::from(RefCell::from(MockConsole::new(&[])));
+        let console = Rc::from(RefCell::from(MockConsole::new("")));
         let mut machine = MachineBuilder::default()
             .add_builtins(all_commands_for(Program::default(), console.clone(), store))
             .build();
@@ -695,7 +694,7 @@ mod tests {
                 program.clone(),
                 store.clone(),
                 &("DEL \"".to_owned() + p + "\""),
-                &[],
+                "",
                 &[],
                 &[(10, "Leave me alone")],
             );
@@ -722,7 +721,7 @@ mod tests {
             Program::default(),
             store,
             "DIR",
-            &[],
+            "",
             &["", "    Modified              Size    Name", "    0 file(s), 0 bytes", ""],
             &[],
         );
@@ -741,7 +740,7 @@ mod tests {
             Program::default(),
             store,
             "DIR",
-            &[],
+            "",
             &[
                 "",
                 "    Modified              Size    Name",
@@ -766,29 +765,17 @@ mod tests {
     #[test]
     fn test_edit_append_empty() {
         let program = Program::default();
-        do_ok_test(
-            program,
-            "EDIT",
-            &[("10 ", "", "first"), ("20 ", "", "second"), ("30 ", "", "")],
-            &[],
-            &[(10, "first"), (20, "second")],
-        );
+        do_ok_test(program, "EDIT", "first\nsecond\n\n", &[], &[(10, "first"), (20, "second")]);
     }
 
     #[test]
     fn test_edit_append_resume() {
         let program = Program::default();
-        do_ok_test(
-            program.clone(),
-            "EDIT",
-            &[("10 ", "", "first"), ("20 ", "", "")],
-            &[],
-            &[(10, "first")],
-        );
+        do_ok_test(program.clone(), "EDIT", "first\n\n", &[], &[(10, "first")]);
         do_ok_test(
             program,
             "EDIT",
-            &[("20 ", "", "second"), ("30 ", "", "third"), ("40 ", "", "")],
+            "second\nthird\n\n",
             &[],
             &[(10, "first"), (20, "second"), (30, "third")],
         );
@@ -798,13 +785,7 @@ mod tests {
     fn test_edit_append_to_arbitrary_number() {
         let program = Program::default();
         program.borrow_mut().insert(28, "next is 30".to_owned());
-        do_ok_test(
-            program,
-            "EDIT",
-            &[("30 ", "", "correct"), ("40 ", "", "")],
-            &[],
-            &[(28, "next is 30"), (30, "correct")],
-        );
+        do_ok_test(program, "EDIT", "correct\n\n", &[], &[(28, "next is 30"), (30, "correct")]);
     }
 
     #[test]
@@ -815,7 +796,7 @@ mod tests {
         do_ok_test(
             program,
             "EDIT 8",
-            &[("8 ", "", "some text")],
+            "some text\n",
             &[],
             &[(7, "before"), (8, "some text"), (9, "after")],
         );
@@ -827,13 +808,7 @@ mod tests {
         program.borrow_mut().insert(7, "before".to_owned());
         program.borrow_mut().insert(8, "some text".to_owned());
         program.borrow_mut().insert(9, "after".to_owned());
-        do_ok_test(
-            program,
-            "EDIT 8",
-            &[("8 ", "some text", "new")],
-            &[],
-            &[(7, "before"), (8, "new"), (9, "after")],
-        );
+        do_ok_test(program, "EDIT 8", "new\n", &[], &[(7, "before"), (8, "new"), (9, "after")]);
     }
 
     #[test]
@@ -842,13 +817,7 @@ mod tests {
         program.borrow_mut().insert(7, "before".to_owned());
         program.borrow_mut().insert(8, "some text".to_owned());
         program.borrow_mut().insert(9, "after".to_owned());
-        do_ok_test(
-            program,
-            "EDIT 8",
-            &[("8 ", "some text", "")],
-            &[],
-            &[(7, "before"), (9, "after")],
-        );
+        do_ok_test(program, "EDIT 8", "\n", &[], &[(7, "before"), (9, "after")]);
     }
 
     #[test]
@@ -862,7 +831,7 @@ mod tests {
     #[test]
     fn test_list_nothing() {
         let program = Program::default();
-        do_ok_test(program, "LIST", &[], &[""], &[]);
+        do_ok_test(program, "LIST", "", &[""], &[]);
     }
 
     #[test]
@@ -873,7 +842,7 @@ mod tests {
         do_ok_test(
             program,
             "LIST",
-            &[],
+            "",
             &["10 first", "1023     second line", ""],
             &[(10, "first"), (1023, "    second line")],
         );
@@ -898,7 +867,7 @@ mod tests {
                 Program::default(),
                 store.clone(),
                 &("LOAD \"".to_owned() + p + "\""),
-                &[],
+                "",
                 &[],
                 &[(10, "line 1"), (20, "  line 2")],
             );
@@ -915,7 +884,7 @@ mod tests {
             Program::default(),
             store,
             &("LOAD \"data.bas\""),
-            &[],
+            "",
             &[],
             &[(10, "a"), (20, "b")],
         );
@@ -965,7 +934,7 @@ mod tests {
     #[test]
     fn test_new_nothing() {
         let program = Program::default();
-        do_ok_test(program, "NEW", &[], &[], &[]);
+        do_ok_test(program, "NEW", "", &[], &[]);
     }
 
     #[test]
@@ -993,7 +962,7 @@ mod tests {
         program.borrow_mut().insert(10, "one".to_owned());
         program.borrow_mut().insert(20, "two".to_owned());
         program.borrow_mut().insert(30, "three".to_owned());
-        do_ok_test(program, "RENUM", &[], &[], &[(10, "one"), (20, "two"), (30, "three")]);
+        do_ok_test(program, "RENUM", "", &[], &[(10, "one"), (20, "two"), (30, "three")]);
     }
 
     #[test]
@@ -1002,7 +971,7 @@ mod tests {
         program.borrow_mut().insert(10, "one".to_owned());
         program.borrow_mut().insert(15, "two".to_owned());
         program.borrow_mut().insert(20, "three".to_owned());
-        do_ok_test(program, "RENUM", &[], &[], &[(10, "one"), (20, "two"), (30, "three")]);
+        do_ok_test(program, "RENUM", "", &[], &[(10, "one"), (20, "two"), (30, "three")]);
     }
 
     #[test]
@@ -1010,7 +979,7 @@ mod tests {
         let program = Program::default();
         program.borrow_mut().insert(10, "one".to_owned());
         program.borrow_mut().insert(30, "three".to_owned());
-        do_ok_test(program, "RENUM", &[], &[], &[(10, "one"), (20, "three")]);
+        do_ok_test(program, "RENUM", "", &[], &[(10, "one"), (20, "three")]);
     }
 
     #[test]
@@ -1019,7 +988,7 @@ mod tests {
         program.borrow_mut().insert(10, "one".to_owned());
         program.borrow_mut().insert(78, "two".to_owned());
         program.borrow_mut().insert(1294, "three".to_owned());
-        do_ok_test(program, "RENUM", &[], &[], &[(10, "one"), (20, "two"), (30, "three")]);
+        do_ok_test(program, "RENUM", "", &[], &[(10, "one"), (20, "two"), (30, "three")]);
     }
 
     #[test]
@@ -1030,7 +999,7 @@ mod tests {
     #[test]
     fn test_run_nothing() {
         let program = Program::default();
-        do_ok_test(program, "RUN", &[], &[], &[]);
+        do_ok_test(program, "RUN", "", &[], &[]);
     }
 
     #[test]
@@ -1072,7 +1041,7 @@ mod tests {
                 program.clone(),
                 store.clone(),
                 &("SAVE \"".to_owned() + p + "\""),
-                &[],
+                "",
                 &[],
                 &[(10, "line 1"), (20, "  line 2")],
             );

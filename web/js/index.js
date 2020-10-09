@@ -32,45 +32,5 @@ term.loadAddon(fitAddon);
 term.open(document.getElementById('terminal'));
 fitAddon.fit();
 
-var queue = [];
-function readLine() {
-    return new Promise(resolve => { queue.push(resolve); });
-}
-
-var interpreter = new endbasic_web.Interpreter(term, readLine);
-
-var line = "";
-term.onData(e => {
-    for (var i = 0; i < e.length; i++) {
-        let ch = e.charAt(i);
-        if (ch === "\x7f") {
-            if (line.length > 0) {
-                term.write('\b \b');
-                line = line.substring(0, line.length - 1);
-            }
-        } else if (ch === "\x0d") {
-            term.write("\n\r");
-            var resolveReadLine = queue.shift();
-            resolveReadLine(line);
-            line = "";
-        } else {
-            term.write(ch);
-            line += ch;
-        }
-    }
-});
-
-async function next(term, readLine, interpreter) {
-    term.write("Ready\n\r");
-    let line = await readLine();
-    interpreter = await interpreter.run(line);
-    let error = interpreter.last_error();
-    if (error.length != 0) {
-        term.write("ERROR: " + error + "\n\r");
-    }
-    setImmediate(next, term, readLine, interpreter);
-}
-
-next(term, readLine, interpreter);
-
 term.focus();
+endbasic_web.run_repl_loop(term);

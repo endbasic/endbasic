@@ -4,7 +4,7 @@
 
 3
 ERROR: Undefined variable a
-10 20 30 counter is 100
+counter is 100
 counter is 101
 counter is 102
 ERROR: Undefined variable counter

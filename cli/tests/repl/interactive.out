@@ -2,7 +2,7 @@
     Welcome to EndBASIC X.Y.Z.
     Type HELP for interactive usage information.
 
-? Got 123 from stdin
+Got 123 from stdin
 ERROR: Unknown builtin FOOBAR
 Continuing
 End of input by CTRL-D

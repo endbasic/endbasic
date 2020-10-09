@@ -13,11 +13,14 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-//! Implementation of the command to exit the interpreter.
+//! Interactive interpreter for the EndBASIC language.
 
+use crate::ast::{ArgSep, Expr, Value};
+use crate::console::{self, Console};
+use crate::exec::{self, BuiltinCommand, ClearCommand, Machine, MachineBuilder};
+use crate::help::HelpCommand;
+use crate::program::{self, Store};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Expr, Value};
-use endbasic_core::exec::{self, BuiltinCommand, Machine};
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -81,10 +84,74 @@ The optional code indicates the return value to return to the system."
     }
 }
 
+/// Enters the interactive interpreter.
+///
+/// `dir` specifies the directory that the interpreter will use for any commands that manipulate
+/// files.
+pub async fn run_repl_loop(
+    console: Rc<RefCell<dyn Console>>,
+    store: Rc<RefCell<dyn Store>>,
+) -> io::Result<i32> {
+    let exit_code = Rc::from(RefCell::from(None));
+    let mut machine = MachineBuilder::default()
+        .add_builtin(Rc::from(ClearCommand::default()))
+        .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
+        .add_builtin(Rc::from(HelpCommand::new(console.clone())))
+        .add_builtins(console::all_commands(console.clone()))
+        .add_builtins(program::all_commands(console.clone(), store))
+        .build();
+
+    {
+        let mut console = console.borrow_mut();
+        console.print("")?;
+        console.print(&format!("    Welcome to EndBASIC {}.", env!("CARGO_PKG_VERSION")))?;
+        console.print("    Type HELP for interactive usage information.")?;
+        console.print("")?;
+    }
+
+    while exit_code.borrow().is_none() {
+        let line = {
+            let mut console = console.borrow_mut();
+            console::read_line(&mut *console, "Ready\n\r", "").await
+        };
+
+        match line {
+            Ok(line) => match machine.exec(&mut line.as_bytes()).await {
+                Ok(()) => (),
+                Err(e) => {
+                    if exit_code.borrow().is_some() {
+                        if let exec::Error::IoError(e) = e {
+                            debug_assert!(e.kind() == io::ErrorKind::UnexpectedEof);
+                        }
+                    } else {
+                        let mut console = console.borrow_mut();
+                        console.print(format!("ERROR: {}", e).as_str())?;
+                    }
+                }
+            },
+            Err(e) => {
+                if e.kind() == io::ErrorKind::Interrupted {
+                    let mut console = console.borrow_mut();
+                    console.print("Interrupted by CTRL-C")?;
+                    // TODO(jmmv): This should cause the interpreter to exit with a signal.
+                    *exit_code.borrow_mut() = Some(1);
+                } else if e.kind() == io::ErrorKind::UnexpectedEof {
+                    let mut console = console.borrow_mut();
+                    console.print("End of input by CTRL-D")?;
+                    *exit_code.borrow_mut() = Some(0);
+                } else {
+                    *exit_code.borrow_mut() = Some(1);
+                }
+            }
+        }
+    }
+    let exit_code = exit_code.borrow();
+    Ok(exit_code.expect("Some code path above did not set an exit code"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use endbasic_core::exec::MachineBuilder;
     use futures_lite::future::block_on;
 
     /// Runs the code `input` and expects it to fail with `expected_err`.

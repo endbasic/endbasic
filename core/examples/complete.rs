@@ -19,9 +19,10 @@
 //! and processes the given file.
 
 use async_trait::async_trait;
-use endbasic_core::console::Console;
+use endbasic_core::console::{Console, Key};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
@@ -29,7 +30,26 @@ use std::process;
 use std::rc::Rc;
 
 /// Incomplete implementation of the EndBASIC console.
-struct IncompleteConsole {}
+#[derive(Default)]
+struct IncompleteConsole {
+    buffer: VecDeque<Key>,
+}
+
+/// Converts a line of text read from stdin into a sequence of key presses.
+// TODO(jmmv): Avoid duplicating this from cli/src/lib.rs.
+fn line_to_keys(s: String) -> VecDeque<Key> {
+    let mut keys = VecDeque::default();
+    for ch in s.chars() {
+        if ch == '\n' {
+            keys.push_back(Key::NewLine);
+        } else if ch == '\r' {
+            keys.push_back(Key::CarriageReturn);
+        } else {
+            keys.push_back(Key::Char(ch));
+        }
+    }
+    keys
+}
 
 #[async_trait(?Send)]
 impl Console for IncompleteConsole {
@@ -43,16 +63,8 @@ impl Console for IncompleteConsole {
         Ok(())
     }
 
-    async fn input(&mut self, prompt: &str, _previous: &str) -> io::Result<String> {
-        if !prompt.is_empty() {
-            let mut stdout = io::stdout();
-            stdout.write_all(prompt.as_bytes())?;
-            stdout.flush()?;
-        }
-
-        let mut answer = String::new();
-        io::stdin().read_line(&mut answer)?;
-        Ok(answer.trim_end().to_owned())
+    fn is_interactive(&self) -> bool {
+        false
     }
 
     fn locate(&mut self, _row: usize, _column: usize) -> io::Result<()> {
@@ -63,6 +75,28 @@ impl Console for IncompleteConsole {
     fn print(&mut self, text: &str) -> io::Result<()> {
         println!("{}", text);
         Ok(())
+    }
+
+    async fn read_key(&mut self) -> io::Result<Key> {
+        // TODO(jmmv): Avoid duplicating this from cli/src/lib.rs.
+        if self.buffer.is_empty() {
+            let mut line = String::new();
+            if io::stdin().read_line(&mut line)? == 0 {
+                return Ok(Key::Eof);
+            }
+            self.buffer = line_to_keys(line);
+        }
+        match self.buffer.pop_front() {
+            Some(key) => Ok(key),
+            None => Ok(Key::Eof),
+        }
+    }
+
+    fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
+        stdout.write_all(bytes)?;
+        stdout.flush()
     }
 }
 
@@ -77,7 +111,7 @@ fn main() {
     };
 
     // TODO(jmmv): Truly add all commands in the core library and test for them.
-    let console = Rc::from(RefCell::from(IncompleteConsole {}));
+    let console = Rc::from(RefCell::from(IncompleteConsole::default()));
     let mut machine = endbasic_core::exec::MachineBuilder::default()
         .add_builtins(endbasic_core::console::all_commands(console))
         .build();

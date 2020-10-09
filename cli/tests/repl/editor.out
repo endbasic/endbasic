@@ -2,7 +2,7 @@
     Welcome to EndBASIC X.Y.Z.
     Type HELP for interactive usage information.
 
-10 20 30 10 PRINT "Hello!"
+10 PRINT "Hello!"
 20 PRINT "Good bye."
 
 Hello!
@@ -10,8 +10,8 @@ Good bye.
 10 PRINT "Hello!"
 20 PRINT "Good bye."
 
-20 This is not part of the program
-5 15 25 5 PRINT "Pre-hello"
+This is not part of the program
+5 PRINT "Pre-hello"
 10 PRINT "Hello!"
 15 PRINT "Interlude"
 20 PRINT "Not yet"
@@ -23,7 +23,7 @@ Good bye.
 40 PRINT "Not yet"
 50 PRINT "Leaving"
 
-60 70 80 10 PRINT "Pre-hello"
+10 PRINT "Pre-hello"
 20 PRINT "Hello!"
 30 PRINT "Interlude"
 40 PRINT "Not yet"
@@ -31,7 +31,7 @@ Good bye.
 60 PRINT "One more thing"
 70 PRINT "Maybe not"
 
-30 10 PRINT "Pre-hello"
+10 PRINT "Pre-hello"
 20 PRINT "Hello!"
 40 PRINT "Not yet"
 50 PRINT "Leaving"
@@ -52,7 +52,7 @@ Leaving
 One more thing
 Maybe not
 
-10 20 30 40 before
+before
 ERROR: Unexpected value in expression
 Did not abort on RUN error!
 End of input by CTRL-D
