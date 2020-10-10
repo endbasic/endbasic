@@ -96,10 +96,7 @@ impl CharOps for char {
     fn is_space(&self) -> bool {
         // TODO(jmmv): This is probably not correct regarding UTF-8 when comparing this function to
         // the `is_whitespace` builtin.  Figure out if that's true and what to do about it.
-        match *self {
-            ' ' | '\t' | '\r' => true,
-            _ => false,
-        }
+        matches!(*self, ' ' | '\t' | '\r')
     }
 
     fn is_word(&self) -> bool {
