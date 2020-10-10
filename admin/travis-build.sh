@@ -36,7 +36,7 @@ do_lint() {
 
     local web_version="$(grep ^version web/Cargo.toml \
         | head -n 1 | cut -d '"' -f 2)"
-    local json_version="$(grep version web/www/package.json \
+    local json_version="$(grep version web/package.json \
         | head -n 1 | cut -d '"' -f 4)"
     if [ "${web_version}" != "${json_version}" ]; then
         echo "Versions in Cargo.toml and package.json are inconsistent" 1>&2
@@ -82,10 +82,6 @@ do_web() {
     set -ux
 
     cd web
-    wasm-pack build
-    cd -
-
-    cd web/www
     npm ci --verbose
     npm run-script build --verbose
     npm run-script test --verbose
