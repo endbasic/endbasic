@@ -7,7 +7,7 @@ const distDir = path.resolve(__dirname, "dist");
 module.exports = {
     mode: "production",
     entry: {
-        index: "./bootstrap.js",
+        index: "./js/bootstrap.js",
     },
     output: {
         path: distDir,
@@ -24,11 +24,7 @@ module.exports = {
     plugins: [
         new CopyWebpackPlugin({
             patterns: [
-                path.resolve(__dirname, ".nojekyll"),
-                path.resolve(__dirname, "bootstrap.js"),
-                path.resolve(__dirname, "index.html"),
-                path.resolve(__dirname, "index.js"),
-                path.resolve(__dirname, "style.css"),
+                path.resolve(__dirname, "static"),
                 {
                     from: path.resolve(__dirname, "node_modules/xterm/css/xterm.css"),
                     to: "xterm.css",
@@ -37,7 +33,7 @@ module.exports = {
         }),
 
         new WasmPackPlugin({
-            crateDirectory: __dirname,
+            crateDirectory: path.resolve(__dirname),
         }),
     ],
 };

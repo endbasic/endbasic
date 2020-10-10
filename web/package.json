@@ -2,11 +2,7 @@
     "name": "endbasic-www",
     "version": "0.2.0",
     "description": "The EndBASIC programming language - web interface",
-    "main": "index.js",
     "private": true,
-    "bin": {
-        "endbasic-www": ".bin/endbasic-www.js"
-    },
     "scripts": {
         "build": "rimraf dist pkg && webpack",
         "start": "rimraf dist pkg && webpack-dev-server --open -d",
@@ -29,7 +25,6 @@
     },
     "homepage": "https://github.com/jmmv/endbasic",
     "dependencies": {
-        "endbasic-web": "file:../pkg",
         "jquery": "3.5.1",
         "xterm": "4.8.1",
         "xterm-addon-fit": "0.4.0"

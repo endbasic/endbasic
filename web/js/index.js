@@ -13,7 +13,7 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-import * as endbasic_web from "endbasic-web";
+import * as endbasic_web from "../pkg/index.js";
 import $ from "jquery";
 import * as xterm from "xterm";
 import * as xterm_fit_addon from "xterm-addon-fit";
