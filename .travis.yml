@@ -57,7 +57,7 @@ deploy:
     provider: pages
     skip_cleanup: true
     github_token: $GITHUB_TOKEN
-    local_dir: web/www/dist
+    local_dir: web/dist
     on:
         branch: master
         condition: "$DO = web"
