@@ -19,9 +19,10 @@ use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
 use crate::eval::{self, Vars};
 use crate::parser::{self, Parser};
 use async_trait::async_trait;
-use futures_lite::future::FutureExt;
 use std::collections::HashMap;
+use std::future::Future;
 use std::io;
+use std::pin::Pin;
 use std::rc::Rc;
 
 /// Execution errors.
@@ -237,11 +238,16 @@ impl Machine {
                 cmd.exec(&args, self).await?
             }
             Statement::If(branches) => {
-                let f = self.do_if(branches).boxed_local();
+                // Change this to using FutureExt::boxed_local if we ever depend on the futures or
+                // futures_lite crate directly.
+                let f: Pin<Box<dyn Future<Output = Result<()>>>> = Box::pin(self.do_if(branches));
                 f.await?;
             }
             Statement::While(condition, body) => {
-                let f = self.do_while(condition, body).boxed_local();
+                // Change this to using FutureExt::boxed_local if we ever depend on the futures or
+                // futures_lite crate directly.
+                let f: Pin<Box<dyn Future<Output = Result<()>>>> =
+                    Box::pin(self.do_while(condition, body));
                 f.await?;
             }
         }
