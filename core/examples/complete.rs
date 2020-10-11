@@ -20,6 +20,7 @@
 
 use async_trait::async_trait;
 use endbasic_core::console::Console;
+use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::env;
 use std::fs;
@@ -89,7 +90,7 @@ fn main() {
         }
     };
 
-    match machine.exec(&mut input) {
+    match block_on(machine.exec(&mut input)) {
         Ok(()) => (),
         Err(e) => {
             eprintln!("ERROR: {}", e);

@@ -414,6 +414,7 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use crate::exec::MachineBuilder;
+    use futures_lite::future::block_on;
 
     /// Runs the `input` code on a new machine and verifies its output.
     ///
@@ -429,7 +430,7 @@ mod tests {
         let console = Rc::from(RefCell::from(MockConsole::new(golden_in)));
         let mut machine =
             MachineBuilder::default().add_builtins(all_commands(console.clone())).build();
-        machine.exec(&mut input.as_bytes()).expect("Execution failed");
+        block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed");
         assert_eq!(expected_out, console.borrow().captured_out());
     }
 
@@ -460,7 +461,10 @@ mod tests {
             MachineBuilder::default().add_builtins(all_commands(console.clone())).build();
         assert_eq!(
             expected_err,
-            format!("{}", machine.exec(&mut input.as_bytes()).expect_err("Execution did not fail"))
+            format!(
+                "{}",
+                block_on(machine.exec(&mut input.as_bytes())).expect_err("Execution did not fail")
+            )
         );
         let expected_out: Vec<CapturedOut> =
             expected_out.iter().map(|x| CapturedOut::Print((*x).to_owned())).collect();

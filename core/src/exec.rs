@@ -19,7 +19,7 @@ use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
 use crate::eval::{self, Vars};
 use crate::parser::{self, Parser};
 use async_trait::async_trait;
-use futures_lite::future::{block_on, FutureExt};
+use futures_lite::future::FutureExt;
 use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
@@ -248,24 +248,16 @@ impl Machine {
         Ok(())
     }
 
-    /// Executes a program extracted from the `input` readable in an asynchronous manner.
+    /// Executes a program extracted from the `input` readable.
     ///
     /// Note that this does not consume `self`.  As a result, it is possible to execute multiple
     /// different programs on the same machine, all sharing state.
-    pub async fn exec_async(&mut self, input: &mut dyn io::Read) -> Result<()> {
+    pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<()> {
         let mut parser = Parser::from(input);
         while let Some(stmt) = parser.parse()? {
             self.exec_one(&stmt).await?;
         }
         Ok(())
-    }
-
-    /// Executes a program extracted from the `input` readable and waits until completion.
-    ///
-    /// Note that this does not consume `self`.  As a result, it is possible to execute multiple
-    /// different programs on the same machine, all sharing state.
-    pub fn exec<'b>(&mut self, input: &'b mut dyn io::Read) -> Result<()> {
-        block_on(self.exec_async(input))
     }
 }
 
@@ -401,13 +393,14 @@ pub(crate) mod testutils {
 mod tests {
     use super::testutils::*;
     use super::*;
+    use futures_lite::future::block_on;
     use std::cell::RefCell;
     use std::rc::Rc;
 
     #[test]
     fn test_clear() {
         let mut machine = Machine::default();
-        machine.exec(&mut b"a = TRUE: b = 1".as_ref()).expect("Execution failed");
+        block_on(machine.exec(&mut b"a = TRUE: b = 1".as_ref())).expect("Execution failed");
         assert!(machine.get_var_as_bool("a").is_ok());
         assert!(machine.get_var_as_int("b").is_ok());
         machine.clear();
@@ -418,7 +411,7 @@ mod tests {
     #[test]
     fn test_get_var_as_bool() {
         let mut machine = Machine::default();
-        machine.exec(&mut b"a = TRUE: b = 1".as_ref()).expect("Execution failed");
+        block_on(machine.exec(&mut b"a = TRUE: b = 1".as_ref())).expect("Execution failed");
         assert!(machine.get_var_as_bool("a").expect("Failed to query a"));
         assert_eq!(
             "Incompatible types in b? reference",
@@ -433,7 +426,7 @@ mod tests {
     #[test]
     fn test_get_var_as_int() {
         let mut machine = Machine::default();
-        machine.exec(&mut b"a = 1: b = \"foo\"".as_ref()).expect("Execution failed");
+        block_on(machine.exec(&mut b"a = 1: b = \"foo\"".as_ref())).expect("Execution failed");
         assert_eq!(1, machine.get_var_as_int("a").expect("Failed to query a"));
         assert_eq!(
             "Incompatible types in b% reference",
@@ -448,7 +441,7 @@ mod tests {
     #[test]
     fn test_get_var_as_string() {
         let mut machine = Machine::default();
-        machine.exec(&mut b"a = \"foo\": b = FALSE".as_ref()).expect("Execution failed");
+        block_on(machine.exec(&mut b"a = \"foo\": b = FALSE".as_ref())).expect("Execution failed");
         assert_eq!("foo", machine.get_var_as_string("a").expect("Failed to query a"));
         assert_eq!(
             "Incompatible types in b$ reference",
@@ -475,7 +468,7 @@ mod tests {
             .add_builtin(Rc::from(in_cmd))
             .add_builtin(Rc::from(out_cmd))
             .build();
-        machine.exec(&mut input.as_bytes())
+        block_on(machine.exec(&mut input.as_bytes()))
     }
 
     /// Runs the `input` code on a new test machine and verifies its output.
@@ -662,16 +655,16 @@ mod tests {
     #[test]
     fn test_exec_shares_state() {
         let mut machine = Machine::default();
-        machine.exec(&mut b"a = 10".as_ref()).expect("Execution failed");
-        machine.exec(&mut b"b = a".as_ref()).expect("Execution failed");
+        block_on(machine.exec(&mut b"a = 10".as_ref())).expect("Execution failed");
+        block_on(machine.exec(&mut b"b = a".as_ref())).expect("Execution failed");
     }
 
     #[test]
     fn test_clear_ok() {
         let mut machine = MachineBuilder::default().add_builtin(Rc::from(ClearCommand {})).build();
-        machine.exec(&mut b"a = 1".as_ref()).unwrap();
+        block_on(machine.exec(&mut b"a = 1".as_ref())).unwrap();
         assert!(machine.get_var_as_int("a").is_ok());
-        machine.exec(&mut b"CLEAR".as_ref()).unwrap();
+        block_on(machine.exec(&mut b"CLEAR".as_ref())).unwrap();
         assert!(machine.get_var_as_int("a").is_err());
     }
 
@@ -680,7 +673,7 @@ mod tests {
         let mut machine = MachineBuilder::default().add_builtin(Rc::from(ClearCommand {})).build();
         assert_eq!(
             "CLEAR takes no arguments",
-            format!("{}", machine.exec(&mut b"CLEAR 123".as_ref()).unwrap_err())
+            format!("{}", block_on(machine.exec(&mut b"CLEAR 123".as_ref())).unwrap_err())
         );
     }
 }
