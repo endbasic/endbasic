@@ -21,6 +21,7 @@
 #![warn(unsafe_code)]
 
 use anyhow::{anyhow, Error, Result};
+use futures_lite::future::block_on;
 use getopts::Options;
 use std::cell::RefCell;
 use std::env;
@@ -118,7 +119,7 @@ fn run<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
         .build();
 
     let mut input = File::open(path)?;
-    match machine.exec(&mut input) {
+    match block_on(machine.exec(&mut input)) {
         Ok(()) => (),
         Err(e) => {
             if exit_code.borrow().is_some() {

@@ -30,6 +30,7 @@ use endbasic_core::exec::{self, ClearCommand, MachineBuilder};
 use endbasic_core::help::HelpCommand;
 use endbasic_core::program;
 pub use exit::ExitCommand;
+use futures_lite::future::block_on;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::cell::RefCell;
@@ -165,7 +166,7 @@ pub fn run_repl_loop(dir: &Path) -> io::Result<i32> {
         match rl.readline("Ready\n") {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
-                match machine.exec(&mut line.as_bytes()) {
+                match block_on(machine.exec(&mut line.as_bytes())) {
                     Ok(()) => (),
                     Err(e) => {
                         if exit_code.borrow().is_some() {

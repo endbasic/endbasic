@@ -20,6 +20,7 @@
 //! parse a configuration file---which is what is shown here.
 
 use endbasic_core::exec::Machine;
+use futures_lite::future::block_on;
 use std::io;
 
 /// Sample code to parse in this example.
@@ -36,7 +37,7 @@ fn main() {
     // Execute the sample script.  All this script can do is modify the state of the machine itself.
     // In other words: the script can set variables in the machine's environment, but that's it.
     let mut cursor = io::Cursor::new(INPUT.as_bytes());
-    machine.exec(&mut cursor).expect("Execution error");
+    block_on(machine.exec(&mut cursor)).expect("Execution error");
 
     // Now that our script has run, inspect the variables it set on the machine.
     match machine.get_var_as_int("foo_value") {

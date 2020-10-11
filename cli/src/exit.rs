@@ -85,6 +85,7 @@ The optional code indicates the return value to return to the system."
 mod tests {
     use super::*;
     use endbasic_core::exec::MachineBuilder;
+    use futures_lite::future::block_on;
 
     /// Runs the code `input` and expects it to fail with `expected_err`.
     fn do_error_test(input: &str, expected_err: &str) {
@@ -92,7 +93,7 @@ mod tests {
         let mut machine = MachineBuilder::default()
             .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
             .build();
-        let err = machine.exec(&mut input.as_bytes()).unwrap_err();
+        let err = block_on(machine.exec(&mut input.as_bytes())).unwrap_err();
         assert_eq!(expected_err, format!("{}", err));
         assert!(exit_code.borrow().is_none());
     }
@@ -103,7 +104,7 @@ mod tests {
         let mut machine = MachineBuilder::default()
             .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
             .build();
-        machine.exec(&mut b"a = 3: EXIT: a = 4".as_ref()).unwrap_err();
+        block_on(machine.exec(&mut b"a = 3: EXIT: a = 4".as_ref())).unwrap_err();
         assert_eq!(0, exit_code.borrow().unwrap());
         assert_eq!(3, machine.get_var_as_int("a").unwrap());
     }
@@ -113,7 +114,7 @@ mod tests {
         let mut machine = MachineBuilder::default()
             .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
             .build();
-        machine.exec(&mut format!("a = 3: EXIT {}: a = 4", code).as_bytes()).unwrap_err();
+        block_on(machine.exec(&mut format!("a = 3: EXIT {}: a = 4", code).as_bytes())).unwrap_err();
         assert_eq!(code, exit_code.borrow().unwrap());
         assert_eq!(3, machine.get_var_as_int("a").unwrap());
     }

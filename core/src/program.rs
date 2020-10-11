@@ -480,7 +480,7 @@ and other state that may already be set."
             text += v;
             text += "\n";
         }
-        machine.exec_async(&mut text.as_bytes()).await
+        machine.exec(&mut text.as_bytes()).await
     }
 }
 
@@ -609,6 +609,7 @@ mod tests {
     use crate::console::testutils::*;
     use crate::exec::testutils::*;
     use crate::exec::MachineBuilder;
+    use futures_lite::future::block_on;
 
     /// Runs the `input` code on a new machine that stores programs in `store` and verifies its
     /// output.
@@ -632,7 +633,7 @@ mod tests {
         let mut machine = MachineBuilder::default()
             .add_builtins(all_commands_for(program.clone(), console.clone(), store))
             .build();
-        machine.exec(&mut input.as_bytes()).expect("Execution failed");
+        block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed");
         let expected_out: Vec<CapturedOut> =
             expected_out.iter().map(|x| CapturedOut::Print((*x).to_owned())).collect();
         assert_eq!(expected_out, console.borrow().captured_out());
@@ -665,7 +666,10 @@ mod tests {
             .build();
         assert_eq!(
             expected_err,
-            format!("{}", machine.exec(&mut input.as_bytes()).expect_err("Execution did not fail"))
+            format!(
+                "{}",
+                block_on(machine.exec(&mut input.as_bytes())).expect_err("Execution did not fail")
+            )
         );
         assert!(console.borrow().captured_out().is_empty());
     }
@@ -973,7 +977,7 @@ mod tests {
             .add_builtin(Rc::from(NewCommand { program: program.clone() }))
             .build();
 
-        machine.exec(&mut b"NEW".as_ref()).unwrap();
+        block_on(machine.exec(&mut b"NEW".as_ref())).unwrap();
         assert!(program.borrow().is_empty());
         assert!(machine.get_vars().is_empty());
     }
@@ -1042,11 +1046,11 @@ mod tests {
             .add_builtin(Rc::from(RunCommand { program }))
             .build();
 
-        machine.exec(&mut b"var = 7: RUN".as_ref()).unwrap();
+        block_on(machine.exec(&mut b"var = 7: RUN".as_ref())).unwrap();
         assert_eq!(&["7"], captured_out.borrow().as_slice());
 
         captured_out.borrow_mut().clear();
-        machine.exec(&mut b"RUN".as_ref()).unwrap();
+        block_on(machine.exec(&mut b"RUN".as_ref())).unwrap();
         assert_eq!(&["8"], captured_out.borrow().as_slice());
     }
 

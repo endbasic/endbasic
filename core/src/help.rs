@@ -211,6 +211,7 @@ mod tests {
     use super::*;
     use crate::console::testutils::*;
     use crate::exec::MachineBuilder;
+    use futures_lite::future::block_on;
     use std::cell::RefCell;
 
     /// Expects the output to the console to be just print calls and concatenates them all as they
@@ -231,7 +232,10 @@ mod tests {
             .build();
         assert_eq!(
             expected_err,
-            format!("{}", machine.exec(&mut input.as_bytes()).expect_err("Execution did not fail"))
+            format!(
+                "{}",
+                block_on(machine.exec(&mut input.as_bytes())).expect_err("Execution did not fail")
+            )
         );
         assert!(console.borrow().captured_out().is_empty());
     }
@@ -243,7 +247,7 @@ mod tests {
             .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
             .add_builtin(Rc::from(DoNothingCommand {}))
             .build();
-        machine.exec(&mut b"HELP".as_ref()).unwrap();
+        block_on(machine.exec(&mut b"HELP".as_ref())).unwrap();
 
         let text = flatten_captured_out(console.borrow().captured_out());
         assert_eq!(
@@ -266,7 +270,7 @@ mod tests {
             .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
             .add_builtin(Rc::from(DoNothingCommand {}))
             .build();
-        machine.exec(&mut b"help Do_Nothing".as_ref()).unwrap();
+        block_on(machine.exec(&mut b"help Do_Nothing".as_ref())).unwrap();
 
         let text = flatten_captured_out(console.borrow().captured_out());
         assert_eq!(
@@ -291,7 +295,7 @@ mod tests {
             .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
             .add_builtin(Rc::from(DoNothingCommand {}))
             .build();
-        machine.exec(&mut b"help lang".as_ref()).unwrap();
+        block_on(machine.exec(&mut b"help lang".as_ref())).unwrap();
 
         let text = flatten_captured_out(console.borrow().captured_out());
         assert_eq!(String::from(LANG_REFERENCE) + "\n", text);

@@ -120,7 +120,7 @@ impl Interpreter {
     // TODO(jmmv): Would be nice to also return here any error information to avoid the separate
     // last_error method... but I haven't figured out how to do that.
     pub async fn run(mut self, code: String) -> Interpreter {
-        match self.machine.exec_async(&mut code.as_bytes()).await {
+        match self.machine.exec(&mut code.as_bytes()).await {
             Ok(()) => {
                 self.last_error = "".to_owned();
             }

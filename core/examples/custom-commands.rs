@@ -22,6 +22,7 @@
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value};
 use endbasic_core::exec::{self, BuiltinCommand, Machine, MachineBuilder};
+use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -114,5 +115,5 @@ fn main() {
     // Execute the sample script.  The script will call back into our custom commands, one of which
     // will update state in Rust land and the other will have side-effects in the console.
     let mut cursor = io::Cursor::new(INPUT.as_bytes());
-    machine.exec(&mut cursor).expect("Execution error");
+    block_on(machine.exec(&mut cursor)).expect("Execution error");
 }
