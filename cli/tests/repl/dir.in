@@ -23,7 +23,7 @@ DIR ' One file, empty.
 EDIT ' Read lines into the program until a blank line.
 first
 second
-thid
+third
 
 SAVE "some lines and a long name.bas"
 DIR ' Two files.
