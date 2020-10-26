@@ -51,12 +51,14 @@ impl Console for XtermJsConsole {
     }
 
     fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
-        if let Some(fg) = fg {
-            self.terminal.write(&format!("\u{001b}[38;5;{}m", fg));
-        }
-        if let Some(bg) = bg {
-            self.terminal.write(&format!("\u{001b}[48;5;{}m", bg));
-        }
+        match fg {
+            None => self.terminal.write("\u{001b}[39m"),
+            Some(color) => self.terminal.write(&format!("\u{001b}[38;5;{}m", color)),
+        };
+        match bg {
+            None => self.terminal.write("\u{001b}[49m"),
+            Some(color) => self.terminal.write(&format!("\u{001b}[48;5;{}m", color)),
+        };
         self.terminal.write("\u{001b}[0K");
         Ok(())
     }

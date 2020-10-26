@@ -94,13 +94,14 @@ impl BuiltinCommand for ColorCommand {
     }
 
     fn syntax(&self) -> &'static str {
-        "[fg%][, bg%]"
+        "[fg%][, [bg%]]"
     }
 
     fn description(&self) -> &'static str {
-        "Sets the foreground, the background, or both colors.
+        "Sets the foreground and background colors.
 Color numbers are given as ANSI numbers and can be between 0 and 255.  If a color number is not \
-specified, then the color is left unchanged."
+specified, then the color is reset to the console's default.  The console default does not \
+necessarily match any other color specifiable in the 0 to 255 range, as it might be transparent."
     }
 
     async fn exec(
@@ -109,11 +110,12 @@ specified, then the color is left unchanged."
         machine: &mut Machine,
     ) -> exec::Result<()> {
         let (fg_expr, bg_expr): (&Option<Expr>, &Option<Expr>) = match args {
+            [] => (&None, &None),
             [(fg, ArgSep::End)] => (fg, &None),
             [(fg, ArgSep::Long), (bg, ArgSep::End)] => (fg, bg),
             _ => {
                 return exec::new_usage_error(
-                    "COLOR takes one or two arguments separated by a comma",
+                    "COLOR takes at most two arguments separated by a comma",
                 )
             }
         };
@@ -491,6 +493,7 @@ mod tests {
 
     #[test]
     fn test_color_ok() {
+        do_control_ok_test("COLOR", &[], &[CapturedOut::Color(None, None)]);
         do_control_ok_test("COLOR ,", &[], &[CapturedOut::Color(None, None)]);
         do_control_ok_test("COLOR 1", &[], &[CapturedOut::Color(Some(1), None)]);
         do_control_ok_test("COLOR 1,", &[], &[CapturedOut::Color(Some(1), None)]);
@@ -502,10 +505,9 @@ mod tests {
 
     #[test]
     fn test_color_errors() {
-        do_simple_error_test("COLOR", "COLOR takes one or two arguments separated by a comma");
         do_simple_error_test(
             "COLOR 1, 2, 3",
-            "COLOR takes one or two arguments separated by a comma",
+            "COLOR takes at most two arguments separated by a comma",
         );
 
         do_simple_error_test("COLOR 1000, 0", "Color out of range");

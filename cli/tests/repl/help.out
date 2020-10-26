@@ -6,7 +6,7 @@ Output from HELP:
 
     CLEAR     Clears all variables to restore initial state.
     CLS       Clears the screen.
-    COLOR     Sets the foreground, the background, or both colors.
+    COLOR     Sets the foreground and background colors.
     DEL       Deletes the given program.
     DIR       Displays the list of files on disk.
     EDIT      Edits the stored program.
@@ -39,11 +39,11 @@ Output from HELP CLS:
 
 Output from HELP COLOR:
 
-    COLOR [fg%][, bg%]
+    COLOR [fg%][, [bg%]]
 
-    Sets the foreground, the background, or both colors.
+    Sets the foreground and background colors.
 
-    Color numbers are given as ANSI numbers and can be between 0 and 255.  If a color number is not specified, then the color is left unchanged.
+    Color numbers are given as ANSI numbers and can be between 0 and 255.  If a color number is not specified, then the color is reset to the console's default.  The console default does not necessarily match any other color specifiable in the 0 to 255 range, as it might be transparent.
 
 Output from HELP DEL:
 

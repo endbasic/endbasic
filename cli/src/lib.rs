@@ -85,16 +85,16 @@ impl console::Console for TextConsole {
 
     fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
         let mut output = io::stdout();
-        if let Some(color) = fg {
-            output
-                .queue(style::SetForegroundColor(style::Color::AnsiValue(color)))
-                .map_err(crossterm_error_to_io_error)?;
-        }
-        if let Some(color) = bg {
-            output
-                .queue(style::SetBackgroundColor(style::Color::AnsiValue(color)))
-                .map_err(crossterm_error_to_io_error)?;
-        }
+        let fg = match fg {
+            None => style::Color::Reset,
+            Some(color) => style::Color::AnsiValue(color),
+        };
+        let bg = match bg {
+            None => style::Color::Reset,
+            Some(color) => style::Color::AnsiValue(color),
+        };
+        output.queue(style::SetForegroundColor(fg)).map_err(crossterm_error_to_io_error)?;
+        output.queue(style::SetBackgroundColor(bg)).map_err(crossterm_error_to_io_error)?;
         output.flush()?;
         Ok(())
     }
