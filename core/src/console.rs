@@ -81,27 +81,62 @@ pub trait Console {
 
 /// Reads a line of text interactively from the console, using the given `prompt` and pre-filling
 /// the input with `previous`.
-pub async fn read_line(
+async fn read_line_interactive(
     console: &mut dyn Console,
     prompt: &str,
     previous: &str,
 ) -> io::Result<String> {
-    let echo = console.is_interactive();
-    let mut line;
-    if echo {
-        line = String::from(previous);
-        console.write(format!("{}{}", prompt, line).as_bytes())?;
-    } else {
-        line = String::new();
-    }
+    let mut line = String::from(previous);
+    console.write(format!("{}{}", prompt, line).as_bytes())?;
     loop {
         match console.read_key().await? {
             Key::Backspace => {
                 if !line.is_empty() {
                     line.pop();
-                    if echo {
-                        console.write(&[8 as u8, 32 as u8, 8 as u8])?;
-                    }
+                    console.write(&[8 as u8, 32 as u8, 8 as u8])?;
+                }
+            }
+
+            Key::CarriageReturn => {
+                // TODO(jmmv): This is here because the integration tests may be checked out with
+                // CRLF line endings on Windows, which means we'd see two characters to end a line
+                // instead of one.  Not sure if we should do this or if instead we should ensure
+                // the golden data we feed to the tests has single-character line endings.
+                if cfg!(not(target_os = "windows")) {
+                    console.write(&[10 as u8, 13 as u8])?;
+                    break;
+                }
+            }
+
+            Key::Char(ch) => {
+                console.write(&[ch as u8])?;
+                line.push(ch);
+            }
+
+            Key::Eof => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
+
+            Key::Interrupt => return Err(io::Error::new(io::ErrorKind::Interrupted, "Ctrl+C")),
+
+            Key::NewLine => {
+                console.write(&[10 as u8, 13 as u8])?;
+                break;
+            }
+
+            // TODO(jmmv): Should do something smarter with unknown keys.
+            Key::Unknown(_) => (),
+        }
+    }
+    Ok(line)
+}
+
+/// Reads a line of text interactively from the console, which is not expected to be a TTY.
+async fn read_line_raw(console: &mut dyn Console) -> io::Result<String> {
+    let mut line = String::new();
+    loop {
+        match console.read_key().await? {
+            Key::Backspace => {
+                if !line.is_empty() {
+                    line.pop();
                 }
             }
             Key::CarriageReturn => {
@@ -110,31 +145,31 @@ pub async fn read_line(
                 // instead of one.  Not sure if we should do this or if instead we should ensure
                 // the golden data we feed to the tests has single-character line endings.
                 if cfg!(not(target_os = "windows")) {
-                    if echo {
-                        console.write(&[10 as u8, 13 as u8])?;
-                    }
                     break;
                 }
             }
-            Key::NewLine => {
-                if echo {
-                    console.write(&[10 as u8, 13 as u8])?;
-                }
-                break;
-            }
+            Key::Char(ch) => line.push(ch),
             Key::Eof => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
             Key::Interrupt => return Err(io::Error::new(io::ErrorKind::Interrupted, "Ctrl+C")),
-            Key::Char(ch) => {
-                if echo {
-                    console.write(&[ch as u8])?;
-                }
-                line.push(ch);
-            }
-            // TODO(jmmv): Should do something smarter with unknown keys.
-            Key::Unknown(_) => (),
+            Key::NewLine => break,
+            Key::Unknown(bad_input) => line += &bad_input,
         }
     }
     Ok(line)
+}
+
+/// Reads a line from the console.  If the console is interactive, this does fancy line editing and
+/// uses the given `prompt` and pre-fills the input with `previous`.
+pub async fn read_line(
+    console: &mut dyn Console,
+    prompt: &str,
+    previous: &str,
+) -> io::Result<String> {
+    if console.is_interactive() {
+        read_line_interactive(console, prompt, previous).await
+    } else {
+        read_line_raw(console).await
+    }
 }
 
 /// The `CLS` command.
