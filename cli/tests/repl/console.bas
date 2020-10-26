@@ -31,7 +31,7 @@ fg = 0
 WHILE row < 10
     column = 0
     WHILE column < 20
-        COLOR fg
+        COLOR fg, 4
         LOCATE row + 5, column + 10
         PRINT "#"
         column = column + 1
