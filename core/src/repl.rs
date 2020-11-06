@@ -112,7 +112,10 @@ pub async fn run_repl_loop(
     while exit_code.borrow().is_none() {
         let line = {
             let mut console = console.borrow_mut();
-            console::read_line(&mut *console, "Ready\n\r", "").await
+            if console.is_interactive() {
+                console.print("Ready")?;
+            }
+            console::read_line(&mut *console, "", "").await
         };
 
         match line {

@@ -23,7 +23,20 @@ use std::io;
 use std::rc::Rc;
 
 /// Decoded key presses as returned by the console.
+#[derive(Clone, Debug)]
 pub enum Key {
+    /// The cursor down key.
+    ArrowDown,
+
+    /// The cursor left key.
+    ArrowLeft,
+
+    /// The cursor right key.
+    ArrowRight,
+
+    /// The cursor up key.
+    ArrowUp,
+
     /// Deletes the previous character.
     Backspace,
 
@@ -49,23 +62,53 @@ pub enum Key {
     Unknown(String),
 }
 
+/// Indicates what part of the console to clear on a `Console::clear()` call.
+#[derive(Debug, Eq, PartialEq)]
+pub enum ClearType {
+    /// Clears the whole console and moves the cursor to the top left corner.
+    All,
+
+    /// Clears only the current line without moving the cursor.
+    CurrentLine,
+
+    /// Clears from the cursor position to the end of the line without moving the cursor.
+    UntilNewLine,
+}
+
+/// Represents a position in the console.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Position {
+    /// The row number, starting from zero.
+    pub row: usize,
+
+    /// The column number, starting from zero.
+    pub column: usize,
+}
+
 /// Hooks to implement the commands that manipulate the console.
 #[async_trait(?Send)]
 pub trait Console {
-    /// Clears the console and moves the cursor to the top left.
-    fn clear(&mut self) -> io::Result<()>;
+    /// Clears the part of the console given by `how`.
+    fn clear(&mut self, how: ClearType) -> io::Result<()>;
 
     /// Sets the console's foreground and background colors to `fg` and `bg`.
     ///
     /// If any of the colors is `None`, the color is left unchanged.
     fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()>;
 
+    /// Hides the cursor.
+    // TODO(jmmv): This API leads to misuse as callers can forget to show the cursor again.
+    fn hide_cursor(&mut self) -> io::Result<()>;
+
     /// Returns true if the console is attached to an interactive terminal.  This controls whether
     /// reading a line echoes back user input, for example.
     fn is_interactive(&self) -> bool;
 
     /// Moves the cursor to the given position, which must be within the screen.
-    fn locate(&mut self, row: usize, column: usize) -> io::Result<()>;
+    fn locate(&mut self, pos: Position) -> io::Result<()>;
+
+    /// Moves the cursor within the line.  Positive values move right, negative values move left.
+    fn move_within_line(&mut self, off: i16) -> io::Result<()>;
 
     /// Writes `text` to the console, followed by a newline or CRLF pair depending on the needs of
     /// the console to advance a line.
@@ -74,6 +117,14 @@ pub trait Console {
 
     /// Waits for and returns the next key press.
     async fn read_key(&mut self) -> io::Result<Key>;
+
+    /// Shows the cursor.
+    fn show_cursor(&mut self) -> io::Result<()>;
+
+    /// Queries the size of the console.
+    ///
+    /// The returned position represents the first row and column that lay *outside* of the console.
+    fn size(&self) -> io::Result<Position>;
 
     /// Writes the raw `bytes` into the console.
     fn write(&mut self, bytes: &[u8]) -> io::Result<()>;
@@ -87,13 +138,50 @@ async fn read_line_interactive(
     previous: &str,
 ) -> io::Result<String> {
     let mut line = String::from(previous);
-    console.write(format!("{}{}", prompt, line).as_bytes())?;
+    if !prompt.is_empty() || !line.is_empty() {
+        console.write(format!("{}{}", prompt, line).as_bytes())?;
+    }
+
+    let width = {
+        // Assumes that the prompt was printed at column 0.  If that was not the case, line length
+        // calculation does not work.
+        let console_size = console.size()?;
+        console_size.column - prompt.len()
+    };
+
+    // Insertion position *within* the line, without accounting for the prompt.
+    let mut pos = line.len();
+
     loop {
         match console.read_key().await? {
+            Key::ArrowUp | Key::ArrowDown => {
+                // TODO(jmmv): Implement history tracking.
+            }
+
+            Key::ArrowLeft => {
+                if pos > 0 {
+                    console.move_within_line(-1)?;
+                    pos -= 1;
+                }
+            }
+
+            Key::ArrowRight => {
+                if pos < line.len() {
+                    console.move_within_line(1)?;
+                    pos += 1;
+                }
+            }
+
             Key::Backspace => {
-                if !line.is_empty() {
-                    line.pop();
-                    console.write(&[8 as u8, 32 as u8, 8 as u8])?;
+                if pos > 0 {
+                    console.hide_cursor()?;
+                    console.move_within_line(-1)?;
+                    console.write(line[pos..].as_bytes())?;
+                    console.write(&[b' '])?;
+                    console.move_within_line(-((line.len() - pos) as i16 + 1))?;
+                    console.show_cursor()?;
+                    line.remove(pos - 1);
+                    pos -= 1;
                 }
             }
 
@@ -109,8 +197,24 @@ async fn read_line_interactive(
             }
 
             Key::Char(ch) => {
-                console.write(&[ch as u8])?;
-                line.push(ch);
+                debug_assert!(line.len() < width);
+                if line.len() == width - 1 {
+                    // TODO(jmmv): Implement support for lines that exceed the width of the input
+                    // field (the width of the screen).
+                    continue;
+                }
+
+                if pos < line.len() {
+                    console.hide_cursor()?;
+                    console.write(&[ch as u8])?;
+                    console.write(line[pos..].as_bytes())?;
+                    console.move_within_line(-((line.len() - pos) as i16))?;
+                    console.show_cursor()?;
+                } else {
+                    console.write(&[ch as u8])?;
+                }
+                line.insert(pos, ch);
+                pos += 1;
             }
 
             Key::Eof => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
@@ -118,7 +222,7 @@ async fn read_line_interactive(
             Key::Interrupt => return Err(io::Error::new(io::ErrorKind::Interrupted, "Ctrl+C")),
 
             Key::NewLine => {
-                console.write(&[10 as u8, 13 as u8])?;
+                console.write(&[b'\r', b'\n'])?;
                 break;
             }
 
@@ -134,6 +238,7 @@ async fn read_line_raw(console: &mut dyn Console) -> io::Result<String> {
     let mut line = String::new();
     loop {
         match console.read_key().await? {
+            Key::ArrowUp | Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight => (),
             Key::Backspace => {
                 if !line.is_empty() {
                     line.pop();
@@ -199,7 +304,7 @@ impl BuiltinCommand for ClsCommand {
         if !args.is_empty() {
             return exec::new_usage_error("CLS takes no arguments");
         }
-        self.console.borrow_mut().clear()?;
+        self.console.borrow_mut().clear(ClearType::All)?;
         Ok(())
     }
 }
@@ -399,7 +504,7 @@ impl BuiltinCommand for LocateCommand {
             None => return exec::new_usage_error("Column cannot be empty"),
         };
 
-        self.console.borrow_mut().locate(row, column)?;
+        self.console.borrow_mut().locate(Position { row, column })?;
         Ok(())
     }
 }
@@ -474,10 +579,13 @@ pub(crate) mod testutils {
     /// A captured command or messages sent to the mock console.
     #[derive(Debug, Eq, PartialEq)]
     pub(crate) enum CapturedOut {
-        Clear,
+        Clear(ClearType),
         Color(Option<u8>, Option<u8>),
-        Locate(usize, usize),
+        HideCursor,
+        Locate(Position),
+        MoveWithinLine(i16),
         Print(String),
+        ShowCursor,
         Write(Vec<u8>),
     }
 
@@ -504,6 +612,11 @@ pub(crate) mod testutils {
             Self { golden_in: keys, captured_out: vec![] }
         }
 
+        /// Creates a new mock console with the given golden input.
+        pub(crate) fn new_raw(keys: &[Key]) -> Self {
+            Self { golden_in: VecDeque::from(keys.to_vec()), captured_out: vec![] }
+        }
+
         /// Obtains a reference to the captured output.
         pub(crate) fn captured_out(&self) -> &[CapturedOut] {
             self.captured_out.as_slice()
@@ -522,8 +635,8 @@ pub(crate) mod testutils {
 
     #[async_trait(?Send)]
     impl Console for MockConsole {
-        fn clear(&mut self) -> io::Result<()> {
-            self.captured_out.push(CapturedOut::Clear);
+        fn clear(&mut self, how: ClearType) -> io::Result<()> {
+            self.captured_out.push(CapturedOut::Clear(how));
             Ok(())
         }
 
@@ -532,12 +645,22 @@ pub(crate) mod testutils {
             Ok(())
         }
 
+        fn hide_cursor(&mut self) -> io::Result<()> {
+            self.captured_out.push(CapturedOut::HideCursor);
+            Ok(())
+        }
+
         fn is_interactive(&self) -> bool {
             false
         }
 
-        fn locate(&mut self, row: usize, column: usize) -> io::Result<()> {
-            self.captured_out.push(CapturedOut::Locate(row, column));
+        fn locate(&mut self, pos: Position) -> io::Result<()> {
+            self.captured_out.push(CapturedOut::Locate(pos));
+            Ok(())
+        }
+
+        fn move_within_line(&mut self, off: i16) -> io::Result<()> {
+            self.captured_out.push(CapturedOut::MoveWithinLine(off));
             Ok(())
         }
 
@@ -553,6 +676,16 @@ pub(crate) mod testutils {
             }
         }
 
+        fn show_cursor(&mut self) -> io::Result<()> {
+            self.captured_out.push(CapturedOut::ShowCursor);
+            Ok(())
+        }
+
+        fn size(&self) -> io::Result<Position> {
+            // TODO(jmmv): Should probably make the console size configurable by the caller.
+            Ok(Position { row: 5, column: 15 })
+        }
+
         fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
             self.captured_out.push(CapturedOut::Write(bytes.to_owned()));
             Ok(())
@@ -566,6 +699,298 @@ mod tests {
     use super::*;
     use crate::exec::MachineBuilder;
     use futures_lite::future::block_on;
+
+    /// Builder pattern to construct a test for `read_line_interactive`.
+    #[must_use]
+    struct ReadLineInteractiveTest {
+        keys: Vec<Key>,
+        prompt: &'static str,
+        previous: &'static str,
+        exp_line: &'static str,
+        exp_output: Vec<CapturedOut>,
+    }
+
+    impl ReadLineInteractiveTest {
+        /// Constructs a new test that feeds no input to the function, with no prompt or previous
+        /// text, and expects an empty return line and no changes to the console.
+        fn new() -> Self {
+            Self { keys: vec![], prompt: "", previous: "", exp_line: "", exp_output: vec![] }
+        }
+
+        /// Adds `key` to the golden input.
+        fn add_key(mut self, key: Key) -> Self {
+            self.keys.push(key);
+            self
+        }
+
+        /// Adds a bunch of `chars` as individual key presses to the golden input.
+        fn add_key_chars(mut self, chars: &'static str) -> Self {
+            for ch in chars.chars() {
+                self.keys.push(Key::Char(ch));
+            }
+            self
+        }
+
+        /// Adds a single state change to the expected output.
+        fn add_output(mut self, output: CapturedOut) -> Self {
+            self.exp_output.push(output);
+            self
+        }
+
+        /// Adds a bunch of `bytes` as separate console writes to the expected output.
+        fn add_output_bytes(mut self, bytes: &'static [u8]) -> Self {
+            if bytes.is_empty() {
+                self.exp_output.push(CapturedOut::Write(vec![]))
+            } else {
+                for b in bytes.iter() {
+                    self.exp_output.push(CapturedOut::Write(vec![*b]))
+                }
+            }
+            self
+        }
+
+        /// Sets the expected resulting line for the test.
+        fn set_line(mut self, line: &'static str) -> Self {
+            self.exp_line = line;
+            self
+        }
+
+        /// Sets the prompt to use for the test.
+        fn set_prompt(mut self, prompt: &'static str) -> Self {
+            self.prompt = prompt;
+            self
+        }
+
+        /// Sets the previous text to use for the test.
+        fn set_previous(mut self, previous: &'static str) -> Self {
+            self.previous = previous;
+            self
+        }
+
+        /// Adds a final return key to the golden input, a newline to the expected output, and
+        /// executes the test.
+        fn accept(mut self) {
+            self.keys.push(Key::NewLine);
+            self.exp_output.push(CapturedOut::Write(vec![b'\r', b'\n']));
+
+            let mut console = MockConsole::new_raw(&self.keys);
+            let line =
+                block_on(read_line_interactive(&mut console, self.prompt, self.previous)).unwrap();
+            assert_eq!(self.exp_line, &line);
+            assert_eq!(self.exp_output.as_slice(), console.captured_out());
+        }
+    }
+
+    #[test]
+    fn test_read_line_interactive_empty() {
+        ReadLineInteractiveTest::new().accept();
+        ReadLineInteractiveTest::new().add_key(Key::Backspace).accept();
+        ReadLineInteractiveTest::new().add_key(Key::ArrowLeft).accept();
+        ReadLineInteractiveTest::new().add_key(Key::ArrowRight).accept();
+    }
+
+    #[test]
+    fn test_read_line_with_prompt() {
+        ReadLineInteractiveTest::new()
+            .set_prompt("Ready> ")
+            .add_output(CapturedOut::Write(b"Ready> ".to_vec()))
+            // -
+            .add_key_chars("hello")
+            .add_output_bytes(b"hello")
+            // -
+            .set_line("hello")
+            .accept();
+
+        ReadLineInteractiveTest::new()
+            .set_prompt("Cannot delete")
+            .add_output(CapturedOut::Write(b"Cannot delete".to_vec()))
+            // -
+            .add_key(Key::Backspace)
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_trailing_input() {
+        ReadLineInteractiveTest::new()
+            .add_key_chars("hello")
+            .add_output_bytes(b"hello")
+            // -
+            .set_line("hello")
+            .accept();
+
+        ReadLineInteractiveTest::new()
+            .set_previous("123")
+            .add_output(CapturedOut::Write(b"123".to_vec()))
+            // -
+            .add_key_chars("hello")
+            .add_output_bytes(b"hello")
+            // -
+            .set_line("123hello")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_middle_input() {
+        ReadLineInteractiveTest::new()
+            .add_key_chars("some text")
+            .add_output_bytes(b"some text")
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowRight)
+            .add_output(CapturedOut::MoveWithinLine(1))
+            // -
+            .add_key_chars(" ")
+            .add_output(CapturedOut::HideCursor)
+            .add_output_bytes(b" ")
+            .add_output(CapturedOut::Write(b"xt".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-2))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .add_key_chars(".")
+            .add_output(CapturedOut::HideCursor)
+            .add_output_bytes(b".")
+            .add_output(CapturedOut::Write(b"xt".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-2))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("some te .xt")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_trailing_backspace() {
+        ReadLineInteractiveTest::new()
+            .add_key_chars("bar")
+            .add_output_bytes(b"bar")
+            // -
+            .add_key(Key::Backspace)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output_bytes(b"")
+            .add_output_bytes(b" ")
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .add_key_chars("zar")
+            .add_output_bytes(b"zar")
+            // -
+            .set_line("bazar")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_middle_backspace() {
+        ReadLineInteractiveTest::new()
+            .add_key_chars("has a tYpo")
+            .add_output_bytes(b"has a tYpo")
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::Backspace)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write(b"po".to_vec()))
+            .add_output_bytes(b" ")
+            .add_output(CapturedOut::MoveWithinLine(-3))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .add_key_chars("y")
+            .add_output(CapturedOut::HideCursor)
+            .add_output_bytes(b"y")
+            .add_output(CapturedOut::Write(b"po".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-2))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("has a typo")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_test_move_bounds() {
+        ReadLineInteractiveTest::new()
+            .set_previous("12")
+            .add_output(CapturedOut::Write(b"12".to_vec()))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_key(Key::ArrowLeft)
+            .add_key(Key::ArrowLeft)
+            .add_key(Key::ArrowLeft)
+            // -
+            .add_key(Key::ArrowRight)
+            .add_output(CapturedOut::MoveWithinLine(1))
+            // -
+            .add_key(Key::ArrowRight)
+            .add_output(CapturedOut::MoveWithinLine(1))
+            // -
+            .add_key(Key::ArrowRight)
+            .add_key(Key::ArrowRight)
+            // -
+            .add_key_chars("3")
+            .add_output_bytes(b"3")
+            // -
+            .set_line("123")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_horizontal_scrolling_not_implemented() {
+        ReadLineInteractiveTest::new()
+            .add_key_chars("1234567890123456789")
+            .add_output_bytes(b"12345678901234")
+            // -
+            .set_line("12345678901234")
+            .accept();
+
+        ReadLineInteractiveTest::new()
+            .add_key_chars("1234567890123456789")
+            .add_output_bytes(b"12345678901234")
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key_chars("these will all be ignored")
+            // -
+            .set_line("12345678901234")
+            .accept();
+
+        ReadLineInteractiveTest::new()
+            .set_prompt("12345")
+            .set_previous("67890")
+            .add_output(CapturedOut::Write(b"1234567890".to_vec()))
+            // -
+            .add_key_chars("1234567890")
+            .add_output_bytes(b"1234")
+            // -
+            .set_line("678901234")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_history_not_implemented() {
+        ReadLineInteractiveTest::new().add_key(Key::ArrowUp).accept();
+        ReadLineInteractiveTest::new().add_key(Key::ArrowDown).accept();
+    }
 
     /// Runs the `input` code on a new machine and verifies its output.
     ///
@@ -623,7 +1048,7 @@ mod tests {
 
     #[test]
     fn test_cls_ok() {
-        do_control_ok_test("CLS", "", &[CapturedOut::Clear]);
+        do_control_ok_test("CLS", "", &[CapturedOut::Clear(ClearType::All)]);
     }
 
     #[test]
@@ -695,8 +1120,16 @@ mod tests {
 
     #[test]
     fn test_locate_ok() {
-        do_control_ok_test("LOCATE 0, 0", "", &[CapturedOut::Locate(0, 0)]);
-        do_control_ok_test("LOCATE 1000, 2000", "", &[CapturedOut::Locate(1000, 2000)]);
+        do_control_ok_test(
+            "LOCATE 0, 0",
+            "",
+            &[CapturedOut::Locate(Position { row: 0, column: 0 })],
+        );
+        do_control_ok_test(
+            "LOCATE 1000, 2000",
+            "",
+            &[CapturedOut::Locate(Position { row: 1000, column: 2000 })],
+        );
     }
 
     #[test]

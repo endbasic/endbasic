@@ -27,6 +27,7 @@ use crossterm::{cursor, event, execute, style, terminal, tty::IsTty, QueueableCo
 use endbasic_core::console;
 use futures_lite::future::block_on;
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::io::{self, Write};
 use std::path::Path;
@@ -114,6 +115,10 @@ impl TextConsole {
             if let event::Event::Key(ev) = event::read().map_err(crossterm_error_to_io_error)? {
                 match ev.code {
                     event::KeyCode::Backspace => return Ok(console::Key::Backspace),
+                    event::KeyCode::Up => return Ok(console::Key::ArrowUp),
+                    event::KeyCode::Down => return Ok(console::Key::ArrowDown),
+                    event::KeyCode::Left => return Ok(console::Key::ArrowLeft),
+                    event::KeyCode::Right => return Ok(console::Key::ArrowRight),
                     event::KeyCode::Char('c') if ev.modifiers == event::KeyModifiers::CONTROL => {
                         return Ok(console::Key::Interrupt)
                     }
@@ -131,9 +136,18 @@ impl TextConsole {
 
 #[async_trait(?Send)]
 impl console::Console for TextConsole {
-    fn clear(&mut self) -> io::Result<()> {
-        execute!(io::stdout(), terminal::Clear(terminal::ClearType::All), cursor::MoveTo(0, 0))
-            .map_err(crossterm_error_to_io_error)
+    fn clear(&mut self, how: console::ClearType) -> io::Result<()> {
+        let how = match how {
+            console::ClearType::All => terminal::ClearType::All,
+            console::ClearType::CurrentLine => terminal::ClearType::CurrentLine,
+            console::ClearType::UntilNewLine => terminal::ClearType::UntilNewLine,
+        };
+        let mut output = io::stdout();
+        output.queue(terminal::Clear(how)).map_err(crossterm_error_to_io_error)?;
+        if how == terminal::ClearType::All {
+            output.queue(cursor::MoveTo(0, 0)).map_err(crossterm_error_to_io_error)?;
+        }
+        output.flush()
     }
 
     fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
@@ -152,22 +166,35 @@ impl console::Console for TextConsole {
         Ok(())
     }
 
+    fn hide_cursor(&mut self) -> io::Result<()> {
+        execute!(io::stdout(), cursor::Hide).map_err(crossterm_error_to_io_error)
+    }
+
     fn is_interactive(&self) -> bool {
         self.is_tty
     }
 
-    fn locate(&mut self, row: usize, column: usize) -> io::Result<()> {
-        if row > std::u16::MAX as usize {
+    fn locate(&mut self, pos: console::Position) -> io::Result<()> {
+        if pos.row > std::u16::MAX as usize {
             return Err(io::Error::new(io::ErrorKind::Other, "Row out of range"));
         }
-        let row = row as u16;
+        let row = pos.row as u16;
 
-        if column > std::u16::MAX as usize {
+        if pos.column > std::u16::MAX as usize {
             return Err(io::Error::new(io::ErrorKind::Other, "Column out of range"));
         }
-        let column = column as u16;
+        let column = pos.column as u16;
 
         execute!(io::stdout(), cursor::MoveTo(column, row)).map_err(crossterm_error_to_io_error)
+    }
+
+    fn move_within_line(&mut self, off: i16) -> io::Result<()> {
+        match off.cmp(&0) {
+            Ordering::Less => execute!(io::stdout(), cursor::MoveLeft(-off as u16)),
+            Ordering::Equal => Ok(()),
+            Ordering::Greater => execute!(io::stdout(), cursor::MoveRight(off as u16)),
+        }
+        .map_err(crossterm_error_to_io_error)
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
@@ -185,6 +212,15 @@ impl console::Console for TextConsole {
         } else {
             self.read_key_from_stdin()
         }
+    }
+
+    fn show_cursor(&mut self) -> io::Result<()> {
+        execute!(io::stdout(), cursor::Show).map_err(crossterm_error_to_io_error)
+    }
+
+    fn size(&self) -> io::Result<console::Position> {
+        let (cols, rows) = terminal::size().map_err(crossterm_error_to_io_error)?;
+        Ok(console::Position { row: rows as usize, column: cols as usize })
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
