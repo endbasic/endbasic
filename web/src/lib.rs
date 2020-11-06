@@ -28,8 +28,9 @@ wasm_bindgen_test_configure!(run_in_browser);
 mod store;
 
 use async_trait::async_trait;
-use endbasic_core::console::{Console, Key};
+use endbasic_core::console::{ClearType, Console, Key, Position};
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::io;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
@@ -44,9 +45,19 @@ struct XtermJsConsole {
 
 #[async_trait(?Send)]
 impl Console for XtermJsConsole {
-    fn clear(&mut self) -> io::Result<()> {
-        self.terminal.write("\u{001b}[2J");
-        self.terminal.write("\u{001b}[0;0H");
+    fn clear(&mut self, how: ClearType) -> io::Result<()> {
+        match how {
+            ClearType::All => {
+                self.terminal.write("\u{001b}[2J");
+                self.terminal.write("\u{001b}[0;0H");
+            }
+            ClearType::CurrentLine => {
+                self.terminal.write("\u{001b}[2K");
+            }
+            ClearType::UntilNewLine => {
+                self.terminal.write("\u{001b}[K");
+            }
+        }
         Ok(())
     }
 
@@ -63,12 +74,26 @@ impl Console for XtermJsConsole {
         Ok(())
     }
 
+    fn hide_cursor(&mut self) -> io::Result<()> {
+        self.terminal.write("\u{001b}[?25l");
+        Ok(())
+    }
+
     fn is_interactive(&self) -> bool {
         true
     }
 
-    fn locate(&mut self, row: usize, column: usize) -> io::Result<()> {
-        self.terminal.write(&format!("\u{001b}[{};{}H", row, column));
+    fn locate(&mut self, pos: Position) -> io::Result<()> {
+        self.terminal.write(&format!("\u{001b}[{};{}H", pos.row + 1, pos.column + 1));
+        Ok(())
+    }
+
+    fn move_within_line(&mut self, off: i16) -> io::Result<()> {
+        match off.cmp(&0) {
+            Ordering::Less => self.terminal.write(&format!("\u{001b}[{}D", -off)),
+            Ordering::Equal => (),
+            Ordering::Greater => self.terminal.write(&format!("\u{001b}[{}C", off)),
+        }
         Ok(())
     }
 
@@ -85,6 +110,10 @@ impl Console for XtermJsConsole {
             8 => Ok(Key::Backspace),
             10 => Ok(Key::NewLine),
             13 => Ok(Key::CarriageReturn),
+            37 => Ok(Key::ArrowLeft),
+            38 => Ok(Key::ArrowUp),
+            39 => Ok(Key::ArrowRight),
+            40 => Ok(Key::ArrowDown),
             67 if dom_event.ctrl_key() => Ok(Key::Interrupt),
             68 if dom_event.ctrl_key() => Ok(Key::Eof),
             _ => {
@@ -94,10 +123,22 @@ impl Console for XtermJsConsole {
                 if printable && chars.len() == 1 {
                     Ok(Key::Char(chars[0]))
                 } else {
-                    Ok(Key::Unknown(event.key()))
+                    Ok(Key::Unknown(format!("<keycode={}>", dom_event.key_code())))
                 }
             }
         }
+    }
+
+    fn show_cursor(&mut self) -> io::Result<()> {
+        self.terminal.write("\u{001b}[?25h");
+        Ok(())
+    }
+
+    fn size(&self) -> io::Result<Position> {
+        Ok(Position {
+            row: self.terminal.get_rows() as usize,
+            column: self.terminal.get_cols() as usize,
+        })
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {

@@ -19,7 +19,7 @@
 //! and processes the given file.
 
 use async_trait::async_trait;
-use endbasic_core::console::{Console, Key};
+use endbasic_core::console::{ClearType, Console, Key, Position};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -53,7 +53,7 @@ fn line_to_keys(s: String) -> VecDeque<Key> {
 
 #[async_trait(?Send)]
 impl Console for IncompleteConsole {
-    fn clear(&mut self) -> io::Result<()> {
+    fn clear(&mut self, _how: ClearType) -> io::Result<()> {
         eprintln!("Clearing the screen not implemented");
         Ok(())
     }
@@ -63,11 +63,21 @@ impl Console for IncompleteConsole {
         Ok(())
     }
 
+    fn hide_cursor(&mut self) -> io::Result<()> {
+        eprintln!("Cursor visibility changes not implemented");
+        Ok(())
+    }
+
     fn is_interactive(&self) -> bool {
         false
     }
 
-    fn locate(&mut self, _row: usize, _column: usize) -> io::Result<()> {
+    fn locate(&mut self, _pos: Position) -> io::Result<()> {
+        eprintln!("Moving the cursor not implemented");
+        Ok(())
+    }
+
+    fn move_within_line(&mut self, _off: i16) -> io::Result<()> {
         eprintln!("Moving the cursor not implemented");
         Ok(())
     }
@@ -90,6 +100,15 @@ impl Console for IncompleteConsole {
             Some(key) => Ok(key),
             None => Ok(Key::Eof),
         }
+    }
+
+    fn show_cursor(&mut self) -> io::Result<()> {
+        eprintln!("Cursor visibility changes not implemented");
+        Ok(())
+    }
+
+    fn size(&self) -> io::Result<Position> {
+        Ok(Position { row: 24, column: 80 })
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
