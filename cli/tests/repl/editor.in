@@ -14,50 +14,30 @@
 ' under the License.
 
 ' Interactive session editing a program.
+'
+' WARNING: This file contains literal control codes to interact with the
+' full-screen editor.  See the README.md file for details on how to generate
+' its corresponding .out file.
 
-EDIT ' Store the program until we get an empty line.
+PRINT "Before edit"
+EDIT
 PRINT "Hello!"
 PRINT "Good bye."
-
-LIST
+
+PRINT "After edit"
 RUN
 
-RENUM ' No-op renumbering.
-LIST
-
-EDIT 20 ' Edit a single line (ensuring editing stops at that line).
-PRINT "Not yet"
-PRINT "This is not part of the program"
-
-EDIT 5 ' Insert an intermediate line.
-PRINT "Pre-hello"
-EDIT 15 ' Insert an intermediate line.
-PRINT "Interlude"
-EDIT 25 ' Insert an intermediate line.
-PRINT "Leaving"
-LIST
-RENUM ' Make all numbers multiples of ten.
-LIST
-
-EDIT ' Append non-blank lines to the program.
-PRINT "One more thing"
-PRINT "Maybe not"
-
-LIST
-
-EDIT 30 ' Delete an existing line.
-
-LIST
-RENUM
-LIST
+EDIT
+PRINT "Resumed editing at the end of the file"
+
 RUN
 
-NEW ' Reset the program.
-LIST
-EDIT ' Add an invalid line in-between valid ones.
-PRINT "before"
-THIS IS INVALID
-PRINT "after"
-
+NEW
+EDIT
+PRINT "This is a new program with an invalid command"
+INVALID LINE
+PRINT "Should not be reached"
+
 RUN
-PRINT "Did not abort on RUN error!"
+
+PRINT "Done."

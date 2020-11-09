@@ -16,7 +16,8 @@
 //! Stored program manipulation and interactive editor.
 
 use crate::ast::{ArgSep, Expr, Value};
-use crate::console::{self, Console};
+use crate::console::Console;
+use crate::editor::Editor;
 use crate::exec::{self, BuiltinCommand, Machine};
 use async_trait::async_trait;
 use std::cell::RefCell;
@@ -24,15 +25,6 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::PathBuf;
 use std::rc::Rc;
-
-/// Representation of a stored program.
-///
-/// Stored programs are kept as a mapping of line numbers to their contents.  The reason is that the
-/// line numbers are not consecutive during editing.
-type ProgramImpl = BTreeMap<usize, String>;
-
-/// Mutable reference to a `ProgramImpl` to serve as the state of all commands.
-type Program = Rc<RefCell<ProgramImpl>>;
 
 /// Metadata of an entry in the store.
 #[derive(Debug, Eq, PartialEq)]
@@ -59,43 +51,17 @@ pub trait Store {
     fn put(&mut self, name: &str, content: &str) -> io::Result<()>;
 }
 
-/// Interactively edits line `n` of the stored `program` via the `console`.
-///
-/// Returns true if the entered line was empty and false otherwise.
-async fn edit_one(
-    program: &mut ProgramImpl,
-    n: usize,
-    console: &mut dyn Console,
-) -> io::Result<bool> {
-    let prompt = format!("{} ", n);
+/// Representation of the single program that we can keep in memory.
+#[async_trait(?Send)]
+pub trait Program {
+    /// Edits the program interactively via the given `console`.
+    async fn edit(&mut self, console: &mut dyn Console) -> io::Result<()>;
 
-    let previous = match program.get(&n) {
-        Some(line) => line,
-        None => "",
-    };
+    /// Reloads the contents of the stored program with the given `text`.
+    fn load(&mut self, text: &str);
 
-    let line = console::read_line(console, &prompt, &previous).await?;
-    debug_assert!(!line.ends_with('\n'));
-    if line.is_empty() {
-        program.remove(&n);
-        Ok(false)
-    } else {
-        program.insert(n, line);
-        Ok(true)
-    }
-}
-
-/// Starts interactive editing after the last line of the program and ends on the first empty line.
-/// Uses the `console` for input/output.
-async fn append(program: &mut ProgramImpl, console: &mut dyn Console) -> io::Result<()> {
-    let mut last_n = match program.iter().next_back() {
-        Some((k, _)) => (*k / 10) * 10 + 10,
-        None => 10,
-    };
-    while edit_one(program, last_n, console).await? {
-        last_n += 10;
-    }
-    Ok(())
+    /// Gets the contents of the stored program as a single string.
+    fn text(&self) -> String;
 }
 
 /// Computes the path to a source file given the `dir` where it lives and a `basename`.
@@ -232,7 +198,7 @@ impl BuiltinCommand for DirCommand {
 /// The `EDIT` command.
 struct EditCommand {
     console: Rc<RefCell<dyn Console>>,
-    program: Program,
+    program: Rc<RefCell<dyn Program>>,
 }
 
 #[async_trait(?Send)]
@@ -246,55 +212,7 @@ impl BuiltinCommand for EditCommand {
     }
 
     fn description(&self) -> &'static str {
-        "Edits the stored program.
-Without a line number, starts interactive editing at the last line of the stored program (or the \
-first line if there is no program yet).  Editing ends on the first empty line.
-With a line number, and if the line does not yet exist, enters interactive editing for that line \
-only.  Otherwise, if the line already exists, presents the contents of that line for interactive \
-editing.  Editing terminates upon an ENTER key press."
-    }
-
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
-        let mut console = self.console.borrow_mut();
-        match args {
-            [] => append(&mut self.program.borrow_mut(), &mut *console).await?,
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_vars())? {
-                Value::Integer(n) => {
-                    if n <= 0 {
-                        return exec::new_usage_error("Line numbers must be a positive integer");
-                    }
-                    edit_one(&mut self.program.borrow_mut(), n as usize, &mut *console).await?;
-                }
-                _ => return exec::new_usage_error("Line numbers must be a positive integer"),
-            },
-            _ => return exec::new_usage_error("EDIT takes no arguments or a line number"),
-        }
-        Ok(())
-    }
-}
-
-/// The `LIST` command.
-struct ListCommand {
-    console: Rc<RefCell<dyn Console>>,
-    program: Program,
-}
-
-#[async_trait(?Send)]
-impl BuiltinCommand for ListCommand {
-    fn name(&self) -> &'static str {
-        "LIST"
-    }
-
-    fn syntax(&self) -> &'static str {
-        ""
-    }
-
-    fn description(&self) -> &'static str {
-        "Lists the contents of the stored program."
+        "Interactively edits the stored program."
     }
 
     async fn exec(
@@ -303,14 +221,12 @@ impl BuiltinCommand for ListCommand {
         _machine: &mut Machine,
     ) -> exec::Result<()> {
         if !args.is_empty() {
-            return exec::new_usage_error("LIST takes no arguments");
+            return exec::new_usage_error("EDIT takes no arguments");
         }
+
         let mut console = self.console.borrow_mut();
-        let program = self.program.borrow();
-        for (k, v) in program.iter() {
-            console.print(&format!("{} {}", k, v))?;
-        }
-        console.print("")?;
+        let mut program = self.program.borrow_mut();
+        program.edit(&mut *console).await?;
         Ok(())
     }
 }
@@ -318,7 +234,7 @@ impl BuiltinCommand for ListCommand {
 /// The `LOAD` command.
 struct LoadCommand {
     store: Rc<RefCell<dyn Store>>,
-    program: Program,
+    program: Rc<RefCell<dyn Program>>,
 }
 
 #[async_trait(?Send)]
@@ -350,18 +266,7 @@ extension is optional, but if present, it must be .BAS."
             Value::Text(t) => {
                 let name = to_filename(t)?;
                 let content = self.store.borrow().get(&name)?;
-
-                let mut n = 10;
-                let mut program = BTreeMap::new();
-                for line in content.lines() {
-                    // TODO(jmmv): Support empty lines in editor.
-                    if !line.is_empty() {
-                        program.insert(n, line.to_owned());
-                        n += 10;
-                    }
-                }
-
-                *self.program.borrow_mut() = program;
+                self.program.borrow_mut().load(&content);
                 machine.clear();
             }
             _ => return exec::new_usage_error("LOAD requires a string as the filename"),
@@ -372,7 +277,7 @@ extension is optional, but if present, it must be .BAS."
 
 /// The `NEW` command.
 struct NewCommand {
-    program: Program,
+    program: Rc<RefCell<dyn Program>>,
 }
 
 #[async_trait(?Send)]
@@ -397,57 +302,15 @@ impl BuiltinCommand for NewCommand {
         if !args.is_empty() {
             return exec::new_usage_error("NEW takes no arguments");
         }
-        *self.program.borrow_mut() = BTreeMap::default();
+        self.program.borrow_mut().load("");
         machine.clear();
-        Ok(())
-    }
-}
-
-/// The `RENUM` command.
-struct RenumCommand {
-    program: Program,
-}
-
-#[async_trait(?Send)]
-impl BuiltinCommand for RenumCommand {
-    fn name(&self) -> &'static str {
-        "RENUM"
-    }
-
-    fn syntax(&self) -> &'static str {
-        ""
-    }
-
-    fn description(&self) -> &'static str {
-        "Reassigns line numbers to make them all multiples of ten."
-    }
-
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        _machine: &mut Machine,
-    ) -> exec::Result<()> {
-        if !args.is_empty() {
-            return exec::new_usage_error("RENUM takes no arguments");
-        }
-        let mut program = self.program.borrow_mut();
-        let numbers: Vec<usize> = program.keys().cloned().collect();
-        let mut lines = numbers.len();
-        let mut new_program = BTreeMap::default();
-        for k in numbers.iter().rev() {
-            let new_line = lines * 10;
-            let content = program.remove(k).unwrap();
-            new_program.insert(new_line, content);
-            lines -= 1;
-        }
-        *program = new_program;
         Ok(())
     }
 }
 
 /// The `RUN` command.
 struct RunCommand {
-    program: Program,
+    program: Rc<RefCell<dyn Program>>,
 }
 
 #[async_trait(?Send)]
@@ -474,20 +337,15 @@ and other state that may already be set."
         if !args.is_empty() {
             return exec::new_usage_error("RUN takes no arguments");
         }
-        let program = self.program.borrow();
-        let mut text = String::new();
-        for (_, v) in program.iter() {
-            text += v;
-            text += "\n";
-        }
-        machine.exec(&mut text.as_bytes()).await
+        let program = self.program.borrow().text();
+        machine.exec(&mut program.as_bytes()).await
     }
 }
 
 /// The `SAVE` command.
 struct SaveCommand {
     store: Rc<RefCell<dyn Store>>,
-    program: Program,
+    program: Rc<RefCell<dyn Program>>,
 }
 
 #[async_trait(?Send)]
@@ -518,11 +376,7 @@ extension is optional, but if present, it must be .BAS."
         match arg0.eval(machine.get_vars())? {
             Value::Text(t) => {
                 let name = to_filename(t)?;
-                let content = self
-                    .program
-                    .borrow()
-                    .values()
-                    .fold(String::new(), |contents, line| contents + line + "\n");
+                let content = self.program.borrow().text();
                 self.store.borrow_mut().put(&name, &content)?;
             }
             _ => return exec::new_usage_error("SAVE requires a string as the filename"),
@@ -534,7 +388,7 @@ extension is optional, but if present, it must be .BAS."
 /// Instantiates all program editing commands against the stored `program`, using `console` for
 /// interactive editing, and using `dir` as the on-disk storage for the programs.
 fn all_commands_for(
-    program: Program,
+    program: Rc<RefCell<dyn Program>>,
     console: Rc<RefCell<dyn Console>>,
     store: Rc<RefCell<dyn Store>>,
 ) -> Vec<Rc<dyn BuiltinCommand>> {
@@ -542,10 +396,8 @@ fn all_commands_for(
         Rc::from(DelCommand { store: store.clone() }),
         Rc::from(DirCommand { console: console.clone(), store: store.clone() }),
         Rc::from(EditCommand { console: console.clone(), program: program.clone() }),
-        Rc::from(ListCommand { console: console.clone(), program: program.clone() }),
         Rc::from(LoadCommand { store: store.clone(), program: program.clone() }),
         Rc::from(NewCommand { program: program.clone() }),
-        Rc::from(RenumCommand { program: program.clone() }),
         Rc::from(RunCommand { program: program.clone() }),
         Rc::from(SaveCommand { store: store.clone(), program }),
     ]
@@ -557,12 +409,13 @@ pub fn all_commands(
     console: Rc<RefCell<dyn Console>>,
     store: Rc<RefCell<dyn Store>>,
 ) -> Vec<Rc<dyn BuiltinCommand>> {
-    all_commands_for(Program::default(), console, store)
+    all_commands_for(Rc::from(RefCell::from(Editor::new())), console, store)
 }
 
 #[cfg(test)]
 mod testutils {
     use super::*;
+    use crate::console;
     use std::collections::HashMap;
 
     #[derive(Default)]
@@ -600,6 +453,34 @@ mod testutils {
             Ok(())
         }
     }
+
+    pub(crate) struct RecordedProgram {
+        content: String,
+    }
+
+    impl RecordedProgram {
+        pub fn new(content: &'static str) -> Self {
+            Self { content: content.to_owned() }
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl Program for RecordedProgram {
+        async fn edit(&mut self, console: &mut dyn Console) -> io::Result<()> {
+            let append = console::read_line(console, "", "").await?;
+            self.content.push_str(&append);
+            self.content.push('\n');
+            Ok(())
+        }
+
+        fn load(&mut self, text: &str) {
+            self.content = text.to_owned();
+        }
+
+        fn text(&self) -> String {
+            self.content.clone()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -618,15 +499,14 @@ mod tests {
     ///
     /// `expected_out` is a sequence of expected calls to `PRINT`.
     ///
-    /// `exp_program` is the expected state of `program` after execution, as a collection of line
-    /// number and content pairs.
+    /// `exp_program` is the expected state of `program` after execution.
     fn do_ok_test_with_store(
-        program: Program,
+        program: Rc<RefCell<dyn Program>>,
         store: Rc<RefCell<dyn Store>>,
         input: &str,
         golden_in: &'static str,
         expected_out: &'static [&'static str],
-        exp_program: &'static [(usize, &'static str)],
+        exp_program: &'static str,
     ) {
         let console =
             Rc::from(RefCell::from(MockConsoleBuilder::new().add_input_chars(golden_in).build()));
@@ -637,20 +517,16 @@ mod tests {
         let expected_out: Vec<CapturedOut> =
             expected_out.iter().map(|x| CapturedOut::Print((*x).to_owned())).collect();
         assert_eq!(expected_out, console.borrow().captured_out());
-
-        let program = program.borrow();
-        let flat_program: Vec<(usize, &str)> =
-            program.iter().map(|(k, v)| (*k, v.as_str())).collect();
-        assert_eq!(exp_program, flat_program.as_slice());
+        assert_eq!(exp_program, program.borrow().text());
     }
 
     /// Same as `do_ok_test_with_store` but with an automatic `store`.
     fn do_ok_test(
-        program: Program,
+        program: Rc<RefCell<dyn Program>>,
         input: &str,
         golden_in: &'static str,
         expected_out: &'static [&'static str],
-        exp_program: &'static [(usize, &'static str)],
+        exp_program: &'static str,
     ) {
         let store = Rc::from(RefCell::from(InMemoryStore::default()));
         do_ok_test_with_store(program, store, input, golden_in, expected_out, exp_program)
@@ -661,8 +537,9 @@ mod tests {
     /// Ensures that this does not touch the console.
     fn do_error_test_with_store(store: Rc<RefCell<dyn Store>>, input: &str, expected_err: &str) {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
+        let program = Rc::from(RefCell::from(RecordedProgram::new("")));
         let mut machine = MachineBuilder::default()
-            .add_builtins(all_commands_for(Program::default(), console.clone(), store))
+            .add_builtins(all_commands_for(program, console.clone(), store))
             .build();
         assert_eq!(
             expected_err,
@@ -686,8 +563,7 @@ mod tests {
         store.put("bar.bas", "").unwrap();
         let store = Rc::from(RefCell::from(store));
 
-        let program = Program::default();
-        program.borrow_mut().insert(10, "Leave me alone".to_owned());
+        let program = Rc::from(RefCell::from(RecordedProgram::new("Leave me alone")));
 
         for p in &["foo", "foo.bas"] {
             store.borrow_mut().put("foo.bas", "line 1\n  line 2\n").unwrap();
@@ -697,7 +573,7 @@ mod tests {
                 &("DEL \"".to_owned() + p + "\""),
                 "",
                 &[],
-                &[(10, "Leave me alone")],
+                "Leave me alone",
             );
         }
 
@@ -719,12 +595,12 @@ mod tests {
     fn test_dir_empty() {
         let store = Rc::from(RefCell::from(InMemoryStore::default()));
         do_ok_test_with_store(
-            Program::default(),
+            Rc::from(RefCell::from(RecordedProgram::new(""))),
             store,
             "DIR",
             "",
             &["", "    Modified              Size    Name", "    0 file(s), 0 bytes", ""],
-            &[],
+            "",
         );
     }
 
@@ -738,7 +614,7 @@ mod tests {
         let store = Rc::from(RefCell::from(store));
 
         do_ok_test_with_store(
-            Program::default(),
+            Rc::from(RefCell::from(RecordedProgram::new(""))),
             store,
             "DIR",
             "",
@@ -753,7 +629,7 @@ mod tests {
                 "    4 file(s), 21 bytes",
                 "",
             ],
-            &[],
+            "",
         );
     }
 
@@ -764,131 +640,40 @@ mod tests {
     }
 
     #[test]
-    fn test_edit_append_empty() {
-        let program = Program::default();
-        do_ok_test(program, "EDIT", "first\nsecond\n\n", &[], &[(10, "first"), (20, "second")]);
-    }
-
-    #[test]
-    fn test_edit_append_resume() {
-        let program = Program::default();
-        do_ok_test(program.clone(), "EDIT", "first\n\n", &[], &[(10, "first")]);
+    fn test_edit_ok() {
         do_ok_test(
-            program,
+            Rc::from(RefCell::from(RecordedProgram::new("previous\n"))),
             "EDIT",
-            "second\nthird\n\n",
+            "new line\n",
             &[],
-            &[(10, "first"), (20, "second"), (30, "third")],
+            "previous\nnew line\n",
         );
-    }
-
-    #[test]
-    fn test_edit_append_to_arbitrary_number() {
-        let program = Program::default();
-        program.borrow_mut().insert(28, "next is 30".to_owned());
-        do_ok_test(program, "EDIT", "correct\n\n", &[], &[(28, "next is 30"), (30, "correct")]);
-    }
-
-    #[test]
-    fn test_edit_one_empty() {
-        let program = Program::default();
-        program.borrow_mut().insert(7, "before".to_owned());
-        program.borrow_mut().insert(9, "after".to_owned());
-        do_ok_test(
-            program,
-            "EDIT 8",
-            "some text\n",
-            &[],
-            &[(7, "before"), (8, "some text"), (9, "after")],
-        );
-    }
-
-    #[test]
-    fn test_edit_one_existing() {
-        let program = Program::default();
-        program.borrow_mut().insert(7, "before".to_owned());
-        program.borrow_mut().insert(8, "some text".to_owned());
-        program.borrow_mut().insert(9, "after".to_owned());
-        do_ok_test(program, "EDIT 8", "new\n", &[], &[(7, "before"), (8, "new"), (9, "after")]);
-    }
-
-    #[test]
-    fn test_edit_delete() {
-        let program = Program::default();
-        program.borrow_mut().insert(7, "before".to_owned());
-        program.borrow_mut().insert(8, "some text".to_owned());
-        program.borrow_mut().insert(9, "after".to_owned());
-        do_ok_test(program, "EDIT 8", "\n", &[], &[(7, "before"), (9, "after")]);
     }
 
     #[test]
     fn test_edit_errors() {
-        do_error_test("EDIT 1, 2", "EDIT takes no arguments or a line number");
-        do_error_test("EDIT 0", "Line numbers must be a positive integer");
-        do_error_test("EDIT -9", "Line numbers must be a positive integer");
-        do_error_test("EDIT \"foo\"", "Line numbers must be a positive integer");
-    }
-
-    #[test]
-    fn test_list_nothing() {
-        let program = Program::default();
-        do_ok_test(program, "LIST", "", &[""], &[]);
-    }
-
-    #[test]
-    fn test_list_something() {
-        let program = Program::default();
-        program.borrow_mut().insert(10, "first".to_owned());
-        program.borrow_mut().insert(1023, "    second line".to_owned());
-        do_ok_test(
-            program,
-            "LIST",
-            "",
-            &["10 first", "1023     second line", ""],
-            &[(10, "first"), (1023, "    second line")],
-        );
-    }
-
-    #[test]
-    fn test_list_errors() {
-        do_error_test("LIST 10", "LIST takes no arguments");
+        do_error_test("EDIT 1", "EDIT takes no arguments");
     }
 
     #[test]
     fn test_load_ok() {
         let mut store = InMemoryStore::default();
-        store.put("foo.bas", "line 1\n  line 2\n").unwrap();
+        store.put("foo.bas", "line 1\n\n  line 2\n").unwrap();
         store.put("foo.bak", "").unwrap();
-        store.put("BAR.BAS", "line 1\n  line 2\n").unwrap();
-        store.put("Baz.bas", "line 1\n  line 2\n").unwrap();
+        store.put("BAR.BAS", "line 1\n\n  line 2\n").unwrap();
+        store.put("Baz.bas", "line 1\n\n  line 2\n").unwrap();
         let store = Rc::from(RefCell::from(store));
 
         for p in &["foo", "foo.bas", "BAR", "BAR.BAS", "Baz"] {
             do_ok_test_with_store(
-                Program::default(),
+                Rc::from(RefCell::from(RecordedProgram::new(""))),
                 store.clone(),
                 &("LOAD \"".to_owned() + p + "\""),
                 "",
                 &[],
-                &[(10, "line 1"), (20, "  line 2")],
+                "line 1\n\n  line 2\n",
             );
         }
-    }
-
-    #[test]
-    fn test_load_skip_empty_lines() {
-        let mut store = InMemoryStore::default();
-        store.put("data.bas", "a\n\nb\n\n").unwrap();
-        let store = Rc::from(RefCell::from(store));
-
-        do_ok_test_with_store(
-            Program::default(),
-            store,
-            &("LOAD \"data.bas\""),
-            "",
-            &[],
-            &[(10, "a"), (20, "b")],
-        );
     }
 
     /// Checks errors that should be handled the same way by `LOAD` and `SAVE`.
@@ -934,21 +719,19 @@ mod tests {
 
     #[test]
     fn test_new_nothing() {
-        let program = Program::default();
-        do_ok_test(program, "NEW", "", &[], &[]);
+        do_ok_test(Rc::from(RefCell::from(RecordedProgram::new(""))), "NEW", "", &[], "");
     }
 
     #[test]
     fn test_new_clears_program_and_variables() {
-        let program = Program::default();
-        program.borrow_mut().insert(10, "some stuff".to_owned());
+        let program = Rc::from(RefCell::from(RecordedProgram::new("some stuff")));
 
         let mut machine = MachineBuilder::default()
             .add_builtin(Rc::from(NewCommand { program: program.clone() }))
             .build();
 
         block_on(machine.exec(&mut b"NEW".as_ref())).unwrap();
-        assert!(program.borrow().is_empty());
+        assert!(program.borrow().text().is_empty());
         assert!(machine.get_vars().is_empty());
     }
 
@@ -958,56 +741,13 @@ mod tests {
     }
 
     #[test]
-    fn test_renum_no_changes() {
-        let program = Program::default();
-        program.borrow_mut().insert(10, "one".to_owned());
-        program.borrow_mut().insert(20, "two".to_owned());
-        program.borrow_mut().insert(30, "three".to_owned());
-        do_ok_test(program, "RENUM", "", &[], &[(10, "one"), (20, "two"), (30, "three")]);
-    }
-
-    #[test]
-    fn test_renum_insertion() {
-        let program = Program::default();
-        program.borrow_mut().insert(10, "one".to_owned());
-        program.borrow_mut().insert(15, "two".to_owned());
-        program.borrow_mut().insert(20, "three".to_owned());
-        do_ok_test(program, "RENUM", "", &[], &[(10, "one"), (20, "two"), (30, "three")]);
-    }
-
-    #[test]
-    fn test_renum_deletion() {
-        let program = Program::default();
-        program.borrow_mut().insert(10, "one".to_owned());
-        program.borrow_mut().insert(30, "three".to_owned());
-        do_ok_test(program, "RENUM", "", &[], &[(10, "one"), (20, "three")]);
-    }
-
-    #[test]
-    fn test_renum_shift() {
-        let program = Program::default();
-        program.borrow_mut().insert(10, "one".to_owned());
-        program.borrow_mut().insert(78, "two".to_owned());
-        program.borrow_mut().insert(1294, "three".to_owned());
-        do_ok_test(program, "RENUM", "", &[], &[(10, "one"), (20, "two"), (30, "three")]);
-    }
-
-    #[test]
-    fn test_renum_errors() {
-        do_error_test("RENUM 10", "RENUM takes no arguments");
-    }
-
-    #[test]
     fn test_run_nothing() {
-        let program = Program::default();
-        do_ok_test(program, "RUN", "", &[], &[]);
+        do_ok_test(Rc::from(RefCell::from(RecordedProgram::new(""))), "RUN", "", &[], "");
     }
 
     #[test]
     fn test_run_something_that_shares_state() {
-        let program = Program::default();
-        program.borrow_mut().insert(23, "OUT var".to_owned());
-        program.borrow_mut().insert(72, "var = var + 1".to_owned());
+        let program = Rc::from(RefCell::from(RecordedProgram::new("OUT var\nvar = var + 1")));
 
         let captured_out = Rc::from(RefCell::from(vec![]));
         let out_cmd = OutCommand::from(captured_out.clone());
@@ -1033,9 +773,7 @@ mod tests {
     fn test_save_ok() {
         let store = Rc::from(RefCell::from(InMemoryStore::default()));
 
-        let program = Program::default();
-        program.borrow_mut().insert(10, "line 1".to_owned());
-        program.borrow_mut().insert(20, "  line 2".to_owned());
+        let program = Rc::from(RefCell::from(RecordedProgram::new("line 1\n  line 2\n")));
 
         for p in &["first", "second.bas", "THIRD", "FOURTH.BAS", "Fifth"] {
             do_ok_test_with_store(
@@ -1044,7 +782,7 @@ mod tests {
                 &("SAVE \"".to_owned() + p + "\""),
                 "",
                 &[],
-                &[(10, "line 1"), (20, "  line 2")],
+                "line 1\n  line 2\n",
             );
         }
 

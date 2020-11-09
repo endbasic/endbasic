@@ -23,6 +23,7 @@
 // TODO(jmmv): Should narrow the exposed interface by 1.0.0.
 pub mod ast;
 pub mod console;
+mod editor;
 pub mod eval;
 pub mod exec;
 pub mod help;

@@ -49,6 +49,9 @@ pub enum Key {
     /// Indicates a request for termination (e.g. `Ctrl-D`).
     Eof,
 
+    /// The escape key.
+    Escape,
+
     /// Indicates a request for interrupt (e.g. `Ctrl-C`).
     // TODO(jmmv): This (and maybe Eof too) should probably be represented as a more generic
     // Control(char) value so that we can represent other control sequences and allow the logic in
@@ -85,6 +88,14 @@ pub struct Position {
     pub column: usize,
 }
 
+impl std::ops::Sub for Position {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self::Output {
+        Position { row: self.row - other.row, column: self.column - other.column }
+    }
+}
+
 /// Hooks to implement the commands that manipulate the console.
 #[async_trait(?Send)]
 pub trait Console {
@@ -96,6 +107,10 @@ pub trait Console {
     /// If any of the colors is `None`, the color is left unchanged.
     fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()>;
 
+    /// Enters the alternate console.
+    // TODO(jmmv): This API leads to misuse as callers can forget to leave the alternate console.
+    fn enter_alt(&mut self) -> io::Result<()>;
+
     /// Hides the cursor.
     // TODO(jmmv): This API leads to misuse as callers can forget to show the cursor again.
     fn hide_cursor(&mut self) -> io::Result<()>;
@@ -103,6 +118,9 @@ pub trait Console {
     /// Returns true if the console is attached to an interactive terminal.  This controls whether
     /// reading a line echoes back user input, for example.
     fn is_interactive(&self) -> bool;
+
+    /// Leaves the alternate console.
+    fn leave_alt(&mut self) -> io::Result<()>;
 
     /// Moves the cursor to the given position, which must be within the screen.
     fn locate(&mut self, pos: Position) -> io::Result<()>;
@@ -219,6 +237,10 @@ async fn read_line_interactive(
 
             Key::Eof => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
 
+            Key::Escape => {
+                // Intentionally ignored.
+            }
+
             Key::Interrupt => return Err(io::Error::new(io::ErrorKind::Interrupted, "Ctrl+C")),
 
             Key::NewLine => {
@@ -254,6 +276,7 @@ async fn read_line_raw(console: &mut dyn Console) -> io::Result<String> {
                 }
             }
             Key::Char(ch) => line.push(ch),
+            Key::Escape => (),
             Key::Eof => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
             Key::Interrupt => return Err(io::Error::new(io::ErrorKind::Interrupted, "Ctrl+C")),
             Key::NewLine => break,
@@ -581,7 +604,9 @@ pub(crate) mod testutils {
     pub(crate) enum CapturedOut {
         Clear(ClearType),
         Color(Option<u8>, Option<u8>),
+        EnterAlt,
         HideCursor,
+        LeaveAlt,
         Locate(Position),
         MoveWithinLine(i16),
         Print(String),
@@ -630,6 +655,11 @@ pub(crate) mod testutils {
             Ok(())
         }
 
+        fn enter_alt(&mut self) -> io::Result<()> {
+            self.captured_out.push(CapturedOut::EnterAlt);
+            Ok(())
+        }
+
         fn hide_cursor(&mut self) -> io::Result<()> {
             self.captured_out.push(CapturedOut::HideCursor);
             Ok(())
@@ -637,6 +667,11 @@ pub(crate) mod testutils {
 
         fn is_interactive(&self) -> bool {
             false
+        }
+
+        fn leave_alt(&mut self) -> io::Result<()> {
+            self.captured_out.push(CapturedOut::LeaveAlt);
+            Ok(())
         }
 
         fn locate(&mut self, pos: Position) -> io::Result<()> {
@@ -1025,6 +1060,21 @@ mod tests {
     fn test_read_line_interactive_history_not_implemented() {
         ReadLineInteractiveTest::new().add_key(Key::ArrowUp).accept();
         ReadLineInteractiveTest::new().add_key(Key::ArrowDown).accept();
+    }
+
+    #[test]
+    fn test_read_line_ignored_keys() {
+        ReadLineInteractiveTest::new()
+            .add_key_chars("not ")
+            .add_output_bytes(b"not ")
+            // -
+            .add_key(Key::Escape)
+            // -
+            .add_key_chars("affected")
+            .add_output_bytes(b"affected")
+            // -
+            .set_line("not affected")
+            .accept();
     }
 
     /// Runs the `input` code on a new machine and verifies its output.

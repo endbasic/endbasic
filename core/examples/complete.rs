@@ -63,6 +63,11 @@ impl Console for IncompleteConsole {
         Ok(())
     }
 
+    fn enter_alt(&mut self) -> io::Result<()> {
+        eprintln!("Alternate console switching not implemented");
+        Ok(())
+    }
+
     fn hide_cursor(&mut self) -> io::Result<()> {
         eprintln!("Cursor visibility changes not implemented");
         Ok(())
@@ -70,6 +75,11 @@ impl Console for IncompleteConsole {
 
     fn is_interactive(&self) -> bool {
         false
+    }
+
+    fn leave_alt(&mut self) -> io::Result<()> {
+        eprintln!("Alternate console switching not implemented");
+        Ok(())
     }
 
     fn locate(&mut self, _pos: Position) -> io::Result<()> {
