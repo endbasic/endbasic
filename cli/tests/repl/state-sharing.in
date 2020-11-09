@@ -14,15 +14,20 @@
 ' under the License.
 
 ' Tests interactions between the stored program and the machine state.
+'
+' WARNING: This file contains literal control codes to interact with the
+' full-screen editor.  See the README.md file for details on how to generate
+' its corresponding .out file.
 
 a = 3
 PRINT a
 CLEAR
 PRINT a
 
-EDIT ' Insert stored program until empty line.
+EDIT ' Insert stored program until an escape character.
 PRINT "counter is"; counter
 counter = counter + 1
+
 
 counter = 100
 RUN

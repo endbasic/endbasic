@@ -14,16 +14,21 @@
 ' under the License.
 
 ' Interactive session that shows the contents of the disk.
+'
+' WARNING: This file contains literal control codes to interact with the
+' full-screen editor.  See the README.md file for details on how to generate
+' its corresponding .out file.
 
 DIR ' Empty listing.
 
 SAVE "empty.bas"
 DIR ' One file, empty.
 
-EDIT ' Read lines into the program until a blank line.
+EDIT ' Insert stored program until an escape character.
 first
 second
 third
+
 
 SAVE "some lines and a long name.bas"
 DIR ' Two files.

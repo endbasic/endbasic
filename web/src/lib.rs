@@ -74,6 +74,11 @@ impl Console for XtermJsConsole {
         Ok(())
     }
 
+    fn enter_alt(&mut self) -> io::Result<()> {
+        self.terminal.write("\u{001b}[?1049h");
+        Ok(())
+    }
+
     fn hide_cursor(&mut self) -> io::Result<()> {
         self.terminal.write("\u{001b}[?25l");
         Ok(())
@@ -81,6 +86,11 @@ impl Console for XtermJsConsole {
 
     fn is_interactive(&self) -> bool {
         true
+    }
+
+    fn leave_alt(&mut self) -> io::Result<()> {
+        self.terminal.write("\u{001b}[?1049l");
+        Ok(())
     }
 
     fn locate(&mut self, pos: Position) -> io::Result<()> {
@@ -110,6 +120,7 @@ impl Console for XtermJsConsole {
             8 => Ok(Key::Backspace),
             10 => Ok(Key::NewLine),
             13 => Ok(Key::CarriageReturn),
+            27 => Ok(Key::Escape),
             37 => Ok(Key::ArrowLeft),
             38 => Ok(Key::ArrowUp),
             39 => Ok(Key::ArrowRight),

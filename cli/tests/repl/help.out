@@ -9,16 +9,14 @@ Output from HELP:
     COLOR     Sets the foreground and background colors.
     DEL       Deletes the given program.
     DIR       Displays the list of files on disk.
-    EDIT      Edits the stored program.
+    EDIT      Interactively edits the stored program.
     EXIT      Exits the interpreter.
     HELP      Prints interactive help.
     INPUT     Obtains user input from the console.
-    LIST      Lists the contents of the stored program.
     LOAD      Loads the given program.
     LOCATE    Moves the cursor to the given position.
     NEW       Clears the stored program from memory.
     PRINT     Prints a message to the console.
-    RENUM     Reassigns line numbers to make them all multiples of ten.
     RUN       Runs the stored program.
     SAVE      Saves the current program in memory to the given filename.
 
@@ -63,11 +61,7 @@ Output from HELP EDIT:
 
     EDIT [lineno%]
 
-    Edits the stored program.
-
-    Without a line number, starts interactive editing at the last line of the stored program (or the first line if there is no program yet).  Editing ends on the first empty line.
-
-    With a line number, and if the line does not yet exist, enters interactive editing for that line only.  Otherwise, if the line already exists, presents the contents of that line for interactive editing.  Editing terminates upon an ENTER key press.
+    Interactively edits the stored program.
 
 Output from HELP EXIT:
 
@@ -97,12 +91,6 @@ Output from HELP INPUT:
 
     The second expression to this function must be a bare variable reference and indicates the variable to update with the obtained input.
 
-Output from HELP LIST:
-
-    LIST
-
-    Lists the contents of the stored program.
-
 Output from HELP LOAD:
 
     LOAD filename
@@ -130,12 +118,6 @@ Output from HELP PRINT:
     Prints a message to the console.
 
     The expressions given as arguments are all evaluated and converted to strings.  Arguments separated by the short `;` separator are concatenated with a single space, while arguments separated by the long `,` separator are concatenated with a tab character.
-
-Output from HELP RENUM:
-
-    RENUM
-
-    Reassigns line numbers to make them all multiples of ten.
 
 Output from HELP RUN:
 

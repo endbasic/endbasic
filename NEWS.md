@@ -15,6 +15,9 @@ not adhere to semantic versioning until 1.0.0.**
     heavy dependencies that assume things about the environment (like terminal
     or file system access).
 
+*   Turned the `EDIT` command into an interactive full-screen text editor and
+    removed the `LIST` and `RENUM` commands.
+
 *   Added the `CLS`, `COLOR`, and `LOCATE` commands for terminal
     manipulation.
 

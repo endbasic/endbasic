@@ -91,7 +91,9 @@ impl TextConsole {
     fn line_to_keys(s: String) -> VecDeque<console::Key> {
         let mut keys = VecDeque::default();
         for ch in s.chars() {
-            if ch == '\n' {
+            if ch == '\x1b' {
+                keys.push_back(console::Key::Escape);
+            } else if ch == '\n' {
                 keys.push_back(console::Key::NewLine);
             } else if ch == '\r' {
                 // Ignore.  When we run under Windows and use golden test input files, we end up
@@ -130,6 +132,7 @@ impl TextConsole {
             if let event::Event::Key(ev) = event::read().map_err(crossterm_error_to_io_error)? {
                 match ev.code {
                     event::KeyCode::Backspace => return Ok(console::Key::Backspace),
+                    event::KeyCode::Esc => return Ok(console::Key::Escape),
                     event::KeyCode::Up => return Ok(console::Key::ArrowUp),
                     event::KeyCode::Down => return Ok(console::Key::ArrowDown),
                     event::KeyCode::Left => return Ok(console::Key::ArrowLeft),
@@ -187,12 +190,20 @@ impl console::Console for TextConsole {
         Ok(())
     }
 
+    fn enter_alt(&mut self) -> io::Result<()> {
+        execute!(io::stdout(), terminal::EnterAlternateScreen).map_err(crossterm_error_to_io_error)
+    }
+
     fn hide_cursor(&mut self) -> io::Result<()> {
         execute!(io::stdout(), cursor::Hide).map_err(crossterm_error_to_io_error)
     }
 
     fn is_interactive(&self) -> bool {
         self.is_tty
+    }
+
+    fn leave_alt(&mut self) -> io::Result<()> {
+        execute!(io::stdout(), terminal::LeaveAlternateScreen).map_err(crossterm_error_to_io_error)
     }
 
     fn locate(&mut self, pos: console::Position) -> io::Result<()> {
