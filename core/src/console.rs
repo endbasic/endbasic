@@ -596,27 +596,12 @@ pub(crate) mod testutils {
 
         /// Sequence of all messages printed.
         captured_out: Vec<CapturedOut>,
+
+        /// The size of the mock console.
+        size: Position,
     }
 
     impl MockConsole {
-        /// Creates a new mock console with the given golden input.
-        pub(crate) fn new(golden_in: &'static str) -> Self {
-            let mut keys = VecDeque::new();
-            for ch in golden_in.chars() {
-                match ch {
-                    '\n' => keys.push_back(Key::NewLine),
-                    '\r' => keys.push_back(Key::CarriageReturn),
-                    ch => keys.push_back(Key::Char(ch)),
-                }
-            }
-            Self { golden_in: keys, captured_out: vec![] }
-        }
-
-        /// Creates a new mock console with the given golden input.
-        pub(crate) fn new_raw(keys: &[Key]) -> Self {
-            Self { golden_in: VecDeque::from(keys.to_vec()), captured_out: vec![] }
-        }
-
         /// Obtains a reference to the captured output.
         pub(crate) fn captured_out(&self) -> &[CapturedOut] {
             self.captured_out.as_slice()
@@ -682,13 +667,60 @@ pub(crate) mod testutils {
         }
 
         fn size(&self) -> io::Result<Position> {
-            // TODO(jmmv): Should probably make the console size configurable by the caller.
-            Ok(Position { row: 5, column: 15 })
+            Ok(self.size)
         }
 
         fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
             self.captured_out.push(CapturedOut::Write(bytes.to_owned()));
             Ok(())
+        }
+    }
+
+    /// Builder pattern for a `MockConsole`.
+    pub(crate) struct MockConsoleBuilder {
+        golden_in: VecDeque<Key>,
+        size: Position,
+    }
+
+    impl MockConsoleBuilder {
+        /// Creates a new console builder, with no golden input and an infinite size.
+        pub(crate) fn new() -> Self {
+            Self {
+                golden_in: VecDeque::new(),
+                size: Position { row: usize::MAX, column: usize::MAX },
+            }
+        }
+
+        /// Adds a bunch of characters as golden input keys.
+        ///
+        /// Note that some escape characters within `s` are interpreted and added as their
+        /// corresponding `Key`s for simplicity.
+        pub(crate) fn add_input_chars(mut self, s: &str) -> Self {
+            for ch in s.chars() {
+                match ch {
+                    '\n' => self.golden_in.push_back(Key::NewLine),
+                    '\r' => self.golden_in.push_back(Key::CarriageReturn),
+                    ch => self.golden_in.push_back(Key::Char(ch)),
+                }
+            }
+            self
+        }
+
+        /// Adds a bunch of keys as golden input.
+        pub(crate) fn add_input_keys(mut self, keys: &[Key]) -> Self {
+            self.golden_in.extend(keys.iter().cloned());
+            self
+        }
+
+        /// Sets the size of the mock console.
+        pub(crate) fn with_size(mut self, size: Position) -> Self {
+            self.size = size;
+            self
+        }
+
+        /// Builds a `MockConsole` instance as configured in the builder.
+        pub(crate) fn build(self) -> MockConsole {
+            MockConsole { golden_in: self.golden_in, captured_out: vec![], size: self.size }
         }
     }
 }
@@ -773,7 +805,10 @@ mod tests {
             self.keys.push(Key::NewLine);
             self.exp_output.push(CapturedOut::Write(vec![b'\r', b'\n']));
 
-            let mut console = MockConsole::new_raw(&self.keys);
+            let mut console = MockConsoleBuilder::new()
+                .add_input_keys(&self.keys)
+                .with_size(Position { row: 5, column: 15 })
+                .build();
             let line =
                 block_on(read_line_interactive(&mut console, self.prompt, self.previous)).unwrap();
             assert_eq!(self.exp_line, &line);
@@ -998,7 +1033,8 @@ mod tests {
     ///
     /// `expected_out` is a sequence of expected commands or messages.
     fn do_control_ok_test(input: &str, golden_in: &'static str, expected_out: &[CapturedOut]) {
-        let console = Rc::from(RefCell::from(MockConsole::new(golden_in)));
+        let console =
+            Rc::from(RefCell::from(MockConsoleBuilder::new().add_input_chars(golden_in).build()));
         let mut machine =
             MachineBuilder::default().add_builtins(all_commands(console.clone())).build();
         block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed");
@@ -1023,7 +1059,8 @@ mod tests {
         expected_out: &'static [&'static str],
         expected_err: &str,
     ) {
-        let console = Rc::from(RefCell::from(MockConsole::new(golden_in)));
+        let console =
+            Rc::from(RefCell::from(MockConsoleBuilder::new().add_input_chars(golden_in).build()));
         let mut machine =
             MachineBuilder::default().add_builtins(all_commands(console.clone())).build();
         assert_eq!(

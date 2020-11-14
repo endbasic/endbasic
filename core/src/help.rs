@@ -225,7 +225,7 @@ mod tests {
 
     /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
     fn do_error_test(input: &str, expected_err: &str) {
-        let console = Rc::from(RefCell::from(MockConsole::new("")));
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
             .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
             .add_builtin(Rc::from(DoNothingCommand {}))
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn test_help_summary() {
-        let console = Rc::from(RefCell::from(MockConsole::new("")));
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
             .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
             .add_builtin(Rc::from(DoNothingCommand {}))
@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn test_help_describe() {
-        let console = Rc::from(RefCell::from(MockConsole::new("")));
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
             .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
             .add_builtin(Rc::from(DoNothingCommand {}))
@@ -290,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_help_lang() {
-        let console = Rc::from(RefCell::from(MockConsole::new("")));
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
             .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
             .add_builtin(Rc::from(DoNothingCommand {}))

@@ -628,7 +628,8 @@ mod tests {
         expected_out: &'static [&'static str],
         exp_program: &'static [(usize, &'static str)],
     ) {
-        let console = Rc::from(RefCell::from(MockConsole::new(golden_in)));
+        let console =
+            Rc::from(RefCell::from(MockConsoleBuilder::new().add_input_chars(golden_in).build()));
         let mut machine = MachineBuilder::default()
             .add_builtins(all_commands_for(program.clone(), console.clone(), store))
             .build();
@@ -659,7 +660,7 @@ mod tests {
     ///
     /// Ensures that this does not touch the console.
     fn do_error_test_with_store(store: Rc<RefCell<dyn Store>>, input: &str, expected_err: &str) {
-        let console = Rc::from(RefCell::from(MockConsole::new("")));
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
             .add_builtins(all_commands_for(Program::default(), console.clone(), store))
             .build();
