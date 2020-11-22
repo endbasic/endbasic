@@ -59,8 +59,11 @@ impl Store for FileStore {
                     // expect symlinks in the programs directory anyway.  If we want to handle this
                     // better, we'll have to add a way to report file types.
                     let metadata = fs::metadata(de.path())?;
-                    let date = time::OffsetDateTime::from(metadata.modified()?)
-                        .to_offset(time::UtcOffset::current_local_offset());
+                    let offset = match time::UtcOffset::try_current_local_offset() {
+                        Ok(offset) => offset,
+                        Err(_) => time::UtcOffset::UTC,
+                    };
+                    let date = time::OffsetDateTime::from(metadata.modified()?).to_offset(offset);
                     let length = metadata.len();
 
                     entries.insert(
