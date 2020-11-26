@@ -29,6 +29,7 @@ use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
+use std::env;
 use std::io::{self, Write};
 use std::path::Path;
 use std::rc::Rc;
@@ -42,6 +43,17 @@ fn crossterm_error_to_io_error(e: crossterm::ErrorKind) -> io::Error {
             io::Error::new(io::ErrorKind::InvalidData, format!("{}", e))
         }
         _ => io::Error::new(io::ErrorKind::Other, format!("{}", e)),
+    }
+}
+
+/// Gets the value of the environment variable `name` and interprets it as a `usize`.  Returns
+/// `None` if the variable is not set or if its contents are invalid.
+fn get_env_var_as_usize(name: &str) -> Option<usize> {
+    match env::var_os(name) {
+        Some(value) => {
+            value.as_os_str().to_string_lossy().parse::<usize>().map(Some).unwrap_or(None)
+        }
+        None => None,
     }
 }
 
@@ -219,8 +231,23 @@ impl console::Console for TextConsole {
     }
 
     fn size(&self) -> io::Result<console::Position> {
-        let (cols, rows) = terminal::size().map_err(crossterm_error_to_io_error)?;
-        Ok(console::Position { row: rows as usize, column: cols as usize })
+        // Must be careful to not query the terminal size if both LINES and COLUMNS are set, because
+        // the query fails when we don't have a PTY and we still need to run under these conditions
+        // for testing purposes.
+        let lines = get_env_var_as_usize("LINES");
+        let columns = get_env_var_as_usize("COLUMNS");
+        let size = match (lines, columns) {
+            (Some(l), Some(c)) => console::Position { row: l, column: c },
+            (l, c) => {
+                let (actual_columns, actual_lines) =
+                    terminal::size().map_err(crossterm_error_to_io_error)?;
+                console::Position {
+                    row: l.unwrap_or(actual_lines as usize),
+                    column: c.unwrap_or(actual_columns as usize),
+                }
+            }
+        };
+        Ok(size)
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {

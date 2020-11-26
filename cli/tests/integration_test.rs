@@ -148,6 +148,8 @@ fn check<P: AsRef<Path>>(
     let result = process::Command::new(bin.as_ref())
         .args(args)
         .stdin(golden_stdin)
+        .env("LINES", "24")
+        .env("COLUMNS", "80")
         .output()
         .expect("Failed to execute subprocess");
     let code = result.status.code().expect("Subprocess didn't exit cleanly");
