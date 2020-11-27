@@ -18,56 +18,33 @@ name: Build and test
 on: [push, pull_request]
 
 jobs:
-    # Generic jobs.  These run on Linux because they are faster this way, but
-    # in principle they are OS-independent.
-    lint:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v2
-            - name: Build and test
-              run: ./.github/workflows/lint.sh
-    package:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v2
-            - name: Build and test
-              run: ./.github/workflows/package.sh
-
-    # Linux-specific builds.
     linux-release:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v2
-            - name: Build and test
-              run: cargo test --all-features --verbose --release
+            - run: cargo test --all-features --verbose --release
     linux-test:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v2
-            - name: Build and test
-              run: cargo test --all-features --verbose
+            - run: cargo test --all-features --verbose
 
-    # macOS-specific builds.
     macos-release:
         runs-on: macos-latest
         steps:
             - uses: actions/checkout@v2
-            - name: Build and test
-              run: cargo test --all-features --verbose --release
+            - run: cargo test --all-features --verbose --release
     macos-test:
         runs-on: macos-latest
         steps:
             - uses: actions/checkout@v2
-            - name: Build and test
-              run: cargo test --all-features --verbose
+            - run: cargo test --all-features --verbose
 
-    # Windows-specific builds.
     windows-release:
         runs-on: windows-latest
         steps:
             - uses: actions/checkout@v2
-            - name: Build and test
-              run: cargo test --all-features --verbose --release
+            - run: cargo test --all-features --verbose --release
               # TODO(jmmv): Avoid bash. In principle we don't need it, but
               # disabling its usage causes console tests to fail.
               shell: bash
@@ -75,8 +52,7 @@ jobs:
         runs-on: windows-latest
         steps:
             - uses: actions/checkout@v2
-            - name: Build and test
-              run: cargo test --all-features --verbose
+            - run: cargo test --all-features --verbose
               # TODO(jmmv): Avoid bash. In principle we don't need it, but
               # disabling its usage causes console tests to fail.
               shell: bash
