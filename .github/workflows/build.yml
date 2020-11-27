@@ -25,13 +25,13 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - name: Build and test
-              run: export DO=lint; ./.github/workflows/install.sh && ./.github/workflows/build.sh
+              run: ./.github/workflows/lint.sh
     package:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v2
             - name: Build and test
-              run: export DO=package; ./.github/workflows/install.sh && ./.github/workflows/build.sh
+              run: ./.github/workflows/package.sh
 
     # Linux-specific builds.
     linux-release:
@@ -39,13 +39,13 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - name: Build and test
-              run: export DO=release; ./.github/workflows/install.sh && ./.github/workflows/build.sh
+              run: cargo test --all-features --verbose --release
     linux-test:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v2
             - name: Build and test
-              run: export DO=test; ./.github/workflows/install.sh && ./.github/workflows/build.sh
+              run: cargo test --all-features --verbose
 
     # macOS-specific builds.
     macos-release:
@@ -53,13 +53,13 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - name: Build and test
-              run: export DO=release; ./.github/workflows/install.sh && ./.github/workflows/build.sh
+              run: cargo test --all-features --verbose --release
     macos-test:
         runs-on: macos-latest
         steps:
             - uses: actions/checkout@v2
             - name: Build and test
-              run: export DO=test; ./.github/workflows/install.sh && ./.github/workflows/build.sh
+              run: cargo test --all-features --verbose
 
     # Windows-specific builds.
     windows-release:
@@ -67,12 +67,16 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - name: Build and test
-              run: export DO=release; ./.github/workflows/install.sh && ./.github/workflows/build.sh
+              run: cargo test --all-features --verbose --release
+              # TODO(jmmv): Avoid bash. In principle we don't need it, but
+              # disabling its usage causes console tests to fail.
               shell: bash
     windows-test:
         runs-on: windows-latest
         steps:
             - uses: actions/checkout@v2
             - name: Build and test
-              run: export DO=test; ./.github/workflows/install.sh && ./.github/workflows/build.sh
+              run: cargo test --all-features --verbose
+              # TODO(jmmv): Avoid bash. In principle we don't need it, but
+              # disabling its usage causes console tests to fail.
               shell: bash

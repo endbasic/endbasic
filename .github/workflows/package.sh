@@ -1,3 +1,4 @@
+#! /bin/sh
 # EndBASIC
 # Copyright 2020 Julio Merino
 #
@@ -13,23 +14,15 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-name: Deploy to gh-pages
+set -eux
 
-on:
-    push:
-        branches:
-            - master
-    schedule:
-        - cron: '0 0 * * *' # Daily.
+( cd core && cargo publish --dry-run )
 
-jobs:
-    publish:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v2
-            - run: ./.github/workflows/publish.sh
-            - uses: tsunematsu21/actions-publish-gh-pages@v1.0.1
-              with:
-                dir: web/dist
-                branch: gh-pages
-                token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+# If we aren't yet ready to release a new version, all crates that depend
+# on others in the workspace cannot be built in publish mode.  Skip them
+# until we can test them.
+if grep 'Changes in' NEWS.md | head -n 1 | fgrep 'X.Y.Z'; then
+    echo "Skipping endbasic publish test in development version"
+else
+    ( cd cli && cargo publish --dry-run )
+fi

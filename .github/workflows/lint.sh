@@ -16,13 +16,17 @@
 
 set -eux
 
-# Runs code sanity checks.
-do_lint() {
+rustup component add clippy
+rustup component add rustfmt
+
+check_do_not_submit() {
     if grep -R '[D]O NOT SUBMIT' *; then
         echo "Submit blocked by" "DO" "NOT" "SUBMIT" 1>&2
         return 1
     fi
+}
 
+check_cargo_toml_versions() {
     local core_version="$(grep ^version core/Cargo.toml \
         | head -n 1 | cut -d '"' -f 2)"
     for pkg in */Cargo.toml; do
@@ -33,7 +37,9 @@ do_lint() {
             return 1
         fi
     done
+}
 
+check_web_versions() {
     local web_version="$(grep ^version web/Cargo.toml \
         | head -n 1 | cut -d '"' -f 2)"
     local json_version="$(grep version web/package.json \
@@ -42,63 +48,16 @@ do_lint() {
         echo "Versions in Cargo.toml and package.json are inconsistent" 1>&2
         return 1
     fi
+}
 
-    # These checks must come last to avoid creating artifacts in the source
-    # directory.
+check_rust() {
     cargo clippy --all-features --all-targets -- -D warnings
     cargo fmt -- --check
 }
 
-# Ensures that the package is ready for publication.
-do_package() {
-    ( cd core && cargo publish --dry-run )
-
-    # If we aren't yet ready to release a new version, all crates that depend
-    # on others in the workspace cannot be built in publish mode.  Skip them
-    # until we can test them.
-    if grep 'Changes in' NEWS.md | head -n 1 | fgrep 'X.Y.Z'; then
-        echo "Skipping endbasic publish test in development version"
-    else
-        ( cd cli && cargo publish --dry-run )
-    fi
-}
-
-# Builds and runs all binaries and tests in release mode.
-do_release() {
-    cargo test --all-features --verbose --release
-}
-
-# Builds and runs all binaries and tests in dev mode.
-do_test() {
-    cargo test --all-features --verbose
-}
-
-# Builds the web interface.
-do_web() {
-    export NVM_DIR="${HOME}/.nvm"
-    [ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
-    set +ux
-    nvm use --lts
-    set -ux
-
-    cd web
-    npm ci --verbose
-    npm run-script build --verbose
-    npm run-script test --verbose
-    cd -
-}
-
-if [ "${DO-unset}" = unset ]; then
-    echo "DO must be set in the environment" 1>&2
-    exit 1
-fi
-case "${DO}" in
-    lint|package|release|test|web)
-        "do_${DO}"
-        ;;
-
-    *)
-        echo "Unknown DO value" 1>&2
-        exit 1
-        ;;
-esac
+check_do_not_submit
+check_cargo_toml_versions
+check_web_versions
+# These checks must come last to avoid creating artifacts in the source
+# directory.
+check_rust
