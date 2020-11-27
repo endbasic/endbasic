@@ -1,3 +1,4 @@
+#! /bin/sh
 # EndBASIC
 # Copyright 2020 Julio Merino
 #
@@ -13,23 +14,27 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-name: Deploy to gh-pages
+set -eux
 
-on:
-    push:
-        branches:
-            - master
-    schedule:
-        - cron: '0 0 * * *' # Daily.
+curl -o- \
+    https://raw.githubusercontent.com/nvm-sh/nvm/v0.35.3/install.sh | bash
 
-jobs:
-    publish:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v2
-            - run: ./.github/workflows/publish.sh
-            - uses: tsunematsu21/actions-publish-gh-pages@v1.0.1
-              with:
-                dir: web/dist
-                branch: gh-pages
-                token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+export NVM_DIR="${HOME}/.nvm"
+[ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
+set +ux
+nvm install --lts
+set -ux
+
+curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+export NVM_DIR="${HOME}/.nvm"
+[ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
+set +ux
+nvm use --lts
+set -ux
+
+cd web
+npm ci --verbose
+npm run-script build --verbose
+npm run-script test --verbose
+cd -
