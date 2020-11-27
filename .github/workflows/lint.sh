@@ -20,10 +20,16 @@ rustup component add clippy
 rustup component add rustfmt
 
 check_do_not_submit() {
-    if grep -R '[D]O NOT SUBMIT' *; then
-        echo "Submit blocked by" "DO" "NOT" "SUBMIT" 1>&2
-        return 1
-    fi
+    for f in .* *; do
+        [ "${f}" != . ] || continue
+        [ "${f}" != .. ] || continue
+        [ "${f}" != .git ] || continue
+
+        if grep -R '[D]O NOT SUBMIT' "${f}"; then
+            echo "Submit blocked by" "DO" "NOT" "SUBMIT" 1>&2
+            return 1
+        fi
+    done
 }
 
 check_cargo_toml_versions() {
