@@ -37,4 +37,5 @@ cd web
 npm ci --verbose
 npm run-script build --verbose
 npm run-script test --verbose
+touch dist/.nojekyll
 cd -
