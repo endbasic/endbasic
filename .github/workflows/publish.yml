@@ -31,5 +31,6 @@ jobs:
             - uses: tsunematsu21/actions-publish-gh-pages@v1.0.1
               with:
                 dir: web/dist
+                repo: endbasic/endbasic.github.io
                 branch: gh-pages
-                token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+                token: ${{ secrets.SERVICE_ACCOUNT_ACCESS_TOKEN }}
