@@ -140,6 +140,12 @@ impl TextConsole {
                     event::KeyCode::Char('d') if ev.modifiers == event::KeyModifiers::CONTROL => {
                         return Ok(console::Key::Eof)
                     }
+                    event::KeyCode::Char('j') if ev.modifiers == event::KeyModifiers::CONTROL => {
+                        return Ok(console::Key::NewLine)
+                    }
+                    event::KeyCode::Char('m') if ev.modifiers == event::KeyModifiers::CONTROL => {
+                        return Ok(console::Key::NewLine)
+                    }
                     event::KeyCode::Char(ch) => return Ok(console::Key::Char(ch)),
                     event::KeyCode::Enter => return Ok(console::Key::NewLine),
                     _ => return Ok(console::Key::Unknown(format!("{:?}", ev))),

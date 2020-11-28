@@ -106,7 +106,7 @@ impl Console for XtermJsConsole {
     async fn read_key(&mut self) -> io::Result<Key> {
         let event = self.on_key_rx.recv().await.unwrap();
         let dom_event = event.dom_event();
-        match dom_event.key_code() {
+        match dom_event.key_code() as u8 {
             8 => Ok(Key::Backspace),
             10 => Ok(Key::NewLine),
             13 => Ok(Key::CarriageReturn),
@@ -114,8 +114,10 @@ impl Console for XtermJsConsole {
             38 => Ok(Key::ArrowUp),
             39 => Ok(Key::ArrowRight),
             40 => Ok(Key::ArrowDown),
-            67 if dom_event.ctrl_key() => Ok(Key::Interrupt),
-            68 if dom_event.ctrl_key() => Ok(Key::Eof),
+            b'C' if dom_event.ctrl_key() => Ok(Key::Interrupt),
+            b'D' if dom_event.ctrl_key() => Ok(Key::Eof),
+            b'J' if dom_event.ctrl_key() => Ok(Key::NewLine),
+            b'M' if dom_event.ctrl_key() => Ok(Key::NewLine),
             _ => {
                 let printable =
                     !dom_event.alt_key() && !dom_event.ctrl_key() && !dom_event.meta_key();
