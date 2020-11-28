@@ -31,7 +31,7 @@ The latest version of EndBASIC is 0.2.0 and was released on 2020-05-07.
 
 Simply open EndBASIC right in your browser by visiting:
 
-> https://endbasic.github.io/
+> https://endbasic.jmmv.dev/
 
 The whole interpreter runs locally.  Any programs you write are persisted in
 your browser's local storage and not uploaded to the cloud.

@@ -26,4 +26,4 @@ a minimal web interface to it.
 
 Visit the following address for a live deployment of the EndBASIC interpreter!
 
-> https://endbasic.github.io/
+> https://endbasic.jmmv.dev/
