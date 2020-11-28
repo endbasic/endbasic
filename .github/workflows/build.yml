@@ -45,14 +45,8 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - run: cargo test --all-features --verbose --release
-              # TODO(jmmv): Avoid bash. In principle we don't need it, but
-              # disabling its usage causes console tests to fail.
-              shell: bash
     windows-test:
         runs-on: windows-latest
         steps:
             - uses: actions/checkout@v2
             - run: cargo test --all-features --verbose
-              # TODO(jmmv): Avoid bash. In principle we don't need it, but
-              # disabling its usage causes console tests to fail.
-              shell: bash
