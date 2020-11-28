@@ -17,7 +17,7 @@ travis-ci = { repository = "jmmv/endbasic", branch = "master" }
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
-crossterm = "0.17"
+crossterm = "0.18"
 dirs = "2.0"
 endbasic-core = { version = "0.2.0", path = "../core" }
 futures-lite = "1.1"
