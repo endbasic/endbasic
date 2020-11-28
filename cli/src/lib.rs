@@ -94,7 +94,10 @@ impl TextConsole {
             if ch == '\n' {
                 keys.push_back(console::Key::NewLine);
             } else if ch == '\r' {
-                keys.push_back(console::Key::CarriageReturn);
+                // Ignore.  When we run under Windows and use golden test input files, we end up
+                // seeing two separate characters to terminate a newline (CRLF) and these confuse
+                // our tests.  I am not sure why this doesn't seem to be a problem for interactive
+                // usage though, but it might just be that crossterm hides this from us.
             } else if !ch.is_control() {
                 keys.push_back(console::Key::Char(ch));
             } else {
