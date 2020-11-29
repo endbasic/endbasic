@@ -153,7 +153,7 @@ impl Console for XtermJsConsole {
 
     fn print(&mut self, text: &str) -> io::Result<()> {
         self.terminal.write(text);
-        self.terminal.write("\n\r");
+        self.terminal.write("\u{001b}[K\r\n");
         Ok(())
     }
 

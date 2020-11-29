@@ -1,0 +1,11 @@
+
+    Welcome to EndBASIC X.Y.Z.
+    Type HELP for interactive usage information.
+
+[38;5;5m[48;5;4mHello[K
+[38;5;4m[48;5;3mHello[K
+[38;5;3m[48;5;2mHello[K
+[38;5;2m[48;5;1mHello[K
+[38;5;1m[48;5;0mHello[K
+[39m[49m[38;5;4m[48;5;2mMessage[K
+[39m[49mEnd of input by CTRL-D

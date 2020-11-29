@@ -156,6 +156,7 @@ async fn read_line_interactive(
     previous: &str,
 ) -> io::Result<String> {
     let mut line = String::from(previous);
+    console.clear(ClearType::UntilNewLine)?;
     if !prompt.is_empty() || !line.is_empty() {
         console.write(format!("{}{}", prompt, line).as_bytes())?;
     }
@@ -209,7 +210,7 @@ async fn read_line_interactive(
                 // instead of one.  Not sure if we should do this or if instead we should ensure
                 // the golden data we feed to the tests has single-character line endings.
                 if cfg!(not(target_os = "windows")) {
-                    console.write(&[10 as u8, 13 as u8])?;
+                    console.write(&[b'\r', b'\n'])?;
                     break;
                 }
             }
@@ -801,7 +802,13 @@ mod tests {
         /// Constructs a new test that feeds no input to the function, with no prompt or previous
         /// text, and expects an empty return line and no changes to the console.
         fn new() -> Self {
-            Self { keys: vec![], prompt: "", previous: "", exp_line: "", exp_output: vec![] }
+            Self {
+                keys: vec![],
+                prompt: "",
+                previous: "",
+                exp_line: "",
+                exp_output: vec![CapturedOut::Clear(ClearType::UntilNewLine)],
+            }
         }
 
         /// Adds `key` to the golden input.
