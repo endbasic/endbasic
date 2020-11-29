@@ -5,7 +5,7 @@ the EndBASIC language definition nor the API exposed by this crate.  Expect
 them to change at any time (especially the Rust API).  Version numbers will
 not adhere to semantic versioning until 1.0.0.**
 
-## Changes in version 0.3.0
+## Changes in version 0.3.1
 
 **Released on 2020-11-29.**
 
@@ -42,6 +42,12 @@ Structural code changes:
     or file system access).
 
 *   Made the language interpreter `async`-compatible.
+
+## Changes in version 0.3.0
+
+**Released on 2020-11-29.**
+
+Broken build due to a bad merge from `HEAD`.
 
 ## Changes in version 0.2.0
 
