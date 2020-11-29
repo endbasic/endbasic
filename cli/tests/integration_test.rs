@@ -266,6 +266,18 @@ fn test_cli_version() {
 }
 
 #[test]
+fn test_repl_colors() {
+    check(
+        bin_path("endbasic"),
+        &[],
+        0,
+        Behavior::File(src_path("cli/tests/repl/colors.in")),
+        Behavior::File(src_path("cli/tests/repl/colors.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_repl_console() {
     check(
         bin_path("endbasic"),

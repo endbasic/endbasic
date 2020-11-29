@@ -65,6 +65,10 @@ pub struct TextConsole {
 
     /// Line-oriented buffer to hold input when not operating in raw mode.
     buffer: VecDeque<console::Key>,
+
+    /// Whether a background color is active.  If so, we need to flush the contents of every line
+    /// we print so that the color applies to the whole line.
+    need_line_flush: bool,
 }
 
 impl TextConsole {
@@ -74,7 +78,7 @@ impl TextConsole {
         if is_tty {
             terminal::enable_raw_mode().map_err(crossterm_error_to_io_error)?;
         }
-        Ok(Self { is_tty, buffer: VecDeque::default() })
+        Ok(Self { is_tty, buffer: VecDeque::default(), need_line_flush: false })
     }
 }
 
@@ -187,6 +191,7 @@ impl console::Console for TextConsole {
         output.queue(style::SetForegroundColor(fg)).map_err(crossterm_error_to_io_error)?;
         output.queue(style::SetBackgroundColor(bg)).map_err(crossterm_error_to_io_error)?;
         output.flush()?;
+        self.need_line_flush = bg != style::Color::Reset;
         Ok(())
     }
 
@@ -230,10 +235,17 @@ impl console::Console for TextConsole {
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
+        stdout.write_all(text.as_bytes())?;
+        if self.need_line_flush {
+            execute!(stdout, terminal::Clear(terminal::ClearType::UntilNewLine))
+                .map_err(crossterm_error_to_io_error)?;
+        }
         if self.is_tty {
-            print!("{}\r\n", text);
+            stdout.write_all(b"\r\n")?;
         } else {
-            println!("{}", text);
+            stdout.write_all(b"\n")?;
         }
         Ok(())
     }
