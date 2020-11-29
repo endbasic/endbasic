@@ -1,6 +1,6 @@
 {
     "name": "endbasic-www",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "The EndBASIC programming language - web interface",
     "private": true,
     "scripts": {

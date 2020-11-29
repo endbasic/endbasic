@@ -5,15 +5,15 @@ the EndBASIC language definition nor the API exposed by this crate.  Expect
 them to change at any time (especially the Rust API).  Version numbers will
 not adhere to semantic versioning until 1.0.0.**
 
-## Changes in version X.Y.Z
+## Changes in version 0.3.0
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2020-11-29.**
 
-*   Split the language core (parser, interpreter, and command implementations)
-    out of the `endbasic` crate and moved them to a separate `endbasic-core`
-    crate.  This is to ensure that the language components stay free from
-    heavy dependencies that assume things about the environment (like terminal
-    or file system access).
+The highlight of this new release is a much improved interactive interface,
+as it gets rid of the line-oriented editor (which used meaningless line
+numbers) and replaces it with a full-screen interactive editor.
+
+New features:
 
 *   Turned the `EDIT` command into an interactive full-screen text editor and
     removed the `LIST` and `RENUM` commands.
@@ -27,11 +27,21 @@ not adhere to semantic versioning until 1.0.0.**
 
 *   Added a barebones web interface.
 
-*   Made the language interpreter `async`-compatible.
+Notable bug fixes:
 
 *   Fixed arithmetic operators to capture overflow conditions.
 
 *   Fixed `EXIT` to accept `0` as the exit code.
+
+Structural code changes:
+
+*   Split the language core (parser, interpreter, and command implementations)
+    out of the `endbasic` crate and moved it to a separate `endbasic-core`
+    crate.  This is to ensure that the language components stay free from
+    heavy dependencies that assume things about the environment (like terminal
+    or file system access).
+
+*   Made the language interpreter `async`-compatible.
 
 ## Changes in version 0.2.0
 
