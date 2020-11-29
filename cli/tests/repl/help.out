@@ -4,19 +4,24 @@
 
 Output from HELP:
 
-    CLEAR     Clears all variables to restore initial state.
+    >> Console manipulation <<
     CLS       Clears the screen.
     COLOR     Sets the foreground and background colors.
+    INPUT     Obtains user input from the console.
+    LOCATE    Moves the cursor to the given position.
+    PRINT     Prints a message to the console.
+
+    >> Interpreter manipulation <<
+    CLEAR     Clears all variables to restore initial state.
+    EXIT      Exits the interpreter.
+    HELP      Prints interactive help.
+
+    >> Stored program manipulation <<
     DEL       Deletes the given program.
     DIR       Displays the list of files on disk.
     EDIT      Interactively edits the stored program.
-    EXIT      Exits the interpreter.
-    HELP      Prints interactive help.
-    INPUT     Obtains user input from the console.
     LOAD      Loads the given program.
-    LOCATE    Moves the cursor to the given position.
     NEW       Clears the stored program from memory.
-    PRINT     Prints a message to the console.
     RUN       Runs the stored program.
     SAVE      Saves the current program in memory to the given filename.
 

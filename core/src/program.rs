@@ -132,6 +132,10 @@ impl BuiltinCommand for DelCommand {
         "DEL"
     }
 
+    fn category(&self) -> &'static str {
+        "Stored program manipulation"
+    }
+
     fn syntax(&self) -> &'static str {
         "filename"
     }
@@ -174,6 +178,10 @@ impl BuiltinCommand for DirCommand {
         "DIR"
     }
 
+    fn category(&self) -> &'static str {
+        "Stored program manipulation"
+    }
+
     fn syntax(&self) -> &'static str {
         ""
     }
@@ -205,6 +213,10 @@ struct EditCommand {
 impl BuiltinCommand for EditCommand {
     fn name(&self) -> &'static str {
         "EDIT"
+    }
+
+    fn category(&self) -> &'static str {
+        "Stored program manipulation"
     }
 
     fn syntax(&self) -> &'static str {
@@ -241,6 +253,10 @@ struct LoadCommand {
 impl BuiltinCommand for LoadCommand {
     fn name(&self) -> &'static str {
         "LOAD"
+    }
+
+    fn category(&self) -> &'static str {
+        "Stored program manipulation"
     }
 
     fn syntax(&self) -> &'static str {
@@ -286,6 +302,10 @@ impl BuiltinCommand for NewCommand {
         "NEW"
     }
 
+    fn category(&self) -> &'static str {
+        "Stored program manipulation"
+    }
+
     fn syntax(&self) -> &'static str {
         ""
     }
@@ -317,6 +337,10 @@ struct RunCommand {
 impl BuiltinCommand for RunCommand {
     fn name(&self) -> &'static str {
         "RUN"
+    }
+
+    fn category(&self) -> &'static str {
+        "Stored program manipulation"
     }
 
     fn syntax(&self) -> &'static str {
@@ -352,6 +376,10 @@ struct SaveCommand {
 impl BuiltinCommand for SaveCommand {
     fn name(&self) -> &'static str {
         "SAVE"
+    }
+
+    fn category(&self) -> &'static str {
+        "Stored program manipulation"
     }
 
     fn syntax(&self) -> &'static str {

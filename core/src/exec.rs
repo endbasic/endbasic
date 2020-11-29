@@ -72,6 +72,9 @@ pub trait BuiltinCommand {
     /// Returns the name of the command, all in uppercase letters.
     fn name(&self) -> &'static str;
 
+    /// Returns the name of the command's category.
+    fn category(&self) -> &'static str;
+
     /// Returns a specification of the command's syntax.
     fn syntax(&self) -> &'static str;
 
@@ -277,6 +280,10 @@ impl BuiltinCommand for ClearCommand {
         "CLEAR"
     }
 
+    fn category(&self) -> &'static str {
+        "Interpreter manipulation"
+    }
+
     fn syntax(&self) -> &'static str {
         ""
     }
@@ -318,6 +325,10 @@ pub(crate) mod testutils {
     impl BuiltinCommand for InCommand {
         fn name(&self) -> &'static str {
             "IN"
+        }
+
+        fn category(&self) -> &'static str {
+            "Testing"
         }
 
         fn syntax(&self) -> &'static str {
@@ -367,6 +378,10 @@ pub(crate) mod testutils {
     impl BuiltinCommand for OutCommand {
         fn name(&self) -> &'static str {
             "OUT"
+        }
+
+        fn category(&self) -> &'static str {
+            "Testing"
         }
 
         fn syntax(&self) -> &'static str {
