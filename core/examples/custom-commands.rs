@@ -47,6 +47,10 @@ impl BuiltinCommand for StoreCommand {
         "STORE"
     }
 
+    fn category(&self) -> &'static str {
+        "File manipulation"
+    }
+
     fn syntax(&self) -> &'static str {
         "\"string to save\""
     }
@@ -81,6 +85,10 @@ struct RetrieveCommand {
 impl BuiltinCommand for RetrieveCommand {
     fn name(&self) -> &'static str {
         "RETRIEVE"
+    }
+
+    fn category(&self) -> &'static str {
+        "File manipulation"
     }
 
     fn syntax(&self) -> &'static str {

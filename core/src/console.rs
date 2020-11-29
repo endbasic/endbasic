@@ -311,6 +311,10 @@ impl BuiltinCommand for ClsCommand {
         "CLS"
     }
 
+    fn category(&self) -> &'static str {
+        "Console manipulation"
+    }
+
     fn syntax(&self) -> &'static str {
         ""
     }
@@ -341,6 +345,10 @@ pub struct ColorCommand {
 impl BuiltinCommand for ColorCommand {
     fn name(&self) -> &'static str {
         "COLOR"
+    }
+
+    fn category(&self) -> &'static str {
+        "Console manipulation"
     }
 
     fn syntax(&self) -> &'static str {
@@ -405,6 +413,10 @@ impl InputCommand {
 impl BuiltinCommand for InputCommand {
     fn name(&self) -> &'static str {
         "INPUT"
+    }
+
+    fn category(&self) -> &'static str {
+        "Console manipulation"
     }
 
     fn syntax(&self) -> &'static str {
@@ -479,6 +491,10 @@ impl BuiltinCommand for LocateCommand {
         "LOCATE"
     }
 
+    fn category(&self) -> &'static str {
+        "Console manipulation"
+    }
+
     fn syntax(&self) -> &'static str {
         "row%, column%"
     }
@@ -548,6 +564,10 @@ impl PrintCommand {
 impl BuiltinCommand for PrintCommand {
     fn name(&self) -> &'static str {
         "PRINT"
+    }
+
+    fn category(&self) -> &'static str {
+        "Console manipulation"
     }
 
     fn syntax(&self) -> &'static str {

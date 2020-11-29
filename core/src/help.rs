@@ -20,7 +20,7 @@ use crate::console::Console;
 use crate::exec::{self, BuiltinCommand, Machine};
 use async_trait::async_trait;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
 /// Cheat-sheet for the language syntax.
@@ -68,23 +68,27 @@ impl HelpCommand {
         &self,
         builtins: &HashMap<&'static str, Rc<dyn BuiltinCommand>>,
     ) -> exec::Result<()> {
-        let mut names = vec![];
+        let mut by_category: BTreeMap<&'static str, Vec<&'static str>> = BTreeMap::new();
         let mut max_length = 0;
-        for name in builtins.keys() {
-            names.push(name);
-            if name.len() > max_length {
-                max_length = name.len();
+        for command in builtins.values() {
+            by_category.entry(command.category()).or_insert_with(Vec::new).push(command.name());
+            if command.name().len() > max_length {
+                max_length = command.name().len();
             }
         }
-        names.sort();
 
         let mut console = self.console.borrow_mut();
-        console.print("")?;
-        for name in names {
-            let filler = " ".repeat(max_length - name.len());
-            let builtin = builtins.get(name).unwrap();
-            let blurb = builtin.description().lines().next().unwrap();
-            console.print(&format!("    {}{}    {}", builtin.name(), filler, blurb))?;
+        for (category, names) in by_category.iter() {
+            console.print("")?;
+            console.print(&format!("    >> {} <<", category))?;
+            let mut names = names.clone();
+            names.sort_unstable();
+            for name in names {
+                let filler = " ".repeat(max_length - name.len());
+                let builtin = builtins.get(name).unwrap();
+                let blurb = builtin.description().lines().next().unwrap();
+                console.print(&format!("    {}{}    {}", builtin.name(), filler, blurb))?;
+            }
         }
         console.print("")?;
         console.print("    Type HELP followed by a command name for details on that command.")?;
@@ -125,6 +129,10 @@ impl HelpCommand {
 impl BuiltinCommand for HelpCommand {
     fn name(&self) -> &'static str {
         "HELP"
+    }
+
+    fn category(&self) -> &'static str {
+        "Interpreter manipulation"
     }
 
     fn syntax(&self) -> &'static str {
@@ -183,6 +191,10 @@ pub(crate) mod testutils {
     impl BuiltinCommand for DoNothingCommand {
         fn name(&self) -> &'static str {
             "DO_NOTHING"
+        }
+
+        fn category(&self) -> &'static str {
+            "Testing"
         }
 
         fn syntax(&self) -> &'static str {
@@ -252,8 +264,11 @@ mod tests {
         let text = flatten_captured_out(console.borrow().captured_out());
         assert_eq!(
             "
-    DO_NOTHING    This is the blurb.
+    >> Interpreter manipulation <<
     HELP          Prints interactive help.
+
+    >> Testing <<
+    DO_NOTHING    This is the blurb.
 
     Type HELP followed by a command name for details on that command.
     Type HELP LANG for a quick reference guide about the language.

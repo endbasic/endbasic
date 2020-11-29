@@ -43,6 +43,10 @@ impl BuiltinCommand for ExitCommand {
         "EXIT"
     }
 
+    fn category(&self) -> &'static str {
+        "Interpreter manipulation"
+    }
+
     fn syntax(&self) -> &'static str {
         "[code%]"
     }
