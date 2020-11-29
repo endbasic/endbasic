@@ -19,7 +19,7 @@ EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 
 ## Overview
 
-The latest version of EndBASIC is 0.3.0 and was released on 2020-11-29.
+The latest version of EndBASIC is 0.3.1 and was released on 2020-11-29.
 
 *   For language features, see [`core/README.md`](core/README.md).
 *   For usage details of the command-line interpreter, see
