@@ -46,6 +46,9 @@ html, body {
 
     opacity: 50%;
     visibility: hidden;
+
+    display: grid;
+    gap: 10px 10px;
 }
 
 #controls button {
@@ -55,6 +58,32 @@ html, body {
     color: white;
     font-size: 18px;
     padding: 5pt 10pt 5pt 10pt;
+}
+
+#controls #button-esc {
+    grid-column-start: 1;
+    grid-column-end: 4;
+    grid-row-start: 1;
+}
+
+#controls #button-up {
+    grid-column-start: 2;
+    grid-row-start: 2;
+}
+
+#controls #button-down {
+    grid-column-start: 2;
+    grid-row-start: 3;
+}
+
+#controls #button-left {
+    grid-column-start: 1;
+    grid-row-start: 3;
+}
+
+#controls #button-right {
+    grid-column-start: 3;
+    grid-row-start: 3;
 }
 
 footer {

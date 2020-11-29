@@ -178,6 +178,26 @@ impl OnScreenKeyboard {
     pub fn press_escape(&self) {
         self.on_key_tx.try_send(Key::Escape).expect("Send to unbounded channel must succeed")
     }
+
+    /// Generates a fake arrow up key press.
+    pub fn press_arrow_up(&self) {
+        self.on_key_tx.try_send(Key::ArrowUp).expect("Send to unbounded channel must succeed")
+    }
+
+    /// Generates a fake arrow down key press.
+    pub fn press_arrow_down(&self) {
+        self.on_key_tx.try_send(Key::ArrowDown).expect("Send to unbounded channel must succeed")
+    }
+
+    /// Generates a fake arrow left key press.
+    pub fn press_arrow_left(&self) {
+        self.on_key_tx.try_send(Key::ArrowLeft).expect("Send to unbounded channel must succeed")
+    }
+
+    /// Generates a fake arrow up key press.
+    pub fn press_arrow_right(&self) {
+        self.on_key_tx.try_send(Key::ArrowRight).expect("Send to unbounded channel must succeed")
+    }
 }
 
 /// Connects the EndBASIC interpreter to a web page.
