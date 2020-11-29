@@ -45,6 +45,22 @@ if (isMobile) {
         osk.press_escape();
         term.focus();
     });
+    $('#button-up').on('click', function() {
+        osk.press_arrow_up();
+        term.focus();
+    });
+    $('#button-down').on('click', function() {
+        osk.press_arrow_down();
+        term.focus();
+    });
+    $('#button-left').on('click', function() {
+        osk.press_arrow_left();
+        term.focus();
+    });
+    $('#button-right').on('click', function() {
+        osk.press_arrow_right();
+        term.focus();
+    });
 
     $('#controls').css('visibility', 'visible');
 }
