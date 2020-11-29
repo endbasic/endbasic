@@ -32,5 +32,22 @@ term.loadAddon(fitAddon);
 term.open(document.getElementById('terminal'));
 fitAddon.fit();
 
+var wt = new endbasic_web.WebTerminal();
+
+var UA = navigator.userAgent;
+var isMobile = (
+    /\b(BlackBerry|webOS|iPhone|IEMobile)\b/i.test(UA) ||
+    /\b(Android|Windows Phone|iPad|iPod)\b/i.test(UA)
+);
+if (isMobile) {
+    var osk = wt.on_screen_keyboard();
+    $('#button-esc').on('click', function() {
+        osk.press_escape();
+        term.focus();
+    });
+
+    $('#controls').css('visibility', 'visible');
+}
+
 term.focus();
-endbasic_web.run_repl_loop(term);
+wt.run_repl_loop(term);

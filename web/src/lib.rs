@@ -37,10 +37,38 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use xterm_js_rs::{OnKeyEvent, Terminal};
 
+/// Converts an xterm.js key event into our own `Key` representation.
+fn on_key_event_into_key(event: OnKeyEvent) -> Key {
+    let dom_event = event.dom_event();
+    match dom_event.key_code() as u8 {
+        8 => Key::Backspace,
+        10 => Key::NewLine,
+        13 => Key::CarriageReturn,
+        27 => Key::Escape,
+        37 => Key::ArrowLeft,
+        38 => Key::ArrowUp,
+        39 => Key::ArrowRight,
+        40 => Key::ArrowDown,
+        b'C' if dom_event.ctrl_key() => Key::Interrupt,
+        b'D' if dom_event.ctrl_key() => Key::Eof,
+        b'J' if dom_event.ctrl_key() => Key::NewLine,
+        b'M' if dom_event.ctrl_key() => Key::NewLine,
+        _ => {
+            let printable = !dom_event.alt_key() && !dom_event.ctrl_key() && !dom_event.meta_key();
+            let chars = event.key().chars().collect::<Vec<char>>();
+            if printable && chars.len() == 1 {
+                Key::Char(chars[0])
+            } else {
+                Key::Unknown(format!("<keycode={}>", dom_event.key_code()))
+            }
+        }
+    }
+}
+
 /// Implementation of a console that talks directly to an xterm.js terminal.
 struct XtermJsConsole {
     terminal: Terminal,
-    on_key_rx: async_channel::Receiver<OnKeyEvent>,
+    on_key_rx: async_channel::Receiver<Key>,
 }
 
 #[async_trait(?Send)]
@@ -114,32 +142,7 @@ impl Console for XtermJsConsole {
     }
 
     async fn read_key(&mut self) -> io::Result<Key> {
-        let event = self.on_key_rx.recv().await.unwrap();
-        let dom_event = event.dom_event();
-        match dom_event.key_code() as u8 {
-            8 => Ok(Key::Backspace),
-            10 => Ok(Key::NewLine),
-            13 => Ok(Key::CarriageReturn),
-            27 => Ok(Key::Escape),
-            37 => Ok(Key::ArrowLeft),
-            38 => Ok(Key::ArrowUp),
-            39 => Ok(Key::ArrowRight),
-            40 => Ok(Key::ArrowDown),
-            b'C' if dom_event.ctrl_key() => Ok(Key::Interrupt),
-            b'D' if dom_event.ctrl_key() => Ok(Key::Eof),
-            b'J' if dom_event.ctrl_key() => Ok(Key::NewLine),
-            b'M' if dom_event.ctrl_key() => Ok(Key::NewLine),
-            _ => {
-                let printable =
-                    !dom_event.alt_key() && !dom_event.ctrl_key() && !dom_event.meta_key();
-                let chars = event.key().chars().collect::<Vec<char>>();
-                if printable && chars.len() == 1 {
-                    Ok(Key::Char(chars[0]))
-                } else {
-                    Ok(Key::Unknown(format!("<keycode={}>", dom_event.key_code())))
-                }
-            }
-        }
+        Ok(self.on_key_rx.recv().await.unwrap())
     }
 
     fn show_cursor(&mut self) -> io::Result<()> {
@@ -162,29 +165,69 @@ impl Console for XtermJsConsole {
     }
 }
 
-/// Starts the EndBASIC interpreter loop on the specified `terminal`.
+/// Interface to implement an on-screen keyboard to provide keys that may not be available on
+/// mobile keyboards.
 #[wasm_bindgen]
-pub async fn run_repl_loop(terminal: Terminal) {
-    let (on_key_tx, on_key_rx) = async_channel::unbounded();
+pub struct OnScreenKeyboard {
+    on_key_tx: async_channel::Sender<Key>,
+}
 
-    let on_key_callback = {
-        Closure::wrap(Box::new(move |e| {
-            on_key_tx.try_send(e).expect("Send to unbounded channel must succeed")
-        }) as Box<dyn FnMut(OnKeyEvent)>)
-    };
-    terminal.on_key(on_key_callback.as_ref().unchecked_ref());
+#[wasm_bindgen]
+impl OnScreenKeyboard {
+    /// Generates a fake Escape key press.
+    pub fn press_escape(&self) {
+        self.on_key_tx.try_send(Key::Escape).expect("Send to unbounded channel must succeed")
+    }
+}
 
-    let console = Rc::from(RefCell::from(XtermJsConsole { terminal, on_key_rx }));
-    let store = Rc::from(RefCell::from(store::WebStore::from_window()));
-    loop {
-        let result = endbasic_core::repl::run_repl_loop(console.clone(), store.clone()).await;
-        let mut console = console.borrow_mut();
-        match result {
-            Ok(exit_code) => console.print(&format!("Interpreter exited with code {}", exit_code)),
-            Err(e) => console.print(&format!("FATAL ERROR: {}", e)),
+/// Connects the EndBASIC interpreter to a web page.
+#[wasm_bindgen]
+pub struct WebTerminal {
+    on_key_rx: async_channel::Receiver<Key>,
+    on_key_tx: async_channel::Sender<Key>,
+}
+
+#[wasm_bindgen]
+impl WebTerminal {
+    /// Creates a new instance of the `WebTerminal`.
+    #[wasm_bindgen(constructor)]
+    #[allow(clippy::new_without_default)] // Cannot implement Default in wasm-bindgen.
+    pub fn new() -> Self {
+        let (on_key_tx, on_key_rx) = async_channel::unbounded();
+        Self { on_key_rx, on_key_tx }
+    }
+
+    /// Generates a new `OnScreenKeyboard` that can inject keypresses into this terminal.
+    pub fn on_screen_keyboard(&self) -> OnScreenKeyboard {
+        OnScreenKeyboard { on_key_tx: self.on_key_tx.clone() }
+    }
+
+    /// Starts the EndBASIC interpreter loop on the specified `terminal`.
+    pub async fn run_repl_loop(self, terminal: Terminal) {
+        let (on_key_tx, on_key_rx) = (self.on_key_tx, self.on_key_rx);
+        let on_key_callback = {
+            Closure::wrap(Box::new(move |e| {
+                on_key_tx
+                    .try_send(on_key_event_into_key(e))
+                    .expect("Send to unbounded channel must succeed")
+            }) as Box<dyn FnMut(OnKeyEvent)>)
+        };
+        terminal.on_key(on_key_callback.as_ref().unchecked_ref());
+
+        let console = Rc::from(RefCell::from(XtermJsConsole { terminal, on_key_rx }));
+        let store = Rc::from(RefCell::from(store::WebStore::from_window()));
+        loop {
+            let result = endbasic_core::repl::run_repl_loop(console.clone(), store.clone()).await;
+            let mut console = console.borrow_mut();
+            match result {
+                Ok(exit_code) => {
+                    console.print(&format!("Interpreter exited with code {}", exit_code))
+                }
+                Err(e) => console.print(&format!("FATAL ERROR: {}", e)),
+            }
+            .expect("Cannot handle terminal printing errors");
+            console.print("").unwrap();
         }
-        .expect("Cannot handle terminal printing errors");
-        console.print("").unwrap();
     }
 }
 
