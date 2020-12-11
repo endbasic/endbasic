@@ -13,7 +13,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-name: Deploy to gh-pages
+name: Deploy to staging
 
 on:
     push:
@@ -31,6 +31,6 @@ jobs:
             - uses: tsunematsu21/actions-publish-gh-pages@v1.0.1
               with:
                 dir: web/dist
-                repo: endbasic/endbasic.github.io
+                repo: endbasic/staging
                 branch: gh-pages
                 token: ${{ secrets.SERVICE_ACCOUNT_ACCESS_TOKEN }}

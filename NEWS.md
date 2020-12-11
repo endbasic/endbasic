@@ -5,6 +5,14 @@ the EndBASIC language definition nor the API exposed by this crate.  Expect
 them to change at any time (especially the Rust API).  Version numbers will
 not adhere to semantic versioning until 1.0.0.**
 
+## Changes in version X.Y.Z
+
+**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+
+*   Builds from `HEAD` are now pushed to a separate staging area to keep the
+    official site pinned to the latest release.  This is to make release
+    numbers meaningful in the web context.
+
 ## Changes in version 0.3.1
 
 **Released on 2020-11-29.**
