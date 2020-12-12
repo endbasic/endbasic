@@ -34,6 +34,7 @@ currently supports:
 *   Variable types: boolean (`?`), integer (`%`), and string (`$`).
 *   Strong typing with optional variable type annotations.
 *   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` statements.
+*   `FOR x = ... TO ... [STEP ...]` / `NEXT` loops.
 *   `WHILE ...` / `END WHILE` loops.
 *   `INPUT` and `PRINT` builtins.
 *   UTF-8 everywhere (I think).

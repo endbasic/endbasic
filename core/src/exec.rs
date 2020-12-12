@@ -213,6 +213,38 @@ impl Machine {
         Ok(())
     }
 
+    /// Executes a `FOR` loop.
+    async fn do_for(
+        &mut self,
+        iterator: &VarRef,
+        start: &Expr,
+        end: &Expr,
+        next: &Expr,
+        body: &[Statement],
+    ) -> Result<()> {
+        debug_assert!(
+            iterator.ref_type() == VarType::Auto || iterator.ref_type() == VarType::Integer
+        );
+        self.assign(iterator, start)?;
+
+        loop {
+            match end.eval(&self.vars)? {
+                Value::Boolean(false) => {
+                    break;
+                }
+                Value::Boolean(true) => (),
+                _ => panic!("Built-in condition should have evaluated to a boolean"),
+            }
+
+            for s in body {
+                self.exec_one(s).await?;
+            }
+
+            self.assign(iterator, next)?;
+        }
+        Ok(())
+    }
+
     /// Executes a `WHILE` loop.
     async fn do_while(&mut self, condition: &Expr, body: &[Statement]) -> Result<()> {
         loop {
@@ -244,6 +276,13 @@ impl Machine {
                 // Change this to using FutureExt::boxed_local if we ever depend on the futures or
                 // futures_lite crate directly.
                 let f: Pin<Box<dyn Future<Output = Result<()>>>> = Box::pin(self.do_if(branches));
+                f.await?;
+            }
+            Statement::For(iterator, start, end, next, body) => {
+                // Change this to using FutureExt::boxed_local if we ever depend on the futures or
+                // futures_lite crate directly.
+                let f: Pin<Box<dyn Future<Output = Result<()>>>> =
+                    Box::pin(self.do_for(iterator, start, end, next, body));
                 f.await?;
             }
             Statement::While(condition, body) => {
@@ -617,6 +656,100 @@ mod tests {
         do_simple_error_test(
             "IF FALSE THEN\nELSEIF 2 THEN\nEND IF",
             "IF/ELSEIF require a boolean condition",
+        );
+    }
+
+    #[test]
+    fn test_for_incrementing() {
+        let code = r#"
+            IN first
+            IN last
+            FOR a = first TO last
+                OUT "a is"; a
+            NEXT
+        "#;
+        do_ok_test(code, &["0", "0"], &["a is 0"]);
+        do_ok_test(code, &["0", "3"], &["a is 0", "a is 1", "a is 2", "a is 3"]);
+    }
+
+    #[test]
+    fn test_for_incrementing_with_step() {
+        let code = r#"
+            IN first
+            IN last
+            FOR a = first TO last STEP 3
+                OUT "a is"; a
+            NEXT
+        "#;
+        do_ok_test(code, &["0", "0"], &["a is 0"]);
+        do_ok_test(code, &["0", "2"], &["a is 0"]);
+        do_ok_test(code, &["0", "3"], &["a is 0", "a is 3"]);
+        do_ok_test(code, &["0", "10"], &["a is 0", "a is 3", "a is 6", "a is 9"]);
+    }
+
+    #[test]
+    fn test_for_decrementing_with_step() {
+        let code = r#"
+            IN first
+            IN last
+            FOR a = first TO last STEP -2
+                OUT "a is"; a
+            NEXT
+        "#;
+        do_ok_test(code, &["0", "0"], &["a is 0"]);
+        do_ok_test(code, &["2", "0"], &["a is 2", "a is 0"]);
+        do_ok_test(code, &["-2", "-6"], &["a is -2", "a is -4", "a is -6"]);
+        do_ok_test(code, &["10", "1"], &["a is 10", "a is 8", "a is 6", "a is 4", "a is 2"]);
+    }
+
+    #[test]
+    fn test_for_already_done() {
+        do_ok_test("FOR i = 10 TO 9\nOUT i\nNEXT", &[], &[]);
+        do_ok_test("FOR i = 9 TO 10 STEP -1\nOUT i\nNEXT", &[], &[]);
+    }
+
+    #[test]
+    fn test_for_iterator_is_visible_after_next() {
+        let code = r#"
+            FOR something = 1 TO 10 STEP 8
+            NEXT
+            OUT something
+        "#;
+        do_ok_test(code, &[], &["17"]);
+    }
+
+    #[test]
+    fn test_for_iterator_can_be_modified() {
+        let code = r#"
+            FOR something = 1 TO 5
+                OUT something
+                something = something + 1
+            NEXT
+        "#;
+        do_ok_test(code, &[], &["1", "3", "5"]);
+    }
+
+    #[test]
+    fn test_for_errors() {
+        do_simple_error_test("FOR\nNEXT", "No iterator name in FOR statement");
+        do_simple_error_test("FOR a = 1 TO 10\nEND IF", "Unexpected token End in statement");
+
+        do_simple_error_test(
+            "FOR i = \"a\" TO 3\nNEXT",
+            "Cannot compare Text(\"a\") and Integer(3) with <=",
+        );
+        do_simple_error_test(
+            "FOR i = 1 TO \"a\"\nNEXT",
+            "Cannot compare Integer(1) and Text(\"a\") with <=",
+        );
+
+        do_simple_error_test(
+            "FOR i = \"b\" TO 7 STEP -8\nNEXT",
+            "Cannot compare Text(\"b\") and Integer(7) with >=",
+        );
+        do_simple_error_test(
+            "FOR i = 1 TO \"b\" STEP -8\nNEXT",
+            "Cannot compare Integer(1) and Text(\"b\") with >=",
         );
     }
 

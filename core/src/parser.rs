@@ -15,8 +15,9 @@
 
 //! Statement and expression parser for the EndBASIC language.
 
-use crate::ast::{ArgSep, Expr, Statement, VarRef};
+use crate::ast::{ArgSep, Expr, Statement, VarRef, VarType};
 use crate::lexer::{Lexer, PeekableLexer, Token};
+use std::cmp::Ordering;
 use std::io;
 
 /// Parser errors.
@@ -280,7 +281,13 @@ impl<'a> Parser<'a> {
             };
 
             match self.lexer.peek()? {
-                Token::Eof | Token::Eol | Token::Comma | Token::Semicolon | Token::Then => break,
+                Token::Eof
+                | Token::Eol
+                | Token::Comma
+                | Token::Semicolon
+                | Token::Then
+                | Token::To
+                | Token::Step => break,
                 _ => (),
             };
             let token = self.lexer.consume_peeked();
@@ -347,11 +354,23 @@ impl<'a> Parser<'a> {
 
                 Token::Bad(e) => return Err(Error::Bad(e)),
 
-                Token::Eof | Token::Eol | Token::Comma | Token::Semicolon | Token::Then => {
+                Token::Eof
+                | Token::Eol
+                | Token::Comma
+                | Token::Semicolon
+                | Token::Then
+                | Token::To
+                | Token::Step => {
                     panic!("Field separators handled above")
                 }
 
-                Token::If | Token::Else | Token::Elseif | Token::End | Token::While => {
+                Token::If
+                | Token::Else
+                | Token::Elseif
+                | Token::End
+                | Token::While
+                | Token::For
+                | Token::Next => {
                     return Err(Error::Bad("Unexpected keyword in expression".to_owned()));
                 }
             };
@@ -437,6 +456,101 @@ impl<'a> Parser<'a> {
         self.reset()
     }
 
+    /// Extracts the optional `STEP` part of a `FOR` statement, with a default of 1.
+    fn parse_step(&mut self) -> Result<i32> {
+        match self.lexer.peek()? {
+            Token::Step => self.lexer.consume_peeked(),
+            _ => return Ok(1),
+        };
+
+        match self.lexer.peek()? {
+            Token::Integer(i) => {
+                let i = *i;
+                self.lexer.consume_peeked();
+                Ok(i)
+            }
+            Token::Minus => {
+                self.lexer.consume_peeked();
+                match self.lexer.peek()? {
+                    Token::Integer(i) => {
+                        let i = *i;
+                        self.lexer.consume_peeked();
+                        Ok(-i)
+                    }
+                    _ => Err(Error::Bad("STEP needs an integer".to_owned())),
+                }
+            }
+            _ => Err(Error::Bad("STEP needs an integer".to_owned())),
+        }
+    }
+
+    /// Parses a `FOR` statement.
+    fn parse_for(&mut self) -> Result<Statement> {
+        let iterator = match self.lexer.read()? {
+            Token::Symbol(iterator) => match iterator.ref_type() {
+                VarType::Auto | VarType::Integer => iterator,
+                _ => {
+                    return Err(Error::Bad(
+                        "Iterator name in FOR statement must be an integer reference".to_owned(),
+                    ))
+                }
+            },
+            _ => return Err(Error::Bad("No iterator name in FOR statement".to_owned())),
+        };
+
+        self.expect_and_consume(Token::Equal, "No equal sign in FOR statement")?;
+        let start = match self.parse_expr()? {
+            Some(expr) => expr,
+            None => return Err(Error::Bad("No start expression in FOR statement".to_owned())),
+        };
+
+        self.expect_and_consume(Token::To, "No TO in FOR statement")?;
+        let end = match self.parse_expr()? {
+            Some(expr) => expr,
+            None => return Err(Error::Bad("No end expression in FOR statement".to_owned())),
+        };
+
+        let step = self.parse_step()?;
+        let end_condition = match step.cmp(&0) {
+            Ordering::Greater => {
+                Expr::LessEqual(Box::from(Expr::Symbol(iterator.clone())), Box::from(end))
+            }
+            Ordering::Less => {
+                Expr::GreaterEqual(Box::from(Expr::Symbol(iterator.clone())), Box::from(end))
+            }
+            Ordering::Equal => {
+                return Err(Error::Bad("Infinite FOR loop; STEP cannot be 0".to_owned()))
+            }
+        };
+
+        let next_value =
+            Expr::Add(Box::from(Expr::Symbol(iterator.clone())), Box::from(Expr::Integer(step)));
+
+        self.expect_and_consume(Token::Eol, "Expecting newline after FOR")?;
+
+        let stmts = self.parse_until(&[Token::Next])?;
+        self.expect_and_consume(Token::Next, "FOR without NEXT")?;
+
+        Ok(Statement::For(iterator, start, end_condition, next_value, stmts))
+    }
+
+    /// Advances until the next statement after failing to parse a `FOR` statement.
+    fn reset_for(&mut self) -> Result<()> {
+        loop {
+            match self.lexer.peek()? {
+                Token::Eof => break,
+                Token::Next => {
+                    self.lexer.consume_peeked();
+                    break;
+                }
+                _ => {
+                    self.lexer.consume_peeked();
+                }
+            }
+        }
+        self.reset()
+    }
+
     /// Parses a `WHILE` statement.
     fn parse_while(&mut self) -> Result<Statement> {
         let expr = match self.parse_expr()? {
@@ -491,6 +605,13 @@ impl<'a> Parser<'a> {
                 let result = self.parse_if();
                 if result.is_err() {
                     self.reset_if()?;
+                }
+                Ok(Some(result?))
+            }
+            Token::For => {
+                let result = self.parse_for();
+                if result.is_err() {
+                    self.reset_for()?;
                 }
                 Ok(Some(result?))
             }
@@ -827,7 +948,7 @@ mod tests {
 
     #[test]
     fn test_expr_errors_due_to_keywords() {
-        for kw in &["IF", "ELSEIF", "ELSE", "END", "WHILE"] {
+        for kw in &["IF", "ELSEIF", "ELSE", "END", "WHILE", "FOR", "NEXT"] {
             do_expr_error_test(&format!("2 + {} - 1", kw), "Unexpected keyword in expression");
         }
     }
@@ -1000,6 +1121,116 @@ mod tests {
 
         do_error_test_no_reset("ELSEIF 1 THEN\nEND IF", "Unexpected token Elseif in statement");
         do_error_test_no_reset("ELSE 1\nEND IF", "Unexpected token Else in statement");
+    }
+
+    #[test]
+    fn test_for_empty() {
+        let auto_iter = VarRef::new("i", VarType::Auto);
+        do_ok_test(
+            "FOR i = 1 TO 10\nNEXT",
+            &[Statement::For(
+                auto_iter.clone(),
+                Expr::Integer(1),
+                Expr::LessEqual(
+                    Box::from(Expr::Symbol(auto_iter.clone())),
+                    Box::from(Expr::Integer(10)),
+                ),
+                Expr::Add(Box::from(Expr::Symbol(auto_iter)), Box::from(Expr::Integer(1))),
+                vec![],
+            )],
+        );
+
+        let typed_iter = VarRef::new("i", VarType::Integer);
+        do_ok_test(
+            "FOR i% = 1 TO 10\nREM Nothing to do\nNEXT",
+            &[Statement::For(
+                typed_iter.clone(),
+                Expr::Integer(1),
+                Expr::LessEqual(
+                    Box::from(Expr::Symbol(typed_iter.clone())),
+                    Box::from(Expr::Integer(10)),
+                ),
+                Expr::Add(Box::from(Expr::Symbol(typed_iter)), Box::from(Expr::Integer(1))),
+                vec![],
+            )],
+        );
+    }
+
+    #[test]
+    fn test_for_incrementing() {
+        let iter = VarRef::new("i", VarType::Auto);
+        do_ok_test(
+            "FOR i = 0 TO 5\nA\nB\nNEXT",
+            &[Statement::For(
+                iter.clone(),
+                Expr::Integer(0),
+                Expr::LessEqual(Box::from(Expr::Symbol(iter.clone())), Box::from(Expr::Integer(5))),
+                Expr::Add(Box::from(Expr::Symbol(iter)), Box::from(Expr::Integer(1))),
+                vec![
+                    Statement::BuiltinCall("A".to_owned(), vec![]),
+                    Statement::BuiltinCall("B".to_owned(), vec![]),
+                ],
+            )],
+        );
+    }
+
+    #[test]
+    fn test_for_incrementing_with_step() {
+        let iter = VarRef::new("i", VarType::Auto);
+        do_ok_test(
+            "FOR i = 0 TO 5 STEP 2\nA\nNEXT",
+            &[Statement::For(
+                iter.clone(),
+                Expr::Integer(0),
+                Expr::LessEqual(Box::from(Expr::Symbol(iter.clone())), Box::from(Expr::Integer(5))),
+                Expr::Add(Box::from(Expr::Symbol(iter)), Box::from(Expr::Integer(2))),
+                vec![Statement::BuiltinCall("A".to_owned(), vec![])],
+            )],
+        );
+    }
+
+    #[test]
+    fn test_for_decrementing_with_step() {
+        let iter = VarRef::new("i", VarType::Auto);
+        do_ok_test(
+            "FOR i = 5 TO 0 STEP -1\nA\nNEXT",
+            &[Statement::For(
+                iter.clone(),
+                Expr::Integer(5),
+                Expr::GreaterEqual(
+                    Box::from(Expr::Symbol(iter.clone())),
+                    Box::from(Expr::Integer(0)),
+                ),
+                Expr::Add(Box::from(Expr::Symbol(iter)), Box::from(Expr::Integer(-1))),
+                vec![Statement::BuiltinCall("A".to_owned(), vec![])],
+            )],
+        );
+    }
+
+    #[test]
+    fn test_for_errors() {
+        do_error_test("FOR\n", "No iterator name in FOR statement");
+        do_error_test("FOR =\n", "No iterator name in FOR statement");
+        do_error_test("FOR a$\n", "Iterator name in FOR statement must be an integer reference");
+
+        do_error_test("FOR i 3\n", "No equal sign in FOR statement");
+        do_error_test("FOR i = TO\n", "No start expression in FOR statement");
+        do_error_test("FOR i = NEXT\n", "Unexpected keyword in expression");
+
+        do_error_test("FOR i = 3 STEP\n", "No TO in FOR statement");
+        do_error_test("FOR i = 3 TO STEP\n", "No end expression in FOR statement");
+        do_error_test("FOR i = 3 TO NEXT\n", "Unexpected keyword in expression");
+
+        do_error_test("FOR i = 3 TO 1 STEP a\n", "STEP needs an integer");
+        do_error_test("FOR i = 3 TO 1 STEP -a\n", "STEP needs an integer");
+        do_error_test("FOR i = 3 TO 1 STEP NEXT\n", "STEP needs an integer");
+        do_error_test("FOR i = 3 TO 1 STEP 0\n", "Infinite FOR loop; STEP cannot be 0");
+
+        do_error_test("FOR i = 3 TO 1", "Expecting newline after FOR");
+        do_error_test("FOR i = 1 TO 3 STEP 1", "Expecting newline after FOR");
+        do_error_test("FOR i = 3 TO 1 STEP -1", "Expecting newline after FOR");
+
+        do_error_test("FOR i = 0 TO 10\nPRINT i\n", "FOR without NEXT");
     }
 
     #[test]
