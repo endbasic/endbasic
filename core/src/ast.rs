@@ -201,6 +201,21 @@ pub enum Statement {
     /// and its guard clause is always a true expression.
     If(Vec<(Expr, Vec<Statement>)>),
 
+    /// Represents a `FOR` statement.
+    ///
+    /// The first parameter is the loop's iterator name, which is expressed a variable reference
+    /// that must be either automatic or an integer.  The second parameter is the expression to
+    /// compute the iterator's initial value, which must evaluate to an integer.  The third
+    /// parameter is the condition to test after each body execution, which if false terminates the
+    /// loop.  The fourth parameter is the expression to compute the iterator's next value.  The
+    /// fifth parameter is the collection of statements within the loop.
+    ///
+    /// Note that we do not store the original end and step values, and instead use expressions to
+    /// represent the loop condition and the computation of the next iterator value.  We do this
+    /// for run-time efficiency.  The reason this is possible is because we force the step to be an
+    /// integer literal at parse time and do not allow it to be an expression.
+    For(VarRef, Expr, Expr, Expr, Vec<Statement>),
+
     /// Represents a `WHILE` statement.
     ///
     /// The first parameter is the loop's condition.  The second parameter is the collection of

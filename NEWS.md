@@ -13,6 +13,8 @@ not adhere to semantic versioning until 1.0.0.**
     official site pinned to the latest release.  This is to make release
     numbers meaningful in the web context.
 
+*   Added simple `FOR` range loops with support for custom `STEP`s.
+
 ## Changes in version 0.3.1
 
 **Released on 2020-11-29.**
