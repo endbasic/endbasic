@@ -305,11 +305,16 @@ impl<'a> Parser<'a> {
                     need_operand = true;
                 }
                 Token::RightParen => {
+                    let mut found = false;
                     while let Some(op) = ops.pop() {
                         op.apply(&mut exprs)?;
                         if op == ExprOp::LeftParen {
+                            found = true;
                             break;
                         }
+                    }
+                    if !found {
+                        return Err(Error::Bad("Unbalanced parenthesis".to_owned()));
                     }
                     need_operand = false;
                 }
@@ -377,7 +382,10 @@ impl<'a> Parser<'a> {
         }
 
         while let Some(op) = ops.pop() {
-            op.apply(&mut exprs)?;
+            match op {
+                ExprOp::LeftParen => return Err(Error::Bad("Unbalanced parenthesis".to_owned())),
+                _ => op.apply(&mut exprs)?,
+            }
         }
 
         if let Some(expr) = exprs.pop() {
@@ -934,6 +942,13 @@ mod tests {
         do_expr_error_test("(2(3))", "Unexpected value in expression");
         do_expr_error_test("((3)2)", "Unexpected value in expression");
         do_expr_error_test("2 3", "Unexpected value in expression");
+
+        do_expr_error_test("(", "Unbalanced parenthesis");
+        do_expr_error_test(")", "Unbalanced parenthesis");
+        do_expr_error_test("(()", "Unbalanced parenthesis");
+        do_expr_error_test("())", "Unbalanced parenthesis");
+        do_expr_error_test("3 + (2 + 1) + (4 - 5", "Unbalanced parenthesis");
+        do_expr_error_test("3 + 2 + 1) + (4 - 5)", "Unbalanced parenthesis");
 
         // TODO(jmmv): This succeeds because `PRINT` is interned as a `Token::Symbol` so the
         // expression parser sees it as a variable reference... but this should probably fail.
