@@ -15,6 +15,8 @@ not adhere to semantic versioning until 1.0.0.**
 
 *   Added simple `FOR` range loops with support for custom `STEP`s.
 
+*   Fixed the expression parser to detect and report unbalanced parenthesis.
+
 ## Changes in version 0.3.1
 
 **Released on 2020-11-29.**
