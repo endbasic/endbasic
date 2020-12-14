@@ -789,6 +789,16 @@ mod tests {
     }
 
     #[test]
+    fn test_function_call_ok() {
+        do_ok_test("x = 3\nOUT SUM(x, Sum%(4, 5), 1, sum())", &[], &["13"]);
+    }
+
+    #[test]
+    fn test_function_call_errors() {
+        do_simple_error_test("OUT SUM?()", "Incompatible type annotation for function call");
+    }
+
+    #[test]
     fn test_while_ok() {
         let code = r#"
             IN n
