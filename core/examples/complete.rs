@@ -142,7 +142,7 @@ fn main() {
     // TODO(jmmv): Truly add all commands in the core library and test for them.
     let console = Rc::from(RefCell::from(IncompleteConsole::default()));
     let mut machine = endbasic_core::exec::MachineBuilder::default()
-        .add_builtins(endbasic_core::console::all_commands(console))
+        .add_commands(endbasic_core::console::all_commands(console))
         .build();
 
     let mut input = match fs::File::open(path) {

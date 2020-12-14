@@ -99,11 +99,11 @@ pub async fn run_repl_loop(
 ) -> io::Result<i32> {
     let exit_code = Rc::from(RefCell::from(None));
     let mut machine = MachineBuilder::default()
-        .add_builtin(Rc::from(ClearCommand::default()))
-        .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
-        .add_builtin(Rc::from(HelpCommand::new(console.clone())))
-        .add_builtins(console::all_commands(console.clone()))
-        .add_builtins(program::all_commands(console.clone(), store))
+        .add_command(Rc::from(ClearCommand::default()))
+        .add_command(Rc::from(ExitCommand::new(exit_code.clone())))
+        .add_command(Rc::from(HelpCommand::new(console.clone())))
+        .add_commands(console::all_commands(console.clone()))
+        .add_commands(program::all_commands(console.clone(), store))
         .build();
 
     {
@@ -173,7 +173,7 @@ mod tests {
     fn do_error_test(input: &str, expected_err: &str) {
         let exit_code = Rc::from(RefCell::from(None));
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
+            .add_command(Rc::from(ExitCommand::new(exit_code.clone())))
             .build();
         let err = block_on(machine.exec(&mut input.as_bytes())).unwrap_err();
         assert_eq!(expected_err, format!("{}", err));
@@ -184,7 +184,7 @@ mod tests {
     fn test_exit_no_code() {
         let exit_code = Rc::from(RefCell::from(None));
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
+            .add_command(Rc::from(ExitCommand::new(exit_code.clone())))
             .build();
         block_on(machine.exec(&mut b"a = 3: EXIT: a = 4".as_ref())).unwrap_err();
         assert_eq!(0, exit_code.borrow().unwrap());
@@ -194,7 +194,7 @@ mod tests {
     fn do_exit_with_code_test(code: i32) {
         let exit_code = Rc::from(RefCell::from(None));
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(ExitCommand::new(exit_code.clone())))
+            .add_command(Rc::from(ExitCommand::new(exit_code.clone())))
             .build();
         block_on(machine.exec(&mut format!("a = 3: EXIT {}: a = 4", code).as_bytes())).unwrap_err();
         assert_eq!(code, exit_code.borrow().unwrap());

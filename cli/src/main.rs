@@ -114,8 +114,8 @@ fn run<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
     let console = Rc::from(RefCell::from(endbasic::TextConsole::from_stdio()?));
     let exit_code = Rc::from(RefCell::from(None));
     let mut machine = endbasic_core::exec::MachineBuilder::default()
-        .add_builtin(Rc::from(endbasic_core::repl::ExitCommand::new(exit_code.clone())))
-        .add_builtins(endbasic_core::console::all_commands(console))
+        .add_command(Rc::from(endbasic_core::repl::ExitCommand::new(exit_code.clone())))
+        .add_commands(endbasic_core::console::all_commands(console))
         .build();
 
     let mut input = File::open(path)?;

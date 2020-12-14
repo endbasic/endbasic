@@ -290,6 +290,32 @@ impl Vars {
     }
 }
 
+/// A trait to define a function that is executed by a `Machine`.
+///
+/// The functions themselves are, for now, pure.  They can only access their input arguments and
+/// cannot modify the state of the machine.
+pub trait BuiltinFunction {
+    /// Returns the name of the function, all in uppercase letters.
+    fn name(&self) -> &'static str;
+
+    /// Returns the return type of the function.
+    fn return_type(&self) -> VarType;
+
+    /// Returns the name of the function's category.
+    fn category(&self) -> &'static str;
+
+    /// Returns a specification of the function's syntax.
+    fn syntax(&self) -> &'static str;
+
+    /// Returns the usage message of the function.
+    fn description(&self) -> &'static str;
+
+    /// Executes the function.
+    ///
+    /// `args` contains the evaluated arguments as provided in the invocation of the function.
+    fn exec(&self, args: Vec<Value>) -> Result<Value>;
+}
+
 impl Expr {
     /// Evaluates the expression to a value.
     ///

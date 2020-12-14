@@ -1113,7 +1113,7 @@ mod tests {
         let console =
             Rc::from(RefCell::from(MockConsoleBuilder::new().add_input_chars(golden_in).build()));
         let mut machine =
-            MachineBuilder::default().add_builtins(all_commands(console.clone())).build();
+            MachineBuilder::default().add_commands(all_commands(console.clone())).build();
         block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed");
         assert_eq!(expected_out, console.borrow().captured_out());
     }
@@ -1139,7 +1139,7 @@ mod tests {
         let console =
             Rc::from(RefCell::from(MockConsoleBuilder::new().add_input_chars(golden_in).build()));
         let mut machine =
-            MachineBuilder::default().add_builtins(all_commands(console.clone())).build();
+            MachineBuilder::default().add_commands(all_commands(console.clone())).build();
         assert_eq!(
             expected_err,
             format!(

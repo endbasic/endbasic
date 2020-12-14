@@ -151,10 +151,10 @@ With a single argument, shows detailed information about the given command."
         args: &[(Option<Expr>, ArgSep)],
         machine: &mut Machine,
     ) -> exec::Result<()> {
-        let builtins = machine.get_builtins();
+        let commands = machine.get_commands();
         match args {
             [] => {
-                self.summary(builtins)?;
+                self.summary(commands)?;
             }
             [(Some(Expr::Symbol(vref)), ArgSep::End)] => {
                 if vref.ref_type() != VarType::Auto {
@@ -164,7 +164,7 @@ With a single argument, shows detailed information about the given command."
                 if name == "LANG" {
                     self.describe_lang()?;
                 } else {
-                    match &builtins.get(name.as_str()) {
+                    match &commands.get(name.as_str()) {
                         Some(builtin) => self.describe(builtin)?,
                         None => {
                             return exec::new_usage_error(format!(
@@ -240,8 +240,8 @@ mod tests {
     fn do_error_test(input: &str, expected_err: &str) {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
-            .add_builtin(Rc::from(DoNothingCommand {}))
+            .add_command(Rc::from(HelpCommand { console: console.clone() }))
+            .add_command(Rc::from(DoNothingCommand {}))
             .build();
         assert_eq!(
             expected_err,
@@ -257,8 +257,8 @@ mod tests {
     fn test_help_summary() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
-            .add_builtin(Rc::from(DoNothingCommand {}))
+            .add_command(Rc::from(HelpCommand { console: console.clone() }))
+            .add_command(Rc::from(DoNothingCommand {}))
             .build();
         block_on(machine.exec(&mut b"HELP".as_ref())).unwrap();
 
@@ -283,8 +283,8 @@ mod tests {
     fn test_help_describe() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
-            .add_builtin(Rc::from(DoNothingCommand {}))
+            .add_command(Rc::from(HelpCommand { console: console.clone() }))
+            .add_command(Rc::from(DoNothingCommand {}))
             .build();
         block_on(machine.exec(&mut b"help Do_Nothing".as_ref())).unwrap();
 
@@ -308,8 +308,8 @@ mod tests {
     fn test_help_lang() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(HelpCommand { console: console.clone() }))
-            .add_builtin(Rc::from(DoNothingCommand {}))
+            .add_command(Rc::from(HelpCommand { console: console.clone() }))
+            .add_command(Rc::from(DoNothingCommand {}))
             .build();
         block_on(machine.exec(&mut b"help lang".as_ref())).unwrap();
 
