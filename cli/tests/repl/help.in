@@ -20,8 +20,25 @@
 ' around line boundaries).  This dump serves to sanity-check that formatting
 ' works as intended.
 
+'
+' General help topics.
+'
+
 PRINT "Output from HELP:"
 HELP
+
+PRINT "Output from HELP COMMANDS:"
+HELP COMMANDS
+
+PRINT "Output from HELP FUNCTIONS:"
+HELP FUNCTIONS
+
+PRINT "Output from HELP LANG:"
+HELP LANG
+
+'
+' Help on commands.
+'
 
 PRINT "Output from HELP CLEAR:"
 HELP CLEAR
@@ -67,3 +84,9 @@ HELP RUN
 
 PRINT "Output from HELP SAVE:"
 HELP SAVE
+
+'
+' Help on functions.
+'
+
+' None yet.

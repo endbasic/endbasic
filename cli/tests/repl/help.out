@@ -4,6 +4,21 @@
 
 Output from HELP:
 
+    EndBASIC X.Y.Z
+    Copyright 2020 Julio Merino
+
+    Project page at <https://github.com/jmmv/endbasic>
+    License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>
+
+    >> Help topics <<
+    COMMANDS     Summary of all builtin commands.
+    FUNCTIONS    Summary of all builtin functions.
+    LANG         Language reference guide.
+
+    Type HELP followed by a topic, command, or function name for details.
+
+Output from HELP COMMANDS:
+
     >> Console manipulation <<
     CLS       Clears the screen.
     COLOR     Sets the foreground and background colors.
@@ -26,7 +41,39 @@ Output from HELP:
     SAVE      Saves the current program in memory to the given filename.
 
     Type HELP followed by a command name for details on that command.
-    Type HELP LANG for a quick reference guide about the language.
+
+Output from HELP FUNCTIONS:
+
+    Type HELP followed by a function name for details on that function.
+
+Output from HELP LANG:
+
+    Symbols (variable and function references):
+        name?    Boolean (TRUE and FALSE).
+        name%    Integer (32 bits).
+        name$    String.
+        name     Type determined by value or definition.
+
+    Assignments:
+        varref = expr
+
+    Expressions:
+        a + b      a - b       a * b     a / b      a MOD b    -a
+        a AND b    NOT a       a OR b    a XOR b
+        a = b      a <> b      a < b     a <= b     a > b      a >= b
+        (a)        varref      funcref(a1[, ..., aN])
+
+    Flow control:
+        IF expr THEN: ...: ELSE IF expr THEN: ...: ELSE: ...: END IF
+        FOR varref = expr TO expr [STEP int]: ...: NEXT
+        WHILE expr: ...: END WHILE
+
+    Misc:
+        st1: st2    Separates statements (same as a newline).
+        REM text    Comment until end of line.
+        ' text      Comment until end of line.
+        ,           Long separator for arguments to builtin call.
+        ;           Short separator for arguments to builtin call.
 
 Output from HELP CLEAR:
 
@@ -78,13 +125,13 @@ Output from HELP EXIT:
 
 Output from HELP HELP:
 
-    HELP [commandname]
+    HELP [topic]
 
     Prints interactive help.
 
-    Without arguments, shows a summary of all available commands.
+    Without arguments, shows a summary of all available help topics.
 
-    With a single argument, shows detailed information about the given command.
+    With a single argument, shows detailed information about the given help topic, command, or function.
 
 Output from HELP INPUT:
 
