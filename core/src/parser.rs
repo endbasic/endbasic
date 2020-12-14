@@ -46,6 +46,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Eq, PartialEq)]
 enum ExprOp {
     LeftParen,
+    Call(VarRef),
 
     Add,
     Subtract,
@@ -94,6 +95,7 @@ impl ExprOp {
     fn priority(&self) -> i8 {
         match self {
             ExprOp::LeftParen => 5,
+            ExprOp::Call(_) => 5,
 
             ExprOp::Negate => 4,
             ExprOp::Not => 4,
@@ -159,6 +161,7 @@ impl ExprOp {
             ExprOp::Not => apply1(exprs, Expr::Not),
 
             ExprOp::LeftParen => Ok(()),
+            ExprOp::Call(_) => Ok(()),
         }
     }
 }
@@ -268,6 +271,7 @@ impl<'a> Parser<'a> {
     fn parse_expr(&mut self) -> Result<Option<Expr>> {
         let mut exprs: Vec<Expr> = vec![];
         let mut ops: Vec<ExprOp> = vec![];
+        let mut arity: Vec<usize> = vec![];
 
         let mut need_operand = true; // Also tracks whether an upcoming minus is unary.
         loop {
@@ -280,16 +284,26 @@ impl<'a> Parser<'a> {
                 Ok(())
             };
 
+            // Stop processing if we encounter an expression separator, but don't consume it because
+            // the caller needs to have access to it.
             match self.lexer.peek()? {
                 Token::Eof
                 | Token::Eol
-                | Token::Comma
                 | Token::Semicolon
                 | Token::Then
                 | Token::To
                 | Token::Step => break,
+                Token::Comma => {
+                    // The comma is a special separator: if it's outside of a function call, the
+                    // expression is complete.  But if it is within a function call, we need to
+                    // continue our processing to extract function arguments.
+                    if arity.is_empty() {
+                        break;
+                    }
+                }
                 _ => (),
             };
+
             let token = self.lexer.consume_peeked();
             match token {
                 Token::Boolean(b) => handle_operand(Expr::Boolean(b))?,
@@ -298,25 +312,68 @@ impl<'a> Parser<'a> {
                 Token::Symbol(vref) => handle_operand(Expr::Symbol(vref))?,
 
                 Token::LeftParen => {
-                    if !need_operand {
-                        return Err(Error::Bad("Unexpected value in expression".to_owned()));
-                    }
-                    ops.push(ExprOp::LeftParen);
+                    // If the last operand we encountered was a symbol, collapse it and the left
+                    // parenthesis into the beginning of a function call.
+                    match exprs.pop() {
+                        Some(Expr::Symbol(vref)) => {
+                            debug_assert!(!need_operand);
+                            ops.push(ExprOp::Call(vref));
+                            arity.push(exprs.len());
+                        }
+                        e => {
+                            if let Some(e) = e {
+                                // We popped out the last expression to see if it this left
+                                // parenthesis started a function call... but if it didn't, we have
+                                // to put the expression back.
+                                exprs.push(e);
+                            }
+                            if !need_operand {
+                                return Err(Error::Bad(
+                                    "Unexpected value in expression".to_owned(),
+                                ));
+                            }
+                            ops.push(ExprOp::LeftParen);
+                        }
+                    };
                     need_operand = true;
                 }
                 Token::RightParen => {
-                    let mut found = false;
                     while let Some(op) = ops.pop() {
                         op.apply(&mut exprs)?;
-                        if op == ExprOp::LeftParen {
-                            found = true;
+                        match op {
+                            ExprOp::LeftParen | ExprOp::Call(_) => {
+                                ops.push(op);
+                                break;
+                            }
+                            _ => (),
+                        };
+                    }
+
+                    match ops.pop() {
+                        Some(ExprOp::LeftParen) => {}
+                        Some(ExprOp::Call(name)) => {
+                            let n = exprs.len() - arity.pop().unwrap();
+                            let params = exprs.split_off(exprs.len() - n);
+                            exprs.push(Expr::Call(name, params));
+                        }
+                        Some(_) => (),
+                        None => return Err(Error::Bad("Unbalanced parenthesis".to_owned())),
+                    }
+                    need_operand = false;
+                }
+                Token::Comma => {
+                    debug_assert!(!ops.is_empty());
+                    if need_operand {
+                        return Err(Error::Bad("Missing expression after comma".to_owned()));
+                    }
+                    while let Some(op) = ops.pop() {
+                        op.apply(&mut exprs)?;
+                        if let ExprOp::Call(_) = op {
+                            ops.push(op);
                             break;
                         }
                     }
-                    if !found {
-                        return Err(Error::Bad("Unbalanced parenthesis".to_owned()));
-                    }
-                    need_operand = false;
+                    need_operand = true;
                 }
 
                 Token::Not => {
@@ -347,9 +404,11 @@ impl<'a> Parser<'a> {
                 | Token::Xor => {
                     let op = ExprOp::from(token);
                     while let Some(op2) = ops.last() {
-                        if *op2 == ExprOp::LeftParen || op2.priority() < op.priority() {
-                            break;
-                        }
+                        match *op2 {
+                            ExprOp::LeftParen | ExprOp::Call(_) => break,
+                            _ if op2.priority() < op.priority() => break,
+                            _ => (),
+                        };
                         let op2 = ops.pop().unwrap();
                         op2.apply(&mut exprs)?;
                     }
@@ -361,7 +420,6 @@ impl<'a> Parser<'a> {
 
                 Token::Eof
                 | Token::Eol
-                | Token::Comma
                 | Token::Semicolon
                 | Token::Then
                 | Token::To
@@ -936,6 +994,56 @@ mod tests {
     }
 
     #[test]
+    fn test_expr_functions_variadic() {
+        use Expr::*;
+        do_expr_ok_test("zero()", Call(VarRef::new("zero", VarType::Auto), vec![]));
+        do_expr_ok_test("one%(1)", Call(VarRef::new("one", VarType::Integer), vec![Integer(1)]));
+        do_expr_ok_test(
+            "many$(3, \"x\", TRUE)",
+            Call(
+                VarRef::new("many", VarType::Text),
+                vec![Integer(3), Text("x".to_owned()), Boolean(true)],
+            ),
+        );
+    }
+
+    #[test]
+    fn test_expr_functions_nested() {
+        use Expr::*;
+        do_expr_ok_test(
+            "outer?(1, inner1(2, 3), 4, inner2(), 5)",
+            Call(
+                VarRef::new("outer", VarType::Boolean),
+                vec![
+                    Integer(1),
+                    Call(VarRef::new("inner1", VarType::Auto), vec![Integer(2), Integer(3)]),
+                    Integer(4),
+                    Call(VarRef::new("inner2", VarType::Auto), vec![]),
+                    Integer(5),
+                ],
+            ),
+        );
+    }
+
+    #[test]
+    fn test_expr_functions_and_ops() {
+        use Expr::*;
+        do_expr_ok_test(
+            "b AND ask?(34 + 15, ask(1, FALSE))",
+            And(
+                Box::from(Symbol(VarRef::new("b".to_owned(), VarType::Auto))),
+                Box::from(Call(
+                    VarRef::new("ask", VarType::Boolean),
+                    vec![
+                        Add(Box::from(Integer(34)), Box::from(Integer(15))),
+                        Call(VarRef::new("ask", VarType::Auto), vec![Integer(1), Boolean(false)]),
+                    ],
+                )),
+            ),
+        );
+    }
+
+    #[test]
     fn test_expr_errors() {
         do_expr_error_test("+3", "Not enough values to apply operator");
         do_expr_error_test("2 + * 3", "Not enough values to apply operator");
@@ -949,6 +1057,13 @@ mod tests {
         do_expr_error_test("())", "Unbalanced parenthesis");
         do_expr_error_test("3 + (2 + 1) + (4 - 5", "Unbalanced parenthesis");
         do_expr_error_test("3 + 2 + 1) + (4 - 5)", "Unbalanced parenthesis");
+
+        do_expr_error_test("foo(,)", "Missing expression after comma");
+        do_expr_error_test("foo(3, , 4)", "Missing expression after comma");
+        // TODO(jmmv): These are not the best error messages...
+        do_expr_error_test("(,)", "Unbalanced parenthesis");
+        do_expr_error_test("(3, 4)", "Unbalanced parenthesis");
+        do_expr_error_test("((), ())", "Unbalanced parenthesis");
 
         // TODO(jmmv): This succeeds because `PRINT` is interned as a `Token::Symbol` so the
         // expression parser sees it as a variable reference... but this should probably fail.
