@@ -16,7 +16,7 @@
 //! Execution engine for EndBASIC programs.
 
 use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
-use crate::eval::{self, Vars};
+use crate::eval::{self, BuiltinFunction, Vars};
 use crate::parser::{self, Parser};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -96,48 +96,76 @@ pub trait BuiltinCommand {
 
 /// Builder pattern for a new machine.
 ///
-/// The `default` constructor creates a new builder for a machine with no builtin commands.
+/// The `default` constructor creates a new builder for a machine with no builtin commands and no
+/// builtin functions.
 #[derive(Default)]
 pub struct MachineBuilder {
-    builtins: HashMap<&'static str, Rc<dyn BuiltinCommand>>,
+    commands: HashMap<&'static str, Rc<dyn BuiltinCommand>>,
+    functions: HashMap<&'static str, Rc<dyn BuiltinFunction>>,
 }
 
 impl MachineBuilder {
     /// Registers the given builtin command, which must not yet be registered.
-    pub fn add_builtin(mut self, command: Rc<dyn BuiltinCommand>) -> Self {
+    pub fn add_command(mut self, command: Rc<dyn BuiltinCommand>) -> Self {
         assert!(
             command.name() == command.name().to_ascii_uppercase(),
             "Command name must be in uppercase"
         );
         assert!(
-            self.builtins.get(&command.name()).is_none(),
+            self.commands.get(&command.name()).is_none(),
             "Command with the same name already registered"
         );
         for l in command.description().lines() {
             assert!(!l.is_empty(), "Description cannot contain empty lines");
         }
-        self.builtins.insert(command.name(), command);
+        self.commands.insert(command.name(), command);
         self
     }
 
-    /// Registers the given builtin commands.  See `add_builtin` for more details.
-    pub fn add_builtins(mut self, commands: Vec<Rc<dyn BuiltinCommand>>) -> Self {
+    /// Registers the given builtin function, which must not yet be registered.
+    pub fn add_function(mut self, function: Rc<dyn BuiltinFunction>) -> Self {
+        assert!(
+            function.name() == function.name().to_ascii_uppercase(),
+            "Function name must be in uppercase"
+        );
+        assert!(
+            self.functions.get(&function.name()).is_none(),
+            "Command with the same name already registered"
+        );
+        for l in function.description().lines() {
+            assert!(!l.is_empty(), "Description cannot contain empty lines");
+        }
+        self.functions.insert(function.name(), function);
+        self
+    }
+
+    /// Registers the given builtin commands.  See `add_command` for more details.
+    pub fn add_commands(mut self, commands: Vec<Rc<dyn BuiltinCommand>>) -> Self {
         for command in commands {
-            self = self.add_builtin(command);
+            self = self.add_command(command);
+        }
+        self
+    }
+
+    /// Registers the given builtin functions.  See `add_function` for more details.
+    pub fn add_functions(mut self, functions: Vec<Rc<dyn BuiltinFunction>>) -> Self {
+        for function in functions {
+            self = self.add_function(function);
         }
         self
     }
 
     /// Creates a new machine with the current configuration.
     pub fn build(self) -> Machine {
-        Machine { builtins: self.builtins, vars: Vars::default() }
+        Machine { commands: self.commands, functions: self.functions, vars: Vars::default() }
     }
 }
 
 /// Executes an EndBASIC program and tracks its state.
 #[derive(Default)]
 pub struct Machine {
-    builtins: HashMap<&'static str, Rc<dyn BuiltinCommand>>,
+    commands: HashMap<&'static str, Rc<dyn BuiltinCommand>>,
+    functions: HashMap<&'static str, Rc<dyn BuiltinFunction>>,
     vars: Vars,
 }
 
@@ -147,9 +175,14 @@ impl Machine {
         self.vars.clear()
     }
 
-    /// Obtains immutable access to the builtins supported by this machine.
-    pub fn get_builtins(&self) -> &HashMap<&'static str, Rc<dyn BuiltinCommand>> {
-        &self.builtins
+    /// Obtains immutable access to the builtin commands provided by this machine.
+    pub fn get_commands(&self) -> &HashMap<&'static str, Rc<dyn BuiltinCommand>> {
+        &self.commands
+    }
+
+    /// Obtains immutable access to the builtin functions provided by this machine.
+    pub fn get_functions(&self) -> &HashMap<&'static str, Rc<dyn BuiltinFunction>> {
+        &self.functions
     }
 
     /// Obtains immutable access to the state of the variables.
@@ -266,7 +299,7 @@ impl Machine {
         match stmt {
             Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
             Statement::BuiltinCall(name, args) => {
-                let cmd = match self.builtins.get(name.as_str()) {
+                let cmd = match self.commands.get(name.as_str()) {
                     Some(cmd) => cmd.clone(),
                     None => return new_syntax_error(format!("Unknown builtin {}", name)),
                 };
@@ -525,8 +558,8 @@ mod tests {
         let in_cmd = InCommand::from(Box::from(RefCell::from(golden_in.iter())));
         let out_cmd = OutCommand::from(captured_out);
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(in_cmd))
-            .add_builtin(Rc::from(out_cmd))
+            .add_command(Rc::from(in_cmd))
+            .add_command(Rc::from(out_cmd))
             .build();
         block_on(machine.exec(&mut input.as_bytes()))
     }
@@ -815,7 +848,7 @@ mod tests {
 
     #[test]
     fn test_clear_ok() {
-        let mut machine = MachineBuilder::default().add_builtin(Rc::from(ClearCommand {})).build();
+        let mut machine = MachineBuilder::default().add_command(Rc::from(ClearCommand {})).build();
         block_on(machine.exec(&mut b"a = 1".as_ref())).unwrap();
         assert!(machine.get_var_as_int("a").is_ok());
         block_on(machine.exec(&mut b"CLEAR".as_ref())).unwrap();
@@ -824,7 +857,7 @@ mod tests {
 
     #[test]
     fn test_clear_errors() {
-        let mut machine = MachineBuilder::default().add_builtin(Rc::from(ClearCommand {})).build();
+        let mut machine = MachineBuilder::default().add_command(Rc::from(ClearCommand {})).build();
         assert_eq!(
             "CLEAR takes no arguments",
             format!("{}", block_on(machine.exec(&mut b"CLEAR 123".as_ref())).unwrap_err())

@@ -539,7 +539,7 @@ mod tests {
         let console =
             Rc::from(RefCell::from(MockConsoleBuilder::new().add_input_chars(golden_in).build()));
         let mut machine = MachineBuilder::default()
-            .add_builtins(all_commands_for(program.clone(), console.clone(), store))
+            .add_commands(all_commands_for(program.clone(), console.clone(), store))
             .build();
         block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed");
         let expected_out: Vec<CapturedOut> =
@@ -567,7 +567,7 @@ mod tests {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let program = Rc::from(RefCell::from(RecordedProgram::new("")));
         let mut machine = MachineBuilder::default()
-            .add_builtins(all_commands_for(program, console.clone(), store))
+            .add_commands(all_commands_for(program, console.clone(), store))
             .build();
         assert_eq!(
             expected_err,
@@ -755,7 +755,7 @@ mod tests {
         let program = Rc::from(RefCell::from(RecordedProgram::new("some stuff")));
 
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(NewCommand { program: program.clone() }))
+            .add_command(Rc::from(NewCommand { program: program.clone() }))
             .build();
 
         block_on(machine.exec(&mut b"NEW".as_ref())).unwrap();
@@ -780,8 +780,8 @@ mod tests {
         let captured_out = Rc::from(RefCell::from(vec![]));
         let out_cmd = OutCommand::from(captured_out.clone());
         let mut machine = MachineBuilder::default()
-            .add_builtin(Rc::from(out_cmd))
-            .add_builtin(Rc::from(RunCommand { program }))
+            .add_command(Rc::from(out_cmd))
+            .add_command(Rc::from(RunCommand { program }))
             .build();
 
         block_on(machine.exec(&mut b"var = 7: RUN".as_ref())).unwrap();

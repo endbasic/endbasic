@@ -116,8 +116,8 @@ fn main() {
     // Create an empty machine.
     let state = Rc::from(RefCell::from(String::new()));
     let mut machine = MachineBuilder::default()
-        .add_builtin(Rc::from(StoreCommand { state: state.clone() }))
-        .add_builtin(Rc::from(RetrieveCommand { state }))
+        .add_command(Rc::from(StoreCommand { state: state.clone() }))
+        .add_command(Rc::from(RetrieveCommand { state }))
         .build();
 
     // Execute the sample script.  The script will call back into our custom commands, one of which
