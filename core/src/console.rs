@@ -381,7 +381,7 @@ necessarily match any other color specifiable in the 0 to 255 range, as it might
 
         fn get_color(e: &Option<Expr>, machine: &Machine) -> exec::Result<Option<u8>> {
             match e {
-                Some(e) => match e.eval(machine.get_vars())? {
+                Some(e) => match e.eval(machine.get_vars(), machine.get_functions())? {
                     Value::Integer(i) if i >= 0 && i <= std::u8::MAX as i32 => Ok(Some(i as u8)),
                     Value::Integer(_) => exec::new_usage_error("Color out of range"),
                     _ => exec::new_usage_error("Color must be an integer"),
@@ -443,7 +443,7 @@ variable to update with the obtained input."
         }
 
         let mut prompt = match &args[0].0 {
-            Some(e) => match e.eval(machine.get_vars())? {
+            Some(e) => match e.eval(machine.get_vars(), machine.get_functions())? {
                 Value::Text(t) => t,
                 _ => return exec::new_usage_error("INPUT prompt must be a string"),
             },
@@ -519,7 +519,7 @@ impl BuiltinCommand for LocateCommand {
         debug_assert!(column_arg.1 == ArgSep::End);
 
         let row = match &row_arg.0 {
-            Some(arg) => match arg.eval(machine.get_vars())? {
+            Some(arg) => match arg.eval(machine.get_vars(), machine.get_functions())? {
                 Value::Integer(i) => {
                     if i < 0 {
                         return exec::new_usage_error("Row cannot be negative");
@@ -532,7 +532,7 @@ impl BuiltinCommand for LocateCommand {
         };
 
         let column = match &column_arg.0 {
-            Some(arg) => match arg.eval(machine.get_vars())? {
+            Some(arg) => match arg.eval(machine.get_vars(), machine.get_functions())? {
                 Value::Integer(i) => {
                     if i < 0 {
                         return exec::new_usage_error("Column cannot be negative");
@@ -590,7 +590,7 @@ separated by the long `,` separator are concatenated with a tab character."
         let mut text = String::new();
         for arg in args.iter() {
             if let Some(expr) = arg.0.as_ref() {
-                text += &expr.eval(machine.get_vars())?.to_string();
+                text += &expr.eval(machine.get_vars(), machine.get_functions())?.to_string();
             }
             match arg.1 {
                 ArgSep::End => break,

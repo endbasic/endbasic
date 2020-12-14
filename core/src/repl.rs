@@ -63,18 +63,20 @@ The optional code indicates the return value to return to the system."
     ) -> exec::Result<()> {
         let arg = match args {
             [] => 0,
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_vars())? {
-                Value::Integer(n) => {
-                    if n < 0 {
-                        return exec::new_usage_error("Exit code must be a positive integer");
+            [(Some(expr), ArgSep::End)] => {
+                match expr.eval(machine.get_vars(), machine.get_functions())? {
+                    Value::Integer(n) => {
+                        if n < 0 {
+                            return exec::new_usage_error("Exit code must be a positive integer");
+                        }
+                        if n >= 128 {
+                            return exec::new_usage_error("Exit code cannot be larger than 127");
+                        }
+                        n
                     }
-                    if n >= 128 {
-                        return exec::new_usage_error("Exit code cannot be larger than 127");
-                    }
-                    n
+                    _ => return exec::new_usage_error("Exit code must be a positive integer"),
                 }
-                _ => return exec::new_usage_error("Exit code must be a positive integer"),
-            },
+            }
             _ => return exec::new_usage_error("EXIT takes zero or one argument"),
         };
         let mut code = self.code.borrow_mut();

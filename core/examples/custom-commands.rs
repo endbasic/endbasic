@@ -68,7 +68,7 @@ impl BuiltinCommand for StoreCommand {
             return exec::new_usage_error("STORE takes one argument only");
         }
         let expr = args[0].0.as_ref().expect("A single argument can never be empty");
-        match expr.eval(machine.get_vars())? {
+        match expr.eval(machine.get_vars(), machine.get_functions())? {
             Value::Text(t) => *self.state.borrow_mut() = t,
             _ => return exec::new_usage_error("Mismatched expression type"),
         }

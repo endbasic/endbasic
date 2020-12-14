@@ -224,7 +224,7 @@ impl Machine {
 
     /// Assigns the value of `expr` to the variable `vref`.
     fn assign(&mut self, vref: &VarRef, expr: &Expr) -> Result<()> {
-        let value = expr.eval(&self.vars)?;
+        let value = expr.eval(&self.vars, &self.functions)?;
         self.vars.set(&vref, value)?;
         Ok(())
     }
@@ -232,7 +232,7 @@ impl Machine {
     /// Executes an `IF` statement.
     async fn do_if(&mut self, branches: &[(Expr, Vec<Statement>)]) -> Result<()> {
         for (expr, stmts) in branches {
-            match expr.eval(&self.vars)? {
+            match expr.eval(&self.vars, &self.functions)? {
                 Value::Boolean(true) => {
                     for s in stmts {
                         self.exec_one(s).await?;
@@ -261,7 +261,7 @@ impl Machine {
         self.assign(iterator, start)?;
 
         loop {
-            match end.eval(&self.vars)? {
+            match end.eval(&self.vars, &self.functions)? {
                 Value::Boolean(false) => {
                     break;
                 }
@@ -281,7 +281,7 @@ impl Machine {
     /// Executes a `WHILE` loop.
     async fn do_while(&mut self, condition: &Expr, body: &[Statement]) -> Result<()> {
         loop {
-            match condition.eval(&self.vars)? {
+            match condition.eval(&self.vars, &self.functions)? {
                 Value::Boolean(true) => {
                     for s in body {
                         self.exec_one(s).await?;
@@ -468,7 +468,7 @@ pub(crate) mod testutils {
             let mut text = String::new();
             for arg in args.iter() {
                 if let Some(expr) = arg.0.as_ref() {
-                    text += &expr.eval(machine.get_vars())?.to_string();
+                    text += &expr.eval(machine.get_vars(), machine.get_functions())?.to_string();
                 }
                 match arg.1 {
                     ArgSep::End => break,
@@ -486,6 +486,7 @@ pub(crate) mod testutils {
 mod tests {
     use super::testutils::*;
     use super::*;
+    use crate::eval::testutils::*;
     use futures_lite::future::block_on;
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -560,6 +561,7 @@ mod tests {
         let mut machine = MachineBuilder::default()
             .add_command(Rc::from(in_cmd))
             .add_command(Rc::from(out_cmd))
+            .add_function(Rc::from(SumFunction {}))
             .build();
         block_on(machine.exec(&mut input.as_bytes()))
     }
