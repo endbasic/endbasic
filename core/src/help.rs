@@ -17,10 +17,11 @@
 
 use crate::ast::{ArgSep, Expr, VarType};
 use crate::console::Console;
+use crate::eval::BuiltinFunction;
 use crate::exec::{self, BuiltinCommand, Machine};
 use async_trait::async_trait;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
 /// Cheat-sheet for the language syntax.
@@ -64,50 +65,99 @@ impl HelpCommand {
         Self { console }
     }
 
-    /// Prints a summary of all available commands.
-    fn summary(
-        &self,
-        builtins: &HashMap<&'static str, Rc<dyn BuiltinCommand>>,
-    ) -> exec::Result<()> {
-        let mut by_category: BTreeMap<&'static str, Vec<&'static str>> = BTreeMap::new();
-        let mut max_length = 0;
-        for command in builtins.values() {
-            by_category.entry(command.category()).or_insert_with(Vec::new).push(command.name());
-            if command.name().len() > max_length {
-                max_length = command.name().len();
-            }
-        }
-
+    /// Prints a summary of all available help topics.
+    fn summary(&self) -> exec::Result<()> {
         let mut console = self.console.borrow_mut();
-        for (category, names) in by_category.iter() {
-            console.print("")?;
-            console.print(&format!("    >> {} <<", category))?;
-            let mut names = names.clone();
-            names.sort_unstable();
-            for name in names {
-                let filler = " ".repeat(max_length - name.len());
-                let builtin = builtins.get(name).unwrap();
-                let blurb = builtin.description().lines().next().unwrap();
-                console.print(&format!("    {}{}    {}", builtin.name(), filler, blurb))?;
-            }
-        }
         console.print("")?;
-        console.print("    Type HELP followed by a command name for details on that command.")?;
-        console.print("    Type HELP LANG for a quick reference guide about the language.")?;
+        console.print(&format!("    EndBASIC {}", env!("CARGO_PKG_VERSION")))?;
+        console.print("    Copyright 2020 Julio Merino")?;
+        console.print("")?;
+        console.print(&format!("    Project page at <{}>", env!("CARGO_PKG_HOMEPAGE")))?;
+        console
+            .print("    License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>")?;
+        console.print("")?;
+        console.print("    >> Help topics <<")?;
+        console.print("    COMMANDS     Summary of all builtin commands.")?;
+        console.print("    FUNCTIONS    Summary of all builtin functions.")?;
+        console.print("    LANG         Language reference guide.")?;
+        console.print("")?;
+        console
+            .print("    Type HELP followed by a topic, command, or function name for details.")?;
         console.print("")?;
         Ok(())
     }
 
-    /// Prints details about a single command.
-    fn describe(&self, builtin: &Rc<dyn BuiltinCommand>) -> exec::Result<()> {
+    fn summarize_builtins(
+        &self,
+        by_category: BTreeMap<&'static str, BTreeMap<String, &'static str>>,
+        what: &'static str,
+    ) -> exec::Result<()> {
+        let mut max_length = 0;
+        for by_name in by_category.values() {
+            for name in by_name.keys() {
+                if name.len() > max_length {
+                    max_length = name.len();
+                }
+            }
+        }
+
+        let mut console = self.console.borrow_mut();
+        for (category, by_name) in by_category.iter() {
+            console.print("")?;
+            console.print(&format!("    >> {} <<", category))?;
+            for (name, blurb) in by_name.iter() {
+                let filler = " ".repeat(max_length - name.len());
+                console.print(&format!("    {}{}    {}", name, filler, blurb))?;
+            }
+        }
+        console.print("")?;
+        console.print(&format!(
+            "    Type HELP followed by a {} name for details on that {}.",
+            what, what,
+        ))?;
+        console.print("")?;
+        Ok(())
+    }
+
+    /// Prints a summary of all available commands.
+    fn summarize_commands(
+        &self,
+        commands: &HashMap<&'static str, Rc<dyn BuiltinCommand>>,
+    ) -> exec::Result<()> {
+        let mut by_category: BTreeMap<&'static str, BTreeMap<String, &'static str>> =
+            BTreeMap::new();
+        for command in commands.values() {
+            let name = command.name().to_owned();
+            let blurb = command.description().lines().next().unwrap();
+            by_category.entry(command.category()).or_insert_with(BTreeMap::new).insert(name, blurb);
+        }
+        self.summarize_builtins(by_category, "command")
+    }
+
+    /// Prints a summary of all available functions.
+    fn summarize_functions(
+        &self,
+        functions: &HashMap<&'static str, Rc<dyn BuiltinFunction>>,
+    ) -> exec::Result<()> {
+        let mut by_category: BTreeMap<&'static str, BTreeMap<String, &'static str>> =
+            BTreeMap::new();
+        for function in functions.values() {
+            let name = format!("{}{}", function.name(), function.return_type().annotation());
+            let blurb = function.description().lines().next().unwrap();
+            by_category
+                .entry(function.category())
+                .or_insert_with(BTreeMap::new)
+                .insert(name, blurb);
+        }
+        self.summarize_builtins(by_category, "function")
+    }
+
+    /// Describes one command or function.
+    fn describe(&self, name: &str, syntax: &str, description: &str) -> exec::Result<()> {
         let mut console = self.console.borrow_mut();
         console.print("")?;
-        if builtin.syntax().is_empty() {
-            console.print(&format!("    {}", builtin.name()))?;
-        } else {
-            console.print(&format!("    {} {}", builtin.name(), builtin.syntax()))?;
-        }
-        for line in builtin.description().lines() {
+        console.print(&format!("    {}{}", name, syntax))?;
+        for line in description.lines() {
             console.print("")?;
             console.print(&format!("    {}", line))?;
         }
@@ -115,6 +165,26 @@ impl HelpCommand {
         Ok(())
     }
 
+    /// Prints details about a single command.
+    fn describe_command(&self, command: &Rc<dyn BuiltinCommand>) -> exec::Result<()> {
+        let syntax = if command.syntax().is_empty() {
+            "".to_owned()
+        } else {
+            format!(" {}", command.syntax())
+        };
+        self.describe(command.name(), &syntax, command.description())
+    }
+
+    /// Prints details about a single command.
+    fn describe_function(&self, function: &Rc<dyn BuiltinFunction>) -> exec::Result<()> {
+        self.describe(
+            &format!("{}{}", function.name(), function.return_type().annotation()),
+            &format!("({})", function.syntax()),
+            function.description(),
+        )
+    }
+
+    /// Prints a quick reference of the language syntax.
     fn describe_lang(&self) -> exec::Result<()> {
         let mut console = self.console.borrow_mut();
         for line in LANG_REFERENCE.lines() {
@@ -123,6 +193,22 @@ impl HelpCommand {
         }
         console.print("")?;
         Ok(())
+    }
+
+    /// Checks if all command and function names are unique after discarding type annotations.
+    // TODO(jmmv): This is a code smell from the lack of genericity between commands and functions.
+    // If we can homogenize their representation, this should go away.
+    fn all_names_unique(
+        commands: &HashMap<&'static str, Rc<dyn BuiltinCommand>>,
+        functions: &HashMap<&'static str, Rc<dyn BuiltinFunction>>,
+    ) -> bool {
+        let names: HashSet<&&'static str> = commands.keys().collect();
+        for name in functions.keys() {
+            if names.contains(&name) {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -137,13 +223,14 @@ impl BuiltinCommand for HelpCommand {
     }
 
     fn syntax(&self) -> &'static str {
-        "[commandname]"
+        "[topic]"
     }
 
     fn description(&self) -> &'static str {
         "Prints interactive help.
-Without arguments, shows a summary of all available commands.
-With a single argument, shows detailed information about the given command."
+Without arguments, shows a summary of all available help topics.
+With a single argument, shows detailed information about the given help topic, command, or \
+function."
     }
 
     async fn exec(
@@ -152,26 +239,58 @@ With a single argument, shows detailed information about the given command."
         machine: &mut Machine,
     ) -> exec::Result<()> {
         let commands = machine.get_commands();
+        let functions = machine.get_functions();
+        debug_assert!(HelpCommand::all_names_unique(commands, functions));
         match args {
             [] => {
-                self.summary(commands)?;
+                self.summary()?;
             }
             [(Some(Expr::Symbol(vref)), ArgSep::End)] => {
-                if vref.ref_type() != VarType::Auto {
-                    return exec::new_usage_error("Command name cannot have a type annotation");
-                }
                 let name = vref.name().to_ascii_uppercase();
-                if name == "LANG" {
+                if name == "COMMANDS" {
+                    if vref.ref_type() != VarType::Auto {
+                        return exec::new_usage_error("Topic name cannot have a type annotation");
+                    }
+                    self.summarize_commands(commands)?;
+                } else if name == "FUNCTIONS" {
+                    if vref.ref_type() != VarType::Auto {
+                        return exec::new_usage_error("Topic name cannot have a type annotation");
+                    }
+                    self.summarize_functions(functions)?;
+                } else if name == "LANG" {
+                    if vref.ref_type() != VarType::Auto {
+                        return exec::new_usage_error("Topic name cannot have a type annotation");
+                    }
                     self.describe_lang()?;
                 } else {
-                    match &commands.get(name.as_str()) {
-                        Some(builtin) => self.describe(builtin)?,
-                        None => {
-                            return exec::new_usage_error(format!(
-                                "Cannot describe unknown builtin {}",
-                                name
-                            ))
+                    let mut found = false;
+                    if let Some(command) = &commands.get(name.as_str()) {
+                        debug_assert!(!found);
+                        if vref.ref_type() != VarType::Auto {
+                            return exec::new_usage_error(
+                                "Command name cannot have a type annotation",
+                            );
                         }
+                        self.describe_command(command)?;
+                        found = true;
+                    }
+                    if let Some(function) = &functions.get(name.as_str()) {
+                        debug_assert!(!found);
+                        if vref.ref_type() != VarType::Auto
+                            && vref.ref_type() != function.return_type()
+                        {
+                            return exec::new_usage_error(
+                                "Incompatible type annotation for function",
+                            );
+                        }
+                        self.describe_function(function)?;
+                        found = true;
+                    }
+                    if !found {
+                        return exec::new_usage_error(format!(
+                            "Cannot describe unknown builtin or function {}",
+                            name
+                        ));
                     }
                 }
             }
@@ -184,6 +303,8 @@ With a single argument, shows detailed information about the given command."
 #[cfg(test)]
 pub(crate) mod testutils {
     use super::*;
+    use crate::ast::Value;
+    use crate::eval;
 
     /// A command that does nothing.
     pub(crate) struct DoNothingCommand {}
@@ -216,6 +337,37 @@ Second paragraph of the extended description."
             Ok(())
         }
     }
+
+    /// A function that does nothing.
+    pub(crate) struct EmptyFunction {}
+
+    impl BuiltinFunction for EmptyFunction {
+        fn name(&self) -> &'static str {
+            "EMPTY"
+        }
+
+        fn return_type(&self) -> VarType {
+            VarType::Text
+        }
+
+        fn category(&self) -> &'static str {
+            "Testing"
+        }
+
+        fn syntax(&self) -> &'static str {
+            "this [would] <be|the> syntax \"specification\""
+        }
+
+        fn description(&self) -> &'static str {
+            "This is the blurb.
+First paragraph of the extended description.
+Second paragraph of the extended description."
+        }
+
+        fn exec(&self, _args: Vec<Value>) -> eval::Result<Value> {
+            Ok(Value::Text("irrelevant".to_owned()))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -242,6 +394,7 @@ mod tests {
         let mut machine = MachineBuilder::default()
             .add_command(Rc::from(HelpCommand { console: console.clone() }))
             .add_command(Rc::from(DoNothingCommand {}))
+            .add_function(Rc::from(EmptyFunction {}))
             .build();
         assert_eq!(
             expected_err,
@@ -254,13 +407,13 @@ mod tests {
     }
 
     #[test]
-    fn test_help_summary() {
+    fn test_help_summarize_commands() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
             .add_command(Rc::from(HelpCommand { console: console.clone() }))
             .add_command(Rc::from(DoNothingCommand {}))
             .build();
-        block_on(machine.exec(&mut b"HELP".as_ref())).unwrap();
+        block_on(machine.exec(&mut b"HELP COMMANDS".as_ref())).unwrap();
 
         let text = flatten_captured_out(console.borrow().captured_out());
         assert_eq!(
@@ -272,7 +425,6 @@ mod tests {
     DO_NOTHING    This is the blurb.
 
     Type HELP followed by a command name for details on that command.
-    Type HELP LANG for a quick reference guide about the language.
 
 ",
             text
@@ -280,7 +432,29 @@ mod tests {
     }
 
     #[test]
-    fn test_help_describe() {
+    fn test_help_summarize_functions() {
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
+        let mut machine = MachineBuilder::default()
+            .add_command(Rc::from(HelpCommand { console: console.clone() }))
+            .add_function(Rc::from(EmptyFunction {}))
+            .build();
+        block_on(machine.exec(&mut b"HELP FUNCTIONS".as_ref())).unwrap();
+
+        let text = flatten_captured_out(console.borrow().captured_out());
+        assert_eq!(
+            "
+    >> Testing <<
+    EMPTY$    This is the blurb.
+
+    Type HELP followed by a function name for details on that function.
+
+",
+            text
+        );
+    }
+
+    #[test]
+    fn test_help_describe_command() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
             .add_command(Rc::from(HelpCommand { console: console.clone() }))
@@ -304,6 +478,40 @@ mod tests {
         );
     }
 
+    fn do_help_describe_function_test(name: &str) {
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
+        let mut machine = MachineBuilder::default()
+            .add_command(Rc::from(HelpCommand { console: console.clone() }))
+            .add_function(Rc::from(EmptyFunction {}))
+            .build();
+        block_on(machine.exec(&mut format!("help {}", name).as_bytes())).unwrap();
+
+        let text = flatten_captured_out(console.borrow().captured_out());
+        assert_eq!(
+            "
+    EMPTY$(this [would] <be|the> syntax \"specification\")
+
+    This is the blurb.
+
+    First paragraph of the extended description.
+
+    Second paragraph of the extended description.
+
+",
+            &text
+        );
+    }
+
+    #[test]
+    fn test_help_describe_function_without_annotation() {
+        do_help_describe_function_test("Empty")
+    }
+
+    #[test]
+    fn test_help_describe_function_with_annotation() {
+        do_help_describe_function_test("EMPTY$")
+    }
+
     #[test]
     fn test_help_lang() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
@@ -322,8 +530,14 @@ mod tests {
         do_error_test("HELP foo bar", "Unexpected value in expression");
         do_error_test("HELP foo, bar", "HELP takes zero or only one argument");
 
-        do_error_test("HELP foo$", "Command name cannot have a type annotation");
-        do_error_test("HELP lang%", "Command name cannot have a type annotation");
-        do_error_test("HELP foo", "Cannot describe unknown builtin FOO");
+        do_error_test("HELP commands%", "Topic name cannot have a type annotation");
+        do_error_test("HELP functions%", "Topic name cannot have a type annotation");
+        do_error_test("HELP lang%", "Topic name cannot have a type annotation");
+
+        do_error_test("HELP foo$", "Cannot describe unknown builtin or function FOO");
+        do_error_test("HELP foo", "Cannot describe unknown builtin or function FOO");
+
+        do_error_test("HELP do_nothing$", "Command name cannot have a type annotation");
+        do_error_test("HELP empty?", "Incompatible type annotation for function");
     }
 }
