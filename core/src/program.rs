@@ -155,7 +155,7 @@ extension is optional, but if present, it must be .BAS."
             return exec::new_usage_error("DEL requires a filename");
         }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
-        match arg0.eval(machine.get_vars())? {
+        match arg0.eval(machine.get_vars(), machine.get_functions())? {
             Value::Text(t) => {
                 let name = to_filename(t)?;
                 self.store.borrow_mut().delete(&name)?;
@@ -278,7 +278,7 @@ extension is optional, but if present, it must be .BAS."
             return exec::new_usage_error("LOAD requires a filename");
         }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
-        match arg0.eval(machine.get_vars())? {
+        match arg0.eval(machine.get_vars(), machine.get_functions())? {
             Value::Text(t) => {
                 let name = to_filename(t)?;
                 let content = self.store.borrow().get(&name)?;
@@ -401,7 +401,7 @@ extension is optional, but if present, it must be .BAS."
             return exec::new_usage_error("SAVE requires a filename");
         }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
-        match arg0.eval(machine.get_vars())? {
+        match arg0.eval(machine.get_vars(), machine.get_functions())? {
             Value::Text(t) => {
                 let name = to_filename(t)?;
                 let content = self.program.borrow().text();
@@ -761,6 +761,8 @@ mod tests {
         block_on(machine.exec(&mut b"NEW".as_ref())).unwrap();
         assert!(program.borrow().text().is_empty());
         assert!(machine.get_vars().is_empty());
+        // TODO(jmmv): If we get user-supplied functions, we need to check here that they were
+        // cleared too.
     }
 
     #[test]
