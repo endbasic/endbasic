@@ -85,6 +85,18 @@ pub enum VarType {
     Text,
 }
 
+impl VarType {
+    /// Returns the type annotation for this type.
+    pub fn annotation(&self) -> &'static str {
+        match self {
+            VarType::Auto => "",
+            VarType::Boolean => "?",
+            VarType::Integer => "%",
+            VarType::Text => "$",
+        }
+    }
+}
+
 /// Represents a reference to a variable (which doesn't have to exist).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VarRef {
@@ -138,12 +150,7 @@ impl VarRef {
 
 impl fmt::Display for VarRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.ref_type {
-            VarType::Auto => write!(f, "{}", self.name),
-            VarType::Boolean => write!(f, "{}?", self.name),
-            VarType::Integer => write!(f, "{}%", self.name),
-            VarType::Text => write!(f, "{}$", self.name),
-        }
+        write!(f, "{}{}", self.name, self.ref_type().annotation())
     }
 }
 
