@@ -363,7 +363,21 @@ impl Expr {
                     for a in args {
                         values.push(a.eval(vars, fs)?);
                     }
-                    f.exec(values)
+                    let result = f.exec(values);
+                    if let Ok(value) = result.as_ref() {
+                        debug_assert!(f.return_type() != VarType::Auto);
+                        let fref = VarRef::new(fref.name(), f.return_type());
+                        // Given that we only support built-in functions at the moment, this could
+                        // well be an assertion.  Doing so could turn into a time bomb when/if we
+                        // add user-defined functions, so handle the problem as an error.
+                        if !fref.accepts(&value) {
+                            return Err(Error::new(format!(
+                                "Value returned by {} is incompatible with its type definition",
+                                fref.name(),
+                            )));
+                        }
+                    }
+                    result
                 }
                 None => Err(Error::new(format!("Unknown function {}", fref))),
             },
@@ -405,6 +419,41 @@ pub(crate) mod testutils {
                 result = result.add(&a)?;
             }
             Ok(result)
+        }
+    }
+
+    /// Returns a value provided at construction time.  Note that the return type is fixed so we use
+    /// this to verify if return values are correctly type-checked.
+    pub(crate) struct TypeCheckFunction {
+        pub value: Value,
+    }
+
+    impl BuiltinFunction for TypeCheckFunction {
+        fn name(&self) -> &'static str {
+            "TYPE_CHECK"
+        }
+
+        fn return_type(&self) -> VarType {
+            VarType::Boolean
+        }
+
+        fn category(&self) -> &'static str {
+            "Testing"
+        }
+
+        fn syntax(&self) -> &'static str {
+            ""
+        }
+
+        fn description(&self) -> &'static str {
+            "See docstring for test code."
+        }
+
+        fn exec(&self, args: Vec<Value>) -> Result<Value> {
+            if !args.is_empty() {
+                return Err(Error::new("Too many arguments"));
+            }
+            Ok(self.value.clone())
         }
     }
 }
@@ -1394,5 +1443,37 @@ mod tests {
                     .unwrap_err()
             )
         );
+    }
+
+    #[test]
+    fn test_expr_function_call_type_check() {
+        let vars = Vars::default();
+
+        {
+            let mut fs: HashMap<&'static str, Rc<dyn BuiltinFunction>> = HashMap::default();
+            let tcf = Rc::from(TypeCheckFunction { value: Value::Boolean(true) });
+            fs.insert(tcf.name(), tcf);
+            assert_eq!(
+                Value::Boolean(true),
+                Expr::Call(VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto), vec![],)
+                    .eval(&vars, &fs)
+                    .unwrap()
+            );
+        }
+
+        {
+            let mut fs: HashMap<&'static str, Rc<dyn BuiltinFunction>> = HashMap::default();
+            let tcf = Rc::from(TypeCheckFunction { value: Value::Integer(5) });
+            fs.insert(tcf.name(), tcf);
+            assert_eq!(
+                "Value returned by TYPE_CHECK is incompatible with its type definition",
+                format!(
+                    "{}",
+                    Expr::Call(VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto), vec![],)
+                        .eval(&vars, &fs)
+                        .unwrap_err()
+                )
+            );
+        }
     }
 }
