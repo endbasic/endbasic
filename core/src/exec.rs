@@ -124,18 +124,12 @@ impl MachineBuilder {
 
     /// Registers the given builtin function, which must not yet be registered.
     pub fn add_function(mut self, function: Rc<dyn BuiltinFunction>) -> Self {
+        let metadata = function.metadata();
         assert!(
-            function.name() == function.name().to_ascii_uppercase(),
-            "Function name must be in uppercase"
+            self.functions.get(&metadata.name()).is_none(),
+            "Function with the same name already registered"
         );
-        assert!(
-            self.functions.get(&function.name()).is_none(),
-            "Command with the same name already registered"
-        );
-        for l in function.description().lines() {
-            assert!(!l.is_empty(), "Description cannot contain empty lines");
-        }
-        self.functions.insert(function.name(), function);
+        self.functions.insert(metadata.name(), function);
         self
     }
 
@@ -561,7 +555,7 @@ mod tests {
         let mut machine = MachineBuilder::default()
             .add_command(Rc::from(in_cmd))
             .add_command(Rc::from(out_cmd))
-            .add_function(Rc::from(SumFunction {}))
+            .add_function(SumFunction::new())
             .build();
         block_on(machine.exec(&mut input.as_bytes()))
     }
