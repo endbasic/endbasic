@@ -23,6 +23,7 @@ use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
+use std::str::Lines;
 
 /// Cheat-sheet for the language syntax.
 const LANG_REFERENCE: &str = r"
@@ -142,10 +143,11 @@ impl HelpCommand {
         let mut by_category: BTreeMap<&'static str, BTreeMap<String, &'static str>> =
             BTreeMap::new();
         for function in functions.values() {
-            let name = format!("{}{}", function.name(), function.return_type().annotation());
-            let blurb = function.description().lines().next().unwrap();
+            let metadata = function.metadata();
+            let name = format!("{}{}", metadata.name(), metadata.return_type().annotation());
+            let blurb = metadata.description().next().unwrap();
             by_category
-                .entry(function.category())
+                .entry(metadata.category())
                 .or_insert_with(BTreeMap::new)
                 .insert(name, blurb);
         }
@@ -153,11 +155,11 @@ impl HelpCommand {
     }
 
     /// Describes one command or function.
-    fn describe(&self, name: &str, syntax: &str, description: &str) -> exec::Result<()> {
+    fn describe(&self, name: &str, syntax: &str, description: Lines) -> exec::Result<()> {
         let mut console = self.console.borrow_mut();
         console.print("")?;
         console.print(&format!("    {}{}", name, syntax))?;
-        for line in description.lines() {
+        for line in description {
             console.print("")?;
             console.print(&format!("    {}", line))?;
         }
@@ -172,15 +174,16 @@ impl HelpCommand {
         } else {
             format!(" {}", command.syntax())
         };
-        self.describe(command.name(), &syntax, command.description())
+        self.describe(command.name(), &syntax, command.description().lines())
     }
 
     /// Prints details about a single command.
     fn describe_function(&self, function: &Rc<dyn BuiltinFunction>) -> exec::Result<()> {
+        let metadata = function.metadata();
         self.describe(
-            &format!("{}{}", function.name(), function.return_type().annotation()),
-            &format!("({})", function.syntax()),
-            function.description(),
+            &format!("{}{}", metadata.name(), metadata.return_type().annotation()),
+            &format!("({})", metadata.syntax()),
+            metadata.description(),
         )
     }
 
@@ -277,7 +280,7 @@ function."
                     if let Some(function) = &functions.get(name.as_str()) {
                         debug_assert!(!found);
                         if vref.ref_type() != VarType::Auto
-                            && vref.ref_type() != function.return_type()
+                            && vref.ref_type() != function.metadata().return_type()
                         {
                             return exec::new_usage_error(
                                 "Incompatible type annotation for function",
@@ -304,7 +307,7 @@ function."
 pub(crate) mod testutils {
     use super::*;
     use crate::ast::Value;
-    use crate::eval;
+    use crate::eval::{self, CallableMetadata, CallableMetadataBuilder};
 
     /// A command that does nothing.
     pub(crate) struct DoNothingCommand {}
@@ -339,29 +342,29 @@ Second paragraph of the extended description."
     }
 
     /// A function that does nothing.
-    pub(crate) struct EmptyFunction {}
+    pub(crate) struct EmptyFunction {
+        metadata: CallableMetadata,
+    }
+
+    impl EmptyFunction {
+        pub(crate) fn new() -> Rc<Self> {
+            Rc::from(Self {
+                metadata: CallableMetadataBuilder::new("EMPTY", VarType::Text)
+                    .with_category("Testing")
+                    .with_syntax("this [would] <be|the> syntax \"specification\"")
+                    .with_description(
+                        "This is the blurb.
+First paragraph of the extended description.
+Second paragraph of the extended description.",
+                    )
+                    .build(),
+            })
+        }
+    }
 
     impl BuiltinFunction for EmptyFunction {
-        fn name(&self) -> &'static str {
-            "EMPTY"
-        }
-
-        fn return_type(&self) -> VarType {
-            VarType::Text
-        }
-
-        fn category(&self) -> &'static str {
-            "Testing"
-        }
-
-        fn syntax(&self) -> &'static str {
-            "this [would] <be|the> syntax \"specification\""
-        }
-
-        fn description(&self) -> &'static str {
-            "This is the blurb.
-First paragraph of the extended description.
-Second paragraph of the extended description."
+        fn metadata(&self) -> &CallableMetadata {
+            &self.metadata
         }
 
         fn exec(&self, _args: Vec<Value>) -> eval::Result<Value> {
@@ -394,7 +397,7 @@ mod tests {
         let mut machine = MachineBuilder::default()
             .add_command(Rc::from(HelpCommand { console: console.clone() }))
             .add_command(Rc::from(DoNothingCommand {}))
-            .add_function(Rc::from(EmptyFunction {}))
+            .add_function(EmptyFunction::new())
             .build();
         assert_eq!(
             expected_err,
@@ -436,7 +439,7 @@ mod tests {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
             .add_command(Rc::from(HelpCommand { console: console.clone() }))
-            .add_function(Rc::from(EmptyFunction {}))
+            .add_function(EmptyFunction::new())
             .build();
         block_on(machine.exec(&mut b"HELP FUNCTIONS".as_ref())).unwrap();
 
@@ -482,7 +485,7 @@ mod tests {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
             .add_command(Rc::from(HelpCommand { console: console.clone() }))
-            .add_function(Rc::from(EmptyFunction {}))
+            .add_function(EmptyFunction::new())
             .build();
         block_on(machine.exec(&mut format!("help {}", name).as_bytes())).unwrap();
 

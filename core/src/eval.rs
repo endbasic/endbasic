@@ -19,6 +19,7 @@ use crate::ast::{Expr, Value, VarRef, VarType};
 use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
+use std::str::Lines;
 
 /// Evaluation errors.
 #[derive(Debug, thiserror::Error)]
@@ -291,25 +292,131 @@ impl Vars {
     }
 }
 
+/// Builder pattern for a callable's metadata.
+pub struct CallableMetadataBuilder {
+    name: &'static str,
+    return_type: VarType,
+    category: Option<&'static str>,
+    syntax: Option<&'static str>,
+    description: Option<&'static str>,
+}
+
+impl CallableMetadataBuilder {
+    /// Constructs a new metadata builder with the minimum information necessary.
+    ///
+    /// All code except tests must populate the whole builder with details.  This is enforced at
+    /// construction time, where we only allow some fields to be missing under the test
+    /// configuration.
+    pub fn new(name: &'static str, return_type: VarType) -> Self {
+        assert!(name == name.to_ascii_uppercase(), "Callable name must be in uppercase");
+
+        Self { name, return_type, syntax: None, category: None, description: None }
+    }
+
+    /// Sets the syntax specification for this callable.  The `syntax` is provided as a free-form
+    /// string that is expected to use whatever representation suits the function best.
+    pub fn with_syntax(mut self, syntax: &'static str) -> Self {
+        self.syntax = Some(syntax);
+        self
+    }
+
+    /// Sets the category for this callable.  All callables with the same category name will be
+    /// grouped together in help messages.
+    pub fn with_category(mut self, category: &'static str) -> Self {
+        self.category = Some(category);
+        self
+    }
+
+    /// Sets the description for this callable.  The `description` is a collection of paragraphs
+    /// separated by a single newline character, where the first paragraph is taken as the summary
+    /// of the description.  The summary must be a short sentence that is descriptive enough to be
+    /// understood without further details.  Empty lines (paragraphs) are not allowed.
+    pub fn with_description(mut self, description: &'static str) -> Self {
+        for l in description.lines() {
+            assert!(!l.is_empty(), "Description cannot contain empty lines");
+        }
+        self.description = Some(description);
+        self
+    }
+
+    /// Generates the final `CallableMetadata` object, ensuring all values are present.
+    pub fn build(self) -> CallableMetadata {
+        CallableMetadata {
+            name: self.name,
+            return_type: self.return_type,
+            syntax: self.syntax.expect("All callables must specify a syntax"),
+            category: self.category.expect("All callables must specify a category"),
+            description: self.description.expect("All callables must specify a description"),
+        }
+    }
+
+    /// Generates the final `CallableMetadata` object, ensuring the minimal set of values are
+    /// present.  Only useful for testing.
+    #[cfg(test)]
+    pub fn test_build(self) -> CallableMetadata {
+        CallableMetadata {
+            name: self.name,
+            return_type: self.return_type,
+            syntax: self.syntax.unwrap_or(""),
+            category: self.category.unwrap_or(""),
+            description: self.description.unwrap_or(""),
+        }
+    }
+}
+
+/// Representation of a callable's metadata.
+///
+/// The callable is expected to hold onto an instance of this object within its struct to make
+/// queries fast.
+pub struct CallableMetadata {
+    name: &'static str,
+    return_type: VarType,
+    syntax: &'static str,
+    category: &'static str,
+    description: &'static str,
+}
+
+impl CallableMetadata {
+    /// Gets the callable's name, all in uppercase.
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+
+    /// Gets the callable's return type.
+    pub fn return_type(&self) -> VarType {
+        self.return_type
+    }
+
+    /// Gets the callable's syntax specification.
+    pub fn syntax(&self) -> &'static str {
+        self.syntax
+    }
+
+    /// Gets the callable's category.
+    pub fn category(&self) -> &'static str {
+        self.category
+    }
+
+    /// Gets the callable's textual description as a collection of lines.  The first line is the
+    /// summary of the callable's purpose.
+    pub fn description(&self) -> Lines<'static> {
+        self.description.lines()
+    }
+}
+
 /// A trait to define a function that is executed by a `Machine`.
 ///
 /// The functions themselves are, for now, pure.  They can only access their input arguments and
 /// cannot modify the state of the machine.
+///
+/// Idiomatically, these objects need to provide a `new()` method that returns an `Rc<Callable>`, as
+/// that's the type used throughout the execution engine.
 pub trait BuiltinFunction {
-    /// Returns the name of the function, all in uppercase letters.
-    fn name(&self) -> &'static str;
-
-    /// Returns the return type of the function.
-    fn return_type(&self) -> VarType;
-
-    /// Returns the name of the function's category.
-    fn category(&self) -> &'static str;
-
-    /// Returns a specification of the function's syntax.
-    fn syntax(&self) -> &'static str;
-
-    /// Returns the usage message of the function.
-    fn description(&self) -> &'static str;
+    /// Returns the metadata for this function.
+    ///
+    /// The return value takes the form of a reference to force the callable to store the metadata
+    /// as a struct field so that calls to this function are guaranteed to be cheap.
+    fn metadata(&self) -> &CallableMetadata;
 
     /// Executes the function.
     ///
@@ -355,7 +462,9 @@ impl Expr {
 
             Expr::Call(fref, args) => match fs.get(fref.name().to_ascii_uppercase().as_str()) {
                 Some(f) => {
-                    if fref.ref_type() != VarType::Auto && fref.ref_type() != f.return_type() {
+                    let metadata = f.metadata();
+                    if fref.ref_type() != VarType::Auto && fref.ref_type() != metadata.return_type()
+                    {
                         return Err(Error::new("Incompatible type annotation for function call"));
                     }
 
@@ -365,8 +474,8 @@ impl Expr {
                     }
                     let result = f.exec(values);
                     if let Ok(value) = result.as_ref() {
-                        debug_assert!(f.return_type() != VarType::Auto);
-                        let fref = VarRef::new(fref.name(), f.return_type());
+                        debug_assert!(metadata.return_type() != VarType::Auto);
+                        let fref = VarRef::new(fref.name(), metadata.return_type());
                         // Given that we only support built-in functions at the moment, this could
                         // well be an assertion.  Doing so could turn into a time bomb when/if we
                         // add user-defined functions, so handle the problem as an error.
@@ -390,27 +499,21 @@ pub(crate) mod testutils {
     use super::*;
 
     /// Sums a collection of integers of arbitrary length.
-    pub(crate) struct SumFunction {}
+    pub(crate) struct SumFunction {
+        metadata: CallableMetadata,
+    }
+
+    impl SumFunction {
+        pub(crate) fn new() -> Rc<Self> {
+            Rc::from(Self {
+                metadata: CallableMetadataBuilder::new("SUM", VarType::Integer).test_build(),
+            })
+        }
+    }
 
     impl BuiltinFunction for SumFunction {
-        fn name(&self) -> &'static str {
-            "SUM"
-        }
-
-        fn return_type(&self) -> VarType {
-            VarType::Integer
-        }
-
-        fn category(&self) -> &'static str {
-            "Testing"
-        }
-
-        fn syntax(&self) -> &'static str {
-            "[expr1% [, exprN%]"
-        }
-
-        fn description(&self) -> &'static str {
-            "See docstring for test code."
+        fn metadata(&self) -> &CallableMetadata {
+            &self.metadata
         }
 
         fn exec(&self, args: Vec<Value>) -> Result<Value> {
@@ -425,28 +528,22 @@ pub(crate) mod testutils {
     /// Returns a value provided at construction time.  Note that the return type is fixed so we use
     /// this to verify if return values are correctly type-checked.
     pub(crate) struct TypeCheckFunction {
-        pub value: Value,
+        metadata: CallableMetadata,
+        value: Value,
+    }
+
+    impl TypeCheckFunction {
+        pub(crate) fn new(value: Value) -> Rc<Self> {
+            Rc::from(Self {
+                metadata: CallableMetadataBuilder::new("TYPE_CHECK", VarType::Boolean).test_build(),
+                value,
+            })
+        }
     }
 
     impl BuiltinFunction for TypeCheckFunction {
-        fn name(&self) -> &'static str {
-            "TYPE_CHECK"
-        }
-
-        fn return_type(&self) -> VarType {
-            VarType::Boolean
-        }
-
-        fn category(&self) -> &'static str {
-            "Testing"
-        }
-
-        fn syntax(&self) -> &'static str {
-            ""
-        }
-
-        fn description(&self) -> &'static str {
-            "See docstring for test code."
+        fn metadata(&self) -> &CallableMetadata {
+            &self.metadata
         }
 
         fn exec(&self, args: Vec<Value>) -> Result<Value> {
@@ -1383,8 +1480,8 @@ mod tests {
         vars.set(&xref, Value::Integer(5)).unwrap();
 
         let mut fs: HashMap<&'static str, Rc<dyn BuiltinFunction>> = HashMap::default();
-        let sum = Rc::from(SumFunction {});
-        fs.insert(sum.name(), sum);
+        let sum = SumFunction::new();
+        fs.insert(sum.metadata().name(), sum);
 
         assert_eq!(
             Value::Integer(0),
@@ -1451,8 +1548,8 @@ mod tests {
 
         {
             let mut fs: HashMap<&'static str, Rc<dyn BuiltinFunction>> = HashMap::default();
-            let tcf = Rc::from(TypeCheckFunction { value: Value::Boolean(true) });
-            fs.insert(tcf.name(), tcf);
+            let tcf = TypeCheckFunction::new(Value::Boolean(true));
+            fs.insert(tcf.metadata().name(), tcf);
             assert_eq!(
                 Value::Boolean(true),
                 Expr::Call(VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto), vec![],)
@@ -1463,8 +1560,8 @@ mod tests {
 
         {
             let mut fs: HashMap<&'static str, Rc<dyn BuiltinFunction>> = HashMap::default();
-            let tcf = Rc::from(TypeCheckFunction { value: Value::Integer(5) });
-            fs.insert(tcf.name(), tcf);
+            let tcf = TypeCheckFunction::new(Value::Integer(5));
+            fs.insert(tcf.metadata().name(), tcf);
             assert_eq!(
                 "Value returned by TYPE_CHECK is incompatible with its type definition",
                 format!(
