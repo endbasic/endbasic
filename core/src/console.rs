@@ -15,7 +15,8 @@
 
 //! Console representation and manipulation.
 
-use crate::ast::{ArgSep, Expr, Value};
+use crate::ast::{ArgSep, Expr, Value, VarType};
+use crate::eval::{CallableMetadata, CallableMetadataBuilder};
 use crate::exec::{self, BuiltinCommand, Machine};
 use async_trait::async_trait;
 use std::cell::RefCell;
@@ -303,25 +304,28 @@ pub async fn read_line(
 
 /// The `CLS` command.
 pub struct ClsCommand {
+    metadata: CallableMetadata,
     console: Rc<RefCell<dyn Console>>,
+}
+
+impl ClsCommand {
+    /// Creates a new `CLS` command that clears the `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("CLS", VarType::Void)
+                .with_syntax("")
+                .with_category("Console manipulation")
+                .with_description("Clears the screen.")
+                .build(),
+            console,
+        })
+    }
 }
 
 #[async_trait(?Send)]
 impl BuiltinCommand for ClsCommand {
-    fn name(&self) -> &'static str {
-        "CLS"
-    }
-
-    fn category(&self) -> &'static str {
-        "Console manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        ""
-    }
-
-    fn description(&self) -> &'static str {
-        "Clears the screen."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -339,28 +343,33 @@ impl BuiltinCommand for ClsCommand {
 
 /// The `COLOR` command.
 pub struct ColorCommand {
+    metadata: CallableMetadata,
     console: Rc<RefCell<dyn Console>>,
+}
+
+impl ColorCommand {
+    /// Creates a new `COLOR` command that changes the color of the `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("COLOR", VarType::Void)
+                .with_syntax("[fg%][, [bg%]]")
+                .with_category("Console manipulation")
+                .with_description(
+                    "Sets the foreground and background colors.
+Color numbers are given as ANSI numbers and can be between 0 and 255.  If a color number is not \
+specified, then the color is reset to the console's default.  The console default does not \
+necessarily match any other color specifiable in the 0 to 255 range, as it might be transparent.",
+                )
+                .build(),
+            console,
+        })
+    }
 }
 
 #[async_trait(?Send)]
 impl BuiltinCommand for ColorCommand {
-    fn name(&self) -> &'static str {
-        "COLOR"
-    }
-
-    fn category(&self) -> &'static str {
-        "Console manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        "[fg%][, [bg%]]"
-    }
-
-    fn description(&self) -> &'static str {
-        "Sets the foreground and background colors.
-Color numbers are given as ANSI numbers and can be between 0 and 255.  If a color number is not \
-specified, then the color is reset to the console's default.  The console default does not \
-necessarily match any other color specifiable in the 0 to 255 range, as it might be transparent."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -400,37 +409,35 @@ necessarily match any other color specifiable in the 0 to 255 range, as it might
 
 /// The `INPUT` command.
 pub struct InputCommand {
+    metadata: CallableMetadata,
     console: Rc<RefCell<dyn Console>>,
 }
 
 impl InputCommand {
     /// Creates a new `INPUT` command that uses `console` to gather user input.
-    pub fn new(console: Rc<RefCell<dyn Console>>) -> Self {
-        Self { console }
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("INPUT", VarType::Void)
+                .with_syntax("[\"prompt\"] <;|,> variableref")
+                .with_category("Console manipulation")
+                .with_description(
+                    "Obtains user input from the console.
+The first expression to this function must be empty or evaluate to a string, and specifies \
+the prompt to print.  If this first argument is followed by the short `;` separator, the \
+prompt is extended with a question mark.
+The second expression to this function must be a bare variable reference and indicates the \
+variable to update with the obtained input.",
+                )
+                .build(),
+            console,
+        })
     }
 }
 
 #[async_trait(?Send)]
 impl BuiltinCommand for InputCommand {
-    fn name(&self) -> &'static str {
-        "INPUT"
-    }
-
-    fn category(&self) -> &'static str {
-        "Console manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        "[\"prompt\"] <;|,> variableref"
-    }
-
-    fn description(&self) -> &'static str {
-        "Obtains user input from the console.
-The first expression to this function must be empty or evaluate to a string, and specifies \
-the prompt to print.  If this first argument is followed by the short `;` separator, the \
-prompt is extended with a question mark.
-The second expression to this function must be a bare variable reference and indicates the \
-variable to update with the obtained input."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -483,25 +490,28 @@ variable to update with the obtained input."
 
 /// The `LOCATE` command.
 pub struct LocateCommand {
+    metadata: CallableMetadata,
     console: Rc<RefCell<dyn Console>>,
+}
+
+impl LocateCommand {
+    /// Creates a new `LOCATE` command that moves the cursor of the `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("LOCATE", VarType::Void)
+                .with_syntax("row%, column%")
+                .with_category("Console manipulation")
+                .with_description("Moves the cursor to the given position.")
+                .build(),
+            console,
+        })
+    }
 }
 
 #[async_trait(?Send)]
 impl BuiltinCommand for LocateCommand {
-    fn name(&self) -> &'static str {
-        "LOCATE"
-    }
-
-    fn category(&self) -> &'static str {
-        "Console manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        "row%, column%"
-    }
-
-    fn description(&self) -> &'static str {
-        "Moves the cursor to the given position."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -551,35 +561,33 @@ impl BuiltinCommand for LocateCommand {
 
 /// The `PRINT` command.
 pub struct PrintCommand {
+    metadata: CallableMetadata,
     console: Rc<RefCell<dyn Console>>,
 }
 
 impl PrintCommand {
     /// Creates a new `PRINT` command that writes to `console`.
-    pub fn new(console: Rc<RefCell<dyn Console>>) -> Self {
-        Self { console }
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("PRINT", VarType::Void)
+                .with_syntax("[expr1 [<;|,> .. exprN]]")
+                .with_category("Console manipulation")
+                .with_description(
+                    "Prints a message to the console.
+The expressions given as arguments are all evaluated and converted to strings.  Arguments \
+separated by the short `;` separator are concatenated with a single space, while arguments \
+separated by the long `,` separator are concatenated with a tab character.",
+                )
+                .build(),
+            console,
+        })
     }
 }
 
 #[async_trait(?Send)]
 impl BuiltinCommand for PrintCommand {
-    fn name(&self) -> &'static str {
-        "PRINT"
-    }
-
-    fn category(&self) -> &'static str {
-        "Console manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        "[expr1 [<;|,> .. exprN]]"
-    }
-
-    fn description(&self) -> &'static str {
-        "Prints a message to the console.
-The expressions given as arguments are all evaluated and converted to strings.  Arguments \
-separated by the short `;` separator are concatenated with a single space, while arguments \
-separated by the long `,` separator are concatenated with a tab character."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -606,11 +614,11 @@ separated by the long `,` separator are concatenated with a tab character."
 /// Adds all console-related commands for the given `console` to the `machine`.
 pub fn all_commands(console: Rc<RefCell<dyn Console>>) -> Vec<Rc<dyn BuiltinCommand>> {
     vec![
-        Rc::from(ClsCommand { console: console.clone() }),
-        Rc::from(ColorCommand { console: console.clone() }),
-        Rc::from(InputCommand::new(console.clone())),
-        Rc::from(LocateCommand { console: console.clone() }),
-        Rc::from(PrintCommand::new(console)),
+        ClsCommand::new(console.clone()),
+        ColorCommand::new(console.clone()),
+        InputCommand::new(console.clone()),
+        LocateCommand::new(console.clone()),
+        PrintCommand::new(console),
     ]
 }
 

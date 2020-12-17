@@ -86,6 +86,9 @@ pub enum VarType {
     /// A string variable.  This should really be called `String` but it would get confusing with
     /// the built-in Rust type.
     Text,
+
+    /// The nothingness type.  Used to represent the return value of commands.
+    Void,
 }
 
 impl VarType {
@@ -96,6 +99,7 @@ impl VarType {
             VarType::Boolean => "?",
             VarType::Integer => "%",
             VarType::Text => "$",
+            VarType::Void => "",
         }
     }
 }

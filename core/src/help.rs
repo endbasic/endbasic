@@ -17,7 +17,7 @@
 
 use crate::ast::{ArgSep, Expr, VarType};
 use crate::console::Console;
-use crate::eval::BuiltinFunction;
+use crate::eval::{BuiltinFunction, CallableMetadata, CallableMetadataBuilder};
 use crate::exec::{self, BuiltinCommand, Machine};
 use async_trait::async_trait;
 use std::cell::RefCell;
@@ -57,13 +57,26 @@ const LANG_REFERENCE: &str = r"
 
 /// The `HELP` command.
 pub struct HelpCommand {
+    metadata: CallableMetadata,
     console: Rc<RefCell<dyn Console>>,
 }
 
 impl HelpCommand {
     /// Creates a new command that writes help messages to `output`.
-    pub fn new(console: Rc<RefCell<dyn Console>>) -> Self {
-        Self { console }
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("HELP", VarType::Void)
+                .with_syntax("[topic]")
+                .with_category("Interpreter manipulation")
+                .with_description(
+                    "Prints interactive help.
+Without arguments, shows a summary of all available help topics.
+With a single argument, shows detailed information about the given help topic, command, or \
+function.",
+                )
+                .build(),
+            console,
+        })
     }
 
     /// Prints a summary of all available help topics.
@@ -128,9 +141,13 @@ impl HelpCommand {
         let mut by_category: BTreeMap<&'static str, BTreeMap<String, &'static str>> =
             BTreeMap::new();
         for command in commands.values() {
-            let name = command.name().to_owned();
-            let blurb = command.description().lines().next().unwrap();
-            by_category.entry(command.category()).or_insert_with(BTreeMap::new).insert(name, blurb);
+            let metadata = command.metadata();
+            let name = metadata.name().to_owned();
+            let blurb = metadata.description().next().unwrap();
+            by_category
+                .entry(metadata.category())
+                .or_insert_with(BTreeMap::new)
+                .insert(name, blurb);
         }
         self.summarize_builtins(by_category, "command")
     }
@@ -169,12 +186,13 @@ impl HelpCommand {
 
     /// Prints details about a single command.
     fn describe_command(&self, command: &Rc<dyn BuiltinCommand>) -> exec::Result<()> {
-        let syntax = if command.syntax().is_empty() {
+        let metadata = command.metadata();
+        let syntax = if metadata.syntax().is_empty() {
             "".to_owned()
         } else {
-            format!(" {}", command.syntax())
+            format!(" {}", metadata.syntax())
         };
-        self.describe(command.name(), &syntax, command.description().lines())
+        self.describe(metadata.name(), &syntax, metadata.description())
     }
 
     /// Prints details about a single command.
@@ -217,23 +235,8 @@ impl HelpCommand {
 
 #[async_trait(?Send)]
 impl BuiltinCommand for HelpCommand {
-    fn name(&self) -> &'static str {
-        "HELP"
-    }
-
-    fn category(&self) -> &'static str {
-        "Interpreter manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        "[topic]"
-    }
-
-    fn description(&self) -> &'static str {
-        "Prints interactive help.
-Without arguments, shows a summary of all available help topics.
-With a single argument, shows detailed information about the given help topic, command, or \
-function."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -310,26 +313,31 @@ pub(crate) mod testutils {
     use crate::eval::{self, CallableMetadata, CallableMetadataBuilder};
 
     /// A command that does nothing.
-    pub(crate) struct DoNothingCommand {}
+    pub(crate) struct DoNothingCommand {
+        metadata: CallableMetadata,
+    }
+
+    impl DoNothingCommand {
+        /// Creates a new instance of the command.
+        pub fn new() -> Rc<Self> {
+            Rc::from(Self {
+                metadata: CallableMetadataBuilder::new("DO_NOTHING", VarType::Void)
+                    .with_syntax("this [would] <be|the> syntax \"specification\"")
+                    .with_category("Testing")
+                    .with_description(
+                        "This is the blurb.
+First paragraph of the extended description.
+Second paragraph of the extended description.",
+                    )
+                    .build(),
+            })
+        }
+    }
 
     #[async_trait(?Send)]
     impl BuiltinCommand for DoNothingCommand {
-        fn name(&self) -> &'static str {
-            "DO_NOTHING"
-        }
-
-        fn category(&self) -> &'static str {
-            "Testing"
-        }
-
-        fn syntax(&self) -> &'static str {
-            "this [would] <be|the> syntax \"specification\""
-        }
-
-        fn description(&self) -> &'static str {
-            "This is the blurb.
-First paragraph of the extended description.
-Second paragraph of the extended description."
+        fn metadata(&self) -> &CallableMetadata {
+            &self.metadata
         }
 
         async fn exec(
@@ -350,8 +358,8 @@ Second paragraph of the extended description."
         pub(crate) fn new() -> Rc<Self> {
             Rc::from(Self {
                 metadata: CallableMetadataBuilder::new("EMPTY", VarType::Text)
-                    .with_category("Testing")
                     .with_syntax("this [would] <be|the> syntax \"specification\"")
+                    .with_category("Testing")
                     .with_description(
                         "This is the blurb.
 First paragraph of the extended description.
@@ -395,8 +403,8 @@ mod tests {
     fn do_error_test(input: &str, expected_err: &str) {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
-            .add_command(Rc::from(HelpCommand { console: console.clone() }))
-            .add_command(Rc::from(DoNothingCommand {}))
+            .add_command(HelpCommand::new(console.clone()))
+            .add_command(DoNothingCommand::new())
             .add_function(EmptyFunction::new())
             .build();
         assert_eq!(
@@ -413,8 +421,8 @@ mod tests {
     fn test_help_summarize_commands() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
-            .add_command(Rc::from(HelpCommand { console: console.clone() }))
-            .add_command(Rc::from(DoNothingCommand {}))
+            .add_command(HelpCommand::new(console.clone()))
+            .add_command(DoNothingCommand::new())
             .build();
         block_on(machine.exec(&mut b"HELP COMMANDS".as_ref())).unwrap();
 
@@ -438,7 +446,7 @@ mod tests {
     fn test_help_summarize_functions() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
-            .add_command(Rc::from(HelpCommand { console: console.clone() }))
+            .add_command(HelpCommand::new(console.clone()))
             .add_function(EmptyFunction::new())
             .build();
         block_on(machine.exec(&mut b"HELP FUNCTIONS".as_ref())).unwrap();
@@ -460,8 +468,8 @@ mod tests {
     fn test_help_describe_command() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
-            .add_command(Rc::from(HelpCommand { console: console.clone() }))
-            .add_command(Rc::from(DoNothingCommand {}))
+            .add_command(HelpCommand::new(console.clone()))
+            .add_command(DoNothingCommand::new())
             .build();
         block_on(machine.exec(&mut b"help Do_Nothing".as_ref())).unwrap();
 
@@ -484,7 +492,7 @@ mod tests {
     fn do_help_describe_function_test(name: &str) {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
-            .add_command(Rc::from(HelpCommand { console: console.clone() }))
+            .add_command(HelpCommand::new(console.clone()))
             .add_function(EmptyFunction::new())
             .build();
         block_on(machine.exec(&mut format!("help {}", name).as_bytes())).unwrap();
@@ -519,8 +527,8 @@ mod tests {
     fn test_help_lang() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
-            .add_command(Rc::from(HelpCommand { console: console.clone() }))
-            .add_command(Rc::from(DoNothingCommand {}))
+            .add_command(HelpCommand::new(console.clone()))
+            .add_command(DoNothingCommand::new())
             .build();
         block_on(machine.exec(&mut b"help lang".as_ref())).unwrap();
 

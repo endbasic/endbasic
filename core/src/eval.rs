@@ -63,6 +63,7 @@ impl Value {
             }
             VarType::Integer => parse_i32(&s),
             VarType::Text => Ok(Value::Text(s)),
+            VarType::Void => panic!("Void values are not supported"),
         }
     }
 

@@ -20,7 +20,8 @@
 //! state not represented within the variables of the machine.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Expr, Value};
+use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
+use endbasic_core::eval::{CallableMetadata, CallableMetadataBuilder};
 use endbasic_core::exec::{self, BuiltinCommand, Machine, MachineBuilder};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
@@ -38,25 +39,28 @@ RETRIEVE
 
 /// The `STORE` command.
 struct StoreCommand {
+    metadata: CallableMetadata,
     state: Rc<RefCell<String>>,
+}
+
+impl StoreCommand {
+    /// Creates a new `STORE` command that updates the string in `state`.
+    pub fn new(state: Rc<RefCell<String>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("STORE", VarType::Void)
+                .with_syntax("\"string to save\"")
+                .with_category("Demonstration")
+                .with_description("Saves the string argument given to it in a Rust variable.")
+                .build(),
+            state,
+        })
+    }
 }
 
 #[async_trait(?Send)]
 impl BuiltinCommand for StoreCommand {
-    fn name(&self) -> &'static str {
-        "STORE"
-    }
-
-    fn category(&self) -> &'static str {
-        "File manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        "\"string to save\""
-    }
-
-    fn description(&self) -> &'static str {
-        "Saves the string argument given to it in a Rust variable."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -78,25 +82,30 @@ impl BuiltinCommand for StoreCommand {
 
 /// The `RETRIEVE` command.
 struct RetrieveCommand {
+    metadata: CallableMetadata,
     state: Rc<RefCell<String>>,
+}
+
+impl RetrieveCommand {
+    /// Creates a new `RETRIEVE` command that prints the string in `state`.
+    pub fn new(state: Rc<RefCell<String>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("RETRIEVE", VarType::Void)
+                .with_syntax("")
+                .with_category("Demonstration")
+                .with_description(
+                    "Retrieves the string saved by STORE and prints it to the console.",
+                )
+                .build(),
+            state,
+        })
+    }
 }
 
 #[async_trait(?Send)]
 impl BuiltinCommand for RetrieveCommand {
-    fn name(&self) -> &'static str {
-        "RETRIEVE"
-    }
-
-    fn category(&self) -> &'static str {
-        "File manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        ""
-    }
-
-    fn description(&self) -> &'static str {
-        "Retrieves the string saved by `StoreCommand` and prints it to the console."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -116,8 +125,8 @@ fn main() {
     // Create an empty machine.
     let state = Rc::from(RefCell::from(String::new()));
     let mut machine = MachineBuilder::default()
-        .add_command(Rc::from(StoreCommand { state: state.clone() }))
-        .add_command(Rc::from(RetrieveCommand { state }))
+        .add_command(StoreCommand::new(state.clone()))
+        .add_command(RetrieveCommand::new(state))
         .build();
 
     // Execute the sample script.  The script will call back into our custom commands, one of which
