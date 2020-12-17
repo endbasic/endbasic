@@ -23,7 +23,6 @@ use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
-use std::str::Lines;
 
 /// Cheat-sheet for the language syntax.
 const LANG_REFERENCE: &str = r"
@@ -101,18 +100,25 @@ function.",
         Ok(())
     }
 
-    fn summarize_builtins(
+    /// Prints a summary of all available callables of a given type `what`.
+    fn summarize_callables<'a, MD: Iterator<Item = &'a CallableMetadata>>(
         &self,
-        by_category: BTreeMap<&'static str, BTreeMap<String, &'static str>>,
-        what: &'static str,
+        what: &str,
+        callables: MD,
     ) -> exec::Result<()> {
+        let mut by_category: BTreeMap<&'static str, BTreeMap<String, &'static str>> =
+            BTreeMap::new();
         let mut max_length = 0;
-        for by_name in by_category.values() {
-            for name in by_name.keys() {
-                if name.len() > max_length {
-                    max_length = name.len();
-                }
+        for metadata in callables {
+            let name = format!("{}{}", metadata.name(), metadata.return_type().annotation());
+            if name.len() > max_length {
+                max_length = name.len();
             }
+            let blurb = metadata.description().next().unwrap();
+            by_category
+                .entry(metadata.category())
+                .or_insert_with(BTreeMap::new)
+                .insert(name, blurb);
         }
 
         let mut console = self.console.borrow_mut();
@@ -133,76 +139,30 @@ function.",
         Ok(())
     }
 
-    /// Prints a summary of all available commands.
-    fn summarize_commands(
-        &self,
-        commands: &HashMap<&'static str, Rc<dyn BuiltinCommand>>,
-    ) -> exec::Result<()> {
-        let mut by_category: BTreeMap<&'static str, BTreeMap<String, &'static str>> =
-            BTreeMap::new();
-        for command in commands.values() {
-            let metadata = command.metadata();
-            let name = metadata.name().to_owned();
-            let blurb = metadata.description().next().unwrap();
-            by_category
-                .entry(metadata.category())
-                .or_insert_with(BTreeMap::new)
-                .insert(name, blurb);
-        }
-        self.summarize_builtins(by_category, "command")
-    }
-
-    /// Prints a summary of all available functions.
-    fn summarize_functions(
-        &self,
-        functions: &HashMap<&'static str, Rc<dyn BuiltinFunction>>,
-    ) -> exec::Result<()> {
-        let mut by_category: BTreeMap<&'static str, BTreeMap<String, &'static str>> =
-            BTreeMap::new();
-        for function in functions.values() {
-            let metadata = function.metadata();
-            let name = format!("{}{}", metadata.name(), metadata.return_type().annotation());
-            let blurb = metadata.description().next().unwrap();
-            by_category
-                .entry(metadata.category())
-                .or_insert_with(BTreeMap::new)
-                .insert(name, blurb);
-        }
-        self.summarize_builtins(by_category, "function")
-    }
-
     /// Describes one command or function.
-    fn describe(&self, name: &str, syntax: &str, description: Lines) -> exec::Result<()> {
+    fn describe_callable(&self, metadata: &CallableMetadata) -> exec::Result<()> {
         let mut console = self.console.borrow_mut();
         console.print("")?;
-        console.print(&format!("    {}{}", name, syntax))?;
-        for line in description {
+        if metadata.return_type() == VarType::Void {
+            if metadata.syntax().is_empty() {
+                console.print(&format!("    {}", metadata.name()))?
+            } else {
+                console.print(&format!("    {} {}", metadata.name(), metadata.syntax()))?
+            }
+        } else {
+            console.print(&format!(
+                "    {}{}({})",
+                metadata.name(),
+                metadata.return_type().annotation(),
+                metadata.syntax(),
+            ))?;
+        }
+        for line in metadata.description() {
             console.print("")?;
             console.print(&format!("    {}", line))?;
         }
         console.print("")?;
         Ok(())
-    }
-
-    /// Prints details about a single command.
-    fn describe_command(&self, command: &Rc<dyn BuiltinCommand>) -> exec::Result<()> {
-        let metadata = command.metadata();
-        let syntax = if metadata.syntax().is_empty() {
-            "".to_owned()
-        } else {
-            format!(" {}", metadata.syntax())
-        };
-        self.describe(metadata.name(), &syntax, metadata.description())
-    }
-
-    /// Prints details about a single command.
-    fn describe_function(&self, function: &Rc<dyn BuiltinFunction>) -> exec::Result<()> {
-        let metadata = function.metadata();
-        self.describe(
-            &format!("{}{}", metadata.name(), metadata.return_type().annotation()),
-            &format!("({})", metadata.syntax()),
-            metadata.description(),
-        )
     }
 
     /// Prints a quick reference of the language syntax.
@@ -257,12 +217,12 @@ impl BuiltinCommand for HelpCommand {
                     if vref.ref_type() != VarType::Auto {
                         return exec::new_usage_error("Topic name cannot have a type annotation");
                     }
-                    self.summarize_commands(commands)?;
+                    self.summarize_callables("command", commands.values().map(|c| c.metadata()))?;
                 } else if name == "FUNCTIONS" {
                     if vref.ref_type() != VarType::Auto {
                         return exec::new_usage_error("Topic name cannot have a type annotation");
                     }
-                    self.summarize_functions(functions)?;
+                    self.summarize_callables("function", functions.values().map(|f| f.metadata()))?;
                 } else if name == "LANG" {
                     if vref.ref_type() != VarType::Auto {
                         return exec::new_usage_error("Topic name cannot have a type annotation");
@@ -277,7 +237,7 @@ impl BuiltinCommand for HelpCommand {
                                 "Command name cannot have a type annotation",
                             );
                         }
-                        self.describe_command(command)?;
+                        self.describe_callable(command.metadata())?;
                         found = true;
                     }
                     if let Some(function) = &functions.get(name.as_str()) {
@@ -289,7 +249,7 @@ impl BuiltinCommand for HelpCommand {
                                 "Incompatible type annotation for function",
                             );
                         }
-                        self.describe_function(function)?;
+                        self.describe_callable(function.metadata())?;
                         found = true;
                     }
                     if !found {
