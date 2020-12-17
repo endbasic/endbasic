@@ -15,9 +15,10 @@
 
 //! Stored program manipulation and interactive editor.
 
-use crate::ast::{ArgSep, Expr, Value};
+use crate::ast::{ArgSep, Expr, Value, VarType};
 use crate::console::Console;
 use crate::editor::Editor;
+use crate::eval::{CallableMetadata, CallableMetadataBuilder};
 use crate::exec::{self, BuiltinCommand, Machine};
 use async_trait::async_trait;
 use std::cell::RefCell;
@@ -123,27 +124,32 @@ fn show_dir(store: &dyn Store, console: &mut dyn Console) -> io::Result<()> {
 
 /// The `DEL` command.
 struct DelCommand {
+    metadata: CallableMetadata,
     store: Rc<RefCell<dyn Store>>,
+}
+
+impl DelCommand {
+    /// Creates a new `DEL` command that deletes a file from the `store`.
+    pub fn new(store: Rc<RefCell<dyn Store>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("DEL", VarType::Void)
+                .with_syntax("filename")
+                .with_category("Stored program manipulation")
+                .with_description(
+                    "Deletes the given program.
+The filename must be a string and must be a basename (no directory components).  The .BAS \
+extension is optional, but if present, it must be .BAS.",
+                )
+                .build(),
+            store,
+        })
+    }
 }
 
 #[async_trait(?Send)]
 impl BuiltinCommand for DelCommand {
-    fn name(&self) -> &'static str {
-        "DEL"
-    }
-
-    fn category(&self) -> &'static str {
-        "Stored program manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        "filename"
-    }
-
-    fn description(&self) -> &'static str {
-        "Deletes the given program.
-The filename must be a string and must be a basename (no directory components).  The .BAS \
-extension is optional, but if present, it must be .BAS."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -168,26 +174,30 @@ extension is optional, but if present, it must be .BAS."
 
 /// The `DIR` command.
 struct DirCommand {
+    metadata: CallableMetadata,
     console: Rc<RefCell<dyn Console>>,
     store: Rc<RefCell<dyn Store>>,
 }
 
+impl DirCommand {
+    /// Creates a new `DIR` command that lists the contents of the `store` on the `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>, store: Rc<RefCell<dyn Store>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("DIR", VarType::Void)
+                .with_syntax("")
+                .with_category("Stored program manipulation")
+                .with_description("Displays the list of files on disk.")
+                .build(),
+            console,
+            store,
+        })
+    }
+}
+
 #[async_trait(?Send)]
 impl BuiltinCommand for DirCommand {
-    fn name(&self) -> &'static str {
-        "DIR"
-    }
-
-    fn category(&self) -> &'static str {
-        "Stored program manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        ""
-    }
-
-    fn description(&self) -> &'static str {
-        "Displays the list of files on disk."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -205,26 +215,30 @@ impl BuiltinCommand for DirCommand {
 
 /// The `EDIT` command.
 struct EditCommand {
+    metadata: CallableMetadata,
     console: Rc<RefCell<dyn Console>>,
     program: Rc<RefCell<dyn Program>>,
 }
 
+impl EditCommand {
+    /// Creates a new `EDIT` command that edits the stored `program` in the `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("EDIT", VarType::Void)
+                .with_syntax("")
+                .with_category("Stored program manipulation")
+                .with_description("Interactively edits the stored program.")
+                .build(),
+            console,
+            program,
+        })
+    }
+}
+
 #[async_trait(?Send)]
 impl BuiltinCommand for EditCommand {
-    fn name(&self) -> &'static str {
-        "EDIT"
-    }
-
-    fn category(&self) -> &'static str {
-        "Stored program manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        "[lineno%]"
-    }
-
-    fn description(&self) -> &'static str {
-        "Interactively edits the stored program."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -245,28 +259,34 @@ impl BuiltinCommand for EditCommand {
 
 /// The `LOAD` command.
 struct LoadCommand {
+    metadata: CallableMetadata,
     store: Rc<RefCell<dyn Store>>,
     program: Rc<RefCell<dyn Program>>,
 }
 
+impl LoadCommand {
+    /// Creates a new `LOAD` command that loads a program from the `store` into `program`.
+    pub fn new(store: Rc<RefCell<dyn Store>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("LOAD", VarType::Void)
+                .with_syntax("filename")
+                .with_category("Stored program manipulation")
+                .with_description(
+                    "Loads the given program.
+The filename must be a string and must be a basename (no directory components).  The .BAS \
+extension is optional, but if present, it must be .BAS.",
+                )
+                .build(),
+            store,
+            program,
+        })
+    }
+}
+
 #[async_trait(?Send)]
 impl BuiltinCommand for LoadCommand {
-    fn name(&self) -> &'static str {
-        "LOAD"
-    }
-
-    fn category(&self) -> &'static str {
-        "Stored program manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        "filename"
-    }
-
-    fn description(&self) -> &'static str {
-        "Loads the given program.
-The filename must be a string and must be a basename (no directory components).  The .BAS \
-extension is optional, but if present, it must be .BAS."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -293,25 +313,28 @@ extension is optional, but if present, it must be .BAS."
 
 /// The `NEW` command.
 struct NewCommand {
+    metadata: CallableMetadata,
     program: Rc<RefCell<dyn Program>>,
+}
+
+impl NewCommand {
+    /// Creates a new `NEW` command that clears the contents of `program`.
+    pub fn new(program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("NEW", VarType::Void)
+                .with_syntax("")
+                .with_category("Stored program manipulation")
+                .with_description("Clears the stored program from memory.")
+                .build(),
+            program,
+        })
+    }
 }
 
 #[async_trait(?Send)]
 impl BuiltinCommand for NewCommand {
-    fn name(&self) -> &'static str {
-        "NEW"
-    }
-
-    fn category(&self) -> &'static str {
-        "Stored program manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        ""
-    }
-
-    fn description(&self) -> &'static str {
-        "Clears the stored program from memory."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -330,27 +353,32 @@ impl BuiltinCommand for NewCommand {
 
 /// The `RUN` command.
 struct RunCommand {
+    metadata: CallableMetadata,
     program: Rc<RefCell<dyn Program>>,
+}
+
+impl RunCommand {
+    /// Creates a new `RUN` command that executes the `program`.
+    pub fn new(program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("RUN", VarType::Void)
+                .with_syntax("")
+                .with_category("Stored program manipulation")
+                .with_description(
+                    "Runs the stored program.
+Note that the program runs in the context of the interpreter so it will pick up any variables \
+and other state that may already be set.",
+                )
+                .build(),
+            program,
+        })
+    }
 }
 
 #[async_trait(?Send)]
 impl BuiltinCommand for RunCommand {
-    fn name(&self) -> &'static str {
-        "RUN"
-    }
-
-    fn category(&self) -> &'static str {
-        "Stored program manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        ""
-    }
-
-    fn description(&self) -> &'static str {
-        "Runs the stored program.
-Note that the program runs in the context of the interpreter so it will pick up any variables \
-and other state that may already be set."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -368,28 +396,34 @@ and other state that may already be set."
 
 /// The `SAVE` command.
 struct SaveCommand {
+    metadata: CallableMetadata,
     store: Rc<RefCell<dyn Store>>,
     program: Rc<RefCell<dyn Program>>,
 }
 
+impl SaveCommand {
+    /// Creates a new `SAVE` command that saves the contents of the `program` in the `store`.
+    pub fn new(store: Rc<RefCell<dyn Store>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("SAVE", VarType::Void)
+                .with_syntax("filename")
+                .with_category("Stored program manipulation")
+                .with_description(
+                    "Saves the current program in memory to the given filename.
+The filename must be a string and must be a basename (no directory components).  The .BAS \
+extension is optional, but if present, it must be .BAS.",
+                )
+                .build(),
+            store,
+            program,
+        })
+    }
+}
+
 #[async_trait(?Send)]
 impl BuiltinCommand for SaveCommand {
-    fn name(&self) -> &'static str {
-        "SAVE"
-    }
-
-    fn category(&self) -> &'static str {
-        "Stored program manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        "filename"
-    }
-
-    fn description(&self) -> &'static str {
-        "Saves the current program in memory to the given filename.
-The filename must be a string and must be a basename (no directory components).  The .BAS \
-extension is optional, but if present, it must be .BAS."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(
@@ -421,13 +455,13 @@ fn all_commands_for(
     store: Rc<RefCell<dyn Store>>,
 ) -> Vec<Rc<dyn BuiltinCommand>> {
     vec![
-        Rc::from(DelCommand { store: store.clone() }),
-        Rc::from(DirCommand { console: console.clone(), store: store.clone() }),
-        Rc::from(EditCommand { console: console.clone(), program: program.clone() }),
-        Rc::from(LoadCommand { store: store.clone(), program: program.clone() }),
-        Rc::from(NewCommand { program: program.clone() }),
-        Rc::from(RunCommand { program: program.clone() }),
-        Rc::from(SaveCommand { store: store.clone(), program }),
+        DelCommand::new(store.clone()),
+        DirCommand::new(console.clone(), store.clone()),
+        EditCommand::new(console.clone(), program.clone()),
+        LoadCommand::new(store.clone(), program.clone()),
+        NewCommand::new(program.clone()),
+        RunCommand::new(program.clone()),
+        SaveCommand::new(store, program),
     ]
 }
 
@@ -754,9 +788,8 @@ mod tests {
     fn test_new_clears_program_and_variables() {
         let program = Rc::from(RefCell::from(RecordedProgram::new("some stuff")));
 
-        let mut machine = MachineBuilder::default()
-            .add_command(Rc::from(NewCommand { program: program.clone() }))
-            .build();
+        let mut machine =
+            MachineBuilder::default().add_command(NewCommand::new(program.clone())).build();
 
         block_on(machine.exec(&mut b"NEW".as_ref())).unwrap();
         assert!(program.borrow().text().is_empty());
@@ -780,10 +813,9 @@ mod tests {
         let program = Rc::from(RefCell::from(RecordedProgram::new("OUT var\nvar = var + 1")));
 
         let captured_out = Rc::from(RefCell::from(vec![]));
-        let out_cmd = OutCommand::from(captured_out.clone());
         let mut machine = MachineBuilder::default()
-            .add_command(Rc::from(out_cmd))
-            .add_command(Rc::from(RunCommand { program }))
+            .add_command(OutCommand::new(captured_out.clone()))
+            .add_command(RunCommand::new(program))
             .build();
 
         block_on(machine.exec(&mut b"var = 7: RUN".as_ref())).unwrap();

@@ -111,7 +111,7 @@ Output from HELP DIR:
 
 Output from HELP EDIT:
 
-    EDIT [lineno%]
+    EDIT
 
     Interactively edits the stored program.
 

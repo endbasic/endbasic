@@ -16,7 +16,7 @@
 //! Execution engine for EndBASIC programs.
 
 use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
-use crate::eval::{self, BuiltinFunction, Vars};
+use crate::eval::{self, BuiltinFunction, CallableMetadata, CallableMetadataBuilder, Vars};
 use crate::parser::{self, Parser};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -67,19 +67,16 @@ pub fn new_usage_error<T, S: Into<String>>(message: S) -> Result<T> {
 /// The commands themselves are immutable but they can reference mutable state.  Given that
 /// EndBASIC is not threaded, it is sufficient for those references to be behind a `RefCell`
 /// and/or an `Rc`.
+///
+/// Idiomatically, these objects need to provide a `new()` method that returns an `Rc<Callable>`, as
+/// that's the type used throughout the execution engine.
 #[async_trait(?Send)]
 pub trait BuiltinCommand {
-    /// Returns the name of the command, all in uppercase letters.
-    fn name(&self) -> &'static str;
-
-    /// Returns the name of the command's category.
-    fn category(&self) -> &'static str;
-
-    /// Returns a specification of the command's syntax.
-    fn syntax(&self) -> &'static str;
-
-    /// Returns the usage message of the command.
-    fn description(&self) -> &'static str;
+    /// Returns the metadata for this command.
+    ///
+    /// The return value takes the form of a reference to force the callable to store the metadata
+    /// as a struct field so that calls to this function are guaranteed to be cheap.
+    fn metadata(&self) -> &CallableMetadata;
 
     /// Executes the command.
     ///
@@ -107,18 +104,12 @@ pub struct MachineBuilder {
 impl MachineBuilder {
     /// Registers the given builtin command, which must not yet be registered.
     pub fn add_command(mut self, command: Rc<dyn BuiltinCommand>) -> Self {
+        let metadata = command.metadata();
         assert!(
-            command.name() == command.name().to_ascii_uppercase(),
-            "Command name must be in uppercase"
-        );
-        assert!(
-            self.commands.get(&command.name()).is_none(),
+            self.commands.get(&metadata.name()).is_none(),
             "Command with the same name already registered"
         );
-        for l in command.description().lines() {
-            assert!(!l.is_empty(), "Description cannot contain empty lines");
-        }
-        self.commands.insert(command.name(), command);
+        self.commands.insert(metadata.name(), command);
         self
     }
 
@@ -337,25 +328,27 @@ impl Machine {
 }
 
 /// The `CLEAR` command.
-#[derive(Default)]
-pub struct ClearCommand {}
+pub struct ClearCommand {
+    metadata: CallableMetadata,
+}
+
+impl ClearCommand {
+    /// Creates a new `CLEAR` command that resets the state of the machine.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void)
+                .with_syntax("")
+                .with_category("Interpreter manipulation")
+                .with_description("Clears all variables to restore initial state.")
+                .build(),
+        })
+    }
+}
 
 #[async_trait(?Send)]
 impl BuiltinCommand for ClearCommand {
-    fn name(&self) -> &'static str {
-        "CLEAR"
-    }
-
-    fn category(&self) -> &'static str {
-        "Interpreter manipulation"
-    }
-
-    fn syntax(&self) -> &'static str {
-        ""
-    }
-
-    fn description(&self) -> &'static str {
-        "Clears all variables to restore initial state."
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
     }
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
@@ -377,32 +370,26 @@ pub(crate) mod testutils {
     /// Every time this command is invoked, it yields the next value from the `data` iterator and
     /// assigns it to the variable provided as its only argument.
     pub(crate) struct InCommand {
+        metadata: CallableMetadata,
         data: Box<RefCell<dyn Iterator<Item = &'static &'static str>>>,
     }
 
     impl InCommand {
         /// Creates a new command with the golden `data`.
-        pub(crate) fn from(data: Box<RefCell<dyn Iterator<Item = &'static &'static str>>>) -> Self {
-            Self { data }
+        pub(crate) fn new(
+            data: Box<RefCell<dyn Iterator<Item = &'static &'static str>>>,
+        ) -> Rc<Self> {
+            Rc::from(Self {
+                metadata: CallableMetadataBuilder::new("IN", VarType::Void).test_build(),
+                data,
+            })
         }
     }
 
     #[async_trait(?Send)]
     impl BuiltinCommand for InCommand {
-        fn name(&self) -> &'static str {
-            "IN"
-        }
-
-        fn category(&self) -> &'static str {
-            "Testing"
-        }
-
-        fn syntax(&self) -> &'static str {
-            "variableref"
-        }
-
-        fn description(&self) -> &'static str {
-            "See docstring for test code."
+        fn metadata(&self) -> &CallableMetadata {
+            &self.metadata
         }
 
         async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
@@ -430,32 +417,24 @@ pub(crate) mod testutils {
     /// This command only accepts arguments separated by the `;` short separator and concatenates
     /// them with a single space.
     pub(crate) struct OutCommand {
+        metadata: CallableMetadata,
         data: Rc<RefCell<Vec<String>>>,
     }
 
     impl OutCommand {
         /// Creates a new command that captures all calls into `data`.
-        pub(crate) fn from(data: Rc<RefCell<Vec<String>>>) -> Self {
-            Self { data }
+        pub(crate) fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
+            Rc::from(Self {
+                metadata: CallableMetadataBuilder::new("OUT", VarType::Void).test_build(),
+                data,
+            })
         }
     }
 
     #[async_trait(?Send)]
     impl BuiltinCommand for OutCommand {
-        fn name(&self) -> &'static str {
-            "OUT"
-        }
-
-        fn category(&self) -> &'static str {
-            "Testing"
-        }
-
-        fn syntax(&self) -> &'static str {
-            "[expr1 [; .. exprN]]"
-        }
-
-        fn description(&self) -> &'static str {
-            "See docstring for test code."
+        fn metadata(&self) -> &CallableMetadata {
+            &self.metadata
         }
 
         async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
@@ -550,11 +529,9 @@ mod tests {
         golden_in: &'static [&'static str],
         captured_out: Rc<RefCell<Vec<String>>>,
     ) -> Result<()> {
-        let in_cmd = InCommand::from(Box::from(RefCell::from(golden_in.iter())));
-        let out_cmd = OutCommand::from(captured_out);
         let mut machine = MachineBuilder::default()
-            .add_command(Rc::from(in_cmd))
-            .add_command(Rc::from(out_cmd))
+            .add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))))
+            .add_command(OutCommand::new(captured_out))
             .add_function(SumFunction::new())
             .build();
         block_on(machine.exec(&mut input.as_bytes()))
@@ -854,7 +831,7 @@ mod tests {
 
     #[test]
     fn test_clear_ok() {
-        let mut machine = MachineBuilder::default().add_command(Rc::from(ClearCommand {})).build();
+        let mut machine = MachineBuilder::default().add_command(ClearCommand::new()).build();
         block_on(machine.exec(&mut b"a = 1".as_ref())).unwrap();
         assert!(machine.get_var_as_int("a").is_ok());
         block_on(machine.exec(&mut b"CLEAR".as_ref())).unwrap();
@@ -863,7 +840,7 @@ mod tests {
 
     #[test]
     fn test_clear_errors() {
-        let mut machine = MachineBuilder::default().add_command(Rc::from(ClearCommand {})).build();
+        let mut machine = MachineBuilder::default().add_command(ClearCommand::new()).build();
         assert_eq!(
             "CLEAR takes no arguments",
             format!("{}", block_on(machine.exec(&mut b"CLEAR 123".as_ref())).unwrap_err())
