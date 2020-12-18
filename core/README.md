@@ -36,8 +36,11 @@ currently supports:
 *   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` statements.
 *   `FOR x = ... TO ... [STEP ...]` / `NEXT` loops.
 *   `WHILE ...` / `END WHILE` loops.
-*   `INPUT` and `PRINT` builtins.
 *   UTF-8 everywhere (I think).
+*   Commands:
+    *   Console: `CLS`, `COLOR`, `INPUT`, `LOCATE`, `PRINT`.
+    *   Interpreter: `CLEAR`, `EXIT`, `HELP`.
+    *   Program: `DEL`, `DIR`, `EDIT`, `LOAD`, `NEW`, `RUN`, `SAVE`.
 
 ## Implementation features
 
