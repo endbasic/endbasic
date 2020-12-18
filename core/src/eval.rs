@@ -21,6 +21,36 @@ use std::mem;
 use std::rc::Rc;
 use std::str::Lines;
 
+/// Function execution errors.
+///
+/// These are separate from the more generic `Error` type because they are not annotated with the
+/// specific function that triggered the error.  We add such annotation once we capture the error
+/// within the evaluation logic.
+#[derive(Debug)]
+pub enum FunctionError {
+    /// A specific parameter had an invalid value.
+    ArgumentError(String),
+
+    /// Error while evaluating input arguments.
+    EvalError(Error),
+
+    /// Any other error not representable by other values.
+    InternalError(String),
+
+    /// General mismatch of parameters given to the function with expectations (different numbers,
+    /// invalid types).
+    SyntaxError,
+}
+
+impl From<Error> for FunctionError {
+    fn from(e: Error) -> Self {
+        Self::EvalError(e)
+    }
+}
+
+/// Result for function evaluation return values.
+pub type FunctionResult = std::result::Result<Value, FunctionError>;
+
 /// Evaluation errors.
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
@@ -32,6 +62,21 @@ impl Error {
     /// Constructs a new evaluation error from a textual `message`.
     fn new<S: Into<String>>(message: S) -> Self {
         Self { message: message.into() }
+    }
+
+    /// Annotates a function evaluation error with the function's metadata.
+    fn from_function_error(md: &CallableMetadata, e: FunctionError) -> Self {
+        let message = match e {
+            FunctionError::ArgumentError(e) => {
+                format!("Syntax error in call to {}: {}", md.name(), e)
+            }
+            FunctionError::EvalError(e) => format!("Error in call to {}: {}", md.name(), e),
+            FunctionError::InternalError(e) => format!("Error in call to {}: {}", md.name(), e),
+            FunctionError::SyntaxError => {
+                format!("Syntax error in call to {}: expected {}", md.name(), md.syntax())
+            }
+        };
+        Self { message }
     }
 }
 
@@ -422,7 +467,7 @@ pub trait BuiltinFunction {
     /// Executes the function.
     ///
     /// `args` contains the evaluated arguments as provided in the invocation of the function.
-    fn exec(&self, args: Vec<Value>) -> Result<Value>;
+    fn exec(&self, args: Vec<Value>) -> FunctionResult;
 }
 
 impl Expr {
@@ -474,20 +519,24 @@ impl Expr {
                         values.push(a.eval(vars, fs)?);
                     }
                     let result = f.exec(values);
-                    if let Ok(value) = result.as_ref() {
-                        debug_assert!(metadata.return_type() != VarType::Auto);
-                        let fref = VarRef::new(fref.name(), metadata.return_type());
-                        // Given that we only support built-in functions at the moment, this could
-                        // well be an assertion.  Doing so could turn into a time bomb when/if we
-                        // add user-defined functions, so handle the problem as an error.
-                        if !fref.accepts(&value) {
-                            return Err(Error::new(format!(
-                                "Value returned by {} is incompatible with its type definition",
-                                fref.name(),
-                            )));
+                    match result {
+                        Ok(value) => {
+                            debug_assert!(metadata.return_type() != VarType::Auto);
+                            let fref = VarRef::new(fref.name(), metadata.return_type());
+                            // Given that we only support built-in functions at the moment, this
+                            // could well be an assertion.  Doing so could turn into a time bomb
+                            // when/if we add user-defined functions, so handle the problem as an
+                            // error.
+                            if !fref.accepts(&value) {
+                                return Err(Error::new(format!(
+                                    "Value returned by {} is incompatible with its type definition",
+                                    fref.name(),
+                                )));
+                            }
+                            Ok(value)
                         }
+                        Err(e) => Err(Error::from_function_error(&metadata, e)),
                     }
-                    result
                 }
                 None => Err(Error::new(format!("Unknown function {}", fref))),
             },
@@ -517,7 +566,7 @@ pub(crate) mod testutils {
             &self.metadata
         }
 
-        fn exec(&self, args: Vec<Value>) -> Result<Value> {
+        fn exec(&self, args: Vec<Value>) -> FunctionResult {
             let mut result = Value::Integer(0);
             for a in args {
                 result = result.add(&a)?;
@@ -547,11 +596,49 @@ pub(crate) mod testutils {
             &self.metadata
         }
 
-        fn exec(&self, args: Vec<Value>) -> Result<Value> {
-            if !args.is_empty() {
-                return Err(Error::new("Too many arguments"));
-            }
+        fn exec(&self, args: Vec<Value>) -> FunctionResult {
+            assert!(args.is_empty());
             Ok(self.value.clone())
+        }
+    }
+
+    /// Returns the error type asked for in an argument.
+    pub(crate) struct ErrorFunction {
+        metadata: CallableMetadata,
+    }
+
+    impl ErrorFunction {
+        pub(crate) fn new() -> Rc<Self> {
+            Rc::from(Self {
+                metadata: CallableMetadataBuilder::new("ERROR", VarType::Boolean)
+                    .with_syntax("arg1$")
+                    .test_build(),
+            })
+        }
+    }
+
+    impl BuiltinFunction for ErrorFunction {
+        fn metadata(&self) -> &CallableMetadata {
+            &self.metadata
+        }
+
+        fn exec(&self, args: Vec<Value>) -> FunctionResult {
+            match args.as_slice() {
+                [Value::Text(s)] => {
+                    if s == "argument" {
+                        Err(FunctionError::ArgumentError("Bad argument".to_owned()))
+                    } else if s == "eval" {
+                        Err(Error::new("Some eval error").into())
+                    } else if s == "internal" {
+                        Err(FunctionError::InternalError("Some internal error".to_owned()))
+                    } else if s == "syntax" {
+                        Err(FunctionError::SyntaxError)
+                    } else {
+                        panic!("Unknown argument");
+                    }
+                }
+                _ => panic!("Invalid arguments"),
+            }
         }
     }
 }
@@ -1573,5 +1660,66 @@ mod tests {
                 )
             );
         }
+    }
+
+    #[test]
+    fn test_expr_function_error_check() {
+        let vars = Vars::default();
+
+        let mut fs: HashMap<&'static str, Rc<dyn BuiltinFunction>> = HashMap::default();
+        let ef = ErrorFunction::new();
+        fs.insert(ef.metadata().name(), ef);
+
+        assert_eq!(
+            "Syntax error in call to ERROR: Bad argument",
+            format!(
+                "{}",
+                Expr::Call(
+                    VarRef::new("ERROR".to_owned(), VarType::Auto),
+                    vec![Expr::Text("argument".to_owned())],
+                )
+                .eval(&vars, &fs)
+                .unwrap_err()
+            )
+        );
+
+        assert_eq!(
+            "Error in call to ERROR: Some eval error",
+            format!(
+                "{}",
+                Expr::Call(
+                    VarRef::new("ERROR".to_owned(), VarType::Auto),
+                    vec![Expr::Text("eval".to_owned())],
+                )
+                .eval(&vars, &fs)
+                .unwrap_err()
+            )
+        );
+
+        assert_eq!(
+            "Error in call to ERROR: Some internal error",
+            format!(
+                "{}",
+                Expr::Call(
+                    VarRef::new("ERROR".to_owned(), VarType::Auto),
+                    vec![Expr::Text("internal".to_owned())],
+                )
+                .eval(&vars, &fs)
+                .unwrap_err()
+            )
+        );
+
+        assert_eq!(
+            "Syntax error in call to ERROR: expected arg1$",
+            format!(
+                "{}",
+                Expr::Call(
+                    VarRef::new("ERROR".to_owned(), VarType::Auto),
+                    vec![Expr::Text("syntax".to_owned())],
+                )
+                .eval(&vars, &fs)
+                .unwrap_err()
+            )
+        );
     }
 }
