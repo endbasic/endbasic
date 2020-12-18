@@ -60,11 +60,15 @@ pub enum Token {
     Or,
     Xor,
 
-    If,
     Else,
     Elseif,
-    Then,
     End,
+    For,
+    If,
+    Next,
+    Step,
+    Then,
+    To,
     While,
 }
 
@@ -234,12 +238,16 @@ impl<'a> Lexer<'a> {
             "ELSEIF" => Ok(Token::Elseif),
             "END" => Ok(Token::End),
             "FALSE" => Ok(Token::Boolean(false)),
+            "FOR" => Ok(Token::For),
             "IF" => Ok(Token::If),
             "MOD" => Ok(Token::Modulo),
+            "NEXT" => Ok(Token::Next),
             "NOT" => Ok(Token::Not),
             "OR" => Ok(Token::Or),
             "REM" => self.consume_rest_of_line(),
+            "STEP" => Ok(Token::Step),
             "THEN" => Ok(Token::Then),
+            "TO" => Ok(Token::To),
             "TRUE" => Ok(Token::Boolean(true)),
             "WHILE" => Ok(Token::While),
             "XOR" => Ok(Token::Xor),
@@ -557,6 +565,13 @@ mod tests {
             "if then elseif else end if",
             &[Token::If, Token::Then, Token::Elseif, Token::Else, Token::End, Token::If],
         );
+    }
+
+    #[test]
+    fn test_for() {
+        do_ok_test("FOR TO STEP NEXT", &[Token::For, Token::To, Token::Step, Token::Next]);
+
+        do_ok_test("for to step next", &[Token::For, Token::To, Token::Step, Token::Next]);
     }
 
     #[test]

@@ -27,3 +27,13 @@ END WHILE
 IF i = 5 THEN
     PRINT "Done!"
 END IF
+
+FOR i = 0 TO 3
+    FOR j = 15 TO 10 STEP -2
+        PRINT i; j
+    NEXT
+NEXT
+
+IF i = 4 AND j = 9 THEN
+    PRINT "Also done!"
+END IF
