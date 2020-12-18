@@ -17,6 +17,9 @@ not adhere to semantic versioning until 1.0.0.**
 
 *   Added support for calls to builtin functions within expressions.
 
+*   Added string manipulation functions: `LEFT`, `LEN`, `LTRIM`, `MID`,
+    `RIGHT` and `RTRIM`.
+
 *   Fixed the expression parser to detect and report unbalanced parenthesis.
 
 ## Changes in version 0.3.1

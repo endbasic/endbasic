@@ -44,6 +44,14 @@ Output from HELP COMMANDS:
 
 Output from HELP FUNCTIONS:
 
+    >> String manipulation <<
+    LEFT$     Returns a given number of characters from the left side of a string.
+    LEN%      Returns the length of the string in expr$.
+    LTRIM$    Returns a copy of a string with leading whitespace removed.
+    MID$      Returns a portion of a string.
+    RIGHT$    Returns a given number of characters from the right side of a string.
+    RTRIM$    Returns a copy of a string with trailing whitespace removed.
+
     Type HELP followed by a function name for details on that function.
 
 Output from HELP LANG:
@@ -186,5 +194,55 @@ Output from HELP SAVE:
     Saves the current program in memory to the given filename.
 
     The filename must be a string and must be a basename (no directory components).  The .BAS extension is optional, but if present, it must be .BAS.
+
+Output from HELP LEFT:
+
+    LEFT$(expr$, n%)
+
+    Returns a given number of characters from the left side of a string.
+
+    If n% is 0, returns an empty string.
+
+    If n% is greater than or equal to the number of characters in expr$, returns expr$.
+
+Output from HELP LEN:
+
+    LEN%(expr$)
+
+    Returns the length of the string in expr$.
+
+Output from HELP LTRIM:
+
+    LTRIM$(expr$)
+
+    Returns a copy of a string with leading whitespace removed.
+
+Output from HELP MID:
+
+    MID$(expr$, start%[, length%])
+
+    Returns a portion of a string.
+
+    start% indicates the starting position of the substring to extract and it is 1-indexed.
+
+    length% indicates the number of characters to extract and, if not specified, defaults to extracting
+
+    until the end of the string.
+
+Output from HELP RIGHT:
+
+    RIGHT$(expr$, n%)
+
+    Returns a given number of characters from the right side of a string.
+
+    If n% is 0, returns an empty string.
+
+    If n% is greater than or equal to the number of characters in expr$, returns expr$.
+
+Output from HELP RTRIM:
+
+    RTRIM$(expr$)
+
+    Returns a copy of a string with trailing whitespace removed.
 
 End of input by CTRL-D
