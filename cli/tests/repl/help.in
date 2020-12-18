@@ -89,4 +89,20 @@ HELP SAVE
 ' Help on functions.
 '
 
-' None yet.
+PRINT "Output from HELP LEFT:"
+HELP LEFT
+
+PRINT "Output from HELP LEN:"
+HELP LEN
+
+PRINT "Output from HELP LTRIM:"
+HELP LTRIM
+
+PRINT "Output from HELP MID:"
+HELP MID
+
+PRINT "Output from HELP RIGHT:"
+HELP RIGHT
+
+PRINT "Output from HELP RTRIM:"
+HELP RTRIM

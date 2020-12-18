@@ -32,3 +32,4 @@ mod parser;
 pub mod program;
 mod reader;
 pub mod repl;
+pub mod strings;

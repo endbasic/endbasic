@@ -41,6 +41,8 @@ currently supports:
     *   Console: `CLS`, `COLOR`, `INPUT`, `LOCATE`, `PRINT`.
     *   Interpreter: `CLEAR`, `EXIT`, `HELP`.
     *   Program: `DEL`, `DIR`, `EDIT`, `LOAD`, `NEW`, `RUN`, `SAVE`.
+*   Functions:
+    *   Strings: `LEFT`, `LEN`, `LTRIM`, `MID`, `RIGHT`, `RTRIM`.
 
 ## Implementation features
 
