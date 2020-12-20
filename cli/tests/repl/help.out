@@ -10,15 +10,6 @@ Output from HELP:
     Project page at <https://github.com/jmmv/endbasic>
     License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>
 
-    >> Help topics <<
-    COMMANDS     Summary of all builtin commands.
-    FUNCTIONS    Summary of all builtin functions.
-    LANG         Language reference guide.
-
-    Type HELP followed by a topic, command, or function name for details.
-
-Output from HELP COMMANDS:
-
     >> Console manipulation <<
     CLS       Clears the screen.
     COLOR     Sets the foreground and background colors.
@@ -40,10 +31,6 @@ Output from HELP COMMANDS:
     RUN       Runs the stored program.
     SAVE      Saves the current program in memory to the given filename.
 
-    Type HELP followed by a command name for details on that command.
-
-Output from HELP FUNCTIONS:
-
     >> String manipulation <<
     LEFT$     Returns a given number of characters from the left side of a string.
     LEN%      Returns the length of the string in expr$.
@@ -52,7 +39,8 @@ Output from HELP FUNCTIONS:
     RIGHT$    Returns a given number of characters from the right side of a string.
     RTRIM$    Returns a copy of a string with trailing whitespace removed.
 
-    Type HELP followed by a function name for details on that function.
+    Type HELP followed by a command or function name for details.
+    Type HELP LANG for a quick reference guide about the language.
 
 Output from HELP LANG:
 
