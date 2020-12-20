@@ -116,6 +116,7 @@ fn run<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
     let mut machine = endbasic_core::exec::MachineBuilder::default()
         .add_command(endbasic_core::repl::ExitCommand::new(exit_code.clone()))
         .add_commands(endbasic_core::console::all_commands(console))
+        .add_functions(endbasic_core::strings::all_functions())
         .build();
 
     let mut input = File::open(path)?;
