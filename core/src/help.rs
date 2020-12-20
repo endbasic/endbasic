@@ -21,7 +21,7 @@ use crate::eval::{BuiltinFunction, CallableMetadata, CallableMetadataBuilder};
 use crate::exec::{self, BuiltinCommand, Machine};
 use async_trait::async_trait;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
 /// Cheat-sheet for the language syntax.
@@ -54,6 +54,60 @@ const LANG_REFERENCE: &str = r"
         ;           Short separator for arguments to builtin call.
 ";
 
+/// Returns the header for the help summary.
+fn header() -> String {
+    format!(
+        "
+    EndBASIC {}
+    Copyright 2020 Julio Merino
+
+    Project page at <{}>
+    License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>
+",
+        env!("CARGO_PKG_VERSION"),
+        env!("CARGO_PKG_HOMEPAGE")
+    )
+}
+
+/// Computes a unified collection of metadata objects for all given `commands` and `functions`.
+// TODO(jmmv): This is a code smell from the lack of genericity between commands and functions.
+// If we can homogenize their representation, this should go away.
+fn compute_callables<'a>(
+    commands: &'a HashMap<&'static str, Rc<dyn BuiltinCommand>>,
+    functions: &'a HashMap<&'static str, Rc<dyn BuiltinFunction>>,
+) -> HashMap<&'static str, &'a CallableMetadata> {
+    let mut callables: HashMap<&'static str, &'a CallableMetadata> = HashMap::default();
+    for (name, command) in commands.iter() {
+        assert!(!callables.contains_key(name), "Command names are in a map; must be unique");
+        callables.insert(&name, command.metadata());
+    }
+    for (name, function) in functions.iter() {
+        assert!(!callables.contains_key(name), "Command and function names are not disjoint");
+        callables.insert(&name, function.metadata());
+    }
+    callables
+}
+
+/// Builds the index of commands needed to print the summary.
+///
+/// The return value is the index in the form of a (category name -> (name, blurb)) mapping,
+/// followed by the length of the longest command name that was found.
+fn build_index(
+    callables: &HashMap<&'static str, &CallableMetadata>,
+) -> (BTreeMap<&'static str, BTreeMap<String, &'static str>>, usize) {
+    let mut index = BTreeMap::default();
+    let mut max_length = 0;
+    for metadata in callables.values() {
+        let name = format!("{}{}", metadata.name(), metadata.return_type().annotation());
+        if name.len() > max_length {
+            max_length = name.len();
+        }
+        let blurb = metadata.description().next().unwrap();
+        index.entry(metadata.category()).or_insert_with(BTreeMap::default).insert(name, blurb);
+    }
+    (index, max_length)
+}
+
 /// The `HELP` command.
 pub struct HelpCommand {
     metadata: CallableMetadata,
@@ -79,50 +133,15 @@ function.",
     }
 
     /// Prints a summary of all available help topics.
-    fn summary(&self) -> exec::Result<()> {
-        let mut console = self.console.borrow_mut();
-        console.print("")?;
-        console.print(&format!("    EndBASIC {}", env!("CARGO_PKG_VERSION")))?;
-        console.print("    Copyright 2020 Julio Merino")?;
-        console.print("")?;
-        console.print(&format!("    Project page at <{}>", env!("CARGO_PKG_HOMEPAGE")))?;
-        console
-            .print("    License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>")?;
-        console.print("")?;
-        console.print("    >> Help topics <<")?;
-        console.print("    COMMANDS     Summary of all builtin commands.")?;
-        console.print("    FUNCTIONS    Summary of all builtin functions.")?;
-        console.print("    LANG         Language reference guide.")?;
-        console.print("")?;
-        console
-            .print("    Type HELP followed by a topic, command, or function name for details.")?;
-        console.print("")?;
-        Ok(())
-    }
+    fn summary(&self, callables: &HashMap<&'static str, &CallableMetadata>) -> exec::Result<()> {
+        let (index, max_length) = build_index(callables);
 
-    /// Prints a summary of all available callables of a given type `what`.
-    fn summarize_callables<'a, MD: Iterator<Item = &'a CallableMetadata>>(
-        &self,
-        what: &str,
-        callables: MD,
-    ) -> exec::Result<()> {
-        let mut by_category: BTreeMap<&'static str, BTreeMap<String, &'static str>> =
-            BTreeMap::new();
-        let mut max_length = 0;
-        for metadata in callables {
-            let name = format!("{}{}", metadata.name(), metadata.return_type().annotation());
-            if name.len() > max_length {
-                max_length = name.len();
-            }
-            let blurb = metadata.description().next().unwrap();
-            by_category
-                .entry(metadata.category())
-                .or_insert_with(BTreeMap::new)
-                .insert(name, blurb);
+        let mut console = self.console.borrow_mut();
+        for line in header().lines() {
+            console.print(line)?;
         }
 
-        let mut console = self.console.borrow_mut();
-        for (category, by_name) in by_category.iter() {
+        for (category, by_name) in index.iter() {
             console.print("")?;
             console.print(&format!("    >> {} <<", category))?;
             for (name, blurb) in by_name.iter() {
@@ -130,11 +149,10 @@ function.",
                 console.print(&format!("    {}{}    {}", name, filler, blurb))?;
             }
         }
+
         console.print("")?;
-        console.print(&format!(
-            "    Type HELP followed by a {} name for details on that {}.",
-            what, what,
-        ))?;
+        console.print("    Type HELP followed by a command or function name for details.")?;
+        console.print("    Type HELP LANG for a quick reference guide about the language.")?;
         console.print("")?;
         Ok(())
     }
@@ -175,22 +193,6 @@ function.",
         console.print("")?;
         Ok(())
     }
-
-    /// Checks if all command and function names are unique after discarding type annotations.
-    // TODO(jmmv): This is a code smell from the lack of genericity between commands and functions.
-    // If we can homogenize their representation, this should go away.
-    fn all_names_unique(
-        commands: &HashMap<&'static str, Rc<dyn BuiltinCommand>>,
-        functions: &HashMap<&'static str, Rc<dyn BuiltinFunction>>,
-    ) -> bool {
-        let names: HashSet<&&'static str> = commands.keys().collect();
-        for name in functions.keys() {
-            if names.contains(&name) {
-                return false;
-            }
-        }
-        true
-    }
 }
 
 #[async_trait(?Send)]
@@ -204,59 +206,32 @@ impl BuiltinCommand for HelpCommand {
         args: &[(Option<Expr>, ArgSep)],
         machine: &mut Machine,
     ) -> exec::Result<()> {
-        let commands = machine.get_commands();
-        let functions = machine.get_functions();
-        debug_assert!(HelpCommand::all_names_unique(commands, functions));
+        let callables = compute_callables(machine.get_commands(), machine.get_functions());
         match args {
-            [] => {
-                self.summary()?;
-            }
+            [] => self.summary(&callables)?,
             [(Some(Expr::Symbol(vref)), ArgSep::End)] => {
                 let name = vref.name().to_ascii_uppercase();
-                if name == "COMMANDS" {
+                if name == "LANG" {
                     if vref.ref_type() != VarType::Auto {
-                        return exec::new_usage_error("Topic name cannot have a type annotation");
-                    }
-                    self.summarize_callables("command", commands.values().map(|c| c.metadata()))?;
-                } else if name == "FUNCTIONS" {
-                    if vref.ref_type() != VarType::Auto {
-                        return exec::new_usage_error("Topic name cannot have a type annotation");
-                    }
-                    self.summarize_callables("function", functions.values().map(|f| f.metadata()))?;
-                } else if name == "LANG" {
-                    if vref.ref_type() != VarType::Auto {
-                        return exec::new_usage_error("Topic name cannot have a type annotation");
+                        return exec::new_usage_error("Incompatible type annotation");
                     }
                     self.describe_lang()?;
                 } else {
-                    let mut found = false;
-                    if let Some(command) = &commands.get(name.as_str()) {
-                        debug_assert!(!found);
-                        if vref.ref_type() != VarType::Auto {
-                            return exec::new_usage_error(
-                                "Command name cannot have a type annotation",
-                            );
+                    match callables.get(name.as_str()) {
+                        Some(metadata) => {
+                            if vref.ref_type() != VarType::Auto
+                                && vref.ref_type() != metadata.return_type()
+                            {
+                                return exec::new_usage_error("Incompatible type annotation");
+                            }
+                            self.describe_callable(metadata)?;
                         }
-                        self.describe_callable(command.metadata())?;
-                        found = true;
-                    }
-                    if let Some(function) = &functions.get(name.as_str()) {
-                        debug_assert!(!found);
-                        if vref.ref_type() != VarType::Auto
-                            && vref.ref_type() != function.metadata().return_type()
-                        {
-                            return exec::new_usage_error(
-                                "Incompatible type annotation for function",
-                            );
+                        None => {
+                            return exec::new_usage_error(format!(
+                                "Cannot describe unknown command or function {}",
+                                name
+                            ))
                         }
-                        self.describe_callable(function.metadata())?;
-                        found = true;
-                    }
-                    if !found {
-                        return exec::new_usage_error(format!(
-                            "Cannot describe unknown builtin or function {}",
-                            name
-                        ));
                     }
                 }
             }
@@ -378,46 +353,28 @@ mod tests {
     }
 
     #[test]
-    fn test_help_summarize_commands() {
+    fn test_help_summarize_callables() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
         let mut machine = MachineBuilder::default()
             .add_command(HelpCommand::new(console.clone()))
             .add_command(DoNothingCommand::new())
+            .add_function(EmptyFunction::new())
             .build();
-        block_on(machine.exec(&mut b"HELP COMMANDS".as_ref())).unwrap();
+        block_on(machine.exec(&mut b"HELP".as_ref())).unwrap();
 
         let text = flatten_captured_out(console.borrow().captured_out());
         assert_eq!(
-            "
+            header()
+                + "
     >> Interpreter manipulation <<
     HELP          Prints interactive help.
 
     >> Testing <<
     DO_NOTHING    This is the blurb.
+    EMPTY$        This is the blurb.
 
-    Type HELP followed by a command name for details on that command.
-
-",
-            text
-        );
-    }
-
-    #[test]
-    fn test_help_summarize_functions() {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
-        let mut machine = MachineBuilder::default()
-            .add_command(HelpCommand::new(console.clone()))
-            .add_function(EmptyFunction::new())
-            .build();
-        block_on(machine.exec(&mut b"HELP FUNCTIONS".as_ref())).unwrap();
-
-        let text = flatten_captured_out(console.borrow().captured_out());
-        assert_eq!(
-            "
-    >> Testing <<
-    EMPTY$    This is the blurb.
-
-    Type HELP followed by a function name for details on that function.
+    Type HELP followed by a command or function name for details.
+    Type HELP LANG for a quick reference guide about the language.
 
 ",
             text
@@ -501,14 +458,12 @@ mod tests {
         do_error_test("HELP foo bar", "Unexpected value in expression");
         do_error_test("HELP foo, bar", "HELP takes zero or only one argument");
 
-        do_error_test("HELP commands%", "Topic name cannot have a type annotation");
-        do_error_test("HELP functions%", "Topic name cannot have a type annotation");
-        do_error_test("HELP lang%", "Topic name cannot have a type annotation");
+        do_error_test("HELP lang%", "Incompatible type annotation");
 
-        do_error_test("HELP foo$", "Cannot describe unknown builtin or function FOO");
-        do_error_test("HELP foo", "Cannot describe unknown builtin or function FOO");
+        do_error_test("HELP foo$", "Cannot describe unknown command or function FOO");
+        do_error_test("HELP foo", "Cannot describe unknown command or function FOO");
 
-        do_error_test("HELP do_nothing$", "Command name cannot have a type annotation");
-        do_error_test("HELP empty?", "Incompatible type annotation for function");
+        do_error_test("HELP do_nothing$", "Incompatible type annotation");
+        do_error_test("HELP empty?", "Incompatible type annotation");
     }
 }
