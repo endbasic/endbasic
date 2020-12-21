@@ -43,6 +43,7 @@ currently supports:
     *   Interpreter: `CLEAR`, `EXIT`, `HELP`.
     *   Program: `DEL`, `DIR`, `EDIT`, `LOAD`, `NEW`, `RUN`, `SAVE`.
 *   Functions:
+    *   Numerics: `DTOI`, `ITOD`.
     *   Strings: `LEFT`, `LEN`, `LTRIM`, `MID`, `RIGHT`, `RTRIM`.
 
 ## Implementation features

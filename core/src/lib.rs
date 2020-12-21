@@ -28,6 +28,7 @@ pub mod eval;
 pub mod exec;
 pub mod help;
 mod lexer;
+pub mod numerics;
 mod parser;
 pub mod program;
 mod reader;

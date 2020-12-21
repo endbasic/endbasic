@@ -83,6 +83,12 @@ HELP SAVE
 ' Help on functions.
 '
 
+PRINT "Output from HELP DTOI:"
+HELP DTOI
+
+PRINT "Output from HELP ITOD:"
+HELP ITOD
+
 PRINT "Output from HELP LEFT:"
 HELP LEFT
 

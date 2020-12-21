@@ -20,6 +20,7 @@ use crate::console::{self, Console};
 use crate::eval::{CallableMetadata, CallableMetadataBuilder};
 use crate::exec::{self, BuiltinCommand, ClearCommand, Machine, MachineBuilder};
 use crate::help::HelpCommand;
+use crate::numerics;
 use crate::program::{self, Store};
 use crate::strings;
 use async_trait::async_trait;
@@ -106,6 +107,7 @@ pub async fn run_repl_loop(
         .add_command(HelpCommand::new(console.clone()))
         .add_commands(console::all_commands(console.clone()))
         .add_commands(program::all_commands(console.clone(), store))
+        .add_functions(numerics::all_functions())
         .add_functions(strings::all_functions())
         .build();
 
