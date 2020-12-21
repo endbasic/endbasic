@@ -22,6 +22,10 @@ Output from HELP:
     EXIT      Exits the interpreter.
     HELP      Prints interactive help.
 
+    >> Numerical manipulation <<
+    DTOI%     Rounds the given double to the closest integer.
+    ITOD#     Converts the given integer to a double.
+
     >> Stored program manipulation <<
     DEL       Deletes the given program.
     DIR       Displays the list of files on disk.
@@ -182,6 +186,20 @@ Output from HELP SAVE:
     Saves the current program in memory to the given filename.
 
     The filename must be a string and must be a basename (no directory components).  The .BAS extension is optional, but if present, it must be .BAS.
+
+Output from HELP DTOI:
+
+    DTOI%(expr#)
+
+    Rounds the given double to the closest integer.
+
+    If the value is too small or too big to fit in the integer's range, returns the smallest or biggest possible integer that fits, respectively.
+
+Output from HELP ITOD:
+
+    ITOD#(expr%)
+
+    Converts the given integer to a double.
 
 Output from HELP LEFT:
 

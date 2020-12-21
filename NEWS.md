@@ -20,6 +20,8 @@ not adhere to semantic versioning until 1.0.0.**
 *   Added string manipulation functions: `LEFT`, `LEN`, `LTRIM`, `MID`,
     `RIGHT` and `RTRIM`.
 
+*   Added numerical functions: `DTOI` and `ITOD`.
+
 *   Fixed the expression parser to properly handle subtractions where the first
     operand is a negative number.
 
@@ -28,7 +30,8 @@ not adhere to semantic versioning until 1.0.0.**
 *   Added support for double-precision floating point numbers (`#` type
     annotation).  This feature is likely incomplete in many ways but is needed
     for random number generation, for example.  Notably, numeric type promotion
-    is not implemented.
+    is not implemented, but the new `ITOD` AND `DTOI` functions help in
+    converting from integers to doubles and back.
 
 ## Changes in version 0.3.1
 
