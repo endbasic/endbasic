@@ -101,15 +101,17 @@ pub async fn run_repl_loop(
     banner: &[&str],
 ) -> io::Result<i32> {
     let exit_code = Rc::from(RefCell::from(None));
-    let mut machine = MachineBuilder::default()
-        .add_command(ClearCommand::new())
-        .add_command(ExitCommand::new(exit_code.clone()))
-        .add_command(HelpCommand::new(console.clone()))
-        .add_commands(console::all_commands(console.clone()))
-        .add_commands(program::all_commands(console.clone(), store))
-        .add_functions(numerics::all_functions())
-        .add_functions(strings::all_functions())
-        .build();
+    let mut machine = {
+        let mut builder = MachineBuilder::default()
+            .add_command(ClearCommand::new())
+            .add_command(ExitCommand::new(exit_code.clone()))
+            .add_command(HelpCommand::new(console.clone()))
+            .add_commands(console::all_commands(console.clone()))
+            .add_commands(program::all_commands(console.clone(), store))
+            .add_functions(strings::all_functions());
+        builder = numerics::add_all(builder);
+        builder.build()
+    };
 
     {
         let mut console = console.borrow_mut();
