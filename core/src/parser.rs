@@ -382,11 +382,22 @@ impl<'a> Parser<'a> {
                     need_operand = true;
                 }
                 Token::Minus => {
+                    let op;
                     if need_operand {
-                        ops.push(ExprOp::Negate);
+                        op = ExprOp::Negate;
                     } else {
-                        ops.push(ExprOp::Subtract);
+                        op = ExprOp::Subtract;
+                        while let Some(op2) = ops.last() {
+                            match *op2 {
+                                ExprOp::LeftParen | ExprOp::Call(_) => break,
+                                _ if op2.priority() < op.priority() => break,
+                                _ => (),
+                            };
+                            let op2 = ops.pop().unwrap();
+                            op2.apply(&mut exprs)?;
+                        }
                     }
+                    ops.push(op);
                     need_operand = true;
                 }
 
@@ -991,8 +1002,16 @@ mod tests {
             Subtract(Box::from(Integer(1)), Box::from(Negate(Box::from(Integer(3))))),
         );
         do_expr_ok_test(
+            "-1 - 3",
+            Subtract(Box::from(Negate(Box::from(Integer(1)))), Box::from(Integer(3))),
+        );
+        do_expr_ok_test(
             "5 + -1",
             Add(Box::from(Integer(5)), Box::from(Negate(Box::from(Integer(1))))),
+        );
+        do_expr_ok_test(
+            "-5 + 1",
+            Add(Box::from(Negate(Box::from(Integer(5)))), Box::from(Integer(1))),
         );
         do_expr_ok_test("NOT -3", Not(Box::from(Negate(Box::from(Integer(3))))));
 

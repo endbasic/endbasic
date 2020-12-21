@@ -20,6 +20,9 @@ not adhere to semantic versioning until 1.0.0.**
 *   Added string manipulation functions: `LEFT`, `LEN`, `LTRIM`, `MID`,
     `RIGHT` and `RTRIM`.
 
+*   Fixed the expression parser to properly handle subtractions where the first
+    operand is a negative number.
+
 *   Fixed the expression parser to detect and report unbalanced parenthesis.
 
 *   Added support for double-precision floating point numbers (`#` type
