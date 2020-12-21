@@ -19,10 +19,12 @@ use crate::parser::{Error, Result};
 use std::fmt;
 
 /// Represents an expression and provides mechanisms to evaluate it.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     /// A literal boolean value.
     Boolean(bool),
+    /// A literal double-precision floating point value.
+    Double(f64),
     /// A literal integer value.
     Integer(i32),
     /// A reference to a variable.
@@ -80,6 +82,9 @@ pub enum VarType {
     /// A boolean variable.
     Boolean,
 
+    /// A double-precision floating point variable.
+    Double,
+
     /// An integer variable.
     Integer,
 
@@ -97,6 +102,7 @@ impl VarType {
         match self {
             VarType::Auto => "",
             VarType::Boolean => "?",
+            VarType::Double => "#",
             VarType::Integer => "%",
             VarType::Text => "$",
             VarType::Void => "",
@@ -148,6 +154,7 @@ impl VarRef {
         match (self.ref_type, value) {
             (VarType::Auto, _) => true,
             (VarType::Boolean, Value::Boolean(_)) => true,
+            (VarType::Double, Value::Double(_)) => true,
             (VarType::Integer, Value::Integer(_)) => true,
             (VarType::Text, Value::Text(_)) => true,
             (_, _) => false,
@@ -166,6 +173,9 @@ impl fmt::Display for VarRef {
 pub enum Value {
     /// A boolean value.
     Boolean(bool),
+
+    /// A double-precision floating point value.
+    Double(f64),
 
     /// An integer value.
     Integer(i32),
@@ -188,7 +198,7 @@ pub enum ArgSep {
 }
 
 /// Represents a statement in the program along all data to execute it.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Statement {
     /// Represents a variable assignment.
     ///

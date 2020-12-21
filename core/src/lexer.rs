@@ -26,13 +26,14 @@ use std::iter::Peekable;
 /// conditions and require special care.  `Eof` indicates that there are no more tokens.
 /// `Bad` indicates that a token was bad and contains the reason behind the problem, but the
 /// stream remains valid for extraction of further tokens.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     Eof,
     Eol,
     Bad(String),
 
     Boolean(bool),
+    Double(f64),
     Integer(i32),
     Text(String),
     Symbol(VarRef),
@@ -150,25 +151,46 @@ impl<'a> Lexer<'a> {
         self.handle_bad_read(msg)
     }
 
-    /// Consumes the integer at the current position, whose first digit is `first`.
-    fn consume_integer(&mut self, first: char) -> io::Result<Token> {
+    /// Consumes the number at the current position, whose first digit is `first`.
+    fn consume_number(&mut self, first: char) -> io::Result<Token> {
         let mut s = String::new();
+        let mut found_dot = false;
         s.push(first);
         loop {
             match self.input.peek() {
+                Some(Ok('.')) => {
+                    if found_dot {
+                        return self.handle_bad_peek("Too many dots in numeric literal");
+                    }
+                    s.push(self.input.next().unwrap()?);
+                    found_dot = true;
+                }
                 Some(Ok(ch)) if ch.is_digit(10) => s.push(self.input.next().unwrap()?),
                 Some(Ok(ch)) if ch.is_separator() => break,
                 Some(Ok(ch)) => {
-                    let msg = format!("Unexpected character in integer: {}", ch);
+                    let msg = format!("Unexpected character in numeric literal: {}", ch);
                     return self.handle_bad_peek(msg);
                 }
                 Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
                 None => break,
             }
         }
-        match s.parse::<i32>() {
-            Ok(i) => Ok(Token::Integer(i)),
-            Err(e) => self.handle_bad_read(format!("Bad integer {}: {}", s, e)),
+        if found_dot {
+            if s.ends_with('.') {
+                // TODO(jmmv): Reconsider supporting double literals with a . that is not prefixed
+                // by a number or not followed by a number.  For now, mimic the error we get when
+                // we encounter a dot not prefixed by a number.
+                return self.handle_bad_read("Unknown character: .");
+            }
+            match s.parse::<f64>() {
+                Ok(d) => Ok(Token::Double(d)),
+                Err(e) => self.handle_bad_read(format!("Bad double {}: {}", s, e)),
+            }
+        } else {
+            match s.parse::<i32>() {
+                Ok(i) => Ok(Token::Integer(i)),
+                Err(e) => self.handle_bad_read(format!("Bad integer {}: {}", s, e)),
+            }
         }
     }
 
@@ -211,6 +233,11 @@ impl<'a> Lexer<'a> {
                 Some(Ok(ch)) if ch.is_separator() => break,
                 Some(Ok('?')) => {
                     vtype = VarType::Boolean;
+                    self.input.next().unwrap()?;
+                    break;
+                }
+                Some(Ok('#')) => {
+                    vtype = VarType::Double;
                     self.input.next().unwrap()?;
                     break;
                 }
@@ -342,7 +369,7 @@ impl<'a> Lexer<'a> {
             '=' => Ok(Token::Equal),
             '<' | '>' => self.consume_operator(ch),
 
-            ch if ch.is_digit(10) => self.consume_integer(ch),
+            ch if ch.is_digit(10) => self.consume_number(ch),
             ch if ch.is_word() => self.consume_symbol(ch),
             ch => self.handle_bad_read(format!("Unknown character: {}", ch)),
         }
@@ -457,12 +484,13 @@ mod tests {
     #[test]
     fn test_some_tokens() {
         do_ok_test(
-            "123 45 \n 6 abc a38z: a=3 with_underscores_1=_2",
+            "123 45 \n 6 3.012 abc a38z: a=3 with_underscores_1=_2",
             &[
                 Token::Integer(123),
                 Token::Integer(45),
                 Token::Eol,
                 Token::Integer(6),
+                Token::Double(3.012),
                 new_auto_symbol("abc"),
                 new_auto_symbol("a38z"),
                 Token::Eol,
@@ -526,10 +554,11 @@ mod tests {
     #[test]
     fn test_var_types() {
         do_ok_test(
-            "a b? i% s$",
+            "a b? d# i% s$",
             &[
                 new_auto_symbol("a"),
                 Token::Symbol(VarRef::new("b", VarType::Boolean)),
+                Token::Symbol(VarRef::new("d", VarType::Double)),
                 Token::Symbol(VarRef::new("i", VarType::Integer)),
                 Token::Symbol(VarRef::new("s", VarType::Text)),
             ],
@@ -609,7 +638,7 @@ mod tests {
     #[test]
     fn test_operator_no_spaces() {
         do_ok_test(
-            "z=2 654<>a32",
+            "z=2 654<>a32 3.1<0.1",
             &[
                 new_auto_symbol("z"),
                 Token::Equal,
@@ -617,6 +646,9 @@ mod tests {
                 Token::Integer(654),
                 Token::NotEqual,
                 new_auto_symbol("a32"),
+                Token::Double(3.1),
+                Token::Less,
+                Token::Double(0.1),
             ],
         );
     }
@@ -656,6 +688,22 @@ mod tests {
     #[test]
     fn test_recoverable_errors() {
         do_ok_test(
+            "0.1.28+5",
+            &[
+                Token::Bad("Too many dots in numeric literal".to_owned()),
+                Token::Plus,
+                Token::Integer(5),
+            ],
+        );
+
+        do_ok_test("1 .3", &[Token::Integer(1), Token::Bad("Unknown character: .".to_owned())]);
+
+        do_ok_test(
+            "1 3. 2",
+            &[Token::Integer(1), Token::Bad("Unknown character: .".to_owned()), Token::Integer(2)],
+        );
+
+        do_ok_test(
             "9999999999+5",
             &[
                 Token::Bad(
@@ -670,7 +718,7 @@ mod tests {
             "\n3!2 1",
             &[
                 Token::Eol,
-                Token::Bad("Unexpected character in integer: !".to_owned()),
+                Token::Bad("Unexpected character in numeric literal: !".to_owned()),
                 Token::Integer(1),
             ],
         );

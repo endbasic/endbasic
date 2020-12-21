@@ -31,7 +31,8 @@ EndBASIC's language features are inspired by other BASIC interpreters but the
 language does not intend to be fully compatible with them.  The language
 currently supports:
 
-*   Variable types: boolean (`?`), integer (`%`), and string (`$`).
+*   Variable types: boolean (`?`), double (`#`), integer (`%`), and string
+    (`$`).
 *   Strong typing with optional variable type annotations.
 *   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` statements.
 *   `FOR x = ... TO ... [STEP ...]` / `NEXT` loops.
