@@ -33,6 +33,8 @@ not adhere to semantic versioning until 1.0.0.**
     is not implemented, but the new `ITOD` AND `DTOI` functions help in
     converting from integers to doubles and back.
 
+*   Added support to generate random numbers via `RANDOMIZE` and `RND`.
+
 ## Changes in version 0.3.1
 
 **Released on 2020-11-29.**

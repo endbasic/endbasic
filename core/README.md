@@ -41,9 +41,10 @@ currently supports:
 *   Commands:
     *   Console: `CLS`, `COLOR`, `INPUT`, `LOCATE`, `PRINT`.
     *   Interpreter: `CLEAR`, `EXIT`, `HELP`.
+    *   Numerics: `RANDOMIZE`.
     *   Program: `DEL`, `DIR`, `EDIT`, `LOAD`, `NEW`, `RUN`, `SAVE`.
 *   Functions:
-    *   Numerics: `DTOI`, `ITOD`.
+    *   Numerics: `DTOI`, `ITOD`, `RND`.
     *   Strings: `LEFT`, `LEN`, `LTRIM`, `MID`, `RIGHT`, `RTRIM`.
 
 ## Implementation features
