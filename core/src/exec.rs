@@ -243,7 +243,11 @@ impl Machine {
         debug_assert!(
             iterator.ref_type() == VarType::Auto || iterator.ref_type() == VarType::Integer
         );
-        self.assign(iterator, start)?;
+        let start_value = start.eval(&self.vars, &self.functions)?;
+        match start_value {
+            Value::Integer(_) => self.vars.set(iterator, start_value)?,
+            _ => return new_syntax_error("FOR supports integer iteration only"),
+        }
 
         loop {
             match end.eval(&self.vars, &self.functions)? {
@@ -740,10 +744,7 @@ mod tests {
         do_simple_error_test("FOR\nNEXT", "No iterator name in FOR statement");
         do_simple_error_test("FOR a = 1 TO 10\nEND IF", "Unexpected token End in statement");
 
-        do_simple_error_test(
-            "FOR i = \"a\" TO 3\nNEXT",
-            "Cannot compare Text(\"a\") and Integer(3) with <=",
-        );
+        do_simple_error_test("FOR i = \"a\" TO 3\nNEXT", "FOR supports integer iteration only");
         do_simple_error_test(
             "FOR i = 1 TO \"a\"\nNEXT",
             "Cannot compare Integer(1) and Text(\"a\") with <=",
@@ -751,12 +752,14 @@ mod tests {
 
         do_simple_error_test(
             "FOR i = \"b\" TO 7 STEP -8\nNEXT",
-            "Cannot compare Text(\"b\") and Integer(7) with >=",
+            "FOR supports integer iteration only",
         );
         do_simple_error_test(
             "FOR i = 1 TO \"b\" STEP -8\nNEXT",
             "Cannot compare Integer(1) and Text(\"b\") with >=",
         );
+
+        do_simple_error_test("FOR a = 1.0 TO 10.0\nNEXT", "FOR supports integer iteration only");
     }
 
     #[test]

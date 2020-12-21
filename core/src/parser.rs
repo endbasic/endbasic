@@ -307,6 +307,7 @@ impl<'a> Parser<'a> {
             let token = self.lexer.consume_peeked();
             match token {
                 Token::Boolean(b) => handle_operand(Expr::Boolean(b))?,
+                Token::Double(d) => handle_operand(Expr::Double(d))?,
                 Token::Integer(i) => handle_operand(Expr::Integer(i))?,
                 Token::Text(t) => handle_operand(Expr::Text(t))?,
                 Token::Symbol(vref) => handle_operand(Expr::Symbol(vref))?,
@@ -554,6 +555,7 @@ impl<'a> Parser<'a> {
     fn parse_for(&mut self) -> Result<Statement> {
         let iterator = match self.lexer.read()? {
             Token::Symbol(iterator) => match iterator.ref_type() {
+                // TODO(jmmv): Should we support doubles in for loops?
                 VarType::Auto | VarType::Integer => iterator,
                 _ => {
                     return Err(Error::Bad(
@@ -979,9 +981,11 @@ mod tests {
     }
 
     #[test]
-    fn test_expr_integer_signs() {
+    fn test_expr_numeric_signs() {
         use Expr::*;
+
         do_expr_ok_test("-a", Negate(Box::from(Symbol(VarRef::new("a", VarType::Auto)))));
+
         do_expr_ok_test(
             "1 - -3",
             Subtract(Box::from(Integer(1)), Box::from(Negate(Box::from(Integer(3))))),
@@ -989,6 +993,16 @@ mod tests {
         do_expr_ok_test(
             "5 + -1",
             Add(Box::from(Integer(5)), Box::from(Negate(Box::from(Integer(1))))),
+        );
+        do_expr_ok_test("NOT -3", Not(Box::from(Negate(Box::from(Integer(3))))));
+
+        do_expr_ok_test(
+            "1.0 - -3.5",
+            Subtract(Box::from(Double(1.0)), Box::from(Negate(Box::from(Double(3.5))))),
+        );
+        do_expr_ok_test(
+            "5.12 + -0.50",
+            Add(Box::from(Double(5.12)), Box::from(Negate(Box::from(Double(0.50))))),
         );
         do_expr_ok_test("NOT -3", Not(Box::from(Negate(Box::from(Integer(3))))));
     }
@@ -1342,6 +1356,7 @@ mod tests {
         do_error_test("FOR\n", "No iterator name in FOR statement");
         do_error_test("FOR =\n", "No iterator name in FOR statement");
         do_error_test("FOR a$\n", "Iterator name in FOR statement must be an integer reference");
+        do_error_test("FOR d#\n", "Iterator name in FOR statement must be an integer reference");
 
         do_error_test("FOR i 3\n", "No equal sign in FOR statement");
         do_error_test("FOR i = TO\n", "No start expression in FOR statement");

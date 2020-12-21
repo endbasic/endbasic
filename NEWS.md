@@ -22,6 +22,11 @@ not adhere to semantic versioning until 1.0.0.**
 
 *   Fixed the expression parser to detect and report unbalanced parenthesis.
 
+*   Added support for double-precision floating point numbers (`#` type
+    annotation).  This feature is likely incomplete in many ways but is needed
+    for random number generation, for example.  Notably, numeric type promotion
+    is not implemented.
+
 ## Changes in version 0.3.1
 
 **Released on 2020-11-29.**

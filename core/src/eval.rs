@@ -86,6 +86,16 @@ pub type Result<T> = std::result::Result<T, Error>;
 impl Value {
     /// Parses a string `s` and constructs a `Value` that matches a given `VarType`.
     pub fn parse_as<T: Into<String>>(vtype: VarType, s: T) -> Result<Value> {
+        fn parse_f64(s: &str) -> Result<Value> {
+            match s.parse::<f64>() {
+                Ok(d) => Ok(Value::Double(d)),
+                Err(_) => Err(Error::new(format!(
+                    "Invalid double-precision floating point literal {}",
+                    s
+                ))),
+            }
+        }
+
         fn parse_i32(s: &str) -> Result<Value> {
             match s.parse::<i32>() {
                 Ok(i) => Ok(Value::Integer(i)),
@@ -106,6 +116,7 @@ impl Value {
                     Err(Error::new(format!("Invalid boolean literal {}", s)))
                 }
             }
+            VarType::Double => parse_f64(&s),
             VarType::Integer => parse_i32(&s),
             VarType::Text => Ok(Value::Text(s)),
             VarType::Void => panic!("Void values are not supported"),
@@ -148,6 +159,7 @@ impl Value {
     pub fn eq(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(lhs == rhs)),
+            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs == rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs == rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs == rhs)),
             (_, _) => Err(Error::new(format!("Cannot compare {:?} and {:?} with =", self, other))),
@@ -158,6 +170,7 @@ impl Value {
     pub fn ne(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(lhs != rhs)),
+            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs != rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs != rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs != rhs)),
             (_, _) => Err(Error::new(format!("Cannot compare {:?} and {:?} with <>", self, other))),
@@ -167,6 +180,7 @@ impl Value {
     /// Performs a less-than check.
     pub fn lt(&self, other: &Self) -> Result<Self> {
         match (self, other) {
+            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs < rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs < rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs < rhs)),
             (_, _) => Err(Error::new(format!("Cannot compare {:?} and {:?} with <", self, other))),
@@ -176,6 +190,7 @@ impl Value {
     /// Performs a less-than or equal-to check.
     pub fn le(&self, other: &Self) -> Result<Self> {
         match (self, other) {
+            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
             (_, _) => Err(Error::new(format!("Cannot compare {:?} and {:?} with <=", self, other))),
@@ -185,6 +200,7 @@ impl Value {
     /// Performs a greater-than check.
     pub fn gt(&self, other: &Self) -> Result<Self> {
         match (self, other) {
+            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs > rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs > rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs > rhs)),
             (_, _) => Err(Error::new(format!("Cannot compare {:?} and {:?} with >", self, other))),
@@ -194,15 +210,17 @@ impl Value {
     /// Performs a greater-than or equal to check.
     pub fn ge(&self, other: &Self) -> Result<Self> {
         match (self, other) {
+            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
             (_, _) => Err(Error::new(format!("Cannot compare {:?} and {:?} with >=", self, other))),
         }
     }
 
-    /// Performs an addition operation.
+    /// Performs an arithmetic addition.
     pub fn add(&self, other: &Self) -> Result<Self> {
         match (self, other) {
+            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs + rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_add(*rhs) {
                 Some(i) => Ok(Value::Integer(i)),
                 None => Err(Error::new(format!("Overflow adding {} and {}", lhs, rhs))),
@@ -212,9 +230,10 @@ impl Value {
         }
     }
 
-    /// Performs a subtraction operation.
+    /// Performs an arithmetic subtraction.
     pub fn sub(&self, other: &Self) -> Result<Self> {
         match (self, other) {
+            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs - rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_sub(*rhs) {
                 Some(i) => Ok(Value::Integer(i)),
                 None => Err(Error::new(format!("Overflow subtracting {} from {}", rhs, lhs))),
@@ -226,6 +245,7 @@ impl Value {
     /// Performs a multiplication.
     pub fn mul(&self, other: &Self) -> Result<Self> {
         match (self, other) {
+            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs * rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_mul(*rhs) {
                 Some(i) => Ok(Value::Integer(i)),
                 None => Err(Error::new(format!("Overflow multiplying {} by {}", lhs, rhs))),
@@ -234,14 +254,19 @@ impl Value {
         }
     }
 
-    /// Performs an integer division.
+    /// Performs an arithmetic division.
     pub fn div(&self, other: &Self) -> Result<Self> {
         match (self, other) {
-            (Value::Integer(_), Value::Integer(0)) => Err(Error::new("Division by zero")),
-            (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_div(*rhs) {
-                Some(i) => Ok(Value::Integer(i)),
-                None => Err(Error::new(format!("Overflow dividing {} by {}", lhs, rhs))),
-            },
+            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs / rhs)),
+            (Value::Integer(lhs), Value::Integer(rhs)) => {
+                if rhs == &0 {
+                    return Err(Error::new("Division by zero"));
+                }
+                match lhs.checked_div(*rhs) {
+                    Some(i) => Ok(Value::Integer(i)),
+                    None => Err(Error::new(format!("Overflow dividing {} by {}", lhs, rhs))),
+                }
+            }
             (_, _) => Err(Error::new(format!("Cannot divide {:?} by {:?}", self, other))),
         }
     }
@@ -249,18 +274,24 @@ impl Value {
     /// Performs a modulo operation.
     pub fn modulo(&self, other: &Self) -> Result<Self> {
         match (self, other) {
-            (Value::Integer(_), Value::Integer(0)) => Err(Error::new("Modulo by zero")),
-            (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_rem(*rhs) {
-                Some(i) => Ok(Value::Integer(i)),
-                None => Err(Error::new(format!("Overflow modulo {} by {}", lhs, rhs))),
-            },
+            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs % rhs)),
+            (Value::Integer(lhs), Value::Integer(rhs)) => {
+                if rhs == &0 {
+                    return Err(Error::new("Modulo by zero"));
+                }
+                match lhs.checked_rem(*rhs) {
+                    Some(i) => Ok(Value::Integer(i)),
+                    None => Err(Error::new(format!("Overflow modulo {} by {}", lhs, rhs))),
+                }
+            }
             (_, _) => Err(Error::new(format!("Cannot modulo {:?} by {:?}", self, other))),
         }
     }
 
-    /// Performs an integer negation.
+    /// Performs an arithmetic negation.
     pub fn neg(&self) -> Result<Self> {
         match self {
+            Value::Double(d) => Ok(Value::Double(-d)),
             Value::Integer(i) => match i.checked_neg() {
                 Some(i) => Ok(Value::Integer(i)),
                 None => Err(Error::new(format!("Overflow negating {}", i))),
@@ -275,6 +306,7 @@ impl ToString for Value {
         match self {
             Value::Boolean(true) => "TRUE".to_owned(),
             Value::Boolean(false) => "FALSE".to_owned(),
+            Value::Double(d) => format!("{}", d),
             Value::Integer(i) => format!("{}", i),
             Value::Text(s2) => s2.clone(),
         }
@@ -482,6 +514,7 @@ impl Expr {
     ) -> Result<Value> {
         match self {
             Expr::Boolean(b) => Ok(Value::Boolean(*b)),
+            Expr::Double(d) => Ok(Value::Double(*d)),
             Expr::Integer(i) => Ok(Value::Integer(*i)),
             Expr::Text(s) => Ok(Value::Text(s.clone())),
 
@@ -685,6 +718,40 @@ mod tests {
     }
 
     #[test]
+    fn test_value_parse_as_double() {
+        use super::Value::*;
+
+        assert_eq!(Double(10.0), Value::parse_as(VarType::Double, "10").unwrap());
+        assert_eq!(Double(0.0), Value::parse_as(VarType::Double, "0").unwrap());
+        assert_eq!(Double(-21.0), Value::parse_as(VarType::Double, "-21").unwrap());
+        assert_eq!(Double(1.0), Value::parse_as(VarType::Double, "1.0").unwrap());
+        assert_eq!(Double(0.01), Value::parse_as(VarType::Double, ".01").unwrap());
+
+        assert_eq!(
+            Double(123456789012345680000000000000.0),
+            Value::parse_as(VarType::Double, "123456789012345678901234567890.1").unwrap()
+        );
+
+        assert_eq!(
+            Double(1.1234567890123457),
+            Value::parse_as(VarType::Double, "1.123456789012345678901234567890").unwrap()
+        );
+
+        assert_eq!(
+            "Invalid double-precision floating point literal ",
+            format!("{}", Value::parse_as(VarType::Double, "").unwrap_err())
+        );
+        assert_eq!(
+            "Invalid double-precision floating point literal - 3.0",
+            format!("{}", Value::parse_as(VarType::Double, "- 3.0").unwrap_err())
+        );
+        assert_eq!(
+            "Invalid double-precision floating point literal 34ab3.1",
+            format!("{}", Value::parse_as(VarType::Double, "34ab3.1").unwrap_err())
+        );
+    }
+
+    #[test]
     fn test_value_parse_as_integer() {
         use super::Value::*;
 
@@ -722,6 +789,8 @@ mod tests {
 
         assert_eq!("TRUE", &Boolean(true).to_string());
         assert_eq!("FALSE", &Boolean(false).to_string());
+        assert_eq!("3", &Double(3.0).to_string());
+        assert_eq!("0.51", &Double(0.51).to_string());
         assert_eq!("-56", &Integer(-56).to_string());
         assert_eq!("some words", &Text("some words".to_owned()).to_string());
     }
@@ -732,6 +801,9 @@ mod tests {
 
         let v = Boolean(false);
         assert_eq!(v, Value::parse_as(VarType::Boolean, &v.to_string()).unwrap());
+
+        let v = Double(10.1);
+        assert_eq!(v, Value::parse_as(VarType::Double, &v.to_string()).unwrap());
 
         let v = Integer(9);
         assert_eq!(v, Value::parse_as(VarType::Integer, &v.to_string()).unwrap());
@@ -806,11 +878,18 @@ mod tests {
             format!("{}", Boolean(true).eq(&Integer(5)).unwrap_err())
         );
 
+        assert_eq!(Boolean(true), Double(2.5).eq(&Double(2.5)).unwrap());
+        assert_eq!(Boolean(false), Double(3.5).eq(&Double(3.6)).unwrap());
+        assert_eq!(
+            "Cannot compare Double(4.0) and Integer(1) with =",
+            format!("{}", Double(4.0).eq(&Integer(1)).unwrap_err())
+        );
+
         assert_eq!(Boolean(true), Integer(2).eq(&Integer(2)).unwrap());
         assert_eq!(Boolean(false), Integer(3).eq(&Integer(4)).unwrap());
         assert_eq!(
-            "Cannot compare Integer(4) and Text(\"5\") with =",
-            format!("{}", Integer(4).eq(&Text("5".to_owned())).unwrap_err())
+            "Cannot compare Integer(4) and Double(1.0) with =",
+            format!("{}", Integer(4).eq(&Double(1.0)).unwrap_err())
         );
 
         assert_eq!(Boolean(true), Text("a".to_owned()).eq(&Text("a".to_owned())).unwrap());
@@ -832,11 +911,18 @@ mod tests {
             format!("{}", Boolean(true).ne(&Integer(5)).unwrap_err())
         );
 
+        assert_eq!(Boolean(false), Double(2.5).ne(&Double(2.5)).unwrap());
+        assert_eq!(Boolean(true), Double(3.5).ne(&Double(3.6)).unwrap());
+        assert_eq!(
+            "Cannot compare Double(4.0) and Integer(1) with <>",
+            format!("{}", Double(4.0).ne(&Integer(1)).unwrap_err())
+        );
+
         assert_eq!(Boolean(false), Integer(2).ne(&Integer(2)).unwrap());
         assert_eq!(Boolean(true), Integer(3).ne(&Integer(4)).unwrap());
         assert_eq!(
-            "Cannot compare Integer(4) and Text(\"5\") with <>",
-            format!("{}", Integer(4).ne(&Text("5".to_owned())).unwrap_err())
+            "Cannot compare Integer(4) and Double(1.0) with <>",
+            format!("{}", Integer(4).ne(&Double(1.0)).unwrap_err())
         );
 
         assert_eq!(Boolean(false), Text("a".to_owned()).ne(&Text("a".to_owned())).unwrap());
@@ -856,11 +942,18 @@ mod tests {
             format!("{}", Boolean(false).lt(&Boolean(true)).unwrap_err())
         );
 
+        assert_eq!(Boolean(false), Double(2.5).lt(&Double(2.5)).unwrap());
+        assert_eq!(Boolean(true), Double(3.5).lt(&Double(3.6)).unwrap());
+        assert_eq!(
+            "Cannot compare Double(4.0) and Integer(1) with <",
+            format!("{}", Double(4.0).lt(&Integer(1)).unwrap_err())
+        );
+
         assert_eq!(Boolean(false), Integer(2).lt(&Integer(2)).unwrap());
         assert_eq!(Boolean(true), Integer(3).lt(&Integer(4)).unwrap());
         assert_eq!(
-            "Cannot compare Integer(4) and Text(\"5\") with <",
-            format!("{}", Integer(4).lt(&Text("5".to_owned())).unwrap_err())
+            "Cannot compare Integer(4) and Double(1.0) with <",
+            format!("{}", Integer(4).lt(&Double(1.0)).unwrap_err())
         );
 
         assert_eq!(Boolean(false), Text("a".to_owned()).lt(&Text("a".to_owned())).unwrap());
@@ -880,12 +973,20 @@ mod tests {
             format!("{}", Boolean(false).le(&Boolean(true)).unwrap_err())
         );
 
+        assert_eq!(Boolean(false), Double(2.1).le(&Double(2.0)).unwrap());
+        assert_eq!(Boolean(true), Double(2.1).le(&Double(2.1)).unwrap());
+        assert_eq!(Boolean(true), Double(2.1).le(&Double(2.2)).unwrap());
+        assert_eq!(
+            "Cannot compare Double(4.0) and Integer(1) with <=",
+            format!("{}", Double(4.0).le(&Integer(1)).unwrap_err())
+        );
+
         assert_eq!(Boolean(false), Integer(2).le(&Integer(1)).unwrap());
         assert_eq!(Boolean(true), Integer(2).le(&Integer(2)).unwrap());
         assert_eq!(Boolean(true), Integer(2).le(&Integer(3)).unwrap());
         assert_eq!(
-            "Cannot compare Integer(4) and Text(\"5\") with <=",
-            format!("{}", Integer(4).le(&Text("5".to_owned())).unwrap_err())
+            "Cannot compare Integer(4) and Double(1.0) with <=",
+            format!("{}", Integer(4).le(&Double(1.0)).unwrap_err())
         );
 
         assert_eq!(Boolean(false), Text("b".to_owned()).le(&Text("a".to_owned())).unwrap());
@@ -906,11 +1007,18 @@ mod tests {
             format!("{}", Boolean(false).gt(&Boolean(true)).unwrap_err())
         );
 
+        assert_eq!(Boolean(false), Double(2.1).gt(&Double(2.1)).unwrap());
+        assert_eq!(Boolean(true), Double(4.1).gt(&Double(4.0)).unwrap());
+        assert_eq!(
+            "Cannot compare Double(4.0) and Integer(1) with >",
+            format!("{}", Double(4.0).gt(&Integer(1)).unwrap_err())
+        );
+
         assert_eq!(Boolean(false), Integer(2).gt(&Integer(2)).unwrap());
         assert_eq!(Boolean(true), Integer(4).gt(&Integer(3)).unwrap());
         assert_eq!(
-            "Cannot compare Integer(4) and Text(\"5\") with >",
-            format!("{}", Integer(4).gt(&Text("5".to_owned())).unwrap_err())
+            "Cannot compare Integer(4) and Double(1.0) with >",
+            format!("{}", Integer(4).gt(&Double(1.0)).unwrap_err())
         );
 
         assert_eq!(Boolean(false), Text("a".to_owned()).gt(&Text("a".to_owned())).unwrap());
@@ -930,12 +1038,20 @@ mod tests {
             format!("{}", Boolean(false).ge(&Boolean(true)).unwrap_err())
         );
 
+        assert_eq!(Boolean(false), Double(2.0).ge(&Double(2.1)).unwrap());
+        assert_eq!(Boolean(true), Double(2.1).ge(&Double(2.1)).unwrap());
+        assert_eq!(Boolean(true), Double(2.2).ge(&Double(2.1)).unwrap());
+        assert_eq!(
+            "Cannot compare Double(4.0) and Integer(1) with >=",
+            format!("{}", Double(4.0).ge(&Integer(1)).unwrap_err())
+        );
+
         assert_eq!(Boolean(false), Integer(1).ge(&Integer(2)).unwrap());
         assert_eq!(Boolean(true), Integer(2).ge(&Integer(2)).unwrap());
         assert_eq!(Boolean(true), Integer(4).ge(&Integer(3)).unwrap());
         assert_eq!(
-            "Cannot compare Integer(4) and Text(\"5\") with >=",
-            format!("{}", Integer(4).ge(&Text("5".to_owned())).unwrap_err())
+            "Cannot compare Integer(4) and Double(1.0) with >=",
+            format!("{}", Integer(4).ge(&Double(1.0)).unwrap_err())
         );
 
         assert_eq!(Boolean(false), Text("".to_owned()).ge(&Text("b".to_owned())).unwrap());
@@ -956,6 +1072,12 @@ mod tests {
             format!("{}", Boolean(false).add(&Boolean(true)).unwrap_err())
         );
 
+        assert_eq!(Double(7.1), Double(2.1).add(&Double(5.0)).unwrap());
+        assert_eq!(
+            "Cannot add Double(4.0) and Integer(5)",
+            format!("{}", Double(4.0).add(&Integer(5)).unwrap_err())
+        );
+
         assert_eq!(Integer(5), Integer(2).add(&Integer(3)).unwrap());
         assert_eq!(Integer(i32::MAX), Integer(i32::MAX).add(&Integer(0)).unwrap());
         assert_eq!(
@@ -963,8 +1085,8 @@ mod tests {
             format!("{}", Integer(i32::MAX).add(&Integer(1)).unwrap_err())
         );
         assert_eq!(
-            "Cannot add Integer(4) and Text(\"5\")",
-            format!("{}", Integer(4).add(&Text("5".to_owned())).unwrap_err())
+            "Cannot add Integer(4) and Double(5.0)",
+            format!("{}", Integer(4).add(&Double(5.0)).unwrap_err())
         );
 
         assert_eq!(Text("ab".to_owned()), Text("a".to_owned()).add(&Text("b".to_owned())).unwrap());
@@ -983,6 +1105,12 @@ mod tests {
             format!("{}", Boolean(false).sub(&Boolean(true)).unwrap_err())
         );
 
+        assert_eq!(Double(-1.0), Double(2.5).sub(&Double(3.5)).unwrap());
+        assert_eq!(
+            "Cannot subtract Integer(5) from Double(4.0)",
+            format!("{}", Double(4.0).sub(&Integer(5)).unwrap_err())
+        );
+
         assert_eq!(Integer(-1), Integer(2).sub(&Integer(3)).unwrap());
         assert_eq!(Integer(i32::MIN), Integer(i32::MIN).sub(&Integer(0)).unwrap());
         assert_eq!(
@@ -990,8 +1118,8 @@ mod tests {
             format!("{}", Integer(i32::MIN).sub(&Integer(1)).unwrap_err())
         );
         assert_eq!(
-            "Cannot subtract Text(\"5\") from Integer(4)",
-            format!("{}", Integer(4).sub(&Text("5".to_owned())).unwrap_err())
+            "Cannot subtract Double(5.0) from Integer(4)",
+            format!("{}", Integer(4).sub(&Double(5.0)).unwrap_err())
         );
 
         assert_eq!(
@@ -1009,6 +1137,12 @@ mod tests {
             format!("{}", Boolean(false).mul(&Boolean(true)).unwrap_err())
         );
 
+        assert_eq!(Double(40.0), Double(4.0).mul(&Double(10.0)).unwrap());
+        assert_eq!(
+            "Cannot multiply Double(4.0) by Integer(5)",
+            format!("{}", Double(4.0).mul(&Integer(5)).unwrap_err())
+        );
+
         assert_eq!(Integer(6), Integer(2).mul(&Integer(3)).unwrap());
         assert_eq!(Integer(i32::MAX), Integer(i32::MAX).mul(&Integer(1)).unwrap());
         assert_eq!(
@@ -1016,8 +1150,8 @@ mod tests {
             format!("{}", Integer(i32::MAX).mul(&Integer(2)).unwrap_err())
         );
         assert_eq!(
-            "Cannot multiply Integer(4) by Text(\"5\")",
-            format!("{}", Integer(4).mul(&Text("5".to_owned())).unwrap_err())
+            "Cannot multiply Integer(4) by Double(5.0)",
+            format!("{}", Integer(4).mul(&Double(5.0)).unwrap_err())
         );
 
         assert_eq!(
@@ -1035,6 +1169,13 @@ mod tests {
             format!("{}", Boolean(false).div(&Boolean(true)).unwrap_err())
         );
 
+        assert_eq!(Double(4.0), Double(10.0).div(&Double(2.5)).unwrap());
+        assert_eq!(Double(f64::INFINITY), Double(1.0).div(&Double(0.0)).unwrap());
+        assert_eq!(
+            "Cannot divide Double(4.0) by Integer(5)",
+            format!("{}", Double(4.0).div(&Integer(5)).unwrap_err())
+        );
+
         assert_eq!(Integer(2), Integer(10).div(&Integer(5)).unwrap());
         assert_eq!(Integer(6), Integer(20).div(&Integer(3)).unwrap());
         assert_eq!(Integer(i32::MIN), Integer(i32::MIN).div(&Integer(1)).unwrap());
@@ -1044,8 +1185,8 @@ mod tests {
             format!("{}", Integer(i32::MIN).div(&Integer(-1)).unwrap_err())
         );
         assert_eq!(
-            "Cannot divide Integer(4) by Text(\"5\")",
-            format!("{}", Integer(4).div(&Text("5".to_owned())).unwrap_err())
+            "Cannot divide Integer(4) by Double(5.0)",
+            format!("{}", Integer(4).div(&Double(5.0)).unwrap_err())
         );
 
         assert_eq!(
@@ -1063,6 +1204,16 @@ mod tests {
             format!("{}", Boolean(false).modulo(&Boolean(true)).unwrap_err())
         );
 
+        assert_eq!(Double(0.0), Double(10.0).modulo(&Double(2.5)).unwrap());
+        match Double(1.0).modulo(&Double(0.0)).unwrap() {
+            Double(d) => assert!(d.is_nan()),
+            _ => panic!("Did not get a double"),
+        };
+        assert_eq!(
+            "Cannot modulo Double(4.0) by Integer(5)",
+            format!("{}", Double(4.0).modulo(&Integer(5)).unwrap_err())
+        );
+
         assert_eq!(Integer(0), Integer(10).modulo(&Integer(5)).unwrap());
         assert_eq!(Integer(2), Integer(20).modulo(&Integer(3)).unwrap());
         assert_eq!("Modulo by zero", format!("{}", Integer(4).modulo(&Integer(0)).unwrap_err()));
@@ -1071,8 +1222,8 @@ mod tests {
             format!("{}", Integer(i32::MIN).modulo(&Integer(-1)).unwrap_err())
         );
         assert_eq!(
-            "Cannot modulo Integer(4) by Text(\"5\")",
-            format!("{}", Integer(4).modulo(&Text("5".to_owned())).unwrap_err())
+            "Cannot modulo Integer(4) by Double(5.0)",
+            format!("{}", Integer(4).modulo(&Double(5.0)).unwrap_err())
         );
 
         assert_eq!(
@@ -1086,6 +1237,9 @@ mod tests {
         use super::Value::*;
 
         assert_eq!("Cannot negate Boolean(true)", format!("{}", Boolean(true).neg().unwrap_err()));
+
+        assert_eq!(Double(-6.12), Double(6.12).neg().unwrap());
+        assert_eq!(Double(5.53), Double(-5.53).neg().unwrap());
 
         assert_eq!(Integer(-6), Integer(6).neg().unwrap());
         assert_eq!(Integer(5), Integer(-5).neg().unwrap());
@@ -1104,6 +1258,7 @@ mod tests {
     fn test_varref_display() {
         assert_eq!("name", format!("{}", VarRef::new("name", VarType::Auto)));
         assert_eq!("abc?", format!("{}", VarRef::new("abc", VarType::Boolean)));
+        assert_eq!("cba#", format!("{}", VarRef::new("cba", VarType::Double)));
         assert_eq!("def%", format!("{}", VarRef::new("def", VarType::Integer)));
         assert_eq!("ghi$", format!("{}", VarRef::new("ghi", VarType::Text)));
     }
@@ -1127,22 +1282,32 @@ mod tests {
     #[test]
     fn test_varref_accepts() {
         let bool_val = Value::Boolean(true);
+        let double_val = Value::Double(0.0);
         let int_val = Value::Integer(0);
         let text_val = Value::Text("x".to_owned());
 
         assert!(VarRef::new("a", VarType::Auto).accepts(&bool_val));
+        assert!(VarRef::new("a", VarType::Auto).accepts(&double_val));
         assert!(VarRef::new("a", VarType::Auto).accepts(&int_val));
         assert!(VarRef::new("a", VarType::Auto).accepts(&text_val));
 
         assert!(VarRef::new("a", VarType::Boolean).accepts(&bool_val));
+        assert!(!VarRef::new("a", VarType::Boolean).accepts(&double_val));
         assert!(!VarRef::new("a", VarType::Boolean).accepts(&int_val));
         assert!(!VarRef::new("a", VarType::Boolean).accepts(&text_val));
 
+        assert!(!VarRef::new("a", VarType::Double).accepts(&bool_val));
+        assert!(VarRef::new("a", VarType::Double).accepts(&double_val));
+        assert!(!VarRef::new("a", VarType::Double).accepts(&int_val));
+        assert!(!VarRef::new("a", VarType::Double).accepts(&text_val));
+
         assert!(!VarRef::new("a", VarType::Integer).accepts(&bool_val));
+        assert!(!VarRef::new("a", VarType::Integer).accepts(&double_val));
         assert!(VarRef::new("a", VarType::Integer).accepts(&int_val));
         assert!(!VarRef::new("a", VarType::Integer).accepts(&text_val));
 
         assert!(!VarRef::new("a", VarType::Text).accepts(&bool_val));
+        assert!(!VarRef::new("a", VarType::Text).accepts(&double_val));
         assert!(!VarRef::new("a", VarType::Text).accepts(&int_val));
         assert!(VarRef::new("a", VarType::Text).accepts(&text_val));
     }
@@ -1161,6 +1326,7 @@ mod tests {
     fn test_vars_get_ok_with_explicit_type() {
         let mut raw_vars = HashMap::new();
         raw_vars.insert("A_BOOLEAN".to_owned(), Value::Boolean(true));
+        raw_vars.insert("A_DOUBLE".to_owned(), Value::Double(3.0));
         raw_vars.insert("AN_INTEGER".to_owned(), Value::Integer(3));
         raw_vars.insert("A_STRING".to_owned(), Value::Text("some text".to_owned()));
         let vars = Vars { vars: raw_vars };
@@ -1168,6 +1334,10 @@ mod tests {
         assert_eq!(
             Value::Boolean(true),
             *vars.get(&VarRef::new("a_boolean", VarType::Boolean)).unwrap()
+        );
+        assert_eq!(
+            Value::Double(3.0),
+            *vars.get(&VarRef::new("a_double", VarType::Double)).unwrap()
         );
         assert_eq!(
             Value::Integer(3),
@@ -1183,6 +1353,7 @@ mod tests {
     fn test_vars_get_ok_with_auto_type() {
         let mut raw_vars = HashMap::new();
         raw_vars.insert("A_BOOLEAN".to_owned(), Value::Boolean(true));
+        raw_vars.insert("A_DOUBLE".to_owned(), Value::Double(3.0));
         raw_vars.insert("AN_INTEGER".to_owned(), Value::Integer(3));
         raw_vars.insert("A_STRING".to_owned(), Value::Text("some text".to_owned()));
         let vars = Vars { vars: raw_vars };
@@ -1191,6 +1362,7 @@ mod tests {
             Value::Boolean(true),
             *vars.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
         );
+        assert_eq!(Value::Double(3.0), *vars.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
         assert_eq!(
             Value::Integer(3),
             *vars.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
@@ -1217,6 +1389,7 @@ mod tests {
     fn test_vars_get_mismatched_type_error() {
         let mut raw_vars = HashMap::new();
         raw_vars.insert("A_BOOLEAN".to_owned(), Value::Boolean(true));
+        raw_vars.insert("A_DOUBLE".to_owned(), Value::Double(3.0));
         raw_vars.insert("AN_INTEGER".to_owned(), Value::Integer(3));
         raw_vars.insert("A_STRING".to_owned(), Value::Text("some text".to_owned()));
         let vars = Vars { vars: raw_vars };
@@ -1227,8 +1400,13 @@ mod tests {
         );
 
         assert_eq!(
-            "Incompatible types in an_integer? reference",
-            format!("{}", vars.get(&VarRef::new("an_integer", VarType::Boolean)).unwrap_err())
+            "Incompatible types in a_double% reference",
+            format!("{}", vars.get(&VarRef::new("a_double", VarType::Integer)).unwrap_err())
+        );
+
+        assert_eq!(
+            "Incompatible types in an_integer# reference",
+            format!("{}", vars.get(&VarRef::new("an_integer", VarType::Double)).unwrap_err())
         );
 
         assert_eq!(
@@ -1246,6 +1424,9 @@ mod tests {
             Value::Boolean(true),
             *vars.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
         );
+
+        vars.set(&VarRef::new("a_double", VarType::Double), Value::Double(0.0)).unwrap();
+        assert_eq!(Value::Double(0.0), *vars.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
 
         vars.set(&VarRef::new("an_integer", VarType::Integer), Value::Integer(0)).unwrap();
         assert_eq!(
@@ -1270,6 +1451,9 @@ mod tests {
             *vars.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
         );
 
+        vars.set(&VarRef::new("a_double", VarType::Auto), Value::Double(0.0)).unwrap();
+        assert_eq!(Value::Double(0.0), *vars.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
+
         vars.set(&VarRef::new("an_integer", VarType::Auto), Value::Integer(0)).unwrap();
         assert_eq!(
             Value::Integer(0),
@@ -1287,6 +1471,8 @@ mod tests {
     fn test_vars_set_mismatched_type_with_existing_value() {
         let bool_ref = VarRef::new("a_boolean", VarType::Auto);
         let bool_val = Value::Boolean(true);
+        let double_ref = VarRef::new("a_double", VarType::Auto);
+        let double_val = Value::Double(0.0);
         let int_ref = VarRef::new("an_integer", VarType::Auto);
         let int_val = Value::Integer(0);
         let text_ref = VarRef::new("a_string", VarType::Auto);
@@ -1294,20 +1480,25 @@ mod tests {
 
         let mut vars = Vars::default();
         vars.set(&bool_ref, bool_val.clone()).unwrap();
+        vars.set(&double_ref, double_val.clone()).unwrap();
         vars.set(&int_ref, int_val.clone()).unwrap();
-        vars.set(&text_ref, text_val).unwrap();
+        vars.set(&text_ref, text_val.clone()).unwrap();
 
         assert_eq!(
             "Incompatible types in a_boolean assignment",
-            format!("{}", vars.set(&bool_ref, int_val.clone()).unwrap_err())
+            format!("{}", vars.set(&bool_ref, text_val).unwrap_err())
+        );
+        assert_eq!(
+            "Incompatible types in a_double assignment",
+            format!("{}", vars.set(&double_ref, int_val).unwrap_err())
         );
         assert_eq!(
             "Incompatible types in an_integer assignment",
-            format!("{}", vars.set(&int_ref, bool_val).unwrap_err())
+            format!("{}", vars.set(&int_ref, double_val).unwrap_err())
         );
         assert_eq!(
             "Incompatible types in a_string assignment",
-            format!("{}", vars.set(&text_ref, int_val).unwrap_err())
+            format!("{}", vars.set(&text_ref, bool_val).unwrap_err())
         );
     }
 
@@ -1315,6 +1506,8 @@ mod tests {
     fn test_vars_set_mismatched_type_for_annotation() {
         let bool_ref = VarRef::new("a_boolean", VarType::Boolean);
         let bool_val = Value::Boolean(true);
+        let double_ref = VarRef::new("a_double", VarType::Double);
+        let double_val = Value::Double(0.0);
         let int_ref = VarRef::new("an_integer", VarType::Integer);
         let int_val = Value::Integer(0);
         let text_ref = VarRef::new("a_string", VarType::Text);
@@ -1323,11 +1516,15 @@ mod tests {
         let mut vars = Vars::default();
         assert_eq!(
             "Incompatible types in a_boolean? assignment",
-            format!("{}", vars.set(&bool_ref, int_val).unwrap_err())
+            format!("{}", vars.set(&bool_ref, text_val).unwrap_err())
+        );
+        assert_eq!(
+            "Incompatible types in a_double# assignment",
+            format!("{}", vars.set(&double_ref, int_val).unwrap_err())
         );
         assert_eq!(
             "Incompatible types in an_integer% assignment",
-            format!("{}", vars.set(&int_ref, text_val).unwrap_err())
+            format!("{}", vars.set(&int_ref, double_val).unwrap_err())
         );
         assert_eq!(
             "Incompatible types in a_string$ assignment",
@@ -1356,6 +1553,7 @@ mod tests {
         let vars = Vars::default();
         let fs = HashMap::default();
         assert_eq!(Value::Boolean(true), Expr::Boolean(true).eval(&vars, &fs).unwrap());
+        assert_eq!(Value::Double(0.0), Expr::Double(0.0).eval(&vars, &fs).unwrap());
         assert_eq!(Value::Integer(0), Expr::Integer(0).eval(&vars, &fs).unwrap());
         assert_eq!(
             Value::Text("z".to_owned()),
@@ -1367,6 +1565,8 @@ mod tests {
     fn test_expr_symbol() {
         let bool_ref = VarRef::new("a_boolean", VarType::Auto);
         let bool_val = Value::Boolean(true);
+        let double_ref = VarRef::new("a_double", VarType::Auto);
+        let double_val = Value::Double(0.0);
         let int_ref = VarRef::new("an_integer", VarType::Auto);
         let int_val = Value::Integer(0);
         let text_ref = VarRef::new("a_string", VarType::Auto);
@@ -1374,12 +1574,14 @@ mod tests {
 
         let mut vars = Vars::default();
         vars.set(&bool_ref, bool_val.clone()).unwrap();
+        vars.set(&double_ref, double_val.clone()).unwrap();
         vars.set(&int_ref, int_val.clone()).unwrap();
         vars.set(&text_ref, text_val.clone()).unwrap();
 
         let fs = HashMap::default();
 
         assert_eq!(bool_val, Expr::Symbol(bool_ref).eval(&vars, &fs).unwrap());
+        assert_eq!(double_val, Expr::Symbol(double_ref).eval(&vars, &fs).unwrap());
         assert_eq!(int_val, Expr::Symbol(int_ref).eval(&vars, &fs).unwrap());
         assert_eq!(text_val, Expr::Symbol(text_ref).eval(&vars, &fs).unwrap());
 

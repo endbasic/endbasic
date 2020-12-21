@@ -16,8 +16,11 @@
 bool1 = TRUE: bool2? = FALSE
 PRINT bool1, bool2
 
-num1 = 1: num2% = 2
-PRINT num1, num2
+double1 = 1.5: double2# = 2.7
+PRINT double1, double2
+
+int1 = 1: int2% = 2
+PRINT int1, int2
 
 string1 = "foo": string2$ = "bar"
 PRINT string1, string2
