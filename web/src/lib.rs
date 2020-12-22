@@ -251,7 +251,8 @@ impl WebTerminal {
         terminal.on_key(on_key_callback.as_ref().unchecked_ref());
 
         let console = Rc::from(RefCell::from(XtermJsConsole { terminal, on_key_rx }));
-        let store = Rc::from(RefCell::from(store::WebStore::from_window()));
+        let store = store::WebStore::from_window();
+        let store = Rc::from(RefCell::from(endbasic_core::program::DemoStoreOverlay::new(store)));
         loop {
             let result =
                 endbasic_core::repl::run_repl_loop(console.clone(), store.clone(), BANNER).await;

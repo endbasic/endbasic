@@ -20,8 +20,10 @@
 
 use async_trait::async_trait;
 use endbasic_core::console::{ClearType, Console, Key, Position};
+use endbasic_core::program::{Metadata, Store};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::collections::VecDeque;
 use std::env;
 use std::fs;
@@ -129,6 +131,31 @@ impl Console for IncompleteConsole {
     }
 }
 
+#[derive(Default)]
+pub(crate) struct IncompleteStore {}
+
+impl Store for IncompleteStore {
+    fn delete(&mut self, name: &str) -> io::Result<()> {
+        println!("IncompleteStore::delete({})", name);
+        Ok(())
+    }
+
+    fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
+        println!("IncompleteStore::enumerate()");
+        Ok(BTreeMap::default())
+    }
+
+    fn get(&self, name: &str) -> io::Result<String> {
+        println!("IncompleteStore::get({})", name);
+        Ok("".to_owned())
+    }
+
+    fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
+        println!("IncompleteStore::put({}, {})", name, content);
+        Ok(())
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let path = match args.as_slice() {
@@ -141,8 +168,11 @@ fn main() {
 
     // TODO(jmmv): Truly add all commands in the core library and test for them.
     let console = Rc::from(RefCell::from(IncompleteConsole::default()));
+    let store = IncompleteStore::default();
+    let store = Rc::from(RefCell::from(endbasic_core::program::DemoStoreOverlay::new(store)));
     let mut machine = endbasic_core::exec::MachineBuilder::default()
-        .add_commands(endbasic_core::console::all_commands(console))
+        .add_commands(endbasic_core::console::all_commands(console.clone()))
+        .add_commands(endbasic_core::program::all_commands(console, store))
         .build();
 
     let mut input = match fs::File::open(path) {
