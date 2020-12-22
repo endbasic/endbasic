@@ -31,7 +31,7 @@ The latest version of EndBASIC is 0.3.1 and was released on 2020-11-29.
 
 Simply open EndBASIC right in your browser by visiting:
 
-> https://endbasic.jmmv.dev/
+> <https://endbasic.jmmv.dev/>
 
 The whole interpreter runs locally.  Any programs you write are persisted in
 your browser's local storage and not uploaded to the cloud.
@@ -39,7 +39,7 @@ your browser's local storage and not uploaded to the cloud.
 You can also read blog posts on EndBASIC, which cover the motivation behind the
 project, guided tours, etc. by visiting:
 
-> https://jmmv.dev/tags/endbasic/
+> <https://jmmv.dev/tags/endbasic/>
 
 ## Installation
 
@@ -54,11 +54,32 @@ cargo install endbasic
 
 ## Examples
 
-You can peek into the `*/tests` subdirectories of this repository to see actual
-EndBASIC code samples.  Look for all files with a `.bas` extension.
+EndBASIC comes bundled with a collection of demo programs that you can load and
+run in the REPL and the web.  Type `DIR` to see the list of available demos,
+then type `LOAD "DEMO:NAME.BAS"` to load a specific demo into memory, and then
+run it with `RUN`.  For example:
 
-The `*/examples` subdirectories contain sample code to show how to embed the
-EndBASIC interpreter into your own programs.
+```text
+Ready
+DIR
+
+    Modified              Size    Name
+    2020-12-22 14:20       651    DEMO:HELLO.BAS
+
+    1 file(s), 651 bytes
+
+Ready
+LOAD "DEMO:HELLO.BAS"
+Ready
+RUN
+What's your name? Julio
+Hello, Julio!
+```
+
+You can also browse the sample files right from this tree by heading to the
+[`core/examples`](core/examples) directory.  In there, you will find the `.bas`
+demo files as well as `.rs` files showing how to embed the EndBASIC interpreter
+in your own programs.
 
 ## Why EndBASIC?
 

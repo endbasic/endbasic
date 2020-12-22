@@ -9,6 +9,11 @@ not adhere to semantic versioning until 1.0.0.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
+*   Added support for built-in demo programs, loadable via the special
+    `DEMO:*.BAS` files.
+
+*   Added the `DEMO:HELLO.BAS` built-in demo program.
+
 *   Builds from `HEAD` are now pushed to a separate staging area to keep the
     official site pinned to the latest release.  This is to make release
     numbers meaningful in the web context.
