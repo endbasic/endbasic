@@ -177,6 +177,18 @@ fn test_example_custom_commands() {
 }
 
 #[test]
+fn test_example_guess() {
+    check(
+        bin_path("examples/complete"),
+        &[&src_str("core/tests/demo-guess.bas")],
+        0,
+        Behavior::File(src_path("core/tests/demo-guess.in")),
+        Behavior::File(src_path("core/tests/demo-guess.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_example_hello() {
     check(
         bin_path("examples/complete"),

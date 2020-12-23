@@ -56,22 +56,22 @@ fn line_to_keys(s: String) -> VecDeque<Key> {
 #[async_trait(?Send)]
 impl Console for IncompleteConsole {
     fn clear(&mut self, _how: ClearType) -> io::Result<()> {
-        eprintln!("Clearing the screen not implemented");
+        println!("IncompleteConsole::clear()");
         Ok(())
     }
 
-    fn color(&mut self, _fg: Option<u8>, _bg: Option<u8>) -> io::Result<()> {
-        eprintln!("Changing colors not implemented");
+    fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
+        println!("IncompleteConsole::color({:?}, {:?})", fg, bg);
         Ok(())
     }
 
     fn enter_alt(&mut self) -> io::Result<()> {
-        eprintln!("Alternate console switching not implemented");
+        println!("IncompleteConsole::enter_alt()");
         Ok(())
     }
 
     fn hide_cursor(&mut self) -> io::Result<()> {
-        eprintln!("Cursor visibility changes not implemented");
+        println!("IncompleteConsole::hide_cursor()");
         Ok(())
     }
 
@@ -80,17 +80,17 @@ impl Console for IncompleteConsole {
     }
 
     fn leave_alt(&mut self) -> io::Result<()> {
-        eprintln!("Alternate console switching not implemented");
+        println!("IncompleteConsole::leave_alt()");
         Ok(())
     }
 
-    fn locate(&mut self, _pos: Position) -> io::Result<()> {
-        eprintln!("Moving the cursor not implemented");
+    fn locate(&mut self, pos: Position) -> io::Result<()> {
+        println!("IncompleteConsole::locate({:?})", pos);
         Ok(())
     }
 
-    fn move_within_line(&mut self, _off: i16) -> io::Result<()> {
-        eprintln!("Moving the cursor not implemented");
+    fn move_within_line(&mut self, off: i16) -> io::Result<()> {
+        println!("IncompleteConsole::move_within_line({})", off);
         Ok(())
     }
 
@@ -115,7 +115,7 @@ impl Console for IncompleteConsole {
     }
 
     fn show_cursor(&mut self) -> io::Result<()> {
-        eprintln!("Cursor visibility changes not implemented");
+        println!("IncompleteConsole::show_cursor()");
         Ok(())
     }
 
@@ -170,10 +170,14 @@ fn main() {
     let console = Rc::from(RefCell::from(IncompleteConsole::default()));
     let store = IncompleteStore::default();
     let store = Rc::from(RefCell::from(endbasic_core::program::DemoStoreOverlay::new(store)));
-    let mut machine = endbasic_core::exec::MachineBuilder::default()
-        .add_commands(endbasic_core::console::all_commands(console.clone()))
-        .add_commands(endbasic_core::program::all_commands(console, store))
-        .build();
+    let mut machine = {
+        let mut builder = endbasic_core::exec::MachineBuilder::default()
+            .add_commands(endbasic_core::console::all_commands(console.clone()))
+            .add_commands(endbasic_core::program::all_commands(console, store))
+            .add_functions(endbasic_core::strings::all_functions());
+        builder = endbasic_core::numerics::add_all(builder);
+        builder.build()
+    };
 
     let mut input = match fs::File::open(path) {
         Ok(file) => file,
