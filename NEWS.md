@@ -12,7 +12,7 @@ not adhere to semantic versioning until 1.0.0.**
 *   Added support for built-in demo programs, loadable via the special
     `DEMO:*.BAS` files.
 
-*   Added the `DEMO:HELLO.BAS` built-in demo program.
+*   Added the `DEMO:GUESS.BAS` and `DEMO:HELLO.BAS` built-in demo programs.
 
 *   Builds from `HEAD` are now pushed to a separate staging area to keep the
     official site pinned to the latest release.  This is to make release

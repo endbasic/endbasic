@@ -90,6 +90,14 @@ impl<S: Store> DemoStoreOverlay<S> {
     pub fn new(delegate: S) -> Self {
         let mut demos = HashMap::default();
         {
+            let content = process_demo(include_bytes!("../examples/guess.bas"));
+            let metadata = Metadata {
+                date: time::OffsetDateTime::from_unix_timestamp(1608693152),
+                length: content.len() as u64,
+            };
+            demos.insert("DEMO:GUESS.BAS", (metadata, content));
+        }
+        {
             let content = process_demo(include_bytes!("../examples/hello.bas"));
             let metadata = Metadata {
                 date: time::OffsetDateTime::from_unix_timestamp(1608646800),
@@ -713,6 +721,7 @@ mod tests {
 
         let entries = store.enumerate().unwrap();
         assert!(entries.contains_key("under.bas"));
+        assert!(entries.contains_key("DEMO:GUESS.BAS"));
         assert!(entries.contains_key("DEMO:HELLO.BAS"));
         assert!(!entries.contains_key("DEMO:HIDDEN.BAS"));
         assert!(!entries.contains_key("demo:hidden.bas"));
