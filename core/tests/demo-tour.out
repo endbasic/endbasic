@@ -1,0 +1,214 @@
+IncompleteConsole::clear()
+IncompleteConsole::color(Some(11), None)
+
+ EndBASIC tour: Welcome!
+=========================
+IncompleteConsole::color(None, None)
+
+Welcome to the EndBASIC tour demo program.  I'm glad you have made it this far!
+
+EndBASIC is an interpreter for a BASIC-like language and is inspired by
+Amstrad's Locomotive BASIC 1.1 and Microsoft's QuickBASIC 4.5.  The main idea
+behind EndBASIC is to provide a playground for learning the foundations of
+programming in a simplified environment.
+
+EndBASIC is written in Rust and is proven to work on Linux, macOS and Windows.
+It likely works on other Unix systems too.  And, thanks to WASM, it also runs
+on the web--which I bet is how you are reading this right now.
+
+If you are accessing EndBASIC via the web interface, please be aware that
+this interface is highly experimental and has many rough edges.  In particular,
+things will go wrong if you try to resize the browser window.  Just reload
+the page for a "reboot".
+
+IncompleteConsole::color(Some(9), None)
+When not in the tour, use the HELP command to access the interactive help
+system.
+IncompleteConsole::color(None, None)
+
+Without further ado, let's get started!
+
+IncompleteConsole::color(Some(11), None)
+IncompleteConsole::clear()
+IncompleteConsole::color(Some(11), None)
+
+ EndBASIC tour: The basics
+===========================
+IncompleteConsole::color(None, None)
+
+There are four primitive types:
+
+* Booleans (?): Literals TRUE and FALSE.
+* Double-precision floating point (#): Literals must contain a period.
+* 32-bit integers (%): Literals must not contain a period.
+* Strings ($): Literals are double-quoted.
+
+Type annotations are optional when the type can be deduced.  The only time
+when they are required is when defining new variables via INPUT.
+There are no type promotions (not even between integers and doubles).
+
+A trivial program to ask a question and print an answer would look like:
+
+    INPUT "What is your name"; name$
+    PRINT "Hello,"; name$
+
+Expressions work as you would expect, with the usual operator precedence
+rules.  Expressions can take function calls too, but I'll let you find what
+those are via HELP.
+
+There are no line numbers and no plans to add them... so, sorry, no GOTO!
+
+IncompleteConsole::color(Some(11), None)
+IncompleteConsole::clear()
+IncompleteConsole::color(Some(11), None)
+
+ EndBASIC tour: Control flow
+=============================
+IncompleteConsole::color(None, None)
+
+Fully-specified if statements look like this:
+
+    IF a% = 1 THEN
+        PRINT "a is 1"
+    ELSEIF a% <> 2 THEN
+        PRINT "a is not 2"
+    ELSE
+        PRINT "a is something else"
+    END IF
+
+While loops look like this:
+
+    WHILE a% < 10
+        a% = a% + 1
+    END WHILE
+
+For loops look like this:
+
+    FOR a = 1 TO 10 STEP 2
+        PRINT a
+    NEXT
+
+IncompleteConsole::color(Some(11), None)
+IncompleteConsole::clear()
+IncompleteConsole::color(Some(11), None)
+
+ EndBASIC tour: File manipulation
+==================================
+IncompleteConsole::color(None, None)
+
+Given that you are reading this tour, you have already encountered how to
+load a program and run it.  But here is how you'd go about creating a new
+program from scratch:
+
+1. Type NEW to clear the machine's program and variables.
+2. Type EDIT to enter the full-screen editor.
+3. Type your program in the editor and then press ESC to exit.
+4. Optionally save your program with SAVE "some-name.bas".
+5. Run the program with RUN.
+6. Repeat from 2 if things don't go as planned.
+
+The cycle above works for demos too.  You can LOAD any demo program and
+enter the interactive editor with EDIT to see and modify its code.  What
+you cannot do is save them under their original name; you will have to pick
+a different name.
+
+If you are in the browser, rest assured that all programs are stored in
+your browser's local storage.  Nothing goes to the cloud.
+
+IncompleteConsole::color(Some(11), None)
+IncompleteConsole::clear()
+IncompleteConsole::color(Some(11), None)
+
+ EndBASIC tour: Screen manipulation
+====================================
+IncompleteConsole::color(None, None)
+
+You have several commands at your disposal to manipulate the contents of
+the screen.  Visual features are particularly interesting for teaching
+purposes, so expect more in this regard.
+
+For example, we can print the foundational colors by selecting them with
+the "COLOR" command and positioning the cursor with "LOCATE":
+
+IncompleteConsole::locate(Position { row: 11, column: 4 })
+IncompleteConsole::color(Some(0), None)
+This is color 0
+IncompleteConsole::locate(Position { row: 12, column: 4 })
+IncompleteConsole::color(Some(1), None)
+This is color 1
+IncompleteConsole::locate(Position { row: 13, column: 4 })
+IncompleteConsole::color(Some(2), None)
+This is color 2
+IncompleteConsole::locate(Position { row: 14, column: 4 })
+IncompleteConsole::color(Some(3), None)
+This is color 3
+IncompleteConsole::locate(Position { row: 15, column: 4 })
+IncompleteConsole::color(Some(4), None)
+This is color 4
+IncompleteConsole::locate(Position { row: 16, column: 4 })
+IncompleteConsole::color(Some(5), None)
+This is color 5
+IncompleteConsole::locate(Position { row: 17, column: 4 })
+IncompleteConsole::color(Some(6), None)
+This is color 6
+IncompleteConsole::locate(Position { row: 18, column: 4 })
+IncompleteConsole::color(Some(7), None)
+This is color 7
+IncompleteConsole::locate(Position { row: 11, column: 23 })
+IncompleteConsole::color(Some(8), None)
+This is color 8
+IncompleteConsole::locate(Position { row: 12, column: 23 })
+IncompleteConsole::color(Some(9), None)
+This is color 9
+IncompleteConsole::locate(Position { row: 13, column: 23 })
+IncompleteConsole::color(Some(10), None)
+This is color 10
+IncompleteConsole::locate(Position { row: 14, column: 23 })
+IncompleteConsole::color(Some(11), None)
+This is color 11
+IncompleteConsole::locate(Position { row: 15, column: 23 })
+IncompleteConsole::color(Some(12), None)
+This is color 12
+IncompleteConsole::locate(Position { row: 16, column: 23 })
+IncompleteConsole::color(Some(13), None)
+This is color 13
+IncompleteConsole::locate(Position { row: 17, column: 23 })
+IncompleteConsole::color(Some(14), None)
+This is color 14
+IncompleteConsole::locate(Position { row: 18, column: 23 })
+IncompleteConsole::color(Some(15), None)
+This is color 15
+IncompleteConsole::color(None, None)
+
+IncompleteConsole::color(Some(11), None)
+IncompleteConsole::clear()
+IncompleteConsole::color(Some(11), None)
+
+ EndBASIC tour: Enjoy
+======================
+IncompleteConsole::color(None, None)
+
+And that's it for the tour.  You can now type EDIT to see the code that
+took you over this journey, load other demo files or... just go forth and
+explore.  HELP and DIR are your friends at any point.
+
+If you like what you have seen so far, please head to the project's GitHub
+page and give it a star:
+IncompleteConsole::color(Some(12), None)
+
+    https://github.com/jmmv/endbasic/
+
+IncompleteConsole::color(None, None)
+Then, visit my blog and subscribe to receive fresh EndBASIC content or...
+you know, to keep me motivated in writing stuff and building this project:
+IncompleteConsole::color(Some(12), None)
+
+    https://jmmv.dev/
+
+IncompleteConsole::color(None, None)
+Thank you! :-)
+
+IncompleteConsole::color(Some(10), None)
+-- Brought to you by Julio Merino <jmmv@>
+IncompleteConsole::color(None, None)
+
