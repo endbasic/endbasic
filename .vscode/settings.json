@@ -1,8 +1,8 @@
 {
     "editor.insertSpaces": true,
-    "editor.rulers": [80],
+    "editor.rulers": [100],
     "editor.tabSize": 4,
-    "editor.wordWrapColumn": 80,
+    "editor.wordWrapColumn": 100,
 
     "files.associations": {
         "*.1": "troff"
@@ -18,18 +18,10 @@
     "rust.cfg_test": true,
     "rust.clippy_preference": "on",
 
-    "[html]": {
-        "editor.rulers": [100],
-        "editor.wordWrapColumn": 100
-    },
-
-    "[javascript]": {
-        "editor.rulers": [100],
-        "editor.wordWrapColumn": 100
-    },
-
     "[markdown]": {
-        "editor.quickSuggestions": false
+        "editor.rulers": [80],
+        "editor.quickSuggestions": false,
+        "editor.wordWrapColumn": 80
     },
 
     "markdownlint.config": {
@@ -52,13 +44,12 @@
 
     "[rust]": {
         "editor.formatOnSave": true,
-        "editor.rulers": [100],
-        "editor.tabSize": 4,
-        "editor.wordWrapColumn": 100
     },
 
-    "[troff]": {
-        "editor.quickSuggestions": false
+    "[plaintext]": {
+        "editor.rulers": [80],
+        "editor.quickSuggestions": false,
+        "editor.wordWrapColumn": 80
     },
 
     "cSpell.words": [
