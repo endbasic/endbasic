@@ -98,7 +98,6 @@ impl BuiltinCommand for ExitCommand {
 pub async fn run_repl_loop(
     console: Rc<RefCell<dyn Console>>,
     store: Rc<RefCell<dyn Store>>,
-    banner: &[&str],
 ) -> io::Result<i32> {
     let exit_code = Rc::from(RefCell::from(None));
     let mut machine = {
@@ -117,14 +116,9 @@ pub async fn run_repl_loop(
         let mut console = console.borrow_mut();
         console.print("")?;
         console.print(&format!("    Welcome to EndBASIC {}.", env!("CARGO_PKG_VERSION")))?;
-        if !banner.is_empty() {
-            console.print("")?;
-            for line in banner {
-                console.print(&format!("    {}", line))?;
-            }
-            console.print("")?;
-        }
+        console.print("")?;
         console.print("    Type HELP for interactive usage information.")?;
+        console.print("    Type LOAD \"DEMO:TOUR.BAS\": RUN for a guided tour.")?;
         console.print("")?;
     }
 

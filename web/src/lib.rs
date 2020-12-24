@@ -37,22 +37,6 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use xterm_js_rs::{OnKeyEvent, Terminal};
 
-const BANNER: &[&str] = &[
-    "EndBASIC is an interpreter for a BASIC-like language and is inspired by",
-    "Amstrad's Locomotive BASIC 1.1 and Microsoft's QuickBASIC 4.5.  The main",
-    "idea behind EndBASIC is to provide a playground for learning the",
-    "foundations of programming in a simplified environment.",
-    "",
-    "EndBASIC is written in Rust and is deployed to the web using WASM.",
-    "Everything, including program saves and restores, happens on the client.",
-    "",
-    "Please be aware that this web interface is highly experimental and has",
-    "many rough edges.  In particular, things will go wrong if you try to",
-    "resize the browser window.  Just reload the page for a \"reboot\".",
-    "",
-    "See the links at the bottom of the page for more details and... enjoy!",
-];
-
 /// Converts an xterm.js key event into our own `Key` representation.
 fn on_key_event_into_key(event: OnKeyEvent) -> Key {
     let dom_event = event.dom_event();
@@ -254,8 +238,7 @@ impl WebTerminal {
         let store = store::WebStore::from_window();
         let store = Rc::from(RefCell::from(endbasic_core::program::DemoStoreOverlay::new(store)));
         loop {
-            let result =
-                endbasic_core::repl::run_repl_loop(console.clone(), store.clone(), BANNER).await;
+            let result = endbasic_core::repl::run_repl_loop(console.clone(), store.clone()).await;
             let mut console = console.borrow_mut();
             match result {
                 Ok(exit_code) => {
