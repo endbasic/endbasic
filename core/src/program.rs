@@ -105,6 +105,14 @@ impl<S: Store> DemoStoreOverlay<S> {
             };
             demos.insert("DEMO:HELLO.BAS", (metadata, content));
         }
+        {
+            let content = process_demo(include_bytes!("../examples/tour.bas"));
+            let metadata = Metadata {
+                date: time::OffsetDateTime::from_unix_timestamp(1608774770),
+                length: content.len() as u64,
+            };
+            demos.insert("DEMO:TOUR.BAS", (metadata, content));
+        }
         Self { demos, delegate }
     }
 
@@ -723,6 +731,7 @@ mod tests {
         assert!(entries.contains_key("under.bas"));
         assert!(entries.contains_key("DEMO:GUESS.BAS"));
         assert!(entries.contains_key("DEMO:HELLO.BAS"));
+        assert!(entries.contains_key("DEMO:TOUR.BAS"));
         assert!(!entries.contains_key("DEMO:HIDDEN.BAS"));
         assert!(!entries.contains_key("demo:hidden.bas"));
     }

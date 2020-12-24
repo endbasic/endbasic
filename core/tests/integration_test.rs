@@ -201,6 +201,18 @@ fn test_example_hello() {
 }
 
 #[test]
+fn test_example_tour() {
+    check(
+        bin_path("examples/complete"),
+        &[&src_str("core/tests/demo-tour.bas")],
+        0,
+        Behavior::File(src_path("core/tests/demo-tour.in")),
+        Behavior::File(src_path("core/tests/demo-tour.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_example_minimal() {
     check(
         bin_path("examples/minimal"),
