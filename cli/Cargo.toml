@@ -1,6 +1,6 @@
 [package]
 name = "endbasic"
-version = "0.3.1"
+version = "0.4.0"
 license = "Apache-2.0"
 authors = ["Julio Merino <julio@meroh.net>"]
 categories = ["development-tools", "parser-implementations"]
@@ -19,7 +19,7 @@ anyhow = "1.0"
 async-trait = "0.1"
 crossterm = "0.18"
 dirs = "2.0"
-endbasic-core = { version = "0.3.1", path = "../core" }
+endbasic-core = { version = "0.4.0", path = "../core" }
 futures-lite = "1.1"
 getopts = "0.2"
 thiserror = "1.0"
