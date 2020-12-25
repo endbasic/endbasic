@@ -5,19 +5,19 @@ the EndBASIC language definition nor the API exposed by this crate.  Expect
 them to change at any time (especially the Rust API).  Version numbers will
 not adhere to semantic versioning until 1.0.0.**
 
-## Changes in version X.Y.Z
+## Changes in version 0.4.0
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2020-12-25.**
 
-*   Added support for built-in demo programs, loadable via the special
-    `DEMO:*.BAS` files.
+New user-experience features:
+
+*   Added support for built-in demo programs.  These are loadable via the
+    special read-only `DEMO:*.BAS` files.
 
 *   Added the `DEMO:GUESS.BAS`, `DEMO:HELLO.BAS` and `DEMO:TOUR.BAS` built-in
     demo programs.
 
-*   Builds from `HEAD` are now pushed to a separate staging area to keep the
-    official site pinned to the latest release.  This is to make release
-    numbers meaningful in the web context.
+New language features:
 
 *   Added simple `FOR` range loops with support for custom `STEP`s.
 
@@ -28,18 +28,28 @@ not adhere to semantic versioning until 1.0.0.**
 
 *   Added numerical functions: `DTOI` and `ITOD`.
 
+*   Added support to for random numbers via the `RANDOMIZE` command and the
+    `RND` numerical function.
+
+*   Added support for double-precision floating point numbers (`#` type
+    annotation).  This feature is incomplete in many ways but is needed for
+    random number generation.  Notably, it is not possible to express some
+    double values in the code (exponents, infinities, and NaNs), and there is
+    no type promotion between integers and doubles.  Use the new `ITOD` AND
+    `DTOI` functions to convert between these two types.
+
+Bug fixes:
+
 *   Fixed the expression parser to properly handle subtractions where the first
     operand is a negative number.
 
 *   Fixed the expression parser to detect and report unbalanced parenthesis.
 
-*   Added support for double-precision floating point numbers (`#` type
-    annotation).  This feature is likely incomplete in many ways but is needed
-    for random number generation, for example.  Notably, numeric type promotion
-    is not implemented, but the new `ITOD` AND `DTOI` functions help in
-    converting from integers to doubles and back.
+Operational changes:
 
-*   Added support to generate random numbers via `RANDOMIZE` and `RND`.
+*   Builds from `HEAD` are now pushed to a separate staging area to keep the
+    official site pinned to the latest release.  This is to make release
+    numbers meaningful in the web context.
 
 ## Changes in version 0.3.1
 
