@@ -13,9 +13,6 @@ edition = "2018"
 build = "build.rs"
 publish = false
 
-[badges]
-travis-ci = { repository = "jmmv/endbasic", branch = "master" }
-
 [lib]
 crate-type = ["cdylib", "rlib"]
 
