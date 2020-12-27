@@ -11,9 +11,6 @@ repository = "https://github.com/jmmv/endbasic"
 readme = "README.md"
 edition = "2018"
 
-[badges]
-travis-ci = { repository = "jmmv/endbasic", branch = "master" }
-
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
