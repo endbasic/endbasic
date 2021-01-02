@@ -486,12 +486,15 @@ impl BuiltinCommand for NewCommand {
 /// The `RUN` command.
 struct RunCommand {
     metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
     program: Rc<RefCell<dyn Program>>,
 }
 
 impl RunCommand {
     /// Creates a new `RUN` command that executes the `program`.
-    pub fn new(program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+    ///
+    /// Reports any non-successful return codes from the program to the console.
+    pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RUN", VarType::Void)
                 .with_syntax("")
@@ -502,6 +505,7 @@ Note that the program runs in the context of the interpreter so it will pick up 
 and other state that may already be set.",
                 )
                 .build(),
+            console,
             program,
         })
     }
@@ -522,7 +526,11 @@ impl BuiltinCommand for RunCommand {
             return exec::new_usage_error("RUN takes no arguments");
         }
         let program = self.program.borrow().text();
-        machine.exec(&mut program.as_bytes()).await
+        let exit_code = machine.exec(&mut program.as_bytes()).await?;
+        if exit_code != 0 {
+            self.console.borrow_mut().print(&format!("Program exited with code {}", exit_code))?;
+        }
+        Ok(())
     }
 }
 
@@ -592,7 +600,7 @@ fn all_commands_for(
         EditCommand::new(console.clone(), program.clone()),
         LoadCommand::new(store.clone(), program.clone()),
         NewCommand::new(program.clone()),
-        RunCommand::new(program.clone()),
+        RunCommand::new(console, program.clone()),
         SaveCommand::new(store, program),
     ]
 }
@@ -1047,20 +1055,45 @@ mod tests {
 
     #[test]
     fn test_run_something_that_shares_state() {
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
+
         let program = Rc::from(RefCell::from(RecordedProgram::new("OUT var\nvar = var + 1")));
 
         let captured_out = Rc::from(RefCell::from(vec![]));
         let mut machine = MachineBuilder::default()
             .add_command(OutCommand::new(captured_out.clone()))
-            .add_command(RunCommand::new(program))
+            .add_command(RunCommand::new(console.clone(), program))
             .build();
 
         block_on(machine.exec(&mut b"var = 7: RUN".as_ref())).unwrap();
         assert_eq!(&["7"], captured_out.borrow().as_slice());
+        assert!(console.borrow().captured_out().is_empty());
 
         captured_out.borrow_mut().clear();
         block_on(machine.exec(&mut b"RUN".as_ref())).unwrap();
         assert_eq!(&["8"], captured_out.borrow().as_slice());
+        assert!(console.borrow().captured_out().is_empty());
+    }
+
+    #[test]
+    fn test_run_something_that_exits() {
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
+
+        let program = Rc::from(RefCell::from(RecordedProgram::new("OUT 5\nEXIT 1\nOUT 4")));
+
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        let mut machine = MachineBuilder::default()
+            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(captured_out.clone()))
+            .add_command(RunCommand::new(console.clone(), program))
+            .build();
+
+        assert_eq!(0, block_on(machine.exec(&mut b"RUN\nOUT \"after\"".as_ref())).unwrap());
+        assert_eq!(&["5", "after"], captured_out.borrow().as_slice());
+        assert_eq!(
+            &[CapturedOut::Print("Program exited with code 1".to_owned())],
+            console.borrow().captured_out()
+        );
     }
 
     #[test]
