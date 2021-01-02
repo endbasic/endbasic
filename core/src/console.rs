@@ -17,7 +17,7 @@
 
 use crate::ast::{ArgSep, Expr, Value, VarType};
 use crate::eval::{CallableMetadata, CallableMetadataBuilder};
-use crate::exec::{self, BuiltinCommand, Machine, MachineBuilder};
+use crate::exec::{self, Command, Machine, MachineBuilder};
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::io;
@@ -323,7 +323,7 @@ impl ClsCommand {
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for ClsCommand {
+impl Command for ClsCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -367,7 +367,7 @@ necessarily match any other color specifiable in the 0 to 255 range, as it might
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for ColorCommand {
+impl Command for ColorCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -435,7 +435,7 @@ variable to update with the obtained input.",
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for InputCommand {
+impl Command for InputCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -509,7 +509,7 @@ impl LocateCommand {
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for LocateCommand {
+impl Command for LocateCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -585,7 +585,7 @@ separated by the long `,` separator are concatenated with a tab character.",
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for PrintCommand {
+impl Command for PrintCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

@@ -17,9 +17,9 @@
 
 use crate::ast::{ArgSep, Expr, Value, VarType};
 use crate::eval::{
-    BuiltinFunction, CallableMetadata, CallableMetadataBuilder, FunctionError, FunctionResult,
+    CallableMetadata, CallableMetadataBuilder, Function, FunctionError, FunctionResult,
 };
-use crate::exec::{self, BuiltinCommand, Machine, MachineBuilder};
+use crate::exec::{self, Command, Machine, MachineBuilder};
 use async_trait::async_trait;
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
@@ -87,7 +87,7 @@ biggest possible integer that fits, respectively.",
     }
 }
 
-impl BuiltinFunction for DtoiFunction {
+impl Function for DtoiFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -118,7 +118,7 @@ impl ItodFunction {
     }
 }
 
-impl BuiltinFunction for ItodFunction {
+impl Function for ItodFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -156,7 +156,7 @@ WARNING: These random numbers offer no cryptographic guarantees.",
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for RandomizeCommand {
+impl Command for RandomizeCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -211,7 +211,7 @@ WARNING: These random numbers offer no cryptographic guarantees.",
     }
 }
 
-impl BuiltinFunction for RndFunction {
+impl Function for RndFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

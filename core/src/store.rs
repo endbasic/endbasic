@@ -18,7 +18,7 @@
 use crate::ast::{ArgSep, Expr, Value, VarType};
 use crate::console::Console;
 use crate::eval::{CallableMetadata, CallableMetadataBuilder};
-use crate::exec::{self, BuiltinCommand, Machine, MachineBuilder};
+use crate::exec::{self, Command, Machine, MachineBuilder};
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -272,7 +272,7 @@ impl ClearCommand {
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for ClearCommand {
+impl Command for ClearCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -315,7 +315,7 @@ extension is optional, but if present, it must be .BAS.",
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for DelCommand {
+impl Command for DelCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -363,7 +363,7 @@ impl DirCommand {
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for DirCommand {
+impl Command for DirCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -404,7 +404,7 @@ impl EditCommand {
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for EditCommand {
+impl Command for EditCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -452,7 +452,7 @@ extension is optional, but if present, it must be .BAS.",
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for LoadCommand {
+impl Command for LoadCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -500,7 +500,7 @@ impl NewCommand {
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for NewCommand {
+impl Command for NewCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -548,7 +548,7 @@ and other state that may already be set.",
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for RunCommand {
+impl Command for RunCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -597,7 +597,7 @@ extension is optional, but if present, it must be .BAS.",
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for SaveCommand {
+impl Command for SaveCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
