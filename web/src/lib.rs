@@ -30,6 +30,7 @@ mod store;
 
 use async_trait::async_trait;
 use endbasic_core::console::{ClearType, Console, Key, Position};
+use endbasic_core::store::DemoStoreOverlay;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::io;
@@ -237,7 +238,7 @@ impl WebTerminal {
 
         let console = Rc::from(RefCell::from(XtermJsConsole { terminal, on_key_rx }));
         let store = store::WebStore::from_window();
-        let store = Rc::from(RefCell::from(endbasic_core::program::DemoStoreOverlay::new(store)));
+        let store = Rc::from(RefCell::from(DemoStoreOverlay::new(store)));
         loop {
             let result = endbasic_core::repl::run_repl_loop(console.clone(), store.clone()).await;
             let mut console = console.borrow_mut();

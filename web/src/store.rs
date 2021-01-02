@@ -15,7 +15,7 @@
 
 //! Implementation of a `Store` that uses the browser's local storage.
 
-use endbasic_core::program::{Metadata, Store};
+use endbasic_core::store::{Metadata, Store};
 use std::collections::BTreeMap;
 use std::io;
 

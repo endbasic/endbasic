@@ -20,7 +20,7 @@
 
 use async_trait::async_trait;
 use endbasic_core::console::{ClearType, Console, Key, Position};
-use endbasic_core::program::{Metadata, Store};
+use endbasic_core::store::{DemoStoreOverlay, Metadata, Store};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -169,11 +169,11 @@ fn main() {
     // TODO(jmmv): Truly add all commands in the core library and test for them.
     let console = Rc::from(RefCell::from(IncompleteConsole::default()));
     let store = IncompleteStore::default();
-    let store = Rc::from(RefCell::from(endbasic_core::program::DemoStoreOverlay::new(store)));
+    let store = Rc::from(RefCell::from(DemoStoreOverlay::new(store)));
     let mut machine = {
         let mut builder = endbasic_core::exec::MachineBuilder::default()
             .add_commands(endbasic_core::console::all_commands(console.clone()))
-            .add_commands(endbasic_core::program::all_commands(console, store))
+            .add_commands(endbasic_core::store::all_commands(console, store))
             .add_functions(endbasic_core::strings::all_functions());
         builder = endbasic_core::numerics::add_all(builder);
         builder.build()

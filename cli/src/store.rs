@@ -15,7 +15,7 @@
 
 //! Implementation of a `FileStore` backed by an on-disk directory.
 
-use endbasic_core::program::{Metadata, Store};
+use endbasic_core::store::{Metadata, Store};
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -104,7 +104,7 @@ impl Store for FileStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use endbasic_core::program::Metadata;
+    use endbasic_core::store::Metadata;
     use std::io::BufRead;
     use std::path::Path;
 
