@@ -59,7 +59,7 @@ fn header() -> String {
     format!(
         "
     EndBASIC {}
-    Copyright 2020 Julio Merino
+    Copyright 2020-2021 Julio Merino
 
     Project page at <{}>
     License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>
