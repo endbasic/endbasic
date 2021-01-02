@@ -489,7 +489,7 @@ impl CallableMetadata {
 ///
 /// Idiomatically, these objects need to provide a `new()` method that returns an `Rc<Callable>`, as
 /// that's the type used throughout the execution engine.
-pub trait BuiltinFunction {
+pub trait Function {
     /// Returns the metadata for this function.
     ///
     /// The return value takes the form of a reference to force the callable to store the metadata
@@ -507,11 +507,7 @@ impl Expr {
     ///
     /// Variable references are resolved by querying `vars`.  Function calls are resolved by
     /// querying `fs`.  Errors in the computation are returned via the special `Value::Bad` type.
-    pub fn eval(
-        &self,
-        vars: &Vars,
-        fs: &HashMap<&'static str, Rc<dyn BuiltinFunction>>,
-    ) -> Result<Value> {
+    pub fn eval(&self, vars: &Vars, fs: &HashMap<&'static str, Rc<dyn Function>>) -> Result<Value> {
         match self {
             Expr::Boolean(b) => Ok(Value::Boolean(*b)),
             Expr::Double(d) => Ok(Value::Double(*d)),
@@ -594,7 +590,7 @@ pub(crate) mod testutils {
         }
     }
 
-    impl BuiltinFunction for SumFunction {
+    impl Function for SumFunction {
         fn metadata(&self) -> &CallableMetadata {
             &self.metadata
         }
@@ -624,7 +620,7 @@ pub(crate) mod testutils {
         }
     }
 
-    impl BuiltinFunction for TypeCheckFunction {
+    impl Function for TypeCheckFunction {
         fn metadata(&self) -> &CallableMetadata {
             &self.metadata
         }
@@ -650,7 +646,7 @@ pub(crate) mod testutils {
         }
     }
 
-    impl BuiltinFunction for ErrorFunction {
+    impl Function for ErrorFunction {
         fn metadata(&self) -> &CallableMetadata {
             &self.metadata
         }
@@ -1769,7 +1765,7 @@ mod tests {
         let mut vars = Vars::default();
         vars.set(&xref, Value::Integer(5)).unwrap();
 
-        let mut fs: HashMap<&'static str, Rc<dyn BuiltinFunction>> = HashMap::default();
+        let mut fs: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
         let sum = SumFunction::new();
         fs.insert(sum.metadata().name(), sum);
 
@@ -1837,7 +1833,7 @@ mod tests {
         let vars = Vars::default();
 
         {
-            let mut fs: HashMap<&'static str, Rc<dyn BuiltinFunction>> = HashMap::default();
+            let mut fs: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
             let tcf = TypeCheckFunction::new(Value::Boolean(true));
             fs.insert(tcf.metadata().name(), tcf);
             assert_eq!(
@@ -1849,7 +1845,7 @@ mod tests {
         }
 
         {
-            let mut fs: HashMap<&'static str, Rc<dyn BuiltinFunction>> = HashMap::default();
+            let mut fs: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
             let tcf = TypeCheckFunction::new(Value::Integer(5));
             fs.insert(tcf.metadata().name(), tcf);
             assert_eq!(
@@ -1868,7 +1864,7 @@ mod tests {
     fn test_expr_function_error_check() {
         let vars = Vars::default();
 
-        let mut fs: HashMap<&'static str, Rc<dyn BuiltinFunction>> = HashMap::default();
+        let mut fs: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
         let ef = ErrorFunction::new();
         fs.insert(ef.metadata().name(), ef);
 

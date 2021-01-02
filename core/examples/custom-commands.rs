@@ -22,7 +22,7 @@
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::eval::{CallableMetadata, CallableMetadataBuilder};
-use endbasic_core::exec::{self, BuiltinCommand, Machine, MachineBuilder};
+use endbasic_core::exec::{self, Command, Machine, MachineBuilder};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::io;
@@ -58,7 +58,7 @@ impl StoreCommand {
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for StoreCommand {
+impl Command for StoreCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -103,7 +103,7 @@ impl RetrieveCommand {
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for RetrieveCommand {
+impl Command for RetrieveCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

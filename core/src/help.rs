@@ -17,8 +17,8 @@
 
 use crate::ast::{ArgSep, Expr, VarType};
 use crate::console::Console;
-use crate::eval::{BuiltinFunction, CallableMetadata, CallableMetadataBuilder};
-use crate::exec::{self, BuiltinCommand, Machine, MachineBuilder};
+use crate::eval::{CallableMetadata, CallableMetadataBuilder, Function};
+use crate::exec::{self, Command, Machine, MachineBuilder};
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -73,8 +73,8 @@ fn header() -> String {
 // TODO(jmmv): This is a code smell from the lack of genericity between commands and functions.
 // If we can homogenize their representation, this should go away.
 fn compute_callables<'a>(
-    commands: &'a HashMap<&'static str, Rc<dyn BuiltinCommand>>,
-    functions: &'a HashMap<&'static str, Rc<dyn BuiltinFunction>>,
+    commands: &'a HashMap<&'static str, Rc<dyn Command>>,
+    functions: &'a HashMap<&'static str, Rc<dyn Function>>,
 ) -> HashMap<&'static str, &'a CallableMetadata> {
     let mut callables: HashMap<&'static str, &'a CallableMetadata> = HashMap::default();
     for (name, command) in commands.iter() {
@@ -196,7 +196,7 @@ function.",
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for HelpCommand {
+impl Command for HelpCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -275,7 +275,7 @@ Second paragraph of the extended description.",
     }
 
     #[async_trait(?Send)]
-    impl BuiltinCommand for DoNothingCommand {
+    impl Command for DoNothingCommand {
         fn metadata(&self) -> &CallableMetadata {
             &self.metadata
         }
@@ -310,7 +310,7 @@ Second paragraph of the extended description.",
         }
     }
 
-    impl BuiltinFunction for EmptyFunction {
+    impl Function for EmptyFunction {
         fn metadata(&self) -> &CallableMetadata {
             &self.metadata
         }

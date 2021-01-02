@@ -16,7 +16,7 @@
 //! Execution engine for EndBASIC programs.
 
 use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
-use crate::eval::{self, BuiltinFunction, CallableMetadata, Vars};
+use crate::eval::{self, CallableMetadata, Function, Vars};
 use crate::parser::{self, Parser};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -71,7 +71,7 @@ pub fn new_usage_error<T, S: Into<String>>(message: S) -> Result<T> {
 /// Idiomatically, these objects need to provide a `new()` method that returns an `Rc<Callable>`, as
 /// that's the type used throughout the execution engine.
 #[async_trait(?Send)]
-pub trait BuiltinCommand {
+pub trait Command {
     /// Returns the metadata for this command.
     ///
     /// The return value takes the form of a reference to force the callable to store the metadata
@@ -97,13 +97,13 @@ pub trait BuiltinCommand {
 /// builtin functions.
 #[derive(Default)]
 pub struct MachineBuilder {
-    commands: HashMap<&'static str, Rc<dyn BuiltinCommand>>,
-    functions: HashMap<&'static str, Rc<dyn BuiltinFunction>>,
+    commands: HashMap<&'static str, Rc<dyn Command>>,
+    functions: HashMap<&'static str, Rc<dyn Function>>,
 }
 
 impl MachineBuilder {
     /// Registers the given builtin command, which must not yet be registered.
-    pub fn add_command(mut self, command: Rc<dyn BuiltinCommand>) -> Self {
+    pub fn add_command(mut self, command: Rc<dyn Command>) -> Self {
         let metadata = command.metadata();
         assert!(
             self.commands.get(&metadata.name()).is_none(),
@@ -114,7 +114,7 @@ impl MachineBuilder {
     }
 
     /// Registers the given builtin function, which must not yet be registered.
-    pub fn add_function(mut self, function: Rc<dyn BuiltinFunction>) -> Self {
+    pub fn add_function(mut self, function: Rc<dyn Function>) -> Self {
         let metadata = function.metadata();
         assert!(
             self.functions.get(&metadata.name()).is_none(),
@@ -125,7 +125,7 @@ impl MachineBuilder {
     }
 
     /// Registers the given builtin commands.  See `add_command` for more details.
-    pub fn add_commands(mut self, commands: Vec<Rc<dyn BuiltinCommand>>) -> Self {
+    pub fn add_commands(mut self, commands: Vec<Rc<dyn Command>>) -> Self {
         for command in commands {
             self = self.add_command(command);
         }
@@ -133,7 +133,7 @@ impl MachineBuilder {
     }
 
     /// Registers the given builtin functions.  See `add_function` for more details.
-    pub fn add_functions(mut self, functions: Vec<Rc<dyn BuiltinFunction>>) -> Self {
+    pub fn add_functions(mut self, functions: Vec<Rc<dyn Function>>) -> Self {
         for function in functions {
             self = self.add_function(function);
         }
@@ -154,8 +154,8 @@ impl MachineBuilder {
 /// Executes an EndBASIC program and tracks its state.
 #[derive(Default)]
 pub struct Machine {
-    commands: HashMap<&'static str, Rc<dyn BuiltinCommand>>,
-    functions: HashMap<&'static str, Rc<dyn BuiltinFunction>>,
+    commands: HashMap<&'static str, Rc<dyn Command>>,
+    functions: HashMap<&'static str, Rc<dyn Function>>,
     vars: Vars,
     stop_exit_code: Option<u8>,
 }
@@ -175,12 +175,12 @@ impl Machine {
     }
 
     /// Obtains immutable access to the builtin commands provided by this machine.
-    pub fn get_commands(&self) -> &HashMap<&'static str, Rc<dyn BuiltinCommand>> {
+    pub fn get_commands(&self) -> &HashMap<&'static str, Rc<dyn Command>> {
         &self.commands
     }
 
     /// Obtains immutable access to the builtin functions provided by this machine.
-    pub fn get_functions(&self) -> &HashMap<&'static str, Rc<dyn BuiltinFunction>> {
+    pub fn get_functions(&self) -> &HashMap<&'static str, Rc<dyn Function>> {
         &self.functions
     }
 
@@ -374,7 +374,7 @@ pub(crate) mod testutils {
     }
 
     #[async_trait(?Send)]
-    impl BuiltinCommand for ExitCommand {
+    impl Command for ExitCommand {
         fn metadata(&self) -> &CallableMetadata {
             &self.metadata
         }
@@ -419,7 +419,7 @@ pub(crate) mod testutils {
     }
 
     #[async_trait(?Send)]
-    impl BuiltinCommand for InCommand {
+    impl Command for InCommand {
         fn metadata(&self) -> &CallableMetadata {
             &self.metadata
         }
@@ -464,7 +464,7 @@ pub(crate) mod testutils {
     }
 
     #[async_trait(?Send)]
-    impl BuiltinCommand for OutCommand {
+    impl Command for OutCommand {
         fn metadata(&self) -> &CallableMetadata {
             &self.metadata
         }

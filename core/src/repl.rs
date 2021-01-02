@@ -18,7 +18,7 @@
 use crate::ast::{ArgSep, Expr, Value, VarType};
 use crate::console::{self, Console};
 use crate::eval::{CallableMetadata, CallableMetadataBuilder};
-use crate::exec::{self, BuiltinCommand, Machine, MachineBuilder};
+use crate::exec::{self, Command, Machine, MachineBuilder};
 use crate::store::Store;
 use async_trait::async_trait;
 use std::cell::RefCell;
@@ -47,7 +47,7 @@ The optional code indicates the return value to return to the system.",
 }
 
 #[async_trait(?Send)]
-impl BuiltinCommand for ExitCommand {
+impl Command for ExitCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

@@ -17,7 +17,7 @@
 
 use crate::ast::{Value, VarType};
 use crate::eval::{
-    BuiltinFunction, CallableMetadata, CallableMetadataBuilder, FunctionError, FunctionResult,
+    CallableMetadata, CallableMetadataBuilder, Function, FunctionError, FunctionResult,
 };
 use crate::exec::MachineBuilder;
 use std::cmp::min;
@@ -48,7 +48,7 @@ If n% is greater than or equal to the number of characters in expr$, returns exp
     }
 }
 
-impl BuiltinFunction for LeftFunction {
+impl Function for LeftFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -86,7 +86,7 @@ impl LenFunction {
     }
 }
 
-impl BuiltinFunction for LenFunction {
+impl Function for LenFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -123,7 +123,7 @@ impl LtrimFunction {
     }
 }
 
-impl BuiltinFunction for LtrimFunction {
+impl Function for LtrimFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -159,7 +159,7 @@ until the end of the string.",
     }
 }
 
-impl BuiltinFunction for MidFunction {
+impl Function for MidFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -204,7 +204,7 @@ If n% is greater than or equal to the number of characters in expr$, returns exp
     }
 }
 
-impl BuiltinFunction for RightFunction {
+impl Function for RightFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -242,7 +242,7 @@ impl RtrimFunction {
     }
 }
 
-impl BuiltinFunction for RtrimFunction {
+impl Function for RtrimFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
