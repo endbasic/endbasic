@@ -5,6 +5,13 @@ the EndBASIC language definition nor the API exposed by this crate.  Expect
 them to change at any time (especially the Rust API).  Version numbers will
 not adhere to semantic versioning until 1.0.0.**
 
+## Changes in version X.Y.Z
+
+**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+
+*   Fixed the `EXIT` command so that it doesn't terminate the REPL when it is
+    part of a script run via `RUN`.
+
 ## Changes in version 0.4.0
 
 **Released on 2020-12-25.**

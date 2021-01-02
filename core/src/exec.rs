@@ -142,7 +142,12 @@ impl MachineBuilder {
 
     /// Creates a new machine with the current configuration.
     pub fn build(self) -> Machine {
-        Machine { commands: self.commands, functions: self.functions, vars: Vars::default() }
+        Machine {
+            commands: self.commands,
+            functions: self.functions,
+            vars: Vars::default(),
+            stop_exit_code: None,
+        }
     }
 }
 
@@ -152,12 +157,21 @@ pub struct Machine {
     commands: HashMap<&'static str, Rc<dyn BuiltinCommand>>,
     functions: HashMap<&'static str, Rc<dyn BuiltinFunction>>,
     vars: Vars,
+    stop_exit_code: Option<u8>,
 }
 
 impl Machine {
     /// Resets the state of the machine by clearing all variable.
     pub fn clear(&mut self) {
         self.vars.clear()
+    }
+
+    /// Tells the machine to stop execution at the next statement boundary.
+    ///
+    /// The `exec()` call that's stopped by this invocation will return the `code` given to this
+    /// call.
+    pub fn exit(&mut self, code: u8) {
+        self.stop_exit_code = Some(code);
     }
 
     /// Obtains immutable access to the builtin commands provided by this machine.
@@ -285,6 +299,10 @@ impl Machine {
 
     /// Executes a single statement.
     async fn exec_one<'a>(&'a mut self, stmt: &'a Statement) -> Result<()> {
+        if self.stop_exit_code.is_some() {
+            return Ok(());
+        }
+
         match stmt {
             Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
             Statement::BuiltinCall(name, args) => {
@@ -322,12 +340,16 @@ impl Machine {
     ///
     /// Note that this does not consume `self`.  As a result, it is possible to execute multiple
     /// different programs on the same machine, all sharing state.
-    pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<()> {
+    pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<u8> {
+        debug_assert!(self.stop_exit_code.is_none());
         let mut parser = Parser::from(input);
-        while let Some(stmt) = parser.parse()? {
-            self.exec_one(&stmt).await?;
+        while self.stop_exit_code.is_none() {
+            match parser.parse()? {
+                Some(stmt) => self.exec_one(&stmt).await?,
+                None => break,
+            }
         }
-        Ok(())
+        Ok(self.stop_exit_code.take().unwrap_or(0))
     }
 }
 
@@ -368,6 +390,44 @@ impl BuiltinCommand for ClearCommand {
 pub(crate) mod testutils {
     use super::*;
     use std::cell::RefCell;
+
+    /// Simplified version of the `EXIT` command.
+    pub(crate) struct ExitCommand {
+        metadata: CallableMetadata,
+    }
+
+    impl ExitCommand {
+        /// Creates a new command that terminates execution once called.
+        pub fn new() -> Rc<Self> {
+            Rc::from(Self {
+                metadata: CallableMetadataBuilder::new("EXIT", VarType::Void).test_build(),
+            })
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl BuiltinCommand for ExitCommand {
+        fn metadata(&self) -> &CallableMetadata {
+            &self.metadata
+        }
+
+        async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
+            let arg = match args {
+                [(Some(expr), ArgSep::End)] => {
+                    match expr.eval(machine.get_vars(), machine.get_functions())? {
+                        Value::Integer(n) => {
+                            assert!(n >= 0 && n < std::u8::MAX as i32, "Exit code out of range");
+                            n as u8
+                        }
+                        _ => panic!("Exit code must be a positive integer"),
+                    }
+                }
+                _ => panic!("EXIT takes one argument"),
+            };
+            machine.exit(arg);
+            Ok(())
+        }
+    }
 
     /// Simplified version of `INPUT` to feed input values based on some golden `data`.
     ///
@@ -532,8 +592,9 @@ mod tests {
         input: &str,
         golden_in: &'static [&'static str],
         captured_out: Rc<RefCell<Vec<String>>>,
-    ) -> Result<()> {
+    ) -> Result<u8> {
         let mut machine = MachineBuilder::default()
+            .add_command(ExitCommand::new())
             .add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))))
             .add_command(OutCommand::new(captured_out))
             .add_function(SumFunction::new())
@@ -551,7 +612,7 @@ mod tests {
         expected_out: &'static [&'static str],
     ) {
         let captured_out = Rc::from(RefCell::from(vec![]));
-        run(input, golden_in, captured_out.clone()).expect("Execution failed");
+        assert_eq!(0, run(input, golden_in, captured_out.clone()).expect("Execution failed"));
         assert_eq!(expected_out, captured_out.borrow().as_slice());
     }
 
@@ -604,6 +665,67 @@ mod tests {
         do_simple_error_test("a = b\n", "Undefined variable b");
         do_simple_error_test("a = 3\na = TRUE\n", "Incompatible types in a assignment");
         do_simple_error_test("a? = 3", "Incompatible types in a? assignment");
+    }
+
+    #[test]
+    fn test_exit_simple() {
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        assert_eq!(
+            5,
+            run("OUT 1\nEXIT 5\nOUT 2", &[], captured_out.clone()).expect("Execution failed")
+        );
+        assert_eq!(&["1"], captured_out.borrow().as_slice());
+    }
+
+    #[test]
+    fn test_exit_zero_is_not_special() {
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        assert_eq!(
+            0,
+            run("OUT 1\nOUT 2\nEXIT 0\nOUT 3", &[], captured_out.clone())
+                .expect("Execution failed")
+        );
+        assert_eq!(&["1", "2"], captured_out.borrow().as_slice());
+    }
+
+    #[test]
+    fn test_exit_nested() {
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        assert_eq!(
+            42,
+            run(
+                "FOR a = 0 TO 10\nOUT a\nIF a = 3 THEN\nEXIT 42\nEND IF\nNEXT",
+                &[],
+                captured_out.clone()
+            )
+            .expect("Execution failed")
+        );
+        assert_eq!(&["0", "1", "2", "3"], captured_out.borrow().as_slice());
+    }
+
+    #[test]
+    fn test_exit_can_resume() {
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        let mut machine = MachineBuilder::default()
+            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(captured_out.clone()))
+            .add_function(SumFunction::new())
+            .build();
+
+        assert_eq!(
+            10,
+            block_on(machine.exec(&mut "OUT 1\nEXIT 10\nOUT 2".as_bytes()))
+                .expect("Execution failed")
+        );
+        assert_eq!(&["1"], captured_out.borrow().as_slice());
+
+        captured_out.borrow_mut().clear();
+        assert_eq!(
+            11,
+            block_on(machine.exec(&mut "OUT 2\nEXIT 11\nOUT 3".as_bytes()))
+                .expect("Execution failed")
+        );
+        assert_eq!(&["2"], captured_out.borrow().as_slice());
     }
 
     #[test]

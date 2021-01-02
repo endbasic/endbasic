@@ -27,7 +27,6 @@ use getopts::Options;
 use std::cell::RefCell;
 use std::env;
 use std::fs::File;
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::rc::Rc;
@@ -113,10 +112,9 @@ fn get_programs_dir(flag: Option<String>) -> Result<PathBuf> {
 /// Executes the `path` program in a fresh machine.
 fn run<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
     let console = Rc::from(RefCell::from(endbasic::TextConsole::from_stdio()?));
-    let exit_code = Rc::from(RefCell::from(None));
     let mut machine = {
         let mut builder = endbasic_core::exec::MachineBuilder::default()
-            .add_command(endbasic_core::repl::ExitCommand::new(exit_code.clone()))
+            .add_command(endbasic_core::repl::ExitCommand::new())
             .add_commands(endbasic_core::console::all_commands(console))
             .add_functions(endbasic_core::strings::all_functions());
         builder = endbasic_core::numerics::add_all(builder);
@@ -124,20 +122,7 @@ fn run<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
     };
 
     let mut input = File::open(path)?;
-    match block_on(machine.exec(&mut input)) {
-        Ok(()) => (),
-        Err(e) => {
-            if exit_code.borrow().is_some() {
-                if let endbasic_core::exec::Error::IoError(e) = e {
-                    debug_assert!(e.kind() == io::ErrorKind::UnexpectedEof);
-                }
-            } else {
-                return Err(e);
-            }
-        }
-    }
-    let exit_code = exit_code.borrow();
-    Ok(exit_code.unwrap_or(0))
+    Ok(block_on(machine.exec(&mut input))? as i32)
 }
 
 /// Version of `main` that returns errors to the caller for reporting.

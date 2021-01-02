@@ -31,12 +31,11 @@ use std::rc::Rc;
 /// The `EXIT` command.
 pub struct ExitCommand {
     metadata: CallableMetadata,
-    code: Rc<RefCell<Option<i32>>>,
 }
 
 impl ExitCommand {
-    /// Creates a new command that updates `code` with the exit code once called.
-    pub fn new(code: Rc<RefCell<Option<i32>>>) -> Rc<Self> {
+    /// Creates a new command that terminates execution once called.
+    pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("EXIT", VarType::Void)
                 .with_syntax("[code%]")
@@ -46,7 +45,6 @@ impl ExitCommand {
 The optional code indicates the return value to return to the system.",
                 )
                 .build(),
-            code,
         })
     }
 }
@@ -73,21 +71,15 @@ impl BuiltinCommand for ExitCommand {
                         if n >= 128 {
                             return exec::new_usage_error("Exit code cannot be larger than 127");
                         }
-                        n
+                        n as u8
                     }
                     _ => return exec::new_usage_error("Exit code must be a positive integer"),
                 }
             }
             _ => return exec::new_usage_error("EXIT takes zero or one argument"),
         };
-        let mut code = self.code.borrow_mut();
-        debug_assert!(code.is_none(), "EXIT called multiple times without exiting");
-        *code = Some(arg);
-
-        // TODO(jmmv): This is ugly, but we need a way to abort execution when we feed a line with
-        // multiple statements to the interpreter.  Maybe this will be nicer with custom error
-        // codes.
-        Err(io::Error::new(io::ErrorKind::UnexpectedEof, "").into())
+        machine.exit(arg);
+        Ok(())
     }
 }
 
@@ -99,11 +91,10 @@ pub async fn run_repl_loop(
     console: Rc<RefCell<dyn Console>>,
     store: Rc<RefCell<dyn Store>>,
 ) -> io::Result<i32> {
-    let exit_code = Rc::from(RefCell::from(None));
     let mut machine = {
         let mut builder = MachineBuilder::default()
             .add_command(ClearCommand::new())
-            .add_command(ExitCommand::new(exit_code.clone()))
+            .add_command(ExitCommand::new())
             .add_command(HelpCommand::new(console.clone()))
             .add_commands(console::all_commands(console.clone()))
             .add_commands(program::all_commands(console.clone(), store))
@@ -122,7 +113,8 @@ pub async fn run_repl_loop(
         console.print("")?;
     }
 
-    while exit_code.borrow().is_none() {
+    let mut exit_code = 0;
+    while exit_code == 0 {
         let line = {
             let mut console = console.borrow_mut();
             if console.is_interactive() {
@@ -133,16 +125,10 @@ pub async fn run_repl_loop(
 
         match line {
             Ok(line) => match machine.exec(&mut line.as_bytes()).await {
-                Ok(()) => (),
+                Ok(code) => exit_code = code,
                 Err(e) => {
-                    if exit_code.borrow().is_some() {
-                        if let exec::Error::IoError(e) = e {
-                            debug_assert!(e.kind() == io::ErrorKind::UnexpectedEof);
-                        }
-                    } else {
-                        let mut console = console.borrow_mut();
-                        console.print(format!("ERROR: {}", e).as_str())?;
-                    }
+                    let mut console = console.borrow_mut();
+                    console.print(format!("ERROR: {}", e).as_str())?;
                 }
             },
             Err(e) => {
@@ -150,19 +136,19 @@ pub async fn run_repl_loop(
                     let mut console = console.borrow_mut();
                     console.print("Interrupted by CTRL-C")?;
                     // TODO(jmmv): This should cause the interpreter to exit with a signal.
-                    *exit_code.borrow_mut() = Some(1);
+                    exit_code = 1;
                 } else if e.kind() == io::ErrorKind::UnexpectedEof {
                     let mut console = console.borrow_mut();
                     console.print("End of input by CTRL-D")?;
-                    *exit_code.borrow_mut() = Some(0);
+                    exit_code = 0;
+                    break;
                 } else {
-                    *exit_code.borrow_mut() = Some(1);
+                    exit_code = 1;
                 }
             }
         }
     }
-    let exit_code = exit_code.borrow();
-    Ok(exit_code.expect("Some code path above did not set an exit code"))
+    Ok(exit_code as i32)
 }
 
 #[cfg(test)]
@@ -172,30 +158,24 @@ mod tests {
 
     /// Runs the code `input` and expects it to fail with `expected_err`.
     fn do_error_test(input: &str, expected_err: &str) {
-        let exit_code = Rc::from(RefCell::from(None));
-        let mut machine =
-            MachineBuilder::default().add_command(ExitCommand::new(exit_code.clone())).build();
+        let mut machine = MachineBuilder::default().add_command(ExitCommand::new()).build();
         let err = block_on(machine.exec(&mut input.as_bytes())).unwrap_err();
         assert_eq!(expected_err, format!("{}", err));
-        assert!(exit_code.borrow().is_none());
     }
 
     #[test]
     fn test_exit_no_code() {
-        let exit_code = Rc::from(RefCell::from(None));
-        let mut machine =
-            MachineBuilder::default().add_command(ExitCommand::new(exit_code.clone())).build();
-        block_on(machine.exec(&mut b"a = 3: EXIT: a = 4".as_ref())).unwrap_err();
-        assert_eq!(0, exit_code.borrow().unwrap());
+        let mut machine = MachineBuilder::default().add_command(ExitCommand::new()).build();
+        assert_eq!(0, block_on(machine.exec(&mut b"a = 3: EXIT: a = 4".as_ref())).unwrap());
         assert_eq!(3, machine.get_var_as_int("a").unwrap());
     }
 
-    fn do_exit_with_code_test(code: i32) {
-        let exit_code = Rc::from(RefCell::from(None));
-        let mut machine =
-            MachineBuilder::default().add_command(ExitCommand::new(exit_code.clone())).build();
-        block_on(machine.exec(&mut format!("a = 3: EXIT {}: a = 4", code).as_bytes())).unwrap_err();
-        assert_eq!(code, exit_code.borrow().unwrap());
+    fn do_exit_with_code_test(code: u8) {
+        let mut machine = MachineBuilder::default().add_command(ExitCommand::new()).build();
+        assert_eq!(
+            code,
+            block_on(machine.exec(&mut format!("a = 3: EXIT {}: a = 4", code).as_bytes())).unwrap()
+        );
         assert_eq!(3, machine.get_var_as_int("a").unwrap());
     }
 
