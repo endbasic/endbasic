@@ -18,7 +18,7 @@
 use crate::ast::{ArgSep, Expr, Value, VarType};
 use crate::console::{self, Console};
 use crate::eval::{CallableMetadata, CallableMetadataBuilder};
-use crate::exec::{self, BuiltinCommand, ClearCommand, Machine, MachineBuilder};
+use crate::exec::{self, BuiltinCommand, Machine, MachineBuilder};
 use crate::help::HelpCommand;
 use crate::numerics;
 use crate::store::{self, Store};
@@ -93,7 +93,6 @@ pub async fn run_repl_loop(
 ) -> io::Result<i32> {
     let mut machine = {
         let mut builder = MachineBuilder::default()
-            .add_command(ClearCommand::new())
             .add_command(ExitCommand::new())
             .add_command(HelpCommand::new(console.clone()))
             .add_commands(console::all_commands(console.clone()))
