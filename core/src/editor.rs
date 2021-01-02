@@ -57,9 +57,9 @@ pub struct Editor {
     insert_col: usize,
 }
 
-impl Editor {
+impl Default for Editor {
     /// Creates a new editor without any stored contents.
-    pub fn new() -> Self {
+    fn default() -> Self {
         Self {
             content: vec![],
             viewport_pos: Position { row: 0, column: 0 },
@@ -67,7 +67,9 @@ impl Editor {
             insert_col: 0,
         }
     }
+}
 
+impl Editor {
     /// Rewrites the status line at the bottom of the `console`, using the previously queried
     /// `console_size`.
     ///
@@ -380,7 +382,7 @@ mod tests {
     /// editor are specified in `cb`. Note that the final Esc key press needed to exit the editor
     /// is automatically appended to `cb` here.
     fn run_editor(previous: &str, exp_text: &str, mut cb: MockConsoleBuilder, ob: OutputBuilder) {
-        let mut editor = Editor::new();
+        let mut editor = Editor::default();
         editor.load(previous);
 
         cb = cb.add_input_keys(&[Key::Escape]);
@@ -392,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_program_behavior() {
-        let mut editor = Editor::new();
+        let mut editor = Editor::default();
         assert!(editor.text().is_empty());
 
         editor.load("some text\n    and more\n");
@@ -404,7 +406,7 @@ mod tests {
 
     #[test]
     fn test_force_trailing_newline() {
-        let mut editor = Editor::new();
+        let mut editor = Editor::default();
         assert!(editor.text().is_empty());
 
         editor.load("missing\nnewline at eof");
@@ -413,7 +415,7 @@ mod tests {
 
     #[test]
     fn test_editing_with_previous_content_starts_on_top_left() {
-        let cb = MockConsoleBuilder::new().with_size(rowcol(10, 40));
+        let cb = MockConsoleBuilder::default().with_size(rowcol(10, 40));
         let mut ob = OutputBuilder::new(rowcol(10, 40));
         ob = ob.refresh(rowcol(0, 0), &["previous content"], rowcol(0, 0));
 
@@ -422,7 +424,7 @@ mod tests {
 
     #[test]
     fn test_insert_in_empty_file() {
-        let mut cb = MockConsoleBuilder::new().with_size(rowcol(10, 40));
+        let mut cb = MockConsoleBuilder::default().with_size(rowcol(10, 40));
         let mut ob = OutputBuilder::new(rowcol(10, 40));
         ob = ob.refresh(rowcol(0, 0), &[""], rowcol(0, 0));
 
@@ -449,7 +451,7 @@ mod tests {
 
     #[test]
     fn test_insert_before_previous_content() {
-        let mut cb = MockConsoleBuilder::new().with_size(rowcol(10, 40));
+        let mut cb = MockConsoleBuilder::default().with_size(rowcol(10, 40));
         let mut ob = OutputBuilder::new(rowcol(10, 40));
         ob = ob.refresh(rowcol(0, 0), &["previous content"], rowcol(0, 0));
 
@@ -470,7 +472,7 @@ mod tests {
 
     #[test]
     fn test_move_in_empty_file() {
-        let mut cb = MockConsoleBuilder::new().with_size(rowcol(10, 40));
+        let mut cb = MockConsoleBuilder::default().with_size(rowcol(10, 40));
         let mut ob = OutputBuilder::new(rowcol(10, 40));
         ob = ob.refresh(rowcol(0, 0), &[""], rowcol(0, 0));
 
@@ -484,7 +486,7 @@ mod tests {
 
     #[test]
     fn test_move_preserves_insertion_column() {
-        let mut cb = MockConsoleBuilder::new().with_size(rowcol(10, 40));
+        let mut cb = MockConsoleBuilder::default().with_size(rowcol(10, 40));
         let mut ob = OutputBuilder::new(rowcol(10, 40));
         ob = ob.refresh(rowcol(0, 0), &["longer", "a", "longer", "b"], rowcol(0, 0));
 
@@ -521,7 +523,7 @@ mod tests {
 
     #[test]
     fn test_move_down_preserves_insertion_column_with_horizontal_scrolling() {
-        let mut cb = MockConsoleBuilder::new().with_size(rowcol(10, 40));
+        let mut cb = MockConsoleBuilder::default().with_size(rowcol(10, 40));
         let mut ob = OutputBuilder::new(rowcol(10, 40));
         ob = ob.refresh(
             rowcol(0, 0),
@@ -624,7 +626,7 @@ mod tests {
 
     #[test]
     fn test_move_up_preserves_insertion_column_with_horizontal_scrolling() {
-        let mut cb = MockConsoleBuilder::new().with_size(rowcol(10, 40));
+        let mut cb = MockConsoleBuilder::default().with_size(rowcol(10, 40));
         let mut ob = OutputBuilder::new(rowcol(10, 40));
         ob = ob.refresh(
             rowcol(0, 0),
@@ -733,7 +735,7 @@ mod tests {
 
     #[test]
     fn test_horizontal_scrolling() {
-        let mut cb = MockConsoleBuilder::new().with_size(rowcol(10, 40));
+        let mut cb = MockConsoleBuilder::default().with_size(rowcol(10, 40));
         let mut ob = OutputBuilder::new(rowcol(10, 40));
         ob = ob.refresh(rowcol(0, 0), &["ab", "", "xyz"], rowcol(0, 0));
 
@@ -838,7 +840,7 @@ mod tests {
 
     #[test]
     fn test_vertical_scrolling() {
-        let mut cb = MockConsoleBuilder::new().with_size(rowcol(5, 40));
+        let mut cb = MockConsoleBuilder::default().with_size(rowcol(5, 40));
         let mut ob = OutputBuilder::new(rowcol(5, 40));
         ob = ob.refresh(rowcol(0, 0), &["abc", "", "d", "e"], rowcol(0, 0));
 
@@ -883,7 +885,7 @@ mod tests {
 
     #[test]
     fn test_vertical_scrolling_when_splitting_last_visible_line() {
-        let mut cb = MockConsoleBuilder::new().with_size(rowcol(4, 40));
+        let mut cb = MockConsoleBuilder::default().with_size(rowcol(4, 40));
         let mut ob = OutputBuilder::new(rowcol(4, 40));
         ob = ob.refresh(rowcol(0, 0), &["first", "second", "thirdfourth"], rowcol(0, 0));
 
@@ -911,7 +913,7 @@ mod tests {
 
     #[test]
     fn test_horizontal_and_vertical_scrolling_when_splitting_last_visible_line() {
-        let mut cb = MockConsoleBuilder::new().with_size(rowcol(4, 40));
+        let mut cb = MockConsoleBuilder::default().with_size(rowcol(4, 40));
         let mut ob = OutputBuilder::new(rowcol(4, 40));
         ob = ob.refresh(
             rowcol(0, 0),
@@ -953,7 +955,7 @@ mod tests {
 
     #[test]
     fn test_vertical_scrolling_when_joining_first_visible_line() {
-        let mut cb = MockConsoleBuilder::new().with_size(rowcol(4, 40));
+        let mut cb = MockConsoleBuilder::default().with_size(rowcol(4, 40));
         let mut ob = OutputBuilder::new(rowcol(4, 40));
         ob = ob.refresh(rowcol(0, 0), &["first", "second", "third"], rowcol(0, 0));
 
@@ -987,7 +989,7 @@ mod tests {
 
     #[test]
     fn test_horizontal_and_vertical_scrolling_when_joining_first_visible_line() {
-        let mut cb = MockConsoleBuilder::new().with_size(rowcol(4, 40));
+        let mut cb = MockConsoleBuilder::default().with_size(rowcol(4, 40));
         let mut ob = OutputBuilder::new(rowcol(4, 40));
         ob = ob.refresh(
             rowcol(0, 0),

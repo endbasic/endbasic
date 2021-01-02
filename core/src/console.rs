@@ -746,15 +746,17 @@ pub(crate) mod testutils {
         size: Position,
     }
 
-    impl MockConsoleBuilder {
+    impl Default for MockConsoleBuilder {
         /// Creates a new console builder, with no golden input and an infinite size.
-        pub(crate) fn new() -> Self {
+        fn default() -> Self {
             Self {
                 golden_in: VecDeque::new(),
                 size: Position { row: usize::MAX, column: usize::MAX },
             }
         }
+    }
 
+    impl MockConsoleBuilder {
         /// Adds a bunch of characters as golden input keys.
         ///
         /// Note that some escape characters within `s` are interpreted and added as their
@@ -806,10 +808,10 @@ mod tests {
         exp_output: Vec<CapturedOut>,
     }
 
-    impl ReadLineInteractiveTest {
+    impl Default for ReadLineInteractiveTest {
         /// Constructs a new test that feeds no input to the function, with no prompt or previous
         /// text, and expects an empty return line and no changes to the console.
-        fn new() -> Self {
+        fn default() -> Self {
             Self {
                 keys: vec![],
                 prompt: "",
@@ -818,7 +820,9 @@ mod tests {
                 exp_output: vec![CapturedOut::Clear(ClearType::UntilNewLine)],
             }
         }
+    }
 
+    impl ReadLineInteractiveTest {
         /// Adds `key` to the golden input.
         fn add_key(mut self, key: Key) -> Self {
             self.keys.push(key);
@@ -875,7 +879,7 @@ mod tests {
             self.keys.push(Key::NewLine);
             self.exp_output.push(CapturedOut::Write(vec![b'\r', b'\n']));
 
-            let mut console = MockConsoleBuilder::new()
+            let mut console = MockConsoleBuilder::default()
                 .add_input_keys(&self.keys)
                 .with_size(Position { row: 5, column: 15 })
                 .build();
@@ -888,15 +892,15 @@ mod tests {
 
     #[test]
     fn test_read_line_interactive_empty() {
-        ReadLineInteractiveTest::new().accept();
-        ReadLineInteractiveTest::new().add_key(Key::Backspace).accept();
-        ReadLineInteractiveTest::new().add_key(Key::ArrowLeft).accept();
-        ReadLineInteractiveTest::new().add_key(Key::ArrowRight).accept();
+        ReadLineInteractiveTest::default().accept();
+        ReadLineInteractiveTest::default().add_key(Key::Backspace).accept();
+        ReadLineInteractiveTest::default().add_key(Key::ArrowLeft).accept();
+        ReadLineInteractiveTest::default().add_key(Key::ArrowRight).accept();
     }
 
     #[test]
     fn test_read_line_with_prompt() {
-        ReadLineInteractiveTest::new()
+        ReadLineInteractiveTest::default()
             .set_prompt("Ready> ")
             .add_output(CapturedOut::Write(b"Ready> ".to_vec()))
             // -
@@ -906,7 +910,7 @@ mod tests {
             .set_line("hello")
             .accept();
 
-        ReadLineInteractiveTest::new()
+        ReadLineInteractiveTest::default()
             .set_prompt("Cannot delete")
             .add_output(CapturedOut::Write(b"Cannot delete".to_vec()))
             // -
@@ -916,14 +920,14 @@ mod tests {
 
     #[test]
     fn test_read_line_interactive_trailing_input() {
-        ReadLineInteractiveTest::new()
+        ReadLineInteractiveTest::default()
             .add_key_chars("hello")
             .add_output_bytes(b"hello")
             // -
             .set_line("hello")
             .accept();
 
-        ReadLineInteractiveTest::new()
+        ReadLineInteractiveTest::default()
             .set_previous("123")
             .add_output(CapturedOut::Write(b"123".to_vec()))
             // -
@@ -936,7 +940,7 @@ mod tests {
 
     #[test]
     fn test_read_line_interactive_middle_input() {
-        ReadLineInteractiveTest::new()
+        ReadLineInteractiveTest::default()
             .add_key_chars("some text")
             .add_output_bytes(b"some text")
             // -
@@ -972,7 +976,7 @@ mod tests {
 
     #[test]
     fn test_read_line_interactive_trailing_backspace() {
-        ReadLineInteractiveTest::new()
+        ReadLineInteractiveTest::default()
             .add_key_chars("bar")
             .add_output_bytes(b"bar")
             // -
@@ -993,7 +997,7 @@ mod tests {
 
     #[test]
     fn test_read_line_interactive_middle_backspace() {
-        ReadLineInteractiveTest::new()
+        ReadLineInteractiveTest::default()
             .add_key_chars("has a tYpo")
             .add_output_bytes(b"has a tYpo")
             // -
@@ -1024,7 +1028,7 @@ mod tests {
 
     #[test]
     fn test_read_line_interactive_test_move_bounds() {
-        ReadLineInteractiveTest::new()
+        ReadLineInteractiveTest::default()
             .set_previous("12")
             .add_output(CapturedOut::Write(b"12".to_vec()))
             // -
@@ -1057,14 +1061,14 @@ mod tests {
 
     #[test]
     fn test_read_line_interactive_horizontal_scrolling_not_implemented() {
-        ReadLineInteractiveTest::new()
+        ReadLineInteractiveTest::default()
             .add_key_chars("1234567890123456789")
             .add_output_bytes(b"12345678901234")
             // -
             .set_line("12345678901234")
             .accept();
 
-        ReadLineInteractiveTest::new()
+        ReadLineInteractiveTest::default()
             .add_key_chars("1234567890123456789")
             .add_output_bytes(b"12345678901234")
             // -
@@ -1079,7 +1083,7 @@ mod tests {
             .set_line("12345678901234")
             .accept();
 
-        ReadLineInteractiveTest::new()
+        ReadLineInteractiveTest::default()
             .set_prompt("12345")
             .set_previous("67890")
             .add_output(CapturedOut::Write(b"1234567890".to_vec()))
@@ -1093,13 +1097,13 @@ mod tests {
 
     #[test]
     fn test_read_line_interactive_history_not_implemented() {
-        ReadLineInteractiveTest::new().add_key(Key::ArrowUp).accept();
-        ReadLineInteractiveTest::new().add_key(Key::ArrowDown).accept();
+        ReadLineInteractiveTest::default().add_key(Key::ArrowUp).accept();
+        ReadLineInteractiveTest::default().add_key(Key::ArrowDown).accept();
     }
 
     #[test]
     fn test_read_line_ignored_keys() {
-        ReadLineInteractiveTest::new()
+        ReadLineInteractiveTest::default()
             .add_key_chars("not ")
             .add_output_bytes(b"not ")
             // -
@@ -1118,8 +1122,9 @@ mod tests {
     ///
     /// `expected_out` is a sequence of expected commands or messages.
     fn do_control_ok_test(input: &str, golden_in: &'static str, expected_out: &[CapturedOut]) {
-        let console =
-            Rc::from(RefCell::from(MockConsoleBuilder::new().add_input_chars(golden_in).build()));
+        let console = Rc::from(RefCell::from(
+            MockConsoleBuilder::default().add_input_chars(golden_in).build(),
+        ));
         let mut machine =
             MachineBuilder::default().add_commands(all_commands(console.clone())).build();
         block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed");
@@ -1144,8 +1149,9 @@ mod tests {
         expected_out: &'static [&'static str],
         expected_err: &str,
     ) {
-        let console =
-            Rc::from(RefCell::from(MockConsoleBuilder::new().add_input_chars(golden_in).build()));
+        let console = Rc::from(RefCell::from(
+            MockConsoleBuilder::default().add_input_chars(golden_in).build(),
+        ));
         let mut machine =
             MachineBuilder::default().add_commands(all_commands(console.clone())).build();
         assert_eq!(

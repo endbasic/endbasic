@@ -649,7 +649,7 @@ pub fn all_commands(
     console: Rc<RefCell<dyn Console>>,
     store: Rc<RefCell<dyn Store>>,
 ) -> Vec<Rc<dyn BuiltinCommand>> {
-    all_commands_for(Rc::from(RefCell::from(Editor::new())), console, store)
+    all_commands_for(Rc::from(RefCell::from(Editor::default())), console, store)
 }
 
 #[cfg(test)]
@@ -853,8 +853,9 @@ mod tests {
         expected_out: &'static [&'static str],
         exp_program: &'static str,
     ) {
-        let console =
-            Rc::from(RefCell::from(MockConsoleBuilder::new().add_input_chars(golden_in).build()));
+        let console = Rc::from(RefCell::from(
+            MockConsoleBuilder::default().add_input_chars(golden_in).build(),
+        ));
         let mut machine = MachineBuilder::default()
             .add_commands(all_commands_for(program.clone(), console.clone(), store))
             .build();
@@ -881,7 +882,7 @@ mod tests {
     ///
     /// Ensures that this does not touch the console.
     fn do_error_test_with_store(store: Rc<RefCell<dyn Store>>, input: &str, expected_err: &str) {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
         let program = Rc::from(RefCell::from(RecordedProgram::new("")));
         let mut machine = MachineBuilder::default()
             .add_commands(all_commands_for(program, console.clone(), store))
@@ -1111,7 +1112,7 @@ mod tests {
 
     #[test]
     fn test_run_something_that_shares_state() {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
 
         let program = Rc::from(RefCell::from(RecordedProgram::new("OUT var\nvar = var + 1")));
 
@@ -1133,7 +1134,7 @@ mod tests {
 
     #[test]
     fn test_run_something_that_exits() {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
 
         let program = Rc::from(RefCell::from(RecordedProgram::new("OUT 5\nEXIT 1\nOUT 4")));
 
