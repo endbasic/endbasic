@@ -336,7 +336,7 @@ mod tests {
 
     /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
     fn do_error_test(input: &str, expected_err: &str) {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
         let mut machine = MachineBuilder::default()
             .add_command(HelpCommand::new(console.clone()))
             .add_command(DoNothingCommand::new())
@@ -354,7 +354,7 @@ mod tests {
 
     #[test]
     fn test_help_summarize_callables() {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
         let mut machine = MachineBuilder::default()
             .add_command(HelpCommand::new(console.clone()))
             .add_command(DoNothingCommand::new())
@@ -383,7 +383,7 @@ mod tests {
 
     #[test]
     fn test_help_describe_command() {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
         let mut machine = MachineBuilder::default()
             .add_command(HelpCommand::new(console.clone()))
             .add_command(DoNothingCommand::new())
@@ -407,7 +407,7 @@ mod tests {
     }
 
     fn do_help_describe_function_test(name: &str) {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
         let mut machine = MachineBuilder::default()
             .add_command(HelpCommand::new(console.clone()))
             .add_function(EmptyFunction::new())
@@ -442,7 +442,7 @@ mod tests {
 
     #[test]
     fn test_help_lang() {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::new().build()));
+        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
         let mut machine = MachineBuilder::default()
             .add_command(HelpCommand::new(console.clone()))
             .add_command(DoNothingCommand::new())
