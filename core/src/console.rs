@@ -17,7 +17,7 @@
 
 use crate::ast::{ArgSep, Expr, Value, VarType};
 use crate::eval::{CallableMetadata, CallableMetadataBuilder};
-use crate::exec::{self, BuiltinCommand, Machine};
+use crate::exec::{self, BuiltinCommand, Machine, MachineBuilder};
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::io;
@@ -611,15 +611,14 @@ impl BuiltinCommand for PrintCommand {
     }
 }
 
-/// Adds all console-related commands for the given `console` to the `machine`.
-pub fn all_commands(console: Rc<RefCell<dyn Console>>) -> Vec<Rc<dyn BuiltinCommand>> {
-    vec![
-        ClsCommand::new(console.clone()),
-        ColorCommand::new(console.clone()),
-        InputCommand::new(console.clone()),
-        LocateCommand::new(console.clone()),
-        PrintCommand::new(console),
-    ]
+/// Adds all console-related commands for the given `console` to the machine `builder`.
+pub fn add_all(builder: MachineBuilder, console: Rc<RefCell<dyn Console>>) -> MachineBuilder {
+    builder
+        .add_command(ClsCommand::new(console.clone()))
+        .add_command(ColorCommand::new(console.clone()))
+        .add_command(InputCommand::new(console.clone()))
+        .add_command(LocateCommand::new(console.clone()))
+        .add_command(PrintCommand::new(console))
 }
 
 #[cfg(test)]
@@ -1125,8 +1124,7 @@ mod tests {
         let console = Rc::from(RefCell::from(
             MockConsoleBuilder::default().add_input_chars(golden_in).build(),
         ));
-        let mut machine =
-            MachineBuilder::default().add_commands(all_commands(console.clone())).build();
+        let mut machine = add_all(MachineBuilder::default(), console.clone()).build();
         block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed");
         assert_eq!(expected_out, console.borrow().captured_out());
     }
@@ -1152,8 +1150,7 @@ mod tests {
         let console = Rc::from(RefCell::from(
             MockConsoleBuilder::default().add_input_chars(golden_in).build(),
         ));
-        let mut machine =
-            MachineBuilder::default().add_commands(all_commands(console.clone())).build();
+        let mut machine = add_all(MachineBuilder::default(), console.clone()).build();
         assert_eq!(
             expected_err,
             format!(

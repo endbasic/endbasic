@@ -1,5 +1,5 @@
 // EndBASIC
-// Copyright 2020 Julio Merino
+// Copyright 2021 Julio Merino
 //
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not
 // use this file except in compliance with the License.  You may obtain a copy
@@ -13,17 +13,15 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-//! Complete EndBASIC interpreter for programs given as arguments.
+//! Complete EndBASIC script executor for programs given as arguments.
 //!
-//! This example sets up a complete EndBASIC interpreter: that is, one with all available commands,
-//! and processes the given file.
+//! This example sets up a complete EndBASIC interpreter with the commands and functions that should
+//! be allowed in scripts (and not in a REPL).
 
 use async_trait::async_trait;
 use endbasic_core::console::{ClearType, Console, Key, Position};
-use endbasic_core::store::{DemoStoreOverlay, Metadata, Store};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
-use std::collections::BTreeMap;
 use std::collections::VecDeque;
 use std::env;
 use std::fs;
@@ -131,31 +129,6 @@ impl Console for IncompleteConsole {
     }
 }
 
-#[derive(Default)]
-pub(crate) struct IncompleteStore {}
-
-impl Store for IncompleteStore {
-    fn delete(&mut self, name: &str) -> io::Result<()> {
-        println!("IncompleteStore::delete({})", name);
-        Ok(())
-    }
-
-    fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
-        println!("IncompleteStore::enumerate()");
-        Ok(BTreeMap::default())
-    }
-
-    fn get(&self, name: &str) -> io::Result<String> {
-        println!("IncompleteStore::get({})", name);
-        Ok("".to_owned())
-    }
-
-    fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
-        println!("IncompleteStore::put({}, {})", name, content);
-        Ok(())
-    }
-}
-
 fn main() {
     let args: Vec<String> = env::args().collect();
     let path = match args.as_slice() {
@@ -166,18 +139,8 @@ fn main() {
         }
     };
 
-    // TODO(jmmv): Truly add all commands in the core library and test for them.
     let console = Rc::from(RefCell::from(IncompleteConsole::default()));
-    let store = IncompleteStore::default();
-    let store = Rc::from(RefCell::from(DemoStoreOverlay::new(store)));
-    let mut machine = {
-        let mut builder = endbasic_core::exec::MachineBuilder::default()
-            .add_commands(endbasic_core::console::all_commands(console.clone()))
-            .add_commands(endbasic_core::store::all_commands(console, store))
-            .add_functions(endbasic_core::strings::all_functions());
-        builder = endbasic_core::numerics::add_all(builder);
-        builder.build()
-    };
+    let mut machine = endbasic_core::scripting_machine_builder(console).build();
 
     let mut input = match fs::File::open(path) {
         Ok(file) => file,

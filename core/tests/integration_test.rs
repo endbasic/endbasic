@@ -166,6 +166,11 @@ fn test_example_complete() {
 }
 
 #[test]
+fn test_example_scripting() {
+    // Nothing to do.  We use this example program to run all language tests below.
+}
+
+#[test]
 fn test_example_custom_commands() {
     check(
         bin_path("examples/custom-commands"),
@@ -180,7 +185,7 @@ fn test_example_custom_commands() {
 #[test]
 fn test_example_guess() {
     check(
-        bin_path("examples/complete"),
+        bin_path("examples/complete-interactive"),
         &[&src_str("core/tests/demo-guess.bas")],
         0,
         Behavior::File(src_path("core/tests/demo-guess.in")),
@@ -192,7 +197,7 @@ fn test_example_guess() {
 #[test]
 fn test_example_hello() {
     check(
-        bin_path("examples/complete"),
+        bin_path("examples/complete-interactive"),
         &[&src_str("core/tests/demo-hello.bas")],
         0,
         Behavior::File(src_path("core/tests/demo-hello.in")),
@@ -204,7 +209,7 @@ fn test_example_hello() {
 #[test]
 fn test_example_tour() {
     check(
-        bin_path("examples/complete"),
+        bin_path("examples/complete-interactive"),
         &[&src_str("core/tests/demo-tour.bas")],
         0,
         Behavior::File(src_path("core/tests/demo-tour.in")),
@@ -228,7 +233,7 @@ fn test_example_minimal() {
 #[test]
 fn test_lang_control_flow() {
     check(
-        bin_path("examples/complete"),
+        bin_path("examples/complete-scripting"),
         &[&src_str("core/tests/control-flow.bas")],
         0,
         Behavior::Null,
@@ -240,7 +245,7 @@ fn test_lang_control_flow() {
 #[test]
 fn test_lang_exec_error() {
     check(
-        bin_path("examples/complete"),
+        bin_path("examples/complete-scripting"),
         &[&src_str("core/tests/exec-error.bas")],
         1,
         Behavior::Null,
@@ -252,7 +257,7 @@ fn test_lang_exec_error() {
 #[test]
 fn test_lang_hello() {
     check(
-        bin_path("examples/complete"),
+        bin_path("examples/complete-scripting"),
         &[&src_str("core/tests/hello.bas")],
         0,
         Behavior::Null,
@@ -264,7 +269,7 @@ fn test_lang_hello() {
 #[test]
 fn test_lang_lexer_error() {
     check(
-        bin_path("examples/complete"),
+        bin_path("examples/complete-scripting"),
         &[&src_str("core/tests/lexer-error.bas")],
         1,
         Behavior::Null,
@@ -276,7 +281,7 @@ fn test_lang_lexer_error() {
 #[test]
 fn test_lang_no_repl_commands() {
     check(
-        bin_path("examples/complete"),
+        bin_path("examples/complete-scripting"),
         &[&src_str("core/tests/no-repl-commands.bas")],
         1,
         Behavior::Null,
@@ -288,7 +293,7 @@ fn test_lang_no_repl_commands() {
 #[test]
 fn test_lang_parser_error() {
     check(
-        bin_path("examples/complete"),
+        bin_path("examples/complete-scripting"),
         &[&src_str("core/tests/parser-error.bas")],
         1,
         Behavior::Null,
@@ -300,7 +305,7 @@ fn test_lang_parser_error() {
 #[test]
 fn test_lang_types() {
     check(
-        bin_path("examples/complete"),
+        bin_path("examples/complete-scripting"),
         &[&src_str("core/tests/types.bas")],
         0,
         Behavior::Null,
@@ -312,7 +317,7 @@ fn test_lang_types() {
 #[test]
 fn test_lang_utf8() {
     check(
-        bin_path("examples/complete"),
+        bin_path("examples/complete-scripting"),
         &[&src_str("core/tests/utf8.bas")],
         0,
         Behavior::File(src_path("core/tests/utf8.in")),
@@ -324,7 +329,7 @@ fn test_lang_utf8() {
 #[test]
 fn test_lang_yes_no() {
     check(
-        bin_path("examples/complete"),
+        bin_path("examples/complete-scripting"),
         &[&src_str("core/tests/yes-no.bas")],
         0,
         Behavior::File(src_path("core/tests/yes-no.in")),

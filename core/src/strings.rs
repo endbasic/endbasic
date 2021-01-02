@@ -19,6 +19,7 @@ use crate::ast::{Value, VarType};
 use crate::eval::{
     BuiltinFunction, CallableMetadata, CallableMetadataBuilder, FunctionError, FunctionResult,
 };
+use crate::exec::MachineBuilder;
 use std::cmp::min;
 use std::rc::Rc;
 
@@ -254,16 +255,15 @@ impl BuiltinFunction for RtrimFunction {
     }
 }
 
-/// Instantiates all functions provided by this module.
-pub fn all_functions() -> Vec<Rc<dyn BuiltinFunction>> {
-    vec![
-        LeftFunction::new(),
-        LenFunction::new(),
-        LtrimFunction::new(),
-        MidFunction::new(),
-        RightFunction::new(),
-        RtrimFunction::new(),
-    ]
+/// Adds all symbols provided by this module to the given machine `builder`.
+pub fn add_all(builder: MachineBuilder) -> MachineBuilder {
+    builder
+        .add_function(LeftFunction::new())
+        .add_function(LenFunction::new())
+        .add_function(LtrimFunction::new())
+        .add_function(MidFunction::new())
+        .add_function(RightFunction::new())
+        .add_function(RtrimFunction::new())
 }
 
 #[cfg(test)]
@@ -274,7 +274,7 @@ mod tests {
     use futures_lite::future::block_on;
 
     fn check_ok(exp_value: Value, expr: &str) {
-        let mut machine = MachineBuilder::default().add_functions(all_functions()).build();
+        let mut machine = add_all(MachineBuilder::default()).build();
         block_on(machine.exec(&mut format!("result = {}", expr).as_bytes())).unwrap();
         assert_eq!(
             &exp_value,
@@ -283,7 +283,7 @@ mod tests {
     }
 
     fn check_error(exp_error: &str, expr: &str) {
-        let mut machine = MachineBuilder::default().add_functions(all_functions()).build();
+        let mut machine = add_all(MachineBuilder::default()).build();
         assert_eq!(
             exp_error,
             format!(
