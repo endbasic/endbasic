@@ -16,7 +16,7 @@
 //! Execution engine for EndBASIC programs.
 
 use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
-use crate::eval::{self, BuiltinFunction, CallableMetadata, CallableMetadataBuilder, Vars};
+use crate::eval::{self, BuiltinFunction, CallableMetadata, Vars};
 use crate::parser::{self, Parser};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -353,42 +353,10 @@ impl Machine {
     }
 }
 
-/// The `CLEAR` command.
-pub struct ClearCommand {
-    metadata: CallableMetadata,
-}
-
-impl ClearCommand {
-    /// Creates a new `CLEAR` command that resets the state of the machine.
-    pub fn new() -> Rc<Self> {
-        Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void)
-                .with_syntax("")
-                .with_category("Interpreter manipulation")
-                .with_description("Clears all variables to restore initial state.")
-                .build(),
-        })
-    }
-}
-
-#[async_trait(?Send)]
-impl BuiltinCommand for ClearCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
-    }
-
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
-        if !args.is_empty() {
-            return new_usage_error("CLEAR takes no arguments");
-        }
-        machine.clear();
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 pub(crate) mod testutils {
     use super::*;
+    use crate::eval::CallableMetadataBuilder;
     use std::cell::RefCell;
 
     /// Simplified version of the `EXIT` command.
@@ -952,23 +920,5 @@ mod tests {
         let mut machine = Machine::default();
         block_on(machine.exec(&mut b"a = 10".as_ref())).expect("Execution failed");
         block_on(machine.exec(&mut b"b = a".as_ref())).expect("Execution failed");
-    }
-
-    #[test]
-    fn test_clear_ok() {
-        let mut machine = MachineBuilder::default().add_command(ClearCommand::new()).build();
-        block_on(machine.exec(&mut b"a = 1".as_ref())).unwrap();
-        assert!(machine.get_var_as_int("a").is_ok());
-        block_on(machine.exec(&mut b"CLEAR".as_ref())).unwrap();
-        assert!(machine.get_var_as_int("a").is_err());
-    }
-
-    #[test]
-    fn test_clear_errors() {
-        let mut machine = MachineBuilder::default().add_command(ClearCommand::new()).build();
-        assert_eq!(
-            "CLEAR takes no arguments",
-            format!("{}", block_on(machine.exec(&mut b"CLEAR 123".as_ref())).unwrap_err())
-        );
     }
 }
