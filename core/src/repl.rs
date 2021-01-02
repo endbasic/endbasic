@@ -19,10 +19,7 @@ use crate::ast::{ArgSep, Expr, Value, VarType};
 use crate::console::{self, Console};
 use crate::eval::{CallableMetadata, CallableMetadataBuilder};
 use crate::exec::{self, BuiltinCommand, Machine, MachineBuilder};
-use crate::help::HelpCommand;
-use crate::numerics;
-use crate::store::{self, Store};
-use crate::strings;
+use crate::store::Store;
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::io;
@@ -83,6 +80,11 @@ impl BuiltinCommand for ExitCommand {
     }
 }
 
+/// Instantiates all REPL commands.
+pub fn add_all(builder: MachineBuilder) -> MachineBuilder {
+    builder.add_command(ExitCommand::new())
+}
+
 /// Enters the interactive interpreter.
 ///
 /// `dir` specifies the directory that the interpreter will use for any commands that manipulate
@@ -91,16 +93,7 @@ pub async fn run_repl_loop(
     console: Rc<RefCell<dyn Console>>,
     store: Rc<RefCell<dyn Store>>,
 ) -> io::Result<i32> {
-    let mut machine = {
-        let mut builder = MachineBuilder::default()
-            .add_command(ExitCommand::new())
-            .add_command(HelpCommand::new(console.clone()))
-            .add_commands(console::all_commands(console.clone()))
-            .add_commands(store::all_commands(console.clone(), store))
-            .add_functions(strings::all_functions());
-        builder = numerics::add_all(builder);
-        builder.build()
-    };
+    let mut machine = crate::interactive_machine_builder(console.clone(), store).build();
 
     {
         let mut console = console.borrow_mut();

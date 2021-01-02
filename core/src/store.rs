@@ -17,9 +17,8 @@
 
 use crate::ast::{ArgSep, Expr, Value, VarType};
 use crate::console::Console;
-use crate::editor::Editor;
 use crate::eval::{CallableMetadata, CallableMetadataBuilder};
-use crate::exec::{self, BuiltinCommand, Machine};
+use crate::exec::{self, BuiltinCommand, Machine, MachineBuilder};
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -292,7 +291,7 @@ impl BuiltinCommand for ClearCommand {
 }
 
 /// The `DEL` command.
-struct DelCommand {
+pub struct DelCommand {
     metadata: CallableMetadata,
     store: Rc<RefCell<dyn Store>>,
 }
@@ -342,7 +341,7 @@ impl BuiltinCommand for DelCommand {
 }
 
 /// The `DIR` command.
-struct DirCommand {
+pub struct DirCommand {
     metadata: CallableMetadata,
     console: Rc<RefCell<dyn Console>>,
     store: Rc<RefCell<dyn Store>>,
@@ -383,7 +382,7 @@ impl BuiltinCommand for DirCommand {
 }
 
 /// The `EDIT` command.
-struct EditCommand {
+pub struct EditCommand {
     metadata: CallableMetadata,
     console: Rc<RefCell<dyn Console>>,
     program: Rc<RefCell<dyn Program>>,
@@ -427,7 +426,7 @@ impl BuiltinCommand for EditCommand {
 }
 
 /// The `LOAD` command.
-struct LoadCommand {
+pub struct LoadCommand {
     metadata: CallableMetadata,
     store: Rc<RefCell<dyn Store>>,
     program: Rc<RefCell<dyn Program>>,
@@ -481,7 +480,7 @@ impl BuiltinCommand for LoadCommand {
 }
 
 /// The `NEW` command.
-struct NewCommand {
+pub struct NewCommand {
     metadata: CallableMetadata,
     program: Rc<RefCell<dyn Program>>,
 }
@@ -521,7 +520,7 @@ impl BuiltinCommand for NewCommand {
 }
 
 /// The `RUN` command.
-struct RunCommand {
+pub struct RunCommand {
     metadata: CallableMetadata,
     console: Rc<RefCell<dyn Console>>,
     program: Rc<RefCell<dyn Program>>,
@@ -572,7 +571,7 @@ impl BuiltinCommand for RunCommand {
 }
 
 /// The `SAVE` command.
-struct SaveCommand {
+pub struct SaveCommand {
     metadata: CallableMetadata,
     store: Rc<RefCell<dyn Store>>,
     program: Rc<RefCell<dyn Program>>,
@@ -624,32 +623,23 @@ impl BuiltinCommand for SaveCommand {
     }
 }
 
-/// Instantiates all program editing commands against the stored `program`, using `console` for
-/// interactive editing, and using `dir` as the on-disk storage for the programs.
-fn all_commands_for(
+/// Adds all program editing commands against the stored `program` to the machine `builder`, using
+/// `console` for interactive editing and using `store` as the on-disk storage for the programs.
+pub fn add_all(
+    builder: MachineBuilder,
     program: Rc<RefCell<dyn Program>>,
     console: Rc<RefCell<dyn Console>>,
     store: Rc<RefCell<dyn Store>>,
-) -> Vec<Rc<dyn BuiltinCommand>> {
-    vec![
-        ClearCommand::new(),
-        DelCommand::new(store.clone()),
-        DirCommand::new(console.clone(), store.clone()),
-        EditCommand::new(console.clone(), program.clone()),
-        LoadCommand::new(store.clone(), program.clone()),
-        NewCommand::new(program.clone()),
-        RunCommand::new(console, program.clone()),
-        SaveCommand::new(store, program),
-    ]
-}
-
-/// Instantiates all program editing commands against a new (empty) program, using `console` for
-/// interactive editing, and using `dir` as the on-disk storage for the programs.
-pub fn all_commands(
-    console: Rc<RefCell<dyn Console>>,
-    store: Rc<RefCell<dyn Store>>,
-) -> Vec<Rc<dyn BuiltinCommand>> {
-    all_commands_for(Rc::from(RefCell::from(Editor::default())), console, store)
+) -> MachineBuilder {
+    builder
+        .add_command(ClearCommand::new())
+        .add_command(DelCommand::new(store.clone()))
+        .add_command(DirCommand::new(console.clone(), store.clone()))
+        .add_command(EditCommand::new(console.clone(), program.clone()))
+        .add_command(LoadCommand::new(store.clone(), program.clone()))
+        .add_command(NewCommand::new(program.clone()))
+        .add_command(RunCommand::new(console, program.clone()))
+        .add_command(SaveCommand::new(store, program))
 }
 
 #[cfg(test)]
@@ -856,9 +846,8 @@ mod tests {
         let console = Rc::from(RefCell::from(
             MockConsoleBuilder::default().add_input_chars(golden_in).build(),
         ));
-        let mut machine = MachineBuilder::default()
-            .add_commands(all_commands_for(program.clone(), console.clone(), store))
-            .build();
+        let mut machine =
+            add_all(MachineBuilder::default(), program.clone(), console.clone(), store).build();
         block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed");
         let expected_out: Vec<CapturedOut> =
             expected_out.iter().map(|x| CapturedOut::Print((*x).to_owned())).collect();
@@ -884,9 +873,8 @@ mod tests {
     fn do_error_test_with_store(store: Rc<RefCell<dyn Store>>, input: &str, expected_err: &str) {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
         let program = Rc::from(RefCell::from(RecordedProgram::new("")));
-        let mut machine = MachineBuilder::default()
-            .add_commands(all_commands_for(program, console.clone(), store))
-            .build();
+        let mut machine =
+            add_all(MachineBuilder::default(), program, console.clone(), store).build();
         assert_eq!(
             expected_err,
             format!(

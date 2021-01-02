@@ -18,7 +18,7 @@
 use crate::ast::{ArgSep, Expr, VarType};
 use crate::console::Console;
 use crate::eval::{BuiltinFunction, CallableMetadata, CallableMetadataBuilder};
-use crate::exec::{self, BuiltinCommand, Machine};
+use crate::exec::{self, BuiltinCommand, Machine, MachineBuilder};
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -241,6 +241,11 @@ impl BuiltinCommand for HelpCommand {
     }
 }
 
+/// Adds all help-related commands to the machine `builder` and makes them write to `console`.
+pub fn add_all(builder: MachineBuilder, console: Rc<RefCell<dyn Console>>) -> MachineBuilder {
+    builder.add_command(HelpCommand::new(console))
+}
+
 #[cfg(test)]
 pub(crate) mod testutils {
     use super::*;
@@ -337,8 +342,7 @@ mod tests {
     /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
     fn do_error_test(input: &str, expected_err: &str) {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
-        let mut machine = MachineBuilder::default()
-            .add_command(HelpCommand::new(console.clone()))
+        let mut machine = add_all(MachineBuilder::default(), console.clone())
             .add_command(DoNothingCommand::new())
             .add_function(EmptyFunction::new())
             .build();
@@ -355,8 +359,7 @@ mod tests {
     #[test]
     fn test_help_summarize_callables() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
-        let mut machine = MachineBuilder::default()
-            .add_command(HelpCommand::new(console.clone()))
+        let mut machine = add_all(MachineBuilder::default(), console.clone())
             .add_command(DoNothingCommand::new())
             .add_function(EmptyFunction::new())
             .build();
@@ -384,8 +387,7 @@ mod tests {
     #[test]
     fn test_help_describe_command() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
-        let mut machine = MachineBuilder::default()
-            .add_command(HelpCommand::new(console.clone()))
+        let mut machine = add_all(MachineBuilder::default(), console.clone())
             .add_command(DoNothingCommand::new())
             .build();
         block_on(machine.exec(&mut b"help Do_Nothing".as_ref())).unwrap();
@@ -408,8 +410,7 @@ mod tests {
 
     fn do_help_describe_function_test(name: &str) {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
-        let mut machine = MachineBuilder::default()
-            .add_command(HelpCommand::new(console.clone()))
+        let mut machine = add_all(MachineBuilder::default(), console.clone())
             .add_function(EmptyFunction::new())
             .build();
         block_on(machine.exec(&mut format!("help {}", name).as_bytes())).unwrap();
@@ -443,8 +444,7 @@ mod tests {
     #[test]
     fn test_help_lang() {
         let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
-        let mut machine = MachineBuilder::default()
-            .add_command(HelpCommand::new(console.clone()))
+        let mut machine = add_all(MachineBuilder::default(), console.clone())
             .add_command(DoNothingCommand::new())
             .build();
         block_on(machine.exec(&mut b"help lang".as_ref())).unwrap();

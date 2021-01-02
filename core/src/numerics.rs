@@ -231,7 +231,7 @@ impl BuiltinFunction for RndFunction {
     }
 }
 
-/// Adds all symbols provided by this module to the given machine builder.
+/// Adds all symbols provided by this module to the given machine `builder`.
 pub fn add_all(mut builder: MachineBuilder) -> MachineBuilder {
     let prng = Rc::from(RefCell::from(Prng::new_from_entryopy()));
     builder = builder.add_command(RandomizeCommand::new(prng.clone()));
