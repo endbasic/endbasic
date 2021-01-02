@@ -21,7 +21,7 @@ use crate::eval::{CallableMetadata, CallableMetadataBuilder};
 use crate::exec::{self, BuiltinCommand, ClearCommand, Machine, MachineBuilder};
 use crate::help::HelpCommand;
 use crate::numerics;
-use crate::program::{self, Store};
+use crate::store::{self, Store};
 use crate::strings;
 use async_trait::async_trait;
 use std::cell::RefCell;
@@ -97,7 +97,7 @@ pub async fn run_repl_loop(
             .add_command(ExitCommand::new())
             .add_command(HelpCommand::new(console.clone()))
             .add_commands(console::all_commands(console.clone()))
-            .add_commands(program::all_commands(console.clone(), store))
+            .add_commands(store::all_commands(console.clone(), store))
             .add_functions(strings::all_functions());
         builder = numerics::add_all(builder);
         builder.build()
