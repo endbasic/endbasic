@@ -455,11 +455,16 @@ fn get_programs_dir(flag: Option<String>) -> Result<PathBuf> {
 /// Enters the interactive interpreter.
 ///
 /// `dir` specifies the directory that the interpreter will use for any commands that manipulate
-/// files.
+/// files.  The special name `:memory:` makes the interpreter use an in-memory only store.
 pub fn run_repl_loop(dir: &Path) -> io::Result<i32> {
     let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
-    let store = FileStore::new(dir);
-    let store = Rc::from(RefCell::from(endbasic_core::store::DemoStoreOverlay::new(store)));
+    let store: Rc<RefCell<dyn Store>> = if dir == Path::new(":memory:") {
+        Rc::from(RefCell::from(endbasic_core::store::DemoStoreOverlay::new(
+            endbasic_core::store::InMemoryStore::default(),
+        )))
+    } else {
+        Rc::from(RefCell::from(endbasic_core::store::DemoStoreOverlay::new(FileStore::new(dir))))
+    };
     block_on(endbasic::run_repl_loop(console, store))
 }
 

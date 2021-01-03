@@ -292,11 +292,9 @@ fn test_repl_console() {
 
 #[test]
 fn test_repl_dir() {
-    let dir = tempfile::tempdir().unwrap();
-    let subdir = dir.path().join("subdir"); // Start with a non-existent directory.
     check(
         bin_path("endbasic"),
-        &["--programs-dir", subdir.to_str().unwrap()],
+        &["--programs-dir=:memory:"],
         0,
         Behavior::File(src_path("cli/tests/repl/dir.in")),
         Behavior::File(src_path("cli/tests/repl/dir.out")),
