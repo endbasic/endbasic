@@ -12,6 +12,9 @@ not adhere to semantic versioning until 1.0.0.**
 *   Fixed the `EXIT` command so that it doesn't terminate the REPL when it is
     part of a script run via `RUN`.
 
+*   Added support for an in-memory store when running the REPL by specifying
+    the `--programs-dir=:memory:` flag.
+
 ## Changes in version 0.4.0
 
 **Released on 2020-12-25.**

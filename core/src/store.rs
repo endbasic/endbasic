@@ -52,6 +52,43 @@ pub trait Store {
     fn put(&mut self, name: &str, content: &str) -> io::Result<()>;
 }
 
+/// An implementation of the store that records all data in memory only.
+#[derive(Default)]
+pub struct InMemoryStore {
+    programs: HashMap<String, String>,
+}
+
+impl Store for InMemoryStore {
+    fn delete(&mut self, name: &str) -> io::Result<()> {
+        match self.programs.remove(name) {
+            Some(_) => Ok(()),
+            None => Err(io::Error::new(io::ErrorKind::NotFound, "Entry not found")),
+        }
+    }
+
+    fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
+        let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875);
+
+        let mut entries = BTreeMap::new();
+        for (name, contents) in &self.programs {
+            entries.insert(name.clone(), Metadata { date, length: contents.len() as u64 });
+        }
+        Ok(entries)
+    }
+
+    fn get(&self, name: &str) -> io::Result<String> {
+        match self.programs.get(name) {
+            Some(content) => Ok(content.to_owned()),
+            None => Err(io::Error::new(io::ErrorKind::NotFound, "Entry not found")),
+        }
+    }
+
+    fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
+        self.programs.insert(name.to_owned(), content.to_owned());
+        Ok(())
+    }
+}
+
 /// Wraps a `Store` and exposes a bunch of read-only demo files.
 ///
 /// All demo file names are case insensitive.  However, this preserves the case sensitiveness
@@ -610,43 +647,6 @@ pub fn add_all(
 mod testutils {
     use super::*;
     use crate::console;
-    use std::collections::HashMap;
-
-    #[derive(Default)]
-    pub(crate) struct InMemoryStore {
-        programs: HashMap<String, String>,
-    }
-
-    impl Store for InMemoryStore {
-        fn delete(&mut self, name: &str) -> io::Result<()> {
-            match self.programs.remove(name) {
-                Some(_) => Ok(()),
-                None => Err(io::Error::new(io::ErrorKind::NotFound, "Entry not found")),
-            }
-        }
-
-        fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
-            let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875);
-
-            let mut entries = BTreeMap::new();
-            for (name, contents) in &self.programs {
-                entries.insert(name.clone(), Metadata { date, length: contents.len() as u64 });
-            }
-            Ok(entries)
-        }
-
-        fn get(&self, name: &str) -> io::Result<String> {
-            match self.programs.get(name) {
-                Some(content) => Ok(content.to_owned()),
-                None => Err(io::Error::new(io::ErrorKind::NotFound, "Entry not found")),
-            }
-        }
-
-        fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
-            self.programs.insert(name.to_owned(), content.to_owned());
-            Ok(())
-        }
-    }
 
     pub(crate) struct RecordedProgram {
         content: String,
