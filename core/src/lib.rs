@@ -45,12 +45,9 @@ pub fn scripting_machine_builder(console: Rc<RefCell<dyn console::Console>>) -> 
     let mut builder = MachineBuilder::default();
 
     builder = console::add_all(builder, console);
+    builder = exec::add_all(builder);
     builder = numerics::add_all(builder);
     builder = strings::add_all(builder);
-
-    // TODO: The "repl" doesn't belong in scripting, but this only brings in the EXIT command for
-    // now and we need it here.  Should fix this in some way.
-    builder = repl::add_all(builder);
 
     builder
 }

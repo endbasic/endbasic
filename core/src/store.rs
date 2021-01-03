@@ -253,43 +253,6 @@ fn show_dir(store: &dyn Store, console: &mut dyn Console) -> io::Result<()> {
     Ok(())
 }
 
-/// The `CLEAR` command.
-pub struct ClearCommand {
-    metadata: CallableMetadata,
-}
-
-impl ClearCommand {
-    /// Creates a new `CLEAR` command that resets the state of the machine.
-    pub fn new() -> Rc<Self> {
-        Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void)
-                .with_syntax("")
-                .with_category("Interpreter manipulation")
-                .with_description("Clears all variables to restore initial state.")
-                .build(),
-        })
-    }
-}
-
-#[async_trait(?Send)]
-impl Command for ClearCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
-    }
-
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
-        if !args.is_empty() {
-            return exec::new_usage_error("CLEAR takes no arguments");
-        }
-        machine.clear();
-        Ok(())
-    }
-}
-
 /// The `DEL` command.
 pub struct DelCommand {
     metadata: CallableMetadata,
@@ -634,7 +597,6 @@ pub fn add_all(
     store: Rc<RefCell<dyn Store>>,
 ) -> MachineBuilder {
     builder
-        .add_command(ClearCommand::new())
         .add_command(DelCommand::new(store.clone()))
         .add_command(DirCommand::new(console.clone(), store.clone()))
         .add_command(EditCommand::new(console.clone(), program.clone()))
@@ -721,7 +683,7 @@ mod tests {
     use super::*;
     use crate::console::testutils::*;
     use crate::exec::testutils::*;
-    use crate::exec::{MachineBuilder, StopReason};
+    use crate::exec::{ExitCommand, MachineBuilder, StopReason};
     use futures_lite::future::block_on;
 
     #[test]
@@ -894,24 +856,6 @@ mod tests {
     fn do_error_test(input: &str, expected_err: &str) {
         let store = Rc::from(RefCell::from(InMemoryStore::default()));
         do_error_test_with_store(store, input, expected_err)
-    }
-
-    #[test]
-    fn test_clear_ok() {
-        let mut machine = MachineBuilder::default().add_command(ClearCommand::new()).build();
-        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"a = 1".as_ref())).unwrap());
-        assert!(machine.get_var_as_int("a").is_ok());
-        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"CLEAR".as_ref())).unwrap());
-        assert!(machine.get_var_as_int("a").is_err());
-    }
-
-    #[test]
-    fn test_clear_errors() {
-        let mut machine = MachineBuilder::default().add_command(ClearCommand::new()).build();
-        assert_eq!(
-            "CLEAR takes no arguments",
-            format!("{}", block_on(machine.exec(&mut b"CLEAR 123".as_ref())).unwrap_err())
-        );
     }
 
     #[test]
