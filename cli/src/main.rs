@@ -452,27 +452,41 @@ fn get_programs_dir(flag: Option<String>) -> Result<PathBuf> {
     Ok(dir.unwrap())
 }
 
-/// Enters the interactive interpreter.
-///
-/// `dir` specifies the directory that the interpreter will use for any commands that manipulate
-/// files.  The special name `:memory:` makes the interpreter use an in-memory only store.
-pub fn run_repl_loop(dir: &Path) -> io::Result<i32> {
-    let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
-    let store: Rc<RefCell<dyn Store>> = if dir == Path::new(":memory:") {
+/// Creates a new store backed by `dir` and overlays the built-in demos.
+fn new_store_with_demos(dir: &Path) -> Rc<RefCell<dyn Store>> {
+    if dir == Path::new(":memory:") {
         Rc::from(RefCell::from(endbasic_core::store::DemoStoreOverlay::new(
             endbasic_core::store::InMemoryStore::default(),
         )))
     } else {
         Rc::from(RefCell::from(endbasic_core::store::DemoStoreOverlay::new(FileStore::new(dir))))
-    };
-    block_on(endbasic::run_repl_loop(console, store))
+    }
+}
+
+/// Enters the interactive interpreter.
+///
+/// `dir` specifies the directory that the interpreter will use for any commands that manipulate
+/// files.  The special name `:memory:` makes the interpreter use an in-memory only store.
+fn run_repl_loop(dir: &Path) -> io::Result<i32> {
+    let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
+    block_on(endbasic::run_repl_loop(console, new_store_with_demos(dir)))
 }
 
 /// Executes the `path` program in a fresh machine.
-fn run<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
+fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
     let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
     let mut machine = endbasic_core::scripting_machine_builder(console).build();
+    let mut input = File::open(path)?;
+    Ok(block_on(machine.exec(&mut input))?.as_exit_code())
+}
 
+/// Executes the `path` program in a fresh machine allowing any interactive-only calls.
+///
+/// `dir` has the same meaning as the parameter passed to `run_repl_loop`.
+fn run_interactive<P: AsRef<Path>>(path: P, dir: &Path) -> endbasic_core::exec::Result<i32> {
+    let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
+    let mut machine =
+        endbasic_core::interactive_machine_builder(console, new_store_with_demos(dir)).build();
     let mut input = File::open(path)?;
     Ok(block_on(machine.exec(&mut input))?.as_exit_code())
 }
@@ -483,6 +497,7 @@ fn safe_main(name: &str, args: env::Args) -> Result<i32> {
 
     let mut opts = Options::new();
     opts.optflag("h", "help", "show command-line usage information and exit");
+    opts.optflag("i", "interactive", "force interactive mode when running a script");
     opts.optopt("", "programs-dir", "directory where user programs are stored", "PATH");
     opts.optflag("", "version", "show version information and exit");
     let matches = opts.parse(args)?;
@@ -500,7 +515,14 @@ fn safe_main(name: &str, args: env::Args) -> Result<i32> {
             let programs_dir = get_programs_dir(matches.opt_str("programs-dir"))?;
             Ok(run_repl_loop(&programs_dir)?)
         }
-        [file] => Ok(run(file)?),
+        [file] => {
+            if matches.opt_present("interactive") {
+                let programs_dir = get_programs_dir(matches.opt_str("programs-dir"))?;
+                Ok(run_interactive(file, &programs_dir)?)
+            } else {
+                Ok(run_script(file)?)
+            }
+        }
         [_, ..] => Err(UsageError::new("Too many arguments").into()),
     }
 }
