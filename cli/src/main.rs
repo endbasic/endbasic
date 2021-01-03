@@ -460,7 +460,7 @@ pub fn run_repl_loop(dir: &Path) -> io::Result<i32> {
     let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
     let store = FileStore::new(dir);
     let store = Rc::from(RefCell::from(endbasic_core::store::DemoStoreOverlay::new(store)));
-    block_on(endbasic_core::repl::run_repl_loop(console, store))
+    block_on(endbasic::run_repl_loop(console, store))
 }
 
 /// Executes the `path` program in a fresh machine.

@@ -11,10 +11,18 @@ repository = "https://github.com/jmmv/endbasic"
 readme = "README.md"
 edition = "2018"
 
+[features]
+default = ["bin"]
+bin = ["crossterm"]
+
+[[bin]]
+name = "endbasic"
+required-features = ["bin"]
+
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
-crossterm = "0.18"
+crossterm = { version = "0.18", optional = true }
 dirs = "2.0"
 endbasic-core = { version = "0.4.0", path = "../core" }
 futures-lite = "1.1"
