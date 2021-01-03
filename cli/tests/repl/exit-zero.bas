@@ -1,5 +1,5 @@
 ' EndBASIC
-' Copyright 2020 Julio Merino
+' Copyright 2021 Julio Merino
 '
 ' Licensed under the Apache License, Version 2.0 (the "License"); you may not
 ' use this file except in compliance with the License.  You may obtain a copy
@@ -13,7 +13,7 @@
 ' License for the specific language governing permissions and limitations
 ' under the License.
 
-' Exits with an error code.
+' Exits cleanly.
 
-EXIT 78: PRINT "Should not be executed"
+EXIT 0: PRINT "Should not be executed"
 PRINT "Should not be executed either"

@@ -180,7 +180,7 @@ fn main() {
     };
 
     match block_on(machine.exec(&mut input)) {
-        Ok(exit_code) => process::exit(exit_code as i32),
+        Ok(stop_reason) => process::exit(stop_reason.as_exit_code()),
         Err(e) => {
             eprintln!("ERROR: {}", e);
             process::exit(1);
