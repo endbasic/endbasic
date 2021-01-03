@@ -1,0 +1,43 @@
+[38;5;15m[48;5;4m[2J[1;1H[K
+[38;5;14m[48;5;4m Guess the number![K
+===================[K
+[38;5;15m[48;5;4m[K
+[K
+Alright! I have a secret number between 0 and 100[K
+[K
+You have 3 attempts left to guess my number[K
+[38;5;9m[48;5;4mWrong. 10 is too low![K
+[38;5;15m[48;5;4m[K
+You have 2 attempts left to guess my number[K
+[38;5;9m[48;5;4mWrong. 90 is too high![K
+[38;5;15m[48;5;4m[K
+You have 1 attempts left to guess my number[K
+[38;5;9m[48;5;4mWrong. 50 is too low![K
+[38;5;15m[48;5;4m[38;5;9m[48;5;4mSorry. You lost :-( The secret number was 70[K
+[38;5;15m[48;5;4m[K
+[K
+Alright! I have a secret number between 0 and 100[K
+[K
+You have 3 attempts left to guess my number[K
+[38;5;9m[48;5;4mWrong. 50 is too high![K
+[38;5;15m[48;5;4m[K
+You have 2 attempts left to guess my number[K
+[38;5;9m[48;5;4mWrong. 75 is too high![K
+[38;5;15m[48;5;4m[K
+You have 1 attempts left to guess my number[K
+[38;5;9m[48;5;4mWrong. 5 is too low![K
+[38;5;15m[48;5;4m[38;5;9m[48;5;4mSorry. You lost :-( The secret number was 22[K
+[38;5;15m[48;5;4m[K
+[K
+Alright! I have a secret number between 0 and 100[K
+[K
+You have 3 attempts left to guess my number[K
+[38;5;9m[48;5;4mWrong. 50 is too low![K
+[38;5;15m[48;5;4m[K
+You have 2 attempts left to guess my number[K
+[38;5;10m[48;5;4mCorrect. You win! :-)[K
+[38;5;15m[48;5;4m[K
+[39m[49m[2J[1;1HScore: 1 wins and 2 losses
+
+Thanks for playing
+

@@ -455,11 +455,11 @@ fn get_programs_dir(flag: Option<String>) -> Result<PathBuf> {
 /// Creates a new store backed by `dir` and overlays the built-in demos.
 fn new_store_with_demos(dir: &Path) -> Rc<RefCell<dyn Store>> {
     if dir == Path::new(":memory:") {
-        Rc::from(RefCell::from(endbasic_core::store::DemoStoreOverlay::new(
+        Rc::from(RefCell::from(endbasic::demos::DemoStoreOverlay::new(
             endbasic_core::store::InMemoryStore::default(),
         )))
     } else {
-        Rc::from(RefCell::from(endbasic_core::store::DemoStoreOverlay::new(FileStore::new(dir))))
+        Rc::from(RefCell::from(endbasic::demos::DemoStoreOverlay::new(FileStore::new(dir))))
     }
 }
 

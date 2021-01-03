@@ -297,6 +297,42 @@ fn test_cli_version() {
 }
 
 #[test]
+fn test_example_guess() {
+    check(
+        bin_path("endbasic"),
+        &["--interactive", &src_str("cli/tests/examples/guess.bas")],
+        0,
+        Behavior::File(src_path("cli/tests/examples/guess.in")),
+        Behavior::File(src_path("cli/tests/examples/guess.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_example_hello() {
+    check(
+        bin_path("endbasic"),
+        &["--interactive", &src_str("cli/tests/examples/hello.bas")],
+        0,
+        Behavior::File(src_path("cli/tests/examples/hello.in")),
+        Behavior::File(src_path("cli/tests/examples/hello.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_example_tour() {
+    check(
+        bin_path("endbasic"),
+        &["--interactive", &src_str("cli/tests/examples/tour.bas")],
+        0,
+        Behavior::File(src_path("cli/tests/examples/tour.in")),
+        Behavior::File(src_path("cli/tests/examples/tour.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_repl_colors() {
     check(
         bin_path("endbasic"),
