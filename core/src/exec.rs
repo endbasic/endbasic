@@ -16,7 +16,7 @@
 //! Execution engine for EndBASIC programs.
 
 use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
-use crate::eval::{self, CallableMetadata, Function, Vars};
+use crate::eval::{self, CallableMetadata, CallableMetadataBuilder, Function, Vars};
 use crate::parser::{self, Parser};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -380,44 +380,6 @@ pub(crate) mod testutils {
     use crate::eval::CallableMetadataBuilder;
     use std::cell::RefCell;
 
-    /// Simplified version of the `EXIT` command.
-    pub(crate) struct ExitCommand {
-        metadata: CallableMetadata,
-    }
-
-    impl ExitCommand {
-        /// Creates a new command that terminates execution once called.
-        pub fn new() -> Rc<Self> {
-            Rc::from(Self {
-                metadata: CallableMetadataBuilder::new("EXIT", VarType::Void).test_build(),
-            })
-        }
-    }
-
-    #[async_trait(?Send)]
-    impl Command for ExitCommand {
-        fn metadata(&self) -> &CallableMetadata {
-            &self.metadata
-        }
-
-        async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
-            let arg = match args {
-                [(Some(expr), ArgSep::End)] => {
-                    match expr.eval(machine.get_vars(), machine.get_functions())? {
-                        Value::Integer(n) => {
-                            assert!(n >= 0 && n < std::u8::MAX as i32, "Exit code out of range");
-                            n as u8
-                        }
-                        _ => panic!("Exit code must be a positive integer"),
-                    }
-                }
-                _ => panic!("EXIT takes one argument"),
-            };
-            machine.exit(arg);
-            Ok(())
-        }
-    }
-
     /// Simplified version of `INPUT` to feed input values based on some golden `data`.
     ///
     /// Every time this command is invoked, it yields the next value from the `data` iterator and
@@ -506,6 +468,95 @@ pub(crate) mod testutils {
             Ok(())
         }
     }
+}
+
+/// The `CLEAR` command.
+pub struct ClearCommand {
+    metadata: CallableMetadata,
+}
+
+impl ClearCommand {
+    /// Creates a new `CLEAR` command that resets the state of the machine.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void)
+                .with_syntax("")
+                .with_category("Interpreter manipulation")
+                .with_description("Clears all variables to restore initial state.")
+                .build(),
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for ClearCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
+        if !args.is_empty() {
+            return new_usage_error("CLEAR takes no arguments");
+        }
+        machine.clear();
+        Ok(())
+    }
+}
+
+/// The `EXIT` command.
+pub struct ExitCommand {
+    metadata: CallableMetadata,
+}
+
+impl ExitCommand {
+    /// Creates a new command that terminates execution once called.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("EXIT", VarType::Void)
+                .with_syntax("[code%]")
+                .with_category("Interpreter manipulation")
+                .with_description(
+                    "Exits the interpreter.
+The optional code indicates the return value to return to the system.",
+                )
+                .build(),
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for ExitCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
+        let arg = match args {
+            [] => 0,
+            [(Some(expr), ArgSep::End)] => {
+                match expr.eval(machine.get_vars(), machine.get_functions())? {
+                    Value::Integer(n) => {
+                        if n < 0 {
+                            return new_usage_error("Exit code must be a positive integer");
+                        }
+                        if n >= 128 {
+                            return new_usage_error("Exit code cannot be larger than 127");
+                        }
+                        n as u8
+                    }
+                    _ => return new_usage_error("Exit code must be a positive integer"),
+                }
+            }
+            _ => return new_usage_error("EXIT takes zero or one argument"),
+        };
+        machine.exit(arg);
+        Ok(())
+    }
+}
+
+/// Instantiates all REPL commands.
+pub fn add_all(builder: MachineBuilder) -> MachineBuilder {
+    builder.add_command(ClearCommand::new()).add_command(ExitCommand::new())
 }
 
 #[cfg(test)]
@@ -680,6 +731,16 @@ mod tests {
             run("OUT 1\nEXIT 5\nOUT 2", &[], captured_out.clone()).expect("Execution failed")
         );
         assert_eq!(&["1"], captured_out.borrow().as_slice());
+    }
+
+    #[test]
+    fn test_exit_default_is_not_special() {
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        assert_eq!(
+            StopReason::Exited(0),
+            run("OUT 1\nOUT 2\nEXIT\nOUT 3", &[], captured_out.clone()).expect("Execution failed")
+        );
+        assert_eq!(&["1", "2"], captured_out.borrow().as_slice());
     }
 
     #[test]
@@ -963,5 +1024,57 @@ mod tests {
             StopReason::Eof,
             block_on(machine.exec(&mut b"b = a".as_ref())).expect("Execution failed")
         );
+    }
+
+    #[test]
+    fn test_clear_ok() {
+        let mut machine = MachineBuilder::default().add_command(ClearCommand::new()).build();
+        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"a = 1".as_ref())).unwrap());
+        assert!(machine.get_var_as_int("a").is_ok());
+        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"CLEAR".as_ref())).unwrap());
+        assert!(machine.get_var_as_int("a").is_err());
+    }
+
+    #[test]
+    fn test_clear_errors() {
+        let mut machine = MachineBuilder::default().add_command(ClearCommand::new()).build();
+        assert_eq!(
+            "CLEAR takes no arguments",
+            format!("{}", block_on(machine.exec(&mut b"CLEAR 123".as_ref())).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_exit_no_code() {
+        let mut machine = MachineBuilder::default().add_command(ExitCommand::new()).build();
+        assert_eq!(
+            StopReason::Exited(0),
+            block_on(machine.exec(&mut b"a = 3: EXIT: a = 4".as_ref())).unwrap()
+        );
+        assert_eq!(3, machine.get_var_as_int("a").unwrap());
+    }
+
+    fn do_exit_with_code_test(code: u8) {
+        let mut machine = MachineBuilder::default().add_command(ExitCommand::new()).build();
+        assert_eq!(
+            StopReason::Exited(code),
+            block_on(machine.exec(&mut format!("a = 3: EXIT {}: a = 4", code).as_bytes())).unwrap()
+        );
+        assert_eq!(3, machine.get_var_as_int("a").unwrap());
+    }
+
+    #[test]
+    fn text_exit_with_code() {
+        do_exit_with_code_test(0);
+        do_exit_with_code_test(1);
+        do_exit_with_code_test(42);
+        do_exit_with_code_test(127);
+    }
+
+    #[test]
+    fn test_exit_errors() {
+        do_error_test("EXIT 1, 2", &[], &[], "EXIT takes zero or one argument");
+        do_error_test("EXIT -3", &[], &[], "Exit code must be a positive integer");
+        do_error_test("EXIT 128", &[], &[], "Exit code cannot be larger than 127");
     }
 }
