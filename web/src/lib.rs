@@ -240,7 +240,7 @@ impl WebTerminal {
         let store = store::WebStore::from_window();
         let store = Rc::from(RefCell::from(DemoStoreOverlay::new(store)));
         loop {
-            let result = endbasic_core::repl::run_repl_loop(console.clone(), store.clone()).await;
+            let result = endbasic::run_repl_loop(console.clone(), store.clone()).await;
             let mut console = console.borrow_mut();
             match result {
                 Ok(exit_code) => {

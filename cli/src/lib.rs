@@ -15,9 +15,15 @@
 
 //! Interactive interpreter for the EndBASIC language.
 
-use crate::console::{self, Console};
-use crate::exec::StopReason;
-use crate::store::Store;
+// Keep these in sync with other top-level files.
+#![allow(clippy::await_holding_refcell_ref)]
+#![warn(anonymous_parameters, bad_style, missing_docs)]
+#![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
+#![warn(unsafe_code)]
+
+use endbasic_core::console::{self, Console};
+use endbasic_core::exec::StopReason;
+use endbasic_core::store::Store;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -30,7 +36,7 @@ pub async fn run_repl_loop(
     console: Rc<RefCell<dyn Console>>,
     store: Rc<RefCell<dyn Store>>,
 ) -> io::Result<i32> {
-    let mut machine = crate::interactive_machine_builder(console.clone(), store).build();
+    let mut machine = endbasic_core::interactive_machine_builder(console.clone(), store).build();
 
     {
         let mut console = console.borrow_mut();

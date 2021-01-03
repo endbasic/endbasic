@@ -36,7 +36,6 @@ mod lexer;
 pub mod numerics;
 mod parser;
 mod reader;
-pub mod repl;
 pub mod store;
 pub mod strings;
 
