@@ -93,6 +93,7 @@ pub trait Command {
 
 /// Describes how the machine stopped execution while it was running a script via `exec()`.
 #[derive(Debug, PartialEq)]
+#[must_use]
 pub enum StopReason {
     /// Execution terminates because the machine reached the end of the input.
     Eof,
@@ -519,7 +520,10 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut machine = Machine::default();
-        block_on(machine.exec(&mut b"a = TRUE: b = 1".as_ref())).expect("Execution failed");
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut b"a = TRUE: b = 1".as_ref())).expect("Execution failed")
+        );
         assert!(machine.get_var_as_bool("a").is_ok());
         assert!(machine.get_var_as_int("b").is_ok());
         machine.clear();
@@ -530,7 +534,10 @@ mod tests {
     #[test]
     fn test_get_var_as_bool() {
         let mut machine = Machine::default();
-        block_on(machine.exec(&mut b"a = TRUE: b = 1".as_ref())).expect("Execution failed");
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut b"a = TRUE: b = 1".as_ref())).expect("Execution failed")
+        );
         assert!(machine.get_var_as_bool("a").expect("Failed to query a"));
         assert_eq!(
             "Incompatible types in b? reference",
@@ -545,7 +552,10 @@ mod tests {
     #[test]
     fn test_get_var_as_int() {
         let mut machine = Machine::default();
-        block_on(machine.exec(&mut b"a = 1: b = \"foo\"".as_ref())).expect("Execution failed");
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut b"a = 1: b = \"foo\"".as_ref())).expect("Execution failed")
+        );
         assert_eq!(1, machine.get_var_as_int("a").expect("Failed to query a"));
         assert_eq!(
             "Incompatible types in b% reference",
@@ -560,7 +570,11 @@ mod tests {
     #[test]
     fn test_get_var_as_string() {
         let mut machine = Machine::default();
-        block_on(machine.exec(&mut b"a = \"foo\": b = FALSE".as_ref())).expect("Execution failed");
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut b"a = \"foo\": b = FALSE".as_ref()))
+                .expect("Execution failed")
+        );
         assert_eq!("foo", machine.get_var_as_string("a").expect("Failed to query a"));
         assert_eq!(
             "Incompatible types in b$ reference",
@@ -941,7 +955,13 @@ mod tests {
     #[test]
     fn test_exec_shares_state() {
         let mut machine = Machine::default();
-        block_on(machine.exec(&mut b"a = 10".as_ref())).expect("Execution failed");
-        block_on(machine.exec(&mut b"b = a".as_ref())).expect("Execution failed");
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut b"a = 10".as_ref())).expect("Execution failed")
+        );
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut b"b = a".as_ref())).expect("Execution failed")
+        );
     }
 }

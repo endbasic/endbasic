@@ -270,12 +270,15 @@ pub fn add_all(builder: MachineBuilder) -> MachineBuilder {
 mod tests {
     use super::*;
     use crate::ast::VarRef;
-    use crate::exec::MachineBuilder;
+    use crate::exec::{MachineBuilder, StopReason};
     use futures_lite::future::block_on;
 
     fn check_ok(exp_value: Value, expr: &str) {
         let mut machine = add_all(MachineBuilder::default()).build();
-        block_on(machine.exec(&mut format!("result = {}", expr).as_bytes())).unwrap();
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut format!("result = {}", expr).as_bytes())).unwrap()
+        );
         assert_eq!(
             &exp_value,
             machine.get_vars().get(&VarRef::new("result", VarType::Auto)).unwrap()

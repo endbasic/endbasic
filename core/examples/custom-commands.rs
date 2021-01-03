@@ -26,6 +26,7 @@ use endbasic_core::exec::{self, Command, Machine, MachineBuilder};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::io;
+use std::process;
 use std::rc::Rc;
 
 /// Sample code to parse in this example.
@@ -132,5 +133,5 @@ fn main() {
     // Execute the sample script.  The script will call back into our custom commands, one of which
     // will update state in Rust land and the other will have side-effects in the console.
     let mut cursor = io::Cursor::new(INPUT.as_bytes());
-    block_on(machine.exec(&mut cursor)).expect("Execution error");
+    process::exit(block_on(machine.exec(&mut cursor)).expect("Execution error").as_exit_code());
 }

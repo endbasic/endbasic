@@ -850,7 +850,10 @@ mod tests {
         ));
         let mut machine =
             add_all(MachineBuilder::default(), program.clone(), console.clone(), store).build();
-        block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed");
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed")
+        );
         let expected_out: Vec<CapturedOut> =
             expected_out.iter().map(|x| CapturedOut::Print((*x).to_owned())).collect();
         assert_eq!(expected_out, console.borrow().captured_out());
@@ -896,9 +899,9 @@ mod tests {
     #[test]
     fn test_clear_ok() {
         let mut machine = MachineBuilder::default().add_command(ClearCommand::new()).build();
-        block_on(machine.exec(&mut b"a = 1".as_ref())).unwrap();
+        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"a = 1".as_ref())).unwrap());
         assert!(machine.get_var_as_int("a").is_ok());
-        block_on(machine.exec(&mut b"CLEAR".as_ref())).unwrap();
+        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"CLEAR".as_ref())).unwrap());
         assert!(machine.get_var_as_int("a").is_err());
     }
 
@@ -1083,7 +1086,7 @@ mod tests {
         let mut machine =
             MachineBuilder::default().add_command(NewCommand::new(program.clone())).build();
 
-        block_on(machine.exec(&mut b"NEW".as_ref())).unwrap();
+        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"NEW".as_ref())).unwrap());
         assert!(program.borrow().text().is_empty());
         assert!(machine.get_vars().is_empty());
         // TODO(jmmv): If we get user-supplied functions, we need to check here that they were
@@ -1112,12 +1115,12 @@ mod tests {
             .add_command(RunCommand::new(console.clone(), program))
             .build();
 
-        block_on(machine.exec(&mut b"var = 7: RUN".as_ref())).unwrap();
+        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"var = 7: RUN".as_ref())).unwrap());
         assert_eq!(&["7"], captured_out.borrow().as_slice());
         assert!(console.borrow().captured_out().is_empty());
 
         captured_out.borrow_mut().clear();
-        block_on(machine.exec(&mut b"RUN".as_ref())).unwrap();
+        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"RUN".as_ref())).unwrap());
         assert_eq!(&["8"], captured_out.borrow().as_slice());
         assert!(console.borrow().captured_out().is_empty());
     }
