@@ -28,6 +28,8 @@ use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
 
+pub mod demos;
+
 /// Enters the interactive interpreter.
 ///
 /// `dir` specifies the directory that the interpreter will use for any commands that manipulate
