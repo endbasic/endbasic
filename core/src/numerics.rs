@@ -245,7 +245,7 @@ pub fn add_all(mut builder: MachineBuilder) -> MachineBuilder {
 mod tests {
     use super::*;
     use crate::ast::VarRef;
-    use crate::exec::MachineBuilder;
+    use crate::exec::{MachineBuilder, StopReason};
     use futures_lite::future::block_on;
 
     fn temp_var_name(v: &Value) -> &'static str {
@@ -259,7 +259,10 @@ mod tests {
 
     fn check_ok_with_machine(machine: &mut Machine, exp_value: Value, expr: &str) {
         let var_name = temp_var_name(&exp_value);
-        block_on(machine.exec(&mut format!("{} = {}", var_name, expr).as_bytes())).unwrap();
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut format!("{} = {}", var_name, expr).as_bytes())).unwrap()
+        );
         assert_eq!(
             &exp_value,
             machine.get_vars().get(&VarRef::new(var_name, VarType::Auto)).unwrap()
@@ -337,7 +340,7 @@ mod tests {
         check_ok_with_machine(&mut machine, Value::Boolean(false), "RND(1) = RND(10)");
         check_ok_with_machine(&mut machine, Value::Boolean(true), "RND(0) = RND(0)");
 
-        block_on(machine.exec(&mut b"RANDOMIZE 10".as_ref())).unwrap();
+        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"RANDOMIZE 10".as_ref())).unwrap());
         check_ok_with_machine(&mut machine, Value::Double(0.7097578208683426), "RND(1)");
         check_ok_with_machine(&mut machine, Value::Double(0.2205558922655312), "RND(1)");
         check_ok_with_machine(&mut machine, Value::Double(0.2205558922655312), "RND(0)");

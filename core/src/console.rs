@@ -794,7 +794,7 @@ pub(crate) mod testutils {
 mod tests {
     use super::testutils::*;
     use super::*;
-    use crate::exec::MachineBuilder;
+    use crate::exec::{MachineBuilder, StopReason};
     use futures_lite::future::block_on;
 
     /// Builder pattern to construct a test for `read_line_interactive`.
@@ -1125,7 +1125,10 @@ mod tests {
             MockConsoleBuilder::default().add_input_chars(golden_in).build(),
         ));
         let mut machine = add_all(MachineBuilder::default(), console.clone()).build();
-        block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed");
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed")
+        );
         assert_eq!(expected_out, console.borrow().captured_out());
     }
 

@@ -326,7 +326,7 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use crate::console::testutils::*;
-    use crate::exec::MachineBuilder;
+    use crate::exec::{MachineBuilder, StopReason};
     use futures_lite::future::block_on;
     use std::cell::RefCell;
 
@@ -363,7 +363,7 @@ mod tests {
             .add_command(DoNothingCommand::new())
             .add_function(EmptyFunction::new())
             .build();
-        block_on(machine.exec(&mut b"HELP".as_ref())).unwrap();
+        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"HELP".as_ref())).unwrap());
 
         let text = flatten_captured_out(console.borrow().captured_out());
         assert_eq!(
@@ -390,7 +390,10 @@ mod tests {
         let mut machine = add_all(MachineBuilder::default(), console.clone())
             .add_command(DoNothingCommand::new())
             .build();
-        block_on(machine.exec(&mut b"help Do_Nothing".as_ref())).unwrap();
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut b"help Do_Nothing".as_ref())).unwrap()
+        );
 
         let text = flatten_captured_out(console.borrow().captured_out());
         assert_eq!(
@@ -413,7 +416,10 @@ mod tests {
         let mut machine = add_all(MachineBuilder::default(), console.clone())
             .add_function(EmptyFunction::new())
             .build();
-        block_on(machine.exec(&mut format!("help {}", name).as_bytes())).unwrap();
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut format!("help {}", name).as_bytes())).unwrap()
+        );
 
         let text = flatten_captured_out(console.borrow().captured_out());
         assert_eq!(
@@ -447,7 +453,7 @@ mod tests {
         let mut machine = add_all(MachineBuilder::default(), console.clone())
             .add_command(DoNothingCommand::new())
             .build();
-        block_on(machine.exec(&mut b"help lang".as_ref())).unwrap();
+        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"help lang".as_ref())).unwrap());
 
         let text = flatten_captured_out(console.borrow().captured_out());
         assert_eq!(String::from(LANG_REFERENCE) + "\n", text);
