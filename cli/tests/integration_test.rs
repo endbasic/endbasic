@@ -317,10 +317,10 @@ fn test_repl_editor() {
 }
 
 #[test]
-fn test_repl_exit() {
+fn test_repl_exit_nonzero() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/repl/exit.bas")],
+        &[&src_str("cli/tests/repl/exit-nonzero.bas")],
         78,
         Behavior::Null,
         Behavior::Null,
@@ -331,7 +331,28 @@ fn test_repl_exit() {
         bin_path("endbasic"),
         &[],
         78,
-        Behavior::File(src_path("cli/tests/repl/exit.bas")),
+        Behavior::File(src_path("cli/tests/repl/exit-nonzero.bas")),
+        Behavior::File(src_path("cli/tests/repl/exit.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_repl_exit_zero() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/repl/exit-zero.bas")],
+        0,
+        Behavior::Null,
+        Behavior::Null,
+        Behavior::Null,
+    );
+
+    check(
+        bin_path("endbasic"),
+        &[],
+        0,
+        Behavior::File(src_path("cli/tests/repl/exit-zero.bas")),
         Behavior::File(src_path("cli/tests/repl/exit.out")),
         Behavior::Null,
     );

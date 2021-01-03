@@ -91,6 +91,26 @@ pub trait Command {
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()>;
 }
 
+/// Describes how the machine stopped execution while it was running a script via `exec()`.
+#[derive(Debug, PartialEq)]
+pub enum StopReason {
+    /// Execution terminates because the machine reached the end of the input.
+    Eof,
+
+    /// Execution terminated because the machine was asked to terminate with `exit()`.
+    Exited(u8),
+}
+
+impl StopReason {
+    /// Converts the stop reason into a process exit code.
+    pub fn as_exit_code(&self) -> i32 {
+        match self {
+            StopReason::Eof => 0,
+            StopReason::Exited(i) => *i as i32,
+        }
+    }
+}
+
 /// Builder pattern for a new machine.
 ///
 /// The `default` constructor creates a new builder for a machine with no builtin commands and no
@@ -146,7 +166,7 @@ impl MachineBuilder {
             commands: self.commands,
             functions: self.functions,
             vars: Vars::default(),
-            stop_exit_code: None,
+            stop_reason: None,
         }
     }
 }
@@ -157,7 +177,7 @@ pub struct Machine {
     commands: HashMap<&'static str, Rc<dyn Command>>,
     functions: HashMap<&'static str, Rc<dyn Function>>,
     vars: Vars,
-    stop_exit_code: Option<u8>,
+    stop_reason: Option<StopReason>,
 }
 
 impl Machine {
@@ -171,7 +191,7 @@ impl Machine {
     /// The `exec()` call that's stopped by this invocation will return the `code` given to this
     /// call.
     pub fn exit(&mut self, code: u8) {
-        self.stop_exit_code = Some(code);
+        self.stop_reason = Some(StopReason::Exited(code));
     }
 
     /// Obtains immutable access to the builtin commands provided by this machine.
@@ -299,7 +319,7 @@ impl Machine {
 
     /// Executes a single statement.
     async fn exec_one<'a>(&'a mut self, stmt: &'a Statement) -> Result<()> {
-        if self.stop_exit_code.is_some() {
+        if self.stop_reason.is_some() {
             return Ok(());
         }
 
@@ -340,16 +360,16 @@ impl Machine {
     ///
     /// Note that this does not consume `self`.  As a result, it is possible to execute multiple
     /// different programs on the same machine, all sharing state.
-    pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<u8> {
-        debug_assert!(self.stop_exit_code.is_none());
+    pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<StopReason> {
+        debug_assert!(self.stop_reason.is_none());
         let mut parser = Parser::from(input);
-        while self.stop_exit_code.is_none() {
+        while self.stop_reason.is_none() {
             match parser.parse()? {
                 Some(stmt) => self.exec_one(&stmt).await?,
                 None => break,
             }
         }
-        Ok(self.stop_exit_code.take().unwrap_or(0))
+        Ok(self.stop_reason.take().unwrap_or(StopReason::Eof))
     }
 }
 
@@ -560,7 +580,7 @@ mod tests {
         input: &str,
         golden_in: &'static [&'static str],
         captured_out: Rc<RefCell<Vec<String>>>,
-    ) -> Result<u8> {
+    ) -> Result<StopReason> {
         let mut machine = MachineBuilder::default()
             .add_command(ExitCommand::new())
             .add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))))
@@ -580,7 +600,10 @@ mod tests {
         expected_out: &'static [&'static str],
     ) {
         let captured_out = Rc::from(RefCell::from(vec![]));
-        assert_eq!(0, run(input, golden_in, captured_out.clone()).expect("Execution failed"));
+        assert_eq!(
+            StopReason::Eof,
+            run(input, golden_in, captured_out.clone()).expect("Execution failed")
+        );
         assert_eq!(expected_out, captured_out.borrow().as_slice());
     }
 
@@ -639,7 +662,7 @@ mod tests {
     fn test_exit_simple() {
         let captured_out = Rc::from(RefCell::from(vec![]));
         assert_eq!(
-            5,
+            StopReason::Exited(5),
             run("OUT 1\nEXIT 5\nOUT 2", &[], captured_out.clone()).expect("Execution failed")
         );
         assert_eq!(&["1"], captured_out.borrow().as_slice());
@@ -649,7 +672,7 @@ mod tests {
     fn test_exit_zero_is_not_special() {
         let captured_out = Rc::from(RefCell::from(vec![]));
         assert_eq!(
-            0,
+            StopReason::Exited(0),
             run("OUT 1\nOUT 2\nEXIT 0\nOUT 3", &[], captured_out.clone())
                 .expect("Execution failed")
         );
@@ -660,7 +683,7 @@ mod tests {
     fn test_exit_nested() {
         let captured_out = Rc::from(RefCell::from(vec![]));
         assert_eq!(
-            42,
+            StopReason::Exited(42),
             run(
                 "FOR a = 0 TO 10\nOUT a\nIF a = 3 THEN\nEXIT 42\nEND IF\nNEXT",
                 &[],
@@ -681,7 +704,7 @@ mod tests {
             .build();
 
         assert_eq!(
-            10,
+            StopReason::Exited(10),
             block_on(machine.exec(&mut "OUT 1\nEXIT 10\nOUT 2".as_bytes()))
                 .expect("Execution failed")
         );
@@ -689,7 +712,7 @@ mod tests {
 
         captured_out.borrow_mut().clear();
         assert_eq!(
-            11,
+            StopReason::Exited(11),
             block_on(machine.exec(&mut "OUT 2\nEXIT 11\nOUT 3".as_bytes()))
                 .expect("Execution failed")
         );

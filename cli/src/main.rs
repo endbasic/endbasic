@@ -115,7 +115,7 @@ fn run<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
     let mut machine = endbasic_core::scripting_machine_builder(console).build();
 
     let mut input = File::open(path)?;
-    Ok(block_on(machine.exec(&mut input))? as i32)
+    Ok(block_on(machine.exec(&mut input))?.as_exit_code())
 }
 
 /// Version of `main` that returns errors to the caller for reporting.

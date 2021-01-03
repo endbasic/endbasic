@@ -18,7 +18,7 @@
 use crate::ast::{ArgSep, Expr, Value, VarType};
 use crate::console::{self, Console};
 use crate::eval::{CallableMetadata, CallableMetadataBuilder};
-use crate::exec::{self, Command, Machine, MachineBuilder};
+use crate::exec::{self, Command, Machine, MachineBuilder, StopReason};
 use crate::store::Store;
 use async_trait::async_trait;
 use std::cell::RefCell;
@@ -105,8 +105,8 @@ pub async fn run_repl_loop(
         console.print("")?;
     }
 
-    let mut exit_code = 0;
-    while exit_code == 0 {
+    let mut stop_reason = StopReason::Eof;
+    while stop_reason == StopReason::Eof {
         let line = {
             let mut console = console.borrow_mut();
             if console.is_interactive() {
@@ -117,7 +117,7 @@ pub async fn run_repl_loop(
 
         match line {
             Ok(line) => match machine.exec(&mut line.as_bytes()).await {
-                Ok(code) => exit_code = code,
+                Ok(reason) => stop_reason = reason,
                 Err(e) => {
                     let mut console = console.borrow_mut();
                     console.print(format!("ERROR: {}", e).as_str())?;
@@ -128,19 +128,19 @@ pub async fn run_repl_loop(
                     let mut console = console.borrow_mut();
                     console.print("Interrupted by CTRL-C")?;
                     // TODO(jmmv): This should cause the interpreter to exit with a signal.
-                    exit_code = 1;
+                    stop_reason = StopReason::Exited(1);
                 } else if e.kind() == io::ErrorKind::UnexpectedEof {
                     let mut console = console.borrow_mut();
                     console.print("End of input by CTRL-D")?;
-                    exit_code = 0;
+                    stop_reason = StopReason::Exited(0);
                     break;
                 } else {
-                    exit_code = 1;
+                    stop_reason = StopReason::Exited(1);
                 }
             }
         }
     }
-    Ok(exit_code as i32)
+    Ok(stop_reason.as_exit_code())
 }
 
 #[cfg(test)]
@@ -158,14 +158,17 @@ mod tests {
     #[test]
     fn test_exit_no_code() {
         let mut machine = MachineBuilder::default().add_command(ExitCommand::new()).build();
-        assert_eq!(0, block_on(machine.exec(&mut b"a = 3: EXIT: a = 4".as_ref())).unwrap());
+        assert_eq!(
+            StopReason::Exited(0),
+            block_on(machine.exec(&mut b"a = 3: EXIT: a = 4".as_ref())).unwrap()
+        );
         assert_eq!(3, machine.get_var_as_int("a").unwrap());
     }
 
     fn do_exit_with_code_test(code: u8) {
         let mut machine = MachineBuilder::default().add_command(ExitCommand::new()).build();
         assert_eq!(
-            code,
+            StopReason::Exited(code),
             block_on(machine.exec(&mut format!("a = 3: EXIT {}: a = 4", code).as_bytes())).unwrap()
         );
         assert_eq!(3, machine.get_var_as_int("a").unwrap());

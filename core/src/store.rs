@@ -562,9 +562,11 @@ impl Command for RunCommand {
             return exec::new_usage_error("RUN takes no arguments");
         }
         let program = self.program.borrow().text();
-        let exit_code = machine.exec(&mut program.as_bytes()).await?;
-        if exit_code != 0 {
-            self.console.borrow_mut().print(&format!("Program exited with code {}", exit_code))?;
+        let stop_reason = machine.exec(&mut program.as_bytes()).await?;
+        if stop_reason.as_exit_code() != 0 {
+            self.console
+                .borrow_mut()
+                .print(&format!("Program exited with code {}", stop_reason.as_exit_code()))?;
         }
         Ok(())
     }
@@ -719,7 +721,7 @@ mod tests {
     use super::*;
     use crate::console::testutils::*;
     use crate::exec::testutils::*;
-    use crate::exec::MachineBuilder;
+    use crate::exec::{MachineBuilder, StopReason};
     use futures_lite::future::block_on;
 
     #[test]
@@ -1133,7 +1135,10 @@ mod tests {
             .add_command(RunCommand::new(console.clone(), program))
             .build();
 
-        assert_eq!(0, block_on(machine.exec(&mut b"RUN\nOUT \"after\"".as_ref())).unwrap());
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut b"RUN\nOUT \"after\"".as_ref())).unwrap()
+        );
         assert_eq!(&["5", "after"], captured_out.borrow().as_slice());
         assert_eq!(
             &[CapturedOut::Print("Program exited with code 1".to_owned())],
