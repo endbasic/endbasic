@@ -1,0 +1,7 @@
+
+    RUN
+
+    Runs the stored program.
+
+    Note that the program runs in the context of the interpreter so it will pick up any variables and other state that may already be set.
+

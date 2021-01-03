@@ -2,6 +2,7 @@ Usage: endbasic [options] [program-file]
 
 Options:
     -h, --help          show command-line usage information and exit
+    -i, --interactive   force interactive mode when running a script
         --programs-dir PATH
                         directory where user programs are stored
         --version       show version information and exit

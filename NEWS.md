@@ -15,6 +15,9 @@ not adhere to semantic versioning until 1.0.0.**
 *   Added support for an in-memory store when running the REPL by specifying
     the `--programs-dir=:memory:` flag.
 
+*   Added support to run scripts as if they were run in the interactive REPL
+    by passing the `--interactive` flag.
+
 ## Changes in version 0.4.0
 
 **Released on 2020-12-25.**

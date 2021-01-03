@@ -187,6 +187,36 @@ fn test_cli_help() {
     check_with_args(&["the", "--help", "flag always wins"]);
 }
 
+#[test]
+fn test_cli_interactive() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/cli/interactive.bas")],
+        1,
+        Behavior::Null,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/cli/interactive.err")),
+    );
+
+    check(
+        bin_path("endbasic"),
+        &["-i", &src_str("cli/tests/cli/interactive.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/cli/interactive.out")),
+        Behavior::Null,
+    );
+
+    check(
+        bin_path("endbasic"),
+        &["--interactive", &src_str("cli/tests/cli/interactive.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/cli/interactive.out")),
+        Behavior::Null,
+    );
+}
+
 // TODO(jmmv): This test fails almost always on Linux CI builds with `Text file busy` when
 // attempting to run the copied binary.  I've also gotten it to occasionally fail on a local Linux
 // installation in the same way, but that's much harder to trigger.  Investigate what's going on.
