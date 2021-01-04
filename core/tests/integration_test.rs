@@ -161,13 +161,27 @@ fn check<P: AsRef<Path>>(
 }
 
 #[test]
-fn test_example_complete() {
-    // Nothing to do.  We use this example program to run all language tests below.
+fn test_example_complete_interactive() {
+    check(
+        bin_path("examples/complete-interactive"),
+        &[&src_str("core/tests/interactive.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("core/tests/interactive.out")),
+        Behavior::Null,
+    );
 }
 
 #[test]
-fn test_example_scripting() {
-    // Nothing to do.  We use this example program to run all language tests below.
+fn test_example_complete_scripting() {
+    check(
+        bin_path("examples/complete-scripting"),
+        &[&src_str("core/tests/script.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("core/tests/script.out")),
+        Behavior::File(src_path("core/tests/script.err")),
+    );
 }
 
 #[test]
@@ -177,7 +191,7 @@ fn test_example_custom_commands() {
         &[],
         0,
         Behavior::Null,
-        Behavior::File(src_path("core/examples/custom-commands.out")),
+        Behavior::File(src_path("core/tests/custom-commands.out")),
         Behavior::Null,
     );
 }
@@ -189,115 +203,7 @@ fn test_example_minimal() {
         &[],
         0,
         Behavior::Null,
-        Behavior::File(src_path("core/examples/minimal.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_lang_control_flow() {
-    check(
-        bin_path("examples/complete-scripting"),
-        &[&src_str("core/tests/control-flow.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("core/tests/control-flow.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_lang_exec_error() {
-    check(
-        bin_path("examples/complete-scripting"),
-        &[&src_str("core/tests/exec-error.bas")],
-        1,
-        Behavior::Null,
-        Behavior::File(src_path("core/tests/exec-error.out")),
-        Behavior::File(src_path("core/tests/exec-error.err")),
-    );
-}
-
-#[test]
-fn test_lang_hello() {
-    check(
-        bin_path("examples/complete-scripting"),
-        &[&src_str("core/tests/hello.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("core/tests/hello.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_lang_lexer_error() {
-    check(
-        bin_path("examples/complete-scripting"),
-        &[&src_str("core/tests/lexer-error.bas")],
-        1,
-        Behavior::Null,
-        Behavior::File(src_path("core/tests/lexer-error.out")),
-        Behavior::File(src_path("core/tests/lexer-error.err")),
-    );
-}
-
-#[test]
-fn test_lang_no_repl_commands() {
-    check(
-        bin_path("examples/complete-scripting"),
-        &[&src_str("core/tests/no-repl-commands.bas")],
-        1,
-        Behavior::Null,
-        Behavior::File(src_path("core/tests/no-repl-commands.out")),
-        Behavior::File(src_path("core/tests/no-repl-commands.err")),
-    );
-}
-
-#[test]
-fn test_lang_parser_error() {
-    check(
-        bin_path("examples/complete-scripting"),
-        &[&src_str("core/tests/parser-error.bas")],
-        1,
-        Behavior::Null,
-        Behavior::File(src_path("core/tests/parser-error.out")),
-        Behavior::File(src_path("core/tests/parser-error.err")),
-    );
-}
-
-#[test]
-fn test_lang_types() {
-    check(
-        bin_path("examples/complete-scripting"),
-        &[&src_str("core/tests/types.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("core/tests/types.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_lang_utf8() {
-    check(
-        bin_path("examples/complete-scripting"),
-        &[&src_str("core/tests/utf8.bas")],
-        0,
-        Behavior::File(src_path("core/tests/utf8.in")),
-        Behavior::File(src_path("core/tests/utf8.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_lang_yes_no() {
-    check(
-        bin_path("examples/complete-scripting"),
-        &[&src_str("core/tests/yes-no.bas")],
-        0,
-        Behavior::File(src_path("core/tests/yes-no.in")),
-        Behavior::File(src_path("core/tests/yes-no.out")),
+        Behavior::File(src_path("core/tests/minimal.out")),
         Behavior::Null,
     );
 }
