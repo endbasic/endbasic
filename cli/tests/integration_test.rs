@@ -333,6 +333,102 @@ fn test_example_tour() {
 }
 
 #[test]
+fn test_lang_control_flow() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/lang/control-flow.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/lang/control-flow.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_lang_exec_error() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/lang/exec-error.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/lang/exec-error.out")),
+        Behavior::File(src_path("cli/tests/lang/exec-error.err")),
+    );
+}
+
+#[test]
+fn test_lang_hello() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/lang/hello.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/lang/hello.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_lang_lexer_error() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/lang/lexer-error.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/lang/lexer-error.out")),
+        Behavior::File(src_path("cli/tests/lang/lexer-error.err")),
+    );
+}
+
+#[test]
+fn test_lang_parser_error() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/lang/parser-error.bas")],
+        1,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/lang/parser-error.out")),
+        Behavior::File(src_path("cli/tests/lang/parser-error.err")),
+    );
+}
+
+#[test]
+fn test_lang_types() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/lang/types.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/lang/types.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_lang_utf8() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/lang/utf8.bas")],
+        0,
+        Behavior::File(src_path("cli/tests/lang/utf8.in")),
+        Behavior::File(src_path("cli/tests/lang/utf8.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_lang_yes_no() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/lang/yes-no.bas")],
+        0,
+        Behavior::File(src_path("cli/tests/lang/yes-no.in")),
+        Behavior::File(src_path("cli/tests/lang/yes-no.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_repl_colors() {
     check(
         bin_path("endbasic"),

@@ -1,5 +1,5 @@
 ' EndBASIC
-' Copyright 2020 Julio Merino
+' Copyright 2021 Julio Merino
 '
 ' Licensed under the Apache License, Version 2.0 (the "License"); you may not
 ' use this file except in compliance with the License.  You may obtain a copy
@@ -13,10 +13,11 @@
 ' License for the specific language governing permissions and limitations
 ' under the License.
 
-' Tests that the scripting interface does not have interactive functionality.
+' A sample program to test the interactive interpreter.
 
-' TODO(jmmv): We should have more tests here, but we cannot until the
-' interpreter is able to continue execution after an error.
+RANDOMIZE 10
+PRINT "The random number is:"; DTOI(RND() * 100.0)
 
-' Interactive help should not be available in scripts.
-HELP
+' Call a command that is for interactive purposes and expect it to work.
+HELP RANDOMIZE
+PRINT "Reached"

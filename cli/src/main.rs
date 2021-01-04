@@ -21,7 +21,7 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
-use anyhow::{anyhow, Error, Result};
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use crossterm::{cursor, event, execute, style, terminal, tty::IsTty, QueueableCommand};
 use endbasic_core::console;
@@ -51,14 +51,6 @@ impl UsageError {
     fn new<T: Into<String>>(message: T) -> Self {
         Self { message: message.into() }
     }
-}
-
-/// Flattens all causes of an error into a single string.
-fn flatten_causes(err: &Error) -> String {
-    err.chain().fold(String::new(), |flattened, cause| {
-        let flattened = if flattened.is_empty() { flattened } else { flattened + ": " };
-        flattened + &format!("{}", cause)
-    })
 }
 
 /// Consumes and returns the program name from `env::Args`.
@@ -541,7 +533,7 @@ fn main() {
                 eprintln!("Type {} --help for more information", name);
                 process::exit(2);
             } else {
-                eprintln!("{}: {}", name, flatten_causes(&e));
+                eprintln!("{}: {}", name, e);
                 process::exit(1);
             }
         }
@@ -554,17 +546,6 @@ mod tests {
     use endbasic_core::store::Metadata;
     use std::io::BufRead;
     use std::path::Path;
-
-    #[test]
-    fn flatten_causes_one() {
-        assert_eq!("the error", flatten_causes(&anyhow!("the error")));
-    }
-
-    #[test]
-    fn flatten_causes_several() {
-        let err = anyhow!("first").context("second").context("and last");
-        assert_eq!("and last: second: first", flatten_causes(&err));
-    }
 
     /// Reads `path` and checks that its contents match `exp_lines`.
     fn check_file(path: &Path, exp_lines: &[&str]) {
