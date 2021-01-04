@@ -15,12 +15,12 @@
 
 //! Numerical functions for EndBASIC.
 
-use crate::ast::{ArgSep, Expr, Value, VarType};
-use crate::eval::{
+use async_trait::async_trait;
+use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
+use endbasic_core::eval::{
     CallableMetadata, CallableMetadataBuilder, Function, FunctionError, FunctionResult,
 };
-use crate::exec::{self, Command, Machine, MachineBuilder};
-use async_trait::async_trait;
+use endbasic_core::exec::{self, Command, Machine, MachineBuilder};
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
 use std::cell::RefCell;
@@ -244,8 +244,8 @@ pub fn add_all(mut builder: MachineBuilder) -> MachineBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::VarRef;
-    use crate::exec::{MachineBuilder, StopReason};
+    use endbasic_core::ast::VarRef;
+    use endbasic_core::exec::{MachineBuilder, StopReason};
     use futures_lite::future::block_on;
 
     fn temp_var_name(v: &Value) -> &'static str {

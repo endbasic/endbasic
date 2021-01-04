@@ -14,18 +14,6 @@ edition = "2018"
 [dependencies]
 async-trait = "0.1"
 thiserror = "1.0"
-time = { version = "0.2", features = ["std"] }
-
-# We don't directly use getrandom but rand does, and we have to customize how
-# getrandom is built if we want it to work in a WASM context.
-[dependencies.getrandom]
-version = "0.2"
-features = ["js"]
-
-[dependencies.rand]
-version = "0.8"
-default-features = false
-features = ["small_rng", "std"]
 
 [dev-dependencies]
 futures-lite = "1.1"

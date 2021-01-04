@@ -25,6 +25,7 @@ EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 The latest version of EndBASIC is 0.4.0 and was released on 2020-12-25.
 
 *   For language features, see [`core/README.md`](core/README.md).
+*   For standard library contents, see [`std/README.md`](std/README.md).
 *   For usage details of the command-line interpreter, see
     [`cli/README.md`](cli/README.md).
 *   For the web interface, see [`web/README.md`](web/README.md).
@@ -83,10 +84,10 @@ What's your name? Julio
 Hello, Julio!
 ```
 
-You can also browse the sample files right from this tree by heading to the
-[`core/examples`](core/examples) directory.  In there, you will find the `.bas`
-demo files as well as `.rs` files showing how to embed the EndBASIC interpreter
-in your own programs.
+You can also browse various sample files in the `examples` subdirectory of each
+crate.  [`core/examples`](core/examples) and [`std/examples`](std/examples) will
+show you how to embed EndBASIC into your own programs, and
+[`cli/examples`](cli/examples) will show you how EndBASIC code looks like.
 
 ## Why EndBASIC?
 

@@ -15,7 +15,7 @@
 
 //! Exposes EndBASIC demos as an overlay to the store.
 
-use endbasic_core::store::{Metadata, Store};
+use endbasic_std::store::{Metadata, Store};
 use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::str;
@@ -154,7 +154,7 @@ impl<S: Store> Store for DemoStoreOverlay<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use endbasic_core::store::InMemoryStore;
+    use endbasic_std::store::InMemoryStore;
 
     #[test]
     fn test_demo_store_overlay_delete() {

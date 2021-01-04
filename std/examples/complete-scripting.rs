@@ -19,7 +19,7 @@
 //! be allowed in scripts (and not in a REPL).
 
 use async_trait::async_trait;
-use endbasic_core::console::{ClearType, Console, Key, Position};
+use endbasic_std::console::{ClearType, Console, Key, Position};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -140,7 +140,7 @@ fn main() {
     };
 
     let console = Rc::from(RefCell::from(IncompleteConsole::default()));
-    let mut machine = endbasic_core::scripting_machine_builder(console).build();
+    let mut machine = endbasic_std::scripting_machine_builder(console).build();
 
     let mut input = match fs::File::open(path) {
         Ok(file) => file,

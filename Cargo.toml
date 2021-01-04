@@ -2,5 +2,6 @@
 members = [
     "cli",
     "core",
+    "std",
     "web",
 ]

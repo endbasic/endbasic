@@ -21,9 +21,9 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
-use endbasic_core::console::{self, Console};
 use endbasic_core::exec::StopReason;
-use endbasic_core::store::Store;
+use endbasic_std::console::{self, Console};
+use endbasic_std::store::Store;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -38,7 +38,7 @@ pub async fn run_repl_loop(
     console: Rc<RefCell<dyn Console>>,
     store: Rc<RefCell<dyn Store>>,
 ) -> io::Result<i32> {
-    let mut machine = endbasic_core::interactive_machine_builder(console.clone(), store).build();
+    let mut machine = endbasic_std::interactive_machine_builder(console.clone(), store).build();
 
     {
         let mut console = console.borrow_mut();

@@ -10,15 +10,17 @@
 
     *   `NEWS.md`: Set next version number, add date, and clean up notes.
     *   `README.md`: Update latest version number and release date.
-    *   `cli/Cargo.toml`: Update version number and `endbasic-core` dependency.
+    *   `cli/Cargo.toml`: Update version number and `endbasic-*` dependencies.
     *   `core/Cargo.toml`: Update version number.
-    *   `web/Cargo.toml`: Update version number and `endbasic-core` dependency.
+    *   `std/Cargo.toml`: Update version number and `endbasic-*` dependencies.
+    *   `web/Cargo.toml`: Update version number and `endbasic-*` dependencies.
     *   `web/package.json`: Update version number.
     *   `.github/workflows/publish-release.yml`: Update tag number.
 
 1.  Once all tests pass, push the new crates out:
 
     *   `( cd core && cargo publish )`
+    *   `( cd std && cargo publish )`
     *   `( cd cli && cargo publish )`
 
 1.  Merge the PR.

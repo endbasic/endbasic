@@ -430,7 +430,6 @@ impl CallableMetadataBuilder {
 
     /// Generates the final `CallableMetadata` object, ensuring the minimal set of values are
     /// present.  Only useful for testing.
-    #[cfg(test)]
     pub fn test_build(self) -> CallableMetadata {
         CallableMetadata {
             name: self.name,

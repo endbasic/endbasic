@@ -15,11 +15,11 @@
 
 //! String functions for EndBASIC.
 
-use crate::ast::{Value, VarType};
-use crate::eval::{
+use endbasic_core::ast::{Value, VarType};
+use endbasic_core::eval::{
     CallableMetadata, CallableMetadataBuilder, Function, FunctionError, FunctionResult,
 };
-use crate::exec::MachineBuilder;
+use endbasic_core::exec::MachineBuilder;
 use std::cmp::min;
 use std::rc::Rc;
 
@@ -269,8 +269,8 @@ pub fn add_all(builder: MachineBuilder) -> MachineBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::VarRef;
-    use crate::exec::{MachineBuilder, StopReason};
+    use endbasic_core::ast::VarRef;
+    use endbasic_core::exec::{MachineBuilder, StopReason};
     use futures_lite::future::block_on;
 
     fn check_ok(exp_value: Value, expr: &str) {

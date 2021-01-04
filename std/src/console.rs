@@ -15,10 +15,10 @@
 
 //! Console representation and manipulation.
 
-use crate::ast::{ArgSep, Expr, Value, VarType};
-use crate::eval::{CallableMetadata, CallableMetadataBuilder};
-use crate::exec::{self, Command, Machine, MachineBuilder};
 use async_trait::async_trait;
+use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
+use endbasic_core::eval::{CallableMetadata, CallableMetadataBuilder};
+use endbasic_core::exec::{self, Command, Machine, MachineBuilder};
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -794,7 +794,7 @@ pub(crate) mod testutils {
 mod tests {
     use super::testutils::*;
     use super::*;
-    use crate::exec::{MachineBuilder, StopReason};
+    use endbasic_core::exec::{MachineBuilder, StopReason};
     use futures_lite::future::block_on;
 
     /// Builder pattern to construct a test for `read_line_interactive`.
