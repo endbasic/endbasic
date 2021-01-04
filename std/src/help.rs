@@ -15,11 +15,11 @@
 
 //! Interactive help support.
 
-use crate::ast::{ArgSep, Expr, VarType};
 use crate::console::Console;
-use crate::eval::{CallableMetadata, CallableMetadataBuilder, Function};
-use crate::exec::{self, Command, Machine, MachineBuilder};
 use async_trait::async_trait;
+use endbasic_core::ast::{ArgSep, Expr, VarType};
+use endbasic_core::eval::{CallableMetadata, CallableMetadataBuilder, Function};
+use endbasic_core::exec::{self, Command, Machine, MachineBuilder};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
@@ -249,8 +249,8 @@ pub fn add_all(builder: MachineBuilder, console: Rc<RefCell<dyn Console>>) -> Ma
 #[cfg(test)]
 pub(crate) mod testutils {
     use super::*;
-    use crate::ast::Value;
-    use crate::eval::{self, CallableMetadata, CallableMetadataBuilder};
+    use endbasic_core::ast::Value;
+    use endbasic_core::eval::{self, CallableMetadata, CallableMetadataBuilder};
 
     /// A command that does nothing.
     pub(crate) struct DoNothingCommand {
@@ -326,7 +326,7 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use crate::console::testutils::*;
-    use crate::exec::{MachineBuilder, StopReason};
+    use endbasic_core::exec::{MachineBuilder, StopReason};
     use futures_lite::future::block_on;
     use std::cell::RefCell;
 

@@ -30,7 +30,7 @@ mod store;
 
 use async_trait::async_trait;
 use endbasic::demos::DemoStoreOverlay;
-use endbasic_core::console::{ClearType, Console, Key, Position};
+use endbasic_std::console::{ClearType, Console, Key, Position};
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::io;

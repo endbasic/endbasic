@@ -15,11 +15,11 @@
 
 //! Stored program manipulation and interactive editor.
 
-use crate::ast::{ArgSep, Expr, Value, VarType};
 use crate::console::Console;
-use crate::eval::{CallableMetadata, CallableMetadataBuilder};
-use crate::exec::{self, Command, Machine, MachineBuilder};
 use async_trait::async_trait;
+use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
+use endbasic_core::eval::{CallableMetadata, CallableMetadataBuilder};
+use endbasic_core::exec::{self, Command, Machine, MachineBuilder};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::io;
@@ -517,6 +517,52 @@ mod testutils {
     use super::*;
     use crate::console;
 
+    /// Simplified version of `PRINT` that captures all calls to it into `data`.
+    ///
+    /// This command only accepts arguments separated by the `;` short separator and concatenates
+    /// them with a single space.
+    pub(crate) struct OutCommand {
+        metadata: CallableMetadata,
+        data: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl OutCommand {
+        /// Creates a new command that captures all calls into `data`.
+        pub(crate) fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
+            Rc::from(Self {
+                metadata: CallableMetadataBuilder::new("OUT", VarType::Void).test_build(),
+                data,
+            })
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl Command for OutCommand {
+        fn metadata(&self) -> &CallableMetadata {
+            &self.metadata
+        }
+
+        async fn exec(
+            &self,
+            args: &[(Option<Expr>, ArgSep)],
+            machine: &mut Machine,
+        ) -> exec::Result<()> {
+            let mut text = String::new();
+            for arg in args.iter() {
+                if let Some(expr) = arg.0.as_ref() {
+                    text += &expr.eval(machine.get_vars(), machine.get_functions())?.to_string();
+                }
+                match arg.1 {
+                    ArgSep::End => break,
+                    ArgSep::Short => text += " ",
+                    ArgSep::Long => return exec::new_usage_error("Cannot use the ',' separator"),
+                }
+            }
+            self.data.borrow_mut().push(text);
+            Ok(())
+        }
+    }
+
     pub(crate) struct RecordedProgram {
         content: String,
     }
@@ -551,8 +597,8 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use crate::console::testutils::*;
-    use crate::exec::testutils::*;
-    use crate::exec::{ExitCommand, MachineBuilder, StopReason};
+    use crate::exec::ExitCommand;
+    use endbasic_core::exec::{MachineBuilder, StopReason};
     use futures_lite::future::block_on;
 
     /// Runs the `input` code on a new machine that stores programs in `store` and verifies its

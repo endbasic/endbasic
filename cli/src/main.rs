@@ -24,8 +24,8 @@
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use crossterm::{cursor, event, execute, style, terminal, tty::IsTty, QueueableCommand};
-use endbasic_core::console;
-use endbasic_core::store::{Metadata, Store};
+use endbasic_std::console;
+use endbasic_std::store::{Metadata, Store};
 use futures_lite::future::block_on;
 use getopts::Options;
 use std::cell::RefCell;
@@ -448,7 +448,7 @@ fn get_programs_dir(flag: Option<String>) -> Result<PathBuf> {
 fn new_store_with_demos(dir: &Path) -> Rc<RefCell<dyn Store>> {
     if dir == Path::new(":memory:") {
         Rc::from(RefCell::from(endbasic::demos::DemoStoreOverlay::new(
-            endbasic_core::store::InMemoryStore::default(),
+            endbasic_std::store::InMemoryStore::default(),
         )))
     } else {
         Rc::from(RefCell::from(endbasic::demos::DemoStoreOverlay::new(FileStore::new(dir))))
@@ -467,7 +467,7 @@ fn run_repl_loop(dir: &Path) -> io::Result<i32> {
 /// Executes the `path` program in a fresh machine.
 fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
     let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
-    let mut machine = endbasic_core::scripting_machine_builder(console).build();
+    let mut machine = endbasic_std::scripting_machine_builder(console).build();
     let mut input = File::open(path)?;
     Ok(block_on(machine.exec(&mut input))?.as_exit_code())
 }
@@ -478,7 +478,7 @@ fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
 fn run_interactive<P: AsRef<Path>>(path: P, dir: &Path) -> endbasic_core::exec::Result<i32> {
     let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
     let mut machine =
-        endbasic_core::interactive_machine_builder(console, new_store_with_demos(dir)).build();
+        endbasic_std::interactive_machine_builder(console, new_store_with_demos(dir)).build();
     let mut input = File::open(path)?;
     Ok(block_on(machine.exec(&mut input))?.as_exit_code())
 }
@@ -543,7 +543,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use endbasic_core::store::Metadata;
+    use endbasic_std::store::Metadata;
     use std::io::BufRead;
     use std::path::Path;
 

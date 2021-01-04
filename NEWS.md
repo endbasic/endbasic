@@ -18,6 +18,10 @@ not adhere to semantic versioning until 1.0.0.**
 *   Added support to run scripts as if they were run in the interactive REPL
     by passing the `--interactive` flag.
 
+*   Split the language and standard library into two separate crates: the
+    existing `endbasic-core` continues to provide the language interpreter
+    and the new `endbasic-std` provides the standard library.
+
 ## Changes in version 0.4.0
 
 **Released on 2020-12-25.**

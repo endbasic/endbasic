@@ -64,6 +64,11 @@ fn src_path(name: &str) -> PathBuf {
     dir.join(name)
 }
 
+/// Same as `src_path` but returns a string reference for the few places where we need this.
+fn src_str(p: &str) -> String {
+    src_path(p).to_str().expect("Need paths to be valid strings").to_owned()
+}
+
 /// Describes the behavior for one of the three streams (stdin, stdout, stderr) connected to a
 /// program.
 enum Behavior {
@@ -156,25 +161,25 @@ fn check<P: AsRef<Path>>(
 }
 
 #[test]
-fn test_example_custom_commands() {
+fn test_example_complete_interactive() {
     check(
-        bin_path("examples/custom-commands"),
-        &[],
+        bin_path("examples/complete-interactive"),
+        &[&src_str("std/tests/interactive.bas")],
         0,
         Behavior::Null,
-        Behavior::File(src_path("core/tests/custom-commands.out")),
+        Behavior::File(src_path("std/tests/interactive.out")),
         Behavior::Null,
     );
 }
 
 #[test]
-fn test_example_minimal() {
+fn test_example_complete_scripting() {
     check(
-        bin_path("examples/minimal"),
-        &[],
-        0,
+        bin_path("examples/complete-scripting"),
+        &[&src_str("std/tests/script.bas")],
+        1,
         Behavior::Null,
-        Behavior::File(src_path("core/tests/minimal.out")),
-        Behavior::Null,
+        Behavior::File(src_path("std/tests/script.out")),
+        Behavior::File(src_path("std/tests/script.err")),
     );
 }

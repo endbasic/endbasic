@@ -19,8 +19,8 @@
 //! and processes the given file.
 
 use async_trait::async_trait;
-use endbasic_core::console::{ClearType, Console, Key, Position};
-use endbasic_core::store::{Metadata, Store};
+use endbasic_std::console::{ClearType, Console, Key, Position};
+use endbasic_std::store::{Metadata, Store};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -168,7 +168,7 @@ fn main() {
 
     let console = Rc::from(RefCell::from(IncompleteConsole::default()));
     let store = Rc::from(RefCell::from(IncompleteStore::default()));
-    let mut machine = endbasic_core::interactive_machine_builder(console, store).build();
+    let mut machine = endbasic_std::interactive_machine_builder(console, store).build();
 
     let mut input = match fs::File::open(path) {
         Ok(file) => file,

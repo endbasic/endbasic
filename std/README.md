@@ -1,4 +1,4 @@
-# The EndBASIC programming language - core
+# The EndBASIC programming language - standard library
 
 ![Build and test](https://github.com/jmmv/endbasic/workflows/Build%20and%20test/badge.svg)
 ![Health checks](https://github.com/jmmv/endbasic/workflows/Health%20checks/badge.svg)
@@ -24,37 +24,34 @@ EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 
 ## What's in this crate?
 
-`endbasic-core` provides the language parser and interpreter.  By design, this
-crate provides zero commands and zero functions.
+`endbasic-std` provides the language standard library, which is composed of
+various commands and functions.  Each of these can be exposed to the
+interpreter individually.
 
-## Language features
+## Standard library features
 
-EndBASIC's language features are inspired by other BASIC interpreters but the
-language does not intend to be fully compatible with them.  The language
-currently supports:
+EndBASIC's standard library is inspired by other BASIC interpreters but does
+not intend to be fully compatible with them.  The library currently contains:
 
-*   Variable types: boolean (`?`), double (`#`), integer (`%`), and string
-    (`$`).
-*   Strong typing with optional variable type annotations.
-*   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` statements.
-*   `FOR x = ... TO ... [STEP ...]` / `NEXT` loops.
-*   `WHILE ...` / `END WHILE` loops.
-*   UTF-8 everywhere (I think).
+*   Console manipulation: `CLS`, `COLOR`, `INPUT`, `LOCATE`, `PRINT`.
+*   Interpreter interaction: `CLEAR`, `EXIT`, `HELP`.
+*   Numerics: `DTOI`, `ITOD`, `RANDOMIZE`, `RND`.
+*   Program manipulation: `DEL`, `DIR`, `EDIT`, `LOAD`, `NEW`, `RUN`, `SAVE`.
+*   Strings: `LEFT`, `LEN`, `LTRIM`, `MID`, `RIGHT`, `RTRIM`.
 
 ## Design principles
 
 Some highlights about the EndBASIC implementation are:
 
-*   Minimalist core.  The interpreter knows how to execute the logic of the
-    language but, by default, it exposes no builtins to the scripts—not even
-    `INPUT` or `PRINT`.  This makes EndBASIC ideal for embedding into other
-    programs, as it is possible to execute external code without side-effects or
-    by precisely controlling how such code interacts with the host program.
+*   Minimalist library.  The standard library provides the logic for all
+    built-in commands, but each command can be individually installed into the
+    parser, and all interactions with the environment (e.g. the console, or the
+    file system) are exposed via hooks that the caller needs to implement.
 
-*   Async support.  The interpreter is async-compatible, making it trivial to
+*   Async support.  The library is async-compatible, making it trivial to
     embed it into Javascript via WASM.
 
 ## Examples
 
 The `examples` directory contains sample code to show how to embed the EndBASIC
-interpreter into your own programs.
+interpreter and standard library into your own programs.
