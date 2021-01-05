@@ -13,17 +13,18 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-//! Minimal EndBASIC interpreter to process a script.
+//! Configuration file parser using an EndBASIC interpreter.
 //!
-//! This example sets up a minimal EndBASIC interpreter: that is, one without any builtin commands,
-//! which makes parsing of any scripts free of side effects.  This could be used, for example, to
-//! parse a configuration file---which is what is shown here.
+//! This example sets up a minimal EndBASIC interpreter and uses it to parse what could be a
+//! configuration file.  Because the interpreter is configured without any commands or functions,
+//! the scripted code cannot call back into Rust land, so the script's execution is guaranteed to
+//! not have side-effects.
 
 use endbasic_core::exec::{Machine, StopReason};
 use futures_lite::future::block_on;
 use std::io;
 
-/// Sample code to parse in this example.
+/// Sample configuration file to parse.
 const INPUT: &str = r#"
 foo_value = 123
 enable_bar = (foo_value > 122)
@@ -37,8 +38,8 @@ fn main() {
     // Execute the sample script.  All this script can do is modify the state of the machine itself.
     // In other words: the script can set variables in the machine's environment, but that's it.
     let mut cursor = io::Cursor::new(INPUT.as_bytes());
-    let stop_reason = block_on(machine.exec(&mut cursor)).expect("Execution error");
-    assert!(stop_reason == StopReason::Eof);
+    let result = block_on(machine.exec(&mut cursor)).expect("Execution error");
+    assert!(result == StopReason::Eof, "We did not register an EXIT command");
 
     // Now that our script has run, inspect the variables it set on the machine.
     match machine.get_var_as_int("foo_value") {

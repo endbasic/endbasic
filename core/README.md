@@ -57,4 +57,14 @@ Some highlights about the EndBASIC implementation are:
 ## Examples
 
 The `examples` directory contains sample code to show how to embed the EndBASIC
-interpreter into your own programs.
+interpreter into your own programs.  In particular:
+
+*   [`examples/config.rs`](examples/config.rs): Shows how to instantiate a
+    minimal EndBASIC interpreter and uses it to implement what could be a
+    configuration file parser.
+
+*   [`examples/dsl.rs`](example/dsl.rs): Shows how to instantiate an EndBASIC
+    interpreter with custom functions and commands to construct what could be a
+    domain-specific language.  This language is then used to control some
+    hypothetical hardware lights and exemplifies how to bridge the Rust world
+    and the EndBASIC world.
