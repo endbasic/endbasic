@@ -156,25 +156,25 @@ fn check<P: AsRef<Path>>(
 }
 
 #[test]
-fn test_example_custom_commands() {
+fn test_example_config() {
     check(
-        bin_path("examples/custom-commands"),
+        bin_path("examples/config"),
         &[],
         0,
         Behavior::Null,
-        Behavior::File(src_path("core/tests/custom-commands.out")),
+        Behavior::File(src_path("core/tests/config.out")),
         Behavior::Null,
     );
 }
 
 #[test]
-fn test_example_minimal() {
+fn test_example_dsl() {
     check(
-        bin_path("examples/minimal"),
+        bin_path("examples/dsl"),
         &[],
         0,
         Behavior::Null,
-        Behavior::File(src_path("core/tests/minimal.out")),
+        Behavior::File(src_path("core/tests/dsl.out")),
         Behavior::Null,
     );
 }

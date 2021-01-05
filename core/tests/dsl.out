@@ -1,0 +1,27 @@
+Running script
+Turning light 1 on
+Turning light 2 on
+Turning light 3 on
+Turning light 4 on
+Turning light 5 on
+Turning light 6 on
+Turning light 7 on
+Turning light 8 on
+Turning light 9 on
+Turning light 10 on
+Turning light 1 off
+Turning light 3 off
+Turning light 5 off
+Turning light 7 off
+Turning light 9 off
+Script done. Dumping final lights state:
+Light 1 is off
+Light 2 is on
+Light 3 is off
+Light 4 is on
+Light 5 is off
+Light 6 is on
+Light 7 is off
+Light 8 is on
+Light 9 is off
+Light 10 is on
