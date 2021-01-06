@@ -21,35 +21,34 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
-use endbasic_core::exec::StopReason;
+use endbasic_core::exec::{Machine, StopReason};
 use endbasic_std::console::{self, Console};
-use endbasic_std::store::Store;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
 
 pub mod demos;
 
+/// Prints the EndBASIC welcome message to the given console.
+pub fn print_welcome(console: Rc<RefCell<dyn Console>>) -> io::Result<()> {
+    let mut console = console.borrow_mut();
+    console.print("")?;
+    console.print(&format!("    Welcome to EndBASIC {}.", env!("CARGO_PKG_VERSION")))?;
+    console.print("")?;
+    console.print("    Type HELP for interactive usage information.")?;
+    console.print("    Type LOAD \"DEMO:TOUR.BAS\": RUN for a guided tour.")?;
+    console.print("")?;
+    Ok(())
+}
+
 /// Enters the interactive interpreter.
 ///
-/// `dir` specifies the directory that the interpreter will use for any commands that manipulate
-/// files.
+/// The `console` provided here is used for the REPL prompt interaction and should match the
+/// console that's in use by the machine (if any).  They don't necessarily have to match though.
 pub async fn run_repl_loop(
+    machine: &mut Machine,
     console: Rc<RefCell<dyn Console>>,
-    store: Rc<RefCell<dyn Store>>,
 ) -> io::Result<i32> {
-    let mut machine = endbasic_std::interactive_machine_builder(console.clone(), store).build();
-
-    {
-        let mut console = console.borrow_mut();
-        console.print("")?;
-        console.print(&format!("    Welcome to EndBASIC {}.", env!("CARGO_PKG_VERSION")))?;
-        console.print("")?;
-        console.print("    Type HELP for interactive usage information.")?;
-        console.print("    Type LOAD \"DEMO:TOUR.BAS\": RUN for a guided tour.")?;
-        console.print("")?;
-    }
-
     let mut stop_reason = StopReason::Eof;
     while stop_reason == StopReason::Eof {
         let line = {

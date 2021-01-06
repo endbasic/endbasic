@@ -461,7 +461,10 @@ fn new_store_with_demos(dir: &Path) -> Rc<RefCell<dyn Store>> {
 /// files.  The special name `:memory:` makes the interpreter use an in-memory only store.
 fn run_repl_loop(dir: &Path) -> io::Result<i32> {
     let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
-    block_on(endbasic::run_repl_loop(console, new_store_with_demos(dir)))
+    let store = new_store_with_demos(dir);
+    let mut machine = endbasic_std::interactive_machine_builder(console.clone(), store).build();
+    endbasic::print_welcome(console.clone())?;
+    block_on(endbasic::run_repl_loop(&mut machine, console))
 }
 
 /// Executes the `path` program in a fresh machine.
