@@ -22,6 +22,10 @@ not adhere to semantic versioning until 1.0.0.**
     existing `endbasic-core` continues to provide the language interpreter
     and the new `endbasic-std` provides the standard library.
 
+*   Made the web interface not restart the machine on an exit request (such as
+    a call to `EXIT`) so that any state is not lost.  It's too easy to hit
+    Ctrl+C by mistake, for example.
+
 ## Changes in version 0.4.0
 
 **Released on 2020-12-25.**

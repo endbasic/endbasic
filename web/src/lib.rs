@@ -239,8 +239,10 @@ impl WebTerminal {
         let console = Rc::from(RefCell::from(XtermJsConsole { terminal, on_key_rx }));
         let store = store::WebStore::from_window();
         let store = Rc::from(RefCell::from(DemoStoreOverlay::new(store)));
+        let mut machine = endbasic_std::interactive_machine_builder(console.clone(), store).build();
+        endbasic::print_welcome(console.clone()).unwrap();
         loop {
-            let result = endbasic::run_repl_loop(console.clone(), store.clone()).await;
+            let result = endbasic::run_repl_loop(&mut machine, console.clone()).await;
             let mut console = console.borrow_mut();
             match result {
                 Ok(exit_code) => {
@@ -249,6 +251,9 @@ impl WebTerminal {
                 Err(e) => console.print(&format!("FATAL ERROR: {}", e)),
             }
             .expect("Cannot handle terminal printing errors");
+            console
+                .print("Resuming execution because the web interpreter cannot be exited")
+                .unwrap();
             console.print("").unwrap();
         }
     }
