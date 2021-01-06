@@ -29,4 +29,3 @@ features = ["small_rng", "std"]
 
 [dev-dependencies]
 futures-lite = "1.1"
-regex = "1"
