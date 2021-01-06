@@ -15,11 +15,7 @@
 
 //! Integration tests that use golden input and output files.
 
-// TODO(jmmv): All of the supporting code here is duplicated in the other EndBASIC crates.
-// Should probably add a separate testutils crate, but I'm hesitant for now.
-
 // Keep these in sync with other top-level files.
-#![allow(clippy::await_holding_refcell_ref)]
 #![warn(anonymous_parameters, bad_style, missing_docs)]
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
