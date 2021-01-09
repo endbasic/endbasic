@@ -44,13 +44,27 @@ impl Key {
     const PREFIX: &'static str = "endbasic-program:";
 
     /// Creates a new key for a program name.
+    ///
+    /// The file name is unconditionally converted to uppercase to facilitate case-insensitive
+    /// matching.
     fn for_name(name: &str) -> Self {
         debug_assert!(name.to_ascii_uppercase().ends_with(".BAS"));
-        Self(format!("{}{}", Key::PREFIX, name))
+        Self(format!("{}{}", Key::PREFIX, name.to_ascii_uppercase()))
+    }
+
+    /// Returns the canonical form of this key.
+    ///
+    /// In essence, this converts the file name in the key to uppercase.  This is necessary to
+    /// migrate older versions of the store that were case sensitive.
+    fn canonical(&self) -> Self {
+        Self(format!("{}{}", Key::PREFIX, self.name().to_ascii_uppercase()))
     }
 
     /// Constructs a key from a serialized representation of a key, or none if the `raw` string does
     /// not correspond to one of our keys.
+    ///
+    /// Note that this *does* respect the case of the file name provided in the string.  This is
+    /// necessary to migrate older versions of the store that were case sensitive.
     fn parse(raw: &str) -> Option<Key> {
         if raw.starts_with(Key::PREFIX) && raw.to_ascii_uppercase().ends_with(".BAS") {
             Some(Key(raw.to_owned()))
@@ -116,7 +130,73 @@ impl WebStore {
         // TODO(jmmv): Should probably do something fancier here instead of these unwraps...
         let window = web_sys::window().unwrap();
         let storage = window.local_storage().unwrap().unwrap();
-        Self { clock: Box::from(JsClock::default()), storage }
+        let mut store = Self { clock: Box::from(JsClock::default()), storage };
+        store.fixup_names().unwrap();
+        store
+    }
+
+    /// Upgrades the store to support case insensitive behavior.
+    ///
+    /// This scans for all existing files in the store and, for any that have names that are not in
+    /// canonical form (all uppercase), renames them to canonical form.
+    fn fixup_names(&mut self) -> io::Result<()> {
+        let n = match self.storage.length() {
+            Ok(n) => n,
+            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", e))),
+        };
+        for i in 0..n {
+            let key = match self.storage.key(i) {
+                Ok(Some(key)) => key,
+                Ok(None) => return Err(io::Error::new(io::ErrorKind::Other, "Entry vanished")),
+                Err(e) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("Failed to fetch local storage entry with index {}: {:?}", i, e),
+                    ))
+                }
+            };
+
+            if let Some(key) = Key::parse(&key) {
+                let canonical = key.canonical();
+                if key != canonical {
+                    self.rename(&key, &canonical)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Renames a file stored with an `old` key to a `new` key.
+    fn rename(&self, old: &Key, new: &Key) -> io::Result<()> {
+        let old = old.serialized();
+        let new = new.serialized();
+
+        let raw = match self.storage.get(old) {
+            Ok(Some(content)) => content,
+            Ok(None) => return Err(io::Error::new(io::ErrorKind::NotFound, "File not found")),
+            Err(e) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Failed to get local storage entry with key {}: {:?}", old, e),
+                ))
+            }
+        };
+
+        if let Err(e) = self.storage.set(new, &raw) {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to put local storage entry with key {}: {:?}", new, e),
+            ));
+        };
+
+        if let Err(e) = self.storage.delete(old) {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to put remove storage entry with key {}: {:?}", old, e),
+            ));
+        };
+
+        Ok(())
     }
 
     /// Obtains and parses the entry given by `key`.
@@ -238,7 +318,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_key_for_name() {
-        assert_eq!(Key("endbasic-program:hello.bas".to_owned()), Key::for_name("hello.bas"));
+        assert_eq!(Key("endbasic-program:HELLO.BAS".to_owned()), Key::for_name("hello.bas"));
         assert_eq!(Key("endbasic-program:OTHER.BAS".to_owned()), Key::for_name("OTHER.BAS"));
     }
 
@@ -260,24 +340,37 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_key_name() {
-        assert_eq!("hello.bas", Key::for_name("hello.bas").name());
+        assert_eq!("HELLO.BAS", Key::for_name("hello.bas").name());
     }
 
     #[wasm_bindgen_test]
     fn test_key_serialized() {
-        assert_eq!("endbasic-program:hello.bas", Key::for_name("hello.bas").serialized());
+        assert_eq!("endbasic-program:HELLO.BAS", Key::for_name("hello.bas").serialized());
+    }
+
+    #[wasm_bindgen_test]
+    fn test_webstore_fixup_names() {
+        let mut webstore = WebStore::from_window();
+        webstore.storage.clear().unwrap();
+        webstore.storage.set("endbasic-program:lower.bas", "").unwrap();
+        webstore.storage.set("endbasic-program:UPPER.BAS", "").unwrap();
+        webstore.fixup_names().unwrap();
+
+        assert!(webstore.storage.get("endbasic-program:lower.bas").unwrap().is_none());
+        webstore.storage.get("endbasic-program:LOWER.BAS").unwrap();
+        webstore.storage.get("endbasic-program:UPPER.BAS").unwrap();
     }
 
     #[wasm_bindgen_test]
     fn test_webstore_delete_ok() {
         let mut webstore = WebStore::from_window();
         webstore.storage.clear().unwrap();
-        webstore.storage.set("endbasic-program:first.bas", "").unwrap();
-        webstore.storage.set("endbasic-program:first.bat", "").unwrap();
+        webstore.storage.set("endbasic-program:FIRST.BAS", "").unwrap();
+        webstore.storage.set("endbasic-program:FIRST.BAT", "").unwrap();
 
         webstore.delete("first.bas").unwrap();
-        assert!(webstore.storage.get("endbasic-program:first.bas").unwrap().is_none());
-        webstore.storage.get("endbasic-program:first.bat").unwrap();
+        assert!(webstore.storage.get("endbasic-program:FIRST.BAS").unwrap().is_none());
+        webstore.storage.get("endbasic-program:FIRST.BAT").unwrap();
     }
 
     #[wasm_bindgen_test]
@@ -305,7 +398,7 @@ mod tests {
         webstore.storage.clear().unwrap();
         webstore
             .storage
-            .set("endbasic-program:first.bas", &serde_json::to_string(&entry1).unwrap())
+            .set("endbasic-program:FIRST.BAS", &serde_json::to_string(&entry1).unwrap())
             .unwrap();
         webstore
             .storage
@@ -316,7 +409,7 @@ mod tests {
 
         let entries = webstore.enumerate().unwrap();
         assert_eq!(2, entries.len());
-        assert_eq!(&entry1.metadata(), entries.get("first.bas").unwrap());
+        assert_eq!(&entry1.metadata(), entries.get("FIRST.BAS").unwrap());
         assert_eq!(&entry2.metadata(), entries.get("SECOND SPACES.BAS").unwrap());
     }
 
@@ -330,15 +423,15 @@ mod tests {
 
         let webstore = WebStore::from_window();
         webstore.storage.clear().unwrap();
-        webstore.storage.set("endbasic-program:a.bas", "first").unwrap();
+        webstore.storage.set("endbasic-program:A.BAS", "first").unwrap();
         webstore
             .storage
-            .set("endbasic-program:b.bas", &serde_json::to_string(&entry).unwrap())
+            .set("endbasic-program:B.BAS", &serde_json::to_string(&entry).unwrap())
             .unwrap();
-        webstore.storage.set("endbasic-program:b.bat", "third").unwrap();
-        webstore.storage.set("b.bas", "fourth").unwrap();
+        webstore.storage.set("endbasic-program:B.BAT", "third").unwrap();
+        webstore.storage.set("B.BAS", "fourth").unwrap();
 
-        assert_eq!(entry.content, webstore.get("b.bas").unwrap());
+        assert_eq!(entry.content, webstore.get("B.BAS").unwrap());
     }
 
     #[wasm_bindgen_test]
@@ -356,7 +449,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_string(&entry).unwrap(),
-            webstore.storage.get("endbasic-program:code.bas").unwrap().unwrap()
+            webstore.storage.get("endbasic-program:CODE.BAS").unwrap().unwrap()
         );
     }
 }

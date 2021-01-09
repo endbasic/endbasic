@@ -26,6 +26,9 @@ not adhere to semantic versioning until 1.0.0.**
     a call to `EXIT`) so that any state is not lost.  It's too easy to hit
     Ctrl+C by mistake, for example.
 
+*   Made file names in the web UI case-insensitive.  Any pre-existing files
+    will be renamed to have an all-uppercase name to support the new semantics.
+
 ## Changes in version 0.4.0
 
 **Released on 2020-12-25.**
