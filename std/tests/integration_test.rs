@@ -131,21 +131,9 @@ fn check<P: AsRef<Path>>(
 }
 
 #[test]
-fn test_example_complete_interactive() {
+fn test_example_script_runner() {
     check(
-        bin_path("examples/complete-interactive"),
-        &[&src_str("std/tests/interactive.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("std/tests/interactive.out")),
-        Behavior::Null,
-    );
-}
-
-#[test]
-fn test_example_complete_scripting() {
-    check(
-        bin_path("examples/complete-scripting"),
+        bin_path("examples/script-runner"),
         &[&src_str("std/tests/script.bas")],
         1,
         Behavior::Null,
