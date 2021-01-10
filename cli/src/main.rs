@@ -398,7 +398,6 @@ impl Store for FileStore {
         let dir = path.parent().expect("Must be a filename with a directory");
         fs::create_dir_all(&dir)?;
 
-        // TODO(jmmv): Should back up existing files.
         let output = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
         let mut writer = io::BufWriter::new(output);
         writer.write_all(content.as_bytes())
@@ -593,17 +592,8 @@ mod tests {
     #[test]
     fn test_delete_missing_file() {
         let dir = tempfile::tempdir().unwrap();
-
-        // TODO(jmmv): This is very ugly... need better error reporting in general, not just for
-        // this one case.
-        let enoent_message = if cfg!(target_os = "windows") {
-            "The system cannot find the file specified. (os error 2)"
-        } else {
-            "No such file or directory (os error 2)"
-        };
-
         let mut store = FileStore::new(&dir.path());
-        assert_eq!(enoent_message, format!("{}", store.delete("a.bas").unwrap_err()));
+        assert_eq!(io::ErrorKind::NotFound, store.delete("a.bas").unwrap_err().kind());
     }
 
     #[test]
@@ -664,19 +654,10 @@ mod tests {
     #[test]
     fn test_enumerate_fails_on_non_directory() {
         let dir = tempfile::tempdir().unwrap();
-
-        // TODO(jmmv): This is very ugly... need better error reporting in general, not just for
-        // this one case.
-        let enotdir_message = if cfg!(target_os = "windows") {
-            "The directory name is invalid. (os error 267)"
-        } else {
-            "Not a directory (os error 20)"
-        };
-
         let file = dir.path().join("not-a-dir");
         write_file(&file, &[]);
         let store = FileStore::new(&file);
-        assert_eq!(enotdir_message, format!("{}", store.enumerate().unwrap_err()));
+        assert_eq!(io::ErrorKind::Other, store.enumerate().unwrap_err().kind());
     }
 
     #[test]
