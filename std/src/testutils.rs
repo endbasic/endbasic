@@ -15,7 +15,8 @@
 
 //! Test utilities for consumers of the EndBASIC interpreter.
 
-use crate::console::{ClearType, Console, Key, Position};
+use crate::console::{self, ClearType, Console, Key, Position};
+use crate::store::Program;
 use async_trait::async_trait;
 use std::collections::VecDeque;
 use std::io;
@@ -195,5 +196,36 @@ impl MockConsoleBuilder {
     /// Builds a `MockConsole` instance as configured in the builder.
     pub fn build(self) -> MockConsole {
         MockConsole { golden_in: self.golden_in, captured_out: vec![], size: self.size }
+    }
+}
+
+/// A stored program that exposes golden contents and accepts new content from the console when
+/// edits are requested.
+pub struct RecordedProgram {
+    content: String,
+}
+
+impl RecordedProgram {
+    /// Creates a new stored program with the given golden `content`.
+    pub fn new(content: &'static str) -> Self {
+        Self { content: content.to_owned() }
+    }
+}
+
+#[async_trait(?Send)]
+impl Program for RecordedProgram {
+    async fn edit(&mut self, console: &mut dyn Console) -> io::Result<()> {
+        let append = console::read_line(console, "", "").await?;
+        self.content.push_str(&append);
+        self.content.push('\n');
+        Ok(())
+    }
+
+    fn load(&mut self, text: &str) {
+        self.content = text.to_owned();
+    }
+
+    fn text(&self) -> String {
+        self.content.clone()
     }
 }
