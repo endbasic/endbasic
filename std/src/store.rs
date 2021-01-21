@@ -596,8 +596,8 @@ mod testutils {
 mod tests {
     use super::testutils::*;
     use super::*;
-    use crate::console::testutils::*;
     use crate::exec::ExitCommand;
+    use crate::testutils::*;
     use endbasic_core::exec::{MachineBuilder, StopReason};
     use futures_lite::future::block_on;
 

@@ -325,7 +325,7 @@ Second paragraph of the extended description.",
 mod tests {
     use super::testutils::*;
     use super::*;
-    use crate::console::testutils::*;
+    use crate::testutils::*;
     use endbasic_core::exec::{MachineBuilder, StopReason};
     use futures_lite::future::block_on;
     use std::cell::RefCell;
