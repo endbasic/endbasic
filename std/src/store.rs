@@ -515,7 +515,6 @@ pub fn add_all(
 #[cfg(test)]
 mod testutils {
     use super::*;
-    use crate::console;
 
     /// Simplified version of `PRINT` that captures all calls to it into `data`.
     ///
@@ -560,34 +559,6 @@ mod testutils {
             }
             self.data.borrow_mut().push(text);
             Ok(())
-        }
-    }
-
-    pub(crate) struct RecordedProgram {
-        content: String,
-    }
-
-    impl RecordedProgram {
-        pub fn new(content: &'static str) -> Self {
-            Self { content: content.to_owned() }
-        }
-    }
-
-    #[async_trait(?Send)]
-    impl Program for RecordedProgram {
-        async fn edit(&mut self, console: &mut dyn Console) -> io::Result<()> {
-            let append = console::read_line(console, "", "").await?;
-            self.content.push_str(&append);
-            self.content.push('\n');
-            Ok(())
-        }
-
-        fn load(&mut self, text: &str) {
-            self.content = text.to_owned();
-        }
-
-        fn text(&self) -> String {
-            self.content.clone()
         }
     }
 }
