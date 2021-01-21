@@ -286,7 +286,7 @@ impl Program for Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::console::testutils::*;
+    use crate::testutils::*;
     use futures_lite::future::block_on;
 
     /// Syntactic sugar to easily instantiate a `Position` at the `row` plus `column` pair.
