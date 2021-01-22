@@ -709,10 +709,9 @@ mod tests {
             self.keys.push(Key::NewLine);
             self.exp_output.push(CapturedOut::Write(vec![b'\r', b'\n']));
 
-            let mut console = MockConsoleBuilder::default()
-                .add_input_keys(&self.keys)
-                .with_size(Position { row: 5, column: 15 })
-                .build();
+            let mut console = MockConsole::default();
+            console.add_input_keys(&self.keys);
+            console.set_size(Position { row: 5, column: 15 });
             let line =
                 block_on(read_line_interactive(&mut console, self.prompt, self.previous)).unwrap();
             assert_eq!(self.exp_line, &line);
@@ -952,9 +951,9 @@ mod tests {
     ///
     /// `expected_out` is a sequence of expected commands or messages.
     fn do_control_ok_test(input: &str, golden_in: &'static str, expected_out: &[CapturedOut]) {
-        let console = Rc::from(RefCell::from(
-            MockConsoleBuilder::default().add_input_chars(golden_in).build(),
-        ));
+        let mut console = MockConsole::default();
+        console.add_input_chars(golden_in);
+        let console = Rc::from(RefCell::from(console));
         let mut machine = add_all(MachineBuilder::default(), console.clone()).build();
         assert_eq!(
             StopReason::Eof,
@@ -981,9 +980,9 @@ mod tests {
         expected_out: &'static [&'static str],
         expected_err: &str,
     ) {
-        let console = Rc::from(RefCell::from(
-            MockConsoleBuilder::default().add_input_chars(golden_in).build(),
-        ));
+        let mut console = MockConsole::default();
+        console.add_input_chars(golden_in);
+        let console = Rc::from(RefCell::from(console));
         let mut machine = add_all(MachineBuilder::default(), console.clone()).build();
         assert_eq!(
             expected_err,

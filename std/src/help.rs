@@ -341,7 +341,7 @@ mod tests {
 
     /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
     fn do_error_test(input: &str, expected_err: &str) {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
+        let console = Rc::from(RefCell::from(MockConsole::default()));
         let mut machine = add_all(MachineBuilder::default(), console.clone())
             .add_command(DoNothingCommand::new())
             .add_function(EmptyFunction::new())
@@ -358,7 +358,7 @@ mod tests {
 
     #[test]
     fn test_help_summarize_callables() {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
+        let console = Rc::from(RefCell::from(MockConsole::default()));
         let mut machine = add_all(MachineBuilder::default(), console.clone())
             .add_command(DoNothingCommand::new())
             .add_function(EmptyFunction::new())
@@ -386,7 +386,7 @@ mod tests {
 
     #[test]
     fn test_help_describe_command() {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
+        let console = Rc::from(RefCell::from(MockConsole::default()));
         let mut machine = add_all(MachineBuilder::default(), console.clone())
             .add_command(DoNothingCommand::new())
             .build();
@@ -412,7 +412,7 @@ mod tests {
     }
 
     fn do_help_describe_function_test(name: &str) {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
+        let console = Rc::from(RefCell::from(MockConsole::default()));
         let mut machine = add_all(MachineBuilder::default(), console.clone())
             .add_function(EmptyFunction::new())
             .build();
@@ -449,7 +449,7 @@ mod tests {
 
     #[test]
     fn test_help_lang() {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
+        let console = Rc::from(RefCell::from(MockConsole::default()));
         let mut machine = add_all(MachineBuilder::default(), console.clone())
             .add_command(DoNothingCommand::new())
             .build();
