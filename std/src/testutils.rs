@@ -194,8 +194,8 @@ pub struct RecordedProgram {
 
 impl RecordedProgram {
     /// Creates a new stored program with the given golden `content`.
-    pub fn new(content: &'static str) -> Self {
-        Self { content: content.to_owned() }
+    pub fn from<S: Into<String>>(content: S) -> Self {
+        Self { content: content.into() }
     }
 }
 

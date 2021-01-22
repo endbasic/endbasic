@@ -620,7 +620,7 @@ mod tests {
     /// Ensures that this does not touch the console.
     fn do_error_test_with_store(store: Rc<RefCell<dyn Store>>, input: &str, expected_err: &str) {
         let console = Rc::from(RefCell::from(MockConsole::default()));
-        let program = Rc::from(RefCell::from(RecordedProgram::new("")));
+        let program = Rc::from(RefCell::from(RecordedProgram::from("")));
         let mut machine =
             add_all(MachineBuilder::default(), program, console.clone(), store).build();
         assert_eq!(
@@ -645,7 +645,7 @@ mod tests {
         store.put("bar.bas", "").unwrap();
         let store = Rc::from(RefCell::from(store));
 
-        let program = Rc::from(RefCell::from(RecordedProgram::new("Leave me alone")));
+        let program = Rc::from(RefCell::from(RecordedProgram::from("Leave me alone")));
 
         for p in &["foo", "foo.bas"] {
             store.borrow_mut().put("foo.bas", "line 1\n  line 2\n").unwrap();
@@ -677,7 +677,7 @@ mod tests {
     fn test_dir_empty() {
         let store = Rc::from(RefCell::from(InMemoryStore::default()));
         do_ok_test_with_store(
-            Rc::from(RefCell::from(RecordedProgram::new(""))),
+            Rc::from(RefCell::from(RecordedProgram::from(""))),
             store,
             "DIR",
             "",
@@ -696,7 +696,7 @@ mod tests {
         let store = Rc::from(RefCell::from(store));
 
         do_ok_test_with_store(
-            Rc::from(RefCell::from(RecordedProgram::new(""))),
+            Rc::from(RefCell::from(RecordedProgram::from(""))),
             store,
             "DIR",
             "",
@@ -724,7 +724,7 @@ mod tests {
     #[test]
     fn test_edit_ok() {
         do_ok_test(
-            Rc::from(RefCell::from(RecordedProgram::new("previous\n"))),
+            Rc::from(RefCell::from(RecordedProgram::from("previous\n"))),
             "EDIT",
             "new line\n",
             &[],
@@ -748,7 +748,7 @@ mod tests {
 
         for p in &["foo", "foo.bas", "BAR", "BAR.BAS", "Baz"] {
             do_ok_test_with_store(
-                Rc::from(RefCell::from(RecordedProgram::new(""))),
+                Rc::from(RefCell::from(RecordedProgram::from(""))),
                 store.clone(),
                 &("LOAD \"".to_owned() + p + "\""),
                 "",
@@ -801,12 +801,12 @@ mod tests {
 
     #[test]
     fn test_new_nothing() {
-        do_ok_test(Rc::from(RefCell::from(RecordedProgram::new(""))), "NEW", "", &[], "");
+        do_ok_test(Rc::from(RefCell::from(RecordedProgram::from(""))), "NEW", "", &[], "");
     }
 
     #[test]
     fn test_new_clears_program_and_variables() {
-        let program = Rc::from(RefCell::from(RecordedProgram::new("some stuff")));
+        let program = Rc::from(RefCell::from(RecordedProgram::from("some stuff")));
 
         let mut machine =
             MachineBuilder::default().add_command(NewCommand::new(program.clone())).build();
@@ -825,14 +825,14 @@ mod tests {
 
     #[test]
     fn test_run_nothing() {
-        do_ok_test(Rc::from(RefCell::from(RecordedProgram::new(""))), "RUN", "", &[], "");
+        do_ok_test(Rc::from(RefCell::from(RecordedProgram::from(""))), "RUN", "", &[], "");
     }
 
     #[test]
     fn test_run_something_that_shares_state() {
         let console = Rc::from(RefCell::from(MockConsole::default()));
 
-        let program = Rc::from(RefCell::from(RecordedProgram::new("OUT var\nvar = var + 1")));
+        let program = Rc::from(RefCell::from(RecordedProgram::from("OUT var\nvar = var + 1")));
 
         let captured_out = Rc::from(RefCell::from(vec![]));
         let mut machine = MachineBuilder::default()
@@ -854,7 +854,7 @@ mod tests {
     fn test_run_something_that_exits() {
         let console = Rc::from(RefCell::from(MockConsole::default()));
 
-        let program = Rc::from(RefCell::from(RecordedProgram::new("OUT 5\nEXIT 1\nOUT 4")));
+        let program = Rc::from(RefCell::from(RecordedProgram::from("OUT 5\nEXIT 1\nOUT 4")));
 
         let captured_out = Rc::from(RefCell::from(vec![]));
         let mut machine = MachineBuilder::default()
@@ -883,7 +883,7 @@ mod tests {
     fn test_save_ok() {
         let store = Rc::from(RefCell::from(InMemoryStore::default()));
 
-        let program = Rc::from(RefCell::from(RecordedProgram::new("line 1\n  line 2\n")));
+        let program = Rc::from(RefCell::from(RecordedProgram::from("line 1\n  line 2\n")));
 
         for p in &["first", "second.bas", "THIRD", "FOURTH.BAS", "Fifth"] {
             do_ok_test_with_store(
