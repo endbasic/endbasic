@@ -67,10 +67,44 @@ pub struct MockConsole {
     size: Position,
 }
 
+impl Default for MockConsole {
+    fn default() -> Self {
+        Self {
+            golden_in: VecDeque::new(),
+            captured_out: vec![],
+            size: Position { row: usize::MAX, column: usize::MAX },
+        }
+    }
+}
+
 impl MockConsole {
+    /// Adds a bunch of characters as golden input keys.
+    ///
+    /// Note that some escape characters within `s` are interpreted and added as their
+    /// corresponding `Key`s for simplicity.
+    pub fn add_input_chars(&mut self, s: &str) {
+        for ch in s.chars() {
+            match ch {
+                '\n' => self.golden_in.push_back(Key::NewLine),
+                '\r' => self.golden_in.push_back(Key::CarriageReturn),
+                ch => self.golden_in.push_back(Key::Char(ch)),
+            }
+        }
+    }
+
+    /// Adds a bunch of keys as golden input.
+    pub fn add_input_keys(&mut self, keys: &[Key]) {
+        self.golden_in.extend(keys.iter().cloned());
+    }
+
     /// Obtains a reference to the captured output.
     pub fn captured_out(&self) -> &[CapturedOut] {
         self.captured_out.as_slice()
+    }
+
+    /// Sets the size of the mock console.
+    pub fn set_size(&mut self, size: Position) {
+        self.size = size;
     }
 }
 
@@ -149,53 +183,6 @@ impl Console for MockConsole {
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
         self.captured_out.push(CapturedOut::Write(bytes.to_owned()));
         Ok(())
-    }
-}
-
-/// Builder pattern for a `MockConsole`.
-pub struct MockConsoleBuilder {
-    golden_in: VecDeque<Key>,
-    size: Position,
-}
-
-impl Default for MockConsoleBuilder {
-    /// Creates a new console builder, with no golden input and an infinite size.
-    fn default() -> Self {
-        Self { golden_in: VecDeque::new(), size: Position { row: usize::MAX, column: usize::MAX } }
-    }
-}
-
-impl MockConsoleBuilder {
-    /// Adds a bunch of characters as golden input keys.
-    ///
-    /// Note that some escape characters within `s` are interpreted and added as their
-    /// corresponding `Key`s for simplicity.
-    pub fn add_input_chars(mut self, s: &str) -> Self {
-        for ch in s.chars() {
-            match ch {
-                '\n' => self.golden_in.push_back(Key::NewLine),
-                '\r' => self.golden_in.push_back(Key::CarriageReturn),
-                ch => self.golden_in.push_back(Key::Char(ch)),
-            }
-        }
-        self
-    }
-
-    /// Adds a bunch of keys as golden input.
-    pub fn add_input_keys(mut self, keys: &[Key]) -> Self {
-        self.golden_in.extend(keys.iter().cloned());
-        self
-    }
-
-    /// Sets the size of the mock console.
-    pub fn with_size(mut self, size: Position) -> Self {
-        self.size = size;
-        self
-    }
-
-    /// Builds a `MockConsole` instance as configured in the builder.
-    pub fn build(self) -> MockConsole {
-        MockConsole { golden_in: self.golden_in, captured_out: vec![], size: self.size }
     }
 }
 

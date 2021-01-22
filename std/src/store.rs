@@ -588,9 +588,9 @@ mod tests {
         expected_out: &'static [&'static str],
         exp_program: &'static str,
     ) {
-        let console = Rc::from(RefCell::from(
-            MockConsoleBuilder::default().add_input_chars(golden_in).build(),
-        ));
+        let mut console = MockConsole::default();
+        console.add_input_chars(golden_in);
+        let console = Rc::from(RefCell::from(console));
         let mut machine =
             add_all(MachineBuilder::default(), program.clone(), console.clone(), store).build();
         assert_eq!(
@@ -619,7 +619,7 @@ mod tests {
     ///
     /// Ensures that this does not touch the console.
     fn do_error_test_with_store(store: Rc<RefCell<dyn Store>>, input: &str, expected_err: &str) {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
+        let console = Rc::from(RefCell::from(MockConsole::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::new("")));
         let mut machine =
             add_all(MachineBuilder::default(), program, console.clone(), store).build();
@@ -830,7 +830,7 @@ mod tests {
 
     #[test]
     fn test_run_something_that_shares_state() {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
+        let console = Rc::from(RefCell::from(MockConsole::default()));
 
         let program = Rc::from(RefCell::from(RecordedProgram::new("OUT var\nvar = var + 1")));
 
@@ -852,7 +852,7 @@ mod tests {
 
     #[test]
     fn test_run_something_that_exits() {
-        let console = Rc::from(RefCell::from(MockConsoleBuilder::default().build()));
+        let console = Rc::from(RefCell::from(MockConsole::default()));
 
         let program = Rc::from(RefCell::from(RecordedProgram::new("OUT 5\nEXIT 1\nOUT 4")));
 
