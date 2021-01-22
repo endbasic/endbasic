@@ -184,6 +184,30 @@ pub enum Value {
     Text(String), // Should be `String` but would get confusing with the built-in Rust type.
 }
 
+impl From<bool> for Value {
+    fn from(b: bool) -> Self {
+        Value::Boolean(b)
+    }
+}
+
+impl From<f64> for Value {
+    fn from(d: f64) -> Self {
+        Value::Double(d)
+    }
+}
+
+impl From<i32> for Value {
+    fn from(i: i32) -> Self {
+        Value::Integer(i)
+    }
+}
+
+impl From<&str> for Value {
+    fn from(s: &str) -> Self {
+        Value::Text(s.to_owned())
+    }
+}
+
 /// Types of separators between arguments to a `BuiltinCall`.
 #[derive(Debug, Eq, PartialEq)]
 pub enum ArgSep {
