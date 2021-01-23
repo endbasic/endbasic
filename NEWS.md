@@ -32,6 +32,8 @@ not adhere to semantic versioning until 1.0.0.**
 *   Added a public `testutils` module within the `std` crate to offer test
     utilities for consumers of the EndBASIC crates.
 
+*   Added support to load an `AUTOEXEC.BAS` file at REPL startup time.
+
 ## Changes in version 0.4.0
 
 **Released on 2020-12-25.**

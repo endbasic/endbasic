@@ -23,6 +23,8 @@
 
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_std::console::{self, Console};
+use endbasic_std::store::Store;
+use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -39,6 +41,33 @@ pub fn print_welcome(console: Rc<RefCell<dyn Console>>) -> io::Result<()> {
     console.print("    Type LOAD \"DEMO:TOUR.BAS\": RUN for a guided tour.")?;
     console.print("")?;
     Ok(())
+}
+
+/// Loads the `AUTOEXEC.BAS` file if it exists in the `store`.
+///
+/// Failures to process the file are logged to the `console` but are ignored.  Other failures are
+/// returned.
+pub fn try_load_autoexec(
+    machine: &mut Machine,
+    console: Rc<RefCell<dyn Console>>,
+    store: Rc<RefCell<dyn Store>>,
+) -> io::Result<()> {
+    match store.borrow().get("AUTOEXEC.BAS") {
+        Ok(code) => {
+            console.borrow_mut().print("Loading AUTOEXEC.BAS...")?;
+            match block_on(machine.exec(&mut code.as_bytes())) {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    console.borrow_mut().print(&format!("AUTOEXEC.BAS failed: {}", e))?;
+                    Ok(())
+                }
+            }
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(e) => {
+            console.borrow_mut().print(&format!("AUTOEXEC.BAS exists but cannot be read: {}", e))
+        }
+    }
 }
 
 /// Enters the interactive interpreter.
@@ -85,4 +114,66 @@ pub async fn run_repl_loop(
         }
     }
     Ok(stop_reason.as_exit_code())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use endbasic_std::testutils::Tester;
+
+    #[test]
+    fn test_autoexec_ok() {
+        let autoexec = "PRINT \"hello\": global_var = 3";
+        let mut tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
+        let (console, store) = (tester.get_console(), tester.get_store());
+        try_load_autoexec(tester.get_machine(), console, store).unwrap();
+        tester
+            .run("")
+            .expect_var("global_var", 3)
+            .expect_prints(["Loading AUTOEXEC.BAS...", "hello"])
+            .expect_file("AUTOEXEC.BAS", autoexec)
+            .check();
+    }
+
+    #[test]
+    fn test_autoexec_error_is_ignored() {
+        let autoexec = "a = 1: b = undef: c = 2";
+        let mut tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
+        let (console, store) = (tester.get_console(), tester.get_store());
+        try_load_autoexec(tester.get_machine(), console, store).unwrap();
+        tester
+            .run("after = 5")
+            .expect_var("a", 1)
+            .expect_var("after", 5)
+            .expect_prints([
+                "Loading AUTOEXEC.BAS...",
+                "AUTOEXEC.BAS failed: Undefined variable undef",
+            ])
+            .expect_file("AUTOEXEC.BAS", autoexec)
+            .check();
+    }
+
+    #[test]
+    fn test_autoexec_name_is_case_sensitive() {
+        let mut tester = Tester::default()
+            .write_file("AUTOEXEC.BAS", "a = 1")
+            .write_file("autoexec.bas", "a = 2");
+        let (console, store) = (tester.get_console(), tester.get_store());
+        try_load_autoexec(tester.get_machine(), console, store).unwrap();
+        tester
+            .run("")
+            .expect_var("a", 1)
+            .expect_prints(["Loading AUTOEXEC.BAS..."])
+            .expect_file("AUTOEXEC.BAS", "a = 1")
+            .expect_file("autoexec.bas", "a = 2")
+            .check();
+    }
+
+    #[test]
+    fn test_autoexec_missing() {
+        let mut tester = Tester::default();
+        let (console, store) = (tester.get_console(), tester.get_store());
+        try_load_autoexec(tester.get_machine(), console, store).unwrap();
+        tester.run("").check();
+    }
 }

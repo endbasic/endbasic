@@ -166,6 +166,24 @@ fn check<P: AsRef<Path>>(
 }
 
 #[test]
+fn test_cli_autoexec_is_ignored() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::copy(&src_path("cli/tests/repl/autoexec.bas"), &dir.path().join("AUTOEXEC.BAS")).unwrap();
+    check(
+        bin_path("endbasic"),
+        &[
+            "--programs-dir",
+            dir.path().to_str().unwrap(),
+            &src_str("cli/tests/cli/interactive.bas"),
+        ],
+        1,
+        Behavior::Null,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/cli/interactive.err")),
+    );
+}
+
+#[test]
 fn test_cli_help() {
     fn check_with_args(args: &[&str]) {
         check(
@@ -420,6 +438,20 @@ fn test_lang_yes_no() {
         0,
         Behavior::File(src_path("cli/tests/lang/yes-no.in")),
         Behavior::File(src_path("cli/tests/lang/yes-no.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_repl_autoexec() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::copy(&src_path("cli/tests/repl/autoexec.bas"), &dir.path().join("AUTOEXEC.BAS")).unwrap();
+    check(
+        bin_path("endbasic"),
+        &["--programs-dir", dir.path().to_str().unwrap()],
+        0,
+        Behavior::File(src_path("cli/tests/repl/hello.bas")),
+        Behavior::File(src_path("cli/tests/repl/autoexec.out")),
         Behavior::Null,
     );
 }
