@@ -33,8 +33,7 @@ pub mod help;
 pub mod numerics;
 pub mod store;
 pub mod strings;
-#[cfg(test)]
-pub(crate) mod testutils;
+pub mod testutils;
 
 /// Creates a new machine populated with all scripting commands from the standard library.
 pub fn scripting_machine(console: Rc<RefCell<dyn console::Console>>) -> Machine {

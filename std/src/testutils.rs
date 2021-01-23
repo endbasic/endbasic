@@ -267,12 +267,36 @@ impl Tester {
         self
     }
 
+    /// Returns a mutable reference to the machine inside the tester.
+    ///
+    /// This method should generally not be used, except to run native methods that have
+    /// side-effects on the machine that we'd like to validate later.
+    pub fn get_machine(&mut self) -> &mut Machine {
+        &mut self.machine
+    }
+
     /// Gets the mock console from the tester.
     ///
     /// This method should generally not be used.  Its primary utility is to hook
     /// externally-instantiated commands into the testing features.
     pub fn get_console(&self) -> Rc<RefCell<MockConsole>> {
         self.console.clone()
+    }
+
+    /// Gets the in-memory store from the tester.
+    ///
+    /// This method should generally not be used.  Its primary utility is to hook
+    /// externally-instantiated commands into the testing features.
+    pub fn get_store(&self) -> Rc<RefCell<InMemoryStore>> {
+        self.store.clone()
+    }
+
+    /// Gets the recorded program from the tester.
+    ///
+    /// This method should generally not be used.  Its primary utility is to hook
+    /// externally-instantiated commands into the testing features.
+    pub fn get_program(&self) -> Rc<RefCell<RecordedProgram>> {
+        self.program.clone()
     }
 
     /// Sets the initial contents of the recorded program to `text`.  Can only be called once and
