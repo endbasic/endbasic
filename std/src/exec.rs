@@ -18,7 +18,7 @@
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::eval::{CallableMetadata, CallableMetadataBuilder};
-use endbasic_core::exec::{new_usage_error, Command, Machine, MachineBuilder, Result};
+use endbasic_core::exec::{new_usage_error, Command, Machine, Result};
 use std::rc::Rc;
 
 /// The `CLEAR` command.
@@ -105,9 +105,10 @@ impl Command for ExitCommand {
     }
 }
 
-/// Instantiates all REPL commands.
-pub fn add_all(builder: MachineBuilder) -> MachineBuilder {
-    builder.add_command(ClearCommand::new()).add_command(ExitCommand::new())
+/// Instantiates all REPL commands and adds them to the `machine`.
+pub fn add_all(machine: &mut Machine) {
+    machine.add_command(ClearCommand::new());
+    machine.add_command(ExitCommand::new());
 }
 
 #[cfg(test)]
@@ -118,7 +119,8 @@ mod tests {
 
     /// Runs the `input` code on a new test machine and verifies that it fails with `expected_err`.
     fn do_error_test(input: &str, expected_err: &str) {
-        let mut machine = MachineBuilder::default().add_command(ExitCommand::new()).build();
+        let mut machine = Machine::default();
+        machine.add_command(ExitCommand::new());
         let err =
             block_on(machine.exec(&mut input.as_bytes())).expect_err("Execution did not fail");
         assert_eq!(expected_err, format!("{}", err));
@@ -126,7 +128,8 @@ mod tests {
 
     #[test]
     fn test_clear_ok() {
-        let mut machine = MachineBuilder::default().add_command(ClearCommand::new()).build();
+        let mut machine = Machine::default();
+        machine.add_command(ClearCommand::new());
         assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"a = 1".as_ref())).unwrap());
         assert!(machine.get_var_as_int("a").is_ok());
         assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"CLEAR".as_ref())).unwrap());
@@ -135,7 +138,8 @@ mod tests {
 
     #[test]
     fn test_clear_errors() {
-        let mut machine = MachineBuilder::default().add_command(ClearCommand::new()).build();
+        let mut machine = Machine::default();
+        machine.add_command(ClearCommand::new());
         assert_eq!(
             "CLEAR takes no arguments",
             format!("{}", block_on(machine.exec(&mut b"CLEAR 123".as_ref())).unwrap_err())
@@ -144,7 +148,8 @@ mod tests {
 
     #[test]
     fn test_exit_no_code() {
-        let mut machine = MachineBuilder::default().add_command(ExitCommand::new()).build();
+        let mut machine = Machine::default();
+        machine.add_command(ExitCommand::new());
         assert_eq!(
             StopReason::Exited(0),
             block_on(machine.exec(&mut b"a = 3: EXIT: a = 4".as_ref())).unwrap()
@@ -153,7 +158,8 @@ mod tests {
     }
 
     fn do_exit_with_code_test(code: u8) {
-        let mut machine = MachineBuilder::default().add_command(ExitCommand::new()).build();
+        let mut machine = Machine::default();
+        machine.add_command(ExitCommand::new());
         assert_eq!(
             StopReason::Exited(code),
             block_on(machine.exec(&mut format!("a = 3: EXIT {}: a = 4", code).as_bytes())).unwrap()

@@ -19,7 +19,7 @@ use crate::console::Console;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, VarType};
 use endbasic_core::eval::{CallableMetadata, CallableMetadataBuilder, Function};
-use endbasic_core::exec::{self, Command, Machine, MachineBuilder};
+use endbasic_core::exec::{self, Command, Machine};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
@@ -241,9 +241,9 @@ impl Command for HelpCommand {
     }
 }
 
-/// Adds all help-related commands to the machine `builder` and makes them write to `console`.
-pub fn add_all(builder: MachineBuilder, console: Rc<RefCell<dyn Console>>) -> MachineBuilder {
-    builder.add_command(HelpCommand::new(console))
+/// Adds all help-related commands to the `machine` and makes them write to `console`.
+pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
+    machine.add_command(HelpCommand::new(console));
 }
 
 #[cfg(test)]
@@ -326,7 +326,7 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use crate::testutils::*;
-    use endbasic_core::exec::{MachineBuilder, StopReason};
+    use endbasic_core::exec::StopReason;
     use futures_lite::future::block_on;
     use std::cell::RefCell;
 
@@ -342,10 +342,10 @@ mod tests {
     /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
     fn do_error_test(input: &str, expected_err: &str) {
         let console = Rc::from(RefCell::from(MockConsole::default()));
-        let mut machine = add_all(MachineBuilder::default(), console.clone())
-            .add_command(DoNothingCommand::new())
-            .add_function(EmptyFunction::new())
-            .build();
+        let mut machine = Machine::default();
+        add_all(&mut machine, console.clone());
+        machine.add_command(DoNothingCommand::new());
+        machine.add_function(EmptyFunction::new());
         assert_eq!(
             expected_err,
             format!(
@@ -359,10 +359,10 @@ mod tests {
     #[test]
     fn test_help_summarize_callables() {
         let console = Rc::from(RefCell::from(MockConsole::default()));
-        let mut machine = add_all(MachineBuilder::default(), console.clone())
-            .add_command(DoNothingCommand::new())
-            .add_function(EmptyFunction::new())
-            .build();
+        let mut machine = Machine::default();
+        add_all(&mut machine, console.clone());
+        machine.add_command(DoNothingCommand::new());
+        machine.add_function(EmptyFunction::new());
         assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"HELP".as_ref())).unwrap());
 
         let text = flatten_captured_out(console.borrow().captured_out());
@@ -387,9 +387,9 @@ mod tests {
     #[test]
     fn test_help_describe_command() {
         let console = Rc::from(RefCell::from(MockConsole::default()));
-        let mut machine = add_all(MachineBuilder::default(), console.clone())
-            .add_command(DoNothingCommand::new())
-            .build();
+        let mut machine = Machine::default();
+        add_all(&mut machine, console.clone());
+        machine.add_command(DoNothingCommand::new());
         assert_eq!(
             StopReason::Eof,
             block_on(machine.exec(&mut b"help Do_Nothing".as_ref())).unwrap()
@@ -413,9 +413,9 @@ mod tests {
 
     fn do_help_describe_function_test(name: &str) {
         let console = Rc::from(RefCell::from(MockConsole::default()));
-        let mut machine = add_all(MachineBuilder::default(), console.clone())
-            .add_function(EmptyFunction::new())
-            .build();
+        let mut machine = Machine::default();
+        add_all(&mut machine, console.clone());
+        machine.add_function(EmptyFunction::new());
         assert_eq!(
             StopReason::Eof,
             block_on(machine.exec(&mut format!("help {}", name).as_bytes())).unwrap()
@@ -450,9 +450,9 @@ mod tests {
     #[test]
     fn test_help_lang() {
         let console = Rc::from(RefCell::from(MockConsole::default()));
-        let mut machine = add_all(MachineBuilder::default(), console.clone())
-            .add_command(DoNothingCommand::new())
-            .build();
+        let mut machine = Machine::default();
+        add_all(&mut machine, console.clone());
+        machine.add_command(DoNothingCommand::new());
         assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"help lang".as_ref())).unwrap());
 
         let text = flatten_captured_out(console.borrow().captured_out());

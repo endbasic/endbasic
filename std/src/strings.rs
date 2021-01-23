@@ -19,7 +19,7 @@ use endbasic_core::ast::{Value, VarType};
 use endbasic_core::eval::{
     CallableMetadata, CallableMetadataBuilder, Function, FunctionError, FunctionResult,
 };
-use endbasic_core::exec::MachineBuilder;
+use endbasic_core::exec::Machine;
 use std::cmp::min;
 use std::rc::Rc;
 
@@ -255,26 +255,26 @@ impl Function for RtrimFunction {
     }
 }
 
-/// Adds all symbols provided by this module to the given machine `builder`.
-pub fn add_all(builder: MachineBuilder) -> MachineBuilder {
-    builder
-        .add_function(LeftFunction::new())
-        .add_function(LenFunction::new())
-        .add_function(LtrimFunction::new())
-        .add_function(MidFunction::new())
-        .add_function(RightFunction::new())
-        .add_function(RtrimFunction::new())
+/// Adds all symbols provided by this module to the given `machine`.
+pub fn add_all(machine: &mut Machine) {
+    machine.add_function(LeftFunction::new());
+    machine.add_function(LenFunction::new());
+    machine.add_function(LtrimFunction::new());
+    machine.add_function(MidFunction::new());
+    machine.add_function(RightFunction::new());
+    machine.add_function(RtrimFunction::new());
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use endbasic_core::ast::VarRef;
-    use endbasic_core::exec::{MachineBuilder, StopReason};
+    use endbasic_core::exec::StopReason;
     use futures_lite::future::block_on;
 
     fn check_ok(exp_value: Value, expr: &str) {
-        let mut machine = add_all(MachineBuilder::default()).build();
+        let mut machine = Machine::default();
+        add_all(&mut machine);
         assert_eq!(
             StopReason::Eof,
             block_on(machine.exec(&mut format!("result = {}", expr).as_bytes())).unwrap()
@@ -286,7 +286,8 @@ mod tests {
     }
 
     fn check_error(exp_error: &str, expr: &str) {
-        let mut machine = add_all(MachineBuilder::default()).build();
+        let mut machine = Machine::default();
+        add_all(&mut machine);
         assert_eq!(
             exp_error,
             format!(

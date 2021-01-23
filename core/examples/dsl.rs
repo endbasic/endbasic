@@ -26,7 +26,7 @@ use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::eval::{
     self, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult,
 };
-use endbasic_core::exec::{self, Command, Machine, MachineBuilder, StopReason};
+use endbasic_core::exec::{self, Command, Machine, StopReason};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::io;
@@ -148,10 +148,9 @@ fn main() {
     let lights = Rc::from(RefCell::from(vec![false; 10]));
 
     // Create the EndBASIC machine and register our callable objects to create our DSL.
-    let mut machine = MachineBuilder::default()
-        .add_command(SwitchLightCommand::new(lights.clone()))
-        .add_function(NumLightsFunction::new(lights.clone()))
-        .build();
+    let mut machine = Machine::default();
+    machine.add_command(SwitchLightCommand::new(lights.clone()));
+    machine.add_function(NumLightsFunction::new(lights.clone()));
 
     // Execute the sample script, which will call back into our callable objects in Rust land to
     // manipulate the state of the lights.

@@ -19,7 +19,7 @@ use crate::console::Console;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::eval::{CallableMetadata, CallableMetadataBuilder};
-use endbasic_core::exec::{self, Command, Machine, MachineBuilder};
+use endbasic_core::exec::{self, Command, Machine};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::io;
@@ -494,22 +494,21 @@ impl Command for SaveCommand {
     }
 }
 
-/// Adds all program editing commands against the stored `program` to the machine `builder`, using
+/// Adds all program editing commands against the stored `program` to the `machine`, using
 /// `console` for interactive editing and using `store` as the on-disk storage for the programs.
 pub fn add_all(
-    builder: MachineBuilder,
+    machine: &mut Machine,
     program: Rc<RefCell<dyn Program>>,
     console: Rc<RefCell<dyn Console>>,
     store: Rc<RefCell<dyn Store>>,
-) -> MachineBuilder {
-    builder
-        .add_command(DelCommand::new(store.clone()))
-        .add_command(DirCommand::new(console.clone(), store.clone()))
-        .add_command(EditCommand::new(console.clone(), program.clone()))
-        .add_command(LoadCommand::new(store.clone(), program.clone()))
-        .add_command(NewCommand::new(program.clone()))
-        .add_command(RunCommand::new(console, program.clone()))
-        .add_command(SaveCommand::new(store, program))
+) {
+    machine.add_command(DelCommand::new(store.clone()));
+    machine.add_command(DirCommand::new(console.clone(), store.clone()));
+    machine.add_command(EditCommand::new(console.clone(), program.clone()));
+    machine.add_command(LoadCommand::new(store.clone(), program.clone()));
+    machine.add_command(NewCommand::new(program.clone()));
+    machine.add_command(RunCommand::new(console, program.clone()));
+    machine.add_command(SaveCommand::new(store, program));
 }
 
 #[cfg(test)]
@@ -569,7 +568,7 @@ mod tests {
     use super::*;
     use crate::exec::ExitCommand;
     use crate::testutils::*;
-    use endbasic_core::exec::{MachineBuilder, StopReason};
+    use endbasic_core::exec::StopReason;
     use futures_lite::future::block_on;
 
     /// Runs the `input` code on a new machine that stores programs in `store` and verifies its
@@ -591,8 +590,8 @@ mod tests {
         let mut console = MockConsole::default();
         console.add_input_chars(golden_in);
         let console = Rc::from(RefCell::from(console));
-        let mut machine =
-            add_all(MachineBuilder::default(), program.clone(), console.clone(), store).build();
+        let mut machine = Machine::default();
+        add_all(&mut machine, program.clone(), console.clone(), store);
         assert_eq!(
             StopReason::Eof,
             block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed")
@@ -621,8 +620,8 @@ mod tests {
     fn do_error_test_with_store(store: Rc<RefCell<dyn Store>>, input: &str, expected_err: &str) {
         let console = Rc::from(RefCell::from(MockConsole::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::from("")));
-        let mut machine =
-            add_all(MachineBuilder::default(), program, console.clone(), store).build();
+        let mut machine = Machine::default();
+        add_all(&mut machine, program, console.clone(), store);
         assert_eq!(
             expected_err,
             format!(
@@ -808,8 +807,8 @@ mod tests {
     fn test_new_clears_program_and_variables() {
         let program = Rc::from(RefCell::from(RecordedProgram::from("some stuff")));
 
-        let mut machine =
-            MachineBuilder::default().add_command(NewCommand::new(program.clone())).build();
+        let mut machine = Machine::default();
+        machine.add_command(NewCommand::new(program.clone()));
 
         assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"NEW".as_ref())).unwrap());
         assert!(program.borrow().text().is_empty());
@@ -835,10 +834,9 @@ mod tests {
         let program = Rc::from(RefCell::from(RecordedProgram::from("OUT var\nvar = var + 1")));
 
         let captured_out = Rc::from(RefCell::from(vec![]));
-        let mut machine = MachineBuilder::default()
-            .add_command(OutCommand::new(captured_out.clone()))
-            .add_command(RunCommand::new(console.clone(), program))
-            .build();
+        let mut machine = Machine::default();
+        machine.add_command(OutCommand::new(captured_out.clone()));
+        machine.add_command(RunCommand::new(console.clone(), program));
 
         assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"var = 7: RUN".as_ref())).unwrap());
         assert_eq!(&["7"], captured_out.borrow().as_slice());
@@ -857,11 +855,10 @@ mod tests {
         let program = Rc::from(RefCell::from(RecordedProgram::from("OUT 5\nEXIT 1\nOUT 4")));
 
         let captured_out = Rc::from(RefCell::from(vec![]));
-        let mut machine = MachineBuilder::default()
-            .add_command(ExitCommand::new())
-            .add_command(OutCommand::new(captured_out.clone()))
-            .add_command(RunCommand::new(console.clone(), program))
-            .build();
+        let mut machine = Machine::default();
+        machine.add_command(ExitCommand::new());
+        machine.add_command(OutCommand::new(captured_out.clone()));
+        machine.add_command(RunCommand::new(console.clone(), program));
 
         assert_eq!(
             StopReason::Eof,

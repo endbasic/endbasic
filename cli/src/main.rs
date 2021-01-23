@@ -461,7 +461,7 @@ fn new_store_with_demos(dir: &Path) -> Rc<RefCell<dyn Store>> {
 fn run_repl_loop(dir: &Path) -> io::Result<i32> {
     let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
     let store = new_store_with_demos(dir);
-    let mut machine = endbasic_std::interactive_machine_builder(console.clone(), store).build();
+    let mut machine = endbasic_std::interactive_machine(console.clone(), store);
     endbasic::print_welcome(console.clone())?;
     block_on(endbasic::run_repl_loop(&mut machine, console))
 }
@@ -469,7 +469,7 @@ fn run_repl_loop(dir: &Path) -> io::Result<i32> {
 /// Executes the `path` program in a fresh machine.
 fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
     let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
-    let mut machine = endbasic_std::scripting_machine_builder(console).build();
+    let mut machine = endbasic_std::scripting_machine(console);
     let mut input = File::open(path)?;
     Ok(block_on(machine.exec(&mut input))?.as_exit_code())
 }
@@ -479,8 +479,7 @@ fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
 /// `dir` has the same meaning as the parameter passed to `run_repl_loop`.
 fn run_interactive<P: AsRef<Path>>(path: P, dir: &Path) -> endbasic_core::exec::Result<i32> {
     let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
-    let mut machine =
-        endbasic_std::interactive_machine_builder(console, new_store_with_demos(dir)).build();
+    let mut machine = endbasic_std::interactive_machine(console, new_store_with_demos(dir));
     let mut input = File::open(path)?;
     Ok(block_on(machine.exec(&mut input))?.as_exit_code())
 }
