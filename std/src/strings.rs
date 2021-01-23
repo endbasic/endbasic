@@ -267,130 +267,111 @@ pub fn add_all(machine: &mut Machine) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use endbasic_core::ast::VarRef;
-    use endbasic_core::exec::StopReason;
-    use futures_lite::future::block_on;
-
-    fn check_ok(exp_value: Value, expr: &str) {
-        let mut machine = Machine::default();
-        add_all(&mut machine);
-        assert_eq!(
-            StopReason::Eof,
-            block_on(machine.exec(&mut format!("result = {}", expr).as_bytes())).unwrap()
-        );
-        assert_eq!(
-            &exp_value,
-            machine.get_vars().get(&VarRef::new("result", VarType::Auto)).unwrap()
-        )
-    }
-
-    fn check_error(exp_error: &str, expr: &str) {
-        let mut machine = Machine::default();
-        add_all(&mut machine);
-        assert_eq!(
-            exp_error,
-            format!(
-                "{}",
-                block_on(machine.exec(&mut format!("result = {}", expr).as_bytes())).unwrap_err()
-            )
-        );
-    }
+    use crate::testutils::*;
 
     #[test]
     fn test_left() {
-        check_ok(Value::Text("".to_owned()), "LEFT(\"\", 0)");
-        check_ok(Value::Text("abc".to_owned()), "LEFT(\"abcdef\", 3)");
-        check_ok(Value::Text("abcdef".to_owned()), "LEFT(\"abcdef\", 6)");
-        check_ok(Value::Text("abcdef".to_owned()), "LEFT(\"abcdef\", 10)");
+        check_expr_ok("", r#"LEFT("", 0)"#);
+        check_expr_ok("abc", r#"LEFT("abcdef", 3)"#);
+        check_expr_ok("abcdef", r#"LEFT("abcdef", 6)"#);
+        check_expr_ok("abcdef", r#"LEFT("abcdef", 10)"#);
 
-        check_error("Syntax error in call to LEFT: expected expr$, n%", "LEFT()");
-        check_error("Syntax error in call to LEFT: expected expr$, n%", "LEFT(\"\", 1, 2)");
-        check_error("Syntax error in call to LEFT: expected expr$, n%", "LEFT(1, 2)");
-        check_error("Syntax error in call to LEFT: expected expr$, n%", "LEFT(\"\", \"\")");
-        check_error("Syntax error in call to LEFT: n% cannot be negative", "LEFT(\"abcdef\", -5)");
+        check_expr_error("Syntax error in call to LEFT: expected expr$, n%", r#"LEFT()"#);
+        check_expr_error("Syntax error in call to LEFT: expected expr$, n%", r#"LEFT("", 1, 2)"#);
+        check_expr_error("Syntax error in call to LEFT: expected expr$, n%", r#"LEFT(1, 2)"#);
+        check_expr_error("Syntax error in call to LEFT: expected expr$, n%", r#"LEFT("", "")"#);
+        check_expr_error(
+            "Syntax error in call to LEFT: n% cannot be negative",
+            r#"LEFT("abcdef", -5)"#,
+        );
     }
 
     #[test]
     fn test_len() {
-        check_ok(Value::Integer(0), "LEN(\"\")");
-        check_ok(Value::Integer(1), "LEN(\" \")");
-        check_ok(Value::Integer(5), "LEN(\"abcde\")");
+        check_expr_ok(0, r#"LEN("")"#);
+        check_expr_ok(1, r#"LEN(" ")"#);
+        check_expr_ok(5, r#"LEN("abcde")"#);
 
-        check_error("Syntax error in call to LEN: expected expr$", "LEN()");
-        check_error("Syntax error in call to LEN: expected expr$", "LEN(3)");
-        check_error("Syntax error in call to LEN: expected expr$", "LEN(\" \", 1)");
+        check_expr_error("Syntax error in call to LEN: expected expr$", r#"LEN()"#);
+        check_expr_error("Syntax error in call to LEN: expected expr$", r#"LEN(3)"#);
+        check_expr_error("Syntax error in call to LEN: expected expr$", r#"LEN(" ", 1)"#);
     }
 
     #[test]
     fn test_ltrim() {
-        check_ok(Value::Text("".to_owned()), "LTRIM(\"\")");
-        check_ok(Value::Text("".to_owned()), "LTRIM(\"  \")");
-        check_ok(Value::Text("".to_owned()), "LTRIM(\"\t\t\")");
-        check_ok(Value::Text("foo \t ".to_owned()), "LTRIM(\" \t foo \t \")");
+        check_expr_ok("", r#"LTRIM("")"#);
+        check_expr_ok("", r#"LTRIM("  ")"#);
+        check_expr_ok("", "LTRIM(\"\t\t\")");
+        check_expr_ok("foo \t ", "LTRIM(\" \t foo \t \")");
 
-        check_error("Syntax error in call to LTRIM: expected expr$", "LTRIM()");
-        check_error("Syntax error in call to LTRIM: expected expr$", "LTRIM(3)");
-        check_error("Syntax error in call to LTRIM: expected expr$", "LTRIM(\" \", 1)");
+        check_expr_error("Syntax error in call to LTRIM: expected expr$", r#"LTRIM()"#);
+        check_expr_error("Syntax error in call to LTRIM: expected expr$", r#"LTRIM(3)"#);
+        check_expr_error("Syntax error in call to LTRIM: expected expr$", r#"LTRIM(" ", 1)"#);
     }
 
     #[test]
     fn test_mid() {
-        check_ok(Value::Text("".to_owned()), "MID(\"\", 0, 0)");
-        check_ok(Value::Text("".to_owned()), "MID(\"basic\", 0, 0)");
-        check_ok(Value::Text("".to_owned()), "MID(\"basic\", 1, 0)");
-        check_ok(Value::Text("a".to_owned()), "MID(\"basic\", 1, 1)");
-        check_ok(Value::Text("as".to_owned()), "MID(\"basic\", 1, 2)");
-        check_ok(Value::Text("asic".to_owned()), "MID(\"basic\", 1, 4)");
-        check_ok(Value::Text("asic".to_owned()), "MID(\"basic\", 1, 10)");
-        check_ok(Value::Text("".to_owned()), "MID(\"basic\", 100, 10)");
+        check_expr_ok("", r#"MID("", 0, 0)"#);
+        check_expr_ok("", r#"MID("basic", 0, 0)"#);
+        check_expr_ok("", r#"MID("basic", 1, 0)"#);
+        check_expr_ok("a", r#"MID("basic", 1, 1)"#);
+        check_expr_ok("as", r#"MID("basic", 1, 2)"#);
+        check_expr_ok("asic", r#"MID("basic", 1, 4)"#);
+        check_expr_ok("asic", r#"MID("basic", 1, 10)"#);
+        check_expr_ok("", r#"MID("basic", 100, 10)"#);
 
-        check_error("Syntax error in call to MID: expected expr$, start%[, length%]", "MID()");
-        check_error("Syntax error in call to MID: expected expr$, start%[, length%]", "MID(3)");
-        check_error(
+        check_expr_error(
             "Syntax error in call to MID: expected expr$, start%[, length%]",
-            "MID(\" \", 1, 1, 10)",
+            r#"MID()"#,
         );
-        check_error(
+        check_expr_error(
             "Syntax error in call to MID: expected expr$, start%[, length%]",
-            "MID(\" \", \"1\", \"2\")",
+            r#"MID(3)"#,
         );
-        check_error(
+        check_expr_error(
+            "Syntax error in call to MID: expected expr$, start%[, length%]",
+            r#"MID(" ", 1, 1, 10)"#,
+        );
+        check_expr_error(
+            "Syntax error in call to MID: expected expr$, start%[, length%]",
+            r#"MID(" ", "1", "2")"#,
+        );
+        check_expr_error(
             "Syntax error in call to MID: start% cannot be negative",
-            "MID(\"abcdef\", -5, 10)",
+            r#"MID("abcdef", -5, 10)"#,
         );
-        check_error(
+        check_expr_error(
             "Syntax error in call to MID: length% cannot be negative",
-            "MID(\"abcdef\", 3, -5)",
+            r#"MID("abcdef", 3, -5)"#,
         );
     }
 
     #[test]
     fn test_right() {
-        check_ok(Value::Text("".to_owned()), "RIGHT(\"\", 0)");
-        check_ok(Value::Text("def".to_owned()), "RIGHT(\"abcdef\", 3)");
-        check_ok(Value::Text("abcdef".to_owned()), "RIGHT(\"abcdef\", 6)");
-        check_ok(Value::Text("abcdef".to_owned()), "RIGHT(\"abcdef\", 10)");
+        check_expr_ok("", r#"RIGHT("", 0)"#);
+        check_expr_ok("def", r#"RIGHT("abcdef", 3)"#);
+        check_expr_ok("abcdef", r#"RIGHT("abcdef", 6)"#);
+        check_expr_ok("abcdef", r#"RIGHT("abcdef", 10)"#);
 
-        check_error("Syntax error in call to RIGHT: expected expr$, n%", "RIGHT()");
-        check_error("Syntax error in call to RIGHT: expected expr$, n%", "RIGHT(\"\", 1, 2)");
-        check_error("Syntax error in call to RIGHT: expected expr$, n%", "RIGHT(1, 2)");
-        check_error("Syntax error in call to RIGHT: expected expr$, n%", "RIGHT(\"\", \"\")");
-        check_error(
+        check_expr_error("Syntax error in call to RIGHT: expected expr$, n%", r#"RIGHT()"#);
+        check_expr_error("Syntax error in call to RIGHT: expected expr$, n%", r#"RIGHT("", 1, 2)"#);
+        check_expr_error("Syntax error in call to RIGHT: expected expr$, n%", r#"RIGHT(1, 2)"#);
+        check_expr_error("Syntax error in call to RIGHT: expected expr$, n%", r#"RIGHT("", "")"#);
+        check_expr_error(
             "Syntax error in call to RIGHT: n% cannot be negative",
-            "RIGHT(\"abcdef\", -5)",
+            r#"RIGHT("abcdef", -5)"#,
         );
     }
 
     #[test]
     fn test_rtrim() {
-        check_ok(Value::Text("".to_owned()), "RTRIM(\"\")");
-        check_ok(Value::Text("".to_owned()), "RTRIM(\"  \")");
-        check_ok(Value::Text("".to_owned()), "RTRIM(\"\t\t\")");
-        check_ok(Value::Text(" \t foo".to_owned()), "RTRIM(\" \t foo \t \")");
+        check_expr_ok("", r#"RTRIM("")"#);
+        check_expr_ok("", r#"RTRIM("  ")"#);
+        check_expr_ok("", "RTRIM(\"\t\t\")");
+        check_expr_ok(" \t foo", "RTRIM(\" \t foo \t \")");
 
-        check_error("Syntax error in call to RTRIM: expected expr$", "RTRIM()");
-        check_error("Syntax error in call to RTRIM: expected expr$", "RTRIM(3)");
-        check_error("Syntax error in call to RTRIM: expected expr$", "RTRIM(\" \", 1)");
+        check_expr_error("Syntax error in call to RTRIM: expected expr$", r#"RTRIM()"#);
+        check_expr_error("Syntax error in call to RTRIM: expected expr$", r#"RTRIM(3)"#);
+        check_expr_error("Syntax error in call to RTRIM: expected expr$", r#"RTRIM(" ", 1)"#);
     }
 }

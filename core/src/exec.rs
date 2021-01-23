@@ -92,7 +92,7 @@ pub trait Command {
 }
 
 /// Describes how the machine stopped execution while it was running a script via `exec()`.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[must_use]
 pub enum StopReason {
     /// Execution terminates because the machine reached the end of the input.

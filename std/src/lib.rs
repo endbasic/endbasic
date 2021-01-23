@@ -49,17 +49,27 @@ pub fn scripting_machine(console: Rc<RefCell<dyn console::Console>>) -> Machine 
 }
 
 /// Creates a new machine populated with all scripting _and_ interactive commands from the
-/// standard library.
-pub fn interactive_machine(
+/// standard library.  This function is private because it permits specifying the initial contents
+/// of the stored `program`, which by default should be empty for public users.
+fn full_machine(
     console: Rc<RefCell<dyn console::Console>>,
     store: Rc<RefCell<dyn store::Store>>,
+    program: Rc<RefCell<dyn store::Program>>,
 ) -> Machine {
     let mut machine = scripting_machine(console.clone());
-
-    let program = Rc::from(RefCell::from(editor::Editor::default()));
 
     help::add_all(&mut machine, console.clone());
     store::add_all(&mut machine, program, console, store);
 
     machine
+}
+
+/// Creates a new machine populated with all scripting _and_ interactive commands from the
+/// standard library.
+pub fn interactive_machine(
+    console: Rc<RefCell<dyn console::Console>>,
+    store: Rc<RefCell<dyn store::Store>>,
+) -> Machine {
+    let program = Rc::from(RefCell::from(editor::Editor::default()));
+    full_machine(console, store, program)
 }
