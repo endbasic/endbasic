@@ -140,7 +140,7 @@ fn main() {
     };
 
     let console = Rc::from(RefCell::from(IncompleteConsole::default()));
-    let mut machine = endbasic_std::scripting_machine_builder(console).build();
+    let mut machine = endbasic_std::scripting_machine(console);
 
     let mut input = match fs::File::open(path) {
         Ok(file) => file,

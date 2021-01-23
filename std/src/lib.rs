@@ -21,7 +21,7 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
-use endbasic_core::exec::MachineBuilder;
+use endbasic_core::exec::Machine;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -36,30 +36,30 @@ pub mod strings;
 #[cfg(test)]
 pub(crate) mod testutils;
 
-/// Creates a new machine builder populated with all scripting commands from the standard library.
-pub fn scripting_machine_builder(console: Rc<RefCell<dyn console::Console>>) -> MachineBuilder {
-    let mut builder = MachineBuilder::default();
+/// Creates a new machine populated with all scripting commands from the standard library.
+pub fn scripting_machine(console: Rc<RefCell<dyn console::Console>>) -> Machine {
+    let mut machine = Machine::default();
 
-    builder = console::add_all(builder, console);
-    builder = exec::add_all(builder);
-    builder = numerics::add_all(builder);
-    builder = strings::add_all(builder);
+    console::add_all(&mut machine, console);
+    exec::add_all(&mut machine);
+    numerics::add_all(&mut machine);
+    strings::add_all(&mut machine);
 
-    builder
+    machine
 }
 
-/// Creates a new machine builder populated with all scripting _and_ interactive commands from the
+/// Creates a new machine populated with all scripting _and_ interactive commands from the
 /// standard library.
-pub fn interactive_machine_builder(
+pub fn interactive_machine(
     console: Rc<RefCell<dyn console::Console>>,
     store: Rc<RefCell<dyn store::Store>>,
-) -> MachineBuilder {
-    let mut builder = scripting_machine_builder(console.clone());
+) -> Machine {
+    let mut machine = scripting_machine(console.clone());
 
     let program = Rc::from(RefCell::from(editor::Editor::default()));
 
-    builder = help::add_all(builder, console.clone());
-    builder = store::add_all(builder, program, console, store);
+    help::add_all(&mut machine, console.clone());
+    store::add_all(&mut machine, program, console, store);
 
-    builder
+    machine
 }

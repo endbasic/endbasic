@@ -112,66 +112,6 @@ impl StopReason {
     }
 }
 
-/// Builder pattern for a new machine.
-///
-/// The `default` constructor creates a new builder for a machine with no builtin commands and no
-/// builtin functions.
-#[derive(Default)]
-pub struct MachineBuilder {
-    commands: HashMap<&'static str, Rc<dyn Command>>,
-    functions: HashMap<&'static str, Rc<dyn Function>>,
-}
-
-impl MachineBuilder {
-    /// Registers the given builtin command, which must not yet be registered.
-    pub fn add_command(mut self, command: Rc<dyn Command>) -> Self {
-        let metadata = command.metadata();
-        assert!(
-            self.commands.get(&metadata.name()).is_none(),
-            "Command with the same name already registered"
-        );
-        self.commands.insert(metadata.name(), command);
-        self
-    }
-
-    /// Registers the given builtin function, which must not yet be registered.
-    pub fn add_function(mut self, function: Rc<dyn Function>) -> Self {
-        let metadata = function.metadata();
-        assert!(
-            self.functions.get(&metadata.name()).is_none(),
-            "Function with the same name already registered"
-        );
-        self.functions.insert(metadata.name(), function);
-        self
-    }
-
-    /// Registers the given builtin commands.  See `add_command` for more details.
-    pub fn add_commands(mut self, commands: Vec<Rc<dyn Command>>) -> Self {
-        for command in commands {
-            self = self.add_command(command);
-        }
-        self
-    }
-
-    /// Registers the given builtin functions.  See `add_function` for more details.
-    pub fn add_functions(mut self, functions: Vec<Rc<dyn Function>>) -> Self {
-        for function in functions {
-            self = self.add_function(function);
-        }
-        self
-    }
-
-    /// Creates a new machine with the current configuration.
-    pub fn build(self) -> Machine {
-        Machine {
-            commands: self.commands,
-            functions: self.functions,
-            vars: Vars::default(),
-            stop_reason: None,
-        }
-    }
-}
-
 /// Executes an EndBASIC program and tracks its state.
 #[derive(Default)]
 pub struct Machine {
@@ -182,6 +122,26 @@ pub struct Machine {
 }
 
 impl Machine {
+    /// Registers the given builtin command, which must not yet be registered.
+    pub fn add_command(&mut self, command: Rc<dyn Command>) {
+        let metadata = command.metadata();
+        assert!(
+            self.commands.get(&metadata.name()).is_none(),
+            "Command with the same name already registered"
+        );
+        self.commands.insert(metadata.name(), command);
+    }
+
+    /// Registers the given builtin function, which must not yet be registered.
+    pub fn add_function(&mut self, function: Rc<dyn Function>) {
+        let metadata = function.metadata();
+        assert!(
+            self.functions.get(&metadata.name()).is_none(),
+            "Function with the same name already registered"
+        );
+        self.functions.insert(metadata.name(), function);
+    }
+
     /// Resets the state of the machine by clearing all variable.
     pub fn clear(&mut self) {
         self.vars.clear()
@@ -595,12 +555,11 @@ mod tests {
         golden_in: &'static [&'static str],
         captured_out: Rc<RefCell<Vec<String>>>,
     ) -> Result<StopReason> {
-        let mut machine = MachineBuilder::default()
-            .add_command(ExitCommand::new())
-            .add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))))
-            .add_command(OutCommand::new(captured_out))
-            .add_function(SumFunction::new())
-            .build();
+        let mut machine = Machine::default();
+        machine.add_command(ExitCommand::new());
+        machine.add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))));
+        machine.add_command(OutCommand::new(captured_out));
+        machine.add_function(SumFunction::new());
         block_on(machine.exec(&mut input.as_bytes()))
     }
 
@@ -711,11 +670,10 @@ mod tests {
     #[test]
     fn test_exit_can_resume() {
         let captured_out = Rc::from(RefCell::from(vec![]));
-        let mut machine = MachineBuilder::default()
-            .add_command(ExitCommand::new())
-            .add_command(OutCommand::new(captured_out.clone()))
-            .add_function(SumFunction::new())
-            .build();
+        let mut machine = Machine::default();
+        machine.add_command(ExitCommand::new());
+        machine.add_command(OutCommand::new(captured_out.clone()));
+        machine.add_function(SumFunction::new());
 
         assert_eq!(
             StopReason::Exited(10),

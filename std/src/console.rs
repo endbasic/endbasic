@@ -18,7 +18,7 @@
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::eval::{CallableMetadata, CallableMetadataBuilder};
-use endbasic_core::exec::{self, Command, Machine, MachineBuilder};
+use endbasic_core::exec::{self, Command, Machine};
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -611,21 +611,20 @@ impl Command for PrintCommand {
     }
 }
 
-/// Adds all console-related commands for the given `console` to the machine `builder`.
-pub fn add_all(builder: MachineBuilder, console: Rc<RefCell<dyn Console>>) -> MachineBuilder {
-    builder
-        .add_command(ClsCommand::new(console.clone()))
-        .add_command(ColorCommand::new(console.clone()))
-        .add_command(InputCommand::new(console.clone()))
-        .add_command(LocateCommand::new(console.clone()))
-        .add_command(PrintCommand::new(console))
+/// Adds all console-related commands for the given `console` to the `machine`.
+pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
+    machine.add_command(ClsCommand::new(console.clone()));
+    machine.add_command(ColorCommand::new(console.clone()));
+    machine.add_command(InputCommand::new(console.clone()));
+    machine.add_command(LocateCommand::new(console.clone()));
+    machine.add_command(PrintCommand::new(console));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testutils::*;
-    use endbasic_core::exec::{MachineBuilder, StopReason};
+    use endbasic_core::exec::StopReason;
     use futures_lite::future::block_on;
 
     /// Builder pattern to construct a test for `read_line_interactive`.
@@ -954,7 +953,8 @@ mod tests {
         let mut console = MockConsole::default();
         console.add_input_chars(golden_in);
         let console = Rc::from(RefCell::from(console));
-        let mut machine = add_all(MachineBuilder::default(), console.clone()).build();
+        let mut machine = Machine::default();
+        add_all(&mut machine, console.clone());
         assert_eq!(
             StopReason::Eof,
             block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed")
@@ -983,7 +983,8 @@ mod tests {
         let mut console = MockConsole::default();
         console.add_input_chars(golden_in);
         let console = Rc::from(RefCell::from(console));
-        let mut machine = add_all(MachineBuilder::default(), console.clone()).build();
+        let mut machine = Machine::default();
+        add_all(&mut machine, console.clone());
         assert_eq!(
             expected_err,
             format!(

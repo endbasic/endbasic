@@ -20,7 +20,7 @@ use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::eval::{
     CallableMetadata, CallableMetadataBuilder, Function, FunctionError, FunctionResult,
 };
-use endbasic_core::exec::{self, Command, Machine, MachineBuilder};
+use endbasic_core::exec::{self, Command, Machine};
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
 use std::cell::RefCell;
@@ -231,21 +231,20 @@ impl Function for RndFunction {
     }
 }
 
-/// Adds all symbols provided by this module to the given machine `builder`.
-pub fn add_all(mut builder: MachineBuilder) -> MachineBuilder {
+/// Adds all symbols provided by this module to the given `machine`.
+pub fn add_all(machine: &mut Machine) {
     let prng = Rc::from(RefCell::from(Prng::new_from_entryopy()));
-    builder = builder.add_command(RandomizeCommand::new(prng.clone()));
-    builder = builder.add_function(DtoiFunction::new());
-    builder = builder.add_function(ItodFunction::new());
-    builder = builder.add_function(RndFunction::new(prng));
-    builder
+    machine.add_command(RandomizeCommand::new(prng.clone()));
+    machine.add_function(DtoiFunction::new());
+    machine.add_function(ItodFunction::new());
+    machine.add_function(RndFunction::new(prng));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use endbasic_core::ast::VarRef;
-    use endbasic_core::exec::{MachineBuilder, StopReason};
+    use endbasic_core::exec::StopReason;
     use futures_lite::future::block_on;
 
     fn temp_var_name(v: &Value) -> &'static str {
@@ -270,12 +269,14 @@ mod tests {
     }
 
     fn check_ok(exp_value: Value, expr: &str) {
-        let mut machine = add_all(MachineBuilder::default()).build();
+        let mut machine = Machine::default();
+        add_all(&mut machine);
         check_ok_with_machine(&mut machine, exp_value, expr)
     }
 
     fn check_error(exp_error: &str, expr: &str) {
-        let mut machine = add_all(MachineBuilder::default()).build();
+        let mut machine = Machine::default();
+        add_all(&mut machine);
         assert_eq!(
             exp_error,
             format!(
@@ -286,7 +287,8 @@ mod tests {
     }
 
     fn check_stmt_error(exp_error: &str, stmt: &str) {
-        let mut machine = add_all(MachineBuilder::default()).build();
+        let mut machine = Machine::default();
+        add_all(&mut machine);
         assert_eq!(
             exp_error,
             format!("{}", block_on(machine.exec(&mut stmt.as_bytes())).unwrap_err())
@@ -331,7 +333,8 @@ mod tests {
 
     #[test]
     fn test_randomize_and_rnd() {
-        let mut machine = add_all(MachineBuilder::default()).build();
+        let mut machine = Machine::default();
+        add_all(&mut machine);
 
         // These tests could lead to flakiness if the PRNG happens to yield the same number twice
         // in a row because we did not previously configure the seed.  It is very unlikely though,

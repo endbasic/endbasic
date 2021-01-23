@@ -239,7 +239,7 @@ impl WebTerminal {
         let console = Rc::from(RefCell::from(XtermJsConsole { terminal, on_key_rx }));
         let store = store::WebStore::from_window();
         let store = Rc::from(RefCell::from(DemoStoreOverlay::new(store)));
-        let mut machine = endbasic_std::interactive_machine_builder(console.clone(), store).build();
+        let mut machine = endbasic_std::interactive_machine(console.clone(), store);
         endbasic::print_welcome(console.clone()).unwrap();
         loop {
             let result = endbasic::run_repl_loop(&mut machine, console.clone()).await;
