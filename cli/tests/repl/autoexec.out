@@ -1,0 +1,10 @@
+
+    Welcome to EndBASIC X.Y.Z.
+
+    Type HELP for interactive usage information.
+    Type LOAD "DEMO:TOUR.BAS": RUN for a guided tour.
+
+Loading AUTOEXEC.BAS...
+I am within AUTOEXEC.BAS!
+Hello, world!
+End of input by CTRL-D

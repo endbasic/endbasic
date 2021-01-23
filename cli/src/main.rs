@@ -461,8 +461,9 @@ fn new_store_with_demos(dir: &Path) -> Rc<RefCell<dyn Store>> {
 fn run_repl_loop(dir: &Path) -> io::Result<i32> {
     let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
     let store = new_store_with_demos(dir);
-    let mut machine = endbasic_std::interactive_machine(console.clone(), store);
+    let mut machine = endbasic_std::interactive_machine(console.clone(), store.clone());
     endbasic::print_welcome(console.clone())?;
+    endbasic::try_load_autoexec(&mut machine, console.clone(), store)?;
     block_on(endbasic::run_repl_loop(&mut machine, console))
 }
 
