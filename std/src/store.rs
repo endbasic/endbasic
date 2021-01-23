@@ -58,6 +58,13 @@ pub struct InMemoryStore {
     programs: HashMap<String, String>,
 }
 
+impl InMemoryStore {
+    /// Returns the mapping of stored file names to their contents.
+    pub fn as_hashmap(&self) -> &HashMap<String, String> {
+        &self.programs
+    }
+}
+
 impl Store for InMemoryStore {
     fn delete(&mut self, name: &str) -> io::Result<()> {
         match self.programs.remove(name) {
@@ -512,194 +519,60 @@ pub fn add_all(
 }
 
 #[cfg(test)]
-mod testutils {
-    use super::*;
-
-    /// Simplified version of `PRINT` that captures all calls to it into `data`.
-    ///
-    /// This command only accepts arguments separated by the `;` short separator and concatenates
-    /// them with a single space.
-    pub(crate) struct OutCommand {
-        metadata: CallableMetadata,
-        data: Rc<RefCell<Vec<String>>>,
-    }
-
-    impl OutCommand {
-        /// Creates a new command that captures all calls into `data`.
-        pub(crate) fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
-            Rc::from(Self {
-                metadata: CallableMetadataBuilder::new("OUT", VarType::Void).test_build(),
-                data,
-            })
-        }
-    }
-
-    #[async_trait(?Send)]
-    impl Command for OutCommand {
-        fn metadata(&self) -> &CallableMetadata {
-            &self.metadata
-        }
-
-        async fn exec(
-            &self,
-            args: &[(Option<Expr>, ArgSep)],
-            machine: &mut Machine,
-        ) -> exec::Result<()> {
-            let mut text = String::new();
-            for arg in args.iter() {
-                if let Some(expr) = arg.0.as_ref() {
-                    text += &expr.eval(machine.get_vars(), machine.get_functions())?.to_string();
-                }
-                match arg.1 {
-                    ArgSep::End => break,
-                    ArgSep::Short => text += " ",
-                    ArgSep::Long => return exec::new_usage_error("Cannot use the ',' separator"),
-                }
-            }
-            self.data.borrow_mut().push(text);
-            Ok(())
-        }
-    }
-}
-
-#[cfg(test)]
 mod tests {
-    use super::testutils::*;
     use super::*;
-    use crate::exec::ExitCommand;
     use crate::testutils::*;
-    use endbasic_core::exec::StopReason;
-    use futures_lite::future::block_on;
-
-    /// Runs the `input` code on a new machine that stores programs in `store` and verifies its
-    /// output.
-    ///
-    /// `golden_in` is a sequence of keys to feed to the commands that request console input.
-    ///
-    /// `expected_out` is a sequence of expected calls to `PRINT`.
-    ///
-    /// `exp_program` is the expected state of `program` after execution.
-    fn do_ok_test_with_store(
-        program: Rc<RefCell<dyn Program>>,
-        store: Rc<RefCell<dyn Store>>,
-        input: &str,
-        golden_in: &'static str,
-        expected_out: &'static [&'static str],
-        exp_program: &'static str,
-    ) {
-        let mut console = MockConsole::default();
-        console.add_input_chars(golden_in);
-        let console = Rc::from(RefCell::from(console));
-        let mut machine = Machine::default();
-        add_all(&mut machine, program.clone(), console.clone(), store);
-        assert_eq!(
-            StopReason::Eof,
-            block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed")
-        );
-        let expected_out: Vec<CapturedOut> =
-            expected_out.iter().map(|x| CapturedOut::Print((*x).to_owned())).collect();
-        assert_eq!(expected_out, console.borrow().captured_out());
-        assert_eq!(exp_program, program.borrow().text());
-    }
-
-    /// Same as `do_ok_test_with_store` but with an automatic `store`.
-    fn do_ok_test(
-        program: Rc<RefCell<dyn Program>>,
-        input: &str,
-        golden_in: &'static str,
-        expected_out: &'static [&'static str],
-        exp_program: &'static str,
-    ) {
-        let store = Rc::from(RefCell::from(InMemoryStore::default()));
-        do_ok_test_with_store(program, store, input, golden_in, expected_out, exp_program)
-    }
-
-    /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
-    ///
-    /// Ensures that this does not touch the console.
-    fn do_error_test_with_store(store: Rc<RefCell<dyn Store>>, input: &str, expected_err: &str) {
-        let console = Rc::from(RefCell::from(MockConsole::default()));
-        let program = Rc::from(RefCell::from(RecordedProgram::from("")));
-        let mut machine = Machine::default();
-        add_all(&mut machine, program, console.clone(), store);
-        assert_eq!(
-            expected_err,
-            format!(
-                "{}",
-                block_on(machine.exec(&mut input.as_bytes())).expect_err("Execution did not fail")
-            )
-        );
-        assert!(console.borrow().captured_out().is_empty());
-    }
-
-    /// Same as `do_error_test_with_store` but with an automatic (and inaccessible) `dir`.
-    fn do_error_test(input: &str, expected_err: &str) {
-        let store = Rc::from(RefCell::from(InMemoryStore::default()));
-        do_error_test_with_store(store, input, expected_err)
-    }
 
     #[test]
     fn test_del_ok() {
-        let mut store = InMemoryStore::default();
-        store.put("bar.bas", "").unwrap();
-        let store = Rc::from(RefCell::from(store));
-
-        let program = Rc::from(RefCell::from(RecordedProgram::from("Leave me alone")));
-
         for p in &["foo", "foo.bas"] {
-            store.borrow_mut().put("foo.bas", "line 1\n  line 2\n").unwrap();
-            do_ok_test_with_store(
-                program.clone(),
-                store.clone(),
-                &("DEL \"".to_owned() + p + "\""),
-                "",
-                &[],
-                "Leave me alone",
-            );
+            Tester::default()
+                .set_program("Leave me alone")
+                .write_file("bar.bas", "")
+                .write_file("foo.bas", "line 1\n  line 2\n")
+                .run(format!(r#"DEL "{}""#, p))
+                .expect_program("Leave me alone")
+                .expect_file("bar.bas", "")
+                .check();
         }
-
-        store.borrow().get("bar.bas").unwrap(); // Check that unrelated entries were not touched.
     }
 
     #[test]
     fn test_del_errors() {
-        let store = Rc::from(RefCell::from(InMemoryStore::default()));
-        check_load_save_common_errors("DEL", store.clone());
+        check_load_save_common_errors("DEL");
 
-        do_error_test_with_store(store.clone(), "DEL \"missing-file\"", "Entry not found");
+        check_stmt_err("Entry not found", r#"DEL "missing-file""#);
 
-        store.borrow_mut().put("mismatched-extension.bat", "").unwrap();
-        do_error_test_with_store(store, "DEL \"mismatched-extension\"", "Entry not found");
+        Tester::default()
+            .write_file("mismatched-extension.bat", "")
+            .run(r#"DEL "mismatched-extension""#)
+            .expect_err("Entry not found")
+            .expect_file("mismatched-extension.bat", "")
+            .check();
     }
 
     #[test]
     fn test_dir_empty() {
-        let store = Rc::from(RefCell::from(InMemoryStore::default()));
-        do_ok_test_with_store(
-            Rc::from(RefCell::from(RecordedProgram::from(""))),
-            store,
-            "DIR",
-            "",
-            &["", "    Modified              Size    Name", "    0 file(s), 0 bytes", ""],
-            "",
-        );
+        Tester::default()
+            .run("DIR")
+            .expect_prints([
+                "",
+                "    Modified              Size    Name",
+                "    0 file(s), 0 bytes",
+                "",
+            ])
+            .check();
     }
 
     #[test]
     fn test_dir_entries_are_sorted() {
-        let mut store = InMemoryStore::default();
-        store.put("empty.bas", "").unwrap();
-        store.put("some other file.bas", "not empty\n").unwrap();
-        store.put("00AAA.BAS", "first\nfile\n").unwrap();
-        store.put("not a bas.txt", "").unwrap();
-        let store = Rc::from(RefCell::from(store));
-
-        do_ok_test_with_store(
-            Rc::from(RefCell::from(RecordedProgram::from(""))),
-            store,
-            "DIR",
-            "",
-            &[
+        Tester::default()
+            .write_file("empty.bas", "")
+            .write_file("some other file.bas", "not empty\n")
+            .write_file("00AAA.BAS", "first\nfile\n")
+            .write_file("not a bas.txt", "")
+            .run("DIR")
+            .expect_prints([
                 "",
                 "    Modified              Size    Name",
                 "    2020-05-06 09:37        11    00AAA.BAS",
@@ -709,199 +582,164 @@ mod tests {
                 "",
                 "    4 file(s), 21 bytes",
                 "",
-            ],
-            "",
-        );
+            ])
+            .expect_file("empty.bas", "")
+            .expect_file("some other file.bas", "not empty\n")
+            .expect_file("00AAA.BAS", "first\nfile\n")
+            .expect_file("not a bas.txt", "")
+            .check();
     }
 
     #[test]
     fn test_dir_errors() {
-        let store = Rc::from(RefCell::from(InMemoryStore::default()));
-        do_error_test_with_store(store, "DIR 2", "DIR takes no arguments");
+        check_stmt_err("DIR takes no arguments", "DIR 2");
     }
 
     #[test]
     fn test_edit_ok() {
-        do_ok_test(
-            Rc::from(RefCell::from(RecordedProgram::from("previous\n"))),
-            "EDIT",
-            "new line\n",
-            &[],
-            "previous\nnew line\n",
-        );
+        Tester::default()
+            .set_program("previous\n")
+            .add_input_chars("new line\n")
+            .run("EDIT")
+            .expect_program("previous\nnew line\n")
+            .check();
     }
 
     #[test]
     fn test_edit_errors() {
-        do_error_test("EDIT 1", "EDIT takes no arguments");
+        check_stmt_err("EDIT takes no arguments", "EDIT 1");
     }
 
     #[test]
     fn test_load_ok() {
-        let mut store = InMemoryStore::default();
-        store.put("foo.bas", "line 1\n\n  line 2\n").unwrap();
-        store.put("foo.bak", "").unwrap();
-        store.put("BAR.BAS", "line 1\n\n  line 2\n").unwrap();
-        store.put("Baz.bas", "line 1\n\n  line 2\n").unwrap();
-        let store = Rc::from(RefCell::from(store));
-
+        let content = "line 1\n\n  line 2\n";
         for p in &["foo", "foo.bas", "BAR", "BAR.BAS", "Baz"] {
-            do_ok_test_with_store(
-                Rc::from(RefCell::from(RecordedProgram::from(""))),
-                store.clone(),
-                &("LOAD \"".to_owned() + p + "\""),
-                "",
-                &[],
-                "line 1\n\n  line 2\n",
-            );
+            Tester::default()
+                .write_file("foo.bas", content)
+                .write_file("foo.bak", "")
+                .write_file("BAR.BAS", content)
+                .write_file("Baz.bas", content)
+                .run(format!(r#"LOAD "{}""#, p))
+                .expect_program("line 1\n\n  line 2\n")
+                .expect_file("foo.bas", content)
+                .expect_file("foo.bak", "")
+                .expect_file("BAR.BAS", content)
+                .expect_file("Baz.bas", content)
+                .check();
         }
     }
 
     /// Checks errors that should be handled the same way by `LOAD` and `SAVE`.
-    fn check_load_save_common_errors(cmd: &str, store: Rc<RefCell<dyn Store>>) {
-        do_error_test_with_store(store.clone(), &cmd, &format!("{} requires a filename", cmd));
-        do_error_test_with_store(
-            store.clone(),
-            &format!("{} 3", cmd),
-            &format!("{} requires a string as the filename", cmd),
-        );
+    fn check_load_save_common_errors(cmd: &str) {
+        Tester::default().run(cmd).expect_err(format!("{} requires a filename", cmd)).check();
+
+        Tester::default()
+            .run(format!("{} 3", cmd))
+            .expect_err(format!("{} requires a string as the filename", cmd))
+            .check();
 
         let mut non_basenames = vec!["./foo.bas", "a/b.bas", "a/b"];
         if cfg!(target_os = "windows") {
             non_basenames.push("c:foo.bas");
         }
         for p in non_basenames.as_slice() {
-            do_error_test_with_store(
-                store.clone(),
-                &format!("{} \"{}\"", cmd, p),
-                "Filename must be a single path component",
-            );
+            Tester::default()
+                .run(format!(r#"{} "{}""#, cmd, p))
+                .expect_err("Filename must be a single path component".to_owned())
+                .check();
         }
 
         for p in &["foo.bak", "foo.ba", "foo.basic"] {
-            do_error_test_with_store(
-                store.clone(),
-                &format!("{} \"{}\"", cmd, p),
-                "Invalid filename extension",
-            );
+            Tester::default()
+                .run(format!(r#"{} "{}""#, cmd, p))
+                .expect_err("Invalid filename extension".to_owned())
+                .check();
         }
     }
 
     #[test]
     fn test_load_errors() {
-        let store = Rc::from(RefCell::from(InMemoryStore::default()));
-        check_load_save_common_errors("LOAD", store.clone());
+        check_load_save_common_errors("LOAD");
 
-        do_error_test_with_store(store.clone(), "LOAD \"missing-file\"", "Entry not found");
+        check_stmt_err("Entry not found", r#"LOAD "missing-file""#);
 
-        store.borrow_mut().put("mismatched-extension.bat", "").unwrap();
-        do_error_test_with_store(store, "LOAD \"mismatched-extension\"", "Entry not found");
+        Tester::default()
+            .write_file("mismatched-extension.bat", "")
+            .run(r#"LOAD "mismatched-extension""#)
+            .expect_err("Entry not found")
+            .expect_file("mismatched-extension.bat", "")
+            .check();
     }
 
     #[test]
     fn test_new_nothing() {
-        do_ok_test(Rc::from(RefCell::from(RecordedProgram::from(""))), "NEW", "", &[], "");
+        Tester::default().run("NEW").check();
     }
 
     #[test]
     fn test_new_clears_program_and_variables() {
-        let program = Rc::from(RefCell::from(RecordedProgram::from("some stuff")));
-
-        let mut machine = Machine::default();
-        machine.add_command(NewCommand::new(program.clone()));
-
-        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"NEW".as_ref())).unwrap());
-        assert!(program.borrow().text().is_empty());
-        assert!(machine.get_vars().is_empty());
-        // TODO(jmmv): If we get user-supplied functions, we need to check here that they were
-        // cleared too.
+        Tester::default().set_program("some stuff").run("a = 3: NEW").check();
     }
 
     #[test]
     fn test_new_errors() {
-        do_error_test("NEW 10", "NEW takes no arguments");
+        check_stmt_err("NEW takes no arguments", "NEW 10");
     }
 
     #[test]
     fn test_run_nothing() {
-        do_ok_test(Rc::from(RefCell::from(RecordedProgram::from(""))), "RUN", "", &[], "");
+        Tester::default().run("RUN").check();
     }
 
     #[test]
     fn test_run_something_that_shares_state() {
-        let console = Rc::from(RefCell::from(MockConsole::default()));
-
-        let program = Rc::from(RefCell::from(RecordedProgram::from("OUT var\nvar = var + 1")));
-
-        let captured_out = Rc::from(RefCell::from(vec![]));
-        let mut machine = Machine::default();
-        machine.add_command(OutCommand::new(captured_out.clone()));
-        machine.add_command(RunCommand::new(console.clone(), program));
-
-        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"var = 7: RUN".as_ref())).unwrap());
-        assert_eq!(&["7"], captured_out.borrow().as_slice());
-        assert!(console.borrow().captured_out().is_empty());
-
-        captured_out.borrow_mut().clear();
-        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"RUN".as_ref())).unwrap());
-        assert_eq!(&["8"], captured_out.borrow().as_slice());
-        assert!(console.borrow().captured_out().is_empty());
+        let program = "PRINT var: var = var + 1";
+        let mut t = Tester::default().set_program(program);
+        t.run("var = 7: RUN")
+            .expect_prints(["7"])
+            .expect_var("var", 8)
+            .expect_program(program)
+            .check();
+        t.run("RUN").expect_prints(["7", "8"]).expect_var("var", 9).expect_program(program).check();
     }
 
     #[test]
     fn test_run_something_that_exits() {
-        let console = Rc::from(RefCell::from(MockConsole::default()));
-
-        let program = Rc::from(RefCell::from(RecordedProgram::from("OUT 5\nEXIT 1\nOUT 4")));
-
-        let captured_out = Rc::from(RefCell::from(vec![]));
-        let mut machine = Machine::default();
-        machine.add_command(ExitCommand::new());
-        machine.add_command(OutCommand::new(captured_out.clone()));
-        machine.add_command(RunCommand::new(console.clone(), program));
-
-        assert_eq!(
-            StopReason::Eof,
-            block_on(machine.exec(&mut b"RUN\nOUT \"after\"".as_ref())).unwrap()
-        );
-        assert_eq!(&["5", "after"], captured_out.borrow().as_slice());
-        assert_eq!(
-            &[CapturedOut::Print("Program exited with code 1".to_owned())],
-            console.borrow().captured_out()
-        );
+        let program = "PRINT 5: EXIT 1: PRINT 4";
+        Tester::default()
+            .set_program(program)
+            .run(r#"RUN: PRINT "after""#)
+            .expect_prints(["5", "Program exited with code 1", "after"])
+            .expect_program(program)
+            .check();
     }
 
     #[test]
     fn test_run_errors() {
-        do_error_test("RUN 10", "RUN takes no arguments");
+        check_stmt_err("RUN takes no arguments", "RUN 10");
     }
 
     #[test]
     fn test_save_ok() {
-        let store = Rc::from(RefCell::from(InMemoryStore::default()));
-
-        let program = Rc::from(RefCell::from(RecordedProgram::from("line 1\n  line 2\n")));
-
-        for p in &["first", "second.bas", "THIRD", "FOURTH.BAS", "Fifth"] {
-            do_ok_test_with_store(
-                program.clone(),
-                store.clone(),
-                &("SAVE \"".to_owned() + p + "\""),
-                "",
-                &[],
-                "line 1\n  line 2\n",
-            );
-        }
-
-        for p in &["first.bas", "second.bas", "THIRD.BAS", "FOURTH.BAS", "Fifth.bas"] {
-            let content = store.borrow().get(p).unwrap();
-            assert_eq!(content, "line 1\n  line 2\n");
+        let content = "\n some line   \n ";
+        for (explicit, actual) in &[
+            ("first", "first.bas"),
+            ("second.bas", "second.bas"),
+            ("THIRD", "THIRD.BAS"),
+            ("FOURTH.BAS", "FOURTH.BAS"),
+            ("Fifth", "Fifth.bas"),
+        ] {
+            Tester::default()
+                .set_program(content)
+                .run(format!(r#"SAVE "{}""#, explicit))
+                .expect_program(content)
+                .expect_file(*actual, content)
+                .check();
         }
     }
 
     #[test]
     fn test_save_errors() {
-        let store = Rc::from(RefCell::from(InMemoryStore::default()));
-        check_load_save_common_errors("SAVE", store);
+        check_load_save_common_errors("SAVE");
     }
 }

@@ -16,13 +16,20 @@
 //! Test utilities for consumers of the EndBASIC interpreter.
 
 use crate::console::{self, ClearType, Console, Key, Position};
-use crate::store::Program;
+use crate::store::{InMemoryStore, Program, Store};
 use async_trait::async_trait;
-use std::collections::VecDeque;
+use endbasic_core::ast::Value;
+use endbasic_core::eval::Function;
+use endbasic_core::exec::{self, Command, Machine, StopReason};
+use futures_lite::future::block_on;
+use std::cell::RefCell;
+use std::collections::{HashMap, VecDeque};
 use std::io;
+use std::rc::Rc;
+use std::result::Result;
 
 /// A captured command or messages sent to the mock console.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CapturedOut {
     /// Represents a call to `Console::clear`.
     Clear(ClearType),
@@ -188,15 +195,9 @@ impl Console for MockConsole {
 
 /// A stored program that exposes golden contents and accepts new content from the console when
 /// edits are requested.
+#[derive(Default)]
 pub struct RecordedProgram {
     content: String,
-}
-
-impl RecordedProgram {
-    /// Creates a new stored program with the given golden `content`.
-    pub fn from<S: Into<String>>(content: S) -> Self {
-        Self { content: content.into() }
-    }
 }
 
 #[async_trait(?Send)]
@@ -215,4 +216,214 @@ impl Program for RecordedProgram {
     fn text(&self) -> String {
         self.content.clone()
     }
+}
+
+/// Builder pattern to prepare an EndBASIC machine for testing purposes.
+#[must_use]
+pub struct Tester {
+    console: Rc<RefCell<MockConsole>>,
+    store: Rc<RefCell<InMemoryStore>>,
+    program: Rc<RefCell<RecordedProgram>>,
+    machine: Machine,
+}
+
+impl Default for Tester {
+    /// Creates a new tester for a fully-equipped (interactive) machine.
+    fn default() -> Self {
+        let console = Rc::from(RefCell::from(MockConsole::default()));
+        let store = Rc::from(RefCell::from(InMemoryStore::default()));
+        let program = Rc::from(RefCell::from(RecordedProgram::default()));
+        let machine = crate::full_machine(console.clone(), store.clone(), program.clone());
+
+        Self { console, store, program, machine }
+    }
+}
+
+impl Tester {
+    /// Creates a new tester using the given `Machine`.
+    pub fn from(machine: Machine) -> Self {
+        let console = Rc::from(RefCell::from(MockConsole::default()));
+        let store = Rc::from(RefCell::from(InMemoryStore::default()));
+        let program = Rc::from(RefCell::from(RecordedProgram::default()));
+
+        Self { console, store, program, machine }
+    }
+
+    /// Registers the given builtin command into the machine, which must not yet be registered.
+    pub fn add_command(mut self, command: Rc<dyn Command>) -> Self {
+        self.machine.add_command(command);
+        self
+    }
+
+    /// Registers the given builtin function into the machine, which must not yet be registered.
+    pub fn add_function(mut self, function: Rc<dyn Function>) -> Self {
+        self.machine.add_function(function);
+        self
+    }
+
+    /// Adds the `golden_in` characters as console input.
+    pub fn add_input_chars(self, golden_in: &str) -> Self {
+        self.console.borrow_mut().add_input_chars(golden_in);
+        self
+    }
+
+    /// Gets the mock console from the tester.
+    ///
+    /// This method should generally not be used.  Its primary utility is to hook
+    /// externally-instantiated commands into the testing features.
+    pub fn get_console(&self) -> Rc<RefCell<MockConsole>> {
+        self.console.clone()
+    }
+
+    /// Sets the initial contents of the recorded program to `text`.  Can only be called once and
+    /// `text` must not be empty.
+    pub fn set_program(self, text: &str) -> Self {
+        assert!(!text.is_empty());
+        {
+            let mut program = self.program.borrow_mut();
+            assert!(program.text().is_empty());
+            program.load(text);
+        }
+        self
+    }
+
+    /// Creates or overwrites a file in the store.
+    pub fn write_file(self, name: &str, content: &str) -> Self {
+        self.store.borrow_mut().put(name, content).unwrap();
+        self
+    }
+
+    /// Runs `script` in the configured machine and returns a `Checker` object to validate
+    /// expectations about the execution.
+    pub fn run<S: Into<String>>(&mut self, script: S) -> Checker {
+        let result = block_on(self.machine.exec(&mut script.into().as_bytes()));
+        Checker::new(self, result)
+    }
+}
+
+/// Captures expectations about the execution of a command and validates them.
+#[must_use]
+pub struct Checker<'a> {
+    tester: &'a Tester,
+    result: exec::Result<StopReason>,
+    exp_result: Result<StopReason, String>,
+    exp_output: Vec<CapturedOut>,
+    exp_store: HashMap<String, String>,
+    exp_program: String,
+    exp_vars: HashMap<String, Value>,
+}
+
+impl<'a> Checker<'a> {
+    /// Creates a new checker with default expectations based on the results of an execution.
+    ///
+    /// The default expectations are that the execution ran through completion and that it did not
+    /// have any side-effects.
+    fn new(tester: &'a Tester, result: exec::Result<StopReason>) -> Self {
+        Self {
+            tester,
+            result,
+            exp_result: Ok(StopReason::Eof),
+            exp_output: vec![],
+            exp_store: HashMap::default(),
+            exp_program: String::new(),
+            exp_vars: HashMap::default(),
+        }
+    }
+
+    /// Expects the invocation to have successfully terminated with the given `stop_reason`.
+    ///
+    /// If not called, defaults to expecting that execution terminated due to EOF.  This or
+    /// `expect_err` can only be called once.
+    pub fn expect_ok(mut self, stop_reason: StopReason) -> Self {
+        assert_eq!(Ok(StopReason::Eof), self.exp_result);
+        self.exp_result = Ok(stop_reason);
+        self
+    }
+
+    /// Expects the invocation to have erroneously terminated with the exact `message`.
+    ///
+    /// If not called, defaults to expecting that execution terminated due to EOF.  This or
+    /// `expect_err` can only be called once.
+    pub fn expect_err<S: Into<String>>(mut self, message: S) -> Self {
+        assert_eq!(Ok(StopReason::Eof), self.exp_result);
+        self.exp_result = Err(message.into());
+        self
+    }
+
+    /// Adds a file to expect in the store with a `name` and specific `content`.
+    pub fn expect_file<N: Into<String>, C: Into<String>>(mut self, name: N, content: C) -> Self {
+        let name = name.into();
+        assert!(!self.exp_store.contains_key(&name));
+        self.exp_store.insert(name, content.into());
+        self
+    }
+
+    /// Adds the `out` sequence of captured outputs to the expected outputs of the execution.
+    pub fn expect_output<V: Into<Vec<CapturedOut>>>(mut self, out: V) -> Self {
+        self.exp_output.append(&mut out.into());
+        self
+    }
+
+    /// Adds the `out` sequence of strings to the expected outputs of the execution.
+    ///
+    /// This is a convenience function around `expect_output` that wraps all incoming strings in
+    /// `CapturedOut::Print` objects, as these are the most common outputs in tests.
+    pub fn expect_prints<S: Into<String>, V: Into<Vec<S>>>(mut self, out: V) -> Self {
+        let out = out.into();
+        self.exp_output
+            .append(&mut out.into_iter().map(|x| CapturedOut::Print(x.into())).collect());
+        self
+    }
+
+    /// Sets the expected contents of the stored program to `text`.  Can only be called once and
+    /// `text` must not be empty.
+    pub fn expect_program<S: Into<String>>(mut self, text: S) -> Self {
+        assert!(self.exp_program.is_empty());
+        let text = text.into();
+        assert!(!text.is_empty());
+        self.exp_program = text;
+        self
+    }
+
+    /// Adds the `name`/`value` pair as a variable to expect in the final state of the machine.
+    pub fn expect_var<S: Into<String>, V: Into<Value>>(mut self, name: S, value: V) -> Self {
+        let name = name.into().to_ascii_uppercase();
+        assert!(!self.exp_vars.contains_key(&name));
+        self.exp_vars.insert(name, value.into());
+        self
+    }
+
+    /// Validates all expectations.
+    pub fn check(self) {
+        match self.result {
+            Ok(stop_reason) => assert_eq!(self.exp_result.unwrap(), stop_reason),
+            Err(e) => assert_eq!(self.exp_result.unwrap_err(), format!("{}", e)),
+        };
+
+        assert_eq!(self.exp_vars, *self.tester.machine.get_vars().as_hashmap());
+        assert_eq!(self.exp_output, self.tester.console.borrow().captured_out());
+        assert_eq!(self.exp_program, self.tester.program.borrow().text());
+        assert_eq!(self.exp_store, *self.tester.store.borrow().as_hashmap());
+    }
+}
+
+/// Executes `stmt` on a default `Tester` instance and checks that it fails with `exp_error`.
+pub fn check_stmt_err<S: Into<String>>(exp_error: S, stmt: &str) {
+    Tester::default().run(stmt).expect_err(exp_error).check();
+}
+
+/// Executes `expr` on a scripting interpreter and ensures that the result is `exp_value`.
+pub fn check_expr_ok<V: Into<Value>>(exp_value: V, expr: &str) {
+    Tester::default()
+        .run(format!("result = {}", expr))
+        .expect_var("result", exp_value.into())
+        .check();
+}
+
+/// Executes `expr` on a scripting interpreter and ensures that evaluation fails with `exp_error`.
+///
+/// Note that `exp_error` is a literal exact match on the formatted error message returned by the
+/// machine.
+pub fn check_expr_error<S: Into<String>>(exp_error: S, expr: &str) {
+    Tester::default().run(format!("result = {}", expr)).expect_err(exp_error).check();
 }

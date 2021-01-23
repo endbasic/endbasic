@@ -67,7 +67,7 @@ pub enum Key {
 }
 
 /// Indicates what part of the console to clear on a `Console::clear()` call.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ClearType {
     /// Clears the whole console and moves the cursor to the top left corner.
     All,
@@ -624,7 +624,6 @@ pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
 mod tests {
     use super::*;
     use crate::testutils::*;
-    use endbasic_core::exec::StopReason;
     use futures_lite::future::block_on;
 
     /// Builder pattern to construct a test for `read_line_interactive`.
@@ -944,192 +943,170 @@ mod tests {
             .accept();
     }
 
-    /// Runs the `input` code on a new machine and verifies its output.
-    ///
-    /// `golden_in` is a sequence of keys to feed to the commands that request console input.
-    ///
-    /// `expected_out` is a sequence of expected commands or messages.
-    fn do_control_ok_test(input: &str, golden_in: &'static str, expected_out: &[CapturedOut]) {
-        let mut console = MockConsole::default();
-        console.add_input_chars(golden_in);
-        let console = Rc::from(RefCell::from(console));
-        let mut machine = Machine::default();
-        add_all(&mut machine, console.clone());
-        assert_eq!(
-            StopReason::Eof,
-            block_on(machine.exec(&mut input.as_bytes())).expect("Execution failed")
-        );
-        assert_eq!(expected_out, console.borrow().captured_out());
-    }
-
-    /// Same as `do_control_ok_test` but with `expected_out` being just a sequence of expected
-    /// `PRINT` calls.
-    fn do_ok_test(input: &str, golden_in: &'static str, expected_out: &'static [&'static str]) {
-        let expected_out: Vec<CapturedOut> =
-            expected_out.iter().map(|x| CapturedOut::Print((*x).to_owned())).collect();
-        do_control_ok_test(input, golden_in, &expected_out)
-    }
-
-    /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
-    ///
-    /// Given that the code has side-effects until it fails, this follows the same process as
-    /// `do_ok_test` regarding `golden_in` and `expected_out`.
-    fn do_error_test(
-        input: &str,
-        golden_in: &'static str,
-        expected_out: &'static [&'static str],
-        expected_err: &str,
-    ) {
-        let mut console = MockConsole::default();
-        console.add_input_chars(golden_in);
-        let console = Rc::from(RefCell::from(console));
-        let mut machine = Machine::default();
-        add_all(&mut machine, console.clone());
-        assert_eq!(
-            expected_err,
-            format!(
-                "{}",
-                block_on(machine.exec(&mut input.as_bytes())).expect_err("Execution did not fail")
-            )
-        );
-        let expected_out: Vec<CapturedOut> =
-            expected_out.iter().map(|x| CapturedOut::Print((*x).to_owned())).collect();
-        assert_eq!(expected_out, console.borrow().captured_out());
-    }
-
-    /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
-    ///
-    /// This is a syntactic wrapper over `do_error_test` to simplify those tests that are not
-    /// expected to request any input nor generate any output.
-    fn do_simple_error_test(input: &str, expected_err: &str) {
-        do_error_test(input, "", &[], expected_err);
-    }
-
     #[test]
     fn test_cls_ok() {
-        do_control_ok_test("CLS", "", &[CapturedOut::Clear(ClearType::All)]);
+        Tester::default().run("CLS").expect_output([CapturedOut::Clear(ClearType::All)]).check();
     }
 
     #[test]
     fn test_cls_errors() {
-        do_simple_error_test("CLS 1", "CLS takes no arguments");
+        check_stmt_err("CLS takes no arguments", "CLS 1");
     }
 
     #[test]
     fn test_color_ok() {
-        do_control_ok_test("COLOR", "", &[CapturedOut::Color(None, None)]);
-        do_control_ok_test("COLOR ,", "", &[CapturedOut::Color(None, None)]);
-        do_control_ok_test("COLOR 1", "", &[CapturedOut::Color(Some(1), None)]);
-        do_control_ok_test("COLOR 1,", "", &[CapturedOut::Color(Some(1), None)]);
-        do_control_ok_test("COLOR , 1", "", &[CapturedOut::Color(None, Some(1))]);
-        do_control_ok_test("COLOR 10, 5", "", &[CapturedOut::Color(Some(10), Some(5))]);
-        do_control_ok_test("COLOR 0, 0", "", &[CapturedOut::Color(Some(0), Some(0))]);
-        do_control_ok_test("COLOR 255, 255", "", &[CapturedOut::Color(Some(255), Some(255))]);
+        fn t() -> Tester {
+            Tester::default()
+        }
+        t().run("COLOR").expect_output([CapturedOut::Color(None, None)]).check();
+        t().run("COLOR ,").expect_output([CapturedOut::Color(None, None)]).check();
+        t().run("COLOR 1").expect_output([CapturedOut::Color(Some(1), None)]).check();
+        t().run("COLOR 1,").expect_output([CapturedOut::Color(Some(1), None)]).check();
+        t().run("COLOR , 1").expect_output([CapturedOut::Color(None, Some(1))]).check();
+        t().run("COLOR 10, 5").expect_output([CapturedOut::Color(Some(10), Some(5))]).check();
+        t().run("COLOR 0, 0").expect_output([CapturedOut::Color(Some(0), Some(0))]).check();
+        t().run("COLOR 255, 255").expect_output([CapturedOut::Color(Some(255), Some(255))]).check();
     }
 
     #[test]
     fn test_color_errors() {
-        do_simple_error_test(
-            "COLOR 1, 2, 3",
-            "COLOR takes at most two arguments separated by a comma",
-        );
+        check_stmt_err("COLOR takes at most two arguments separated by a comma", "COLOR 1, 2, 3");
 
-        do_simple_error_test("COLOR 1000, 0", "Color out of range");
-        do_simple_error_test("COLOR 0, 1000", "Color out of range");
+        check_stmt_err("Color out of range", "COLOR 1000, 0");
+        check_stmt_err("Color out of range", "COLOR 0, 1000");
 
-        do_simple_error_test("COLOR TRUE, 0", "Color must be an integer");
-        do_simple_error_test("COLOR 0, TRUE", "Color must be an integer");
+        check_stmt_err("Color must be an integer", "COLOR TRUE, 0");
+        check_stmt_err("Color must be an integer", "COLOR 0, TRUE");
     }
 
     #[test]
     fn test_input_ok() {
-        do_ok_test("INPUT ; foo\nPRINT foo", "9\n", &["9"]);
-        do_ok_test("INPUT ; foo\nPRINT foo", "-9\n", &["-9"]);
-        do_ok_test("INPUT , bar?\nPRINT bar", "true\n", &["TRUE"]);
-        do_ok_test("INPUT ; foo$\nPRINT foo", "\n", &[""]);
-        do_ok_test(
+        fn t<V: Into<Value>>(stmt: &str, input: &str, output: &str, var: &str, value: V) {
+            Tester::default()
+                .add_input_chars(input)
+                .run(stmt)
+                .expect_prints([output])
+                .expect_var(var, value)
+                .check();
+        }
+
+        t("INPUT ; foo\nPRINT foo", "9\n", "9", "foo", 9);
+        t("INPUT ; foo\nPRINT foo", "-9\n", "-9", "foo", -9);
+        t("INPUT , bar?\nPRINT bar", "true\n", "TRUE", "bar", true);
+        t("INPUT ; foo$\nPRINT foo", "\n", "", "foo", "");
+        t(
             "INPUT \"With question mark\"; a$\nPRINT a$",
             "some long text\n",
-            &["some long text"],
+            "some long text",
+            "a",
+            "some long text",
         );
-        do_ok_test(
-            "prompt$ = \"Indirectly without question mark\"\nINPUT prompt$, b\nPRINT b * 2",
-            "42\n",
-            &["84"],
-        );
+
+        Tester::default()
+            .add_input_chars("42\n")
+            .run("prompt$ = \"Indirectly without question mark\"\nINPUT prompt$, b\nPRINT b * 2")
+            .expect_prints(["84"])
+            .expect_var("prompt", "Indirectly without question mark")
+            .expect_var("b", 42)
+            .check();
     }
 
     #[test]
     fn test_input_retry() {
-        do_ok_test("INPUT ; b?", "\ntrue\n", &["Retry input: Invalid boolean literal "]);
-        do_ok_test("INPUT ; b?", "0\ntrue\n", &["Retry input: Invalid boolean literal 0"]);
-        do_ok_test("a = 3\nINPUT ; a", "\n7\n", &["Retry input: Invalid integer literal "]);
-        do_ok_test("a = 3\nINPUT ; a", "x\n7\n", &["Retry input: Invalid integer literal x"]);
+        Tester::default()
+            .add_input_chars("\ntrue\n")
+            .run("INPUT ; b?")
+            .expect_prints(["Retry input: Invalid boolean literal "])
+            .expect_var("b", true)
+            .check();
+
+        Tester::default()
+            .add_input_chars("0\ntrue\n")
+            .run("INPUT ; b?")
+            .expect_prints(["Retry input: Invalid boolean literal 0"])
+            .expect_var("b", true)
+            .check();
+
+        Tester::default()
+            .add_input_chars("\n7\n")
+            .run("a = 3\nINPUT ; a")
+            .expect_prints(["Retry input: Invalid integer literal "])
+            .expect_var("a", 7)
+            .check();
+
+        Tester::default()
+            .add_input_chars("x\n7\n")
+            .run("a = 3\nINPUT ; a")
+            .expect_prints(["Retry input: Invalid integer literal x"])
+            .expect_var("a", 7)
+            .check();
     }
 
     #[test]
     fn test_input_errors() {
-        do_simple_error_test("INPUT", "INPUT requires two arguments");
-        do_simple_error_test("INPUT ; ,", "INPUT requires two arguments");
-        do_simple_error_test("INPUT ;", "INPUT requires a variable reference");
-        do_simple_error_test("INPUT 3 ; a", "INPUT prompt must be a string");
-        do_simple_error_test("INPUT ; a + 1", "INPUT requires a variable reference");
-        do_simple_error_test("INPUT \"a\" + TRUE; b?", "Cannot add Text(\"a\") and Boolean(true)");
+        check_stmt_err("INPUT requires two arguments", "INPUT");
+        check_stmt_err("INPUT requires two arguments", "INPUT ; ,");
+        check_stmt_err("INPUT requires a variable reference", "INPUT ;");
+        check_stmt_err("INPUT prompt must be a string", "INPUT 3 ; a");
+        check_stmt_err("INPUT requires a variable reference", "INPUT ; a + 1");
+        check_stmt_err("Cannot add Text(\"a\") and Boolean(true)", "INPUT \"a\" + TRUE; b?");
     }
 
     #[test]
     fn test_locate_ok() {
-        do_control_ok_test(
-            "LOCATE 0, 0",
-            "",
-            &[CapturedOut::Locate(Position { row: 0, column: 0 })],
-        );
-        do_control_ok_test(
-            "LOCATE 1000, 2000",
-            "",
-            &[CapturedOut::Locate(Position { row: 1000, column: 2000 })],
-        );
+        Tester::default()
+            .run("LOCATE 0, 0")
+            .expect_output([CapturedOut::Locate(Position { row: 0, column: 0 })])
+            .check();
+
+        Tester::default()
+            .run("LOCATE 1000, 2000")
+            .expect_output([CapturedOut::Locate(Position { row: 1000, column: 2000 })])
+            .check();
     }
 
     #[test]
     fn test_locate_errors() {
-        do_simple_error_test("LOCATE", "LOCATE takes two arguments");
-        do_simple_error_test("LOCATE 1", "LOCATE takes two arguments");
-        do_simple_error_test("LOCATE 1, 2, 3", "LOCATE takes two arguments");
-        do_simple_error_test("LOCATE 1; 2", "LOCATE expects arguments separated by a comma");
+        check_stmt_err("LOCATE takes two arguments", "LOCATE");
+        check_stmt_err("LOCATE takes two arguments", "LOCATE 1");
+        check_stmt_err("LOCATE takes two arguments", "LOCATE 1, 2, 3");
+        check_stmt_err("LOCATE expects arguments separated by a comma", "LOCATE 1; 2");
 
-        do_simple_error_test("LOCATE -1, 2", "Row cannot be negative");
-        do_simple_error_test("LOCATE TRUE, 2", "Row must be an integer");
-        do_simple_error_test("LOCATE , 2", "Row cannot be empty");
+        check_stmt_err("Row cannot be negative", "LOCATE -1, 2");
+        check_stmt_err("Row must be an integer", "LOCATE TRUE, 2");
+        check_stmt_err("Row cannot be empty", "LOCATE , 2");
 
-        do_simple_error_test("LOCATE 1, -2", "Column cannot be negative");
-        do_simple_error_test("LOCATE 1, TRUE", "Column must be an integer");
-        do_simple_error_test("LOCATE 1,", "Column cannot be empty");
+        check_stmt_err("Column cannot be negative", "LOCATE 1, -2");
+        check_stmt_err("Column must be an integer", "LOCATE 1, TRUE");
+        check_stmt_err("Column cannot be empty", "LOCATE 1,");
     }
 
     #[test]
     fn test_print_ok() {
-        do_ok_test("PRINT", "", &[""]);
-        do_ok_test("PRINT ;", "", &[" "]);
-        do_ok_test("PRINT ,", "", &["\t"]);
-        do_ok_test("PRINT ;,;,", "", &[" \t \t"]);
+        Tester::default().run("PRINT").expect_prints([""]).check();
+        Tester::default().run("PRINT ;").expect_prints([" "]).check();
+        Tester::default().run("PRINT ,").expect_prints(["\t"]).check();
+        Tester::default().run("PRINT ;,;,").expect_prints([" \t \t"]).check();
 
-        do_ok_test("PRINT 3", "", &["3"]);
-        do_ok_test("PRINT 3 = 5", "", &["FALSE"]);
-        do_ok_test("PRINT true;123;\"foo bar\"", "", &["TRUE 123 foo bar"]);
-        do_ok_test("PRINT 6,1;3,5", "", &["6\t1 3\t5"]);
+        Tester::default().run("PRINT 3").expect_prints(["3"]).check();
+        Tester::default().run("PRINT 3 = 5").expect_prints(["FALSE"]).check();
+        Tester::default()
+            .run("PRINT true;123;\"foo bar\"")
+            .expect_prints(["TRUE 123 foo bar"])
+            .check();
+        Tester::default().run("PRINT 6,1;3,5").expect_prints(["6\t1 3\t5"]).check();
 
-        do_ok_test(
-            "word = \"foo\"\nPRINT word, word\nPRINT word + \"s\"",
-            "",
-            &["foo\tfoo", "foos"],
-        );
+        Tester::default()
+            .run(r#"word = "foo": PRINT word, word: PRINT word + "s""#)
+            .expect_prints(["foo\tfoo", "foos"])
+            .expect_var("word", "foo")
+            .check();
     }
 
     #[test]
     fn test_print_errors() {
         // Ensure type errors from `Expr` and `Value` bubble up.
-        do_simple_error_test("PRINT a b", "Unexpected value in expression");
-        do_simple_error_test("PRINT 3 + TRUE", "Cannot add Integer(3) and Boolean(true)");
+        check_stmt_err("Unexpected value in expression", "PRINT a b");
+        check_stmt_err("Cannot add Integer(3) and Boolean(true)", "PRINT 3 + TRUE");
     }
 }

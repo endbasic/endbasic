@@ -314,13 +314,18 @@ impl ToString for Value {
 }
 
 /// Storage for all variables that exist at runtime.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Vars {
     /// Map of variable names (without type annotations) to their values.
     vars: HashMap<String, Value>,
 }
 
 impl Vars {
+    /// Returns the mapping of all variables.
+    pub fn as_hashmap(&self) -> &HashMap<String, Value> {
+        &self.vars
+    }
+
     /// Clears all variables.
     pub fn clear(&mut self) {
         self.vars.clear()

@@ -113,58 +113,34 @@ pub fn add_all(machine: &mut Machine) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::testutils::*;
     use endbasic_core::exec::StopReason;
-    use futures_lite::future::block_on;
-
-    /// Runs the `input` code on a new test machine and verifies that it fails with `expected_err`.
-    fn do_error_test(input: &str, expected_err: &str) {
-        let mut machine = Machine::default();
-        machine.add_command(ExitCommand::new());
-        let err =
-            block_on(machine.exec(&mut input.as_bytes())).expect_err("Execution did not fail");
-        assert_eq!(expected_err, format!("{}", err));
-    }
 
     #[test]
     fn test_clear_ok() {
-        let mut machine = Machine::default();
-        machine.add_command(ClearCommand::new());
-        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"a = 1".as_ref())).unwrap());
-        assert!(machine.get_var_as_int("a").is_ok());
-        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"CLEAR".as_ref())).unwrap());
-        assert!(machine.get_var_as_int("a").is_err());
+        Tester::default().run("a = 1: CLEAR").check();
     }
 
     #[test]
     fn test_clear_errors() {
-        let mut machine = Machine::default();
-        machine.add_command(ClearCommand::new());
-        assert_eq!(
-            "CLEAR takes no arguments",
-            format!("{}", block_on(machine.exec(&mut b"CLEAR 123".as_ref())).unwrap_err())
-        );
+        check_stmt_err("CLEAR takes no arguments", "CLEAR 123");
     }
 
     #[test]
     fn test_exit_no_code() {
-        let mut machine = Machine::default();
-        machine.add_command(ExitCommand::new());
-        assert_eq!(
-            StopReason::Exited(0),
-            block_on(machine.exec(&mut b"a = 3: EXIT: a = 4".as_ref())).unwrap()
-        );
-        assert_eq!(3, machine.get_var_as_int("a").unwrap());
+        Tester::default()
+            .run("a = 3: EXIT: a = 4")
+            .expect_ok(StopReason::Exited(0))
+            .expect_var("a", 3)
+            .check();
     }
 
     fn do_exit_with_code_test(code: u8) {
-        let mut machine = Machine::default();
-        machine.add_command(ExitCommand::new());
-        assert_eq!(
-            StopReason::Exited(code),
-            block_on(machine.exec(&mut format!("a = 3: EXIT {}: a = 4", code).as_bytes())).unwrap()
-        );
-        assert_eq!(3, machine.get_var_as_int("a").unwrap());
+        Tester::default()
+            .run(format!("a = 3: EXIT {}: a = 4", code))
+            .expect_ok(StopReason::Exited(code))
+            .expect_var("a", 3)
+            .check();
     }
 
     #[test]
@@ -177,8 +153,8 @@ mod tests {
 
     #[test]
     fn test_exit_errors() {
-        do_error_test("EXIT 1, 2", "EXIT takes zero or one argument");
-        do_error_test("EXIT -3", "Exit code must be a positive integer");
-        do_error_test("EXIT 128", "Exit code cannot be larger than 127");
+        check_stmt_err("EXIT takes zero or one argument", "EXIT 1, 2");
+        check_stmt_err("Exit code must be a positive integer", "EXIT -3");
+        check_stmt_err("Exit code cannot be larger than 127", "EXIT 128");
     }
 }

@@ -55,18 +55,15 @@ const LANG_REFERENCE: &str = r"
 ";
 
 /// Returns the header for the help summary.
-fn header() -> String {
-    format!(
-        "
-    EndBASIC {}
-    Copyright 2020-2021 Julio Merino
-
-    Project page at <{}>
-    License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>
-",
-        env!("CARGO_PKG_VERSION"),
-        env!("CARGO_PKG_HOMEPAGE")
-    )
+fn header() -> Vec<String> {
+    vec![
+        "".to_owned(),
+        format!("    EndBASIC {}", env!("CARGO_PKG_VERSION")),
+        "    Copyright 2020-2021 Julio Merino".to_owned(),
+        "".to_owned(),
+        format!("    Project page at <{}>", env!("CARGO_PKG_HOMEPAGE")),
+        "    License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>".to_owned(),
+    ]
 }
 
 /// Computes a unified collection of metadata objects for all given `commands` and `functions`.
@@ -137,8 +134,8 @@ function.",
         let (index, max_length) = build_index(callables);
 
         let mut console = self.console.borrow_mut();
-        for line in header().lines() {
-            console.print(line)?;
+        for line in header() {
+            console.print(&line)?;
         }
 
         for (category, by_name) in index.iter() {
@@ -326,115 +323,71 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use crate::testutils::*;
-    use endbasic_core::exec::StopReason;
-    use futures_lite::future::block_on;
-    use std::cell::RefCell;
 
-    /// Expects the output to the console to be just print calls and concatenates them all as they
-    /// would have been printed on screen.
-    fn flatten_captured_out(output: &[CapturedOut]) -> String {
-        output.iter().fold(String::new(), |result, o| match o {
-            CapturedOut::Print(text) => result + &text + "\n",
-            _ => panic!("Unexpected element in output"),
-        })
-    }
-
-    /// Runs the `input` code on a new machine and verifies that it fails with `expected_err`.
-    fn do_error_test(input: &str, expected_err: &str) {
-        let console = Rc::from(RefCell::from(MockConsole::default()));
-        let mut machine = Machine::default();
-        add_all(&mut machine, console.clone());
-        machine.add_command(DoNothingCommand::new());
-        machine.add_function(EmptyFunction::new());
-        assert_eq!(
-            expected_err,
-            format!(
-                "{}",
-                block_on(machine.exec(&mut input.as_bytes())).expect_err("Execution did not fail")
-            )
-        );
-        assert!(console.borrow().captured_out().is_empty());
+    fn tester() -> Tester {
+        let tester = Tester::from(Machine::default());
+        let console = tester.get_console();
+        tester.add_command(HelpCommand::new(console))
     }
 
     #[test]
     fn test_help_summarize_callables() {
-        let console = Rc::from(RefCell::from(MockConsole::default()));
-        let mut machine = Machine::default();
-        add_all(&mut machine, console.clone());
-        machine.add_command(DoNothingCommand::new());
-        machine.add_function(EmptyFunction::new());
-        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"HELP".as_ref())).unwrap());
-
-        let text = flatten_captured_out(console.borrow().captured_out());
-        assert_eq!(
-            header()
-                + "
-    >> Interpreter manipulation <<
-    HELP          Prints interactive help.
-
-    >> Testing <<
-    DO_NOTHING    This is the blurb.
-    EMPTY$        This is the blurb.
-
-    Type HELP followed by a command or function name for details.
-    Type HELP LANG for a quick reference guide about the language.
-
-",
-            text
-        );
+        tester()
+            .add_command(DoNothingCommand::new())
+            .add_function(EmptyFunction::new())
+            .run("HELP")
+            .expect_prints(header())
+            .expect_prints([
+                "",
+                "    >> Interpreter manipulation <<",
+                "    HELP          Prints interactive help.",
+                "",
+                "    >> Testing <<",
+                "    DO_NOTHING    This is the blurb.",
+                "    EMPTY$        This is the blurb.",
+                "",
+                "    Type HELP followed by a command or function name for details.",
+                "    Type HELP LANG for a quick reference guide about the language.",
+                "",
+            ])
+            .check();
     }
 
     #[test]
     fn test_help_describe_command() {
-        let console = Rc::from(RefCell::from(MockConsole::default()));
-        let mut machine = Machine::default();
-        add_all(&mut machine, console.clone());
-        machine.add_command(DoNothingCommand::new());
-        assert_eq!(
-            StopReason::Eof,
-            block_on(machine.exec(&mut b"help Do_Nothing".as_ref())).unwrap()
-        );
-
-        let text = flatten_captured_out(console.borrow().captured_out());
-        assert_eq!(
-            "
-    DO_NOTHING this [would] <be|the> syntax \"specification\"
-
-    This is the blurb.
-
-    First paragraph of the extended description.
-
-    Second paragraph of the extended description.
-
-",
-            &text
-        );
+        tester()
+            .add_command(DoNothingCommand::new())
+            .run("help Do_Nothing")
+            .expect_prints([
+                "",
+                "    DO_NOTHING this [would] <be|the> syntax \"specification\"",
+                "",
+                "    This is the blurb.",
+                "",
+                "    First paragraph of the extended description.",
+                "",
+                "    Second paragraph of the extended description.",
+                "",
+            ])
+            .check();
     }
 
     fn do_help_describe_function_test(name: &str) {
-        let console = Rc::from(RefCell::from(MockConsole::default()));
-        let mut machine = Machine::default();
-        add_all(&mut machine, console.clone());
-        machine.add_function(EmptyFunction::new());
-        assert_eq!(
-            StopReason::Eof,
-            block_on(machine.exec(&mut format!("help {}", name).as_bytes())).unwrap()
-        );
-
-        let text = flatten_captured_out(console.borrow().captured_out());
-        assert_eq!(
-            "
-    EMPTY$(this [would] <be|the> syntax \"specification\")
-
-    This is the blurb.
-
-    First paragraph of the extended description.
-
-    Second paragraph of the extended description.
-
-",
-            &text
-        );
+        tester()
+            .add_function(EmptyFunction::new())
+            .run(format!("help {}", name))
+            .expect_prints([
+                "",
+                "    EMPTY$(this [would] <be|the> syntax \"specification\")",
+                "",
+                "    This is the blurb.",
+                "",
+                "    First paragraph of the extended description.",
+                "",
+                "    Second paragraph of the extended description.",
+                "",
+            ])
+            .check();
     }
 
     #[test]
@@ -449,27 +402,27 @@ mod tests {
 
     #[test]
     fn test_help_lang() {
-        let console = Rc::from(RefCell::from(MockConsole::default()));
-        let mut machine = Machine::default();
-        add_all(&mut machine, console.clone());
-        machine.add_command(DoNothingCommand::new());
-        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"help lang".as_ref())).unwrap());
-
-        let text = flatten_captured_out(console.borrow().captured_out());
-        assert_eq!(String::from(LANG_REFERENCE) + "\n", text);
+        tester()
+            .run("help lang")
+            .expect_prints(LANG_REFERENCE.lines().collect::<Vec<&str>>())
+            .expect_prints([""])
+            .check();
     }
 
     #[test]
     fn test_help_errors() {
-        do_error_test("HELP foo bar", "Unexpected value in expression");
-        do_error_test("HELP foo, bar", "HELP takes zero or only one argument");
+        let mut t =
+            tester().add_command(DoNothingCommand::new()).add_function(EmptyFunction::new());
 
-        do_error_test("HELP lang%", "Incompatible type annotation");
+        t.run("HELP foo bar").expect_err("Unexpected value in expression").check();
+        t.run("HELP foo, bar").expect_err("HELP takes zero or only one argument").check();
 
-        do_error_test("HELP foo$", "Cannot describe unknown command or function FOO");
-        do_error_test("HELP foo", "Cannot describe unknown command or function FOO");
+        t.run("HELP lang%").expect_err("Incompatible type annotation").check();
 
-        do_error_test("HELP do_nothing$", "Incompatible type annotation");
-        do_error_test("HELP empty?", "Incompatible type annotation");
+        t.run("HELP foo$").expect_err("Cannot describe unknown command or function FOO").check();
+        t.run("HELP foo").expect_err("Cannot describe unknown command or function FOO").check();
+
+        t.run("HELP do_nothing$").expect_err("Incompatible type annotation").check();
+        t.run("HELP empty?").expect_err("Incompatible type annotation").check();
     }
 }
