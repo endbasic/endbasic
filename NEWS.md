@@ -29,6 +29,9 @@ not adhere to semantic versioning until 1.0.0.**
 *   Made file names in the web UI case-insensitive.  Any pre-existing files
     will be renamed to have an all-uppercase name to support the new semantics.
 
+*   Added a public `testutils` module within the `std` crate to offer test
+    utilities for consumers of the EndBASIC crates.
+
 ## Changes in version 0.4.0
 
 **Released on 2020-12-25.**
