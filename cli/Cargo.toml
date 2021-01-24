@@ -27,6 +27,5 @@ thiserror = "1.0"
 time = { version = "0.2", features = ["std"] }
 
 [dev-dependencies]
-filetime = "0.2"
 regex = "1"
 tempfile = "3"
