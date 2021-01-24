@@ -18,7 +18,7 @@ name: Deploy to release
 on:
     push:
         tags:
-            - endbasic-0.4.0
+            - endbasic-0.5.0
 
 jobs:
     publish:

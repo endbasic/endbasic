@@ -5,12 +5,20 @@ the EndBASIC language definition nor the API exposed by this crate.  Expect
 them to change at any time (especially the Rust API).  Version numbers will
 not adhere to semantic versioning until 1.0.0.**
 
-## Changes in version X.Y.Z
+## Changes in version 0.5.0
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2021-01-24.**
 
-*   Fixed the `EXIT` command so that it doesn't terminate the REPL when it is
-    part of a script run via `RUN`.
+This is primarily a quality-focused release.  Most of the work since 0.4.0 has
+gone into fixing long-standing issues in the codebase (particularly around
+internal testability), but a lot of these have also had end-user impact.
+
+New user-experience features:
+
+*   Added support to load an `AUTOEXEC.BAS` file at REPL startup time.
+
+*   Made file names in the web UI case-insensitive.  Any pre-existing files
+    will be renamed to have an all-uppercase name to support the new semantics.
 
 *   Added support for an in-memory store when running the REPL by specifying
     the `--programs-dir=:memory:` flag.
@@ -18,21 +26,23 @@ not adhere to semantic versioning until 1.0.0.**
 *   Added support to run scripts as if they were run in the interactive REPL
     by passing the `--interactive` flag.
 
-*   Split the language and standard library into two separate crates: the
-    existing `endbasic-core` continues to provide the language interpreter
-    and the new `endbasic-std` provides the standard library.
+Bug fixes:
+
+*   Fixed the `EXIT` command so that it doesn't terminate the REPL when it is
+    part of a script run via `RUN`.
 
 *   Made the web interface not restart the machine on an exit request (such as
     a call to `EXIT`) so that any state is not lost.  It's too easy to hit
     Ctrl+C by mistake, for example.
 
-*   Made file names in the web UI case-insensitive.  Any pre-existing files
-    will be renamed to have an all-uppercase name to support the new semantics.
+Major internal API changes:
+
+*   Split the language and standard library into two separate crates: the
+    existing `endbasic-core` continues to provide the language interpreter
+    and the new `endbasic-std` provides the standard library.
 
 *   Added a public `testutils` module within the `std` crate to offer test
     utilities for consumers of the EndBASIC crates.
-
-*   Added support to load an `AUTOEXEC.BAS` file at REPL startup time.
 
 ## Changes in version 0.4.0
 
