@@ -29,7 +29,6 @@ use endbasic_core::eval::{
 use endbasic_core::exec::{self, Command, Machine, StopReason};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
-use std::io;
 use std::rc::Rc;
 
 /// Sample code that uses our DSL to control the lights.
@@ -154,9 +153,8 @@ fn main() {
 
     // Execute the sample script, which will call back into our callable objects in Rust land to
     // manipulate the state of the lights.
-    let mut cursor = io::Cursor::new(INPUT.as_bytes());
     println!("Running script");
-    let result = block_on(machine.exec(&mut cursor)).expect("Execution error");
+    let result = block_on(machine.exec(&mut INPUT.as_bytes())).expect("Execution error");
     assert!(result == StopReason::Eof, "We did not register an EXIT command");
 
     // Finally, print out the resulting state to verify that it is what we expect.

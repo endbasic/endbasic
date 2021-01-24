@@ -22,7 +22,6 @@
 
 use endbasic_core::exec::{Machine, StopReason};
 use futures_lite::future::block_on;
-use std::io;
 
 /// Sample configuration file to parse.
 const INPUT: &str = r#"
@@ -37,8 +36,7 @@ fn main() {
 
     // Execute the sample script.  All this script can do is modify the state of the machine itself.
     // In other words: the script can set variables in the machine's environment, but that's it.
-    let mut cursor = io::Cursor::new(INPUT.as_bytes());
-    let result = block_on(machine.exec(&mut cursor)).expect("Execution error");
+    let result = block_on(machine.exec(&mut INPUT.as_bytes())).expect("Execution error");
     assert!(result == StopReason::Eof, "We did not register an EXIT command");
 
     // Now that our script has run, inspect the variables it set on the machine.
