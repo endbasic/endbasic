@@ -26,7 +26,7 @@ use std::fs;
 use std::process;
 use std::rc::Rc;
 
-fn main() {
+fn safe_main() -> i32 {
     let args: Vec<String> = env::args().collect();
     let path = match args.as_slice() {
         [_, path] => path,
@@ -48,10 +48,17 @@ fn main() {
     };
 
     match block_on(machine.exec(&mut input)) {
-        Ok(stop_reason) => process::exit(stop_reason.as_exit_code()),
+        Ok(stop_reason) => stop_reason.as_exit_code(),
         Err(e) => {
             eprintln!("ERROR: {}", e);
-            process::exit(1);
+            1
         }
     }
+}
+
+fn main() {
+    // We must ensure that all destructors run (in particular, the console's destructor) before
+    // exiting.  `process:exit` doesn't do that for us, so wrap the program's code into a separate
+    // function so that we can guarantee that the destructors have run here.
+    process::exit(safe_main());
 }

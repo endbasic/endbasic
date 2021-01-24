@@ -184,21 +184,24 @@ fn safe_main(name: &str, args: env::Args) -> Result<i32> {
 
 fn main() {
     let (name, args) = program_name(env::args(), "endbasic");
-    match safe_main(&name, args) {
-        Ok(code) => process::exit(code),
+    let exit_code = match safe_main(&name, args) {
+        Ok(code) => code,
         Err(e) => {
             if let Some(e) = e.downcast_ref::<UsageError>() {
                 eprintln!("Usage error: {}", e);
                 eprintln!("Type {} --help for more information", name);
-                process::exit(2);
+                2
             } else if let Some(e) = e.downcast_ref::<getopts::Fail>() {
                 eprintln!("Usage error: {}", e);
                 eprintln!("Type {} --help for more information", name);
-                process::exit(2);
+                2
             } else {
                 eprintln!("{}: {}", name, e);
-                process::exit(1);
+                1
             }
         }
-    }
+    };
+    // There should not be any interesting destructors left behind when calling this, or else they
+    // will not run.
+    process::exit(exit_code);
 }
