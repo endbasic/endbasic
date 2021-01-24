@@ -31,3 +31,7 @@ features = ["js"]
 version = "0.8"
 default-features = false
 features = ["small_rng", "std"]
+
+[dev-dependencies]
+filetime = "0.2"
+tempfile = "3"
