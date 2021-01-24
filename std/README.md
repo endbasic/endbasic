@@ -4,8 +4,8 @@
 ![Health checks](https://github.com/jmmv/endbasic/workflows/Health%20checks/badge.svg)
 ![Deploy to staging](https://github.com/jmmv/endbasic/workflows/Deploy%20to%20staging/badge.svg)
 ![Deploy to release](https://github.com/jmmv/endbasic/workflows/Deploy%20to%20release/badge.svg)
-[![Crates.io](https://img.shields.io/crates/v/endbasic-core.svg)](https://crates.io/crates/endbasic-core/)
-[![Docs.rs](https://docs.rs/endbasic-core/badge.svg)](https://docs.rs/endbasic-core/)
+[![Crates.io](https://img.shields.io/crates/v/endbasic-std.svg)](https://crates.io/crates/endbasic-std/)
+[![Docs.rs](https://docs.rs/endbasic-std/badge.svg)](https://docs.rs/endbasic-std/)
 
 EndBASIC is an interpreter for a BASIC-like language and is inspired by
 Amstrad's Locomotive BASIC 1.1 and Microsoft's QuickBASIC 4.5.  Like the former,
