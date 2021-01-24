@@ -55,3 +55,7 @@ Some highlights about the EndBASIC implementation are:
 
 The `examples` directory contains sample code to show how to embed the EndBASIC
 interpreter and standard library into your own programs.
+
+*   [`examples/script-runner.rs`](examples/script-runner.rs): Shows how to
+    instantiate full-blown EndBASIC interpreter and uses it to implement a
+    script runner.
