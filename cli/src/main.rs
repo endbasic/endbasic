@@ -22,16 +22,12 @@
 #![warn(unsafe_code)]
 
 use anyhow::{anyhow, Result};
-use async_trait::async_trait;
-use crossterm::{cursor, event, execute, style, terminal, tty::IsTty, QueueableCommand};
-use endbasic_std::console;
 use endbasic_std::store::{Metadata, Store};
+use endbasic_std::terminal::TerminalConsole;
 use futures_lite::future::block_on;
 use getopts::Options;
 use std::cell::RefCell;
-use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::collections::VecDeque;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -68,261 +64,6 @@ fn program_name(mut args: env::Args, default_name: &'static str) -> (String, env
         None => default_name.to_owned(),
     };
     (name, args)
-}
-
-//// Converts a `crossterm::ErrorKind` to an `io::Error`.
-fn crossterm_error_to_io_error(e: crossterm::ErrorKind) -> io::Error {
-    match e {
-        crossterm::ErrorKind::IoError(e) => e,
-        crossterm::ErrorKind::Utf8Error(e) => {
-            io::Error::new(io::ErrorKind::InvalidData, format!("{}", e))
-        }
-        _ => io::Error::new(io::ErrorKind::Other, format!("{}", e)),
-    }
-}
-
-/// Gets the value of the environment variable `name` and interprets it as a `usize`.  Returns
-/// `None` if the variable is not set or if its contents are invalid.
-fn get_env_var_as_usize(name: &str) -> Option<usize> {
-    match env::var_os(name) {
-        Some(value) => {
-            value.as_os_str().to_string_lossy().parse::<usize>().map(Some).unwrap_or(None)
-        }
-        None => None,
-    }
-}
-
-/// Implementation of the EndBASIC console to interact with stdin and stdout.
-pub struct TextConsole {
-    /// Whether stdin and stdout are attached to a TTY.  When this is true, the console is put in
-    /// raw mode for finer-grained control.
-    is_tty: bool,
-
-    /// Line-oriented buffer to hold input when not operating in raw mode.
-    buffer: VecDeque<console::Key>,
-
-    /// Whether a background color is active.  If so, we need to flush the contents of every line
-    /// we print so that the color applies to the whole line.
-    need_line_flush: bool,
-}
-
-impl TextConsole {
-    /// Creates a new console based on the properties of stdin/stdout.
-    pub fn from_stdio() -> io::Result<Self> {
-        let is_tty = io::stdin().is_tty() && io::stdout().is_tty();
-        if is_tty {
-            terminal::enable_raw_mode().map_err(crossterm_error_to_io_error)?;
-        }
-        Ok(Self { is_tty, buffer: VecDeque::default(), need_line_flush: false })
-    }
-}
-
-impl Drop for TextConsole {
-    fn drop(&mut self) {
-        if self.is_tty {
-            terminal::disable_raw_mode().unwrap();
-        }
-    }
-}
-
-impl TextConsole {
-    /// Converts a line of text read from stdin into a sequence of key presses.
-    fn line_to_keys(s: String) -> VecDeque<console::Key> {
-        let mut keys = VecDeque::default();
-        for ch in s.chars() {
-            if ch == '\x1b' {
-                keys.push_back(console::Key::Escape);
-            } else if ch == '\n' {
-                keys.push_back(console::Key::NewLine);
-            } else if ch == '\r' {
-                // Ignore.  When we run under Windows and use golden test input files, we end up
-                // seeing two separate characters to terminate a newline (CRLF) and these confuse
-                // our tests.  I am not sure why this doesn't seem to be a problem for interactive
-                // usage though, but it might just be that crossterm hides this from us.
-            } else if !ch.is_control() {
-                keys.push_back(console::Key::Char(ch));
-            } else {
-                keys.push_back(console::Key::Unknown(format!("{}", ch)));
-            }
-        }
-        keys
-    }
-
-    /// Reads a single key from stdin when not attached to a TTY.  Because characters are not
-    /// visible to us until a newline is received, this reads complete lines and buffers them in
-    /// memory.
-    fn read_key_from_stdin(&mut self) -> io::Result<console::Key> {
-        if self.buffer.is_empty() {
-            let mut line = String::new();
-            if io::stdin().read_line(&mut line)? == 0 {
-                return Ok(console::Key::Eof);
-            }
-            self.buffer = TextConsole::line_to_keys(line);
-        }
-        match self.buffer.pop_front() {
-            Some(key) => Ok(key),
-            None => Ok(console::Key::Eof),
-        }
-    }
-
-    /// Reads a single key from the connected TTY.  This assumes the TTY is in raw mode.
-    fn read_key_from_tty(&mut self) -> io::Result<console::Key> {
-        loop {
-            if let event::Event::Key(ev) = event::read().map_err(crossterm_error_to_io_error)? {
-                match ev.code {
-                    event::KeyCode::Backspace => return Ok(console::Key::Backspace),
-                    event::KeyCode::Esc => return Ok(console::Key::Escape),
-                    event::KeyCode::Up => return Ok(console::Key::ArrowUp),
-                    event::KeyCode::Down => return Ok(console::Key::ArrowDown),
-                    event::KeyCode::Left => return Ok(console::Key::ArrowLeft),
-                    event::KeyCode::Right => return Ok(console::Key::ArrowRight),
-                    event::KeyCode::Char('c') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        return Ok(console::Key::Interrupt)
-                    }
-                    event::KeyCode::Char('d') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        return Ok(console::Key::Eof)
-                    }
-                    event::KeyCode::Char('j') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        return Ok(console::Key::NewLine)
-                    }
-                    event::KeyCode::Char('m') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        return Ok(console::Key::NewLine)
-                    }
-                    event::KeyCode::Char(ch) => return Ok(console::Key::Char(ch)),
-                    event::KeyCode::Enter => return Ok(console::Key::NewLine),
-                    _ => return Ok(console::Key::Unknown(format!("{:?}", ev))),
-                }
-            }
-        }
-    }
-}
-
-#[async_trait(?Send)]
-impl console::Console for TextConsole {
-    fn clear(&mut self, how: console::ClearType) -> io::Result<()> {
-        let how = match how {
-            console::ClearType::All => terminal::ClearType::All,
-            console::ClearType::CurrentLine => terminal::ClearType::CurrentLine,
-            console::ClearType::UntilNewLine => terminal::ClearType::UntilNewLine,
-        };
-        let mut output = io::stdout();
-        output.queue(terminal::Clear(how)).map_err(crossterm_error_to_io_error)?;
-        if how == terminal::ClearType::All {
-            output.queue(cursor::MoveTo(0, 0)).map_err(crossterm_error_to_io_error)?;
-        }
-        output.flush()
-    }
-
-    fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
-        let mut output = io::stdout();
-        let fg = match fg {
-            None => style::Color::Reset,
-            Some(color) => style::Color::AnsiValue(color),
-        };
-        let bg = match bg {
-            None => style::Color::Reset,
-            Some(color) => style::Color::AnsiValue(color),
-        };
-        output.queue(style::SetForegroundColor(fg)).map_err(crossterm_error_to_io_error)?;
-        output.queue(style::SetBackgroundColor(bg)).map_err(crossterm_error_to_io_error)?;
-        output.flush()?;
-        self.need_line_flush = bg != style::Color::Reset;
-        Ok(())
-    }
-
-    fn enter_alt(&mut self) -> io::Result<()> {
-        execute!(io::stdout(), terminal::EnterAlternateScreen).map_err(crossterm_error_to_io_error)
-    }
-
-    fn hide_cursor(&mut self) -> io::Result<()> {
-        execute!(io::stdout(), cursor::Hide).map_err(crossterm_error_to_io_error)
-    }
-
-    fn is_interactive(&self) -> bool {
-        self.is_tty
-    }
-
-    fn leave_alt(&mut self) -> io::Result<()> {
-        execute!(io::stdout(), terminal::LeaveAlternateScreen).map_err(crossterm_error_to_io_error)
-    }
-
-    fn locate(&mut self, pos: console::Position) -> io::Result<()> {
-        if pos.row > std::u16::MAX as usize {
-            return Err(io::Error::new(io::ErrorKind::Other, "Row out of range"));
-        }
-        let row = pos.row as u16;
-
-        if pos.column > std::u16::MAX as usize {
-            return Err(io::Error::new(io::ErrorKind::Other, "Column out of range"));
-        }
-        let column = pos.column as u16;
-
-        execute!(io::stdout(), cursor::MoveTo(column, row)).map_err(crossterm_error_to_io_error)
-    }
-
-    fn move_within_line(&mut self, off: i16) -> io::Result<()> {
-        match off.cmp(&0) {
-            Ordering::Less => execute!(io::stdout(), cursor::MoveLeft(-off as u16)),
-            Ordering::Equal => Ok(()),
-            Ordering::Greater => execute!(io::stdout(), cursor::MoveRight(off as u16)),
-        }
-        .map_err(crossterm_error_to_io_error)
-    }
-
-    fn print(&mut self, text: &str) -> io::Result<()> {
-        let stdout = io::stdout();
-        let mut stdout = stdout.lock();
-        stdout.write_all(text.as_bytes())?;
-        if self.need_line_flush {
-            execute!(stdout, terminal::Clear(terminal::ClearType::UntilNewLine))
-                .map_err(crossterm_error_to_io_error)?;
-        }
-        if self.is_tty {
-            stdout.write_all(b"\r\n")?;
-        } else {
-            stdout.write_all(b"\n")?;
-        }
-        Ok(())
-    }
-
-    async fn read_key(&mut self) -> io::Result<console::Key> {
-        if self.is_tty {
-            self.read_key_from_tty()
-        } else {
-            self.read_key_from_stdin()
-        }
-    }
-
-    fn show_cursor(&mut self) -> io::Result<()> {
-        execute!(io::stdout(), cursor::Show).map_err(crossterm_error_to_io_error)
-    }
-
-    fn size(&self) -> io::Result<console::Position> {
-        // Must be careful to not query the terminal size if both LINES and COLUMNS are set, because
-        // the query fails when we don't have a PTY and we still need to run under these conditions
-        // for testing purposes.
-        let lines = get_env_var_as_usize("LINES");
-        let columns = get_env_var_as_usize("COLUMNS");
-        let size = match (lines, columns) {
-            (Some(l), Some(c)) => console::Position { row: l, column: c },
-            (l, c) => {
-                let (actual_columns, actual_lines) =
-                    terminal::size().map_err(crossterm_error_to_io_error)?;
-                console::Position {
-                    row: l.unwrap_or(actual_lines as usize),
-                    column: c.unwrap_or(actual_columns as usize),
-                }
-            }
-        };
-        Ok(size)
-    }
-
-    fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        let stdout = io::stdout();
-        let mut stdout = stdout.lock();
-        stdout.write_all(bytes)?;
-        stdout.flush()
-    }
 }
 
 /// An implementation of `Store` backed by an on-disk directory.
@@ -459,7 +200,7 @@ fn new_store_with_demos(dir: &Path) -> Rc<RefCell<dyn Store>> {
 /// `dir` specifies the directory that the interpreter will use for any commands that manipulate
 /// files.  The special name `:memory:` makes the interpreter use an in-memory only store.
 fn run_repl_loop(dir: &Path) -> io::Result<i32> {
-    let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
+    let console = Rc::from(RefCell::from(TerminalConsole::from_stdio()?));
     let store = new_store_with_demos(dir);
     let mut machine = endbasic_std::interactive_machine(console.clone(), store.clone());
     endbasic::print_welcome(console.clone())?;
@@ -469,7 +210,7 @@ fn run_repl_loop(dir: &Path) -> io::Result<i32> {
 
 /// Executes the `path` program in a fresh machine.
 fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
-    let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
+    let console = Rc::from(RefCell::from(TerminalConsole::from_stdio()?));
     let mut machine = endbasic_std::scripting_machine(console);
     let mut input = File::open(path)?;
     Ok(block_on(machine.exec(&mut input))?.as_exit_code())
@@ -479,7 +220,7 @@ fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
 ///
 /// `dir` has the same meaning as the parameter passed to `run_repl_loop`.
 fn run_interactive<P: AsRef<Path>>(path: P, dir: &Path) -> endbasic_core::exec::Result<i32> {
-    let console = Rc::from(RefCell::from(TextConsole::from_stdio()?));
+    let console = Rc::from(RefCell::from(TerminalConsole::from_stdio()?));
     let mut machine = endbasic_std::interactive_machine(console, new_store_with_demos(dir));
     let mut input = File::open(path)?;
     Ok(block_on(machine.exec(&mut input))?.as_exit_code())

@@ -33,6 +33,8 @@ pub mod help;
 pub mod numerics;
 pub mod store;
 pub mod strings;
+#[cfg(feature = "crossterm")]
+pub mod terminal;
 pub mod testutils;
 
 /// Creates a new machine populated with all scripting commands from the standard library.
