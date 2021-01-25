@@ -1,6 +1,6 @@
 [package]
 name = "endbasic-web"
-version = "0.5.0"
+version = "0.5.1"
 license = "Apache-2.0"
 authors = ["Julio Merino <julio@meroh.net>"]
 categories = ["development-tools", "parser-implementations"]
@@ -32,12 +32,12 @@ wasm-bindgen-futures = "0.4"
 xterm-js-rs = "0.1.1"
 
 [dependencies.endbasic]
-version = "0.5.0"
+version = "0.5.1"
 path = "../cli"
 default-features = false
 
 [dependencies.endbasic-std]
-version = "0.5.0"
+version = "0.5.1"
 path = "../std"
 default-features = false
 

@@ -1,6 +1,6 @@
 [package]
 name = "endbasic-std"
-version = "0.5.0"
+version = "0.5.1"
 license = "Apache-2.0"
 authors = ["Julio Merino <julio@meroh.net>"]
 categories = ["development-tools", "parser-implementations"]
@@ -17,7 +17,7 @@ default = ["crossterm"]
 [dependencies]
 async-trait = "0.1"
 crossterm = { version = "0.18", optional = true }
-endbasic-core = { version = "0.5.0", path = "../core" }
+endbasic-core = { version = "0.5.1", path = "../core" }
 futures-lite = "1.1"
 time = { version = "0.2", features = ["std"] }
 
