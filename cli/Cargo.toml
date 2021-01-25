@@ -11,9 +11,9 @@ repository = "https://github.com/jmmv/endbasic"
 readme = "README.md"
 edition = "2018"
 
-[[bin]]
-name = "endbasic"
-required-features = ["endbasic-std/crossterm"]
+[features]
+default = ["bin"]
+bin = ["endbasic-std/crossterm"]
 
 [dependencies]
 anyhow = "1.0"

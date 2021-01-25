@@ -16,6 +16,15 @@
 
 set -eux
 
+# Test the installation workflow first because this should succeed regardless
+# of the state of crates.io.
+cargo install --path cli
+ret=0; echo "EXIT 123" | "${HOME}/.cargo/bin/endbasic" || ret="$?"
+if [ "${ret}" -ne 123 ]; then
+    echo "Installed endbasic binary doesn't seem to work" 1>&2
+    exit 1
+fi
+
 ( cd core && cargo publish --dry-run )
 
 # If we aren't yet ready to release a new version, all crates that depend

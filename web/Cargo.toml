@@ -23,7 +23,6 @@ default = ["console_error_panic_hook"]
 async-channel = "1.5"
 async-trait = "0.1"
 console_error_panic_hook = { version = "0.1.6", optional = true }
-endbasic = { version = "0.5.0", path = "../cli" }
 js-sys = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -31,6 +30,11 @@ time = { version = "0.2", features = ["serde", "std"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 xterm-js-rs = "0.1.1"
+
+[dependencies.endbasic]
+version = "0.5.0"
+path = "../cli"
+default-features = false
 
 [dependencies.endbasic-std]
 version = "0.5.0"
