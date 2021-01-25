@@ -5,9 +5,9 @@ the EndBASIC language definition nor the API exposed by this crate.  Expect
 them to change at any time (especially the Rust API).  Version numbers will
 not adhere to semantic versioning until 1.0.0.**
 
-## Changes in version X.Y.Z
+## Changes in version 0.5.1
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2021-01-25.**
 
 *   Fixed the dependencies of the `endbasic` crate so that `cargo install`
     works as documented.
