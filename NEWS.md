@@ -11,6 +11,10 @@ not adhere to semantic versioning until 1.0.0.**
 
 *   Added simple support for the `DIM` statement to define variables.
 
+*   Modified `INPUT` so that it autodetects the target type of a variable when
+    the variable is already defined, instead of assuming the integer type for
+    unqualified variable references.
+
 *   Fixed the expression parser to properly handle symbol names that appear
     immediately after a left parenthesis.  This broke with the addition of
     function calls.

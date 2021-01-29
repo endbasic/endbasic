@@ -361,6 +361,26 @@ impl Vars {
         self.vars.is_empty()
     }
 
+    /// Adds a type annotation to the variable reference if the variable is already defined and the
+    /// reference lacks one.
+    pub fn qualify_varref(&self, vref: &VarRef) -> Result<VarRef> {
+        match self.vars.get(&vref.name().to_ascii_uppercase()) {
+            Some(value) => match vref.ref_type() {
+                VarType::Auto => Ok(vref.clone().qualify(value.as_vartype())),
+                _ => {
+                    if !vref.accepts(&value) {
+                        return Err(Error::new(format!(
+                            "Incompatible types in {} reference",
+                            vref
+                        )));
+                    }
+                    Ok(vref.clone())
+                }
+            },
+            None => Ok(vref.clone()),
+        }
+    }
+
     /// Sets the value of a variable.
     ///
     /// If `vref` contains a type annotation, the type of the value must be compatible with that
@@ -1453,6 +1473,31 @@ mod tests {
         assert_eq!(
             "Incompatible types in a_string% reference",
             format!("{}", vars.get(&VarRef::new("a_string", VarType::Integer)).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_vars_qualify_varref() {
+        let mut raw_vars = HashMap::new();
+        raw_vars.insert("V".to_owned(), Value::Boolean(true));
+        let vars = Vars { vars: raw_vars };
+
+        assert_eq!(
+            VarRef::new("V", VarType::Boolean),
+            vars.qualify_varref(&VarRef::new("V", VarType::Auto)).unwrap(),
+        );
+        assert_eq!(
+            VarRef::new("V", VarType::Boolean),
+            vars.qualify_varref(&VarRef::new("V", VarType::Boolean)).unwrap(),
+        );
+        assert_eq!(
+            "Incompatible types in V% reference",
+            format!("{}", vars.qualify_varref(&VarRef::new("V", VarType::Integer)).unwrap_err()),
+        );
+
+        assert_eq!(
+            VarRef::new("UNDEF", VarType::Auto),
+            vars.qualify_varref(&VarRef::new("UNDEF", VarType::Auto)).unwrap(),
         );
     }
 

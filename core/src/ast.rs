@@ -156,6 +156,16 @@ impl VarRef {
         &self.name
     }
 
+    /// Adds the type annotation `ref_type` to this reference.
+    ///
+    /// Assumes that the current annotation for this reference is `Auto` and that the given
+    /// annotation is not.
+    pub fn qualify(self, ref_type: VarType) -> Self {
+        assert!(ref_type != VarType::Auto, "Cannot qualify with auto");
+        assert!(self.ref_type == VarType::Auto, "Reference already qualified");
+        Self { name: self.name, ref_type }
+    }
+
     /// Returns the type of this reference.
     pub fn ref_type(&self) -> VarType {
         self.ref_type
@@ -217,6 +227,18 @@ impl From<i32> for Value {
 impl From<&str> for Value {
     fn from(s: &str) -> Self {
         Value::Text(s.to_owned())
+    }
+}
+
+impl Value {
+    /// Returns the type of the value as a `VarType`.
+    pub fn as_vartype(&self) -> VarType {
+        match self {
+            Value::Boolean(_) => VarType::Boolean,
+            Value::Double(_) => VarType::Double,
+            Value::Integer(_) => VarType::Integer,
+            Value::Text(_) => VarType::Text,
+        }
     }
 }
 

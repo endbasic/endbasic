@@ -464,6 +464,7 @@ impl Command for InputCommand {
             Some(Expr::Symbol(vref)) => vref,
             _ => return exec::new_usage_error("INPUT requires a variable reference"),
         };
+        let vref = machine.get_vars().qualify_varref(vref)?;
 
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
@@ -471,7 +472,7 @@ impl Command for InputCommand {
             match read_line(&mut *console, &prompt, &previous_answer).await {
                 Ok(answer) => match Value::parse_as(vref.ref_type(), answer.trim_end()) {
                     Ok(value) => {
-                        machine.get_mut_vars().set(vref, value)?;
+                        machine.get_mut_vars().set(&vref, value)?;
                         return Ok(());
                     }
                     Err(e) => {
@@ -1008,6 +1009,28 @@ mod tests {
             .expect_prints(["84"])
             .expect_var("prompt", "Indirectly without question mark")
             .expect_var("b", 42)
+            .check();
+    }
+
+    #[test]
+    fn test_input_on_predefined_vars() {
+        Tester::default()
+            .add_input_chars("1.5\n")
+            .run("d = 3.0\nINPUT ; d")
+            .expect_var("d", 1.5)
+            .check();
+
+        Tester::default()
+            .add_input_chars("foo bar\n")
+            .run("DIM s AS STRING\nINPUT ; s")
+            .expect_var("s", "foo bar")
+            .check();
+
+        Tester::default()
+            .add_input_chars("5\ntrue\n")
+            .run("DIM b AS BOOLEAN\nINPUT ; b")
+            .expect_prints(["Retry input: Invalid boolean literal 5"])
+            .expect_var("b", true)
             .check();
     }
 
