@@ -71,6 +71,13 @@ pub enum Token {
     Then,
     To,
     While,
+
+    Dim,
+    As,
+    BooleanName,
+    DoubleName,
+    IntegerName,
+    TextName,
 }
 
 /// Extra operations to test properties of a `char` based on the language semantics.
@@ -261,18 +268,24 @@ impl<'a> Lexer<'a> {
         }
         match s.to_uppercase().as_str() {
             "AND" => Ok(Token::And),
+            "AS" => Ok(Token::As),
+            "BOOLEAN" => Ok(Token::BooleanName),
+            "DIM" => Ok(Token::Dim),
+            "DOUBLE" => Ok(Token::DoubleName),
             "ELSE" => Ok(Token::Else),
             "ELSEIF" => Ok(Token::Elseif),
             "END" => Ok(Token::End),
             "FALSE" => Ok(Token::Boolean(false)),
             "FOR" => Ok(Token::For),
             "IF" => Ok(Token::If),
+            "INTEGER" => Ok(Token::IntegerName),
             "MOD" => Ok(Token::Modulo),
             "NEXT" => Ok(Token::Next),
             "NOT" => Ok(Token::Not),
             "OR" => Ok(Token::Or),
             "REM" => self.consume_rest_of_line(),
             "STEP" => Ok(Token::Step),
+            "STRING" => Ok(Token::TextName),
             "THEN" => Ok(Token::Then),
             "TO" => Ok(Token::To),
             "TRUE" => Ok(Token::Boolean(true)),
@@ -580,6 +593,21 @@ mod tests {
         do_ok_test(
             "\"this \\\"is escaped\\\" \\\\ \\a\" 1",
             &[Token::Text("this \"is escaped\" \\ a".to_owned()), Token::Integer(1)],
+        );
+    }
+
+    #[test]
+    fn test_dim() {
+        do_ok_test("DIM AS", &[Token::Dim, Token::As]);
+        do_ok_test(
+            "BOOLEAN DOUBLE INTEGER STRING",
+            &[Token::BooleanName, Token::DoubleName, Token::IntegerName, Token::TextName],
+        );
+
+        do_ok_test("dim as", &[Token::Dim, Token::As]);
+        do_ok_test(
+            "boolean double integer string",
+            &[Token::BooleanName, Token::DoubleName, Token::IntegerName, Token::TextName],
         );
     }
 

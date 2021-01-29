@@ -293,6 +293,7 @@ impl Machine {
                 };
                 cmd.exec(&args, self).await?
             }
+            Statement::Dim(varname, vartype) => self.vars.dim(varname, *vartype)?,
             Statement::If(branches) => {
                 // Change this to using FutureExt::boxed_local if we ever depend on the futures or
                 // futures_lite crate directly.
@@ -629,6 +630,18 @@ mod tests {
         do_simple_error_test("a = b\n", "Undefined variable b");
         do_simple_error_test("a = 3\na = TRUE\n", "Incompatible types in a assignment");
         do_simple_error_test("a? = 3", "Incompatible types in a? assignment");
+    }
+
+    #[test]
+    fn test_dim_ok() {
+        do_ok_test("DIM foo\nDIM bar AS BOOLEAN\nOUT foo%; bar?", &[], &["0 FALSE"]);
+    }
+
+    #[test]
+    fn test_dim_errors() {
+        do_simple_error_test("DIM i\nDIM i", "Cannot DIM already-defined variable i");
+        do_simple_error_test("DIM i\nDIM I", "Cannot DIM already-defined variable I");
+        do_simple_error_test("i = 0\nDIM i", "Cannot DIM already-defined variable i");
     }
 
     #[test]

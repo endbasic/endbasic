@@ -9,6 +9,8 @@ not adhere to semantic versioning until 1.0.0.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
+*   Added simple support for the `DIM` statement to define variables.
+
 *   Fixed the expression parser to properly handle symbol names that appear
     immediately after a left parenthesis.  This broke with the addition of
     function calls.
