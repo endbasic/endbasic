@@ -331,6 +331,16 @@ impl Vars {
         self.vars.clear()
     }
 
+    /// Defines a new variable `name` of type `vartype`.  The variable must not yet exist.
+    pub fn dim(&mut self, name: &str, vartype: VarType) -> Result<()> {
+        let key = name.to_ascii_uppercase();
+        if self.vars.contains_key(&key) {
+            return Err(Error::new(format!("Cannot DIM already-defined variable {}", name)));
+        }
+        self.vars.insert(key, vartype.default_value());
+        Ok(())
+    }
+
     /// Obtains the value of a variable.
     ///
     /// Returns an error if the variable is not defined, or if the type annotation in the variable
@@ -1320,6 +1330,37 @@ mod tests {
         assert!(!vars.is_empty());
         vars.clear();
         assert!(vars.is_empty());
+    }
+
+    #[test]
+    fn test_vars_dim() {
+        let mut vars = Vars::default();
+
+        vars.dim("a_boolean", VarType::Boolean).unwrap();
+        assert_eq!(
+            Value::Boolean(false),
+            *vars.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
+        );
+
+        vars.dim("a_double", VarType::Double).unwrap();
+        assert_eq!(Value::Double(0.0), *vars.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
+
+        vars.dim("an_integer", VarType::Integer).unwrap();
+        assert_eq!(
+            Value::Integer(0),
+            *vars.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
+        );
+
+        vars.dim("a_string", VarType::Text).unwrap();
+        assert_eq!(
+            Value::Text("".to_owned()),
+            *vars.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
+        );
+
+        assert_eq!(
+            "Cannot DIM already-defined variable An_Integer",
+            format!("{}", vars.dim("An_Integer", VarType::Integer).unwrap_err())
+        );
     }
 
     #[test]

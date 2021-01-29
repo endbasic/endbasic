@@ -32,8 +32,9 @@ const LANG_REFERENCE: &str = r"
         name$    String.
         name     Type determined by value or definition.
 
-    Assignments:
+    Assignments and declarations:
         varref = expr
+        DIM varname [AS BOOLEAN|DOUBLE|INTEGER|STRING]
 
     Expressions:
         a + b      a - b       a * b     a / b      a MOD b    -a

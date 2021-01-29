@@ -108,6 +108,18 @@ impl VarType {
             VarType::Void => "",
         }
     }
+
+    /// Returns the default value to assign to this type.
+    pub fn default_value(&self) -> Value {
+        match self {
+            VarType::Auto => Value::Integer(0),
+            VarType::Boolean => Value::Boolean(false),
+            VarType::Double => Value::Double(0.0),
+            VarType::Integer => Value::Integer(0),
+            VarType::Text => Value::Text("".to_owned()),
+            VarType::Void => panic!("Cannot represent a default value for void"),
+        }
+    }
 }
 
 /// Represents a reference to a variable (which doesn't have to exist).
@@ -240,6 +252,17 @@ pub enum Statement {
     /// carries `ArgSep::End` as the separator.  The reason the expression is optional is to support
     /// calls of the form `PRINT a, , b`.
     BuiltinCall(String, Vec<(Option<Expr>, ArgSep)>),
+
+    /// Represents a variable declaration.
+    ///
+    /// The first parameter is the name of the variable to set; type annotations are not allowed.
+    /// The second parameter is the type of the variable to be defined.
+    ///
+    /// Given that a declaration causes the variable to be initialized to a default value, it is
+    /// tempting to model this statement as a simple assignment.  However, we must be able to
+    /// detect variable redeclarations at runtime, so we must treat this statement as a separate
+    /// type from assignments.
+    Dim(String, VarType),
 
     /// Represents an `IF` statement.
     ///

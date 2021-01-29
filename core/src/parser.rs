@@ -261,6 +261,46 @@ impl<'a> Parser<'a> {
         Ok(Statement::BuiltinCall(name, args))
     }
 
+    /// Parses a `DIM` statement.
+    fn parse_dim(&mut self) -> Result<Statement> {
+        let vref = match self.lexer.read()? {
+            Token::Symbol(vref) => vref,
+            _ => return Err(Error::Bad("Expected variable name after DIM".to_owned())),
+        };
+        let name = vref.into_unannotated_string()?;
+
+        let peeked = self.lexer.peek()?;
+        let vartype = match peeked {
+            Token::Eof | Token::Eol => {
+                // Token consumed below in the common path.
+                VarType::Integer
+            }
+            Token::As => {
+                self.lexer.consume_peeked();
+                match self.lexer.read()? {
+                    Token::BooleanName => VarType::Boolean,
+                    Token::DoubleName => VarType::Double,
+                    Token::IntegerName => VarType::Integer,
+                    Token::TextName => VarType::Text,
+                    t => {
+                        return Err(Error::Bad(format!(
+                            "Invalid type name {:?} in DIM AS statement",
+                            t
+                        )))
+                    }
+                }
+            }
+            _ => return Err(Error::Bad("Expected AS or end of statement".to_owned())),
+        };
+
+        let next = self.lexer.peek()?;
+        match next {
+            Token::Eof | Token::Eol => (),
+            _ => return Err(Error::Bad("Unexpected token in DIM statement".to_owned())),
+        }
+        Ok(Statement::Dim(name, vartype))
+    }
+
     /// Parses an expression.
     ///
     /// It is important to single out the special `Empty` expression as a possible return value,
@@ -447,13 +487,19 @@ impl<'a> Parser<'a> {
                     panic!("Field separators handled above")
                 }
 
-                Token::If
+                Token::As
+                | Token::BooleanName
+                | Token::Dim
+                | Token::DoubleName
                 | Token::Else
                 | Token::Elseif
                 | Token::End
-                | Token::While
                 | Token::For
-                | Token::Next => {
+                | Token::If
+                | Token::IntegerName
+                | Token::Next
+                | Token::TextName
+                | Token::While => {
                     return Err(Error::Bad("Unexpected keyword in expression".to_owned()));
                 }
             };
@@ -688,6 +734,7 @@ impl<'a> Parser<'a> {
         let res = match self.lexer.read()? {
             Token::Eof => return Ok(None),
             Token::Eol => Ok(None),
+            Token::Dim => Ok(Some(self.parse_dim()?)),
             Token::If => {
                 let result = self.parse_if();
                 if result.is_err() {
@@ -881,6 +928,43 @@ mod tests {
         do_error_test("PRINT IF 1\n", "Unexpected keyword in expression");
         do_error_test("PRINT 3, IF 1\n", "Unexpected keyword in expression");
         do_error_test("PRINT 3 THEN\n", "Expected comma, semicolon, or end of statement");
+    }
+
+    #[test]
+    fn test_dim_default_type() {
+        do_ok_test("DIM i", &[Statement::Dim("i".to_owned(), VarType::Integer)]);
+    }
+
+    #[test]
+    fn test_dim_as_simple_types() {
+        do_ok_test("DIM i AS BOOLEAN", &[Statement::Dim("i".to_owned(), VarType::Boolean)]);
+        do_ok_test("DIM i AS DOUBLE", &[Statement::Dim("i".to_owned(), VarType::Double)]);
+        do_ok_test("DIM i AS INTEGER", &[Statement::Dim("i".to_owned(), VarType::Integer)]);
+        do_ok_test("DIM i AS STRING", &[Statement::Dim("i".to_owned(), VarType::Text)]);
+    }
+
+    #[test]
+    fn test_dim_consecutive() {
+        do_ok_test(
+            "DIM i\nDIM j AS BOOLEAN\nDIM k",
+            &[
+                Statement::Dim("i".to_owned(), VarType::Integer),
+                Statement::Dim("j".to_owned(), VarType::Boolean),
+                Statement::Dim("k".to_owned(), VarType::Integer),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_dim_errors() {
+        do_error_test("DIM", "Expected variable name after DIM");
+        do_error_test("DIM 3", "Expected variable name after DIM");
+        do_error_test("DIM AS", "Expected variable name after DIM");
+        do_error_test("DIM foo 3", "Expected AS or end of statement");
+        do_error_test("DIM a AS", "Invalid type name Eof in DIM AS statement");
+        do_error_test("DIM a$ AS", "Type annotation not allowed in a$");
+        do_error_test("DIM a AS 3", "Invalid type name Integer(3) in DIM AS statement");
+        do_error_test("DIM a AS INTEGER 3", "Unexpected token in DIM statement");
     }
 
     /// Wrapper around `do_ok_test` to parse an expression.  Given that expressions alone are not
@@ -1136,7 +1220,10 @@ mod tests {
 
     #[test]
     fn test_expr_errors_due_to_keywords() {
-        for kw in &["IF", "ELSEIF", "ELSE", "END", "WHILE", "FOR", "NEXT"] {
+        for kw in &[
+            "AS", "BOOLEAN", "DIM", "DOUBLE", "ELSE", "ELSEIF", "END", "FOR", "IF", "INTEGER",
+            "NEXT", "STRING", "WHILE",
+        ] {
             do_expr_error_test(&format!("2 + {} - 1", kw), "Unexpected keyword in expression");
         }
     }
