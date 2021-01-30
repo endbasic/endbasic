@@ -118,7 +118,7 @@ impl Command for SwitchLightCommand {
             return exec::new_usage_error("SWITCH_LIGHT takes one argument only");
         }
         let expr = args[0].0.as_ref().expect("A single argument can never be empty");
-        match expr.eval(machine.get_vars(), machine.get_functions())? {
+        match expr.eval(machine.get_symbols(), machine.get_functions())? {
             Value::Integer(i) => {
                 let lights = &mut *self.lights.borrow_mut();
                 if i < 1 {
