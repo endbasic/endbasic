@@ -317,9 +317,17 @@ impl<'a> Parser<'a> {
                     // parenthesis into the beginning of a function call.
                     match exprs.pop() {
                         Some(Expr::Symbol(vref)) => {
-                            debug_assert!(!need_operand);
-                            ops.push(ExprOp::Call(vref));
-                            arity.push(exprs.len());
+                            if !need_operand {
+                                ops.push(ExprOp::Call(vref));
+                                arity.push(exprs.len());
+                            } else {
+                                // We popped out the last expression to see if it this left
+                                // parenthesis started a function call... but it did not (it is a
+                                // symbol following a parenthesis) so put both the expression and the
+                                // token back.
+                                ops.push(ExprOp::LeftParen);
+                                exprs.push(Expr::Symbol(vref));
+                            }
                         }
                         e => {
                             if let Some(e) = e {
@@ -1071,6 +1079,23 @@ mod tests {
                         Add(Box::from(Integer(34)), Box::from(Integer(15))),
                         Call(VarRef::new("ask", VarType::Auto), vec![Integer(1), Boolean(false)]),
                     ],
+                )),
+            ),
+        );
+    }
+
+    #[test]
+    fn test_expr_functions_not_confused_with_symbols() {
+        use Expr::*;
+        let iref = VarRef::new("i", VarType::Auto);
+        let jref = VarRef::new("j", VarType::Auto);
+        do_expr_ok_test(
+            "i = 0 OR i = (j - 1)",
+            Or(
+                Box::from(Equal(Box::from(Symbol(iref.clone())), Box::from(Integer(0)))),
+                Box::from(Equal(
+                    Box::from(Symbol(iref)),
+                    Box::from(Subtract(Box::from(Symbol(jref)), Box::from(Integer(1)))),
                 )),
             ),
         );

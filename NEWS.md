@@ -5,6 +5,14 @@ the EndBASIC language definition nor the API exposed by this crate.  Expect
 them to change at any time (especially the Rust API).  Version numbers will
 not adhere to semantic versioning until 1.0.0.**
 
+## Changes in version X.Y.Z
+
+**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+
+*   Fixed the expression parser to properly handle symbol names that appear
+    immediately after a left parenthesis.  This broke with the addition of
+    function calls.
+
 ## Changes in version 0.5.1
 
 **Released on 2021-01-25.**
