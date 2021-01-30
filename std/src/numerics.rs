@@ -170,14 +170,12 @@ impl Command for RandomizeCommand {
             [] => {
                 *self.prng.borrow_mut() = Prng::new_from_entryopy();
             }
-            [(Some(expr), ArgSep::End)] => {
-                match expr.eval(machine.get_symbols(), machine.get_functions())? {
-                    Value::Integer(n) => {
-                        *self.prng.borrow_mut() = Prng::new_from_seed(n);
-                    }
-                    _ => return exec::new_usage_error("Random seed must be an integer"),
+            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_symbols())? {
+                Value::Integer(n) => {
+                    *self.prng.borrow_mut() = Prng::new_from_seed(n);
                 }
-            }
+                _ => return exec::new_usage_error("Random seed must be an integer"),
+            },
             _ => return exec::new_usage_error("RANDOMIZE takes zero or one argument"),
         };
         Ok(())
