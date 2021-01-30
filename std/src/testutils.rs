@@ -424,7 +424,7 @@ impl<'a> Checker<'a> {
             Err(e) => assert_eq!(self.exp_result.unwrap_err(), format!("{}", e)),
         };
 
-        assert_eq!(self.exp_vars, *self.tester.machine.get_vars().as_hashmap());
+        assert_eq!(self.exp_vars, *self.tester.machine.get_symbols().as_hashmap());
         assert_eq!(self.exp_output, self.tester.console.borrow().captured_out());
         assert_eq!(self.exp_program, self.tester.program.borrow().text());
         assert_eq!(self.exp_store, *self.tester.store.borrow().as_hashmap());

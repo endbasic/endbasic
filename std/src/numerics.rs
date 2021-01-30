@@ -171,7 +171,7 @@ impl Command for RandomizeCommand {
                 *self.prng.borrow_mut() = Prng::new_from_entryopy();
             }
             [(Some(expr), ArgSep::End)] => {
-                match expr.eval(machine.get_vars(), machine.get_functions())? {
+                match expr.eval(machine.get_symbols(), machine.get_functions())? {
                     Value::Integer(n) => {
                         *self.prng.borrow_mut() = Prng::new_from_seed(n);
                     }

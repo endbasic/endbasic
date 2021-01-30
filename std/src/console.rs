@@ -390,7 +390,7 @@ impl Command for ColorCommand {
 
         fn get_color(e: &Option<Expr>, machine: &Machine) -> exec::Result<Option<u8>> {
             match e {
-                Some(e) => match e.eval(machine.get_vars(), machine.get_functions())? {
+                Some(e) => match e.eval(machine.get_symbols(), machine.get_functions())? {
                     Value::Integer(i) if i >= 0 && i <= std::u8::MAX as i32 => Ok(Some(i as u8)),
                     Value::Integer(_) => exec::new_usage_error("Color out of range"),
                     _ => exec::new_usage_error("Color must be an integer"),
@@ -450,7 +450,7 @@ impl Command for InputCommand {
         }
 
         let mut prompt = match &args[0].0 {
-            Some(e) => match e.eval(machine.get_vars(), machine.get_functions())? {
+            Some(e) => match e.eval(machine.get_symbols(), machine.get_functions())? {
                 Value::Text(t) => t,
                 _ => return exec::new_usage_error("INPUT prompt must be a string"),
             },
@@ -464,7 +464,7 @@ impl Command for InputCommand {
             Some(Expr::Symbol(vref)) => vref,
             _ => return exec::new_usage_error("INPUT requires a variable reference"),
         };
-        let vref = machine.get_vars().qualify_varref(vref)?;
+        let vref = machine.get_symbols().qualify_varref(vref)?;
 
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
@@ -472,7 +472,7 @@ impl Command for InputCommand {
             match read_line(&mut *console, &prompt, &previous_answer).await {
                 Ok(answer) => match Value::parse_as(vref.ref_type(), answer.trim_end()) {
                     Ok(value) => {
-                        machine.get_mut_vars().set(&vref, value)?;
+                        machine.get_mut_symbols().set(&vref, value)?;
                         return Ok(());
                     }
                     Err(e) => {
@@ -530,7 +530,7 @@ impl Command for LocateCommand {
         debug_assert!(column_arg.1 == ArgSep::End);
 
         let row = match &row_arg.0 {
-            Some(arg) => match arg.eval(machine.get_vars(), machine.get_functions())? {
+            Some(arg) => match arg.eval(machine.get_symbols(), machine.get_functions())? {
                 Value::Integer(i) => {
                     if i < 0 {
                         return exec::new_usage_error("Row cannot be negative");
@@ -543,7 +543,7 @@ impl Command for LocateCommand {
         };
 
         let column = match &column_arg.0 {
-            Some(arg) => match arg.eval(machine.get_vars(), machine.get_functions())? {
+            Some(arg) => match arg.eval(machine.get_symbols(), machine.get_functions())? {
                 Value::Integer(i) => {
                     if i < 0 {
                         return exec::new_usage_error("Column cannot be negative");
@@ -599,7 +599,7 @@ impl Command for PrintCommand {
         let mut text = String::new();
         for arg in args.iter() {
             if let Some(expr) = arg.0.as_ref() {
-                text += &expr.eval(machine.get_vars(), machine.get_functions())?.to_string();
+                text += &expr.eval(machine.get_symbols(), machine.get_functions())?.to_string();
             }
             match arg.1 {
                 ArgSep::End => break,

@@ -85,7 +85,7 @@ impl Command for ExitCommand {
         let arg = match args {
             [] => 0,
             [(Some(expr), ArgSep::End)] => {
-                match expr.eval(machine.get_vars(), machine.get_functions())? {
+                match expr.eval(machine.get_symbols(), machine.get_functions())? {
                     Value::Integer(n) => {
                         if n < 0 {
                             return new_usage_error("Exit code must be a positive integer");

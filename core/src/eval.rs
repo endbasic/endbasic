@@ -313,14 +313,14 @@ impl ToString for Value {
     }
 }
 
-/// Storage for all variables that exist at runtime.
+/// Storage for all symbols that exist at runtime.
 #[derive(Debug, Default)]
-pub struct Vars {
+pub struct Symbols {
     /// Map of variable names (without type annotations) to their values.
     vars: HashMap<String, Value>,
 }
 
-impl Vars {
+impl Symbols {
     /// Returns the mapping of all variables.
     pub fn as_hashmap(&self) -> &HashMap<String, Value> {
         &self.vars
@@ -539,35 +539,39 @@ pub trait Function {
 impl Expr {
     /// Evaluates the expression to a value.
     ///
-    /// Variable references are resolved by querying `vars`.  Function calls are resolved by
+    /// Variable references are resolved by querying `syms`.  Function calls are resolved by
     /// querying `fs`.  Errors in the computation are returned via the special `Value::Bad` type.
-    pub fn eval(&self, vars: &Vars, fs: &HashMap<&'static str, Rc<dyn Function>>) -> Result<Value> {
+    pub fn eval(
+        &self,
+        syms: &Symbols,
+        fs: &HashMap<&'static str, Rc<dyn Function>>,
+    ) -> Result<Value> {
         match self {
             Expr::Boolean(b) => Ok(Value::Boolean(*b)),
             Expr::Double(d) => Ok(Value::Double(*d)),
             Expr::Integer(i) => Ok(Value::Integer(*i)),
             Expr::Text(s) => Ok(Value::Text(s.clone())),
 
-            Expr::Symbol(vref) => Ok(vars.get(vref)?.clone()),
+            Expr::Symbol(vref) => Ok(syms.get(vref)?.clone()),
 
-            Expr::And(lhs, rhs) => Value::and(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
-            Expr::Or(lhs, rhs) => Value::or(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
-            Expr::Xor(lhs, rhs) => Value::xor(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
-            Expr::Not(v) => Value::not(&v.eval(vars, fs)?),
+            Expr::And(lhs, rhs) => Value::and(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
+            Expr::Or(lhs, rhs) => Value::or(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
+            Expr::Xor(lhs, rhs) => Value::xor(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
+            Expr::Not(v) => Value::not(&v.eval(syms, fs)?),
 
-            Expr::Equal(lhs, rhs) => Value::eq(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
-            Expr::NotEqual(lhs, rhs) => Value::ne(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
-            Expr::Less(lhs, rhs) => Value::lt(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
-            Expr::LessEqual(lhs, rhs) => Value::le(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
-            Expr::Greater(lhs, rhs) => Value::gt(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
-            Expr::GreaterEqual(lhs, rhs) => Value::ge(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
+            Expr::Equal(lhs, rhs) => Value::eq(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
+            Expr::NotEqual(lhs, rhs) => Value::ne(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
+            Expr::Less(lhs, rhs) => Value::lt(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
+            Expr::LessEqual(lhs, rhs) => Value::le(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
+            Expr::Greater(lhs, rhs) => Value::gt(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
+            Expr::GreaterEqual(lhs, rhs) => Value::ge(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
 
-            Expr::Add(lhs, rhs) => Value::add(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
-            Expr::Subtract(lhs, rhs) => Value::sub(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
-            Expr::Multiply(lhs, rhs) => Value::mul(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
-            Expr::Divide(lhs, rhs) => Value::div(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
-            Expr::Modulo(lhs, rhs) => Value::modulo(&lhs.eval(vars, fs)?, &rhs.eval(vars, fs)?),
-            Expr::Negate(e) => Value::neg(&e.eval(vars, fs)?),
+            Expr::Add(lhs, rhs) => Value::add(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
+            Expr::Subtract(lhs, rhs) => Value::sub(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
+            Expr::Multiply(lhs, rhs) => Value::mul(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
+            Expr::Divide(lhs, rhs) => Value::div(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
+            Expr::Modulo(lhs, rhs) => Value::modulo(&lhs.eval(syms, fs)?, &rhs.eval(syms, fs)?),
+            Expr::Negate(e) => Value::neg(&e.eval(syms, fs)?),
 
             Expr::Call(fref, args) => match fs.get(fref.name().to_ascii_uppercase().as_str()) {
                 Some(f) => {
@@ -579,7 +583,7 @@ impl Expr {
 
                     let mut values = Vec::with_capacity(args.len());
                     for a in args {
-                        values.push(a.eval(vars, fs)?);
+                        values.push(a.eval(syms, fs)?);
                     }
                     let result = f.exec(values);
                     match result {
@@ -1343,218 +1347,218 @@ mod tests {
     }
 
     #[test]
-    fn test_vars_clear() {
+    fn test_symbols_clear() {
         let mut raw_vars = HashMap::new();
         raw_vars.insert("FOO".to_owned(), Value::Boolean(true));
-        let mut vars = Vars { vars: raw_vars };
-        assert!(!vars.is_empty());
-        vars.clear();
-        assert!(vars.is_empty());
+        let mut syms = Symbols { vars: raw_vars };
+        assert!(!syms.is_empty());
+        syms.clear();
+        assert!(syms.is_empty());
     }
 
     #[test]
-    fn test_vars_dim() {
-        let mut vars = Vars::default();
+    fn test_symbols_dim() {
+        let mut syms = Symbols::default();
 
-        vars.dim("a_boolean", VarType::Boolean).unwrap();
+        syms.dim("a_boolean", VarType::Boolean).unwrap();
         assert_eq!(
             Value::Boolean(false),
-            *vars.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
+            *syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
         );
 
-        vars.dim("a_double", VarType::Double).unwrap();
-        assert_eq!(Value::Double(0.0), *vars.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
+        syms.dim("a_double", VarType::Double).unwrap();
+        assert_eq!(Value::Double(0.0), *syms.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
 
-        vars.dim("an_integer", VarType::Integer).unwrap();
+        syms.dim("an_integer", VarType::Integer).unwrap();
         assert_eq!(
             Value::Integer(0),
-            *vars.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
+            *syms.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
         );
 
-        vars.dim("a_string", VarType::Text).unwrap();
+        syms.dim("a_string", VarType::Text).unwrap();
         assert_eq!(
             Value::Text("".to_owned()),
-            *vars.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
+            *syms.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
         );
 
         assert_eq!(
             "Cannot DIM already-defined variable An_Integer",
-            format!("{}", vars.dim("An_Integer", VarType::Integer).unwrap_err())
+            format!("{}", syms.dim("An_Integer", VarType::Integer).unwrap_err())
         );
     }
 
     #[test]
-    fn test_vars_get_ok_with_explicit_type() {
+    fn test_symbols_get_ok_with_explicit_type() {
         let mut raw_vars = HashMap::new();
         raw_vars.insert("A_BOOLEAN".to_owned(), Value::Boolean(true));
         raw_vars.insert("A_DOUBLE".to_owned(), Value::Double(3.0));
         raw_vars.insert("AN_INTEGER".to_owned(), Value::Integer(3));
         raw_vars.insert("A_STRING".to_owned(), Value::Text("some text".to_owned()));
-        let vars = Vars { vars: raw_vars };
+        let syms = Symbols { vars: raw_vars };
 
         assert_eq!(
             Value::Boolean(true),
-            *vars.get(&VarRef::new("a_boolean", VarType::Boolean)).unwrap()
+            *syms.get(&VarRef::new("a_boolean", VarType::Boolean)).unwrap()
         );
         assert_eq!(
             Value::Double(3.0),
-            *vars.get(&VarRef::new("a_double", VarType::Double)).unwrap()
+            *syms.get(&VarRef::new("a_double", VarType::Double)).unwrap()
         );
         assert_eq!(
             Value::Integer(3),
-            *vars.get(&VarRef::new("an_integer", VarType::Integer)).unwrap()
+            *syms.get(&VarRef::new("an_integer", VarType::Integer)).unwrap()
         );
         assert_eq!(
             Value::Text("some text".to_owned()),
-            *vars.get(&VarRef::new("a_string", VarType::Text)).unwrap()
+            *syms.get(&VarRef::new("a_string", VarType::Text)).unwrap()
         );
     }
 
     #[test]
-    fn test_vars_get_ok_with_auto_type() {
+    fn test_symbols_get_ok_with_auto_type() {
         let mut raw_vars = HashMap::new();
         raw_vars.insert("A_BOOLEAN".to_owned(), Value::Boolean(true));
         raw_vars.insert("A_DOUBLE".to_owned(), Value::Double(3.0));
         raw_vars.insert("AN_INTEGER".to_owned(), Value::Integer(3));
         raw_vars.insert("A_STRING".to_owned(), Value::Text("some text".to_owned()));
-        let vars = Vars { vars: raw_vars };
+        let syms = Symbols { vars: raw_vars };
 
         assert_eq!(
             Value::Boolean(true),
-            *vars.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
+            *syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
         );
-        assert_eq!(Value::Double(3.0), *vars.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
+        assert_eq!(Value::Double(3.0), *syms.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
         assert_eq!(
             Value::Integer(3),
-            *vars.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
+            *syms.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
         );
         assert_eq!(
             Value::Text("some text".to_owned()),
-            *vars.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
+            *syms.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
         );
     }
 
     #[test]
-    fn test_vars_get_undefined_error() {
+    fn test_symbols_get_undefined_error() {
         let mut raw_vars = HashMap::new();
         raw_vars.insert("a_string".to_owned(), Value::Text("some text".to_owned()));
-        let vars = Vars { vars: raw_vars };
+        let syms = Symbols { vars: raw_vars };
 
         assert_eq!(
             "Undefined variable a_str",
-            format!("{}", vars.get(&VarRef::new("a_str", VarType::Integer)).unwrap_err())
+            format!("{}", syms.get(&VarRef::new("a_str", VarType::Integer)).unwrap_err())
         );
     }
 
     #[test]
-    fn test_vars_get_mismatched_type_error() {
+    fn test_symbols_get_mismatched_type_error() {
         let mut raw_vars = HashMap::new();
         raw_vars.insert("A_BOOLEAN".to_owned(), Value::Boolean(true));
         raw_vars.insert("A_DOUBLE".to_owned(), Value::Double(3.0));
         raw_vars.insert("AN_INTEGER".to_owned(), Value::Integer(3));
         raw_vars.insert("A_STRING".to_owned(), Value::Text("some text".to_owned()));
-        let vars = Vars { vars: raw_vars };
+        let syms = Symbols { vars: raw_vars };
 
         assert_eq!(
             "Incompatible types in a_boolean$ reference",
-            format!("{}", vars.get(&VarRef::new("a_boolean", VarType::Text)).unwrap_err())
+            format!("{}", syms.get(&VarRef::new("a_boolean", VarType::Text)).unwrap_err())
         );
 
         assert_eq!(
             "Incompatible types in a_double% reference",
-            format!("{}", vars.get(&VarRef::new("a_double", VarType::Integer)).unwrap_err())
+            format!("{}", syms.get(&VarRef::new("a_double", VarType::Integer)).unwrap_err())
         );
 
         assert_eq!(
             "Incompatible types in an_integer# reference",
-            format!("{}", vars.get(&VarRef::new("an_integer", VarType::Double)).unwrap_err())
+            format!("{}", syms.get(&VarRef::new("an_integer", VarType::Double)).unwrap_err())
         );
 
         assert_eq!(
             "Incompatible types in a_string% reference",
-            format!("{}", vars.get(&VarRef::new("a_string", VarType::Integer)).unwrap_err())
+            format!("{}", syms.get(&VarRef::new("a_string", VarType::Integer)).unwrap_err())
         );
     }
 
     #[test]
-    fn test_vars_qualify_varref() {
+    fn test_symbols_qualify_varref() {
         let mut raw_vars = HashMap::new();
         raw_vars.insert("V".to_owned(), Value::Boolean(true));
-        let vars = Vars { vars: raw_vars };
+        let syms = Symbols { vars: raw_vars };
 
         assert_eq!(
             VarRef::new("V", VarType::Boolean),
-            vars.qualify_varref(&VarRef::new("V", VarType::Auto)).unwrap(),
+            syms.qualify_varref(&VarRef::new("V", VarType::Auto)).unwrap(),
         );
         assert_eq!(
             VarRef::new("V", VarType::Boolean),
-            vars.qualify_varref(&VarRef::new("V", VarType::Boolean)).unwrap(),
+            syms.qualify_varref(&VarRef::new("V", VarType::Boolean)).unwrap(),
         );
         assert_eq!(
             "Incompatible types in V% reference",
-            format!("{}", vars.qualify_varref(&VarRef::new("V", VarType::Integer)).unwrap_err()),
+            format!("{}", syms.qualify_varref(&VarRef::new("V", VarType::Integer)).unwrap_err()),
         );
 
         assert_eq!(
             VarRef::new("UNDEF", VarType::Auto),
-            vars.qualify_varref(&VarRef::new("UNDEF", VarType::Auto)).unwrap(),
+            syms.qualify_varref(&VarRef::new("UNDEF", VarType::Auto)).unwrap(),
         );
     }
 
     #[test]
-    fn test_vars_set_ok_with_explicit_type() {
-        let mut vars = Vars::default();
+    fn test_symbols_set_ok_with_explicit_type() {
+        let mut syms = Symbols::default();
 
-        vars.set(&VarRef::new("a_boolean", VarType::Boolean), Value::Boolean(true)).unwrap();
+        syms.set(&VarRef::new("a_boolean", VarType::Boolean), Value::Boolean(true)).unwrap();
         assert_eq!(
             Value::Boolean(true),
-            *vars.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
+            *syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
         );
 
-        vars.set(&VarRef::new("a_double", VarType::Double), Value::Double(0.0)).unwrap();
-        assert_eq!(Value::Double(0.0), *vars.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
+        syms.set(&VarRef::new("a_double", VarType::Double), Value::Double(0.0)).unwrap();
+        assert_eq!(Value::Double(0.0), *syms.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
 
-        vars.set(&VarRef::new("an_integer", VarType::Integer), Value::Integer(0)).unwrap();
+        syms.set(&VarRef::new("an_integer", VarType::Integer), Value::Integer(0)).unwrap();
         assert_eq!(
             Value::Integer(0),
-            *vars.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
+            *syms.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
         );
 
-        vars.set(&VarRef::new("a_string", VarType::Text), Value::Text("x".to_owned())).unwrap();
+        syms.set(&VarRef::new("a_string", VarType::Text), Value::Text("x".to_owned())).unwrap();
         assert_eq!(
             Value::Text("x".to_owned()),
-            *vars.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
+            *syms.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
         );
     }
 
     #[test]
-    fn test_vars_set_ok_with_auto_type() {
-        let mut vars = Vars::default();
+    fn test_symbols_set_ok_with_auto_type() {
+        let mut syms = Symbols::default();
 
-        vars.set(&VarRef::new("a_boolean", VarType::Auto), Value::Boolean(true)).unwrap();
+        syms.set(&VarRef::new("a_boolean", VarType::Auto), Value::Boolean(true)).unwrap();
         assert_eq!(
             Value::Boolean(true),
-            *vars.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
+            *syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
         );
 
-        vars.set(&VarRef::new("a_double", VarType::Auto), Value::Double(0.0)).unwrap();
-        assert_eq!(Value::Double(0.0), *vars.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
+        syms.set(&VarRef::new("a_double", VarType::Auto), Value::Double(0.0)).unwrap();
+        assert_eq!(Value::Double(0.0), *syms.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
 
-        vars.set(&VarRef::new("an_integer", VarType::Auto), Value::Integer(0)).unwrap();
+        syms.set(&VarRef::new("an_integer", VarType::Auto), Value::Integer(0)).unwrap();
         assert_eq!(
             Value::Integer(0),
-            *vars.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
+            *syms.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
         );
 
-        vars.set(&VarRef::new("a_string", VarType::Auto), Value::Text("x".to_owned())).unwrap();
+        syms.set(&VarRef::new("a_string", VarType::Auto), Value::Text("x".to_owned())).unwrap();
         assert_eq!(
             Value::Text("x".to_owned()),
-            *vars.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
+            *syms.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
         );
     }
 
     #[test]
-    fn test_vars_set_mismatched_type_with_existing_value() {
+    fn test_symbols_set_mismatched_type_with_existing_value() {
         let bool_ref = VarRef::new("a_boolean", VarType::Auto);
         let bool_val = Value::Boolean(true);
         let double_ref = VarRef::new("a_double", VarType::Auto);
@@ -1564,32 +1568,32 @@ mod tests {
         let text_ref = VarRef::new("a_string", VarType::Auto);
         let text_val = Value::Text("x".to_owned());
 
-        let mut vars = Vars::default();
-        vars.set(&bool_ref, bool_val.clone()).unwrap();
-        vars.set(&double_ref, double_val.clone()).unwrap();
-        vars.set(&int_ref, int_val.clone()).unwrap();
-        vars.set(&text_ref, text_val.clone()).unwrap();
+        let mut syms = Symbols::default();
+        syms.set(&bool_ref, bool_val.clone()).unwrap();
+        syms.set(&double_ref, double_val.clone()).unwrap();
+        syms.set(&int_ref, int_val.clone()).unwrap();
+        syms.set(&text_ref, text_val.clone()).unwrap();
 
         assert_eq!(
             "Incompatible types in a_boolean assignment",
-            format!("{}", vars.set(&bool_ref, text_val).unwrap_err())
+            format!("{}", syms.set(&bool_ref, text_val).unwrap_err())
         );
         assert_eq!(
             "Incompatible types in a_double assignment",
-            format!("{}", vars.set(&double_ref, int_val).unwrap_err())
+            format!("{}", syms.set(&double_ref, int_val).unwrap_err())
         );
         assert_eq!(
             "Incompatible types in an_integer assignment",
-            format!("{}", vars.set(&int_ref, double_val).unwrap_err())
+            format!("{}", syms.set(&int_ref, double_val).unwrap_err())
         );
         assert_eq!(
             "Incompatible types in a_string assignment",
-            format!("{}", vars.set(&text_ref, bool_val).unwrap_err())
+            format!("{}", syms.set(&text_ref, bool_val).unwrap_err())
         );
     }
 
     #[test]
-    fn test_vars_set_mismatched_type_for_annotation() {
+    fn test_symbols_set_mismatched_type_for_annotation() {
         let bool_ref = VarRef::new("a_boolean", VarType::Boolean);
         let bool_val = Value::Boolean(true);
         let double_ref = VarRef::new("a_double", VarType::Double);
@@ -1599,51 +1603,51 @@ mod tests {
         let text_ref = VarRef::new("a_string", VarType::Text);
         let text_val = Value::Text("x".to_owned());
 
-        let mut vars = Vars::default();
+        let mut syms = Symbols::default();
         assert_eq!(
             "Incompatible types in a_boolean? assignment",
-            format!("{}", vars.set(&bool_ref, text_val).unwrap_err())
+            format!("{}", syms.set(&bool_ref, text_val).unwrap_err())
         );
         assert_eq!(
             "Incompatible types in a_double# assignment",
-            format!("{}", vars.set(&double_ref, int_val).unwrap_err())
+            format!("{}", syms.set(&double_ref, int_val).unwrap_err())
         );
         assert_eq!(
             "Incompatible types in an_integer% assignment",
-            format!("{}", vars.set(&int_ref, double_val).unwrap_err())
+            format!("{}", syms.set(&int_ref, double_val).unwrap_err())
         );
         assert_eq!(
             "Incompatible types in a_string$ assignment",
-            format!("{}", vars.set(&text_ref, bool_val).unwrap_err())
+            format!("{}", syms.set(&text_ref, bool_val).unwrap_err())
         );
     }
 
     #[test]
-    fn test_vars_get_set_case_insensitivity() {
-        let mut vars = Vars::default();
-        vars.set(&VarRef::new("SomeName", VarType::Auto), Value::Integer(6)).unwrap();
-        assert_eq!(Value::Integer(6), *vars.get(&VarRef::new("somename", VarType::Auto)).unwrap());
+    fn test_symbols_get_set_case_insensitivity() {
+        let mut syms = Symbols::default();
+        syms.set(&VarRef::new("SomeName", VarType::Auto), Value::Integer(6)).unwrap();
+        assert_eq!(Value::Integer(6), *syms.get(&VarRef::new("somename", VarType::Auto)).unwrap());
     }
 
     #[test]
-    fn test_vars_get_set_replace_value() {
-        let mut vars = Vars::default();
-        vars.set(&VarRef::new("the_var", VarType::Auto), Value::Integer(100)).unwrap();
-        assert_eq!(Value::Integer(100), *vars.get(&VarRef::new("the_var", VarType::Auto)).unwrap());
-        vars.set(&VarRef::new("the_var", VarType::Auto), Value::Integer(200)).unwrap();
-        assert_eq!(Value::Integer(200), *vars.get(&VarRef::new("the_var", VarType::Auto)).unwrap());
+    fn test_symbols_get_set_replace_value() {
+        let mut syms = Symbols::default();
+        syms.set(&VarRef::new("the_var", VarType::Auto), Value::Integer(100)).unwrap();
+        assert_eq!(Value::Integer(100), *syms.get(&VarRef::new("the_var", VarType::Auto)).unwrap());
+        syms.set(&VarRef::new("the_var", VarType::Auto), Value::Integer(200)).unwrap();
+        assert_eq!(Value::Integer(200), *syms.get(&VarRef::new("the_var", VarType::Auto)).unwrap());
     }
 
     #[test]
     fn test_expr_literals() {
-        let vars = Vars::default();
+        let syms = Symbols::default();
         let fs = HashMap::default();
-        assert_eq!(Value::Boolean(true), Expr::Boolean(true).eval(&vars, &fs).unwrap());
-        assert_eq!(Value::Double(0.0), Expr::Double(0.0).eval(&vars, &fs).unwrap());
-        assert_eq!(Value::Integer(0), Expr::Integer(0).eval(&vars, &fs).unwrap());
+        assert_eq!(Value::Boolean(true), Expr::Boolean(true).eval(&syms, &fs).unwrap());
+        assert_eq!(Value::Double(0.0), Expr::Double(0.0).eval(&syms, &fs).unwrap());
+        assert_eq!(Value::Integer(0), Expr::Integer(0).eval(&syms, &fs).unwrap());
         assert_eq!(
             Value::Text("z".to_owned()),
-            Expr::Text("z".to_owned()).eval(&vars, &fs).unwrap()
+            Expr::Text("z".to_owned()).eval(&syms, &fs).unwrap()
         );
     }
 
@@ -1658,24 +1662,24 @@ mod tests {
         let text_ref = VarRef::new("a_string", VarType::Auto);
         let text_val = Value::Text("x".to_owned());
 
-        let mut vars = Vars::default();
-        vars.set(&bool_ref, bool_val.clone()).unwrap();
-        vars.set(&double_ref, double_val.clone()).unwrap();
-        vars.set(&int_ref, int_val.clone()).unwrap();
-        vars.set(&text_ref, text_val.clone()).unwrap();
+        let mut syms = Symbols::default();
+        syms.set(&bool_ref, bool_val.clone()).unwrap();
+        syms.set(&double_ref, double_val.clone()).unwrap();
+        syms.set(&int_ref, int_val.clone()).unwrap();
+        syms.set(&text_ref, text_val.clone()).unwrap();
 
         let fs = HashMap::default();
 
-        assert_eq!(bool_val, Expr::Symbol(bool_ref).eval(&vars, &fs).unwrap());
-        assert_eq!(double_val, Expr::Symbol(double_ref).eval(&vars, &fs).unwrap());
-        assert_eq!(int_val, Expr::Symbol(int_ref).eval(&vars, &fs).unwrap());
-        assert_eq!(text_val, Expr::Symbol(text_ref).eval(&vars, &fs).unwrap());
+        assert_eq!(bool_val, Expr::Symbol(bool_ref).eval(&syms, &fs).unwrap());
+        assert_eq!(double_val, Expr::Symbol(double_ref).eval(&syms, &fs).unwrap());
+        assert_eq!(int_val, Expr::Symbol(int_ref).eval(&syms, &fs).unwrap());
+        assert_eq!(text_val, Expr::Symbol(text_ref).eval(&syms, &fs).unwrap());
 
         assert_eq!(
             "Undefined variable x",
             format!(
                 "{}",
-                Expr::Symbol(VarRef::new("x", VarType::Auto)).eval(&vars, &fs).unwrap_err()
+                Expr::Symbol(VarRef::new("x", VarType::Auto)).eval(&syms, &fs).unwrap_err()
             )
         );
     }
@@ -1689,23 +1693,23 @@ mod tests {
         // expression operator to essentially avoid duplicating all those tests.  We do this by
         // triggering errors and rely on the fact that their messages are different for every
         // operation.
-        let vars = Vars::default();
+        let syms = Symbols::default();
         let fs = HashMap::default();
         assert_eq!(
             "Cannot AND Boolean(false) and Integer(0)",
-            format!("{}", Expr::And(a_bool.clone(), an_int.clone()).eval(&vars, &fs).unwrap_err())
+            format!("{}", Expr::And(a_bool.clone(), an_int.clone()).eval(&syms, &fs).unwrap_err())
         );
         assert_eq!(
             "Cannot OR Boolean(false) and Integer(0)",
-            format!("{}", Expr::Or(a_bool.clone(), an_int.clone()).eval(&vars, &fs).unwrap_err())
+            format!("{}", Expr::Or(a_bool.clone(), an_int.clone()).eval(&syms, &fs).unwrap_err())
         );
         assert_eq!(
             "Cannot XOR Boolean(false) and Integer(0)",
-            format!("{}", Expr::Xor(a_bool, an_int.clone()).eval(&vars, &fs).unwrap_err())
+            format!("{}", Expr::Xor(a_bool, an_int.clone()).eval(&syms, &fs).unwrap_err())
         );
         assert_eq!(
             "Cannot apply NOT to Integer(0)",
-            format!("{}", Expr::Not(an_int).eval(&vars, &fs).unwrap_err())
+            format!("{}", Expr::Not(an_int).eval(&syms, &fs).unwrap_err())
         );
     }
 
@@ -1718,43 +1722,43 @@ mod tests {
         // expression operator to essentially avoid duplicating all those tests.  We do this by
         // triggering errors and rely on the fact that their messages are different for every
         // operation.
-        let vars = Vars::default();
+        let syms = Symbols::default();
         let fs = HashMap::default();
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with =",
             format!(
                 "{}",
-                Expr::Equal(a_bool.clone(), an_int.clone()).eval(&vars, &fs).unwrap_err()
+                Expr::Equal(a_bool.clone(), an_int.clone()).eval(&syms, &fs).unwrap_err()
             )
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with <>",
             format!(
                 "{}",
-                Expr::NotEqual(a_bool.clone(), an_int.clone()).eval(&vars, &fs).unwrap_err()
+                Expr::NotEqual(a_bool.clone(), an_int.clone()).eval(&syms, &fs).unwrap_err()
             )
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with <",
-            format!("{}", Expr::Less(a_bool.clone(), an_int.clone()).eval(&vars, &fs).unwrap_err())
+            format!("{}", Expr::Less(a_bool.clone(), an_int.clone()).eval(&syms, &fs).unwrap_err())
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with <=",
             format!(
                 "{}",
-                Expr::LessEqual(a_bool.clone(), an_int.clone()).eval(&vars, &fs).unwrap_err()
+                Expr::LessEqual(a_bool.clone(), an_int.clone()).eval(&syms, &fs).unwrap_err()
             )
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with >",
             format!(
                 "{}",
-                Expr::Greater(a_bool.clone(), an_int.clone()).eval(&vars, &fs).unwrap_err()
+                Expr::Greater(a_bool.clone(), an_int.clone()).eval(&syms, &fs).unwrap_err()
             )
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with >=",
-            format!("{}", Expr::GreaterEqual(a_bool, an_int).eval(&vars, &fs).unwrap_err())
+            format!("{}", Expr::GreaterEqual(a_bool, an_int).eval(&syms, &fs).unwrap_err())
         );
     }
 
@@ -1767,33 +1771,33 @@ mod tests {
         // expression operator to essentially avoid duplicating all those tests.  We do this by
         // triggering errors and rely on the fact that their messages are different for every
         // operation.
-        let vars = Vars::default();
+        let syms = Symbols::default();
         let fs = HashMap::default();
         assert_eq!(
             "Cannot add Boolean(false) and Integer(0)",
-            format!("{}", Expr::Add(a_bool.clone(), an_int.clone()).eval(&vars, &fs).unwrap_err())
+            format!("{}", Expr::Add(a_bool.clone(), an_int.clone()).eval(&syms, &fs).unwrap_err())
         );
         assert_eq!(
             "Cannot subtract Integer(0) from Boolean(false)",
             format!(
                 "{}",
-                Expr::Subtract(a_bool.clone(), an_int.clone()).eval(&vars, &fs).unwrap_err()
+                Expr::Subtract(a_bool.clone(), an_int.clone()).eval(&syms, &fs).unwrap_err()
             )
         );
         assert_eq!(
             "Cannot multiply Boolean(false) by Integer(0)",
             format!(
                 "{}",
-                Expr::Multiply(a_bool.clone(), an_int.clone()).eval(&vars, &fs).unwrap_err()
+                Expr::Multiply(a_bool.clone(), an_int.clone()).eval(&syms, &fs).unwrap_err()
             )
         );
         assert_eq!(
             "Cannot divide Boolean(false) by Integer(0)",
-            format!("{}", Expr::Divide(a_bool.clone(), an_int).eval(&vars, &fs).unwrap_err())
+            format!("{}", Expr::Divide(a_bool.clone(), an_int).eval(&syms, &fs).unwrap_err())
         );
         assert_eq!(
             "Cannot negate Boolean(false)",
-            format!("{}", Expr::Negate(a_bool).eval(&vars, &fs).unwrap_err())
+            format!("{}", Expr::Negate(a_bool).eval(&syms, &fs).unwrap_err())
         );
     }
 
@@ -1802,9 +1806,9 @@ mod tests {
         let xref = VarRef::new("x", VarType::Integer);
         let yref = VarRef::new("y", VarType::Integer);
 
-        let mut vars = Vars::default();
-        vars.set(&xref, Value::Integer(10)).unwrap();
-        vars.set(&yref, Value::Integer(3)).unwrap();
+        let mut syms = Symbols::default();
+        syms.set(&xref, Value::Integer(10)).unwrap();
+        syms.set(&yref, Value::Integer(3)).unwrap();
 
         let fs = HashMap::default();
 
@@ -1817,7 +1821,7 @@ mod tests {
                 )),
                 Box::from(Expr::Symbol(yref.clone()))
             )
-            .eval(&vars, &fs)
+            .eval(&syms, &fs)
             .unwrap()
         );
 
@@ -1827,7 +1831,7 @@ mod tests {
                 Box::from(Expr::Symbol(xref)),
                 Box::from(Expr::Add(Box::from(Expr::Integer(7)), Box::from(Expr::Symbol(yref))))
             )
-            .eval(&vars, &fs)
+            .eval(&syms, &fs)
             .unwrap()
         );
 
@@ -1842,7 +1846,7 @@ mod tests {
                         Box::from(Expr::Boolean(true))
                     ))
                 )
-                .eval(&vars, &fs)
+                .eval(&syms, &fs)
                 .unwrap_err()
             )
         );
@@ -1852,8 +1856,8 @@ mod tests {
     fn test_expr_function_call_simple() {
         let xref = VarRef::new("x", VarType::Integer);
 
-        let mut vars = Vars::default();
-        vars.set(&xref, Value::Integer(5)).unwrap();
+        let mut syms = Symbols::default();
+        syms.set(&xref, Value::Integer(5)).unwrap();
 
         let mut fs: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
         let sum = SumFunction::new();
@@ -1862,14 +1866,14 @@ mod tests {
         assert_eq!(
             Value::Integer(0),
             Expr::Call(VarRef::new("SUM".to_owned(), VarType::Auto), vec![],)
-                .eval(&vars, &fs)
+                .eval(&syms, &fs)
                 .unwrap()
         );
 
         assert_eq!(
             Value::Integer(5),
             Expr::Call(VarRef::new("sum".to_owned(), VarType::Auto), vec![Expr::Integer(5)],)
-                .eval(&vars, &fs)
+                .eval(&syms, &fs)
                 .unwrap()
         );
 
@@ -1879,7 +1883,7 @@ mod tests {
                 VarRef::new("SUM".to_owned(), VarType::Auto),
                 vec![Expr::Integer(5), Expr::Integer(2)],
             )
-            .eval(&vars, &fs)
+            .eval(&syms, &fs)
             .unwrap()
         );
 
@@ -1893,7 +1897,7 @@ mod tests {
                     Expr::Subtract(Box::from(Expr::Integer(100)), Box::from(Expr::Integer(90)))
                 ],
             )
-            .eval(&vars, &fs)
+            .eval(&syms, &fs)
             .unwrap()
         );
 
@@ -1902,7 +1906,7 @@ mod tests {
             format!(
                 "{}",
                 Expr::Call(VarRef::new("SUM".to_owned(), VarType::Text), vec![])
-                    .eval(&vars, &fs)
+                    .eval(&syms, &fs)
                     .unwrap_err()
             )
         );
@@ -1912,7 +1916,7 @@ mod tests {
             format!(
                 "{}",
                 Expr::Call(VarRef::new("SUMA".to_owned(), VarType::Text), vec![])
-                    .eval(&vars, &fs)
+                    .eval(&syms, &fs)
                     .unwrap_err()
             )
         );
@@ -1920,7 +1924,7 @@ mod tests {
 
     #[test]
     fn test_expr_function_call_type_check() {
-        let vars = Vars::default();
+        let syms = Symbols::default();
 
         {
             let mut fs: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
@@ -1929,7 +1933,7 @@ mod tests {
             assert_eq!(
                 Value::Boolean(true),
                 Expr::Call(VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto), vec![],)
-                    .eval(&vars, &fs)
+                    .eval(&syms, &fs)
                     .unwrap()
             );
         }
@@ -1943,7 +1947,7 @@ mod tests {
                 format!(
                     "{}",
                     Expr::Call(VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto), vec![],)
-                        .eval(&vars, &fs)
+                        .eval(&syms, &fs)
                         .unwrap_err()
                 )
             );
@@ -1952,7 +1956,7 @@ mod tests {
 
     #[test]
     fn test_expr_function_error_check() {
-        let vars = Vars::default();
+        let syms = Symbols::default();
 
         let mut fs: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
         let ef = ErrorFunction::new();
@@ -1966,7 +1970,7 @@ mod tests {
                     VarRef::new("ERROR".to_owned(), VarType::Auto),
                     vec![Expr::Text("argument".to_owned())],
                 )
-                .eval(&vars, &fs)
+                .eval(&syms, &fs)
                 .unwrap_err()
             )
         );
@@ -1979,7 +1983,7 @@ mod tests {
                     VarRef::new("ERROR".to_owned(), VarType::Auto),
                     vec![Expr::Text("eval".to_owned())],
                 )
-                .eval(&vars, &fs)
+                .eval(&syms, &fs)
                 .unwrap_err()
             )
         );
@@ -1992,7 +1996,7 @@ mod tests {
                     VarRef::new("ERROR".to_owned(), VarType::Auto),
                     vec![Expr::Text("internal".to_owned())],
                 )
-                .eval(&vars, &fs)
+                .eval(&syms, &fs)
                 .unwrap_err()
             )
         );
@@ -2005,7 +2009,7 @@ mod tests {
                     VarRef::new("ERROR".to_owned(), VarType::Auto),
                     vec![Expr::Text("syntax".to_owned())],
                 )
-                .eval(&vars, &fs)
+                .eval(&syms, &fs)
                 .unwrap_err()
             )
         );

@@ -16,7 +16,7 @@
 //! Execution engine for EndBASIC programs.
 
 use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
-use crate::eval::{self, CallableMetadata, Function, Vars};
+use crate::eval::{self, CallableMetadata, Function, Symbols};
 use crate::parser::{self, Parser};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -117,7 +117,7 @@ impl StopReason {
 pub struct Machine {
     commands: HashMap<&'static str, Rc<dyn Command>>,
     functions: HashMap<&'static str, Rc<dyn Function>>,
-    vars: Vars,
+    symbols: Symbols,
     stop_reason: Option<StopReason>,
 }
 
@@ -144,7 +144,7 @@ impl Machine {
 
     /// Resets the state of the machine by clearing all variable.
     pub fn clear(&mut self) {
-        self.vars.clear()
+        self.symbols.clear()
     }
 
     /// Tells the machine to stop execution at the next statement boundary.
@@ -165,20 +165,20 @@ impl Machine {
         &self.functions
     }
 
-    /// Obtains immutable access to the state of the variables.
-    pub fn get_vars(&self) -> &Vars {
-        &self.vars
+    /// Obtains immutable access to the state of the symbols.
+    pub fn get_symbols(&self) -> &Symbols {
+        &self.symbols
     }
 
-    /// Obtains mutable access to the state of the variables.
-    pub fn get_mut_vars(&mut self) -> &mut Vars {
-        &mut self.vars
+    /// Obtains mutable access to the state of the symbols.
+    pub fn get_mut_symbols(&mut self) -> &mut Symbols {
+        &mut self.symbols
     }
 
     /// Retrieves the variable `name` as a boolean.  Fails if it is some other type or if it's not
     /// defined.
     pub fn get_var_as_bool(&self, name: &str) -> Result<bool> {
-        match self.vars.get(&VarRef::new(name, VarType::Boolean))? {
+        match self.symbols.get(&VarRef::new(name, VarType::Boolean))? {
             Value::Boolean(b) => Ok(*b),
             _ => panic!("Invalid type check in get()"),
         }
@@ -187,7 +187,7 @@ impl Machine {
     /// Retrieves the variable `name` as an integer.  Fails if it is some other type or if it's not
     /// defined.
     pub fn get_var_as_int(&self, name: &str) -> Result<i32> {
-        match self.vars.get(&VarRef::new(name, VarType::Integer))? {
+        match self.symbols.get(&VarRef::new(name, VarType::Integer))? {
             Value::Integer(i) => Ok(*i),
             _ => panic!("Invalid type check in get()"),
         }
@@ -196,7 +196,7 @@ impl Machine {
     /// Retrieves the variable `name` as a string.  Fails if it is some other type or if it's not
     /// defined.
     pub fn get_var_as_string(&self, name: &str) -> Result<&str> {
-        match self.vars.get(&VarRef::new(name, VarType::Text))? {
+        match self.symbols.get(&VarRef::new(name, VarType::Text))? {
             Value::Text(s) => Ok(s),
             _ => panic!("Invalid type check in get()"),
         }
@@ -204,15 +204,15 @@ impl Machine {
 
     /// Assigns the value of `expr` to the variable `vref`.
     fn assign(&mut self, vref: &VarRef, expr: &Expr) -> Result<()> {
-        let value = expr.eval(&self.vars, &self.functions)?;
-        self.vars.set(&vref, value)?;
+        let value = expr.eval(&self.symbols, &self.functions)?;
+        self.symbols.set(&vref, value)?;
         Ok(())
     }
 
     /// Executes an `IF` statement.
     async fn do_if(&mut self, branches: &[(Expr, Vec<Statement>)]) -> Result<()> {
         for (expr, stmts) in branches {
-            match expr.eval(&self.vars, &self.functions)? {
+            match expr.eval(&self.symbols, &self.functions)? {
                 Value::Boolean(true) => {
                     for s in stmts {
                         self.exec_one(s).await?;
@@ -238,14 +238,14 @@ impl Machine {
         debug_assert!(
             iterator.ref_type() == VarType::Auto || iterator.ref_type() == VarType::Integer
         );
-        let start_value = start.eval(&self.vars, &self.functions)?;
+        let start_value = start.eval(&self.symbols, &self.functions)?;
         match start_value {
-            Value::Integer(_) => self.vars.set(iterator, start_value)?,
+            Value::Integer(_) => self.symbols.set(iterator, start_value)?,
             _ => return new_syntax_error("FOR supports integer iteration only"),
         }
 
         loop {
-            match end.eval(&self.vars, &self.functions)? {
+            match end.eval(&self.symbols, &self.functions)? {
                 Value::Boolean(false) => {
                     break;
                 }
@@ -265,7 +265,7 @@ impl Machine {
     /// Executes a `WHILE` loop.
     async fn do_while(&mut self, condition: &Expr, body: &[Statement]) -> Result<()> {
         loop {
-            match condition.eval(&self.vars, &self.functions)? {
+            match condition.eval(&self.symbols, &self.functions)? {
                 Value::Boolean(true) => {
                     for s in body {
                         self.exec_one(s).await?;
@@ -293,7 +293,7 @@ impl Machine {
                 };
                 cmd.exec(&args, self).await?
             }
-            Statement::Dim(varname, vartype) => self.vars.dim(varname, *vartype)?,
+            Statement::Dim(varname, vartype) => self.symbols.dim(varname, *vartype)?,
             Statement::If(branches) => {
                 // Change this to using FutureExt::boxed_local if we ever depend on the futures or
                 // futures_lite crate directly.
@@ -364,7 +364,7 @@ pub(crate) mod testutils {
         async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
             let arg = match args {
                 [(Some(expr), ArgSep::End)] => {
-                    match expr.eval(machine.get_vars(), machine.get_functions())? {
+                    match expr.eval(machine.get_symbols(), machine.get_functions())? {
                         Value::Integer(n) => {
                             assert!((0..128).contains(&n), "Exit code out of range");
                             n as u8
@@ -421,7 +421,7 @@ pub(crate) mod testutils {
             let mut data = self.data.borrow_mut();
             let raw_value = data.next().unwrap().to_owned();
             let value = Value::parse_as(vref.ref_type(), raw_value)?;
-            machine.get_mut_vars().set(vref, value)?;
+            machine.get_mut_symbols().set(vref, value)?;
             Ok(())
         }
     }
@@ -455,7 +455,7 @@ pub(crate) mod testutils {
             let mut text = String::new();
             for arg in args.iter() {
                 if let Some(expr) = arg.0.as_ref() {
-                    text += &expr.eval(machine.get_vars(), machine.get_functions())?.to_string();
+                    text += &expr.eval(machine.get_symbols(), machine.get_functions())?.to_string();
                 }
                 match arg.1 {
                     ArgSep::End => break,
