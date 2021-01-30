@@ -84,20 +84,18 @@ impl Command for ExitCommand {
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
         let arg = match args {
             [] => 0,
-            [(Some(expr), ArgSep::End)] => {
-                match expr.eval(machine.get_symbols(), machine.get_functions())? {
-                    Value::Integer(n) => {
-                        if n < 0 {
-                            return new_usage_error("Exit code must be a positive integer");
-                        }
-                        if n >= 128 {
-                            return new_usage_error("Exit code cannot be larger than 127");
-                        }
-                        n as u8
+            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_symbols())? {
+                Value::Integer(n) => {
+                    if n < 0 {
+                        return new_usage_error("Exit code must be a positive integer");
                     }
-                    _ => return new_usage_error("Exit code must be a positive integer"),
+                    if n >= 128 {
+                        return new_usage_error("Exit code cannot be larger than 127");
+                    }
+                    n as u8
                 }
-            }
+                _ => return new_usage_error("Exit code must be a positive integer"),
+            },
             _ => return new_usage_error("EXIT takes zero or one argument"),
         };
         machine.exit(arg);

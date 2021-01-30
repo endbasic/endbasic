@@ -116,7 +116,6 @@ impl StopReason {
 #[derive(Default)]
 pub struct Machine {
     commands: HashMap<&'static str, Rc<dyn Command>>,
-    functions: HashMap<&'static str, Rc<dyn Function>>,
     symbols: Symbols,
     stop_reason: Option<StopReason>,
 }
@@ -134,12 +133,7 @@ impl Machine {
 
     /// Registers the given builtin function, which must not yet be registered.
     pub fn add_function(&mut self, function: Rc<dyn Function>) {
-        let metadata = function.metadata();
-        assert!(
-            self.functions.get(&metadata.name()).is_none(),
-            "Function with the same name already registered"
-        );
-        self.functions.insert(metadata.name(), function);
+        self.symbols.add_function(function)
     }
 
     /// Resets the state of the machine by clearing all variable.
@@ -162,7 +156,7 @@ impl Machine {
 
     /// Obtains immutable access to the builtin functions provided by this machine.
     pub fn get_functions(&self) -> &HashMap<&'static str, Rc<dyn Function>> {
-        &self.functions
+        self.symbols.get_functions()
     }
 
     /// Obtains immutable access to the state of the symbols.
@@ -204,7 +198,7 @@ impl Machine {
 
     /// Assigns the value of `expr` to the variable `vref`.
     fn assign(&mut self, vref: &VarRef, expr: &Expr) -> Result<()> {
-        let value = expr.eval(&self.symbols, &self.functions)?;
+        let value = expr.eval(&self.symbols)?;
         self.symbols.set(&vref, value)?;
         Ok(())
     }
@@ -212,7 +206,7 @@ impl Machine {
     /// Executes an `IF` statement.
     async fn do_if(&mut self, branches: &[(Expr, Vec<Statement>)]) -> Result<()> {
         for (expr, stmts) in branches {
-            match expr.eval(&self.symbols, &self.functions)? {
+            match expr.eval(&self.symbols)? {
                 Value::Boolean(true) => {
                     for s in stmts {
                         self.exec_one(s).await?;
@@ -238,14 +232,14 @@ impl Machine {
         debug_assert!(
             iterator.ref_type() == VarType::Auto || iterator.ref_type() == VarType::Integer
         );
-        let start_value = start.eval(&self.symbols, &self.functions)?;
+        let start_value = start.eval(&self.symbols)?;
         match start_value {
             Value::Integer(_) => self.symbols.set(iterator, start_value)?,
             _ => return new_syntax_error("FOR supports integer iteration only"),
         }
 
         loop {
-            match end.eval(&self.symbols, &self.functions)? {
+            match end.eval(&self.symbols)? {
                 Value::Boolean(false) => {
                     break;
                 }
@@ -265,7 +259,7 @@ impl Machine {
     /// Executes a `WHILE` loop.
     async fn do_while(&mut self, condition: &Expr, body: &[Statement]) -> Result<()> {
         loop {
-            match condition.eval(&self.symbols, &self.functions)? {
+            match condition.eval(&self.symbols)? {
                 Value::Boolean(true) => {
                     for s in body {
                         self.exec_one(s).await?;
@@ -363,15 +357,13 @@ pub(crate) mod testutils {
 
         async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
             let arg = match args {
-                [(Some(expr), ArgSep::End)] => {
-                    match expr.eval(machine.get_symbols(), machine.get_functions())? {
-                        Value::Integer(n) => {
-                            assert!((0..128).contains(&n), "Exit code out of range");
-                            n as u8
-                        }
-                        _ => panic!("Exit code must be a positive integer"),
+                [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_symbols())? {
+                    Value::Integer(n) => {
+                        assert!((0..128).contains(&n), "Exit code out of range");
+                        n as u8
                     }
-                }
+                    _ => panic!("Exit code must be a positive integer"),
+                },
                 _ => panic!("EXIT takes one argument"),
             };
             machine.exit(arg);
@@ -455,7 +447,7 @@ pub(crate) mod testutils {
             let mut text = String::new();
             for arg in args.iter() {
                 if let Some(expr) = arg.0.as_ref() {
-                    text += &expr.eval(machine.get_symbols(), machine.get_functions())?.to_string();
+                    text += &expr.eval(machine.get_symbols())?.to_string();
                 }
                 match arg.1 {
                     ArgSep::End => break,
