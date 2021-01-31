@@ -313,6 +313,101 @@ impl ToString for Value {
     }
 }
 
+/// Represents a multidimensional array.
+pub struct Array {
+    /// The type of all elements in the array.
+    subtype: VarType,
+
+    /// The dimensions of the array.  At least one must be present.
+    dimensions: Vec<usize>,
+
+    /// The values in the array, flattened.  Given dimensions `(N, M, O)`, an element `(i, j, k)` is
+    /// at position `i * (M * O) + j * O + k`.
+    values: Vec<Value>,
+}
+
+impl Array {
+    /// Creates a new array of the given `subtype` and `dimensions`.
+    pub fn new(subtype: VarType, dimensions: Vec<usize>) -> Self {
+        assert!(!dimensions.is_empty());
+        let mut n = 1;
+        for dim in &dimensions {
+            assert!(n > 0);
+            n *= dim;
+        }
+        let mut values = Vec::with_capacity(n);
+        let value = subtype.default_value();
+        for _ in 0..n {
+            values.push(value.clone());
+        }
+        Self { subtype, dimensions, values }
+    }
+
+    /// Returns the type of the elements in this array.
+    pub fn subtype(&self) -> VarType {
+        self.subtype
+    }
+
+    /// Validates that the subscript `i` is in the `[0,max)` range and converts it to an `usize`.
+    fn validate_subscript(i: i32, max: usize) -> Result<usize> {
+        if i < 0 {
+            Err(Error::new(format!("Subscript {} cannot be negative", i)))
+        } else if (i as usize) >= max {
+            Err(Error::new(format!("Subscript {} exceeds limit of {}", i, max)))
+        } else {
+            Ok(i as usize)
+        }
+    }
+
+    /// Computes the index to access the flat `values` array given a list of `subscripts`.
+    ///
+    /// It is an error if `dimensions` and `subscripts` have different sizes, or if the values in
+    /// `subscripts` are negative.
+    fn native_index(dimensions: &[usize], subscripts: &[i32]) -> Result<usize> {
+        if subscripts.len() != dimensions.len() {
+            return Err(Error::new(format!(
+                "Cannot index array with {} subscripts; need {}",
+                subscripts.len(),
+                dimensions.len()
+            )));
+        }
+
+        let mut offset = 0;
+        let mut multiplier = 1;
+        let mut k = dimensions.len() - 1;
+        while k > 0 {
+            offset += Array::validate_subscript(subscripts[k], dimensions[k])? * multiplier;
+            debug_assert!(dimensions[k] > 0);
+            multiplier *= dimensions[k];
+            k -= 1;
+        }
+        offset += Array::validate_subscript(subscripts[k], dimensions[k])? * multiplier;
+        Ok(offset)
+    }
+
+    /// Assings the `value` to the array position indicated by the `subscripts`.
+    pub fn assign(&mut self, subscripts: &[i32], value: Value) -> Result<()> {
+        if value.as_vartype() != self.subtype {
+            return Err(Error::new(format!(
+                "Cannot assign value of type {:?} to array of type {:?}",
+                value.as_vartype(),
+                self.subtype
+            )));
+        }
+        let i = Array::native_index(&self.dimensions, subscripts)?;
+        self.values[i] = value;
+        Ok(())
+    }
+
+    /// Obtains the value contained in the array position indicated by the `subscripts`.
+    pub fn index(&self, subscripts: &[i32]) -> Result<&Value> {
+        let i = Array::native_index(&self.dimensions, subscripts)?;
+        let value = &self.values[i];
+        debug_assert!(value.as_vartype() == self.subtype);
+        Ok(value)
+    }
+}
+
 /// Storage for all symbols that exist at runtime.
 #[derive(Default)]
 pub struct Symbols {
@@ -1377,6 +1472,168 @@ mod tests {
         assert!(!VarRef::new("a", VarType::Text).accepts(&double_val));
         assert!(!VarRef::new("a", VarType::Text).accepts(&int_val));
         assert!(VarRef::new("a", VarType::Text).accepts(&text_val));
+    }
+
+    #[test]
+    fn test_array_unidimensional_ok() {
+        let mut array = Array::new(VarType::Integer, vec![5]);
+        assert_eq!(VarType::Integer, array.subtype());
+
+        array.assign(&[1], 5.into()).unwrap();
+        array.assign(&[4], 8.into()).unwrap();
+        assert_eq!(&Value::Integer(0), array.index(&[0]).unwrap());
+        assert_eq!(&Value::Integer(5), array.index(&[1]).unwrap());
+        assert_eq!(&Value::Integer(0), array.index(&[2]).unwrap());
+        assert_eq!(&Value::Integer(0), array.index(&[3]).unwrap());
+        assert_eq!(&Value::Integer(8), array.index(&[4]).unwrap());
+    }
+
+    #[test]
+    fn test_array_unidimensional_errors() {
+        let mut array = Array::new(VarType::Integer, vec![5]);
+
+        assert_eq!(
+            "Cannot index array with 0 subscripts; need 1",
+            format!("{}", array.assign(&[], Value::Integer(1)).unwrap_err())
+        );
+        assert_eq!(
+            "Cannot index array with 0 subscripts; need 1",
+            format!("{}", array.index(&[]).unwrap_err())
+        );
+
+        assert_eq!(
+            "Cannot index array with 2 subscripts; need 1",
+            format!("{}", array.assign(&[1, 2], Value::Integer(1)).unwrap_err())
+        );
+        assert_eq!(
+            "Cannot index array with 2 subscripts; need 1",
+            format!("{}", array.index(&[1, 2]).unwrap_err())
+        );
+
+        assert_eq!(
+            "Subscript -1 cannot be negative",
+            format!("{}", array.assign(&[-1], Value::Integer(1)).unwrap_err())
+        );
+        assert_eq!(
+            "Subscript -1 cannot be negative",
+            format!("{}", array.index(&[-1]).unwrap_err())
+        );
+
+        assert_eq!(
+            "Subscript 6 exceeds limit of 5",
+            format!("{}", array.assign(&[6], Value::Integer(1)).unwrap_err())
+        );
+        assert_eq!("Subscript 6 exceeds limit of 5", format!("{}", array.index(&[6]).unwrap_err()));
+
+        assert_eq!(
+            "Cannot assign value of type Text to array of type Integer",
+            format!("{}", array.assign(&[0], Value::Text("a".to_owned())).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_array_bidimensional_ok() {
+        let mut array = Array::new(VarType::Double, vec![2, 3]);
+        assert_eq!(VarType::Double, array.subtype());
+
+        array.assign(&[0, 1], 9.1.into()).unwrap();
+        array.assign(&[1, 0], 8.1.into()).unwrap();
+        array.assign(&[1, 2], 7.1.into()).unwrap();
+        assert_eq!(&Value::Double(0.0), array.index(&[0, 0]).unwrap());
+        assert_eq!(&Value::Double(9.1), array.index(&[0, 1]).unwrap());
+        assert_eq!(&Value::Double(0.0), array.index(&[0, 2]).unwrap());
+        assert_eq!(&Value::Double(8.1), array.index(&[1, 0]).unwrap());
+        assert_eq!(&Value::Double(0.0), array.index(&[1, 1]).unwrap());
+        assert_eq!(&Value::Double(7.1), array.index(&[1, 2]).unwrap());
+    }
+
+    #[test]
+    fn test_array_bidimensional_errors() {
+        let mut array = Array::new(VarType::Integer, vec![5, 2]);
+
+        assert_eq!(
+            "Cannot index array with 0 subscripts; need 2",
+            format!("{}", array.assign(&[], Value::Integer(1)).unwrap_err())
+        );
+        assert_eq!(
+            "Cannot index array with 0 subscripts; need 2",
+            format!("{}", array.index(&[]).unwrap_err())
+        );
+
+        assert_eq!(
+            "Cannot index array with 1 subscripts; need 2",
+            format!("{}", array.assign(&[1], Value::Integer(1)).unwrap_err())
+        );
+        assert_eq!(
+            "Cannot index array with 1 subscripts; need 2",
+            format!("{}", array.index(&[1]).unwrap_err())
+        );
+
+        assert_eq!(
+            "Subscript -1 cannot be negative",
+            format!("{}", array.assign(&[-1, 1], Value::Integer(1)).unwrap_err())
+        );
+        assert_eq!(
+            "Subscript -1 cannot be negative",
+            format!("{}", array.index(&[-1, 1]).unwrap_err())
+        );
+
+        assert_eq!(
+            "Subscript -1 cannot be negative",
+            format!("{}", array.assign(&[1, -1], Value::Integer(1)).unwrap_err())
+        );
+        assert_eq!(
+            "Subscript -1 cannot be negative",
+            format!("{}", array.index(&[1, -1]).unwrap_err())
+        );
+
+        assert_eq!(
+            "Subscript 2 exceeds limit of 2",
+            format!("{}", array.assign(&[-1, 2], Value::Integer(1)).unwrap_err())
+        );
+        assert_eq!(
+            "Subscript 2 exceeds limit of 2",
+            format!("{}", array.index(&[-1, 2]).unwrap_err())
+        );
+
+        assert_eq!(
+            "Cannot assign value of type Text to array of type Integer",
+            format!("{}", array.assign(&[0, 0], Value::Text("a".to_owned())).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_array_multidimensional() {
+        let mut array = Array::new(VarType::Integer, vec![2, 4, 3, 5]);
+        assert_eq!(VarType::Integer, array.subtype());
+
+        // First initialize the array with sequential numbers and check that they are valid
+        // immediately after assignment.
+        let mut n = 0;
+        for i in 0..2 {
+            for j in 0..4 {
+                for k in 0..3 {
+                    for l in 0..5 {
+                        array.assign(&[i, j, k, l], n.into()).unwrap();
+                        assert_eq!(&Value::Integer(n), array.index(&[i, j, k, l]).unwrap());
+                        n += 1;
+                    }
+                }
+            }
+        }
+
+        // But then also iterate over them all to ensure none were overwritten.
+        let mut n = 0;
+        for i in 0..2 {
+            for j in 0..4 {
+                for k in 0..3 {
+                    for l in 0..5 {
+                        assert_eq!(&Value::Integer(n), array.index(&[i, j, k, l]).unwrap());
+                        n += 1;
+                    }
+                }
+            }
+        }
     }
 
     #[test]
