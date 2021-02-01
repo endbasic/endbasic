@@ -288,6 +288,9 @@ impl Machine {
                 cmd.exec(&args, self).await?
             }
             Statement::Dim(varname, vartype) => self.symbols.dim(varname, *vartype)?,
+            Statement::DimArray(_varname, _dimensions, _subtype) => {
+                return new_syntax_error("Array declarations not yet implemented")
+            }
             Statement::If(branches) => {
                 // Change this to using FutureExt::boxed_local if we ever depend on the futures or
                 // futures_lite crate directly.

@@ -258,20 +258,12 @@ impl<'a> Parser<'a> {
         Ok(Statement::BuiltinCall(name, args))
     }
 
-    /// Parses a `DIM` statement.
-    fn parse_dim(&mut self) -> Result<Statement> {
-        let vref = match self.lexer.read()? {
-            Token::Symbol(vref) => vref,
-            _ => return Err(Error::Bad("Expected variable name after DIM".to_owned())),
-        };
-        let name = vref.into_unannotated_string()?;
-
+    /// Parses the `AS typename` clause of a `DIM` statement.  The caller has already consumed the
+    /// `AS` token.
+    fn parse_dim_as(&mut self) -> Result<VarType> {
         let peeked = self.lexer.peek()?;
         let vartype = match peeked {
-            Token::Eof | Token::Eol => {
-                // Token consumed below in the common path.
-                VarType::Integer
-            }
+            Token::Eof | Token::Eol => VarType::Integer,
             Token::As => {
                 self.lexer.consume_peeked();
                 match self.lexer.read()? {
@@ -295,7 +287,34 @@ impl<'a> Parser<'a> {
             Token::Eof | Token::Eol => (),
             _ => return Err(Error::Bad("Unexpected token in DIM statement".to_owned())),
         }
-        Ok(Statement::Dim(name, vartype))
+
+        Ok(vartype)
+    }
+
+    /// Parses a `DIM` statement.
+    fn parse_dim(&mut self) -> Result<Statement> {
+        let vref = match self.lexer.read()? {
+            Token::Symbol(vref) => vref,
+            _ => return Err(Error::Bad("Expected variable name after DIM".to_owned())),
+        };
+        let name = vref.into_unannotated_string()?;
+
+        let peeked = self.lexer.peek()?;
+        match peeked {
+            Token::LeftParen => {
+                self.lexer.consume_peeked();
+                let subscripts = self.parse_comma_separated_exprs()?;
+                if subscripts.is_empty() {
+                    return Err(Error::Bad("Arrays require at least one dimension".to_owned()));
+                }
+                let vartype = self.parse_dim_as()?;
+                Ok(Statement::DimArray(name, subscripts, vartype))
+            }
+            _ => {
+                let vartype = self.parse_dim_as()?;
+                Ok(Statement::Dim(name, vartype))
+            }
+        }
     }
 
     /// Parses a variable list of comma-separated expressions.  The caller must have consumed the
@@ -962,6 +981,41 @@ mod tests {
     }
 
     #[test]
+    fn test_dim_array() {
+        use Expr::*;
+
+        do_ok_test(
+            "DIM i(10)",
+            &[Statement::DimArray("i".to_owned(), vec![Integer(10)], VarType::Integer)],
+        );
+
+        do_ok_test(
+            "DIM foo(-5, 0) AS STRING",
+            &[Statement::DimArray(
+                "foo".to_owned(),
+                vec![Negate(Box::from(Integer(5))), Integer(0)],
+                VarType::Text,
+            )],
+        );
+
+        do_ok_test(
+            "DIM foo(bar$() + 3, 8, -1)",
+            &[Statement::DimArray(
+                "foo".to_owned(),
+                vec![
+                    Add(
+                        Box::from(Call(VarRef::new("bar", VarType::Text), vec![])),
+                        Box::from(Integer(3)),
+                    ),
+                    Integer(8),
+                    Negate(Box::from(Integer(1))),
+                ],
+                VarType::Integer,
+            )],
+        );
+    }
+
+    #[test]
     fn test_dim_errors() {
         do_error_test("DIM", "Expected variable name after DIM");
         do_error_test("DIM 3", "Expected variable name after DIM");
@@ -971,6 +1025,13 @@ mod tests {
         do_error_test("DIM a$ AS", "Type annotation not allowed in a$");
         do_error_test("DIM a AS 3", "Invalid type name Integer(3) in DIM AS statement");
         do_error_test("DIM a AS INTEGER 3", "Unexpected token in DIM statement");
+
+        do_error_test("DIM a()", "Arrays require at least one dimension");
+        do_error_test("DIM a(,)", "Missing expression");
+        do_error_test("DIM a(, 3)", "Missing expression");
+        do_error_test("DIM a(3, )", "Missing expression");
+        do_error_test("DIM a(3, , 4)", "Missing expression");
+        do_error_test("DIM a(1) AS INTEGER 3", "Unexpected token in DIM statement");
     }
 
     /// Wrapper around `do_ok_test` to parse an expression.  Given that expressions alone are not

@@ -286,6 +286,13 @@ pub enum Statement {
     /// type from assignments.
     Dim(String, VarType),
 
+    /// Represents an array declaration.
+    ///
+    /// The first parameter is the name of the array to set; type annotations are not allowed.
+    /// The second parameter is the expressions to compute the dimensions of the array.  The third
+    /// parameter is the type of the elements in the array.
+    DimArray(String, Vec<Expr>, VarType),
+
     /// Represents an `IF` statement.
     ///
     /// The first and only parameter is a sequence containing all the branches of the statement.
