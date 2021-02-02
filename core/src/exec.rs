@@ -279,6 +279,9 @@ impl Machine {
         }
 
         match stmt {
+            Statement::ArrayAssignment(_vref, _subscripts, _value) => {
+                return new_syntax_error("Array assignments not yet implemented")
+            }
             Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
             Statement::BuiltinCall(name, args) => {
                 let cmd = match self.commands.get(name.as_str()) {

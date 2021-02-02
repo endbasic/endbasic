@@ -258,6 +258,13 @@ pub enum ArgSep {
 /// Represents a statement in the program along all data to execute it.
 #[derive(Debug, PartialEq)]
 pub enum Statement {
+    /// Represents an assignment to an element of an array.
+    ///
+    /// The first parameter is the reference to the array to modify.  The second parameter is the
+    /// expressions to compute the subscripts to index the array.  the third parameter is the
+    /// expression to compute the value of the modified element.
+    ArrayAssignment(VarRef, Vec<Expr>, Expr),
+
     /// Represents a variable assignment.
     ///
     /// The first parameter is the reference to the variable to set.  The second parameter is the
