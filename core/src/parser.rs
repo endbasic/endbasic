@@ -207,7 +207,7 @@ impl<'a> Parser<'a> {
 
     /// Parses an assignment for the variable reference `varref` already read.
     fn parse_assignment(&mut self, vref: VarRef) -> Result<Statement> {
-        let expr = match self.parse_expr()? {
+        let expr = match self.parse_expr(None)? {
             Some(expr) => expr,
             None => return Err(Error::Bad("Missing expression in assignment".to_owned())),
         };
@@ -220,8 +220,24 @@ impl<'a> Parser<'a> {
         Ok(Statement::Assignment(vref, expr))
     }
 
+    /// Parses an assignment to the array `varref` with `subscripts`, both of which have already
+    /// been read.
+    fn parse_array_assignment(&mut self, vref: VarRef, subscripts: Vec<Expr>) -> Result<Statement> {
+        let expr = match self.parse_expr(None)? {
+            Some(expr) => expr,
+            None => return Err(Error::Bad("Missing expression in array assignment".to_owned())),
+        };
+
+        let next = self.lexer.peek()?;
+        match next {
+            Token::Eof | Token::Eol => (),
+            _ => return Err(Error::Bad("Unexpected token in array assignment".to_owned())),
+        }
+        Ok(Statement::ArrayAssignment(vref, subscripts, expr))
+    }
+
     /// Parses a builtin call (things of the form `INPUT a`).
-    fn parse_builtin_call(&mut self, vref: VarRef) -> Result<Statement> {
+    fn parse_builtin_call(&mut self, vref: VarRef, mut first: Option<Expr>) -> Result<Statement> {
         let mut name = match vref.into_unannotated_string() {
             Ok(name) => name,
             Err(e) => return Err(Error::Bad(format!("{}", e))),
@@ -230,7 +246,7 @@ impl<'a> Parser<'a> {
 
         let mut args = vec![];
         loop {
-            let expr = self.parse_expr()?;
+            let expr = self.parse_expr(first.take())?;
 
             let peeked = self.lexer.peek()?;
             match peeked {
@@ -256,6 +272,30 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(Statement::BuiltinCall(name, args))
+    }
+
+    /// Starts processing either an array reference or a builtin call and disambiguates between the
+    /// two.
+    fn parse_array_or_builtin_call(&mut self, vref: VarRef) -> Result<Statement> {
+        match self.lexer.peek()? {
+            Token::LeftParen => {
+                self.lexer.consume_peeked();
+                let mut exprs = self.parse_comma_separated_exprs()?;
+                match self.lexer.peek()? {
+                    Token::Equal => {
+                        self.lexer.consume_peeked();
+                        self.parse_array_assignment(vref, exprs)
+                    }
+                    _ => {
+                        if exprs.len() != 1 {
+                            return Err(Error::Bad("Expected expression".to_owned()));
+                        }
+                        self.parse_builtin_call(vref, Some(exprs.remove(0)))
+                    }
+                }
+            }
+            _ => self.parse_builtin_call(vref, None),
+        }
     }
 
     /// Parses the `AS typename` clause of a `DIM` statement.  The caller has already consumed the
@@ -322,7 +362,7 @@ impl<'a> Parser<'a> {
     /// consume it).  We expect at least one expression.
     fn parse_comma_separated_exprs(&mut self) -> Result<Vec<Expr>> {
         let mut exprs = vec![];
-        if let Some(expr) = self.parse_expr()? {
+        if let Some(expr) = self.parse_expr(None)? {
             // The first expression is optional to support calls to functions without arguments.
             exprs.push(expr);
         }
@@ -341,7 +381,7 @@ impl<'a> Parser<'a> {
                         // encounter more than one expression.
                         return Err(Error::Bad("Missing expression".to_owned()));
                     }
-                    match self.parse_expr()? {
+                    match self.parse_expr(None)? {
                         Some(expr) => exprs.push(expr),
                         None => return Err(Error::Bad("Missing expression".to_owned())),
                     }
@@ -358,12 +398,20 @@ impl<'a> Parser<'a> {
     /// Returns `None` if no expression was found.  This is necessary to treat the case of empty
     /// arguments to statements, as is the case in `PRINT a , , b`.
     ///
+    /// If the caller has already processed a parenthesized term of an expression like
+    /// `(first) + second`, then that term must be provided in `first`.
+    ///
     /// This is an implementation of the Shunting Yard Algorithm by Edgar Dijkstra.
-    fn parse_expr(&mut self) -> Result<Option<Expr>> {
+    fn parse_expr(&mut self, first: Option<Expr>) -> Result<Option<Expr>> {
         let mut exprs: Vec<Expr> = vec![];
         let mut ops: Vec<ExprOp> = vec![];
 
         let mut need_operand = true; // Also tracks whether an upcoming minus is unary.
+        if let Some(e) = first {
+            exprs.push(e);
+            need_operand = false;
+        }
+
         loop {
             let mut handle_operand = |e| {
                 if !need_operand {
@@ -546,7 +594,7 @@ impl<'a> Parser<'a> {
 
     /// Parses an `IF` statement.
     fn parse_if(&mut self) -> Result<Statement> {
-        let expr = match self.parse_expr()? {
+        let expr = match self.parse_expr(None)? {
             Some(expr) => expr,
             None => return Err(Error::Bad("No expression in IF statement".to_owned())),
         };
@@ -560,7 +608,7 @@ impl<'a> Parser<'a> {
             match peeked {
                 Token::Elseif => {
                     self.lexer.consume_peeked();
-                    let expr = match self.parse_expr()? {
+                    let expr = match self.parse_expr(None)? {
                         Some(expr) => expr,
                         None => {
                             return Err(Error::Bad("No expression in ELSEIF statement".to_owned()))
@@ -657,13 +705,13 @@ impl<'a> Parser<'a> {
         };
 
         self.expect_and_consume(Token::Equal, "No equal sign in FOR statement")?;
-        let start = match self.parse_expr()? {
+        let start = match self.parse_expr(None)? {
             Some(expr) => expr,
             None => return Err(Error::Bad("No start expression in FOR statement".to_owned())),
         };
 
         self.expect_and_consume(Token::To, "No TO in FOR statement")?;
-        let end = match self.parse_expr()? {
+        let end = match self.parse_expr(None)? {
             Some(expr) => expr,
             None => return Err(Error::Bad("No end expression in FOR statement".to_owned())),
         };
@@ -711,7 +759,7 @@ impl<'a> Parser<'a> {
 
     /// Parses a `WHILE` statement.
     fn parse_while(&mut self) -> Result<Statement> {
-        let expr = match self.parse_expr()? {
+        let expr = match self.parse_expr(None)? {
             Some(expr) => expr,
             None => return Err(Error::Bad("No expression in WHILE statement".to_owned())),
         };
@@ -780,7 +828,7 @@ impl<'a> Parser<'a> {
                     self.lexer.consume_peeked();
                     Ok(Some(self.parse_assignment(vref)?))
                 } else {
-                    Ok(Some(self.parse_builtin_call(vref)?))
+                    Ok(Some(self.parse_array_or_builtin_call(vref)?))
                 }
             }
             Token::While => {
@@ -894,6 +942,49 @@ mod tests {
     }
 
     #[test]
+    fn test_array_assignments() {
+        do_ok_test(
+            "a(1)=100\nfoo(2, 3)=\"text\"\nabc$ (5 + z, 6) = TRUE OR FALSE",
+            &[
+                Statement::ArrayAssignment(
+                    VarRef::new("a", VarType::Auto),
+                    vec![Expr::Integer(1)],
+                    Expr::Integer(100),
+                ),
+                Statement::ArrayAssignment(
+                    VarRef::new("foo", VarType::Auto),
+                    vec![Expr::Integer(2), Expr::Integer(3)],
+                    Expr::Text("text".to_owned()),
+                ),
+                Statement::ArrayAssignment(
+                    VarRef::new("abc", VarType::Text),
+                    vec![
+                        Expr::Add(
+                            Box::from(Expr::Integer(5)),
+                            Box::from(Expr::Symbol(VarRef::new("z".to_owned(), VarType::Auto))),
+                        ),
+                        Expr::Integer(6),
+                    ],
+                    Expr::Or(Box::from(Expr::Boolean(true)), Box::from(Expr::Boolean(false))),
+                ),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_array_assignment_errors() {
+        do_error_test("a(", "Unexpected token");
+        do_error_test("a()", "Expected expression");
+        do_error_test("a() =", "Missing expression in array assignment");
+        do_error_test("a() IF", "Expected expression");
+        do_error_test("a() = 3 4", "Unexpected value in expression");
+        do_error_test("a() = 3 THEN", "Unexpected token in array assignment");
+        do_error_test("a(,) = 3", "Missing expression");
+        do_error_test("a(2;3) = 3", "Unexpected token");
+        do_error_test("(2) = 3", "Unexpected token LeftParen in statement");
+    }
+
+    #[test]
     fn test_assignments() {
         do_ok_test(
             "a=1\nfoo$ = \"bar\"\nb$ = 3 + z",
@@ -947,12 +1038,60 @@ mod tests {
     }
 
     #[test]
+    fn test_builtin_calls_and_array_references_disambiguation() {
+        use Expr::*;
+
+        do_ok_test(
+            "PRINT(1)",
+            &[Statement::BuiltinCall("PRINT".to_owned(), vec![(Some(Integer(1)), ArgSep::End)])],
+        );
+
+        do_ok_test(
+            "PRINT(1), 2",
+            &[Statement::BuiltinCall(
+                "PRINT".to_owned(),
+                vec![(Some(Integer(1)), ArgSep::Long), (Some(Integer(2)), ArgSep::End)],
+            )],
+        );
+
+        do_ok_test(
+            "PRINT(1); 2",
+            &[Statement::BuiltinCall(
+                "PRINT".to_owned(),
+                vec![(Some(Integer(1)), ArgSep::Short), (Some(Integer(2)), ArgSep::End)],
+            )],
+        );
+
+        do_ok_test(
+            "PRINT(1);",
+            &[Statement::BuiltinCall(
+                "PRINT".to_owned(),
+                vec![(Some(Integer(1)), ArgSep::Short), (None, ArgSep::End)],
+            )],
+        );
+
+        do_ok_test(
+            "PRINT(1) + 2; 3",
+            &[Statement::BuiltinCall(
+                "PRINT".to_owned(),
+                vec![
+                    (Some(Add(Box::from(Integer(1)), Box::from(Integer(2)))), ArgSep::Short),
+                    (Some(Integer(3)), ArgSep::End),
+                ],
+            )],
+        );
+    }
+
+    #[test]
     fn test_builtin_calls_error() {
         do_error_test("FOO 3 5\n", "Unexpected value in expression");
         do_error_test("INPUT$ a\n", "Type annotation not allowed in INPUT$");
         do_error_test("PRINT IF 1\n", "Unexpected keyword in expression");
         do_error_test("PRINT 3, IF 1\n", "Unexpected keyword in expression");
         do_error_test("PRINT 3 THEN\n", "Expected comma, semicolon, or end of statement");
+        do_error_test("PRINT ()\n", "Expected expression");
+        do_error_test("PRINT (2, 3)\n", "Expected expression");
+        do_error_test("PRINT (2, 3); 4\n", "Expected expression");
     }
 
     #[test]
@@ -1275,10 +1414,10 @@ mod tests {
         do_expr_error_test("((3)2)", "Unexpected value in expression");
         do_expr_error_test("2 3", "Unexpected value in expression");
 
-        do_expr_error_test("(", "Unbalanced parenthesis");
+        do_expr_error_test("(", "Missing expression");
         do_expr_error_test(")", "Expected comma, semicolon, or end of statement");
-        do_expr_error_test("(()", "Unbalanced parenthesis");
-        do_expr_error_test("())", "Expected comma, semicolon, or end of statement");
+        do_expr_error_test("(()", "Missing expression");
+        do_expr_error_test("())", "Expected expression");
         do_expr_error_test("3 + (2 + 1) + (4 - 5", "Unbalanced parenthesis");
         do_expr_error_test(
             "3 + 2 + 1) + (4 - 5)",
@@ -1290,9 +1429,9 @@ mod tests {
         do_expr_error_test("foo(3, )", "Missing expression");
         do_expr_error_test("foo(3, , 4)", "Missing expression");
         // TODO(jmmv): These are not the best error messages...
-        do_expr_error_test("(,)", "Unbalanced parenthesis");
-        do_expr_error_test("(3, 4)", "Unbalanced parenthesis");
-        do_expr_error_test("((), ())", "Unbalanced parenthesis");
+        do_expr_error_test("(,)", "Missing expression");
+        do_expr_error_test("(3, 4)", "Expected expression");
+        do_expr_error_test("((), ())", "Missing expression");
 
         // TODO(jmmv): This succeeds because `PRINT` is interned as a `Token::Symbol` so the
         // expression parser sees it as a variable reference... but this should probably fail.

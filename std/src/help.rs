@@ -33,7 +33,7 @@ const LANG_REFERENCE: &str = r"
         name     Type determined by value or definition.
 
     Assignments and declarations:
-        varref = expr
+        varref[(dim1[, ..., dimN])] = expr
         DIM varname[(dim1[, ..., dimN])] [AS BOOLEAN|DOUBLE|INTEGER|STRING]
 
     Expressions:
