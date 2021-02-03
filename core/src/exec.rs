@@ -637,9 +637,9 @@ mod tests {
 
     #[test]
     fn test_dim_errors() {
-        do_simple_error_test("DIM i\nDIM i", "Cannot DIM already-defined variable i");
-        do_simple_error_test("DIM i\nDIM I", "Cannot DIM already-defined variable I");
-        do_simple_error_test("i = 0\nDIM i", "Cannot DIM already-defined variable i");
+        do_simple_error_test("DIM i\nDIM i", "Cannot DIM already-defined symbol i");
+        do_simple_error_test("DIM i\nDIM I", "Cannot DIM already-defined symbol I");
+        do_simple_error_test("i = 0\nDIM i", "Cannot DIM already-defined symbol i");
     }
 
     #[test]

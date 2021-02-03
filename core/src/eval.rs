@@ -431,13 +431,21 @@ impl Symbols {
         Self { functions: HashMap::default(), vars }
     }
 
-    /// Registers the given builtin function, which must not yet be registered.
+    /// Returns true if the given name is defined as any kind of symbol.
+    ///
+    /// The input `name` must be in canonical form (uppercase).
+    fn is_defined(&self, name: &str) -> bool {
+        assert!(name == name.to_ascii_uppercase());
+        self.vars.get(name).is_some() || self.functions.get(name).is_some()
+    }
+
+    /// Registers the given builtin function.
+    ///
+    /// Given that functions cannot be defined at runtime, specifying a non-unique name results in
+    /// a panic.
     pub fn add_function(&mut self, function: Rc<dyn Function>) {
         let metadata = function.metadata();
-        assert!(
-            self.functions.get(&metadata.name()).is_none(),
-            "Function with the same name already registered"
-        );
+        assert!(!self.is_defined(metadata.name()));
         self.functions.insert(metadata.name(), function);
     }
 
@@ -454,8 +462,8 @@ impl Symbols {
     /// Defines a new variable `name` of type `vartype`.  The variable must not yet exist.
     pub fn dim(&mut self, name: &str, vartype: VarType) -> Result<()> {
         let key = name.to_ascii_uppercase();
-        if self.vars.contains_key(&key) {
-            return Err(Error::new(format!("Cannot DIM already-defined variable {}", name)));
+        if self.is_defined(&key) {
+            return Err(Error::new(format!("Cannot DIM already-defined symbol {}", name)));
         }
         self.vars.insert(key, vartype.default_value());
         Ok(())
@@ -520,6 +528,9 @@ impl Symbols {
     /// the existing variable.  In other words: a variable cannot change types while it's alive.
     pub fn set(&mut self, vref: &VarRef, value: Value) -> Result<()> {
         let name = vref.name().to_ascii_uppercase();
+        if self.is_defined(&name) && !self.vars.contains_key(&name) {
+            return Err(Error::new(format!("Cannot redefine {} as a variable", vref)));
+        }
         if !vref.accepts(&value) {
             return Err(Error::new(format!("Incompatible types in {} assignment", vref)));
         }
@@ -1647,7 +1658,7 @@ mod tests {
     }
 
     #[test]
-    fn test_symbols_dim() {
+    fn test_symbols_dim_ok() {
         let mut syms = Symbols::default();
 
         syms.dim("a_boolean", VarType::Boolean).unwrap();
@@ -1670,10 +1681,27 @@ mod tests {
             Value::Text("".to_owned()),
             *syms.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
         );
+    }
+
+    #[test]
+    fn test_symbols_dim_name_overlap() {
+        let mut functions: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
+        let sum = SumFunction::new();
+        functions.insert(sum.metadata().name(), sum);
+
+        let mut vars = HashMap::default();
+        vars.insert("SOMEVAR".to_owned(), Value::Integer(1));
+
+        let mut syms = Symbols { functions, vars };
 
         assert_eq!(
-            "Cannot DIM already-defined variable An_Integer",
-            format!("{}", syms.dim("An_Integer", VarType::Integer).unwrap_err())
+            "Cannot DIM already-defined symbol Sum",
+            format!("{}", syms.dim("Sum", VarType::Integer).unwrap_err())
+        );
+
+        assert_eq!(
+            "Cannot DIM already-defined symbol SomeVar",
+            format!("{}", syms.dim("SomeVar", VarType::Integer).unwrap_err())
         );
     }
 
@@ -1909,6 +1937,26 @@ mod tests {
         assert_eq!(
             "Incompatible types in a_string$ assignment",
             format!("{}", syms.set(&text_ref, bool_val).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_symbols_set_name_overlap() {
+        let mut functions: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
+        let sum = SumFunction::new();
+        functions.insert(sum.metadata().name(), sum);
+
+        let mut vars = HashMap::default();
+        vars.insert("SOMEVAR".to_owned(), Value::Integer(1));
+
+        let mut syms = Symbols { functions, vars };
+
+        assert_eq!(
+            "Cannot redefine Sum% as a variable",
+            format!(
+                "{}",
+                syms.set(&VarRef::new("Sum", VarType::Integer), Value::Integer(1)).unwrap_err()
+            )
         );
     }
 
