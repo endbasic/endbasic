@@ -19,6 +19,9 @@ not adhere to semantic versioning until 1.0.0.**
     immediately after a left parenthesis.  This broke with the addition of
     function calls.
 
+*   Fixed the definition of variables so that their names cannot shadow
+    existing functions.
+
 ## Changes in version 0.5.1
 
 **Released on 2021-01-25.**
