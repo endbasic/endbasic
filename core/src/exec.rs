@@ -203,6 +203,25 @@ impl Machine {
         Ok(())
     }
 
+    /// Defines a new array `name` of type `subtype` with `dimensions`.  The array must not yet
+    /// exist, and the name may not overlap function or variable names.
+    pub fn dim_array(&mut self, name: &str, subtype: &VarType, dimensions: &[Expr]) -> Result<()> {
+        let mut ds = Vec::with_capacity(dimensions.len());
+        for dim_expr in dimensions {
+            match dim_expr.eval(&self.symbols)? {
+                Value::Integer(i) => {
+                    if i <= 0 {
+                        return new_syntax_error("Dimensions in DIM array must be positive");
+                    }
+                    ds.push(i as usize);
+                }
+                _ => return new_syntax_error("Dimensions in DIM array must be integers"),
+            }
+        }
+        self.symbols.dim_array(name, *subtype, ds)?;
+        Ok(())
+    }
+
     /// Executes an `IF` statement.
     async fn do_if(&mut self, branches: &[(Expr, Vec<Statement>)]) -> Result<()> {
         for (expr, stmts) in branches {
@@ -279,8 +298,8 @@ impl Machine {
         }
 
         match stmt {
-            Statement::ArrayAssignment(_vref, _subscripts, _value) => {
-                return new_syntax_error("Array assignments not yet implemented")
+            Statement::ArrayAssignment(vref, subscripts, value) => {
+                self.symbols.set_array(vref, subscripts, value)?
             }
             Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
             Statement::BuiltinCall(name, args) => {
@@ -291,8 +310,8 @@ impl Machine {
                 cmd.exec(&args, self).await?
             }
             Statement::Dim(varname, vartype) => self.symbols.dim(varname, *vartype)?,
-            Statement::DimArray(_varname, _dimensions, _subtype) => {
-                return new_syntax_error("Array declarations not yet implemented")
+            Statement::DimArray(varname, dimensions, subtype) => {
+                self.dim_array(varname, subtype, dimensions)?
             }
             Statement::If(branches) => {
                 // Change this to using FutureExt::boxed_local if we ever depend on the futures or
@@ -604,6 +623,28 @@ mod tests {
     }
 
     #[test]
+    fn test_array_assignment_ok() {
+        do_ok_test("DIM a(3)\na(1) = 5 + 1\nOUT a(0); a(1); a(2)", &[], &["0 6 0"]);
+        do_ok_test("DIM a(3) AS STRING\na$(1) = \"x\"\nOUT a(0); a(1); a$(2)", &[], &[" x "]);
+    }
+
+    #[test]
+    fn test_array_assignment_ok_case_insensitive() {
+        do_ok_test("DIM a(3)\nA(1) = 5\na(2) = 1\nOUT A(0); a(1); A(2)", &[], &["0 5 1"]);
+    }
+
+    #[test]
+    fn test_array_assignment_errors() {
+        do_simple_error_test("a() = 3\n", "Cannot index undefined array a");
+        do_simple_error_test("DIM a(2)\na() = 3\n", "Cannot index array with 0 subscripts; need 1");
+        do_simple_error_test("DIM a(1)\na(-1) = 3\n", "Subscript -1 cannot be negative");
+        do_simple_error_test(
+            "DIM a(2)\na$(1) = 3",
+            "Incompatible type annotation for array reference",
+        );
+    }
+
+    #[test]
     fn test_assignment_ok_types() {
         do_ok_test("a = TRUE\nOUT a; a?", &[], &["TRUE TRUE"]);
         do_ok_test("a? = FALSE\nOUT a; a?", &[], &["FALSE FALSE"]);
@@ -640,6 +681,23 @@ mod tests {
         do_simple_error_test("DIM i\nDIM i", "Cannot DIM already-defined symbol i");
         do_simple_error_test("DIM i\nDIM I", "Cannot DIM already-defined symbol I");
         do_simple_error_test("i = 0\nDIM i", "Cannot DIM already-defined symbol i");
+    }
+
+    #[test]
+    fn test_dim_array_ok() {
+        do_ok_test(
+            "DIM foo(3, 4)\nDIM bar(1) AS BOOLEAN\nOUT foo%(2, 2); bar?(0)",
+            &[],
+            &["0 FALSE"],
+        );
+    }
+
+    #[test]
+    fn test_dim_array_errors() {
+        do_simple_error_test("DIM i()", "Arrays require at least one dimension");
+        do_simple_error_test("DIM i(FALSE)", "Dimensions in DIM array must be integers");
+        do_simple_error_test("DIM i(-3)", "Dimensions in DIM array must be positive");
+        do_simple_error_test("DIM i\nDIM i(3)", "Cannot DIM already-defined symbol i");
     }
 
     #[test]

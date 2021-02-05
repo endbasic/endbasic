@@ -314,6 +314,7 @@ impl ToString for Value {
 }
 
 /// Represents a multidimensional array.
+#[derive(Debug)]
 pub struct Array {
     /// The type of all elements in the array.
     subtype: VarType,
@@ -341,6 +342,11 @@ impl Array {
             values.push(value.clone());
         }
         Self { subtype, dimensions, values }
+    }
+
+    /// Returns the dimensions of the array.
+    pub fn dimensions(&self) -> &[usize] {
+        &self.dimensions
     }
 
     /// Returns the type of the elements in this array.
@@ -411,6 +417,9 @@ impl Array {
 /// Storage for all symbols that exist at runtime.
 #[derive(Default)]
 pub struct Symbols {
+    /// Map of array names (without type annotations) to their definitions.
+    arrays: HashMap<String, Array>,
+
     /// Map of function names (without type annotations) to their definitions.
     functions: HashMap<&'static str, Rc<dyn Function>>,
 
@@ -419,16 +428,22 @@ pub struct Symbols {
 }
 
 impl Symbols {
+    /// Constructs a new symbol table with some predefined `arrays`.
+    #[cfg(test)]
+    fn from_arrays(arrays: HashMap<String, Array>) -> Self {
+        Self { arrays, functions: HashMap::default(), vars: HashMap::default() }
+    }
+
     /// Constructs a new symbol table with some predefined `functions`.
     #[cfg(test)]
     fn from_functions(functions: HashMap<&'static str, Rc<dyn Function>>) -> Self {
-        Self { functions, vars: HashMap::default() }
+        Self { arrays: HashMap::default(), functions, vars: HashMap::default() }
     }
 
     /// Constructs a new symbol table with the raw variables `vars`.
     #[cfg(test)]
     fn from_vars(vars: HashMap<String, Value>) -> Self {
-        Self { functions: HashMap::default(), vars }
+        Self { arrays: HashMap::default(), functions: HashMap::default(), vars }
     }
 
     /// Returns true if the given name is defined as any kind of symbol.
@@ -436,7 +451,9 @@ impl Symbols {
     /// The input `name` must be in canonical form (uppercase).
     fn is_defined(&self, name: &str) -> bool {
         assert!(name == name.to_ascii_uppercase());
-        self.vars.get(name).is_some() || self.functions.get(name).is_some()
+        self.vars.get(name).is_some()
+            || self.arrays.get(name).is_some()
+            || self.functions.get(name).is_some()
     }
 
     /// Registers the given builtin function.
@@ -469,6 +486,22 @@ impl Symbols {
         Ok(())
     }
 
+    /// Defines a new array `name` of type `subtype` with `dimensions`.  The array must not yet
+    /// exist, and the name may not overlap function or variable names.
+    pub fn dim_array(
+        &mut self,
+        name: &str,
+        subtype: VarType,
+        dimensions: Vec<usize>,
+    ) -> Result<()> {
+        let key = name.to_ascii_uppercase();
+        if self.is_defined(&key) {
+            return Err(Error::new(format!("Cannot DIM already-defined symbol {}", name)));
+        }
+        self.arrays.insert(key, Array::new(subtype, dimensions));
+        Ok(())
+    }
+
     /// Obtains the value of a variable.
     ///
     /// Returns an error if the variable is not defined, or if the type annotation in the variable
@@ -482,6 +515,20 @@ impl Symbols {
             return Err(Error::new(format!("Incompatible types in {} reference", vref)));
         }
         Ok(value)
+    }
+
+    /// Obtains the definition of the array `name`, or `None` if it is not defined.
+    ///
+    /// Returns an error if the array is not defined, or if the type annotation in the array
+    /// reference does not match the type of the value that the array contains.
+    pub fn get_array(&self, vref: &VarRef) -> Result<Option<&Array>> {
+        let array = self.arrays.get(&vref.name().to_ascii_uppercase());
+        if let Some(array) = array {
+            if vref.ref_type() != VarType::Auto && vref.ref_type() != array.subtype() {
+                return Err(Error::new(format!("Incompatible types in {} reference", vref)));
+            }
+        }
+        Ok(array)
     }
 
     /// Obtains the definition of the function `name`, or None if it is not defined.
@@ -543,6 +590,41 @@ impl Symbols {
             self.vars.insert(name, value);
         }
         Ok(())
+    }
+
+    /// Sets the value of the element indexed by `subscripts` in the array `vref` to `value`.
+    ///
+    /// If `vref` contains a type annotation, the type of the value must be compatible with that
+    /// type annotation.
+    pub fn set_array(&mut self, vref: &VarRef, subscripts: &[Expr], value: &Expr) -> Result<()> {
+        let mut ds = Vec::with_capacity(subscripts.len());
+        for ss_expr in subscripts {
+            match ss_expr.eval(self)? {
+                Value::Integer(i) => ds.push(i),
+                v => {
+                    return Err(Error::new(format!(
+                        "Subscript {:?} in array reference must be an integer",
+                        v,
+                    )))
+                }
+            }
+        }
+
+        let value = value.eval(self)?;
+
+        let key = vref.name().to_ascii_uppercase();
+        let array = match self.arrays.get_mut(&key) {
+            Some(array) => array,
+            None => {
+                return Err(Error::new(format!("Cannot index undefined array {}", vref.name())))
+            }
+        };
+
+        if vref.ref_type() != VarType::Auto && vref.ref_type() != array.subtype() {
+            return Err(Error::new("Incompatible type annotation for array reference"));
+        }
+
+        array.assign(&ds, value)
     }
 }
 
@@ -678,6 +760,56 @@ pub trait Function {
 }
 
 impl Expr {
+    /// Evaluates a reference to `array` with subscripts `args`.
+    fn eval_array_ref(&self, syms: &Symbols, array: &Array, args: &[Expr]) -> Result<Value> {
+        let mut subscripts = Vec::with_capacity(args.len());
+        for a in args {
+            match a.eval(syms)? {
+                Value::Integer(i) => subscripts.push(i),
+                _ => return Err(Error::new("Array subscripts must be integers")),
+            }
+        }
+        array.index(&subscripts).map(|v| v.clone())
+    }
+
+    /// Evaluates a function call specified by `fref` and arguments `args` on the function `f`.
+    fn eval_function_call(
+        &self,
+        syms: &Symbols,
+        fref: &VarRef,
+        args: &[Expr],
+        f: &Rc<dyn Function>,
+    ) -> Result<Value> {
+        let metadata = f.metadata();
+        if fref.ref_type() != VarType::Auto && fref.ref_type() != metadata.return_type() {
+            return Err(Error::new("Incompatible type annotation for function call"));
+        }
+
+        let mut values = Vec::with_capacity(args.len());
+        for a in args {
+            values.push(a.eval(syms)?);
+        }
+        let result = f.exec(values);
+        match result {
+            Ok(value) => {
+                debug_assert!(metadata.return_type() != VarType::Auto);
+                let fref = VarRef::new(fref.name(), metadata.return_type());
+                // Given that we only support built-in functions at the moment, this
+                // could well be an assertion.  Doing so could turn into a time bomb
+                // when/if we add user-defined functions, so handle the problem as an
+                // error.
+                if !fref.accepts(&value) {
+                    return Err(Error::new(format!(
+                        "Value returned by {} is incompatible with its type definition",
+                        fref.name(),
+                    )));
+                }
+                Ok(value)
+            }
+            Err(e) => Err(Error::from_function_error(&metadata, e)),
+        }
+    }
+
     /// Evaluates the expression to a value.
     ///
     /// Symbols are resolved by querying `syms`.  Errors in the computation are returned via the
@@ -710,41 +842,15 @@ impl Expr {
             Expr::Modulo(lhs, rhs) => Value::modulo(&lhs.eval(syms)?, &rhs.eval(syms)?),
             Expr::Negate(e) => Value::neg(&e.eval(syms)?),
 
-            Expr::Call(fref, args) => match syms
-                .get_function(fref.name().to_ascii_uppercase().as_str())
-            {
-                Some(f) => {
-                    let metadata = f.metadata();
-                    if fref.ref_type() != VarType::Auto && fref.ref_type() != metadata.return_type()
-                    {
-                        return Err(Error::new("Incompatible type annotation for function call"));
-                    }
-
-                    let mut values = Vec::with_capacity(args.len());
-                    for a in args {
-                        values.push(a.eval(syms)?);
-                    }
-                    let result = f.exec(values);
-                    match result {
-                        Ok(value) => {
-                            debug_assert!(metadata.return_type() != VarType::Auto);
-                            let fref = VarRef::new(fref.name(), metadata.return_type());
-                            // Given that we only support built-in functions at the moment, this
-                            // could well be an assertion.  Doing so could turn into a time bomb
-                            // when/if we add user-defined functions, so handle the problem as an
-                            // error.
-                            if !fref.accepts(&value) {
-                                return Err(Error::new(format!(
-                                    "Value returned by {} is incompatible with its type definition",
-                                    fref.name(),
-                                )));
-                            }
-                            Ok(value)
-                        }
-                        Err(e) => Err(Error::from_function_error(&metadata, e)),
+            Expr::Call(fref, args) => match syms.get_array(fref)? {
+                Some(array) => self.eval_array_ref(syms, array, args),
+                None => {
+                    let key = fref.name().to_ascii_uppercase();
+                    match syms.get_function(key.as_str()) {
+                        Some(f) => self.eval_function_call(syms, fref, args, f),
+                        None => Err(Error::new(format!("Unknown function or array {}", fref))),
                     }
                 }
-                None => Err(Error::new(format!("Unknown function {}", fref))),
             },
         }
     }
@@ -1685,6 +1791,9 @@ mod tests {
 
     #[test]
     fn test_symbols_dim_name_overlap() {
+        let mut arrays = HashMap::default();
+        arrays.insert("SOMEARRAY".to_owned(), Array::new(VarType::Integer, vec![1]));
+
         let mut functions: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
         let sum = SumFunction::new();
         functions.insert(sum.metadata().name(), sum);
@@ -1692,7 +1801,7 @@ mod tests {
         let mut vars = HashMap::default();
         vars.insert("SOMEVAR".to_owned(), Value::Integer(1));
 
-        let mut syms = Symbols { functions, vars };
+        let mut syms = Symbols { arrays, functions, vars };
 
         assert_eq!(
             "Cannot DIM already-defined symbol Sum",
@@ -1702,6 +1811,79 @@ mod tests {
         assert_eq!(
             "Cannot DIM already-defined symbol SomeVar",
             format!("{}", syms.dim("SomeVar", VarType::Integer).unwrap_err())
+        );
+
+        assert_eq!(
+            "Cannot DIM already-defined symbol SomeArray",
+            format!("{}", syms.dim("SomeArray", VarType::Integer).unwrap_err())
+        );
+    }
+
+    fn assert_same_array_shape(exp_subtype: VarType, exp_dims: &[usize], array: &Array) {
+        assert_eq!(exp_subtype, array.subtype());
+        assert_eq!(exp_dims, array.dimensions());
+    }
+
+    #[test]
+    fn test_symbols_dim_array_ok() {
+        let mut syms = Symbols::default();
+
+        syms.dim_array("a_boolean", VarType::Boolean, vec![1]).unwrap();
+        assert_same_array_shape(
+            VarType::Boolean,
+            &[1],
+            syms.get_array(&VarRef::new("a_boolean", VarType::Auto)).unwrap().unwrap(),
+        );
+
+        syms.dim_array("a_double", VarType::Double, vec![5, 10]).unwrap();
+        assert_same_array_shape(
+            VarType::Double,
+            &[5, 10],
+            syms.get_array(&VarRef::new("a_double", VarType::Auto)).unwrap().unwrap(),
+        );
+
+        syms.dim_array("an_integer", VarType::Integer, vec![100]).unwrap();
+        assert_same_array_shape(
+            VarType::Integer,
+            &[100],
+            syms.get_array(&VarRef::new("an_integer", VarType::Auto)).unwrap().unwrap(),
+        );
+
+        syms.dim_array("a_string", VarType::Text, vec![1, 1]).unwrap();
+        assert_same_array_shape(
+            VarType::Text,
+            &[1, 1],
+            syms.get_array(&VarRef::new("a_string", VarType::Auto)).unwrap().unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_symbols_dim_array_name_overlap() {
+        let mut arrays = HashMap::default();
+        arrays.insert("SOMEARRAY".to_owned(), Array::new(VarType::Integer, vec![1]));
+
+        let mut functions: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
+        let sum = SumFunction::new();
+        functions.insert(sum.metadata().name(), sum);
+
+        let mut vars = HashMap::default();
+        vars.insert("SOMEVAR".to_owned(), Value::Integer(1));
+
+        let mut syms = Symbols { arrays, functions, vars };
+
+        assert_eq!(
+            "Cannot DIM already-defined symbol Sum",
+            format!("{}", syms.dim_array("Sum", VarType::Integer, vec![5]).unwrap_err())
+        );
+
+        assert_eq!(
+            "Cannot DIM already-defined symbol SomeVar",
+            format!("{}", syms.dim_array("SomeVar", VarType::Integer, vec![5]).unwrap_err())
+        );
+
+        assert_eq!(
+            "Cannot DIM already-defined symbol SomeArray",
+            format!("{}", syms.dim_array("SomeArray", VarType::Integer, vec![5]).unwrap_err())
         );
     }
 
@@ -1795,6 +1977,108 @@ mod tests {
         assert_eq!(
             "Incompatible types in a_string% reference",
             format!("{}", syms.get(&VarRef::new("a_string", VarType::Integer)).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_symbols_get_array_ok_with_explicit_type() {
+        let mut raw_arrays = HashMap::new();
+        raw_arrays.insert("A_BOOLEAN".to_owned(), Array::new(VarType::Boolean, vec![5]));
+        raw_arrays.insert("A_DOUBLE".to_owned(), Array::new(VarType::Double, vec![3]));
+        raw_arrays.insert("AN_INTEGER".to_owned(), Array::new(VarType::Integer, vec![8]));
+        raw_arrays.insert("A_STRING".to_owned(), Array::new(VarType::Text, vec![1, 5]));
+        let syms = Symbols::from_arrays(raw_arrays);
+
+        assert_same_array_shape(
+            VarType::Boolean,
+            &[5],
+            syms.get_array(&VarRef::new("a_boolean", VarType::Boolean)).unwrap().unwrap(),
+        );
+        assert_same_array_shape(
+            VarType::Double,
+            &[3],
+            syms.get_array(&VarRef::new("a_double", VarType::Double)).unwrap().unwrap(),
+        );
+        assert_same_array_shape(
+            VarType::Integer,
+            &[8],
+            syms.get_array(&VarRef::new("an_integer", VarType::Integer)).unwrap().unwrap(),
+        );
+        assert_same_array_shape(
+            VarType::Text,
+            &[1, 5],
+            syms.get_array(&VarRef::new("a_string", VarType::Text)).unwrap().unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_symbols_get_array_ok_with_auto_type() {
+        let mut raw_arrays = HashMap::new();
+        raw_arrays.insert("A_BOOLEAN".to_owned(), Array::new(VarType::Boolean, vec![5]));
+        raw_arrays.insert("A_DOUBLE".to_owned(), Array::new(VarType::Double, vec![3]));
+        raw_arrays.insert("AN_INTEGER".to_owned(), Array::new(VarType::Integer, vec![8]));
+        raw_arrays.insert("A_STRING".to_owned(), Array::new(VarType::Text, vec![1, 5]));
+        let syms = Symbols::from_arrays(raw_arrays);
+
+        assert_same_array_shape(
+            VarType::Boolean,
+            &[5],
+            syms.get_array(&VarRef::new("a_boolean", VarType::Auto)).unwrap().unwrap(),
+        );
+        assert_same_array_shape(
+            VarType::Double,
+            &[3],
+            syms.get_array(&VarRef::new("a_double", VarType::Auto)).unwrap().unwrap(),
+        );
+        assert_same_array_shape(
+            VarType::Integer,
+            &[8],
+            syms.get_array(&VarRef::new("an_integer", VarType::Auto)).unwrap().unwrap(),
+        );
+        assert_same_array_shape(
+            VarType::Text,
+            &[1, 5],
+            syms.get_array(&VarRef::new("a_string", VarType::Auto)).unwrap().unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_symbols_get_array_undefined_ok() {
+        let mut raw_arrays = HashMap::new();
+        raw_arrays.insert("A_STRING".to_owned(), Array::new(VarType::Text, vec![1, 5]));
+        let syms = Symbols::from_arrays(raw_arrays);
+
+        assert!(syms.get_array(&VarRef::new("a_str", VarType::Text)).unwrap().is_none());
+        assert!(syms.get_array(&VarRef::new("A_STR", VarType::Text)).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_symbols_get_array_mismatched_type_error() {
+        let mut raw_arrays = HashMap::new();
+        raw_arrays.insert("A_BOOLEAN".to_owned(), Array::new(VarType::Boolean, vec![5]));
+        raw_arrays.insert("A_DOUBLE".to_owned(), Array::new(VarType::Double, vec![3]));
+        raw_arrays.insert("AN_INTEGER".to_owned(), Array::new(VarType::Integer, vec![8]));
+        raw_arrays.insert("A_STRING".to_owned(), Array::new(VarType::Text, vec![1, 5]));
+        let syms = Symbols::from_arrays(raw_arrays);
+
+        assert_eq!(
+            "Incompatible types in a_boolean$ reference",
+            format!("{}", syms.get_array(&VarRef::new("a_boolean", VarType::Text)).unwrap_err())
+        );
+
+        assert_eq!(
+            "Incompatible types in a_double% reference",
+            format!("{}", syms.get_array(&VarRef::new("a_double", VarType::Integer)).unwrap_err())
+        );
+
+        assert_eq!(
+            "Incompatible types in an_integer# reference",
+            format!("{}", syms.get_array(&VarRef::new("an_integer", VarType::Double)).unwrap_err())
+        );
+
+        assert_eq!(
+            "Incompatible types in a_string% reference",
+            format!("{}", syms.get_array(&VarRef::new("a_string", VarType::Integer)).unwrap_err())
         );
     }
 
@@ -1942,6 +2226,9 @@ mod tests {
 
     #[test]
     fn test_symbols_set_name_overlap() {
+        let mut arrays = HashMap::default();
+        arrays.insert("SOMEARRAY".to_owned(), Array::new(VarType::Integer, vec![1]));
+
         let mut functions: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
         let sum = SumFunction::new();
         functions.insert(sum.metadata().name(), sum);
@@ -1949,13 +2236,21 @@ mod tests {
         let mut vars = HashMap::default();
         vars.insert("SOMEVAR".to_owned(), Value::Integer(1));
 
-        let mut syms = Symbols { functions, vars };
+        let mut syms = Symbols { arrays, functions, vars };
 
         assert_eq!(
             "Cannot redefine Sum% as a variable",
             format!(
                 "{}",
                 syms.set(&VarRef::new("Sum", VarType::Integer), Value::Integer(1)).unwrap_err()
+            )
+        );
+
+        assert_eq!(
+            "Cannot redefine SomeArray$ as a variable",
+            format!(
+                "{}",
+                syms.set(&VarRef::new("SomeArray", VarType::Text), Value::Integer(1)).unwrap_err()
             )
         );
     }
@@ -1974,6 +2269,126 @@ mod tests {
         assert_eq!(Value::Integer(100), *syms.get(&VarRef::new("the_var", VarType::Auto)).unwrap());
         syms.set(&VarRef::new("the_var", VarType::Auto), Value::Integer(200)).unwrap();
         assert_eq!(Value::Integer(200), *syms.get(&VarRef::new("the_var", VarType::Auto)).unwrap());
+    }
+
+    #[test]
+    fn test_symbols_set_array_ok_with_explicit_type() {
+        let mut syms = Symbols::default();
+
+        syms.dim_array("array", VarType::Integer, vec![10]).unwrap();
+        syms.set_array(
+            &VarRef::new("array", VarType::Integer),
+            &[Expr::Integer(4)],
+            &Expr::Integer(7),
+        )
+        .unwrap();
+        assert_eq!(
+            Value::Integer(7),
+            *syms
+                .get_array(&VarRef::new("array", VarType::Auto))
+                .unwrap()
+                .unwrap()
+                .index(&[4])
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn test_symbols_set_array_ok_with_auto_type() {
+        let mut syms = Symbols::default();
+
+        syms.dim_array("array", VarType::Integer, vec![10]).unwrap();
+        syms.set_array(
+            &VarRef::new("array", VarType::Auto),
+            &[Expr::Integer(0)],
+            &Expr::Negate(Box::from(Expr::Integer(10))),
+        )
+        .unwrap();
+        assert_eq!(
+            Value::Integer(-10),
+            *syms
+                .get_array(&VarRef::new("array", VarType::Auto))
+                .unwrap()
+                .unwrap()
+                .index(&[0])
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn test_symbols_set_array_mismatched_type_with_existing_value() {
+        let mut syms = Symbols::default();
+
+        syms.dim_array("array", VarType::Integer, vec![10]).unwrap();
+        assert_eq!(
+            "Incompatible type annotation for array reference",
+            format!(
+                "{}",
+                syms.set_array(
+                    &VarRef::new("array", VarType::Boolean),
+                    &[Expr::Integer(0)],
+                    &Expr::Integer(3),
+                )
+                .unwrap_err()
+            )
+        );
+    }
+
+    #[test]
+    fn test_symbols_set_array_mismatched_type_for_annotation() {
+        let mut syms = Symbols::default();
+
+        syms.dim_array("array", VarType::Integer, vec![10]).unwrap();
+        assert_eq!(
+            "Cannot assign value of type Double to array of type Integer",
+            format!(
+                "{}",
+                syms.set_array(
+                    &VarRef::new("array", VarType::Integer),
+                    &[Expr::Integer(0)],
+                    &Expr::Double(3.0),
+                )
+                .unwrap_err()
+            )
+        );
+    }
+
+    #[test]
+    fn test_symbols_set_array_undefined() {
+        let mut syms = Symbols::default();
+
+        syms.dim_array("array", VarType::Integer, vec![10]).unwrap();
+        assert_eq!(
+            "Cannot index undefined array foo",
+            format!(
+                "{}",
+                syms.set_array(
+                    &VarRef::new("foo", VarType::Integer),
+                    &[Expr::Integer(0)],
+                    &Expr::Integer(3),
+                )
+                .unwrap_err()
+            )
+        );
+    }
+
+    #[test]
+    fn test_symbols_set_array_invalid_subscript_type() {
+        let mut syms = Symbols::default();
+
+        syms.dim_array("array", VarType::Integer, vec![10]).unwrap();
+        assert_eq!(
+            "Subscript Double(0.0) in array reference must be an integer",
+            format!(
+                "{}",
+                syms.set_array(
+                    &VarRef::new("foo", VarType::Integer),
+                    &[Expr::Integer(3), Expr::Double(0.0)],
+                    &Expr::Integer(3),
+                )
+                .unwrap_err()
+            )
+        );
     }
 
     #[test]
@@ -2159,6 +2574,98 @@ mod tests {
     }
 
     #[test]
+    fn test_expr_array_simple() {
+        let xref = VarRef::new("x", VarType::Integer);
+
+        let mut syms = Symbols::default();
+        syms.dim_array("x", VarType::Integer, vec![2, 4]).unwrap();
+        syms.set_array(&xref, &[Expr::Integer(1), Expr::Integer(3)], &Expr::Integer(8)).unwrap();
+
+        assert_eq!(
+            Value::Integer(0),
+            Expr::Call(VarRef::new("X", VarType::Auto), vec![Expr::Integer(0), Expr::Integer(3)])
+                .eval(&syms)
+                .unwrap()
+        );
+
+        assert_eq!(
+            Value::Integer(8),
+            Expr::Call(VarRef::new("X", VarType::Auto), vec![Expr::Integer(1), Expr::Integer(3)])
+                .eval(&syms)
+                .unwrap()
+        );
+
+        assert_eq!(
+            Value::Integer(8),
+            Expr::Call(
+                VarRef::new("X", VarType::Integer),
+                vec![Expr::Integer(1), Expr::Integer(3)]
+            )
+            .eval(&syms)
+            .unwrap()
+        );
+
+        assert_eq!(
+            "Incompatible types in X# reference",
+            format!(
+                "{}",
+                Expr::Call(
+                    VarRef::new("X", VarType::Double),
+                    vec![Expr::Integer(1), Expr::Integer(3)]
+                )
+                .eval(&syms)
+                .unwrap_err()
+            )
+        );
+
+        assert_eq!(
+            "Cannot index array with 1 subscripts; need 2",
+            format!(
+                "{}",
+                Expr::Call(VarRef::new("X", VarType::Integer), vec![Expr::Integer(1)])
+                    .eval(&syms)
+                    .unwrap_err()
+            )
+        );
+
+        assert_eq!(
+            "Subscript -1 cannot be negative",
+            format!(
+                "{}",
+                Expr::Call(
+                    VarRef::new("X", VarType::Integer),
+                    vec![Expr::Integer(0), Expr::Integer(-1)]
+                )
+                .eval(&syms)
+                .unwrap_err()
+            )
+        );
+
+        assert_eq!(
+            "Subscript 10 exceeds limit of 2",
+            format!(
+                "{}",
+                Expr::Call(
+                    VarRef::new("X", VarType::Integer),
+                    vec![Expr::Integer(10), Expr::Integer(0)]
+                )
+                .eval(&syms)
+                .unwrap_err()
+            )
+        );
+
+        assert_eq!(
+            "Unknown function or array y$",
+            format!(
+                "{}",
+                Expr::Call(VarRef::new("y".to_owned(), VarType::Text), vec![])
+                    .eval(&syms)
+                    .unwrap_err()
+            )
+        );
+    }
+
+    #[test]
     fn test_expr_function_call_simple() {
         let xref = VarRef::new("x", VarType::Integer);
 
@@ -2216,7 +2723,7 @@ mod tests {
         );
 
         assert_eq!(
-            "Unknown function SUMA$",
+            "Unknown function or array SUMA$",
             format!(
                 "{}",
                 Expr::Call(VarRef::new("SUMA".to_owned(), VarType::Text), vec![])

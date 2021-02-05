@@ -26,8 +26,9 @@ use std::rc::Rc;
 
 /// Cheat-sheet for the language syntax.
 const LANG_REFERENCE: &str = r"
-    Symbols (variable and function references):
+    Symbols (variable, array and function references):
         name?    Boolean (TRUE and FALSE).
+        name#    Floating point (double).
         name%    Integer (32 bits).
         name$    String.
         name     Type determined by value or definition.
@@ -40,7 +41,8 @@ const LANG_REFERENCE: &str = r"
         a + b      a - b       a * b     a / b      a MOD b    -a
         a AND b    NOT a       a OR b    a XOR b
         a = b      a <> b      a < b     a <= b     a > b      a >= b
-        (a)        varref      funcref(a1[, ..., aN])
+        (a)        varref
+        arrayref(s1[, ..., sN])          funcref(a1[, ..., aN])
 
     Flow control:
         IF expr THEN: ...: ELSE IF expr THEN: ...: ELSE: ...: END IF

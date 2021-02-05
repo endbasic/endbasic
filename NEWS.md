@@ -9,7 +9,9 @@ not adhere to semantic versioning until 1.0.0.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
-*   Added simple support for the `DIM` statement to define variables.
+*   Added support for the `DIM` statement to define variables and arrays.
+
+*   Added support for multidimensional arrays.
 
 *   Modified `INPUT` so that it autodetects the target type of a variable when
     the variable is already defined, instead of assuming the integer type for
