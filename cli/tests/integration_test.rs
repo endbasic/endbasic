@@ -395,6 +395,18 @@ fn test_lang_lexer_error() {
 }
 
 #[test]
+fn test_lang_matrix() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/lang/matrix.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/lang/matrix.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_lang_parser_error() {
     check(
         bin_path("endbasic"),

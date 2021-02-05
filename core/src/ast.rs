@@ -67,7 +67,7 @@ pub enum Expr {
     /// Logical xor of two expressions.
     Xor(Box<Expr>, Box<Expr>),
 
-    /// A function call.
+    /// A function call or an array reference.
     Call(VarRef, Vec<Expr>),
 }
 
