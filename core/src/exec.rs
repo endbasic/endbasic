@@ -16,7 +16,7 @@
 //! Execution engine for EndBASIC programs.
 
 use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
-use crate::eval::{self, CallableMetadata, Function, Symbols};
+use crate::eval::{self, CallableMetadata, Function, Symbol, Symbols};
 use crate::parser::{self, Parser};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -155,7 +155,7 @@ impl Machine {
     }
 
     /// Obtains immutable access to the builtin functions provided by this machine.
-    pub fn get_functions(&self) -> &HashMap<&'static str, Rc<dyn Function>> {
+    pub fn get_functions(&self) -> HashMap<String, &Rc<dyn Function>> {
         self.symbols.get_functions()
     }
 
@@ -172,7 +172,7 @@ impl Machine {
     /// Retrieves the variable `name` as a boolean.  Fails if it is some other type or if it's not
     /// defined.
     pub fn get_var_as_bool(&self, name: &str) -> Result<bool> {
-        match self.symbols.get(&VarRef::new(name, VarType::Boolean))? {
+        match self.symbols.get_var(&VarRef::new(name, VarType::Boolean))? {
             Value::Boolean(b) => Ok(*b),
             _ => panic!("Invalid type check in get()"),
         }
@@ -181,7 +181,7 @@ impl Machine {
     /// Retrieves the variable `name` as an integer.  Fails if it is some other type or if it's not
     /// defined.
     pub fn get_var_as_int(&self, name: &str) -> Result<i32> {
-        match self.symbols.get(&VarRef::new(name, VarType::Integer))? {
+        match self.symbols.get_var(&VarRef::new(name, VarType::Integer))? {
             Value::Integer(i) => Ok(*i),
             _ => panic!("Invalid type check in get()"),
         }
@@ -190,7 +190,7 @@ impl Machine {
     /// Retrieves the variable `name` as a string.  Fails if it is some other type or if it's not
     /// defined.
     pub fn get_var_as_string(&self, name: &str) -> Result<&str> {
-        match self.symbols.get(&VarRef::new(name, VarType::Text))? {
+        match self.symbols.get_var(&VarRef::new(name, VarType::Text))? {
             Value::Text(s) => Ok(s),
             _ => panic!("Invalid type check in get()"),
         }
@@ -199,8 +199,30 @@ impl Machine {
     /// Assigns the value of `expr` to the variable `vref`.
     fn assign(&mut self, vref: &VarRef, expr: &Expr) -> Result<()> {
         let value = expr.eval(&self.symbols)?;
-        self.symbols.set(&vref, value)?;
+        self.symbols.set_var(&vref, value)?;
         Ok(())
+    }
+
+    /// Assigns the value of `expr` to the array `vref` in the position `subscripts`.
+    fn assign_array(&mut self, vref: &VarRef, subscripts: &[Expr], expr: &Expr) -> Result<()> {
+        let mut ds = Vec::with_capacity(subscripts.len());
+        for ss_expr in subscripts {
+            match ss_expr.eval(&self.symbols)? {
+                Value::Integer(i) => ds.push(i),
+                v => return new_syntax_error(format!("Subscript {:?} must be an integer", v)),
+            }
+        }
+
+        let value = expr.eval(&self.symbols)?;
+
+        match self.symbols.get_mut(vref)? {
+            Some(Symbol::Array(array)) => {
+                array.assign(&ds, value)?;
+                Ok(())
+            }
+            Some(_) => new_syntax_error(format!("Cannot index non-array {}", vref.name())),
+            None => new_syntax_error(format!("Cannot index undefined array {}", vref.name())),
+        }
     }
 
     /// Defines a new array `name` of type `subtype` with `dimensions`.  The array must not yet
@@ -253,7 +275,7 @@ impl Machine {
         );
         let start_value = start.eval(&self.symbols)?;
         match start_value {
-            Value::Integer(_) => self.symbols.set(iterator, start_value)?,
+            Value::Integer(_) => self.symbols.set_var(iterator, start_value)?,
             _ => return new_syntax_error("FOR supports integer iteration only"),
         }
 
@@ -299,7 +321,7 @@ impl Machine {
 
         match stmt {
             Statement::ArrayAssignment(vref, subscripts, value) => {
-                self.symbols.set_array(vref, subscripts, value)?
+                self.assign_array(vref, subscripts, value)?
             }
             Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
             Statement::BuiltinCall(name, args) => {
@@ -438,7 +460,7 @@ pub(crate) mod testutils {
             let mut data = self.data.borrow_mut();
             let raw_value = data.next().unwrap().to_owned();
             let value = Value::parse_as(vref.ref_type(), raw_value)?;
-            machine.get_mut_symbols().set(vref, value)?;
+            machine.get_mut_symbols().set_var(vref, value)?;
             Ok(())
         }
     }
@@ -626,6 +648,11 @@ mod tests {
     fn test_array_assignment_ok() {
         do_ok_test("DIM a(3)\na(1) = 5 + 1\nOUT a(0); a(1); a(2)", &[], &["0 6 0"]);
         do_ok_test("DIM a(3) AS STRING\na$(1) = \"x\"\nOUT a(0); a(1); a$(2)", &[], &[" x "]);
+        do_ok_test(
+            "DIM a(3, 8, 2) AS BOOLEAN\na(3 - 3, 2 * 2, 1) = TRUE\nOUT a(0, 4, 1)",
+            &[],
+            &["TRUE"],
+        );
     }
 
     #[test]
@@ -636,12 +663,14 @@ mod tests {
     #[test]
     fn test_array_assignment_errors() {
         do_simple_error_test("a() = 3\n", "Cannot index undefined array a");
+        do_simple_error_test("a = 3\na(0) = 3\n", "Cannot index non-array a");
         do_simple_error_test("DIM a(2)\na() = 3\n", "Cannot index array with 0 subscripts; need 1");
         do_simple_error_test("DIM a(1)\na(-1) = 3\n", "Subscript -1 cannot be negative");
         do_simple_error_test(
-            "DIM a(2)\na$(1) = 3",
-            "Incompatible type annotation for array reference",
+            "DIM a(1)\na(1, 3.0) = 3\n",
+            "Subscript Double(3.0) must be an integer",
         );
+        do_simple_error_test("DIM a(2)\na$(1) = 3", "Incompatible types in a$ reference");
     }
 
     #[test]
@@ -923,7 +952,7 @@ mod tests {
 
     #[test]
     fn test_function_call_errors() {
-        do_simple_error_test("OUT SUM?()", "Incompatible type annotation for function call");
+        do_simple_error_test("OUT SUM?()", "Incompatible types in SUM? reference");
     }
 
     #[test]

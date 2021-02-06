@@ -74,16 +74,16 @@ fn header() -> Vec<String> {
 // If we can homogenize their representation, this should go away.
 fn compute_callables<'a>(
     commands: &'a HashMap<&'static str, Rc<dyn Command>>,
-    functions: &'a HashMap<&'static str, Rc<dyn Function>>,
-) -> HashMap<&'static str, &'a CallableMetadata> {
-    let mut callables: HashMap<&'static str, &'a CallableMetadata> = HashMap::default();
+    functions: &'a HashMap<String, &Rc<dyn Function>>,
+) -> HashMap<String, &'a CallableMetadata> {
+    let mut callables: HashMap<String, &'a CallableMetadata> = HashMap::default();
     for (name, command) in commands.iter() {
-        assert!(!callables.contains_key(name), "Command names are in a map; must be unique");
-        callables.insert(&name, command.metadata());
+        assert!(!callables.contains_key(*name), "Command names are in a map; must be unique");
+        callables.insert(name.to_string(), command.metadata());
     }
     for (name, function) in functions.iter() {
         assert!(!callables.contains_key(name), "Command and function names are not disjoint");
-        callables.insert(&name, function.metadata());
+        callables.insert(name.clone(), function.metadata());
     }
     callables
 }
@@ -93,7 +93,7 @@ fn compute_callables<'a>(
 /// The return value is the index in the form of a (category name -> (name, blurb)) mapping,
 /// followed by the length of the longest command name that was found.
 fn build_index(
-    callables: &HashMap<&'static str, &CallableMetadata>,
+    callables: &HashMap<String, &CallableMetadata>,
 ) -> (BTreeMap<&'static str, BTreeMap<String, &'static str>>, usize) {
     let mut index = BTreeMap::default();
     let mut max_length = 0;
@@ -133,7 +133,7 @@ function.",
     }
 
     /// Prints a summary of all available help topics.
-    fn summary(&self, callables: &HashMap<&'static str, &CallableMetadata>) -> exec::Result<()> {
+    fn summary(&self, callables: &HashMap<String, &CallableMetadata>) -> exec::Result<()> {
         let (index, max_length) = build_index(callables);
 
         let mut console = self.console.borrow_mut();
@@ -206,7 +206,8 @@ impl Command for HelpCommand {
         args: &[(Option<Expr>, ArgSep)],
         machine: &mut Machine,
     ) -> exec::Result<()> {
-        let callables = compute_callables(machine.get_commands(), machine.get_functions());
+        let fs = machine.get_functions();
+        let callables = compute_callables(machine.get_commands(), &fs);
         match args {
             [] => self.summary(&callables)?,
             [(Some(Expr::Symbol(vref)), ArgSep::End)] => {

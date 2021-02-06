@@ -19,7 +19,7 @@ use crate::console::{self, ClearType, Console, Key, Position};
 use crate::store::{InMemoryStore, Program, Store};
 use async_trait::async_trait;
 use endbasic_core::ast::Value;
-use endbasic_core::eval::Function;
+use endbasic_core::eval::{Array, Function, Symbol};
 use endbasic_core::exec::{self, Command, Machine, StopReason};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
@@ -424,7 +424,25 @@ impl<'a> Checker<'a> {
             Err(e) => assert_eq!(self.exp_result.unwrap_err(), format!("{}", e)),
         };
 
-        assert_eq!(self.exp_vars, *self.tester.machine.get_symbols().as_hashmap());
+        let mut arrays: HashMap<&str, &Array> = HashMap::default();
+        let mut vars = HashMap::default();
+        for (name, symbol) in self.tester.machine.get_symbols().as_hashmap() {
+            match symbol {
+                Symbol::Array(array) => {
+                    arrays.insert(name, array);
+                }
+                Symbol::Function(_) => {
+                    // We currently don't support user-defined functions at runtime so there is no
+                    // need to validate anything about them.
+                }
+                Symbol::Variable(value) => {
+                    vars.insert(name.to_owned(), value.clone());
+                }
+            }
+        }
+
+        assert!(arrays.is_empty());
+        assert_eq!(self.exp_vars, vars);
         assert_eq!(self.exp_output, self.tester.console.borrow().captured_out());
         assert_eq!(self.exp_program, self.tester.program.borrow().text());
         assert_eq!(self.exp_store, *self.tester.store.borrow().as_hashmap());
