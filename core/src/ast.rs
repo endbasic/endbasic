@@ -171,16 +171,9 @@ impl VarRef {
         self.ref_type
     }
 
-    /// Returns true if this reference is compatible with the given `value`'s type.
-    pub fn accepts(&self, value: &Value) -> bool {
-        match (self.ref_type, value) {
-            (VarType::Auto, _) => true,
-            (VarType::Boolean, Value::Boolean(_)) => true,
-            (VarType::Double, Value::Double(_)) => true,
-            (VarType::Integer, Value::Integer(_)) => true,
-            (VarType::Text, Value::Text(_)) => true,
-            (_, _) => false,
-        }
+    /// Returns true if this reference is compatible with the given type.
+    pub fn accepts(&self, other: VarType) -> bool {
+        self.ref_type == VarType::Auto || self.ref_type == other
     }
 }
 

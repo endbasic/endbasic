@@ -520,7 +520,7 @@ impl Symbols {
         let symbol = self.by_name.get(key);
         if let Some(symbol) = symbol {
             let stype = symbol.eval_type();
-            if vref.ref_type() != VarType::Auto && vref.ref_type() != stype {
+            if !vref.accepts(stype) {
                 return Err(Error::new(format!("Incompatible types in {} reference", vref)));
             }
         }
@@ -535,7 +535,7 @@ impl Symbols {
         match self.by_name.get_mut(key) {
             Some(symbol) => {
                 let stype = symbol.eval_type();
-                if vref.ref_type() != VarType::Auto && vref.ref_type() != stype {
+                if !vref.accepts(stype) {
                     return Err(Error::new(format!("Incompatible types in {} reference", vref)));
                 }
                 Ok(Some(symbol))
@@ -576,7 +576,7 @@ impl Symbols {
             Some(symbol) => match vref.ref_type() {
                 VarType::Auto => Ok(vref.clone().qualify(symbol.eval_type())),
                 _ => {
-                    if vref.ref_type() != VarType::Auto && vref.ref_type() != symbol.eval_type() {
+                    if !vref.accepts(symbol.eval_type()) {
                         return Err(Error::new(format!(
                             "Incompatible types in {} reference",
                             vref
@@ -607,7 +607,7 @@ impl Symbols {
             }
             Some(_) => Err(Error::new(format!("Cannot redefine {} as a variable", vref))),
             None => {
-                if vref.ref_type() != VarType::Auto && vref.ref_type() != value.as_vartype() {
+                if !vref.accepts(value.as_vartype()) {
                     return Err(Error::new(format!("Incompatible types in {} assignment", vref)));
                 }
                 self.by_name.insert(vref.name().to_ascii_uppercase(), Symbol::Variable(value));
@@ -771,7 +771,7 @@ impl Expr {
         f: &Rc<dyn Function>,
     ) -> Result<Value> {
         let metadata = f.metadata();
-        if fref.ref_type() != VarType::Auto && fref.ref_type() != metadata.return_type() {
+        if !fref.accepts(metadata.return_type()) {
             return Err(Error::new("Incompatible type annotation for function call"));
         }
 
@@ -788,7 +788,7 @@ impl Expr {
                 // could well be an assertion.  Doing so could turn into a time bomb
                 // when/if we add user-defined functions, so handle the problem as an
                 // error.
-                if !fref.accepts(&value) {
+                if !fref.accepts(value.as_vartype()) {
                     return Err(Error::new(format!(
                         "Value returned by {} is incompatible with its type definition",
                         fref.name(),
@@ -1584,35 +1584,30 @@ mod tests {
 
     #[test]
     fn test_varref_accepts() {
-        let bool_val = Value::Boolean(true);
-        let double_val = Value::Double(0.0);
-        let int_val = Value::Integer(0);
-        let text_val = Value::Text("x".to_owned());
+        assert!(VarRef::new("a", VarType::Auto).accepts(VarType::Boolean));
+        assert!(VarRef::new("a", VarType::Auto).accepts(VarType::Double));
+        assert!(VarRef::new("a", VarType::Auto).accepts(VarType::Integer));
+        assert!(VarRef::new("a", VarType::Auto).accepts(VarType::Text));
 
-        assert!(VarRef::new("a", VarType::Auto).accepts(&bool_val));
-        assert!(VarRef::new("a", VarType::Auto).accepts(&double_val));
-        assert!(VarRef::new("a", VarType::Auto).accepts(&int_val));
-        assert!(VarRef::new("a", VarType::Auto).accepts(&text_val));
+        assert!(VarRef::new("a", VarType::Boolean).accepts(VarType::Boolean));
+        assert!(!VarRef::new("a", VarType::Boolean).accepts(VarType::Double));
+        assert!(!VarRef::new("a", VarType::Boolean).accepts(VarType::Integer));
+        assert!(!VarRef::new("a", VarType::Boolean).accepts(VarType::Text));
 
-        assert!(VarRef::new("a", VarType::Boolean).accepts(&bool_val));
-        assert!(!VarRef::new("a", VarType::Boolean).accepts(&double_val));
-        assert!(!VarRef::new("a", VarType::Boolean).accepts(&int_val));
-        assert!(!VarRef::new("a", VarType::Boolean).accepts(&text_val));
+        assert!(!VarRef::new("a", VarType::Double).accepts(VarType::Boolean));
+        assert!(VarRef::new("a", VarType::Double).accepts(VarType::Double));
+        assert!(!VarRef::new("a", VarType::Double).accepts(VarType::Integer));
+        assert!(!VarRef::new("a", VarType::Double).accepts(VarType::Text));
 
-        assert!(!VarRef::new("a", VarType::Double).accepts(&bool_val));
-        assert!(VarRef::new("a", VarType::Double).accepts(&double_val));
-        assert!(!VarRef::new("a", VarType::Double).accepts(&int_val));
-        assert!(!VarRef::new("a", VarType::Double).accepts(&text_val));
+        assert!(!VarRef::new("a", VarType::Integer).accepts(VarType::Boolean));
+        assert!(!VarRef::new("a", VarType::Integer).accepts(VarType::Double));
+        assert!(VarRef::new("a", VarType::Integer).accepts(VarType::Integer));
+        assert!(!VarRef::new("a", VarType::Integer).accepts(VarType::Text));
 
-        assert!(!VarRef::new("a", VarType::Integer).accepts(&bool_val));
-        assert!(!VarRef::new("a", VarType::Integer).accepts(&double_val));
-        assert!(VarRef::new("a", VarType::Integer).accepts(&int_val));
-        assert!(!VarRef::new("a", VarType::Integer).accepts(&text_val));
-
-        assert!(!VarRef::new("a", VarType::Text).accepts(&bool_val));
-        assert!(!VarRef::new("a", VarType::Text).accepts(&double_val));
-        assert!(!VarRef::new("a", VarType::Text).accepts(&int_val));
-        assert!(VarRef::new("a", VarType::Text).accepts(&text_val));
+        assert!(!VarRef::new("a", VarType::Text).accepts(VarType::Boolean));
+        assert!(!VarRef::new("a", VarType::Text).accepts(VarType::Double));
+        assert!(!VarRef::new("a", VarType::Text).accepts(VarType::Integer));
+        assert!(VarRef::new("a", VarType::Text).accepts(VarType::Text));
     }
 
     #[test]
