@@ -17,6 +17,7 @@
 
 use crate::ast::{Expr, Value, VarRef, VarType};
 use std::collections::HashMap;
+use std::fmt;
 use std::mem;
 use std::rc::Rc;
 use std::str::Lines;
@@ -414,75 +415,84 @@ impl Array {
     }
 }
 
+/// Holds the definition of a symbol.
+pub enum Symbol {
+    /// An array definition.
+    Array(Array),
+
+    /// A function definition.
+    Function(Rc<dyn Function>),
+
+    /// A variable definition.
+    Variable(Value),
+}
+
+impl Symbol {
+    /// Returns the type the symbol evaluates as.
+    fn eval_type(&self) -> VarType {
+        match self {
+            Symbol::Array(array) => array.subtype(),
+            Symbol::Function(function) => function.metadata().return_type(),
+            Symbol::Variable(value) => value.as_vartype(),
+        }
+    }
+
+    /// Returns whether the symbol was defined by the user or not.
+    fn user_defined(&self) -> bool {
+        match self {
+            Symbol::Array(_) => true,
+            Symbol::Function(_) => false,
+            Symbol::Variable(_) => true,
+        }
+    }
+}
+
+impl fmt::Debug for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Symbol::Array(array) => write!(f, "Array({:?})", array),
+            Symbol::Function(function) => write!(f, "Function({:?})", function.metadata()),
+            Symbol::Variable(value) => write!(f, "Variable({:?})", value),
+        }
+    }
+}
+
 /// Storage for all symbols that exist at runtime.
 #[derive(Default)]
 pub struct Symbols {
-    /// Map of array names (without type annotations) to their definitions.
-    arrays: HashMap<String, Array>,
-
-    /// Map of function names (without type annotations) to their definitions.
-    functions: HashMap<&'static str, Rc<dyn Function>>,
-
-    /// Map of variable names (without type annotations) to their values.
-    vars: HashMap<String, Value>,
+    /// Map of symbol names to their definitions.
+    by_name: HashMap<String, Symbol>,
 }
 
 impl Symbols {
-    /// Constructs a new symbol table with some predefined `arrays`.
-    #[cfg(test)]
-    fn from_arrays(arrays: HashMap<String, Array>) -> Self {
-        Self { arrays, functions: HashMap::default(), vars: HashMap::default() }
-    }
-
-    /// Constructs a new symbol table with some predefined `functions`.
-    #[cfg(test)]
-    fn from_functions(functions: HashMap<&'static str, Rc<dyn Function>>) -> Self {
-        Self { arrays: HashMap::default(), functions, vars: HashMap::default() }
-    }
-
-    /// Constructs a new symbol table with the raw variables `vars`.
-    #[cfg(test)]
-    fn from_vars(vars: HashMap<String, Value>) -> Self {
-        Self { arrays: HashMap::default(), functions: HashMap::default(), vars }
-    }
-
-    /// Returns true if the given name is defined as any kind of symbol.
-    ///
-    /// The input `name` must be in canonical form (uppercase).
-    fn is_defined(&self, name: &str) -> bool {
-        assert!(name == name.to_ascii_uppercase());
-        self.vars.get(name).is_some()
-            || self.arrays.get(name).is_some()
-            || self.functions.get(name).is_some()
-    }
-
     /// Registers the given builtin function.
     ///
     /// Given that functions cannot be defined at runtime, specifying a non-unique name results in
     /// a panic.
     pub fn add_function(&mut self, function: Rc<dyn Function>) {
-        let metadata = function.metadata();
-        assert!(!self.is_defined(metadata.name()));
-        self.functions.insert(metadata.name(), function);
+        let key = function.metadata().name();
+        debug_assert!(key == key.to_ascii_uppercase());
+        assert!(!self.by_name.contains_key(key));
+        self.by_name.insert(key.to_owned(), Symbol::Function(function));
     }
 
-    /// Returns the mapping of all variables.
-    pub fn as_hashmap(&self) -> &HashMap<String, Value> {
-        &self.vars
+    /// Returns the mapping of all symbols.
+    pub fn as_hashmap(&self) -> &HashMap<String, Symbol> {
+        &self.by_name
     }
 
-    /// Clears all variables.
+    /// Clears all user-defined symbols.
     pub fn clear(&mut self) {
-        self.vars.clear()
+        self.by_name.retain(|_, symbol| !symbol.user_defined());
     }
 
     /// Defines a new variable `name` of type `vartype`.  The variable must not yet exist.
     pub fn dim(&mut self, name: &str, vartype: VarType) -> Result<()> {
         let key = name.to_ascii_uppercase();
-        if self.is_defined(&key) {
+        if self.by_name.contains_key(&key) {
             return Err(Error::new(format!("Cannot DIM already-defined symbol {}", name)));
         }
-        self.vars.insert(key, vartype.default_value());
+        self.by_name.insert(key, Symbol::Variable(vartype.default_value()));
         Ok(())
     }
 
@@ -495,65 +505,78 @@ impl Symbols {
         dimensions: Vec<usize>,
     ) -> Result<()> {
         let key = name.to_ascii_uppercase();
-        if self.is_defined(&key) {
+        if self.by_name.contains_key(&key) {
             return Err(Error::new(format!("Cannot DIM already-defined symbol {}", name)));
         }
-        self.arrays.insert(key, Array::new(subtype, dimensions));
+        self.by_name.insert(key, Symbol::Array(Array::new(subtype, dimensions)));
         Ok(())
+    }
+
+    /// Obtains the value of a symbol or `None` if it is not defined.
+    ///
+    /// Returns an error if the type annotation in the symbol reference does not match its type.
+    fn get(&self, vref: &VarRef) -> Result<Option<&Symbol>> {
+        let key = &vref.name().to_ascii_uppercase();
+        let symbol = self.by_name.get(key);
+        if let Some(symbol) = symbol {
+            let stype = symbol.eval_type();
+            if vref.ref_type() != VarType::Auto && vref.ref_type() != stype {
+                return Err(Error::new(format!("Incompatible types in {} reference", vref)));
+            }
+        }
+        Ok(symbol)
+    }
+
+    /// Obtains the value of a symbol or `None` if it is not defined.
+    ///
+    /// Returns an error if the type annotation in the symbol reference does not match its type.
+    pub fn get_mut(&mut self, vref: &VarRef) -> Result<Option<&mut Symbol>> {
+        let key = &vref.name().to_ascii_uppercase();
+        match self.by_name.get_mut(key) {
+            Some(symbol) => {
+                let stype = symbol.eval_type();
+                if vref.ref_type() != VarType::Auto && vref.ref_type() != stype {
+                    return Err(Error::new(format!("Incompatible types in {} reference", vref)));
+                }
+                Ok(Some(symbol))
+            }
+            None => Ok(None),
+        }
     }
 
     /// Obtains the value of a variable.
     ///
-    /// Returns an error if the variable is not defined, or if the type annotation in the variable
-    /// reference does not match the type of the value that the variable contains.
-    pub fn get(&self, vref: &VarRef) -> Result<&Value> {
-        let value = match self.vars.get(&vref.name().to_ascii_uppercase()) {
-            Some(v) => v,
-            None => return Err(Error::new(format!("Undefined variable {}", vref.name()))),
-        };
-        if !vref.accepts(&value) {
-            return Err(Error::new(format!("Incompatible types in {} reference", vref)));
+    /// Returns an error if the variable is not defined, if the referenced symbol is not a variable,
+    /// or if the type annotation in the variable reference does not match the type of the value
+    /// that the variable contains.
+    pub fn get_var(&self, vref: &VarRef) -> Result<&Value> {
+        match self.get(vref)? {
+            Some(Symbol::Variable(v)) => Ok(v),
+            Some(_) => Err(Error::new(format!("{} is not a variable", vref.name()))),
+            None => Err(Error::new(format!("Undefined variable {}", vref.name()))),
         }
-        Ok(value)
-    }
-
-    /// Obtains the definition of the array `name`, or `None` if it is not defined.
-    ///
-    /// Returns an error if the array is not defined, or if the type annotation in the array
-    /// reference does not match the type of the value that the array contains.
-    pub fn get_array(&self, vref: &VarRef) -> Result<Option<&Array>> {
-        let array = self.arrays.get(&vref.name().to_ascii_uppercase());
-        if let Some(array) = array {
-            if vref.ref_type() != VarType::Auto && vref.ref_type() != array.subtype() {
-                return Err(Error::new(format!("Incompatible types in {} reference", vref)));
-            }
-        }
-        Ok(array)
-    }
-
-    /// Obtains the definition of the function `name`, or None if it is not defined.
-    pub fn get_function(&self, name: &str) -> Option<&Rc<dyn Function>> {
-        self.functions.get(name)
     }
 
     /// Obtains the definition of all functions.
-    pub fn get_functions(&self) -> &HashMap<&'static str, Rc<dyn Function>> {
-        &self.functions
+    pub fn get_functions(&self) -> HashMap<String, &Rc<dyn Function>> {
+        let mut fs = HashMap::default();
+        for (name, symbol) in self.by_name.iter() {
+            if let Symbol::Function(f) = symbol {
+                fs.insert(name.clone(), f);
+            }
+        }
+        fs
     }
 
-    /// Returns true if this contains no variables.
-    pub fn is_empty(&self) -> bool {
-        self.vars.is_empty()
-    }
-
-    /// Adds a type annotation to the variable reference if the variable is already defined and the
+    /// Adds a type annotation to the symbol reference if the symbol is already defined and the
     /// reference lacks one.
     pub fn qualify_varref(&self, vref: &VarRef) -> Result<VarRef> {
-        match self.vars.get(&vref.name().to_ascii_uppercase()) {
-            Some(value) => match vref.ref_type() {
-                VarType::Auto => Ok(vref.clone().qualify(value.as_vartype())),
+        let key = vref.name().to_ascii_uppercase();
+        match self.by_name.get(&key) {
+            Some(symbol) => match vref.ref_type() {
+                VarType::Auto => Ok(vref.clone().qualify(symbol.eval_type())),
                 _ => {
-                    if !vref.accepts(&value) {
+                    if vref.ref_type() != VarType::Auto && vref.ref_type() != symbol.eval_type() {
                         return Err(Error::new(format!(
                             "Incompatible types in {} reference",
                             vref
@@ -573,58 +596,24 @@ impl Symbols {
     ///
     /// If the variable is already defined, then the type of the new value must be compatible with
     /// the existing variable.  In other words: a variable cannot change types while it's alive.
-    pub fn set(&mut self, vref: &VarRef, value: Value) -> Result<()> {
-        let name = vref.name().to_ascii_uppercase();
-        if self.is_defined(&name) && !self.vars.contains_key(&name) {
-            return Err(Error::new(format!("Cannot redefine {} as a variable", vref)));
-        }
-        if !vref.accepts(&value) {
-            return Err(Error::new(format!("Incompatible types in {} assignment", vref)));
-        }
-        if let Some(old_value) = self.vars.get_mut(&name) {
-            if mem::discriminant(&value) != mem::discriminant(old_value) {
-                return Err(Error::new(format!("Incompatible types in {} assignment", vref)));
-            }
-            *old_value = value;
-        } else {
-            self.vars.insert(name, value);
-        }
-        Ok(())
-    }
-
-    /// Sets the value of the element indexed by `subscripts` in the array `vref` to `value`.
-    ///
-    /// If `vref` contains a type annotation, the type of the value must be compatible with that
-    /// type annotation.
-    pub fn set_array(&mut self, vref: &VarRef, subscripts: &[Expr], value: &Expr) -> Result<()> {
-        let mut ds = Vec::with_capacity(subscripts.len());
-        for ss_expr in subscripts {
-            match ss_expr.eval(self)? {
-                Value::Integer(i) => ds.push(i),
-                v => {
-                    return Err(Error::new(format!(
-                        "Subscript {:?} in array reference must be an integer",
-                        v,
-                    )))
+    pub fn set_var(&mut self, vref: &VarRef, value: Value) -> Result<()> {
+        match self.get_mut(vref)? {
+            Some(Symbol::Variable(old_value)) => {
+                if mem::discriminant(&value) != mem::discriminant(old_value) {
+                    return Err(Error::new(format!("Incompatible types in {} assignment", vref)));
                 }
+                *old_value = value;
+                Ok(())
             }
-        }
-
-        let value = value.eval(self)?;
-
-        let key = vref.name().to_ascii_uppercase();
-        let array = match self.arrays.get_mut(&key) {
-            Some(array) => array,
+            Some(_) => Err(Error::new(format!("Cannot redefine {} as a variable", vref))),
             None => {
-                return Err(Error::new(format!("Cannot index undefined array {}", vref.name())))
+                if vref.ref_type() != VarType::Auto && vref.ref_type() != value.as_vartype() {
+                    return Err(Error::new(format!("Incompatible types in {} assignment", vref)));
+                }
+                self.by_name.insert(vref.name().to_ascii_uppercase(), Symbol::Variable(value));
+                Ok(())
             }
-        };
-
-        if vref.ref_type() != VarType::Auto && vref.ref_type() != array.subtype() {
-            return Err(Error::new("Incompatible type annotation for array reference"));
         }
-
-        array.assign(&ds, value)
     }
 }
 
@@ -703,6 +692,7 @@ impl CallableMetadataBuilder {
 ///
 /// The callable is expected to hold onto an instance of this object within its struct to make
 /// queries fast.
+#[derive(Debug)]
 pub struct CallableMetadata {
     name: &'static str,
     return_type: VarType,
@@ -821,8 +811,6 @@ impl Expr {
             Expr::Integer(i) => Ok(Value::Integer(*i)),
             Expr::Text(s) => Ok(Value::Text(s.clone())),
 
-            Expr::Symbol(vref) => Ok(syms.get(vref)?.clone()),
-
             Expr::And(lhs, rhs) => Value::and(&lhs.eval(syms)?, &rhs.eval(syms)?),
             Expr::Or(lhs, rhs) => Value::or(&lhs.eval(syms)?, &rhs.eval(syms)?),
             Expr::Xor(lhs, rhs) => Value::xor(&lhs.eval(syms)?, &rhs.eval(syms)?),
@@ -842,15 +830,13 @@ impl Expr {
             Expr::Modulo(lhs, rhs) => Value::modulo(&lhs.eval(syms)?, &rhs.eval(syms)?),
             Expr::Negate(e) => Value::neg(&e.eval(syms)?),
 
-            Expr::Call(fref, args) => match syms.get_array(fref)? {
-                Some(array) => self.eval_array_ref(syms, array, args),
-                None => {
-                    let key = fref.name().to_ascii_uppercase();
-                    match syms.get_function(key.as_str()) {
-                        Some(f) => self.eval_function_call(syms, fref, args, f),
-                        None => Err(Error::new(format!("Unknown function or array {}", fref))),
-                    }
-                }
+            Expr::Symbol(vref) => Ok(syms.get_var(vref)?.clone()),
+
+            Expr::Call(fref, args) => match syms.get(fref)? {
+                Some(Symbol::Array(array)) => self.eval_array_ref(syms, array, args),
+                Some(Symbol::Function(f)) => self.eval_function_call(syms, fref, args, f),
+                Some(_) => Err(Error::new(format!("{} is not an array or a function", fref))),
+                None => Err(Error::new(format!("Unknown function or array {}", fref))),
             },
         }
     }
@@ -859,6 +845,44 @@ impl Expr {
 #[cfg(test)]
 pub(crate) mod testutils {
     use super::*;
+
+    /// Builder pattern for a test `Symbols` object.
+    #[derive(Default)]
+    pub(crate) struct SymbolsBuilder {
+        by_name: HashMap<String, Symbol>,
+    }
+
+    impl SymbolsBuilder {
+        /// Adds the array named `name` of type `subtype` to the list of symbols.  The dimensions
+        /// and contents of the array are unspecified.
+        pub(crate) fn add_array<S: Into<String>>(mut self, name: S, subtype: VarType) -> Self {
+            let name = name.into();
+            assert!(name == name.to_ascii_uppercase());
+            let array = Array::new(subtype, vec![10]);
+            self.by_name.insert(name, Symbol::Array(array));
+            self
+        }
+
+        /// Adds the function `func` to the list of symbols.
+        pub(crate) fn add_function(mut self, func: Rc<dyn Function>) -> Self {
+            let name = func.metadata().name();
+            assert!(name == name.to_ascii_uppercase());
+            self.by_name.insert(name.to_owned(), Symbol::Function(func));
+            self
+        }
+
+        /// Adds the variable named `name` with an initial `value` to the list of symbols.
+        pub(crate) fn add_var<S: Into<String>>(mut self, name: S, value: Value) -> Self {
+            let name = name.into();
+            assert!(name == name.to_ascii_uppercase());
+            self.by_name.insert(name, Symbol::Variable(value));
+            self
+        }
+
+        pub(crate) fn build(self) -> Symbols {
+            Symbols { by_name: self.by_name }
+        }
+    }
 
     /// Sums a collection of integers of arbitrary length.
     pub(crate) struct SumFunction {
@@ -1755,12 +1779,19 @@ mod tests {
 
     #[test]
     fn test_symbols_clear() {
-        let mut raw_vars = HashMap::new();
-        raw_vars.insert("FOO".to_owned(), Value::Boolean(true));
-        let mut syms = Symbols::from_vars(raw_vars);
-        assert!(!syms.is_empty());
+        let mut syms = SymbolsBuilder::default()
+            .add_array("SOMEARRAY", VarType::Integer)
+            .add_function(SumFunction::new())
+            .add_var("SOMEVAR", Value::Boolean(true))
+            .build();
+
+        assert!(syms.get(&VarRef::new("SOMEARRAY", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SUM", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SOMEVAR", VarType::Auto)).unwrap().is_some());
         syms.clear();
-        assert!(syms.is_empty());
+        assert!(!syms.get(&VarRef::new("SOMEARRAY", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SUM", VarType::Auto)).unwrap().is_some());
+        assert!(!syms.get(&VarRef::new("SOMEVAR", VarType::Auto)).unwrap().is_some());
     }
 
     #[test]
@@ -1768,40 +1799,37 @@ mod tests {
         let mut syms = Symbols::default();
 
         syms.dim("a_boolean", VarType::Boolean).unwrap();
-        assert_eq!(
-            Value::Boolean(false),
-            *syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
-        );
+        match syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap().unwrap() {
+            Symbol::Variable(value) => assert_eq!(&Value::Boolean(false), value),
+            _ => panic!("Got something that is not the variable we asked for"),
+        }
 
         syms.dim("a_double", VarType::Double).unwrap();
-        assert_eq!(Value::Double(0.0), *syms.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
+        match syms.get(&VarRef::new("a_double", VarType::Auto)).unwrap().unwrap() {
+            Symbol::Variable(value) => assert_eq!(&Value::Double(0.0), value),
+            _ => panic!("Got something that is not the variable we asked for"),
+        }
 
         syms.dim("an_integer", VarType::Integer).unwrap();
-        assert_eq!(
-            Value::Integer(0),
-            *syms.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
-        );
+        match syms.get(&VarRef::new("an_integer", VarType::Auto)).unwrap().unwrap() {
+            Symbol::Variable(value) => assert_eq!(&Value::Integer(0), value),
+            _ => panic!("Got something that is not the variable we asked for"),
+        }
 
         syms.dim("a_string", VarType::Text).unwrap();
-        assert_eq!(
-            Value::Text("".to_owned()),
-            *syms.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
-        );
+        match syms.get(&VarRef::new("a_string", VarType::Auto)).unwrap().unwrap() {
+            Symbol::Variable(value) => assert_eq!(&Value::Text("".to_owned()), value),
+            _ => panic!("Got something that is not the variable we asked for"),
+        }
     }
 
     #[test]
     fn test_symbols_dim_name_overlap() {
-        let mut arrays = HashMap::default();
-        arrays.insert("SOMEARRAY".to_owned(), Array::new(VarType::Integer, vec![1]));
-
-        let mut functions: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
-        let sum = SumFunction::new();
-        functions.insert(sum.metadata().name(), sum);
-
-        let mut vars = HashMap::default();
-        vars.insert("SOMEVAR".to_owned(), Value::Integer(1));
-
-        let mut syms = Symbols { arrays, functions, vars };
+        let mut syms = SymbolsBuilder::default()
+            .add_array("SOMEARRAY", VarType::Integer)
+            .add_function(SumFunction::new())
+            .add_var("SOMEVAR", Value::Boolean(true))
+            .build();
 
         assert_eq!(
             "Cannot DIM already-defined symbol Sum",
@@ -1819,9 +1847,14 @@ mod tests {
         );
     }
 
-    fn assert_same_array_shape(exp_subtype: VarType, exp_dims: &[usize], array: &Array) {
-        assert_eq!(exp_subtype, array.subtype());
-        assert_eq!(exp_dims, array.dimensions());
+    fn assert_same_array_shape(exp_subtype: VarType, exp_dims: &[usize], symbol: &Symbol) {
+        match symbol {
+            Symbol::Array(array) => {
+                assert_eq!(exp_subtype, array.subtype());
+                assert_eq!(exp_dims, array.dimensions());
+            }
+            _ => panic!("Expected array symbol type, got {:?}", symbol),
+        }
     }
 
     #[test]
@@ -1832,44 +1865,38 @@ mod tests {
         assert_same_array_shape(
             VarType::Boolean,
             &[1],
-            syms.get_array(&VarRef::new("a_boolean", VarType::Auto)).unwrap().unwrap(),
+            syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap().unwrap(),
         );
 
         syms.dim_array("a_double", VarType::Double, vec![5, 10]).unwrap();
         assert_same_array_shape(
             VarType::Double,
             &[5, 10],
-            syms.get_array(&VarRef::new("a_double", VarType::Auto)).unwrap().unwrap(),
+            syms.get(&VarRef::new("a_double", VarType::Auto)).unwrap().unwrap(),
         );
 
         syms.dim_array("an_integer", VarType::Integer, vec![100]).unwrap();
         assert_same_array_shape(
             VarType::Integer,
             &[100],
-            syms.get_array(&VarRef::new("an_integer", VarType::Auto)).unwrap().unwrap(),
+            syms.get(&VarRef::new("an_integer", VarType::Auto)).unwrap().unwrap(),
         );
 
         syms.dim_array("a_string", VarType::Text, vec![1, 1]).unwrap();
         assert_same_array_shape(
             VarType::Text,
             &[1, 1],
-            syms.get_array(&VarRef::new("a_string", VarType::Auto)).unwrap().unwrap(),
+            syms.get(&VarRef::new("a_string", VarType::Auto)).unwrap().unwrap(),
         );
     }
 
     #[test]
     fn test_symbols_dim_array_name_overlap() {
-        let mut arrays = HashMap::default();
-        arrays.insert("SOMEARRAY".to_owned(), Array::new(VarType::Integer, vec![1]));
-
-        let mut functions: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
-        let sum = SumFunction::new();
-        functions.insert(sum.metadata().name(), sum);
-
-        let mut vars = HashMap::default();
-        vars.insert("SOMEVAR".to_owned(), Value::Integer(1));
-
-        let mut syms = Symbols { arrays, functions, vars };
+        let mut syms = SymbolsBuilder::default()
+            .add_array("SOMEARRAY", VarType::Integer)
+            .add_function(SumFunction::new())
+            .add_var("SOMEVAR", Value::Boolean(true))
+            .build();
 
         assert_eq!(
             "Cannot DIM already-defined symbol Sum",
@@ -1888,506 +1915,278 @@ mod tests {
     }
 
     #[test]
-    fn test_symbols_get_ok_with_explicit_type() {
-        let mut raw_vars = HashMap::new();
-        raw_vars.insert("A_BOOLEAN".to_owned(), Value::Boolean(true));
-        raw_vars.insert("A_DOUBLE".to_owned(), Value::Double(3.0));
-        raw_vars.insert("AN_INTEGER".to_owned(), Value::Integer(3));
-        raw_vars.insert("A_STRING".to_owned(), Value::Text("some text".to_owned()));
-        let syms = Symbols::from_vars(raw_vars);
+    fn test_symbols_get_check_types() {
+        // If modifying this test, update the identical test for get_mut() below.
+        let syms = SymbolsBuilder::default()
+            .add_array("BOOL_ARRAY", VarType::Boolean)
+            .add_function(SumFunction::new())
+            .add_var("STRING_VAR", Value::Text("".to_owned()))
+            .build();
 
+        for ref_type in &[VarType::Auto, VarType::Boolean] {
+            match syms.get(&VarRef::new("bool_array", *ref_type)).unwrap().unwrap() {
+                Symbol::Array(array) => assert_eq!(VarType::Boolean, array.subtype()),
+                _ => panic!("Got something that is not the array we asked for"),
+            }
+        }
         assert_eq!(
-            Value::Boolean(true),
-            *syms.get(&VarRef::new("a_boolean", VarType::Boolean)).unwrap()
+            "Incompatible types in bool_array$ reference",
+            format!("{}", syms.get(&VarRef::new("bool_array", VarType::Text)).unwrap_err())
         );
+
+        for ref_type in &[VarType::Auto, VarType::Integer] {
+            match syms.get(&VarRef::new("sum", *ref_type)).unwrap().unwrap() {
+                Symbol::Function(f) => assert_eq!(VarType::Integer, f.metadata().return_type()),
+                _ => panic!("Got something that is not the function we asked for"),
+            }
+        }
         assert_eq!(
-            Value::Double(3.0),
-            *syms.get(&VarRef::new("a_double", VarType::Double)).unwrap()
+            "Incompatible types in sum# reference",
+            format!("{}", syms.get(&VarRef::new("sum", VarType::Double)).unwrap_err())
         );
+
+        for ref_type in &[VarType::Auto, VarType::Text] {
+            match syms.get(&VarRef::new("string_var", *ref_type)).unwrap().unwrap() {
+                Symbol::Variable(value) => assert_eq!(VarType::Text, value.as_vartype()),
+                _ => panic!("Got something that is not the variable we asked for"),
+            }
+        }
         assert_eq!(
-            Value::Integer(3),
-            *syms.get(&VarRef::new("an_integer", VarType::Integer)).unwrap()
-        );
-        assert_eq!(
-            Value::Text("some text".to_owned()),
-            *syms.get(&VarRef::new("a_string", VarType::Text)).unwrap()
+            "Incompatible types in string_var% reference",
+            format!("{}", syms.get(&VarRef::new("string_var", VarType::Integer)).unwrap_err())
         );
     }
 
     #[test]
-    fn test_symbols_get_ok_with_auto_type() {
-        let mut raw_vars = HashMap::new();
-        raw_vars.insert("A_BOOLEAN".to_owned(), Value::Boolean(true));
-        raw_vars.insert("A_DOUBLE".to_owned(), Value::Double(3.0));
-        raw_vars.insert("AN_INTEGER".to_owned(), Value::Integer(3));
-        raw_vars.insert("A_STRING".to_owned(), Value::Text("some text".to_owned()));
-        let syms = Symbols::from_vars(raw_vars);
+    fn test_symbols_get_case_insensitivity() {
+        // If modifying this test, update the identical test for get_mut() below.
+        let syms = SymbolsBuilder::default()
+            .add_array("SOMEARRAY", VarType::Integer)
+            .add_function(SumFunction::new())
+            .add_var("SOMEVAR", Value::Boolean(true))
+            .build();
 
+        assert!(syms.get(&VarRef::new("somearray", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SomeArray", VarType::Auto)).unwrap().is_some());
+
+        assert!(syms.get(&VarRef::new("sum", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("Sum", VarType::Auto)).unwrap().is_some());
+
+        assert!(syms.get(&VarRef::new("somevar", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SomeVar", VarType::Auto)).unwrap().is_some());
+    }
+
+    #[test]
+    fn test_symbols_get_undefined() {
+        // If modifying this test, update the identical test for get_mut() below.
+        let syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
+        assert!(syms.get(&VarRef::new("SOME_THIN", VarType::Integer)).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_symbols_get_mut_check_types() {
+        // If modifying this test, update the identical test for get() above.
+        let mut syms = SymbolsBuilder::default()
+            .add_array("BOOL_ARRAY", VarType::Boolean)
+            .add_function(SumFunction::new())
+            .add_var("STRING_VAR", Value::Text("".to_owned()))
+            .build();
+
+        for ref_type in &[VarType::Auto, VarType::Boolean] {
+            match syms.get_mut(&VarRef::new("bool_array", *ref_type)).unwrap().unwrap() {
+                Symbol::Array(array) => assert_eq!(VarType::Boolean, array.subtype()),
+                _ => panic!("Got something that is not the array we asked for"),
+            }
+        }
         assert_eq!(
-            Value::Boolean(true),
-            *syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
+            "Incompatible types in bool_array$ reference",
+            format!("{}", syms.get_mut(&VarRef::new("bool_array", VarType::Text)).unwrap_err())
         );
-        assert_eq!(Value::Double(3.0), *syms.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
+
+        for ref_type in &[VarType::Auto, VarType::Integer] {
+            match syms.get_mut(&VarRef::new("sum", *ref_type)).unwrap().unwrap() {
+                Symbol::Function(f) => assert_eq!(VarType::Integer, f.metadata().return_type()),
+                _ => panic!("Got something that is not the function we asked for"),
+            }
+        }
         assert_eq!(
-            Value::Integer(3),
-            *syms.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
+            "Incompatible types in sum# reference",
+            format!("{}", syms.get_mut(&VarRef::new("sum", VarType::Double)).unwrap_err())
         );
+
+        for ref_type in &[VarType::Auto, VarType::Text] {
+            match syms.get_mut(&VarRef::new("string_var", *ref_type)).unwrap().unwrap() {
+                Symbol::Variable(value) => assert_eq!(VarType::Text, value.as_vartype()),
+                _ => panic!("Got something that is not the variable we asked for"),
+            }
+        }
         assert_eq!(
-            Value::Text("some text".to_owned()),
-            *syms.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
+            "Incompatible types in string_var% reference",
+            format!("{}", syms.get_mut(&VarRef::new("string_var", VarType::Integer)).unwrap_err())
         );
     }
 
     #[test]
-    fn test_symbols_get_undefined_error() {
-        let mut raw_vars = HashMap::new();
-        raw_vars.insert("a_string".to_owned(), Value::Text("some text".to_owned()));
-        let syms = Symbols::from_vars(raw_vars);
+    fn test_symbols_get_mut_case_insensitivity() {
+        // If modifying this test, update the identical test for get() above.
+        let mut syms = SymbolsBuilder::default()
+            .add_array("SOMEARRAY", VarType::Integer)
+            .add_function(SumFunction::new())
+            .add_var("SOMEVAR", Value::Boolean(true))
+            .build();
 
-        assert_eq!(
-            "Undefined variable a_str",
-            format!("{}", syms.get(&VarRef::new("a_str", VarType::Integer)).unwrap_err())
-        );
+        assert!(syms.get_mut(&VarRef::new("somearray", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("SomeArray", VarType::Auto)).unwrap().is_some());
+
+        assert!(syms.get_mut(&VarRef::new("sum", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("Sum", VarType::Auto)).unwrap().is_some());
+
+        assert!(syms.get_mut(&VarRef::new("somevar", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("SomeVar", VarType::Auto)).unwrap().is_some());
     }
 
     #[test]
-    fn test_symbols_get_mismatched_type_error() {
-        let mut raw_vars = HashMap::new();
-        raw_vars.insert("A_BOOLEAN".to_owned(), Value::Boolean(true));
-        raw_vars.insert("A_DOUBLE".to_owned(), Value::Double(3.0));
-        raw_vars.insert("AN_INTEGER".to_owned(), Value::Integer(3));
-        raw_vars.insert("A_STRING".to_owned(), Value::Text("some text".to_owned()));
-        let syms = Symbols::from_vars(raw_vars);
-
-        assert_eq!(
-            "Incompatible types in a_boolean$ reference",
-            format!("{}", syms.get(&VarRef::new("a_boolean", VarType::Text)).unwrap_err())
-        );
-
-        assert_eq!(
-            "Incompatible types in a_double% reference",
-            format!("{}", syms.get(&VarRef::new("a_double", VarType::Integer)).unwrap_err())
-        );
-
-        assert_eq!(
-            "Incompatible types in an_integer# reference",
-            format!("{}", syms.get(&VarRef::new("an_integer", VarType::Double)).unwrap_err())
-        );
-
-        assert_eq!(
-            "Incompatible types in a_string% reference",
-            format!("{}", syms.get(&VarRef::new("a_string", VarType::Integer)).unwrap_err())
-        );
-    }
-
-    #[test]
-    fn test_symbols_get_array_ok_with_explicit_type() {
-        let mut raw_arrays = HashMap::new();
-        raw_arrays.insert("A_BOOLEAN".to_owned(), Array::new(VarType::Boolean, vec![5]));
-        raw_arrays.insert("A_DOUBLE".to_owned(), Array::new(VarType::Double, vec![3]));
-        raw_arrays.insert("AN_INTEGER".to_owned(), Array::new(VarType::Integer, vec![8]));
-        raw_arrays.insert("A_STRING".to_owned(), Array::new(VarType::Text, vec![1, 5]));
-        let syms = Symbols::from_arrays(raw_arrays);
-
-        assert_same_array_shape(
-            VarType::Boolean,
-            &[5],
-            syms.get_array(&VarRef::new("a_boolean", VarType::Boolean)).unwrap().unwrap(),
-        );
-        assert_same_array_shape(
-            VarType::Double,
-            &[3],
-            syms.get_array(&VarRef::new("a_double", VarType::Double)).unwrap().unwrap(),
-        );
-        assert_same_array_shape(
-            VarType::Integer,
-            &[8],
-            syms.get_array(&VarRef::new("an_integer", VarType::Integer)).unwrap().unwrap(),
-        );
-        assert_same_array_shape(
-            VarType::Text,
-            &[1, 5],
-            syms.get_array(&VarRef::new("a_string", VarType::Text)).unwrap().unwrap(),
-        );
-    }
-
-    #[test]
-    fn test_symbols_get_array_ok_with_auto_type() {
-        let mut raw_arrays = HashMap::new();
-        raw_arrays.insert("A_BOOLEAN".to_owned(), Array::new(VarType::Boolean, vec![5]));
-        raw_arrays.insert("A_DOUBLE".to_owned(), Array::new(VarType::Double, vec![3]));
-        raw_arrays.insert("AN_INTEGER".to_owned(), Array::new(VarType::Integer, vec![8]));
-        raw_arrays.insert("A_STRING".to_owned(), Array::new(VarType::Text, vec![1, 5]));
-        let syms = Symbols::from_arrays(raw_arrays);
-
-        assert_same_array_shape(
-            VarType::Boolean,
-            &[5],
-            syms.get_array(&VarRef::new("a_boolean", VarType::Auto)).unwrap().unwrap(),
-        );
-        assert_same_array_shape(
-            VarType::Double,
-            &[3],
-            syms.get_array(&VarRef::new("a_double", VarType::Auto)).unwrap().unwrap(),
-        );
-        assert_same_array_shape(
-            VarType::Integer,
-            &[8],
-            syms.get_array(&VarRef::new("an_integer", VarType::Auto)).unwrap().unwrap(),
-        );
-        assert_same_array_shape(
-            VarType::Text,
-            &[1, 5],
-            syms.get_array(&VarRef::new("a_string", VarType::Auto)).unwrap().unwrap(),
-        );
-    }
-
-    #[test]
-    fn test_symbols_get_array_undefined_ok() {
-        let mut raw_arrays = HashMap::new();
-        raw_arrays.insert("A_STRING".to_owned(), Array::new(VarType::Text, vec![1, 5]));
-        let syms = Symbols::from_arrays(raw_arrays);
-
-        assert!(syms.get_array(&VarRef::new("a_str", VarType::Text)).unwrap().is_none());
-        assert!(syms.get_array(&VarRef::new("A_STR", VarType::Text)).unwrap().is_none());
-    }
-
-    #[test]
-    fn test_symbols_get_array_mismatched_type_error() {
-        let mut raw_arrays = HashMap::new();
-        raw_arrays.insert("A_BOOLEAN".to_owned(), Array::new(VarType::Boolean, vec![5]));
-        raw_arrays.insert("A_DOUBLE".to_owned(), Array::new(VarType::Double, vec![3]));
-        raw_arrays.insert("AN_INTEGER".to_owned(), Array::new(VarType::Integer, vec![8]));
-        raw_arrays.insert("A_STRING".to_owned(), Array::new(VarType::Text, vec![1, 5]));
-        let syms = Symbols::from_arrays(raw_arrays);
-
-        assert_eq!(
-            "Incompatible types in a_boolean$ reference",
-            format!("{}", syms.get_array(&VarRef::new("a_boolean", VarType::Text)).unwrap_err())
-        );
-
-        assert_eq!(
-            "Incompatible types in a_double% reference",
-            format!("{}", syms.get_array(&VarRef::new("a_double", VarType::Integer)).unwrap_err())
-        );
-
-        assert_eq!(
-            "Incompatible types in an_integer# reference",
-            format!("{}", syms.get_array(&VarRef::new("an_integer", VarType::Double)).unwrap_err())
-        );
-
-        assert_eq!(
-            "Incompatible types in a_string% reference",
-            format!("{}", syms.get_array(&VarRef::new("a_string", VarType::Integer)).unwrap_err())
-        );
+    fn test_symbols_get_mut_undefined() {
+        // If modifying this test, update the identical test for get() above.
+        let mut syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
+        assert!(syms.get_mut(&VarRef::new("SOME_THIN", VarType::Integer)).unwrap().is_none());
     }
 
     #[test]
     fn test_symbols_qualify_varref() {
-        let mut raw_vars = HashMap::new();
-        raw_vars.insert("V".to_owned(), Value::Boolean(true));
-        let syms = Symbols::from_vars(raw_vars);
+        let syms = SymbolsBuilder::default().add_array("V", VarType::Boolean).build();
 
         assert_eq!(
-            VarRef::new("V", VarType::Boolean),
-            syms.qualify_varref(&VarRef::new("V", VarType::Auto)).unwrap(),
+            VarRef::new("v", VarType::Boolean),
+            syms.qualify_varref(&VarRef::new("v", VarType::Auto)).unwrap(),
         );
         assert_eq!(
-            VarRef::new("V", VarType::Boolean),
-            syms.qualify_varref(&VarRef::new("V", VarType::Boolean)).unwrap(),
+            VarRef::new("v", VarType::Boolean),
+            syms.qualify_varref(&VarRef::new("v", VarType::Boolean)).unwrap(),
         );
         assert_eq!(
-            "Incompatible types in V% reference",
-            format!("{}", syms.qualify_varref(&VarRef::new("V", VarType::Integer)).unwrap_err()),
+            "Incompatible types in v% reference",
+            format!("{}", syms.qualify_varref(&VarRef::new("v", VarType::Integer)).unwrap_err()),
         );
 
         assert_eq!(
-            VarRef::new("UNDEF", VarType::Auto),
-            syms.qualify_varref(&VarRef::new("UNDEF", VarType::Auto)).unwrap(),
+            VarRef::new("undefined", VarType::Auto),
+            syms.qualify_varref(&VarRef::new("undefined", VarType::Auto)).unwrap(),
         );
-    }
-
-    #[test]
-    fn test_symbols_set_ok_with_explicit_type() {
-        let mut syms = Symbols::default();
-
-        syms.set(&VarRef::new("a_boolean", VarType::Boolean), Value::Boolean(true)).unwrap();
         assert_eq!(
-            Value::Boolean(true),
-            *syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
-        );
-
-        syms.set(&VarRef::new("a_double", VarType::Double), Value::Double(0.0)).unwrap();
-        assert_eq!(Value::Double(0.0), *syms.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
-
-        syms.set(&VarRef::new("an_integer", VarType::Integer), Value::Integer(0)).unwrap();
-        assert_eq!(
-            Value::Integer(0),
-            *syms.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
-        );
-
-        syms.set(&VarRef::new("a_string", VarType::Text), Value::Text("x".to_owned())).unwrap();
-        assert_eq!(
-            Value::Text("x".to_owned()),
-            *syms.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
+            VarRef::new("undefined", VarType::Text),
+            syms.qualify_varref(&VarRef::new("undefined", VarType::Text)).unwrap(),
         );
     }
 
     #[test]
-    fn test_symbols_set_ok_with_auto_type() {
-        let mut syms = Symbols::default();
-
-        syms.set(&VarRef::new("a_boolean", VarType::Auto), Value::Boolean(true)).unwrap();
-        assert_eq!(
-            Value::Boolean(true),
-            *syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap()
-        );
-
-        syms.set(&VarRef::new("a_double", VarType::Auto), Value::Double(0.0)).unwrap();
-        assert_eq!(Value::Double(0.0), *syms.get(&VarRef::new("a_double", VarType::Auto)).unwrap());
-
-        syms.set(&VarRef::new("an_integer", VarType::Auto), Value::Integer(0)).unwrap();
-        assert_eq!(
-            Value::Integer(0),
-            *syms.get(&VarRef::new("an_integer", VarType::Auto)).unwrap()
-        );
-
-        syms.set(&VarRef::new("a_string", VarType::Auto), Value::Text("x".to_owned())).unwrap();
-        assert_eq!(
-            Value::Text("x".to_owned()),
-            *syms.get(&VarRef::new("a_string", VarType::Auto)).unwrap()
-        );
-    }
-
-    #[test]
-    fn test_symbols_set_mismatched_type_with_existing_value() {
-        let bool_ref = VarRef::new("a_boolean", VarType::Auto);
-        let bool_val = Value::Boolean(true);
-        let double_ref = VarRef::new("a_double", VarType::Auto);
-        let double_val = Value::Double(0.0);
-        let int_ref = VarRef::new("an_integer", VarType::Auto);
-        let int_val = Value::Integer(0);
-        let text_ref = VarRef::new("a_string", VarType::Auto);
-        let text_val = Value::Text("x".to_owned());
-
-        let mut syms = Symbols::default();
-        syms.set(&bool_ref, bool_val.clone()).unwrap();
-        syms.set(&double_ref, double_val.clone()).unwrap();
-        syms.set(&int_ref, int_val.clone()).unwrap();
-        syms.set(&text_ref, text_val.clone()).unwrap();
-
-        assert_eq!(
-            "Incompatible types in a_boolean assignment",
-            format!("{}", syms.set(&bool_ref, text_val).unwrap_err())
-        );
-        assert_eq!(
-            "Incompatible types in a_double assignment",
-            format!("{}", syms.set(&double_ref, int_val).unwrap_err())
-        );
-        assert_eq!(
-            "Incompatible types in an_integer assignment",
-            format!("{}", syms.set(&int_ref, double_val).unwrap_err())
-        );
-        assert_eq!(
-            "Incompatible types in a_string assignment",
-            format!("{}", syms.set(&text_ref, bool_val).unwrap_err())
-        );
-    }
-
-    #[test]
-    fn test_symbols_set_mismatched_type_for_annotation() {
-        let bool_ref = VarRef::new("a_boolean", VarType::Boolean);
-        let bool_val = Value::Boolean(true);
-        let double_ref = VarRef::new("a_double", VarType::Double);
-        let double_val = Value::Double(0.0);
-        let int_ref = VarRef::new("an_integer", VarType::Integer);
-        let int_val = Value::Integer(0);
-        let text_ref = VarRef::new("a_string", VarType::Text);
-        let text_val = Value::Text("x".to_owned());
+    fn test_symbols_set_var_new_check_types() {
+        for ref_type in &[VarType::Auto, VarType::Text] {
+            let mut syms = Symbols::default();
+            syms.set_var(&VarRef::new("v", *ref_type), Value::Text("a".to_owned())).unwrap();
+            match syms.get(&VarRef::new("v", VarType::Auto)).unwrap().unwrap() {
+                Symbol::Variable(value) => assert_eq!(&Value::Text("a".to_owned()), value),
+                _ => panic!("Got something that is not the variable we asked for"),
+            }
+        }
 
         let mut syms = Symbols::default();
         assert_eq!(
-            "Incompatible types in a_boolean? assignment",
-            format!("{}", syms.set(&bool_ref, text_val).unwrap_err())
-        );
-        assert_eq!(
-            "Incompatible types in a_double# assignment",
-            format!("{}", syms.set(&double_ref, int_val).unwrap_err())
-        );
-        assert_eq!(
-            "Incompatible types in an_integer% assignment",
-            format!("{}", syms.set(&int_ref, double_val).unwrap_err())
-        );
-        assert_eq!(
-            "Incompatible types in a_string$ assignment",
-            format!("{}", syms.set(&text_ref, bool_val).unwrap_err())
+            "Incompatible types in v% assignment",
+            format!(
+                "{}",
+                syms.set_var(&VarRef::new("v", VarType::Integer), Value::Double(3.0)).unwrap_err()
+            )
         );
     }
 
     #[test]
-    fn test_symbols_set_name_overlap() {
-        let mut arrays = HashMap::default();
-        arrays.insert("SOMEARRAY".to_owned(), Array::new(VarType::Integer, vec![1]));
+    fn test_symbols_set_var_existing_check_types() {
+        for ref_type in &[VarType::Auto, VarType::Integer] {
+            let mut syms = SymbolsBuilder::default().add_var("V", Value::Integer(10)).build();
+            syms.set_var(&VarRef::new("v", *ref_type), Value::Integer(3)).unwrap();
+            match syms.get(&VarRef::new("v", VarType::Auto)).unwrap().unwrap() {
+                Symbol::Variable(value) => assert_eq!(&Value::Integer(3), value),
+                _ => panic!("Got something that is not the variable we asked for"),
+            }
+        }
 
-        let mut functions: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
-        let sum = SumFunction::new();
-        functions.insert(sum.metadata().name(), sum);
+        let mut syms = SymbolsBuilder::default().add_var("V", Value::Integer(10)).build();
+        assert_eq!(
+            "Incompatible types in v assignment",
+            format!(
+                "{}",
+                syms.set_var(&VarRef::new("v", VarType::Auto), Value::Double(3.0)).unwrap_err()
+            )
+        );
+    }
 
-        let mut vars = HashMap::default();
-        vars.insert("SOMEVAR".to_owned(), Value::Integer(1));
-
-        let mut syms = Symbols { arrays, functions, vars };
+    #[test]
+    fn test_symbols_set_var_name_overlap() {
+        let mut syms = SymbolsBuilder::default()
+            .add_array("SOMEARRAY", VarType::Integer)
+            .add_function(SumFunction::new())
+            .add_var("SOMEVAR", Value::Boolean(true))
+            .build();
 
         assert_eq!(
             "Cannot redefine Sum% as a variable",
             format!(
                 "{}",
-                syms.set(&VarRef::new("Sum", VarType::Integer), Value::Integer(1)).unwrap_err()
+                syms.set_var(&VarRef::new("Sum", VarType::Integer), Value::Integer(1)).unwrap_err()
             )
         );
 
         assert_eq!(
-            "Cannot redefine SomeArray$ as a variable",
+            "Cannot redefine SomeArray% as a variable",
             format!(
                 "{}",
-                syms.set(&VarRef::new("SomeArray", VarType::Text), Value::Integer(1)).unwrap_err()
+                syms.set_var(&VarRef::new("SomeArray", VarType::Integer), Value::Integer(1))
+                    .unwrap_err()
             )
         );
-    }
 
-    #[test]
-    fn test_symbols_get_set_case_insensitivity() {
-        let mut syms = Symbols::default();
-        syms.set(&VarRef::new("SomeName", VarType::Auto), Value::Integer(6)).unwrap();
-        assert_eq!(Value::Integer(6), *syms.get(&VarRef::new("somename", VarType::Auto)).unwrap());
-    }
-
-    #[test]
-    fn test_symbols_get_set_replace_value() {
-        let mut syms = Symbols::default();
-        syms.set(&VarRef::new("the_var", VarType::Auto), Value::Integer(100)).unwrap();
-        assert_eq!(Value::Integer(100), *syms.get(&VarRef::new("the_var", VarType::Auto)).unwrap());
-        syms.set(&VarRef::new("the_var", VarType::Auto), Value::Integer(200)).unwrap();
-        assert_eq!(Value::Integer(200), *syms.get(&VarRef::new("the_var", VarType::Auto)).unwrap());
-    }
-
-    #[test]
-    fn test_symbols_set_array_ok_with_explicit_type() {
-        let mut syms = Symbols::default();
-
-        syms.dim_array("array", VarType::Integer, vec![10]).unwrap();
-        syms.set_array(
-            &VarRef::new("array", VarType::Integer),
-            &[Expr::Integer(4)],
-            &Expr::Integer(7),
-        )
-        .unwrap();
         assert_eq!(
-            Value::Integer(7),
-            *syms
-                .get_array(&VarRef::new("array", VarType::Auto))
-                .unwrap()
-                .unwrap()
-                .index(&[4])
-                .unwrap()
-        );
-    }
-
-    #[test]
-    fn test_symbols_set_array_ok_with_auto_type() {
-        let mut syms = Symbols::default();
-
-        syms.dim_array("array", VarType::Integer, vec![10]).unwrap();
-        syms.set_array(
-            &VarRef::new("array", VarType::Auto),
-            &[Expr::Integer(0)],
-            &Expr::Negate(Box::from(Expr::Integer(10))),
-        )
-        .unwrap();
-        assert_eq!(
-            Value::Integer(-10),
-            *syms
-                .get_array(&VarRef::new("array", VarType::Auto))
-                .unwrap()
-                .unwrap()
-                .index(&[0])
-                .unwrap()
-        );
-    }
-
-    #[test]
-    fn test_symbols_set_array_mismatched_type_with_existing_value() {
-        let mut syms = Symbols::default();
-
-        syms.dim_array("array", VarType::Integer, vec![10]).unwrap();
-        assert_eq!(
-            "Incompatible type annotation for array reference",
+            "Incompatible types in SomeArray$ reference",
             format!(
                 "{}",
-                syms.set_array(
-                    &VarRef::new("array", VarType::Boolean),
-                    &[Expr::Integer(0)],
-                    &Expr::Integer(3),
-                )
-                .unwrap_err()
+                syms.set_var(&VarRef::new("SomeArray", VarType::Text), Value::Integer(1))
+                    .unwrap_err()
             )
         );
     }
 
     #[test]
-    fn test_symbols_set_array_mismatched_type_for_annotation() {
+    fn test_symbols_get_var_set_var_case_insensitivity() {
         let mut syms = Symbols::default();
-
-        syms.dim_array("array", VarType::Integer, vec![10]).unwrap();
+        syms.set_var(&VarRef::new("SomeName", VarType::Auto), Value::Integer(6)).unwrap();
         assert_eq!(
-            "Cannot assign value of type Double to array of type Integer",
-            format!(
-                "{}",
-                syms.set_array(
-                    &VarRef::new("array", VarType::Integer),
-                    &[Expr::Integer(0)],
-                    &Expr::Double(3.0),
-                )
-                .unwrap_err()
-            )
+            Value::Integer(6),
+            *syms.get_var(&VarRef::new("somename", VarType::Auto)).unwrap()
         );
     }
 
     #[test]
-    fn test_symbols_set_array_undefined() {
+    fn test_symbols_get_var_set_var_replace_value() {
         let mut syms = Symbols::default();
-
-        syms.dim_array("array", VarType::Integer, vec![10]).unwrap();
+        syms.set_var(&VarRef::new("the_var", VarType::Auto), Value::Integer(100)).unwrap();
         assert_eq!(
-            "Cannot index undefined array foo",
-            format!(
-                "{}",
-                syms.set_array(
-                    &VarRef::new("foo", VarType::Integer),
-                    &[Expr::Integer(0)],
-                    &Expr::Integer(3),
-                )
-                .unwrap_err()
-            )
+            Value::Integer(100),
+            *syms.get_var(&VarRef::new("the_var", VarType::Auto)).unwrap()
+        );
+        syms.set_var(&VarRef::new("the_var", VarType::Auto), Value::Integer(200)).unwrap();
+        assert_eq!(
+            Value::Integer(200),
+            *syms.get_var(&VarRef::new("the_var", VarType::Auto)).unwrap()
         );
     }
 
     #[test]
-    fn test_symbols_set_array_invalid_subscript_type() {
-        let mut syms = Symbols::default();
-
-        syms.dim_array("array", VarType::Integer, vec![10]).unwrap();
+    fn test_symbols_get_var_undefined_error() {
+        let syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
         assert_eq!(
-            "Subscript Double(0.0) in array reference must be an integer",
-            format!(
-                "{}",
-                syms.set_array(
-                    &VarRef::new("foo", VarType::Integer),
-                    &[Expr::Integer(3), Expr::Double(0.0)],
-                    &Expr::Integer(3),
-                )
-                .unwrap_err()
-            )
+            "Undefined variable SOME_THIN",
+            format!("{}", syms.get_var(&VarRef::new("SOME_THIN", VarType::Integer)).unwrap_err())
         );
     }
 
@@ -2412,10 +2211,10 @@ mod tests {
         let text_val = Value::Text("x".to_owned());
 
         let mut syms = Symbols::default();
-        syms.set(&bool_ref, bool_val.clone()).unwrap();
-        syms.set(&double_ref, double_val.clone()).unwrap();
-        syms.set(&int_ref, int_val.clone()).unwrap();
-        syms.set(&text_ref, text_val.clone()).unwrap();
+        syms.set_var(&bool_ref, bool_val.clone()).unwrap();
+        syms.set_var(&double_ref, double_val.clone()).unwrap();
+        syms.set_var(&int_ref, int_val.clone()).unwrap();
+        syms.set_var(&text_ref, text_val.clone()).unwrap();
 
         assert_eq!(bool_val, Expr::Symbol(bool_ref).eval(&syms).unwrap());
         assert_eq!(double_val, Expr::Symbol(double_ref).eval(&syms).unwrap());
@@ -2530,8 +2329,8 @@ mod tests {
         let yref = VarRef::new("y", VarType::Integer);
 
         let mut syms = Symbols::default();
-        syms.set(&xref, Value::Integer(10)).unwrap();
-        syms.set(&yref, Value::Integer(3)).unwrap();
+        syms.set_var(&xref, Value::Integer(10)).unwrap();
+        syms.set_var(&yref, Value::Integer(3)).unwrap();
 
         assert_eq!(
             Value::Integer(36),
@@ -2579,7 +2378,10 @@ mod tests {
 
         let mut syms = Symbols::default();
         syms.dim_array("x", VarType::Integer, vec![2, 4]).unwrap();
-        syms.set_array(&xref, &[Expr::Integer(1), Expr::Integer(3)], &Expr::Integer(8)).unwrap();
+        match syms.get_mut(&xref).unwrap().unwrap() {
+            Symbol::Array(array) => array.assign(&[1, 3], Value::Integer(8)).unwrap(),
+            _ => panic!("Got something that is not the array we asked for"),
+        }
 
         assert_eq!(
             Value::Integer(0),
@@ -2668,13 +2470,8 @@ mod tests {
     #[test]
     fn test_expr_function_call_simple() {
         let xref = VarRef::new("x", VarType::Integer);
-
-        let mut fs: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
-        let sum = SumFunction::new();
-        fs.insert(sum.metadata().name(), sum);
-
-        let mut syms = Symbols::from_functions(fs);
-        syms.set(&xref, Value::Integer(5)).unwrap();
+        let mut syms = SymbolsBuilder::default().add_function(SumFunction::new()).build();
+        syms.set_var(&xref, Value::Integer(5)).unwrap();
 
         assert_eq!(
             Value::Integer(0),
@@ -2713,7 +2510,7 @@ mod tests {
         );
 
         assert_eq!(
-            "Incompatible type annotation for function call",
+            "Incompatible types in SUM$ reference",
             format!(
                 "{}",
                 Expr::Call(VarRef::new("SUM".to_owned(), VarType::Text), vec![])
@@ -2736,10 +2533,9 @@ mod tests {
     #[test]
     fn test_expr_function_call_type_check() {
         {
-            let mut fs: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
-            let tcf = TypeCheckFunction::new(Value::Boolean(true));
-            fs.insert(tcf.metadata().name(), tcf);
-            let syms = Symbols::from_functions(fs);
+            let syms = SymbolsBuilder::default()
+                .add_function(TypeCheckFunction::new(Value::Boolean(true)))
+                .build();
             assert_eq!(
                 Value::Boolean(true),
                 Expr::Call(VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto), vec![],)
@@ -2749,10 +2545,9 @@ mod tests {
         }
 
         {
-            let mut fs: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
-            let tcf = TypeCheckFunction::new(Value::Integer(5));
-            fs.insert(tcf.metadata().name(), tcf);
-            let syms = Symbols::from_functions(fs);
+            let syms = SymbolsBuilder::default()
+                .add_function(TypeCheckFunction::new(Value::Integer(5)))
+                .build();
             assert_eq!(
                 "Value returned by TYPE_CHECK is incompatible with its type definition",
                 format!(
@@ -2767,10 +2562,7 @@ mod tests {
 
     #[test]
     fn test_expr_function_error_check() {
-        let mut fs: HashMap<&'static str, Rc<dyn Function>> = HashMap::default();
-        let ef = ErrorFunction::new();
-        fs.insert(ef.metadata().name(), ef);
-        let syms = Symbols::from_functions(fs);
+        let syms = SymbolsBuilder::default().add_function(ErrorFunction::new()).build();
 
         assert_eq!(
             "Syntax error in call to ERROR: Bad argument",

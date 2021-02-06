@@ -472,7 +472,7 @@ impl Command for InputCommand {
             match read_line(&mut *console, &prompt, &previous_answer).await {
                 Ok(answer) => match Value::parse_as(vref.ref_type(), answer.trim_end()) {
                     Ok(value) => {
-                        machine.get_mut_symbols().set(&vref, value)?;
+                        machine.get_mut_symbols().set_var(&vref, value)?;
                         return Ok(());
                     }
                     Err(e) => {

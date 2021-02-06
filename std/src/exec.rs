@@ -117,6 +117,7 @@ mod tests {
     #[test]
     fn test_clear_ok() {
         Tester::default().run("a = 1: CLEAR").check();
+        Tester::default().run("DIM a(2): CLEAR: DIM a(5) AS STRING: CLEAR").check();
     }
 
     #[test]
