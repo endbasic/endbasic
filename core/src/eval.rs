@@ -16,7 +16,7 @@
 //! Evaluator for EndBASIC expressions.
 
 use crate::ast::{Expr, Value, VarRef, VarType};
-use crate::syms::{Array, CallableMetadata, Function, FunctionError, Symbol, Symbols};
+use crate::syms::{Array, CallError, CallableMetadata, Function, Symbol, Symbols};
 use std::rc::Rc;
 
 /// Evaluation errors.
@@ -32,15 +32,15 @@ impl Error {
         Self { message: message.into() }
     }
 
-    /// Annotates a function evaluation error with the function's metadata.
-    fn from_function_error(md: &CallableMetadata, e: FunctionError) -> Self {
+    /// Annotates a call evaluation error with the function's metadata.
+    fn from_call_error(md: &CallableMetadata, e: CallError) -> Self {
         let message = match e {
-            FunctionError::ArgumentError(e) => {
+            CallError::ArgumentError(e) => {
                 format!("Syntax error in call to {}: {}", md.name(), e)
             }
-            FunctionError::EvalError(e) => format!("Error in call to {}: {}", md.name(), e),
-            FunctionError::InternalError(e) => format!("Error in call to {}: {}", md.name(), e),
-            FunctionError::SyntaxError => {
+            CallError::EvalError(e) => format!("Error in call to {}: {}", md.name(), e),
+            CallError::InternalError(e) => format!("Error in call to {}: {}", md.name(), e),
+            CallError::SyntaxError => {
                 format!("Syntax error in call to {}: expected {}", md.name(), md.syntax())
             }
         };
@@ -328,7 +328,7 @@ impl Expr {
                 }
                 Ok(value)
             }
-            Err(e) => Err(Error::from_function_error(&metadata, e)),
+            Err(e) => Err(Error::from_call_error(&metadata, e)),
         }
     }
 
@@ -430,13 +430,13 @@ pub(crate) mod testutils {
             match args.as_slice() {
                 [Value::Text(s)] => {
                     if s == "argument" {
-                        Err(FunctionError::ArgumentError("Bad argument".to_owned()))
+                        Err(CallError::ArgumentError("Bad argument".to_owned()))
                     } else if s == "eval" {
                         Err(Error::new("Some eval error").into())
                     } else if s == "internal" {
-                        Err(FunctionError::InternalError("Some internal error".to_owned()))
+                        Err(CallError::InternalError("Some internal error".to_owned()))
                     } else if s == "syntax" {
-                        Err(FunctionError::SyntaxError)
+                        Err(CallError::SyntaxError)
                     } else {
                         panic!("Unknown argument");
                     }
