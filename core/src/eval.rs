@@ -33,13 +33,14 @@ impl Error {
     }
 
     /// Annotates a call evaluation error with the function's metadata.
-    fn from_call_error(md: &CallableMetadata, e: CallError) -> Self {
+    pub(crate) fn from_call_error(md: &CallableMetadata, e: CallError) -> Self {
         let message = match e {
             CallError::ArgumentError(e) => {
                 format!("Syntax error in call to {}: {}", md.name(), e)
             }
             CallError::EvalError(e) => format!("Error in call to {}: {}", md.name(), e),
             CallError::InternalError(e) => format!("Error in call to {}: {}", md.name(), e),
+            CallError::IoError(e) => format!("Error in call to {}: {}", md.name(), e),
             CallError::SyntaxError => {
                 format!("Syntax error in call to {}: expected {}", md.name(), md.syntax())
             }

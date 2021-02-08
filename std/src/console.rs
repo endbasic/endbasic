@@ -17,8 +17,10 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
-use endbasic_core::exec::{self, Command, Machine};
-use endbasic_core::syms::{CallableMetadata, CallableMetadataBuilder};
+use endbasic_core::exec::Machine;
+use endbasic_core::syms::{
+    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
+};
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -328,13 +330,9 @@ impl Command for ClsCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        _machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
         if !args.is_empty() {
-            return exec::new_usage_error("CLS takes no arguments");
+            return Err(CallError::ArgumentError("CLS takes no arguments".to_owned()));
         }
         self.console.borrow_mut().clear(ClearType::All)?;
         Ok(())
@@ -372,28 +370,26 @@ impl Command for ColorCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         let (fg_expr, bg_expr): (&Option<Expr>, &Option<Expr>) = match args {
             [] => (&None, &None),
             [(fg, ArgSep::End)] => (fg, &None),
             [(fg, ArgSep::Long), (bg, ArgSep::End)] => (fg, bg),
             _ => {
-                return exec::new_usage_error(
-                    "COLOR takes at most two arguments separated by a comma",
-                )
+                return Err(CallError::ArgumentError(
+                    "COLOR takes at most two arguments separated by a comma".to_owned(),
+                ))
             }
         };
 
-        fn get_color(e: &Option<Expr>, machine: &Machine) -> exec::Result<Option<u8>> {
+        fn get_color(e: &Option<Expr>, machine: &Machine) -> Result<Option<u8>, CallError> {
             match e {
                 Some(e) => match e.eval(machine.get_symbols())? {
                     Value::Integer(i) if i >= 0 && i <= std::u8::MAX as i32 => Ok(Some(i as u8)),
-                    Value::Integer(_) => exec::new_usage_error("Color out of range"),
-                    _ => exec::new_usage_error("Color must be an integer"),
+                    Value::Integer(_) => {
+                        Err(CallError::ArgumentError("Color out of range".to_owned()))
+                    }
+                    _ => Err(CallError::ArgumentError("Color must be an integer".to_owned())),
                 },
                 None => Ok(None),
             }
@@ -440,19 +436,19 @@ impl Command for InputCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         if args.len() != 2 {
-            return exec::new_usage_error("INPUT requires two arguments");
+            return Err(CallError::ArgumentError("INPUT requires two arguments".to_owned()));
         }
 
         let mut prompt = match &args[0].0 {
             Some(e) => match e.eval(machine.get_symbols())? {
                 Value::Text(t) => t,
-                _ => return exec::new_usage_error("INPUT prompt must be a string"),
+                _ => {
+                    return Err(CallError::ArgumentError(
+                        "INPUT prompt must be a string".to_owned(),
+                    ))
+                }
             },
             None => "".to_owned(),
         };
@@ -462,7 +458,11 @@ impl Command for InputCommand {
 
         let vref = match &args[1].0 {
             Some(Expr::Symbol(vref)) => vref,
-            _ => return exec::new_usage_error("INPUT requires a variable reference"),
+            _ => {
+                return Err(CallError::ArgumentError(
+                    "INPUT requires a variable reference".to_owned(),
+                ))
+            }
         };
         let vref = machine.get_symbols().qualify_varref(vref)?;
 
@@ -515,17 +515,15 @@ impl Command for LocateCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         if args.len() != 2 {
-            return exec::new_usage_error("LOCATE takes two arguments");
+            return Err(CallError::ArgumentError("LOCATE takes two arguments".to_owned()));
         }
         let (row_arg, column_arg) = (&args[0], &args[1]);
         if row_arg.1 != ArgSep::Long {
-            return exec::new_usage_error("LOCATE expects arguments separated by a comma");
+            return Err(CallError::ArgumentError(
+                "LOCATE expects arguments separated by a comma".to_owned(),
+            ));
         }
         debug_assert!(column_arg.1 == ArgSep::End);
 
@@ -533,26 +531,28 @@ impl Command for LocateCommand {
             Some(arg) => match arg.eval(machine.get_symbols())? {
                 Value::Integer(i) => {
                     if i < 0 {
-                        return exec::new_usage_error("Row cannot be negative");
+                        return Err(CallError::ArgumentError("Row cannot be negative".to_owned()));
                     }
                     i as usize
                 }
-                _ => return exec::new_usage_error("Row must be an integer"),
+                _ => return Err(CallError::ArgumentError("Row must be an integer".to_owned())),
             },
-            None => return exec::new_usage_error("Row cannot be empty"),
+            None => return Err(CallError::ArgumentError("Row cannot be empty".to_owned())),
         };
 
         let column = match &column_arg.0 {
             Some(arg) => match arg.eval(machine.get_symbols())? {
                 Value::Integer(i) => {
                     if i < 0 {
-                        return exec::new_usage_error("Column cannot be negative");
+                        return Err(CallError::ArgumentError(
+                            "Column cannot be negative".to_owned(),
+                        ));
                     }
                     i as usize
                 }
-                _ => return exec::new_usage_error("Column must be an integer"),
+                _ => return Err(CallError::ArgumentError("Column must be an integer".to_owned())),
             },
-            None => return exec::new_usage_error("Column cannot be empty"),
+            None => return Err(CallError::ArgumentError("Column cannot be empty".to_owned())),
         };
 
         self.console.borrow_mut().locate(Position { row, column })?;
@@ -591,11 +591,7 @@ impl Command for PrintCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         let mut text = String::new();
         for arg in args.iter() {
             if let Some(expr) = arg.0.as_ref() {

@@ -17,9 +17,10 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
-use endbasic_core::exec::{self, Command, Machine};
+use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult,
+    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
+    FunctionResult,
 };
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
@@ -161,11 +162,7 @@ impl Command for RandomizeCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         match args {
             [] => {
                 *self.prng.borrow_mut() = Prng::new_from_entryopy();
@@ -174,9 +171,17 @@ impl Command for RandomizeCommand {
                 Value::Integer(n) => {
                     *self.prng.borrow_mut() = Prng::new_from_seed(n);
                 }
-                _ => return exec::new_usage_error("Random seed must be an integer"),
+                _ => {
+                    return Err(CallError::ArgumentError(
+                        "Random seed must be an integer".to_owned(),
+                    ))
+                }
             },
-            _ => return exec::new_usage_error("RANDOMIZE takes zero or one argument"),
+            _ => {
+                return Err(CallError::ArgumentError(
+                    "RANDOMIZE takes zero or one argument".to_owned(),
+                ))
+            }
         };
         Ok(())
     }

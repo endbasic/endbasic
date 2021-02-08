@@ -15,11 +15,10 @@
 
 //! Execution engine for EndBASIC programs.
 
-use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
+use crate::ast::{Expr, Statement, Value, VarRef, VarType};
 use crate::eval;
 use crate::parser::{self, Parser};
-use crate::syms::{CallableMetadata, Function, Symbol, Symbols};
-use async_trait::async_trait;
+use crate::syms::{CallError, CallableMetadata, Command, Function, Symbol, Symbols};
 use std::collections::HashMap;
 use std::future::Future;
 use std::io;
@@ -44,10 +43,26 @@ pub enum Error {
     /// Syntax error.
     #[error("{0}")]
     SyntaxError(String),
+}
 
-    /// Execution of a builtin command failed due to a user call error.
-    #[error("{0}")]
-    UsageError(String),
+impl Error {
+    /// Annotates a call evaluation error with the command's metadata.
+    // TODO(jmmv): This is a hack to support the transition to a better Command abstraction within
+    // Symbols and exists to minimize the amount of impacted tests.  Should be removed and/or
+    // somehow unified with the equivalent function in eval::Error.
+    pub(crate) fn from_call_error(md: &CallableMetadata, e: CallError) -> Self {
+        match e {
+            CallError::ArgumentError(e) => Self::SyntaxError(e),
+            CallError::EvalError(e) => Self::EvalError(e),
+            CallError::InternalError(e) => Self::SyntaxError(e),
+            CallError::IoError(e) => Self::IoError(e),
+            CallError::SyntaxError => Self::SyntaxError(format!(
+                "Syntax error in call to {}: expected {}",
+                md.name(),
+                md.syntax()
+            )),
+        }
+    }
 }
 
 /// Result for execution return values.
@@ -56,40 +71,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Instantiates a new `Err(Error::SyntaxError(...))` from a message.  Syntactic sugar.
 fn new_syntax_error<T, S: Into<String>>(message: S) -> Result<T> {
     Err(Error::SyntaxError(message.into()))
-}
-
-/// Instantiates a new `Err(Error::UsageError(...))` from a message.  Syntactic sugar.
-pub fn new_usage_error<T, S: Into<String>>(message: S) -> Result<T> {
-    Err(Error::UsageError(message.into()))
-}
-
-/// A trait to define a command that is executed by a `Machine`.
-///
-/// The commands themselves are immutable but they can reference mutable state.  Given that
-/// EndBASIC is not threaded, it is sufficient for those references to be behind a `RefCell`
-/// and/or an `Rc`.
-///
-/// Idiomatically, these objects need to provide a `new()` method that returns an `Rc<Callable>`, as
-/// that's the type used throughout the execution engine.
-#[async_trait(?Send)]
-pub trait Command {
-    /// Returns the metadata for this command.
-    ///
-    /// The return value takes the form of a reference to force the callable to store the metadata
-    /// as a struct field so that calls to this function are guaranteed to be cheap.
-    fn metadata(&self) -> &CallableMetadata;
-
-    /// Executes the command.
-    ///
-    /// `args` contains the arguments as provided in the invocation of the command.  Each entry in
-    /// this array contains an optional expression (to support things like `PRINT a, , b`) and the
-    /// separator that was used between that argument and the next.  The last entry in `args` always
-    /// has `ArgSep::End` as the separator.
-    ///
-    /// `machine` provides mutable access to the current state of the machine invoking the command.
-    ///
-    /// Commands cannot return any value except for errors.
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()>;
 }
 
 /// Describes how the machine stopped execution while it was running a script via `exec()`.
@@ -330,7 +311,9 @@ impl Machine {
                     Some(cmd) => cmd.clone(),
                     None => return new_syntax_error(format!("Unknown builtin {}", name)),
                 };
-                cmd.exec(&args, self).await?
+                cmd.exec(&args, self)
+                    .await
+                    .map_err(|e| Error::from_call_error(cmd.metadata(), e))?;
             }
             Statement::Dim(varname, vartype) => self.symbols.dim(varname, *vartype)?,
             Statement::DimArray(varname, dimensions, subtype) => {
@@ -380,7 +363,9 @@ impl Machine {
 #[cfg(test)]
 pub(crate) mod testutils {
     use super::*;
-    use crate::syms::CallableMetadataBuilder;
+    use crate::ast::ArgSep;
+    use crate::syms::{CallError, CallableMetadata, CallableMetadataBuilder, CommandResult};
+    use async_trait::async_trait;
     use std::cell::RefCell;
 
     /// Simplified version of `EXIT` to test the machine's `exit()` method.
@@ -403,7 +388,11 @@ pub(crate) mod testutils {
             &self.metadata
         }
 
-        async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
+        async fn exec(
+            &self,
+            args: &[(Option<Expr>, ArgSep)],
+            machine: &mut Machine,
+        ) -> CommandResult {
             let arg = match args {
                 [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_symbols())? {
                     Value::Integer(n) => {
@@ -446,16 +435,20 @@ pub(crate) mod testutils {
             &self.metadata
         }
 
-        async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
+        async fn exec(
+            &self,
+            args: &[(Option<Expr>, ArgSep)],
+            machine: &mut Machine,
+        ) -> CommandResult {
             if args.len() != 1 {
-                return new_usage_error("IN only takes one argument");
+                return Err(CallError::SyntaxError);
             }
             if args[0].1 != ArgSep::End {
-                return new_usage_error("Invalid separator");
+                return Err(CallError::SyntaxError);
             }
             let vref = match &args[0].0 {
                 Some(Expr::Symbol(vref)) => vref,
-                _ => return new_usage_error("IN requires a variable reference"),
+                _ => return Err(CallError::SyntaxError),
             };
 
             let mut data = self.data.borrow_mut();
@@ -491,7 +484,11 @@ pub(crate) mod testutils {
             &self.metadata
         }
 
-        async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
+        async fn exec(
+            &self,
+            args: &[(Option<Expr>, ArgSep)],
+            machine: &mut Machine,
+        ) -> CommandResult {
             let mut text = String::new();
             for arg in args.iter() {
                 if let Some(expr) = arg.0.as_ref() {
@@ -500,7 +497,7 @@ pub(crate) mod testutils {
                 match arg.1 {
                     ArgSep::End => break,
                     ArgSep::Short => text += " ",
-                    ArgSep::Long => return new_usage_error("Cannot use the ',' separator"),
+                    ArgSep::Long => return Err(CallError::SyntaxError),
                 }
             }
             self.data.borrow_mut().push(text);
