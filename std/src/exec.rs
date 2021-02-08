@@ -17,8 +17,8 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
-use endbasic_core::eval::{CallableMetadata, CallableMetadataBuilder};
 use endbasic_core::exec::{new_usage_error, Command, Machine, Result};
+use endbasic_core::syms::{CallableMetadata, CallableMetadataBuilder};
 use std::rc::Rc;
 
 /// The `CLEAR` command.

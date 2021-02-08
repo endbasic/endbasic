@@ -16,10 +16,10 @@
 //! String functions for EndBASIC.
 
 use endbasic_core::ast::{Value, VarType};
-use endbasic_core::eval::{
+use endbasic_core::exec::Machine;
+use endbasic_core::syms::{
     CallableMetadata, CallableMetadataBuilder, Function, FunctionError, FunctionResult,
 };
-use endbasic_core::exec::Machine;
 use std::cmp::min;
 use std::rc::Rc;
 

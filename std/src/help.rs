@@ -18,8 +18,8 @@
 use crate::console::Console;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, VarType};
-use endbasic_core::eval::{CallableMetadata, CallableMetadataBuilder, Function};
 use endbasic_core::exec::{self, Command, Machine};
+use endbasic_core::syms::{CallableMetadata, CallableMetadataBuilder, Function};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
@@ -251,7 +251,7 @@ pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
 pub(crate) mod testutils {
     use super::*;
     use endbasic_core::ast::Value;
-    use endbasic_core::eval::{self, CallableMetadata, CallableMetadataBuilder};
+    use endbasic_core::syms::{CallableMetadata, CallableMetadataBuilder, FunctionResult};
 
     /// A command that does nothing.
     pub(crate) struct DoNothingCommand {
@@ -316,7 +316,7 @@ Second paragraph of the extended description.",
             &self.metadata
         }
 
-        fn exec(&self, _args: Vec<Value>) -> eval::FunctionResult {
+        fn exec(&self, _args: Vec<Value>) -> FunctionResult {
             Ok(Value::Text("irrelevant".to_owned()))
         }
     }

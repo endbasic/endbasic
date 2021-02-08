@@ -17,10 +17,10 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
-use endbasic_core::eval::{
+use endbasic_core::exec::{self, Command, Machine};
+use endbasic_core::syms::{
     CallableMetadata, CallableMetadataBuilder, Function, FunctionError, FunctionResult,
 };
-use endbasic_core::exec::{self, Command, Machine};
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
 use std::cell::RefCell;

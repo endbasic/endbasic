@@ -23,10 +23,10 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
-use endbasic_core::eval::{
-    self, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult,
-};
 use endbasic_core::exec::{self, Command, Machine, StopReason};
+use endbasic_core::syms::{
+    CallableMetadata, CallableMetadataBuilder, Function, FunctionError, FunctionResult,
+};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -75,7 +75,7 @@ impl Function for NumLightsFunction {
 
     fn exec(&self, args: Vec<Value>) -> FunctionResult {
         if !args.is_empty() {
-            return Err(eval::FunctionError::SyntaxError);
+            return Err(FunctionError::SyntaxError);
         }
         let num = self.lights.borrow().len();
         assert!(num <= std::i32::MAX as usize, "Ended up with too many lights");

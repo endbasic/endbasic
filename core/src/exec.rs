@@ -16,8 +16,9 @@
 //! Execution engine for EndBASIC programs.
 
 use crate::ast::{ArgSep, Expr, Statement, Value, VarRef, VarType};
-use crate::eval::{self, CallableMetadata, Function, Symbol, Symbols};
+use crate::eval;
 use crate::parser::{self, Parser};
+use crate::syms::{CallableMetadata, Function, Symbol, Symbols};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::future::Future;
@@ -379,7 +380,7 @@ impl Machine {
 #[cfg(test)]
 pub(crate) mod testutils {
     use super::*;
-    use crate::eval::CallableMetadataBuilder;
+    use crate::syms::CallableMetadataBuilder;
     use std::cell::RefCell;
 
     /// Simplified version of `EXIT` to test the machine's `exit()` method.
@@ -512,7 +513,7 @@ pub(crate) mod testutils {
 mod tests {
     use super::testutils::*;
     use super::*;
-    use crate::eval::testutils::*;
+    use crate::syms::testutils::*;
     use futures_lite::future::block_on;
     use std::cell::RefCell;
     use std::rc::Rc;
