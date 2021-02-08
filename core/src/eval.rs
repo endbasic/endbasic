@@ -1558,59 +1558,6 @@ mod tests {
     }
 
     #[test]
-    fn test_varref_display() {
-        assert_eq!("name", format!("{}", VarRef::new("name", VarType::Auto)));
-        assert_eq!("abc?", format!("{}", VarRef::new("abc", VarType::Boolean)));
-        assert_eq!("cba#", format!("{}", VarRef::new("cba", VarType::Double)));
-        assert_eq!("def%", format!("{}", VarRef::new("def", VarType::Integer)));
-        assert_eq!("ghi$", format!("{}", VarRef::new("ghi", VarType::Text)));
-    }
-
-    #[test]
-    fn test_varref_into_unannotated_string() {
-        assert_eq!(
-            "print",
-            &VarRef::new("print", VarType::Auto).into_unannotated_string().unwrap()
-        );
-
-        assert_eq!(
-            "Type annotation not allowed in print$",
-            format!(
-                "{}",
-                &VarRef::new("print", VarType::Text).into_unannotated_string().unwrap_err()
-            )
-        );
-    }
-
-    #[test]
-    fn test_varref_accepts() {
-        assert!(VarRef::new("a", VarType::Auto).accepts(VarType::Boolean));
-        assert!(VarRef::new("a", VarType::Auto).accepts(VarType::Double));
-        assert!(VarRef::new("a", VarType::Auto).accepts(VarType::Integer));
-        assert!(VarRef::new("a", VarType::Auto).accepts(VarType::Text));
-
-        assert!(VarRef::new("a", VarType::Boolean).accepts(VarType::Boolean));
-        assert!(!VarRef::new("a", VarType::Boolean).accepts(VarType::Double));
-        assert!(!VarRef::new("a", VarType::Boolean).accepts(VarType::Integer));
-        assert!(!VarRef::new("a", VarType::Boolean).accepts(VarType::Text));
-
-        assert!(!VarRef::new("a", VarType::Double).accepts(VarType::Boolean));
-        assert!(VarRef::new("a", VarType::Double).accepts(VarType::Double));
-        assert!(!VarRef::new("a", VarType::Double).accepts(VarType::Integer));
-        assert!(!VarRef::new("a", VarType::Double).accepts(VarType::Text));
-
-        assert!(!VarRef::new("a", VarType::Integer).accepts(VarType::Boolean));
-        assert!(!VarRef::new("a", VarType::Integer).accepts(VarType::Double));
-        assert!(VarRef::new("a", VarType::Integer).accepts(VarType::Integer));
-        assert!(!VarRef::new("a", VarType::Integer).accepts(VarType::Text));
-
-        assert!(!VarRef::new("a", VarType::Text).accepts(VarType::Boolean));
-        assert!(!VarRef::new("a", VarType::Text).accepts(VarType::Double));
-        assert!(!VarRef::new("a", VarType::Text).accepts(VarType::Integer));
-        assert!(VarRef::new("a", VarType::Text).accepts(VarType::Text));
-    }
-
-    #[test]
     fn test_array_unidimensional_ok() {
         let mut array = Array::new(VarType::Integer, vec![5]);
         assert_eq!(VarType::Integer, array.subtype());
