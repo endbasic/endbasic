@@ -24,6 +24,10 @@ not adhere to semantic versioning until 1.0.0.**
 *   Fixed the definition of variables so that their names cannot shadow
     existing functions.
 
+*   Refactored the internal representation of symbols (variables, arrays,
+    functions, and commands) for a more uniform handling.  As a side-effect, it
+    is now an error to have two symbols of any kind with the same name.
+
 ## Changes in version 0.5.1
 
 **Released on 2021-01-25.**

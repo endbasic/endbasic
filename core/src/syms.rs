@@ -174,6 +174,9 @@ pub enum Symbol {
     /// An array definition.
     Array(Array),
 
+    /// A command definition.
+    Command(Rc<dyn Command>),
+
     /// A function definition.
     Function(Rc<dyn Function>),
 
@@ -186,6 +189,7 @@ impl Symbol {
     fn eval_type(&self) -> VarType {
         match self {
             Symbol::Array(array) => array.subtype(),
+            Symbol::Command(command) => command.metadata().return_type(),
             Symbol::Function(function) => function.metadata().return_type(),
             Symbol::Variable(value) => value.as_vartype(),
         }
@@ -195,6 +199,7 @@ impl Symbol {
     fn user_defined(&self) -> bool {
         match self {
             Symbol::Array(_) => true,
+            Symbol::Command(_) => false,
             Symbol::Function(_) => false,
             Symbol::Variable(_) => true,
         }
@@ -205,6 +210,7 @@ impl fmt::Debug for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Symbol::Array(array) => write!(f, "Array({:?})", array),
+            Symbol::Command(command) => write!(f, "Command({:?})", command.metadata()),
             Symbol::Function(function) => write!(f, "Function({:?})", function.metadata()),
             Symbol::Variable(value) => write!(f, "Variable({:?})", value),
         }
@@ -219,6 +225,17 @@ pub struct Symbols {
 }
 
 impl Symbols {
+    /// Registers the given builtin command.
+    ///
+    /// Given that commands cannot be defined at runtime, specifying a non-unique name results in
+    /// a panic.
+    pub fn add_command(&mut self, command: Rc<dyn Command>) {
+        let key = command.metadata().name();
+        debug_assert!(key == key.to_ascii_uppercase());
+        assert!(!self.by_name.contains_key(key));
+        self.by_name.insert(key.to_owned(), Symbol::Command(command));
+    }
+
     /// Registers the given builtin function.
     ///
     /// Given that functions cannot be defined at runtime, specifying a non-unique name results in
@@ -309,6 +326,17 @@ impl Symbols {
             Some(_) => Err(Error::new(format!("{} is not a variable", vref.name()))),
             None => Err(Error::new(format!("Undefined variable {}", vref.name()))),
         }
+    }
+
+    /// Obtains the definition of all commands.
+    pub fn get_commands(&self) -> HashMap<String, &Rc<dyn Command>> {
+        let mut cs = HashMap::default();
+        for (name, symbol) in self.by_name.iter() {
+            if let Symbol::Command(c) = symbol {
+                cs.insert(name.clone(), c);
+            }
+        }
+        cs
     }
 
     /// Obtains the definition of all functions.
@@ -553,6 +581,14 @@ pub(crate) mod testutils {
             self
         }
 
+        /// Adds the command `cmd` to the list of symbols.
+        pub(crate) fn add_command(mut self, cmd: Rc<dyn Command>) -> Self {
+            let name = cmd.metadata().name();
+            assert!(name == name.to_ascii_uppercase());
+            self.by_name.insert(name.to_owned(), Symbol::Command(cmd));
+            self
+        }
+
         /// Adds the function `func` to the list of symbols.
         pub(crate) fn add_function(mut self, func: Rc<dyn Function>) -> Self {
             let name = func.metadata().name();
@@ -607,6 +643,7 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use crate::ast::VarRef;
+    use crate::exec::testutils::ExitCommand;
 
     #[test]
     fn test_array_unidimensional_ok() {
@@ -774,15 +811,18 @@ mod tests {
     fn test_symbols_clear() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
+            .add_command(ExitCommand::new())
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
         assert!(syms.get(&VarRef::new("SOMEARRAY", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("EXIT", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SUM", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SOMEVAR", VarType::Auto)).unwrap().is_some());
         syms.clear();
         assert!(!syms.get(&VarRef::new("SOMEARRAY", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("EXIT", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SUM", VarType::Auto)).unwrap().is_some());
         assert!(!syms.get(&VarRef::new("SOMEVAR", VarType::Auto)).unwrap().is_some());
     }
@@ -820,9 +860,15 @@ mod tests {
     fn test_symbols_dim_name_overlap() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
+            .add_command(ExitCommand::new())
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
+
+        assert_eq!(
+            "Cannot DIM already-defined symbol Exit",
+            format!("{}", syms.dim("Exit", VarType::Integer).unwrap_err())
+        );
 
         assert_eq!(
             "Cannot DIM already-defined symbol Sum",
@@ -887,9 +933,15 @@ mod tests {
     fn test_symbols_dim_array_name_overlap() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
+            .add_command(ExitCommand::new())
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
+
+        assert_eq!(
+            "Cannot DIM already-defined symbol Exit",
+            format!("{}", syms.dim_array("Exit", VarType::Integer, vec![5]).unwrap_err())
+        );
 
         assert_eq!(
             "Cannot DIM already-defined symbol Sum",
@@ -912,6 +964,7 @@ mod tests {
         // If modifying this test, update the identical test for get_mut() below.
         let syms = SymbolsBuilder::default()
             .add_array("BOOL_ARRAY", VarType::Boolean)
+            .add_command(ExitCommand::new())
             .add_function(SumFunction::new())
             .add_var("STRING_VAR", Value::Text("".to_owned()))
             .build();
@@ -925,6 +978,15 @@ mod tests {
         assert_eq!(
             "Incompatible types in bool_array$ reference",
             format!("{}", syms.get(&VarRef::new("bool_array", VarType::Text)).unwrap_err())
+        );
+
+        match syms.get(&VarRef::new("exit", VarType::Auto)).unwrap().unwrap() {
+            Symbol::Command(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
+            _ => panic!("Got something that is not the command we asked for"),
+        }
+        assert_eq!(
+            "Incompatible types in exit# reference",
+            format!("{}", syms.get(&VarRef::new("exit", VarType::Double)).unwrap_err())
         );
 
         for ref_type in &[VarType::Auto, VarType::Integer] {
@@ -955,12 +1017,16 @@ mod tests {
         // If modifying this test, update the identical test for get_mut() below.
         let syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
+            .add_command(ExitCommand::new())
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
         assert!(syms.get(&VarRef::new("somearray", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SomeArray", VarType::Auto)).unwrap().is_some());
+
+        assert!(syms.get(&VarRef::new("exit", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("Exit", VarType::Auto)).unwrap().is_some());
 
         assert!(syms.get(&VarRef::new("sum", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("Sum", VarType::Auto)).unwrap().is_some());
@@ -981,6 +1047,7 @@ mod tests {
         // If modifying this test, update the identical test for get() above.
         let mut syms = SymbolsBuilder::default()
             .add_array("BOOL_ARRAY", VarType::Boolean)
+            .add_command(ExitCommand::new())
             .add_function(SumFunction::new())
             .add_var("STRING_VAR", Value::Text("".to_owned()))
             .build();
@@ -994,6 +1061,15 @@ mod tests {
         assert_eq!(
             "Incompatible types in bool_array$ reference",
             format!("{}", syms.get_mut(&VarRef::new("bool_array", VarType::Text)).unwrap_err())
+        );
+
+        match syms.get_mut(&VarRef::new("exit", VarType::Auto)).unwrap().unwrap() {
+            Symbol::Command(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
+            _ => panic!("Got something that is not the command we asked for"),
+        }
+        assert_eq!(
+            "Incompatible types in exit# reference",
+            format!("{}", syms.get_mut(&VarRef::new("exit", VarType::Double)).unwrap_err())
         );
 
         for ref_type in &[VarType::Auto, VarType::Integer] {
@@ -1024,12 +1100,16 @@ mod tests {
         // If modifying this test, update the identical test for get() above.
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
+            .add_command(ExitCommand::new())
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
         assert!(syms.get_mut(&VarRef::new("somearray", VarType::Auto)).unwrap().is_some());
         assert!(syms.get_mut(&VarRef::new("SomeArray", VarType::Auto)).unwrap().is_some());
+
+        assert!(syms.get_mut(&VarRef::new("exit", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("Exit", VarType::Auto)).unwrap().is_some());
 
         assert!(syms.get_mut(&VarRef::new("sum", VarType::Auto)).unwrap().is_some());
         assert!(syms.get_mut(&VarRef::new("Sum", VarType::Auto)).unwrap().is_some());
@@ -1118,9 +1198,18 @@ mod tests {
     fn test_symbols_set_var_name_overlap() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
+            .add_command(ExitCommand::new())
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
+
+        assert_eq!(
+            "Cannot redefine Exit as a variable",
+            format!(
+                "{}",
+                syms.set_var(&VarRef::new("Exit", VarType::Auto), Value::Integer(1)).unwrap_err()
+            )
+        );
 
         assert_eq!(
             "Cannot redefine Sum% as a variable",
