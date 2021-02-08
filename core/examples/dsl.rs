@@ -23,9 +23,10 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
-use endbasic_core::exec::{self, Command, Machine, StopReason};
+use endbasic_core::exec::{Machine, StopReason};
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult,
+    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
+    FunctionResult,
 };
 use futures_lite::future::block_on;
 use std::cell::RefCell;
@@ -109,24 +110,22 @@ impl Command for SwitchLightCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         if args.len() != 1 {
-            return exec::new_usage_error("SWITCH_LIGHT takes one argument only");
+            return Err(CallError::SyntaxError);
         }
         let expr = args[0].0.as_ref().expect("A single argument can never be empty");
         match expr.eval(machine.get_symbols())? {
             Value::Integer(i) => {
                 let lights = &mut *self.lights.borrow_mut();
                 if i < 1 {
-                    return exec::new_usage_error("Light id cannot be zero or negative");
+                    return Err(CallError::ArgumentError(
+                        "Light id cannot be zero or negative".to_owned(),
+                    ));
                 }
                 let i = i as usize;
                 if i > lights.len() {
-                    return exec::new_usage_error("Light id out of range");
+                    return Err(CallError::ArgumentError("Light id out of range".to_owned()));
                 }
                 if lights[i - 1] {
                     println!("Turning light {} off", i);
@@ -135,7 +134,7 @@ impl Command for SwitchLightCommand {
                 }
                 lights[i - 1] = !lights[i - 1];
             }
-            _ => return exec::new_usage_error("Mismatched expression type"),
+            _ => return Err(CallError::ArgumentError("Mismatched expression type".to_owned())),
         }
         Ok(())
     }

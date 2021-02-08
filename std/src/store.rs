@@ -18,8 +18,10 @@
 use crate::console::Console;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
-use endbasic_core::exec::{self, Command, Machine};
-use endbasic_core::syms::{CallableMetadata, CallableMetadataBuilder};
+use endbasic_core::exec::Machine;
+use endbasic_core::syms::{
+    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
+};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{self, File, OpenOptions};
@@ -276,13 +278,9 @@ impl Command for DelCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         if args.len() != 1 {
-            return exec::new_usage_error("DEL requires a filename");
+            return Err(CallError::ArgumentError("DEL requires a filename".to_owned()));
         }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_symbols())? {
@@ -290,7 +288,11 @@ impl Command for DelCommand {
                 let name = to_filename(t)?;
                 self.store.borrow_mut().delete(&name)?;
             }
-            _ => return exec::new_usage_error("DEL requires a string as the filename"),
+            _ => {
+                return Err(CallError::ArgumentError(
+                    "DEL requires a string as the filename".to_owned(),
+                ))
+            }
         }
         Ok(())
     }
@@ -324,13 +326,9 @@ impl Command for DirCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        _machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
         if !args.is_empty() {
-            return exec::new_usage_error("DIR takes no arguments");
+            return Err(CallError::ArgumentError("DIR takes no arguments".to_owned()));
         }
         show_dir(&*self.store.borrow(), &mut *self.console.borrow_mut())?;
         Ok(())
@@ -365,13 +363,9 @@ impl Command for EditCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        _machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
         if !args.is_empty() {
-            return exec::new_usage_error("EDIT takes no arguments");
+            return Err(CallError::ArgumentError("EDIT takes no arguments".to_owned()));
         }
 
         let mut console = self.console.borrow_mut();
@@ -413,13 +407,9 @@ impl Command for LoadCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         if args.len() != 1 {
-            return exec::new_usage_error("LOAD requires a filename");
+            return Err(CallError::ArgumentError("LOAD requires a filename".to_owned()));
         }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_symbols())? {
@@ -429,7 +419,11 @@ impl Command for LoadCommand {
                 self.program.borrow_mut().load(&content);
                 machine.clear();
             }
-            _ => return exec::new_usage_error("LOAD requires a string as the filename"),
+            _ => {
+                return Err(CallError::ArgumentError(
+                    "LOAD requires a string as the filename".to_owned(),
+                ))
+            }
         }
         Ok(())
     }
@@ -461,13 +455,9 @@ impl Command for NewCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         if !args.is_empty() {
-            return exec::new_usage_error("NEW takes no arguments");
+            return Err(CallError::ArgumentError("NEW takes no arguments".to_owned()));
         }
         self.program.borrow_mut().load("");
         machine.clear();
@@ -509,16 +499,19 @@ impl Command for RunCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         if !args.is_empty() {
-            return exec::new_usage_error("RUN takes no arguments");
+            return Err(CallError::ArgumentError("RUN takes no arguments".to_owned()));
         }
         let program = self.program.borrow().text();
-        let stop_reason = machine.exec(&mut program.as_bytes()).await?;
+        let stop_reason = match machine.exec(&mut program.as_bytes()).await {
+            Ok(stop_reason) => stop_reason,
+            Err(e) => {
+                // TODO(jmmv): This conversion to an internal error is not great and is just a
+                // workaround for the mess that CallError currently is in the context of commands.
+                return Err(CallError::InternalError(format!("{}", e)));
+            }
+        };
         if stop_reason.as_exit_code() != 0 {
             self.console
                 .borrow_mut()
@@ -560,13 +553,9 @@ impl Command for SaveCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         if args.len() != 1 {
-            return exec::new_usage_error("SAVE requires a filename");
+            return Err(CallError::ArgumentError("SAVE requires a filename".to_owned()));
         }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_symbols())? {
@@ -575,7 +564,11 @@ impl Command for SaveCommand {
                 let content = self.program.borrow().text();
                 self.store.borrow_mut().put(&name, &content)?;
             }
-            _ => return exec::new_usage_error("SAVE requires a string as the filename"),
+            _ => {
+                return Err(CallError::ArgumentError(
+                    "SAVE requires a string as the filename".to_owned(),
+                ))
+            }
         }
         Ok(())
     }

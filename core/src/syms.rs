@@ -15,10 +15,13 @@
 
 //! Symbol definitions and symbols table representation.
 
-use crate::ast::{Value, VarRef, VarType};
+use crate::ast::{ArgSep, Expr, Value, VarRef, VarType};
 use crate::eval::{Error, Result};
+use crate::exec::Machine;
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
+use std::io;
 use std::mem;
 use std::rc::Rc;
 use std::str::Lines;
@@ -39,6 +42,9 @@ pub enum CallError {
     /// Any other error not representable by other values.
     InternalError(String),
 
+    /// I/O error during execution.
+    IoError(io::Error),
+
     /// General mismatch of parameters given to the function with expectations (different numbers,
     /// invalid types).
     SyntaxError,
@@ -49,6 +55,15 @@ impl From<Error> for CallError {
         Self::EvalError(e)
     }
 }
+
+impl From<io::Error> for CallError {
+    fn from(e: io::Error) -> Self {
+        Self::IoError(e)
+    }
+}
+
+/// Result for command execution return values.
+pub type CommandResult = std::result::Result<(), CallError>;
 
 /// Result for function evaluation return values.
 pub type FunctionResult = std::result::Result<Value, CallError>;
@@ -486,6 +501,35 @@ pub trait Function {
     ///
     /// `args` contains the evaluated arguments as provided in the invocation of the function.
     fn exec(&self, args: Vec<Value>) -> FunctionResult;
+}
+
+/// A trait to define a command that is executed by a `Machine`.
+///
+/// The commands themselves are immutable but they can reference mutable state.  Given that
+/// EndBASIC is not threaded, it is sufficient for those references to be behind a `RefCell`
+/// and/or an `Rc`.
+///
+/// Idiomatically, these objects need to provide a `new()` method that returns an `Rc<Callable>`, as
+/// that's the type used throughout the execution engine.
+#[async_trait(?Send)]
+pub trait Command {
+    /// Returns the metadata for this command.
+    ///
+    /// The return value takes the form of a reference to force the callable to store the metadata
+    /// as a struct field so that calls to this function are guaranteed to be cheap.
+    fn metadata(&self) -> &CallableMetadata;
+
+    /// Executes the command.
+    ///
+    /// `args` contains the arguments as provided in the invocation of the command.  Each entry in
+    /// this array contains an optional expression (to support things like `PRINT a, , b`) and the
+    /// separator that was used between that argument and the next.  The last entry in `args` always
+    /// has `ArgSep::End` as the separator.
+    ///
+    /// `machine` provides mutable access to the current state of the machine invoking the command.
+    ///
+    /// Commands cannot return any value except for errors.
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult;
 }
 
 #[cfg(test)]

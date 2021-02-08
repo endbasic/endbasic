@@ -18,8 +18,10 @@
 use crate::console::Console;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, VarType};
-use endbasic_core::exec::{self, Command, Machine};
-use endbasic_core::syms::{CallableMetadata, CallableMetadataBuilder, Function};
+use endbasic_core::exec::{self, Machine};
+use endbasic_core::syms::{
+    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
+};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
@@ -201,11 +203,7 @@ impl Command for HelpCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        args: &[(Option<Expr>, ArgSep)],
-        machine: &mut Machine,
-    ) -> exec::Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         let fs = machine.get_functions();
         let callables = compute_callables(machine.get_commands(), &fs);
         match args {
@@ -214,7 +212,9 @@ impl Command for HelpCommand {
                 let name = vref.name().to_ascii_uppercase();
                 if name == "LANG" {
                     if vref.ref_type() != VarType::Auto {
-                        return exec::new_usage_error("Incompatible type annotation");
+                        return Err(CallError::ArgumentError(
+                            "Incompatible type annotation".to_owned(),
+                        ));
                     }
                     self.describe_lang()?;
                 } else {
@@ -223,20 +223,26 @@ impl Command for HelpCommand {
                             if vref.ref_type() != VarType::Auto
                                 && vref.ref_type() != metadata.return_type()
                             {
-                                return exec::new_usage_error("Incompatible type annotation");
+                                return Err(CallError::ArgumentError(
+                                    "Incompatible type annotation".to_owned(),
+                                ));
                             }
                             self.describe_callable(metadata)?;
                         }
                         None => {
-                            return exec::new_usage_error(format!(
+                            return Err(CallError::ArgumentError(format!(
                                 "Cannot describe unknown command or function {}",
                                 name
-                            ))
+                            )))
                         }
                     }
                 }
             }
-            _ => return exec::new_usage_error("HELP takes zero or only one argument"),
+            _ => {
+                return Err(CallError::ArgumentError(
+                    "HELP takes zero or only one argument".to_owned(),
+                ))
+            }
         }
         Ok(())
     }
@@ -285,7 +291,7 @@ Second paragraph of the extended description.",
             &self,
             _args: &[(Option<Expr>, ArgSep)],
             _machine: &mut Machine,
-        ) -> exec::Result<()> {
+        ) -> CommandResult {
             Ok(())
         }
     }

@@ -17,8 +17,10 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
-use endbasic_core::exec::{new_usage_error, Command, Machine, Result};
-use endbasic_core::syms::{CallableMetadata, CallableMetadataBuilder};
+use endbasic_core::exec::Machine;
+use endbasic_core::syms::{
+    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
+};
 use std::rc::Rc;
 
 /// The `CLEAR` command.
@@ -45,9 +47,9 @@ impl Command for ClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         if !args.is_empty() {
-            return new_usage_error("CLEAR takes no arguments");
+            return Err(CallError::ArgumentError("CLEAR takes no arguments".to_owned()));
         }
         machine.clear();
         Ok(())
@@ -81,22 +83,32 @@ impl Command for ExitCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         let arg = match args {
             [] => 0,
             [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_symbols())? {
                 Value::Integer(n) => {
                     if n < 0 {
-                        return new_usage_error("Exit code must be a positive integer");
+                        return Err(CallError::ArgumentError(
+                            "Exit code must be a positive integer".to_owned(),
+                        ));
                     }
                     if n >= 128 {
-                        return new_usage_error("Exit code cannot be larger than 127");
+                        return Err(CallError::ArgumentError(
+                            "Exit code cannot be larger than 127".to_owned(),
+                        ));
                     }
                     n as u8
                 }
-                _ => return new_usage_error("Exit code must be a positive integer"),
+                _ => {
+                    return Err(CallError::ArgumentError(
+                        "Exit code must be a positive integer".to_owned(),
+                    ))
+                }
             },
-            _ => return new_usage_error("EXIT takes zero or one argument"),
+            _ => {
+                return Err(CallError::ArgumentError("EXIT takes zero or one argument".to_owned()))
+            }
         };
         machine.exit(arg);
         Ok(())
