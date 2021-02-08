@@ -18,8 +18,8 @@
 use crate::console::Console;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
-use endbasic_core::eval::{CallableMetadata, CallableMetadataBuilder};
 use endbasic_core::exec::{self, Command, Machine};
+use endbasic_core::syms::{CallableMetadata, CallableMetadataBuilder};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{self, File, OpenOptions};
