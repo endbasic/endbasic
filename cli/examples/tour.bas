@@ -153,15 +153,15 @@ PRINT
 PRINT "For example, we can print the foundational colors by selecting them with"
 PRINT "the \"COLOR\" command and positioning the cursor with \"LOCATE\":"
 PRINT
-FOR color% = 0 TO 7
-    LOCATE 11 + color%, 4
-    COLOR color%
-    PRINT "This is color"; color%
+FOR c% = 0 TO 7
+    LOCATE 11 + c%, 4
+    COLOR c%
+    PRINT "This is color"; c%
 NEXT
-FOR color% = 8 TO 15
-    LOCATE 11 + color% - 8, 23
-    COLOR color%
-    PRINT "This is color"; color%
+FOR c% = 8 TO 15
+    LOCATE 11 + c% - 8, 23
+    COLOR c%
+    PRINT "This is color"; c%
 NEXT
 COLOR
 PRINT

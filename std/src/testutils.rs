@@ -431,8 +431,8 @@ impl<'a> Checker<'a> {
                 Symbol::Array(array) => {
                     arrays.insert(name, array);
                 }
-                Symbol::Function(_) => {
-                    // We currently don't support user-defined functions at runtime so there is no
+                Symbol::Command(_) | Symbol::Function(_) => {
+                    // We currently don't support user-defined callables at runtime so there is no
                     // need to validate anything about them.
                 }
                 Symbol::Variable(value) => {

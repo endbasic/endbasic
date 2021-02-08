@@ -75,12 +75,12 @@ fn header() -> Vec<String> {
 // TODO(jmmv): This is a code smell from the lack of genericity between commands and functions.
 // If we can homogenize their representation, this should go away.
 fn compute_callables<'a>(
-    commands: &'a HashMap<&'static str, Rc<dyn Command>>,
+    commands: &'a HashMap<String, &Rc<dyn Command>>,
     functions: &'a HashMap<String, &Rc<dyn Function>>,
 ) -> HashMap<String, &'a CallableMetadata> {
     let mut callables: HashMap<String, &'a CallableMetadata> = HashMap::default();
     for (name, command) in commands.iter() {
-        assert!(!callables.contains_key(*name), "Command names are in a map; must be unique");
+        assert!(!callables.contains_key(name), "Command names are in a map; must be unique");
         callables.insert(name.to_string(), command.metadata());
     }
     for (name, function) in functions.iter() {
@@ -204,8 +204,9 @@ impl Command for HelpCommand {
     }
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+        let cs = machine.get_commands();
         let fs = machine.get_functions();
-        let callables = compute_callables(machine.get_commands(), &fs);
+        let callables = compute_callables(&cs, &fs);
         match args {
             [] => self.summary(&callables)?,
             [(Some(Expr::Symbol(vref)), ArgSep::End)] => {

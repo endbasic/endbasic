@@ -97,7 +97,6 @@ impl StopReason {
 /// Executes an EndBASIC program and tracks its state.
 #[derive(Default)]
 pub struct Machine {
-    commands: HashMap<&'static str, Rc<dyn Command>>,
     symbols: Symbols,
     stop_reason: Option<StopReason>,
 }
@@ -105,12 +104,7 @@ pub struct Machine {
 impl Machine {
     /// Registers the given builtin command, which must not yet be registered.
     pub fn add_command(&mut self, command: Rc<dyn Command>) {
-        let metadata = command.metadata();
-        assert!(
-            self.commands.get(&metadata.name()).is_none(),
-            "Command with the same name already registered"
-        );
-        self.commands.insert(metadata.name(), command);
+        self.symbols.add_command(command)
     }
 
     /// Registers the given builtin function, which must not yet be registered.
@@ -132,8 +126,8 @@ impl Machine {
     }
 
     /// Obtains immutable access to the builtin commands provided by this machine.
-    pub fn get_commands(&self) -> &HashMap<&'static str, Rc<dyn Command>> {
-        &self.commands
+    pub fn get_commands(&self) -> HashMap<String, &Rc<dyn Command>> {
+        self.symbols.get_commands()
     }
 
     /// Obtains immutable access to the builtin functions provided by this machine.
@@ -307,8 +301,9 @@ impl Machine {
             }
             Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
             Statement::BuiltinCall(name, args) => {
-                let cmd = match self.commands.get(name.as_str()) {
-                    Some(cmd) => cmd.clone(),
+                let cmd = match self.symbols.get(&VarRef::new(name, VarType::Auto))? {
+                    Some(Symbol::Command(cmd)) => cmd.clone(),
+                    Some(_) => return new_syntax_error(format!("{} is not a command", name)),
                     None => return new_syntax_error(format!("Unknown builtin {}", name)),
                 };
                 cmd.exec(&args, self)
@@ -950,6 +945,7 @@ mod tests {
 
     #[test]
     fn test_function_call_errors() {
+        do_simple_error_test("OUT OUT()", "OUT is not an array or a function");
         do_simple_error_test("OUT SUM?()", "Incompatible types in SUM? reference");
     }
 

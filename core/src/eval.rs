@@ -453,6 +453,7 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use crate::ast::VarRef;
+    use crate::exec::testutils::ExitCommand;
     use crate::syms::testutils::*;
 
     #[test]
@@ -1450,6 +1451,34 @@ mod tests {
                 )
                 .eval(&syms)
                 .unwrap_err()
+            )
+        );
+    }
+
+    #[test]
+    fn test_expr_call_non_function() {
+        let syms = SymbolsBuilder::default()
+            .add_var("SOMEVAR", Value::Integer(0))
+            .add_command(ExitCommand::new())
+            .build();
+
+        assert_eq!(
+            "SOMEVAR is not an array or a function",
+            format!(
+                "{}",
+                Expr::Call(VarRef::new("SOMEVAR".to_owned(), VarType::Auto), vec![])
+                    .eval(&syms)
+                    .unwrap_err()
+            )
+        );
+
+        assert_eq!(
+            "EXIT is not an array or a function",
+            format!(
+                "{}",
+                Expr::Call(VarRef::new("EXIT".to_owned(), VarType::Auto), vec![])
+                    .eval(&syms)
+                    .unwrap_err()
             )
         );
     }
