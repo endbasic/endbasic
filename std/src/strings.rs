@@ -18,7 +18,7 @@
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallableMetadata, CallableMetadataBuilder, Function, FunctionError, FunctionResult,
+    CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult,
 };
 use std::cmp::min;
 use std::rc::Rc;
@@ -57,13 +57,13 @@ impl Function for LeftFunction {
         match args.as_slice() {
             [Value::Text(s), Value::Integer(n)] => {
                 if n < &0 {
-                    Err(FunctionError::ArgumentError("n% cannot be negative".to_owned()))
+                    Err(CallError::ArgumentError("n% cannot be negative".to_owned()))
                 } else {
                     let n = min(s.len(), *n as usize);
                     Ok(Value::Text(s[..n].to_owned()))
                 }
             }
-            _ => Err(FunctionError::SyntaxError),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
@@ -95,12 +95,12 @@ impl Function for LenFunction {
         match args.as_slice() {
             [Value::Text(s)] => {
                 if s.len() > i32::MAX as usize {
-                    Err(FunctionError::InternalError("String too long".to_owned()))
+                    Err(CallError::InternalError("String too long".to_owned()))
                 } else {
                     Ok(Value::Integer(s.len() as i32))
                 }
             }
-            _ => Err(FunctionError::SyntaxError),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
@@ -131,7 +131,7 @@ impl Function for LtrimFunction {
     fn exec(&self, args: Vec<Value>) -> FunctionResult {
         match args.as_slice() {
             [Value::Text(s)] => Ok(Value::Text(s.trim_start().to_owned())),
-            _ => Err(FunctionError::SyntaxError),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
@@ -168,16 +168,16 @@ impl Function for MidFunction {
         match args.as_slice() {
             [Value::Text(s), Value::Integer(start), Value::Integer(length)] => {
                 if *start < 0 {
-                    Err(FunctionError::ArgumentError("start% cannot be negative".to_owned()))
+                    Err(CallError::ArgumentError("start% cannot be negative".to_owned()))
                 } else if *length < 0 {
-                    Err(FunctionError::ArgumentError("length% cannot be negative".to_owned()))
+                    Err(CallError::ArgumentError("length% cannot be negative".to_owned()))
                 } else {
                     let start = min(s.len(), *start as usize);
                     let end = min(start + (*length as usize), s.len());
                     Ok(Value::Text(s[start..end].to_owned()))
                 }
             }
-            _ => Err(FunctionError::SyntaxError),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
@@ -213,13 +213,13 @@ impl Function for RightFunction {
         match args.as_slice() {
             [Value::Text(s), Value::Integer(n)] => {
                 if n < &0 {
-                    Err(FunctionError::ArgumentError("n% cannot be negative".to_owned()))
+                    Err(CallError::ArgumentError("n% cannot be negative".to_owned()))
                 } else {
                     let n = min(s.len(), *n as usize);
                     Ok(Value::Text(s[s.len() - n..].to_owned()))
                 }
             }
-            _ => Err(FunctionError::SyntaxError),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
@@ -250,7 +250,7 @@ impl Function for RtrimFunction {
     fn exec(&self, args: Vec<Value>) -> FunctionResult {
         match args.as_slice() {
             [Value::Text(s)] => Ok(Value::Text(s.trim_end().to_owned())),
-            _ => Err(FunctionError::SyntaxError),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }

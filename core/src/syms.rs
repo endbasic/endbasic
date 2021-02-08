@@ -23,13 +23,13 @@ use std::mem;
 use std::rc::Rc;
 use std::str::Lines;
 
-/// Function execution errors.
+/// Command or function execution errors.
 ///
 /// These are separate from the more generic `Error` type because they are not annotated with the
-/// specific function that triggered the error.  We add such annotation once we capture the error
+/// specific callable that triggered the error.  We add such annotation once we capture the error
 /// within the evaluation logic.
 #[derive(Debug)]
-pub enum FunctionError {
+pub enum CallError {
     /// A specific parameter had an invalid value.
     ArgumentError(String),
 
@@ -44,14 +44,14 @@ pub enum FunctionError {
     SyntaxError,
 }
 
-impl From<Error> for FunctionError {
+impl From<Error> for CallError {
     fn from(e: Error) -> Self {
         Self::EvalError(e)
     }
 }
 
 /// Result for function evaluation return values.
-pub type FunctionResult = std::result::Result<Value, FunctionError>;
+pub type FunctionResult = std::result::Result<Value, CallError>;
 
 /// Represents a multidimensional array.
 #[derive(Debug)]

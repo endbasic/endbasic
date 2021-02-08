@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::exec::{self, Command, Machine};
 use endbasic_core::syms::{
-    CallableMetadata, CallableMetadataBuilder, Function, FunctionError, FunctionResult,
+    CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult,
 };
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
@@ -95,7 +95,7 @@ impl Function for DtoiFunction {
     fn exec(&self, args: Vec<Value>) -> FunctionResult {
         match args.as_slice() {
             [Value::Double(n)] => Ok(Value::Integer(*n as i32)),
-            _ => Err(FunctionError::SyntaxError),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
@@ -126,7 +126,7 @@ impl Function for ItodFunction {
     fn exec(&self, args: Vec<Value>) -> FunctionResult {
         match args.as_slice() {
             [Value::Integer(n)] => Ok(Value::Double(*n as f64)),
-            _ => Err(FunctionError::SyntaxError),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
@@ -220,11 +220,9 @@ impl Function for RndFunction {
             [Value::Integer(n)] => match n.cmp(&0) {
                 Ordering::Equal => Ok(Value::Double(self.prng.borrow_mut().last())),
                 Ordering::Greater => Ok(Value::Double(self.prng.borrow_mut().next())),
-                Ordering::Less => {
-                    Err(FunctionError::ArgumentError("n% cannot be negative".to_owned()))
-                }
+                Ordering::Less => Err(CallError::ArgumentError("n% cannot be negative".to_owned())),
             },
-            _ => Err(FunctionError::SyntaxError),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
