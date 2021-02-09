@@ -235,6 +235,12 @@ pub struct Symbols {
 }
 
 impl Symbols {
+    /// Constructs a symbols object from a flat map of symbol names to their definitions.
+    #[cfg(test)]
+    pub(crate) fn from(by_name: HashMap<String, Symbol>) -> Self {
+        Self { by_name }
+    }
+
     /// Registers the given builtin command.
     ///
     /// Given that commands cannot be defined at runtime, specifying a non-unique name results in
@@ -549,89 +555,10 @@ pub trait Command {
 }
 
 #[cfg(test)]
-pub(crate) mod testutils {
-    use super::*;
-
-    /// Builder pattern for a test `Symbols` object.
-    #[derive(Default)]
-    pub(crate) struct SymbolsBuilder {
-        by_name: HashMap<String, Symbol>,
-    }
-
-    impl SymbolsBuilder {
-        /// Adds the array named `name` of type `subtype` to the list of symbols.  The dimensions
-        /// and contents of the array are unspecified.
-        pub(crate) fn add_array<S: Into<String>>(mut self, name: S, subtype: VarType) -> Self {
-            let name = name.into();
-            assert!(name == name.to_ascii_uppercase());
-            let array = Array::new(subtype, vec![10]);
-            self.by_name.insert(name, Symbol::Array(array));
-            self
-        }
-
-        /// Adds the command `cmd` to the list of symbols.
-        pub(crate) fn add_command(mut self, cmd: Rc<dyn Command>) -> Self {
-            let name = cmd.metadata().name();
-            assert!(name == name.to_ascii_uppercase());
-            self.by_name.insert(name.to_owned(), Symbol::Command(cmd));
-            self
-        }
-
-        /// Adds the function `func` to the list of symbols.
-        pub(crate) fn add_function(mut self, func: Rc<dyn Function>) -> Self {
-            let name = func.metadata().name();
-            assert!(name == name.to_ascii_uppercase());
-            self.by_name.insert(name.to_owned(), Symbol::Function(func));
-            self
-        }
-
-        /// Adds the variable named `name` with an initial `value` to the list of symbols.
-        pub(crate) fn add_var<S: Into<String>>(mut self, name: S, value: Value) -> Self {
-            let name = name.into();
-            assert!(name == name.to_ascii_uppercase());
-            self.by_name.insert(name, Symbol::Variable(value));
-            self
-        }
-
-        pub(crate) fn build(self) -> Symbols {
-            Symbols { by_name: self.by_name }
-        }
-    }
-
-    /// Sums a collection of integers of arbitrary length.
-    pub(crate) struct SumFunction {
-        metadata: CallableMetadata,
-    }
-
-    impl SumFunction {
-        pub(crate) fn new() -> Rc<Self> {
-            Rc::from(Self {
-                metadata: CallableMetadataBuilder::new("SUM", VarType::Integer).test_build(),
-            })
-        }
-    }
-
-    impl Function for SumFunction {
-        fn metadata(&self) -> &CallableMetadata {
-            &self.metadata
-        }
-
-        fn exec(&self, args: Vec<Value>) -> FunctionResult {
-            let mut result = Value::Integer(0);
-            for a in args {
-                result = result.add(&a)?;
-            }
-            Ok(result)
-        }
-    }
-}
-
-#[cfg(test)]
 mod tests {
-    use super::testutils::*;
     use super::*;
     use crate::ast::VarRef;
-    use crate::exec::testutils::ExitCommand;
+    use crate::testutils::*;
 
     #[test]
     fn test_array_unidimensional_ok() {

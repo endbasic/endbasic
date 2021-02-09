@@ -29,3 +29,5 @@ mod lexer;
 mod parser;
 mod reader;
 pub mod syms;
+#[cfg(test)]
+mod testutils;
