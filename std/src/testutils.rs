@@ -18,7 +18,7 @@
 use crate::console::{self, ClearType, Console, Key, Position};
 use crate::store::{InMemoryStore, Program, Store};
 use async_trait::async_trait;
-use endbasic_core::ast::Value;
+use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{self, Machine, StopReason};
 use endbasic_core::syms::{Array, Command, Function, Symbol};
 use futures_lite::future::block_on;
@@ -334,6 +334,7 @@ pub struct Checker<'a> {
     exp_output: Vec<CapturedOut>,
     exp_store: HashMap<String, String>,
     exp_program: String,
+    exp_arrays: HashMap<String, Array>,
     exp_vars: HashMap<String, Value>,
 }
 
@@ -350,6 +351,7 @@ impl<'a> Checker<'a> {
             exp_output: vec![],
             exp_store: HashMap::default(),
             exp_program: String::new(),
+            exp_arrays: HashMap::default(),
             exp_vars: HashMap::default(),
         }
     }
@@ -371,6 +373,20 @@ impl<'a> Checker<'a> {
     pub fn expect_err<S: Into<String>>(mut self, message: S) -> Self {
         assert_eq!(Ok(StopReason::Eof), self.exp_result);
         self.exp_result = Err(message.into());
+        self
+    }
+
+    /// Adds the `name` array as an array to expect in the final state of the machine.  At the
+    /// moment, we only check that the array is of type `subtype` and has certain `dimensions`.
+    pub fn expect_array<S: Into<String>>(
+        mut self,
+        name: S,
+        subtype: VarType,
+        dimensions: &[usize],
+    ) -> Self {
+        let name = name.into().to_ascii_uppercase();
+        assert!(!self.exp_arrays.contains_key(&name));
+        self.exp_arrays.insert(name, Array::new(subtype, dimensions.to_owned()));
         self
     }
 
@@ -441,8 +457,13 @@ impl<'a> Checker<'a> {
             }
         }
 
-        assert!(arrays.is_empty());
         assert_eq!(self.exp_vars, vars);
+        for (name, exp_array) in self.exp_arrays {
+            let array = arrays.remove(name.as_str()).expect("Expected array not present");
+            assert_eq!(exp_array.subtype(), array.subtype());
+            assert_eq!(exp_array.dimensions(), array.dimensions());
+        }
+        assert!(arrays.is_empty());
         assert_eq!(self.exp_output, self.tester.console.borrow().captured_out());
         assert_eq!(self.exp_program, self.tester.program.borrow().text());
         assert_eq!(self.exp_store, *self.tester.store.borrow().as_hashmap());
