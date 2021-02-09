@@ -195,6 +195,16 @@ impl Symbol {
         }
     }
 
+    /// Returns the metadata for the symbol, if any.
+    pub fn metadata(&self) -> Option<&CallableMetadata> {
+        match self {
+            Symbol::Array(_) => None,
+            Symbol::Command(command) => Some(command.metadata()),
+            Symbol::Function(function) => Some(function.metadata()),
+            Symbol::Variable(_) => None,
+        }
+    }
+
     /// Returns whether the symbol was defined by the user or not.
     fn user_defined(&self) -> bool {
         match self {
@@ -326,28 +336,6 @@ impl Symbols {
             Some(_) => Err(Error::new(format!("{} is not a variable", vref.name()))),
             None => Err(Error::new(format!("Undefined variable {}", vref.name()))),
         }
-    }
-
-    /// Obtains the definition of all commands.
-    pub fn get_commands(&self) -> HashMap<String, &Rc<dyn Command>> {
-        let mut cs = HashMap::default();
-        for (name, symbol) in self.by_name.iter() {
-            if let Symbol::Command(c) = symbol {
-                cs.insert(name.clone(), c);
-            }
-        }
-        cs
-    }
-
-    /// Obtains the definition of all functions.
-    pub fn get_functions(&self) -> HashMap<String, &Rc<dyn Function>> {
-        let mut fs = HashMap::default();
-        for (name, symbol) in self.by_name.iter() {
-            if let Symbol::Function(f) = symbol {
-                fs.insert(name.clone(), f);
-            }
-        }
-        fs
     }
 
     /// Adds a type annotation to the symbol reference if the symbol is already defined and the

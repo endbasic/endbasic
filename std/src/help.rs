@@ -18,12 +18,13 @@
 use crate::console::Console;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, VarType};
-use endbasic_core::exec::{self, Machine};
+use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
+    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Symbols,
 };
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
+use std::io;
 use std::rc::Rc;
 
 /// Cheat-sheet for the language syntax.
@@ -71,41 +72,24 @@ fn header() -> Vec<String> {
     ]
 }
 
-/// Computes a unified collection of metadata objects for all given `commands` and `functions`.
-// TODO(jmmv): This is a code smell from the lack of genericity between commands and functions.
-// If we can homogenize their representation, this should go away.
-fn compute_callables<'a>(
-    commands: &'a HashMap<String, &Rc<dyn Command>>,
-    functions: &'a HashMap<String, &Rc<dyn Function>>,
-) -> HashMap<String, &'a CallableMetadata> {
-    let mut callables: HashMap<String, &'a CallableMetadata> = HashMap::default();
-    for (name, command) in commands.iter() {
-        assert!(!callables.contains_key(name), "Command names are in a map; must be unique");
-        callables.insert(name.to_string(), command.metadata());
-    }
-    for (name, function) in functions.iter() {
-        assert!(!callables.contains_key(name), "Command and function names are not disjoint");
-        callables.insert(name.clone(), function.metadata());
-    }
-    callables
-}
-
-/// Builds the index of commands needed to print the summary.
+/// Builds the index of symbols needed to print the summary.
 ///
 /// The return value is the index in the form of a (category name -> (name, blurb)) mapping,
 /// followed by the length of the longest command name that was found.
 fn build_index(
-    callables: &HashMap<String, &CallableMetadata>,
+    symbols: &Symbols,
 ) -> (BTreeMap<&'static str, BTreeMap<String, &'static str>>, usize) {
     let mut index = BTreeMap::default();
     let mut max_length = 0;
-    for metadata in callables.values() {
-        let name = format!("{}{}", metadata.name(), metadata.return_type().annotation());
-        if name.len() > max_length {
-            max_length = name.len();
+    for symbol in symbols.as_hashmap().values() {
+        if let Some(metadata) = symbol.metadata() {
+            let name = format!("{}{}", metadata.name(), metadata.return_type().annotation());
+            if name.len() > max_length {
+                max_length = name.len();
+            }
+            let blurb = metadata.description().next().unwrap();
+            index.entry(metadata.category()).or_insert_with(BTreeMap::default).insert(name, blurb);
         }
-        let blurb = metadata.description().next().unwrap();
-        index.entry(metadata.category()).or_insert_with(BTreeMap::default).insert(name, blurb);
     }
     (index, max_length)
 }
@@ -135,8 +119,8 @@ function.",
     }
 
     /// Prints a summary of all available help topics.
-    fn summary(&self, callables: &HashMap<String, &CallableMetadata>) -> exec::Result<()> {
-        let (index, max_length) = build_index(callables);
+    fn summary(&self, symbols: &Symbols) -> io::Result<()> {
+        let (index, max_length) = build_index(symbols);
 
         let mut console = self.console.borrow_mut();
         for line in header() {
@@ -160,7 +144,7 @@ function.",
     }
 
     /// Describes one command or function.
-    fn describe_callable(&self, metadata: &CallableMetadata) -> exec::Result<()> {
+    fn describe_callable(&self, metadata: &CallableMetadata) -> io::Result<()> {
         let mut console = self.console.borrow_mut();
         console.print("")?;
         if metadata.return_type() == VarType::Void {
@@ -186,7 +170,7 @@ function.",
     }
 
     /// Prints a quick reference of the language syntax.
-    fn describe_lang(&self) -> exec::Result<()> {
+    fn describe_lang(&self) -> io::Result<()> {
         let mut console = self.console.borrow_mut();
         for line in LANG_REFERENCE.lines() {
             // Print line by line to honor any possible differences in line feeds.
@@ -204,11 +188,8 @@ impl Command for HelpCommand {
     }
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        let cs = machine.get_commands();
-        let fs = machine.get_functions();
-        let callables = compute_callables(&cs, &fs);
         match args {
-            [] => self.summary(&callables)?,
+            [] => self.summary(machine.get_symbols())?,
             [(Some(Expr::Symbol(vref)), ArgSep::End)] => {
                 let name = vref.name().to_ascii_uppercase();
                 if name == "LANG" {
@@ -219,17 +200,16 @@ impl Command for HelpCommand {
                     }
                     self.describe_lang()?;
                 } else {
-                    match callables.get(name.as_str()) {
-                        Some(metadata) => {
-                            if vref.ref_type() != VarType::Auto
-                                && vref.ref_type() != metadata.return_type()
-                            {
-                                return Err(CallError::ArgumentError(
-                                    "Incompatible type annotation".to_owned(),
-                                ));
+                    match machine.get_symbols().get(vref)? {
+                        Some(symbol) => match symbol.metadata() {
+                            Some(metadata) => self.describe_callable(metadata)?,
+                            None => {
+                                return Err(CallError::ArgumentError(format!(
+                                    "No help available for {}",
+                                    name
+                                )))
                             }
-                            self.describe_callable(metadata)?;
-                        }
+                        },
                         None => {
                             return Err(CallError::ArgumentError(format!(
                                 "Cannot describe unknown command or function {}",
@@ -258,7 +238,9 @@ pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
 pub(crate) mod testutils {
     use super::*;
     use endbasic_core::ast::Value;
-    use endbasic_core::syms::{CallableMetadata, CallableMetadataBuilder, FunctionResult};
+    use endbasic_core::syms::{
+        CallableMetadata, CallableMetadataBuilder, Function, FunctionResult,
+    };
 
     /// A command that does nothing.
     pub(crate) struct DoNothingCommand {
@@ -342,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn test_help_summarize_callables() {
+    fn test_help_summarize_symbols() {
         tester()
             .add_command(DoNothingCommand::new())
             .add_function(EmptyFunction::new())
@@ -433,7 +415,21 @@ mod tests {
         t.run("HELP foo$").expect_err("Cannot describe unknown command or function FOO").check();
         t.run("HELP foo").expect_err("Cannot describe unknown command or function FOO").check();
 
-        t.run("HELP do_nothing$").expect_err("Incompatible type annotation").check();
-        t.run("HELP empty?").expect_err("Incompatible type annotation").check();
+        t.run("HELP do_nothing$").expect_err("Incompatible types in do_nothing$ reference").check();
+        t.run("HELP empty?").expect_err("Incompatible types in empty? reference").check();
+
+        let mut t = tester();
+        t.run("HELP undoc").expect_err("Cannot describe unknown command or function UNDOC").check();
+        t.run("undoc = 3: HELP undoc")
+            .expect_err("No help available for UNDOC")
+            .expect_var("undoc", 3)
+            .check();
+
+        let mut t = tester();
+        t.run("HELP undoc").expect_err("Cannot describe unknown command or function UNDOC").check();
+        t.run("DIM undoc(3): HELP undoc")
+            .expect_err("No help available for UNDOC")
+            .expect_array("undoc", VarType::Integer, &[3])
+            .check();
     }
 }
