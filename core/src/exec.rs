@@ -19,7 +19,6 @@ use crate::ast::{Expr, Statement, Value, VarRef, VarType};
 use crate::eval;
 use crate::parser::{self, Parser};
 use crate::syms::{CallError, CallableMetadata, Command, Function, Symbol, Symbols};
-use std::collections::HashMap;
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
@@ -123,16 +122,6 @@ impl Machine {
     /// call.
     pub fn exit(&mut self, code: u8) {
         self.stop_reason = Some(StopReason::Exited(code));
-    }
-
-    /// Obtains immutable access to the builtin commands provided by this machine.
-    pub fn get_commands(&self) -> HashMap<String, &Rc<dyn Command>> {
-        self.symbols.get_commands()
-    }
-
-    /// Obtains immutable access to the builtin functions provided by this machine.
-    pub fn get_functions(&self) -> HashMap<String, &Rc<dyn Function>> {
-        self.symbols.get_functions()
     }
 
     /// Obtains immutable access to the state of the symbols.
