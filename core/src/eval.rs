@@ -376,85 +376,10 @@ impl Expr {
 }
 
 #[cfg(test)]
-pub(crate) mod testutils {
-    use super::*;
-    use crate::syms::{CallableMetadataBuilder, FunctionResult};
-
-    /// Returns a value provided at construction time.  Note that the return type is fixed so we use
-    /// this to verify if return values are correctly type-checked.
-    pub(crate) struct TypeCheckFunction {
-        metadata: CallableMetadata,
-        value: Value,
-    }
-
-    impl TypeCheckFunction {
-        pub(crate) fn new(value: Value) -> Rc<Self> {
-            Rc::from(Self {
-                metadata: CallableMetadataBuilder::new("TYPE_CHECK", VarType::Boolean).test_build(),
-                value,
-            })
-        }
-    }
-
-    impl Function for TypeCheckFunction {
-        fn metadata(&self) -> &CallableMetadata {
-            &self.metadata
-        }
-
-        fn exec(&self, args: Vec<Value>) -> FunctionResult {
-            assert!(args.is_empty());
-            Ok(self.value.clone())
-        }
-    }
-
-    /// Returns the error type asked for in an argument.
-    pub(crate) struct ErrorFunction {
-        metadata: CallableMetadata,
-    }
-
-    impl ErrorFunction {
-        pub(crate) fn new() -> Rc<Self> {
-            Rc::from(Self {
-                metadata: CallableMetadataBuilder::new("ERROR", VarType::Boolean)
-                    .with_syntax("arg1$")
-                    .test_build(),
-            })
-        }
-    }
-
-    impl Function for ErrorFunction {
-        fn metadata(&self) -> &CallableMetadata {
-            &self.metadata
-        }
-
-        fn exec(&self, args: Vec<Value>) -> FunctionResult {
-            match args.as_slice() {
-                [Value::Text(s)] => {
-                    if s == "argument" {
-                        Err(CallError::ArgumentError("Bad argument".to_owned()))
-                    } else if s == "eval" {
-                        Err(Error::new("Some eval error").into())
-                    } else if s == "internal" {
-                        Err(CallError::InternalError("Some internal error".to_owned()))
-                    } else if s == "syntax" {
-                        Err(CallError::SyntaxError)
-                    } else {
-                        panic!("Unknown argument");
-                    }
-                }
-                _ => panic!("Invalid arguments"),
-            }
-        }
-    }
-}
-
-#[cfg(test)]
 mod tests {
-    use super::testutils::*;
     use super::*;
     use crate::ast::VarRef;
-    use crate::exec::testutils::ExitCommand;
-    use crate::syms::testutils::*;
+    use crate::testutils::*;
 
     #[test]
     fn test_value_parse_as_auto() {
