@@ -30,14 +30,53 @@ mod store;
 
 use async_trait::async_trait;
 use endbasic::demos::DemoStoreOverlay;
+use endbasic_core::syms::{self, CommandResult};
 use endbasic_std::console::{ClearType, Console, Key, Position};
 use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::future::Future;
 use std::io;
+use std::pin::Pin;
 use std::rc::Rc;
+use std::time::Duration;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use xterm_js_rs::{OnKeyEvent, Terminal};
+
+/// Sleeps for the given period of time.
+fn js_sleep(d: Duration) -> Pin<Box<dyn Future<Output = CommandResult>>> {
+    let ms = d.as_millis();
+    if ms > std::i32::MAX as u128 {
+        // The JavaScript setTimeout function only takes i32s so ensure our value fits.  If it
+        // doesn't, you can imagine chaining calls to setTimeout to achieve the desired delay...
+        // but the numbers we are talking about are so big that this doesn't make sense.
+        return Box::pin(async move {
+            Err(syms::CallError::InternalError("Cannot sleep for that long".to_owned()))
+        });
+    }
+    let ms = ms as i32;
+
+    let (timeout_tx, timeout_rx) = async_channel::unbounded();
+    let callback = {
+        Closure::wrap(Box::new(move || timeout_tx.try_send(true).expect("Send must succeed"))
+            as Box<dyn FnMut()>)
+    };
+
+    let window = web_sys::window().unwrap();
+    window
+        .set_timeout_with_callback_and_timeout_and_arguments(
+            callback.as_ref().unchecked_ref(),
+            ms,
+            &js_sys::Array::new(),
+        )
+        .unwrap();
+
+    Box::pin(async move {
+        let _ = callback; // Must grab ownership so that the closure remains alive until it is used.
+        timeout_rx.recv().await.unwrap();
+        Ok(())
+    })
+}
 
 /// Converts an xterm.js key event into our own `Key` representation.
 fn on_key_event_into_key(event: OnKeyEvent) -> Key {
@@ -241,6 +280,7 @@ impl WebTerminal {
         let store = Rc::from(RefCell::from(DemoStoreOverlay::new(store)));
         let mut machine = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
+            .with_sleep_fn(Box::from(js_sleep))
             .make_interactive()
             .with_store(store.clone())
             .build()
@@ -277,4 +317,29 @@ pub fn main() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use js_sys::Date;
+    use wasm_bindgen_test::*;
+
+    #[wasm_bindgen_test]
+    async fn test_js_sleep_ok() {
+        let before = Date::now();
+        js_sleep(Duration::from_millis(10)).await.unwrap();
+        let elapsed = Date::now() - before;
+        assert!(10.0 <= elapsed);
+    }
+
+    #[wasm_bindgen_test]
+    async fn test_js_sleep_too_big() {
+        match js_sleep(Duration::from_millis(std::i32::MAX as u64 + 1)).await.unwrap_err() {
+            syms::CallError::InternalError(e) => {
+                assert_eq!("Cannot sleep for that long", e)
+            }
+            e => panic!("Unexpected error type: {:?}", e),
+        }
+    }
 }

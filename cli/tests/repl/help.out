@@ -23,6 +23,7 @@ Output from HELP:
     CLEAR        Clears all variables to restore initial state.
     EXIT         Exits the interpreter.
     HELP         Prints interactive help.
+    SLEEP        Suspends program execution.
 
     >> Numerical manipulation <<
     DTOI%        Rounds the given double to the closest integer.
@@ -203,6 +204,14 @@ Output from HELP SAVE:
     Saves the current program in memory to the given filename.
 
     The filename must be a string and must be a basename (no directory components).  The .BAS extension is optional, but if present, it must be .BAS.
+
+Output from HELP SLEEP:
+
+    SLEEP seconds%|seconds#
+
+    Suspends program execution.
+
+    Pauses program execution for the given number of seconds, which can be specified either as an integral or as a floating point number for finer precision.
 
 Output from HELP DTOI:
 
