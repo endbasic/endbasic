@@ -56,7 +56,7 @@ impl Prng {
 
     /// Returns the previously returned random number.
     fn last(&self) -> f64 {
-        (self.last as f64) / (u32::MAX as f64)
+        (self.last as f64) / (std::u32::MAX as f64)
     }
 
     /// Computes the next random number and returns it.
@@ -257,8 +257,8 @@ mod tests {
         check_expr_ok(100, "DTOI( 100.9)");
         check_expr_ok(-100, "DTOI(-100.9)");
 
-        check_expr_ok(i32::MAX, "DTOI(12345678901234567890.0)");
-        check_expr_ok(i32::MIN, "DTOI(-12345678901234567890.0)");
+        check_expr_ok(std::i32::MAX, "DTOI(12345678901234567890.0)");
+        check_expr_ok(std::i32::MIN, "DTOI(-12345678901234567890.0)");
 
         check_expr_error("Syntax error in call to DTOI: expected expr#", "DTOI()");
         check_expr_error("Syntax error in call to DTOI: expected expr#", "DTOI(3)");
@@ -271,10 +271,10 @@ mod tests {
         check_expr_ok(10.0, "ITOD(10)");
         check_expr_ok(-10.0, "ITOD(-10)");
 
-        check_expr_ok(i32::MAX as f64, &format!("ITOD({})", i32::MAX));
+        check_expr_ok(std::i32::MAX as f64, &format!("ITOD({})", std::i32::MAX));
         // TODO(jmmv): Due to limitations in the lexer/parser, we cannot represent the minimum
         // value of an i32 in the code as a literal.
-        check_expr_ok(i32::MIN as f64, &format!("ITOD({} - 1)", i32::MIN + 1));
+        check_expr_ok(std::i32::MIN as f64, &format!("ITOD({} - 1)", std::i32::MIN + 1));
 
         check_expr_error("Syntax error in call to ITOD: expected expr%", "ITOD()");
         check_expr_error("Syntax error in call to ITOD: expected expr%", "ITOD(3.0)");

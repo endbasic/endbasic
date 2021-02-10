@@ -778,10 +778,10 @@ mod tests {
         );
 
         assert_eq!(Integer(5), Integer(2).add(&Integer(3)).unwrap());
-        assert_eq!(Integer(i32::MAX), Integer(i32::MAX).add(&Integer(0)).unwrap());
+        assert_eq!(Integer(std::i32::MAX), Integer(std::i32::MAX).add(&Integer(0)).unwrap());
         assert_eq!(
-            format!("Overflow adding {} and 1", i32::MAX),
-            format!("{}", Integer(i32::MAX).add(&Integer(1)).unwrap_err())
+            format!("Overflow adding {} and 1", std::i32::MAX),
+            format!("{}", Integer(std::i32::MAX).add(&Integer(1)).unwrap_err())
         );
         assert_eq!(
             "Cannot add Integer(4) and Double(5.0)",
@@ -811,10 +811,10 @@ mod tests {
         );
 
         assert_eq!(Integer(-1), Integer(2).sub(&Integer(3)).unwrap());
-        assert_eq!(Integer(i32::MIN), Integer(i32::MIN).sub(&Integer(0)).unwrap());
+        assert_eq!(Integer(std::i32::MIN), Integer(std::i32::MIN).sub(&Integer(0)).unwrap());
         assert_eq!(
-            format!("Overflow subtracting 1 from {}", i32::MIN),
-            format!("{}", Integer(i32::MIN).sub(&Integer(1)).unwrap_err())
+            format!("Overflow subtracting 1 from {}", std::i32::MIN),
+            format!("{}", Integer(std::i32::MIN).sub(&Integer(1)).unwrap_err())
         );
         assert_eq!(
             "Cannot subtract Double(5.0) from Integer(4)",
@@ -843,10 +843,10 @@ mod tests {
         );
 
         assert_eq!(Integer(6), Integer(2).mul(&Integer(3)).unwrap());
-        assert_eq!(Integer(i32::MAX), Integer(i32::MAX).mul(&Integer(1)).unwrap());
+        assert_eq!(Integer(std::i32::MAX), Integer(std::i32::MAX).mul(&Integer(1)).unwrap());
         assert_eq!(
-            format!("Overflow multiplying {} by 2", i32::MAX),
-            format!("{}", Integer(i32::MAX).mul(&Integer(2)).unwrap_err())
+            format!("Overflow multiplying {} by 2", std::i32::MAX),
+            format!("{}", Integer(std::i32::MAX).mul(&Integer(2)).unwrap_err())
         );
         assert_eq!(
             "Cannot multiply Integer(4) by Double(5.0)",
@@ -877,11 +877,11 @@ mod tests {
 
         assert_eq!(Integer(2), Integer(10).div(&Integer(5)).unwrap());
         assert_eq!(Integer(6), Integer(20).div(&Integer(3)).unwrap());
-        assert_eq!(Integer(i32::MIN), Integer(i32::MIN).div(&Integer(1)).unwrap());
+        assert_eq!(Integer(std::i32::MIN), Integer(std::i32::MIN).div(&Integer(1)).unwrap());
         assert_eq!("Division by zero", format!("{}", Integer(4).div(&Integer(0)).unwrap_err()));
         assert_eq!(
-            format!("Overflow dividing {} by -1", i32::MIN),
-            format!("{}", Integer(i32::MIN).div(&Integer(-1)).unwrap_err())
+            format!("Overflow dividing {} by -1", std::i32::MIN),
+            format!("{}", Integer(std::i32::MIN).div(&Integer(-1)).unwrap_err())
         );
         assert_eq!(
             "Cannot divide Integer(4) by Double(5.0)",
@@ -917,8 +917,8 @@ mod tests {
         assert_eq!(Integer(2), Integer(20).modulo(&Integer(3)).unwrap());
         assert_eq!("Modulo by zero", format!("{}", Integer(4).modulo(&Integer(0)).unwrap_err()));
         assert_eq!(
-            format!("Overflow modulo {} by -1", i32::MIN),
-            format!("{}", Integer(i32::MIN).modulo(&Integer(-1)).unwrap_err())
+            format!("Overflow modulo {} by -1", std::i32::MIN),
+            format!("{}", Integer(std::i32::MIN).modulo(&Integer(-1)).unwrap_err())
         );
         assert_eq!(
             "Cannot modulo Integer(4) by Double(5.0)",
@@ -943,8 +943,8 @@ mod tests {
         assert_eq!(Integer(-6), Integer(6).neg().unwrap());
         assert_eq!(Integer(5), Integer(-5).neg().unwrap());
         assert_eq!(
-            format!("Overflow negating {}", i32::MIN),
-            format!("{}", Integer(i32::MIN).neg().unwrap_err())
+            format!("Overflow negating {}", std::i32::MIN),
+            format!("{}", Integer(std::i32::MIN).neg().unwrap_err())
         );
 
         assert_eq!(

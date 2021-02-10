@@ -79,7 +79,7 @@ impl Default for MockConsole {
         Self {
             golden_in: VecDeque::new(),
             captured_out: vec![],
-            size: Position { row: usize::MAX, column: usize::MAX },
+            size: Position { row: std::usize::MAX, column: std::usize::MAX },
         }
     }
 }
