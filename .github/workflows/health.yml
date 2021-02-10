@@ -18,13 +18,30 @@ name: Health checks
 on: [push, pull_request]
 
 jobs:
+    compat:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions-rs/toolchain@v1
+              with:
+                  profile: minimal
+                  # Target a minimum version that ships with common systems
+                  # out there.  In particular, Raspbian as of 2021-02-10.
+                  toolchain: 1.42
+                  default: true
+            - uses: actions/checkout@v2
+            # On old toolchains, we only care about being able to build, and
+            # we only really care about the CLI.
+            - run: cd cli && cargo build --all-features --verbose
     lint:
         runs-on: ubuntu-latest
         steps:
             - uses: actions-rs/toolchain@v1
               with:
                   profile: minimal
+                  # Use the latest stable Rust version for lint checks to
+                  # verify any new Clippy warnings that may appear.
                   toolchain: stable
+                  default: true
                   components: clippy, rustfmt
             - uses: actions/checkout@v2
             - run: ./.github/workflows/lint.sh

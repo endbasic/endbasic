@@ -94,7 +94,7 @@ impl Function for LenFunction {
     fn exec(&self, args: Vec<Value>) -> FunctionResult {
         match args.as_slice() {
             [Value::Text(s)] => {
-                if s.len() > i32::MAX as usize {
+                if s.len() > std::i32::MAX as usize {
                     Err(CallError::InternalError("String too long".to_owned()))
                 } else {
                     Ok(Value::Integer(s.len() as i32))
