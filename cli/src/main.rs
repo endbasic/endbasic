@@ -29,7 +29,6 @@ use getopts::Options;
 use std::cell::RefCell;
 use std::env;
 use std::fs::File;
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::rc::Rc;
@@ -117,19 +116,22 @@ fn new_store_with_demos(dir: &Path) -> Rc<RefCell<dyn Store>> {
 ///
 /// `dir` specifies the directory that the interpreter will use for any commands that manipulate
 /// files.  The special name `:memory:` makes the interpreter use an in-memory only store.
-fn run_repl_loop(dir: &Path) -> io::Result<i32> {
+fn run_repl_loop(dir: &Path) -> endbasic_core::exec::Result<i32> {
     let console = Rc::from(RefCell::from(TerminalConsole::from_stdio()?));
     let store = new_store_with_demos(dir);
-    let mut machine = endbasic_std::interactive_machine(console.clone(), store.clone());
+    let mut machine = endbasic_std::MachineBuilder::default()
+        .with_console(console.clone())
+        .make_interactive()
+        .with_store(store.clone())
+        .build()?;
     endbasic::print_welcome(console.clone())?;
     endbasic::try_load_autoexec(&mut machine, console.clone(), store)?;
-    block_on(endbasic::run_repl_loop(&mut machine, console))
+    Ok(block_on(endbasic::run_repl_loop(&mut machine, console))?)
 }
 
 /// Executes the `path` program in a fresh machine.
 fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
-    let console = Rc::from(RefCell::from(TerminalConsole::from_stdio()?));
-    let mut machine = endbasic_std::scripting_machine(console);
+    let mut machine = endbasic_std::MachineBuilder::default().build()?;
     let mut input = File::open(path)?;
     Ok(block_on(machine.exec(&mut input))?.as_exit_code())
 }
@@ -138,8 +140,10 @@ fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
 ///
 /// `dir` has the same meaning as the parameter passed to `run_repl_loop`.
 fn run_interactive<P: AsRef<Path>>(path: P, dir: &Path) -> endbasic_core::exec::Result<i32> {
-    let console = Rc::from(RefCell::from(TerminalConsole::from_stdio()?));
-    let mut machine = endbasic_std::interactive_machine(console, new_store_with_demos(dir));
+    let mut machine = endbasic_std::MachineBuilder::default()
+        .make_interactive()
+        .with_store(new_store_with_demos(dir))
+        .build()?;
     let mut input = File::open(path)?;
     Ok(block_on(machine.exec(&mut input))?.as_exit_code())
 }

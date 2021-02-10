@@ -18,13 +18,10 @@
 //! This example sets up a complete EndBASIC interpreter with the commands and functions that should
 //! be allowed in scripts (and not in a REPL).
 
-use endbasic_std::terminal::TerminalConsole;
 use futures_lite::future::block_on;
-use std::cell::RefCell;
 use std::env;
 use std::fs;
 use std::process;
-use std::rc::Rc;
 
 fn safe_main() -> i32 {
     let args: Vec<String> = env::args().collect();
@@ -36,8 +33,7 @@ fn safe_main() -> i32 {
         }
     };
 
-    let console = Rc::from(RefCell::from(TerminalConsole::from_stdio().unwrap()));
-    let mut machine = endbasic_std::scripting_machine(console);
+    let mut machine = endbasic_std::MachineBuilder::default().build().unwrap();
 
     let mut input = match fs::File::open(path) {
         Ok(file) => file,
