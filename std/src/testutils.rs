@@ -233,7 +233,14 @@ impl Default for Tester {
         let console = Rc::from(RefCell::from(MockConsole::default()));
         let store = Rc::from(RefCell::from(InMemoryStore::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
-        let machine = crate::full_machine(console.clone(), store.clone(), program.clone());
+
+        let machine = crate::MachineBuilder::default()
+            .with_console(console.clone())
+            .make_interactive()
+            .with_store(store.clone())
+            .with_program(program.clone())
+            .build()
+            .unwrap();
 
         Self { console, store, program, machine }
     }
