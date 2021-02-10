@@ -35,6 +35,7 @@ not intend to be fully compatible with them.  The library currently contains:
 
 *   Console manipulation: `CLS`, `COLOR`, `INPUT`, `LOCATE`, `PRINT`.
 *   Date and time manipulation: `SLEEP`.
+*   Hardware interaction: `GPIO_CLEAR`, `GPIO_READ`, `GPIO_SETUP`, `GPIO_WRITE`.
 *   Interpreter interaction: `CLEAR`, `EXIT`, `HELP`.
 *   Numerics: `DTOI`, `ITOD`, `RANDOMIZE`, `RND`.
 *   Program manipulation: `DEL`, `DIR`, `EDIT`, `LIST`, `LOAD`, `NEW`, `RUN`,

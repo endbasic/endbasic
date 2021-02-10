@@ -13,41 +13,47 @@ Output from HELP:
     License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>
 
     >> Console manipulation <<
-    CLS          Clears the screen.
-    COLOR        Sets the foreground and background colors.
-    INPUT        Obtains user input from the console.
-    LOCATE       Moves the cursor to the given position.
-    PRINT        Prints a message to the console.
+    CLS           Clears the screen.
+    COLOR         Sets the foreground and background colors.
+    INPUT         Obtains user input from the console.
+    LOCATE        Moves the cursor to the given position.
+    PRINT         Prints a message to the console.
+
+    >> Hardware manipulation <<
+    GPIO_CLEAR    Resets the GPIO chip or a specific pin.
+    GPIO_READ?    Reads the state of a GPIO pin.
+    GPIO_SETUP    Configures a GPIO pin for input or output.
+    GPIO_WRITE    Sets the state of a GPIO pin.
 
     >> Interpreter manipulation <<
-    CLEAR        Clears all variables to restore initial state.
-    EXIT         Exits the interpreter.
-    HELP         Prints interactive help.
-    SLEEP        Suspends program execution.
+    CLEAR         Clears all variables to restore initial state.
+    EXIT          Exits the interpreter.
+    HELP          Prints interactive help.
+    SLEEP         Suspends program execution.
 
     >> Numerical manipulation <<
-    DTOI%        Rounds the given double to the closest integer.
-    ITOD#        Converts the given integer to a double.
-    RANDOMIZE    Reinitializes the pseudo-random number generator.
-    RND#         Returns a random number in the [0..1] range.
+    DTOI%         Rounds the given double to the closest integer.
+    ITOD#         Converts the given integer to a double.
+    RANDOMIZE     Reinitializes the pseudo-random number generator.
+    RND#          Returns a random number in the [0..1] range.
 
     >> Stored program manipulation <<
-    DEL          Deletes the given program.
-    DIR          Displays the list of files on disk.
-    EDIT         Interactively edits the stored program.
-    LIST         Prints the currently-loaded program.
-    LOAD         Loads the given program.
-    NEW          Clears the stored program from memory.
-    RUN          Runs the stored program.
-    SAVE         Saves the current program in memory to the given filename.
+    DEL           Deletes the given program.
+    DIR           Displays the list of files on disk.
+    EDIT          Interactively edits the stored program.
+    LIST          Prints the currently-loaded program.
+    LOAD          Loads the given program.
+    NEW           Clears the stored program from memory.
+    RUN           Runs the stored program.
+    SAVE          Saves the current program in memory to the given filename.
 
     >> String manipulation <<
-    LEFT$        Returns a given number of characters from the left side of a string.
-    LEN%         Returns the length of the string in expr$.
-    LTRIM$       Returns a copy of a string with leading whitespace removed.
-    MID$         Returns a portion of a string.
-    RIGHT$       Returns a given number of characters from the right side of a string.
-    RTRIM$       Returns a copy of a string with trailing whitespace removed.
+    LEFT$         Returns a given number of characters from the left side of a string.
+    LEN%          Returns the length of the string in expr$.
+    LTRIM$        Returns a copy of a string with leading whitespace removed.
+    MID$          Returns a portion of a string.
+    RIGHT$        Returns a given number of characters from the right side of a string.
+    RTRIM$        Returns a copy of a string with trailing whitespace removed.
 
     Type HELP followed by a command or function name for details.
     Type HELP LANG for a quick reference guide about the language.
@@ -131,6 +137,34 @@ Output from HELP EXIT:
     Exits the interpreter.
 
     The optional code indicates the return value to return to the system.
+
+Output from HELP GPIO_CLEAR:
+
+    GPIO_CLEAR [pin%]
+
+    Resets the GPIO chip or a specific pin.
+
+    If no pin% is specified, resets the state of all GPIO pins. If a pin% is given, only that pin is reset.  It is OK if the given pin has never been configured before.
+
+Output from HELP GPIO_SETUP:
+
+    GPIO_SETUP pin% mode$
+
+    Configures a GPIO pin for input or output.
+
+    Before a GPIO pin can be used for reads or writes, it must be configured to be an input or output pin.  Additionally, if pull up or pull down resistors are available and desired, these must be configured upfront too.
+
+    The mode$ has to be one of "IN", "IN-PULL-DOWN", "IN-PULL-UP", or "OUT".  These values are case-insensitive.  The possibility of using the pull-down and pull-up resistors depends on whether they are available in the hardware, and selecting these modes will fail if they are not.
+
+    It is OK to reconfigure an already configured pin without clearing its state first.
+
+Output from HELP GPIO_WRITE:
+
+    GPIO_WRITE pin% value?
+
+    Sets the state of a GPIO pin.
+
+    A FALSE value? sets the pin to low, and a TRUE value? sets the pin to high.
 
 Output from HELP HELP:
 
@@ -227,6 +261,14 @@ Output from HELP DTOI:
     Rounds the given double to the closest integer.
 
     If the value is too small or too big to fit in the integer's range, returns the smallest or biggest possible integer that fits, respectively.
+
+Output from HELP GPIO_READ:
+
+    GPIO_READ?(pin%)
+
+    Reads the state of a GPIO pin.
+
+    Returns FALSE to represent a low value, and TRUE to represent a high value.
 
 Output from HELP ITOD:
 

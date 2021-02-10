@@ -56,3 +56,9 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - run: cd std && cargo build --no-default-features --verbose
+    linux-rpi-feature:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v2
+            - run: cd std && cargo test --features=rpi --verbose
+            - run: cd cli && cargo test --features=rpi --verbose

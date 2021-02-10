@@ -16,6 +16,7 @@
 //! Test utilities for consumers of the EndBASIC interpreter.
 
 use crate::console::{self, ClearType, Console, Key, Position};
+use crate::gpio;
 use crate::store::{InMemoryStore, Program, Store};
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
@@ -234,8 +235,16 @@ impl Default for Tester {
         let store = Rc::from(RefCell::from(InMemoryStore::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
 
+        // Default to the pins set that always returns errors.  We could have implemented a set of
+        // fake pins here to track GPIO state changes in a nicer way, similar to how we track all
+        // other machine state... but the GPIO module already implements its own mocking feature.
+        // The mocking feature is necessary for integration testing in any case, so we just use that
+        // everywhere instead of having yet another implementation in this module.
+        let gpio_pins = Rc::from(RefCell::from(gpio::NoopPins::default()));
+
         let machine = crate::MachineBuilder::default()
             .with_console(console.clone())
+            .with_gpio_pins(gpio_pins)
             .make_interactive()
             .with_store(store.clone())
             .with_program(program.clone())
@@ -399,6 +408,24 @@ impl<'a> Checker<'a> {
         let mut array = Array::new(subtype, dimensions.to_owned());
         for (subscripts, value) in contents.into_iter() {
             array.assign(subscripts, value).unwrap();
+        }
+        self.exp_arrays.insert(name, array);
+        self
+    }
+
+    /// Adds the `name` array as an array to expect in the final state of the machine.  The array
+    /// will be tested to have the same `subtype` and only one dimension with `contents`.
+    pub fn expect_array_simple<S: Into<String>>(
+        mut self,
+        name: S,
+        subtype: VarType,
+        contents: Vec<Value>,
+    ) -> Self {
+        let name = name.into().to_ascii_uppercase();
+        assert!(!self.exp_arrays.contains_key(&name));
+        let mut array = Array::new(subtype, vec![contents.len()]);
+        for (i, value) in contents.into_iter().enumerate() {
+            array.assign(&[i as i32], value).unwrap();
         }
         self.exp_arrays.insert(name, array);
         self

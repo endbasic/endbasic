@@ -18,6 +18,9 @@
     "rust.cfg_test": true,
     "rust.clippy_preference": "on",
 
+    // Enable this for assistance while developing features that target ARM.
+    //"rust.target": "armv7-unknown-linux-gnueabihf",
+
     "[markdown]": {
         "editor.rulers": [80],
         "editor.quickSuggestions": false,
