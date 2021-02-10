@@ -13,6 +13,8 @@ not adhere to semantic versioning until 1.0.0.**
 
 *   Added support for multidimensional arrays.
 
+*   Added the `SLEEP` command to pause execution for a certain period of time.
+
 *   Modified `INPUT` so that it autodetects the target type of a variable when
     the variable is already defined, instead of assuming the integer type for
     unqualified variable references.

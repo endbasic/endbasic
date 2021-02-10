@@ -55,12 +55,19 @@ fn try_get_default_console() -> Result<Option<Rc<RefCell<dyn console::Console>>>
 #[derive(Default)]
 pub struct MachineBuilder {
     console: Option<Rc<RefCell<dyn console::Console>>>,
+    sleep_fn: Option<exec::SleepFn>,
 }
 
 impl MachineBuilder {
     /// Overrides the default terminal-based console with the given one.
     pub fn with_console(mut self, console: Rc<RefCell<dyn console::Console>>) -> Self {
         self.console = Some(console);
+        self
+    }
+
+    /// Overrides the default sleep function with the given one.
+    pub fn with_sleep_fn(mut self, sleep_fn: exec::SleepFn) -> Self {
+        self.sleep_fn = Some(sleep_fn);
         self
     }
 
@@ -80,7 +87,7 @@ impl MachineBuilder {
     pub fn build(mut self) -> Result<Machine> {
         let mut machine = Machine::default();
         console::add_all(&mut machine, self.get_console()?);
-        exec::add_all(&mut machine);
+        exec::add_all(&mut machine, self.sleep_fn);
         numerics::add_all(&mut machine);
         strings::add_all(&mut machine);
         Ok(machine)
