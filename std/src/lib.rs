@@ -29,6 +29,7 @@ use std::rc::Rc;
 pub mod console;
 mod editor;
 pub mod exec;
+pub mod gpio;
 pub mod help;
 pub mod numerics;
 pub mod store;
@@ -49,12 +50,25 @@ fn try_get_default_console() -> Result<Option<Rc<RefCell<dyn console::Console>>>
     Ok(None)
 }
 
+/// Obtains the default set of pins for a Raspberry Pi.
+#[cfg(feature = "rpi")]
+fn default_gpio_pins() -> Rc<RefCell<dyn gpio::Pins>> {
+    Rc::from(RefCell::from(gpio::RppalPins::default()))
+}
+
+/// Obtains the default set of pins for a platform without GPIO support.
+#[cfg(not(feature = "rpi"))]
+fn default_gpio_pins() -> Rc<RefCell<dyn gpio::Pins>> {
+    Rc::from(RefCell::from(gpio::NoopPins::default()))
+}
+
 /// Builder pattern to construct an EndBASIC interpreter.
 ///
 /// Unless otherwise specified, the interpreter is connected to a terminal-based console.
 #[derive(Default)]
 pub struct MachineBuilder {
     console: Option<Rc<RefCell<dyn console::Console>>>,
+    gpio_pins: Option<Rc<RefCell<dyn gpio::Pins>>>,
     sleep_fn: Option<exec::SleepFn>,
 }
 
@@ -65,13 +79,19 @@ impl MachineBuilder {
         self
     }
 
+    /// Overrides the default hardware-based GPIO pins with the given ones.
+    pub fn with_gpio_pins(mut self, pins: Rc<RefCell<dyn gpio::Pins>>) -> Self {
+        self.gpio_pins = Some(pins);
+        self
+    }
+
     /// Overrides the default sleep function with the given one.
     pub fn with_sleep_fn(mut self, sleep_fn: exec::SleepFn) -> Self {
         self.sleep_fn = Some(sleep_fn);
         self
     }
 
-    /// Lazily initializes the console field with a default value and returns it.
+    /// Lazily initializes the `console` field with a default value and returns it.
     fn get_console(&mut self) -> Result<Rc<RefCell<dyn console::Console>>> {
         if self.console.is_none() {
             self.console = try_get_default_console()?;
@@ -83,10 +103,22 @@ impl MachineBuilder {
             .clone())
     }
 
+    /// Lazily initializes the `gpio_pins` field with a default value and returns it.
+    fn get_gpio_pins(&mut self) -> Rc<RefCell<dyn gpio::Pins>> {
+        if self.gpio_pins.is_none() {
+            self.gpio_pins = Some(default_gpio_pins());
+        }
+        self.gpio_pins
+            .as_ref()
+            .expect("Default GPIO pins not available and with_gpio_pins() was not called")
+            .clone()
+    }
+
     /// Builds the interpreter.
     pub fn build(mut self) -> Result<Machine> {
         let mut machine = Machine::default();
         console::add_all(&mut machine, self.get_console()?);
+        gpio::add_all(&mut machine, self.get_gpio_pins());
         exec::add_all(&mut machine, self.sleep_fn);
         numerics::add_all(&mut machine);
         strings::add_all(&mut machine);

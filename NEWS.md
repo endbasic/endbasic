@@ -9,6 +9,13 @@ not adhere to semantic versioning until 1.0.0.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
+*   Added basic suport for GPIO via the new `GPIO_SETUP`, `GPIO_CLEAR`,
+    `GPIO_WRITE` commands and the `GPIO_READ` function.  These symbols are
+    always available, but at the moment, they are only functional on the
+    Raspberry Pi.  Support for this platform must be enabled via the new
+    `rpi` feature because the `rppal` dependency does not compile on all
+    supported platforms.
+
 *   Added support for the `DIM` statement to define variables and arrays.
 
 *   Added support for multidimensional arrays.

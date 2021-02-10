@@ -29,9 +29,11 @@ jobs:
                   toolchain: 1.42
                   default: true
             - uses: actions/checkout@v2
-            # On old toolchains, we only care about being able to build, and
-            # we only really care about the CLI.
+            # On old toolchains, we only care about being able to build.
             - run: cd cli && cargo build --verbose
+            # And because we do this primarily for Raspbian, make sure the
+            # relevant features build there too.
+            - run: cd cli && cargo build --features=rpi --verbose
     lint:
         runs-on: ubuntu-latest
         steps:
