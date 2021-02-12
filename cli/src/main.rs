@@ -66,20 +66,18 @@ fn program_name(mut args: env::Args, default_name: &'static str) -> (String, env
 }
 
 /// Prints usage information for program `name` with `opts` following the GNU Standards format.
-fn help(name: &str, opts: &Options) -> Result<i32> {
+fn help(name: &str, opts: &Options) {
     let brief = format!("Usage: {} [options] [program-file]", name);
     println!("{}", opts.usage(&brief));
     println!("Report bugs to: https://github.com/jmmv/endbasic/issues");
     println!("EndBASIC home page: https://github.com/jmmv/endbasic");
-    Ok(0)
 }
 
 /// Prints version information following the GNU Standards format.
-fn version() -> Result<i32> {
+fn version() {
     println!("EndBASIC {}", env!("CARGO_PKG_VERSION"));
     println!("Copyright 2020-2021 Julio Merino");
     println!("License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>");
-    Ok(0)
 }
 
 /// Computes the path to the directory where user programs live if `flag` is none; otherwise
@@ -158,11 +156,13 @@ fn safe_main(name: &str, args: env::Args) -> Result<i32> {
     let matches = opts.parse(args)?;
 
     if matches.opt_present("help") {
-        return help(name, &opts);
+        help(name, &opts);
+        return Ok(0);
     }
 
     if matches.opt_present("version") {
-        return version();
+        version();
+        return Ok(0);
     }
 
     match matches.free.as_slice() {
