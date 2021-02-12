@@ -15,6 +15,7 @@
     *   `std/Cargo.toml`: Update version number and `endbasic-*` dependencies.
     *   `web/Cargo.toml`: Update version number and `endbasic-*` dependencies.
     *   `web/package.json`: Update version number.
+    *   `web/package-lock.json`: Update version number.
     *   `.github/workflows/publish-release.yml`: Update tag number.
 
 1.  Once all tests pass, push the new crates out:
