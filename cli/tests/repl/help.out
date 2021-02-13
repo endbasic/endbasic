@@ -35,6 +35,7 @@ Output from HELP:
     DEL          Deletes the given program.
     DIR          Displays the list of files on disk.
     EDIT         Interactively edits the stored program.
+    LIST         Prints the currently-loaded program.
     LOAD         Loads the given program.
     NEW          Clears the stored program from memory.
     RUN          Runs the stored program.
@@ -150,6 +151,12 @@ Output from HELP INPUT:
     The first expression to this function must be empty or evaluate to a string, and specifies the prompt to print.  If this first argument is followed by the short `;` separator, the prompt is extended with a question mark.
 
     The second expression to this function must be a bare variable reference and indicates the variable to update with the obtained input.
+
+Output from HELP LIST:
+
+    LIST
+
+    Prints the currently-loaded program.
 
 Output from HELP LOAD:
 

@@ -19,6 +19,11 @@ not adhere to semantic versioning until 1.0.0.**
     the variable is already defined, instead of assuming the integer type for
     unqualified variable references.
 
+*   Readded the `LIST` command to dump the stored program to the console.  This
+    was removed in 0.3 with the addition of the full-screen text editor, but
+    having quick access to the program's contents is useful to showcase both
+    code and output at once.
+
 *   Fixed the expression parser to properly handle symbol names that appear
     immediately after a left parenthesis.  This broke with the addition of
     function calls.
