@@ -13,7 +13,7 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-//! Stored program manipulation and interactive editor.
+//! Stored program manipulation.
 
 use crate::console::Console;
 use async_trait::async_trait;
@@ -29,6 +29,9 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::str;
+
+/// Category string for all functions provided by this module.
+const CATEGORY: &str = "Stored program manipulation";
 
 /// Metadata of an entry in the store.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -260,7 +263,7 @@ impl DelCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DEL", VarType::Void)
                 .with_syntax("filename")
-                .with_category("Stored program manipulation")
+                .with_category(CATEGORY)
                 .with_description(
                     "Deletes the given program.
 The filename must be a string and must be a basename (no directory components).  The .BAS \
@@ -311,7 +314,7 @@ impl DirCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DIR", VarType::Void)
                 .with_syntax("")
-                .with_category("Stored program manipulation")
+                .with_category(CATEGORY)
                 .with_description("Displays the list of files on disk.")
                 .build(),
             console,
@@ -348,7 +351,7 @@ impl EditCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("EDIT", VarType::Void)
                 .with_syntax("")
-                .with_category("Stored program manipulation")
+                .with_category(CATEGORY)
                 .with_description("Interactively edits the stored program.")
                 .build(),
             console,
@@ -375,6 +378,58 @@ impl Command for EditCommand {
     }
 }
 
+/// The `LIST` command.
+pub struct ListCommand {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+    program: Rc<RefCell<dyn Program>>,
+}
+
+impl ListCommand {
+    /// Creates a new `LIST` command that dumps the `program` to the `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("LIST", VarType::Void)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description("Prints the currently-loaded program.")
+                .build(),
+            console,
+            program,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for ListCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
+            return Err(CallError::ArgumentError("LIST takes no arguments".to_owned()));
+        }
+        let program = self.program.borrow().text();
+        let program: Vec<&str> = program.lines().collect();
+        let digits = {
+            let mut digits = 0;
+            let mut count = program.len();
+            while count > 0 {
+                digits += 1;
+                count /= 10;
+            }
+            digits
+        };
+        let mut console = self.console.borrow_mut();
+        for (i, line) in program.into_iter().enumerate() {
+            let formatted = format!("{:digits$} | {}", i + 1, line, digits = digits);
+            console.print(&formatted)?;
+        }
+        Ok(())
+    }
+}
+
 /// The `LOAD` command.
 pub struct LoadCommand {
     metadata: CallableMetadata,
@@ -388,7 +443,7 @@ impl LoadCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOAD", VarType::Void)
                 .with_syntax("filename")
-                .with_category("Stored program manipulation")
+                .with_category(CATEGORY)
                 .with_description(
                     "Loads the given program.
 The filename must be a string and must be a basename (no directory components).  The .BAS \
@@ -441,7 +496,7 @@ impl NewCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("NEW", VarType::Void)
                 .with_syntax("")
-                .with_category("Stored program manipulation")
+                .with_category(CATEGORY)
                 .with_description("Clears the stored program from memory.")
                 .build(),
             program,
@@ -480,7 +535,7 @@ impl RunCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RUN", VarType::Void)
                 .with_syntax("")
-                .with_category("Stored program manipulation")
+                .with_category(CATEGORY)
                 .with_description(
                     "Runs the stored program.
 Note that the program runs in the context of the interpreter so it will pick up any variables \
@@ -534,7 +589,7 @@ impl SaveCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SAVE", VarType::Void)
                 .with_syntax("filename")
-                .with_category("Stored program manipulation")
+                .with_category(CATEGORY)
                 .with_description(
                     "Saves the current program in memory to the given filename.
 The filename must be a string and must be a basename (no directory components).  The .BAS \
@@ -585,6 +640,7 @@ pub fn add_all(
     machine.add_command(DelCommand::new(store.clone()));
     machine.add_command(DirCommand::new(console.clone(), store.clone()));
     machine.add_command(EditCommand::new(console.clone(), program.clone()));
+    machine.add_command(ListCommand::new(console.clone(), program.clone()));
     machine.add_command(LoadCommand::new(store.clone(), program.clone()));
     machine.add_command(NewCommand::new(program.clone()));
     machine.add_command(RunCommand::new(console, program.clone()));
@@ -813,6 +869,33 @@ mod tests {
     #[test]
     fn test_edit_errors() {
         check_stmt_err("EDIT takes no arguments", "EDIT 1");
+    }
+
+    #[test]
+    fn test_list_ok() {
+        Tester::default().run("LIST").check();
+
+        Tester::default()
+            .set_program("one\n\nthree\n")
+            .run("LIST")
+            .expect_prints(["1 | one", "2 | ", "3 | three"])
+            .expect_program("one\n\nthree\n")
+            .check();
+
+        Tester::default()
+            .set_program("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n")
+            .run("LIST")
+            .expect_prints([
+                " 1 | a", " 2 | b", " 3 | c", " 4 | d", " 5 | e", " 6 | f", " 7 | g", " 8 | h",
+                " 9 | i", "10 | j",
+            ])
+            .expect_program("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n")
+            .check();
+    }
+
+    #[test]
+    fn test_list_errors() {
+        check_stmt_err("LIST takes no arguments", "LIST 2");
     }
 
     #[test]
