@@ -572,6 +572,7 @@ impl<'a> Parser<'a> {
                 | Token::IntegerName
                 | Token::Next
                 | Token::TextName
+                | Token::Wend
                 | Token::While => {
                     return Err(Error::Bad("Unexpected keyword in expression".to_owned()));
                 }
@@ -765,9 +766,8 @@ impl<'a> Parser<'a> {
         };
         self.expect_and_consume(Token::Eol, "Expecting newline after WHILE")?;
 
-        let stmts = self.parse_until(&[Token::End])?;
-        self.expect_and_consume(Token::End, "WHILE without END WHILE")?;
-        self.expect_and_consume(Token::While, "WHILE without END WHILE")?;
+        let stmts = self.parse_until(&[Token::Wend])?;
+        self.expect_and_consume(Token::Wend, "WHILE without WEND")?;
 
         Ok(Statement::While(expr, stmts))
     }
@@ -779,7 +779,7 @@ impl<'a> Parser<'a> {
                 Token::Eof => break,
                 Token::End => {
                     self.lexer.consume_peeked();
-                    self.expect_and_consume(Token::While, "WHILE without END WHILE")?;
+                    self.expect_and_consume(Token::While, "WHILE without WEND")?;
                     break;
                 }
                 _ => {
@@ -1738,22 +1738,19 @@ mod tests {
     #[test]
     fn test_while_empty() {
         do_ok_test(
-            "WHILE 2 + 3\nEND WHILE",
+            "WHILE 2 + 3\nWEND",
             &[Statement::While(
                 Expr::Add(Box::from(Expr::Integer(2)), Box::from(Expr::Integer(3))),
                 vec![],
             )],
         );
-        do_ok_test(
-            "WHILE 5\n\nREM foo\n\nEND WHILE\n",
-            &[Statement::While(Expr::Integer(5), vec![])],
-        );
+        do_ok_test("WHILE 5\n\nREM foo\n\nWEND\n", &[Statement::While(Expr::Integer(5), vec![])]);
     }
 
     #[test]
     fn test_while_loops() {
         do_ok_test(
-            "WHILE TRUE\nA\nB\nEND WHILE",
+            "WHILE TRUE\nA\nB\nWEND",
             &[Statement::While(
                 Expr::Boolean(true),
                 vec![
@@ -1771,9 +1768,9 @@ mod tests {
                 A
                 WHILE FALSE
                     B
-                END WHILE
+                WEND
                 C
-            END WHILE
+            WEND
         "#;
         do_ok_test(
             code,
@@ -1795,10 +1792,11 @@ mod tests {
     fn test_while_errors() {
         do_error_test("WHILE\n", "No expression in WHILE statement");
         do_error_test("WHILE TRUE", "Expecting newline after WHILE");
-        do_error_test("WHILE TRUE\n", "WHILE without END WHILE");
-        do_error_test("WHILE TRUE\nEND", "WHILE without END WHILE");
-        do_error_test("WHILE TRUE\nEND\n", "WHILE without END WHILE");
+        do_error_test("WHILE TRUE\n", "WHILE without WEND");
+        do_error_test("WHILE TRUE\nEND", "Unexpected token End in statement");
+        do_error_test("WHILE TRUE\nEND\n", "Unexpected token End in statement");
+        do_error_test("WHILE TRUE\nEND WHILE\n", "Unexpected token End in statement");
 
-        do_error_test("WHILE ,\nEND WHILE", "No expression in WHILE statement");
+        do_error_test("WHILE ,\nWEND", "No expression in WHILE statement");
     }
 }

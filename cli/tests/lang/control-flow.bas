@@ -20,9 +20,9 @@ WHILE i < 5
     WHILE j < i
         PRINT i; j
         j = j + 1
-    END WHILE
+    WEND
     i = i + 1
-END WHILE
+WEND
 
 IF i = 5 THEN
     PRINT "Done!"

@@ -798,21 +798,21 @@ mod tests {
             WHILE n > 0
                 OUT "n is"; n
                 n = n - 1
-            END WHILE
+            WEND
         "#;
         do_ok_test(code, &["0"], &[]);
         do_ok_test(code, &["3"], &["n is 3", "n is 2", "n is 1"]);
 
-        do_ok_test("WHILE FALSE\nOUT 1\nEND WHILE", &[], &[]);
+        do_ok_test("WHILE FALSE\nOUT 1\nWEND", &[], &[]);
     }
 
     #[test]
     fn test_while_errors() {
-        do_simple_error_test("WHILE\nEND WHILE", "No expression in WHILE statement");
-        do_simple_error_test("WHILE\nEND IF", "WHILE without END WHILE");
+        do_simple_error_test("WHILE\nWEND", "No expression in WHILE statement");
+        do_simple_error_test("WHILE\nEND IF", "WHILE without WEND");
 
-        do_simple_error_test("WHILE 2\n", "WHILE without END WHILE");
-        do_simple_error_test("WHILE 2\nEND WHILE", "WHILE requires a boolean condition");
+        do_simple_error_test("WHILE 2\n", "WHILE without WEND");
+        do_simple_error_test("WHILE 2\nWEND", "WHILE requires a boolean condition");
     }
 
     #[test]

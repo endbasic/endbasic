@@ -67,7 +67,7 @@ While loops look like this:
 
     WHILE a% < 10
         a% = a% + 1
-    END WHILE
+    WEND
 
 For loops look like this:
 

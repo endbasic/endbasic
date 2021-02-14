@@ -24,6 +24,11 @@ not adhere to semantic versioning until 1.0.0.**
     having quick access to the program's contents is useful to showcase both
     code and output at once.
 
+*   Replaced `END WHILE` with `WEND` as the earlier BASICs did.  We could
+    probably support both, but for now, sticking to the simpler world of a
+    different keyword per statement seems nicer (and this matches what the
+    `FOR`/`NEXT` pair do).
+
 *   Fixed the expression parser to properly handle symbol names that appear
     immediately after a left parenthesis.  This broke with the addition of
     function calls.
