@@ -16,7 +16,7 @@
 ' Tests that the background color is used to clear all new lines until the right
 ' margin of the screen.
 
-A = 5: WHILE A > 0: COLOR A, A - 1: PRINT "Hello": A = A - 1: END WHILE
+A = 5: WHILE A > 0: COLOR A, A - 1: PRINT "Hello": A = A - 1: WEND
 COLOR
 
 COLOR 4, 2

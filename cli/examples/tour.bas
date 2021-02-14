@@ -99,7 +99,7 @@ PRINT "While loops look like this:"
 PRINT
 PRINT "    WHILE a% < 10"
 PRINT "        a% = a% + 1"
-PRINT "    END WHILE"
+PRINT "    WEND"
 PRINT
 PRINT "For loops look like this:"
 PRINT

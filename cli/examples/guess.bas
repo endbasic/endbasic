@@ -55,7 +55,7 @@ WHILE again?
             COLOR fg%, bg%
         END IF
         attempts% = attempts% - 1
-    END WHILE
+    WEND
 
     IF guess% = secret% THEN
         wins% = wins% + 1
@@ -70,7 +70,7 @@ WHILE again?
     PRINT
 
     INPUT "Do you want to play again"; again?
-END WHILE
+WEND
 
 COLOR
 CLS

@@ -50,7 +50,7 @@ const LANG_REFERENCE: &str = r"
     Flow control:
         IF expr THEN: ...: ELSE IF expr THEN: ...: ELSE: ...: END IF
         FOR varref = expr TO expr [STEP int]: ...: NEXT
-        WHILE expr: ...: END WHILE
+        WHILE expr: ...: WEND
 
     Misc:
         st1: st2    Separates statements (same as a newline).

@@ -70,6 +70,7 @@ pub enum Token {
     Step,
     Then,
     To,
+    Wend,
     While,
 
     Dim,
@@ -289,6 +290,7 @@ impl<'a> Lexer<'a> {
             "THEN" => Ok(Token::Then),
             "TO" => Ok(Token::To),
             "TRUE" => Ok(Token::Boolean(true)),
+            "WEND" => Ok(Token::Wend),
             "WHILE" => Ok(Token::While),
             "XOR" => Ok(Token::Xor),
             _ => Ok(Token::Symbol(VarRef::new(s, vtype))),
@@ -633,9 +635,9 @@ mod tests {
 
     #[test]
     fn test_while() {
-        do_ok_test("WHILE END WHILE", &[Token::While, Token::End, Token::While]);
+        do_ok_test("WHILE WEND", &[Token::While, Token::Wend]);
 
-        do_ok_test("while end while", &[Token::While, Token::End, Token::While]);
+        do_ok_test("while wend", &[Token::While, Token::Wend]);
     }
 
     /// Syntactic sugar to instantiate a test that verifies the parsing of an operator.

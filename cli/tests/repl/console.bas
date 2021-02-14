@@ -36,8 +36,8 @@ WHILE row < 10
         PRINT "#"
         column = column + 1
         fg = (fg + 1) MOD 15
-    END WHILE
+    WEND
     row = row + 1
-END WHILE
+WEND
 
 LOCATE 100, 0

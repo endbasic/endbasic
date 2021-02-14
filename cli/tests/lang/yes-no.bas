@@ -16,9 +16,9 @@
 b? = TRUE
 WHILE b?
   INPUT "Should we continue"; b?
-END WHILE
+WEND
 
 b? = FALSE
 WHILE NOT b?
   INPUT "Should we exit"; b?
-END WHILE
+WEND
