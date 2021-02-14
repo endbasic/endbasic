@@ -171,6 +171,25 @@ INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
 CLS
 COLOR 11
 PRINT
+PRINT " EndBASIC tour: Hardware access"
+PRINT "================================"
+COLOR
+PRINT
+PRINT "If you happen to be running on a Raspberry Pi, EndBASIC has some support"
+PRINT "to manipulate its hardware.  At the moment this includes only basic access"
+PRINT "to the GPIO lines.  See the \"DEMO:GPIO.BAS\" demo for an example."
+PRINT
+PRINT "Please note that you have to be running on a Raspberry Pi *AND* you must"
+PRINT "have compiled EndBASIC with --features=rpi for this to work."
+PRINT
+COLOR
+PRINT
+COLOR 11
+INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
+
+CLS
+COLOR 11
+PRINT
 PRINT " EndBASIC tour: Enjoy"
 PRINT "======================"
 COLOR

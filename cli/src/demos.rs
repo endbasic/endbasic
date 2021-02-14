@@ -65,6 +65,14 @@ impl<S: Store> DemoStoreOverlay<S> {
             demos.insert("DEMO:GUESS.BAS", (metadata, content));
         }
         {
+            let content = process_demo(include_bytes!("../examples/gpio.bas"));
+            let metadata = Metadata {
+                date: time::OffsetDateTime::from_unix_timestamp(1613316558),
+                length: content.len() as u64,
+            };
+            demos.insert("DEMO:GPIO.BAS", (metadata, content));
+        }
+        {
             let content = process_demo(include_bytes!("../examples/hello.bas"));
             let metadata = Metadata {
                 date: time::OffsetDateTime::from_unix_timestamp(1608646800),

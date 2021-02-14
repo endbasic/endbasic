@@ -1,0 +1,47 @@
+[2J[1;1H[38;5;11m[49m
+ GPIO demo
+===========
+[39m[49m
+This demo showcases how to poll a hardware button attached to a GPIO
+pin and how to flash an LED attached to another one.
+
+[38;5;2m[49mTo get started, follow these steps:
+[39m[49m
+1. Connect an LED to pin 18 and to ground; don't forget to add a
+   resistor inline.
+
+2. Connect a push button to pin 8 and to ground.  We'll be
+   using the built-in pull-up resistor for the input pin so there is
+   no need to do any extra wiring.
+
+[38;5;1m[49mThis demo is only functional on the Raspberry Pi and assumes you have
+built EndBASIC with --features=rpi.  If these conditions are not met,
+the demo will fail to run.
+[39m[49m
+[2J[1;1H[38;5;11m[49m
+ GPIO demo
+===========
+[39m[49m
+Waiting for a button press on pin 8 ...
+Button pressed! Blinking LED on pin 18 ...
+5
+4
+3
+2
+1
+Dumping GPIO trace...
+__GPIO_MOCK_DATA	0	803
+__GPIO_MOCK_DATA	1	1804
+__GPIO_MOCK_DATA	2	811
+__GPIO_MOCK_DATA	3	811
+__GPIO_MOCK_DATA	4	810
+__GPIO_MOCK_DATA	5	1821
+__GPIO_MOCK_DATA	6	1820
+__GPIO_MOCK_DATA	7	1821
+__GPIO_MOCK_DATA	8	1820
+__GPIO_MOCK_DATA	9	1821
+__GPIO_MOCK_DATA	10	1820
+__GPIO_MOCK_DATA	11	1821
+__GPIO_MOCK_DATA	12	1820
+__GPIO_MOCK_DATA	13	1821
+__GPIO_MOCK_DATA	14	1820
