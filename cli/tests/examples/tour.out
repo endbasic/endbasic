@@ -127,6 +127,18 @@ the "COLOR" command and positioning the cursor with "LOCATE":
 [19;24H[38;5;15m[49mThis is color 15
 [39m[49m
 [38;5;11m[49m[2J[1;1H[38;5;11m[49m
+ EndBASIC tour: Hardware access
+================================
+[39m[49m
+If you happen to be running on a Raspberry Pi, EndBASIC has some support
+to manipulate its hardware.  At the moment this includes only basic access
+to the GPIO lines.  See the "DEMO:GPIO.BAS" demo for an example.
+
+Please note that you have to be running on a Raspberry Pi *AND* you must
+have compiled EndBASIC with --features=rpi for this to work.
+
+[39m[49m
+[38;5;11m[49m[2J[1;1H[38;5;11m[49m
  EndBASIC tour: Enjoy
 ======================
 [39m[49m

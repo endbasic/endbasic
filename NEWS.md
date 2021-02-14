@@ -16,6 +16,9 @@ not adhere to semantic versioning until 1.0.0.**
     `rpi` feature because the `rppal` dependency does not compile on all
     supported platforms.
 
+*   Added the new demo program `DEMO:GPIO.BAS` to accompany the new support
+    for GPIO.
+
 *   Added support for the `DIM` statement to define variables and arrays.
 
 *   Added support for multidimensional arrays.

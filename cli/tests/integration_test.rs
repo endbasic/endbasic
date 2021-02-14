@@ -311,6 +311,18 @@ fn test_cli_version() {
 }
 
 #[test]
+fn test_example_gpio() {
+    check(
+        bin_path("endbasic"),
+        &["--interactive", &src_str("cli/tests/examples/gpio.bas")],
+        0,
+        Behavior::File(src_path("cli/tests/examples/gpio.in")),
+        Behavior::File(src_path("cli/tests/examples/gpio.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_example_guess() {
     check(
         bin_path("endbasic"),
