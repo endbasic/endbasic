@@ -31,7 +31,7 @@ jobs:
             - uses: actions/checkout@v2
             # On old toolchains, we only care about being able to build, and
             # we only really care about the CLI.
-            - run: cd cli && cargo build --all-features --verbose
+            - run: cd cli && cargo build --verbose
     lint:
         runs-on: ubuntu-latest
         steps:

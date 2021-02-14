@@ -57,7 +57,8 @@ check_web_versions() {
 }
 
 check_rust() {
-    cargo clippy --all-features --all-targets -- -D warnings
+    cargo clippy --all-targets -- -D warnings
+    cargo clippy --all-targets --all-features -- -D warnings
     cargo fmt -- --check
 }
 
