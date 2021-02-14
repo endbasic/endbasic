@@ -22,31 +22,37 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v2
-            - run: cargo test --all-features --verbose --release
+            - run: cargo test --verbose --release
     linux-test:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v2
-            - run: cargo test --all-features --verbose
+            - run: cargo test --verbose
 
     macos-release:
         runs-on: macos-latest
         steps:
             - uses: actions/checkout@v2
-            - run: cargo test --all-features --verbose --release
+            - run: cargo test --verbose --release
     macos-test:
         runs-on: macos-latest
         steps:
             - uses: actions/checkout@v2
-            - run: cargo test --all-features --verbose
+            - run: cargo test --verbose
 
     windows-release:
         runs-on: windows-latest
         steps:
             - uses: actions/checkout@v2
-            - run: cargo test --all-features --verbose --release
+            - run: cargo test --verbose --release
     windows-test:
         runs-on: windows-latest
         steps:
             - uses: actions/checkout@v2
-            - run: cargo test --all-features --verbose
+            - run: cargo test --verbose
+
+    linux-no-features:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v2
+            - run: cd std && cargo build --no-default-features --verbose
