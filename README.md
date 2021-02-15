@@ -31,9 +31,20 @@ The latest version of EndBASIC is 0.5.1 and was released on 2021-01-25.
 *   For the web interface, see [`web/README.md`](web/README.md).
 *   For changes across versions, see [`NEWS.md`](NEWS.md).
 
-Here is a little demo:
+Here is a little demo of the interactive capabilities:
 
-![Video showing the first page of the tour and the "guess" demo](demo.gif)
+<a href="assets/repl-demo.gif">
+    <img src="assets/repl-demo.gif"
+         alt="Video showing the first page of the tour and the guess demo">
+</a>
+
+And here is a photo of a program controlling a Raspberry Pi:
+
+<a href="assets/gpio-rpi.jpg">
+    <img src="assets/gpio-rpi.jpg"
+         alt="Raspberry Pi with an EndBASIC program to control its GPIO"
+         width="600" height="800">
+</a>
 
 ## Quick start
 
