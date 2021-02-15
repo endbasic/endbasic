@@ -26,7 +26,7 @@ use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
-    FunctionResult,
+    FunctionResult, Symbols,
 };
 use futures_lite::future::block_on;
 use std::cell::RefCell;
@@ -74,7 +74,7 @@ impl Function for NumLightsFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>) -> FunctionResult {
+    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -115,7 +115,7 @@ impl Command for SwitchLightCommand {
             return Err(CallError::SyntaxError);
         }
         let expr = args[0].0.as_ref().expect("A single argument can never be empty");
-        match expr.eval(machine.get_symbols())? {
+        match expr.eval(machine.get_mut_symbols())? {
             Value::Integer(i) => {
                 let lights = &mut *self.lights.borrow_mut();
                 if i < 1 {

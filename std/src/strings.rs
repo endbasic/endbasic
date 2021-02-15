@@ -18,7 +18,7 @@
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult,
+    CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult, Symbols,
 };
 use std::cmp::min;
 use std::rc::Rc;
@@ -53,7 +53,7 @@ impl Function for LeftFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>) -> FunctionResult {
+    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
         match args.as_slice() {
             [Value::Text(s), Value::Integer(n)] => {
                 if n < &0 {
@@ -91,7 +91,7 @@ impl Function for LenFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>) -> FunctionResult {
+    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
         match args.as_slice() {
             [Value::Text(s)] => {
                 if s.len() > std::i32::MAX as usize {
@@ -128,7 +128,7 @@ impl Function for LtrimFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>) -> FunctionResult {
+    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
         match args.as_slice() {
             [Value::Text(s)] => Ok(Value::Text(s.trim_start().to_owned())),
             _ => Err(CallError::SyntaxError),
@@ -164,7 +164,7 @@ impl Function for MidFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>) -> FunctionResult {
+    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
         match args.as_slice() {
             [Value::Text(s), Value::Integer(start), Value::Integer(length)] => {
                 if *start < 0 {
@@ -209,7 +209,7 @@ impl Function for RightFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>) -> FunctionResult {
+    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
         match args.as_slice() {
             [Value::Text(s), Value::Integer(n)] => {
                 if n < &0 {
@@ -247,7 +247,7 @@ impl Function for RtrimFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>) -> FunctionResult {
+    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
         match args.as_slice() {
             [Value::Text(s)] => Ok(Value::Text(s.trim_end().to_owned())),
             _ => Err(CallError::SyntaxError),

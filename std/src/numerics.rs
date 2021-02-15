@@ -20,7 +20,7 @@ use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
-    FunctionResult,
+    FunctionResult, Symbols,
 };
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
@@ -93,7 +93,7 @@ impl Function for DtoiFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>) -> FunctionResult {
+    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
         match args.as_slice() {
             [Value::Double(n)] => Ok(Value::Integer(*n as i32)),
             _ => Err(CallError::SyntaxError),
@@ -124,7 +124,7 @@ impl Function for ItodFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>) -> FunctionResult {
+    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
         match args.as_slice() {
             [Value::Integer(n)] => Ok(Value::Double(*n as f64)),
             _ => Err(CallError::SyntaxError),
@@ -167,7 +167,7 @@ impl Command for RandomizeCommand {
             [] => {
                 *self.prng.borrow_mut() = Prng::new_from_entryopy();
             }
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_symbols())? {
+            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols())? {
                 Value::Integer(n) => {
                     *self.prng.borrow_mut() = Prng::new_from_seed(n);
                 }
@@ -219,7 +219,7 @@ impl Function for RndFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>) -> FunctionResult {
+    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
         match args.as_slice() {
             [] => Ok(Value::Double(self.prng.borrow_mut().next())),
             [Value::Integer(n)] => match n.cmp(&0) {

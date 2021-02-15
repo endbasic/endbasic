@@ -382,9 +382,9 @@ impl Command for ColorCommand {
             }
         };
 
-        fn get_color(e: &Option<Expr>, machine: &Machine) -> Result<Option<u8>, CallError> {
+        fn get_color(e: &Option<Expr>, machine: &mut Machine) -> Result<Option<u8>, CallError> {
             match e {
-                Some(e) => match e.eval(machine.get_symbols())? {
+                Some(e) => match e.eval(machine.get_mut_symbols())? {
                     Value::Integer(i) if i >= 0 && i <= std::u8::MAX as i32 => Ok(Some(i as u8)),
                     Value::Integer(_) => {
                         Err(CallError::ArgumentError("Color out of range".to_owned()))
@@ -442,7 +442,7 @@ impl Command for InputCommand {
         }
 
         let mut prompt = match &args[0].0 {
-            Some(e) => match e.eval(machine.get_symbols())? {
+            Some(e) => match e.eval(machine.get_mut_symbols())? {
                 Value::Text(t) => t,
                 _ => {
                     return Err(CallError::ArgumentError(
@@ -528,7 +528,7 @@ impl Command for LocateCommand {
         debug_assert!(column_arg.1 == ArgSep::End);
 
         let row = match &row_arg.0 {
-            Some(arg) => match arg.eval(machine.get_symbols())? {
+            Some(arg) => match arg.eval(machine.get_mut_symbols())? {
                 Value::Integer(i) => {
                     if i < 0 {
                         return Err(CallError::ArgumentError("Row cannot be negative".to_owned()));
@@ -541,7 +541,7 @@ impl Command for LocateCommand {
         };
 
         let column = match &column_arg.0 {
-            Some(arg) => match arg.eval(machine.get_symbols())? {
+            Some(arg) => match arg.eval(machine.get_mut_symbols())? {
                 Value::Integer(i) => {
                     if i < 0 {
                         return Err(CallError::ArgumentError(
@@ -595,7 +595,7 @@ impl Command for PrintCommand {
         let mut text = String::new();
         for arg in args.iter() {
             if let Some(expr) = arg.0.as_ref() {
-                text += &expr.eval(machine.get_symbols())?.to_string();
+                text += &expr.eval(machine.get_mut_symbols())?.to_string();
             }
             match arg.1 {
                 ArgSep::End => break,

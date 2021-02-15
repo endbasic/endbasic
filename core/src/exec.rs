@@ -163,7 +163,7 @@ impl Machine {
 
     /// Assigns the value of `expr` to the variable `vref`.
     fn assign(&mut self, vref: &VarRef, expr: &Expr) -> Result<()> {
-        let value = expr.eval(&self.symbols)?;
+        let value = expr.eval(&mut self.symbols)?;
         self.symbols.set_var(&vref, value)?;
         Ok(())
     }
@@ -172,13 +172,13 @@ impl Machine {
     fn assign_array(&mut self, vref: &VarRef, subscripts: &[Expr], expr: &Expr) -> Result<()> {
         let mut ds = Vec::with_capacity(subscripts.len());
         for ss_expr in subscripts {
-            match ss_expr.eval(&self.symbols)? {
+            match ss_expr.eval(&mut self.symbols)? {
                 Value::Integer(i) => ds.push(i),
                 v => return new_syntax_error(format!("Subscript {:?} must be an integer", v)),
             }
         }
 
-        let value = expr.eval(&self.symbols)?;
+        let value = expr.eval(&mut self.symbols)?;
 
         match self.symbols.get_mut(vref)? {
             Some(Symbol::Array(array)) => {
@@ -195,7 +195,7 @@ impl Machine {
     pub fn dim_array(&mut self, name: &str, subtype: &VarType, dimensions: &[Expr]) -> Result<()> {
         let mut ds = Vec::with_capacity(dimensions.len());
         for dim_expr in dimensions {
-            match dim_expr.eval(&self.symbols)? {
+            match dim_expr.eval(&mut self.symbols)? {
                 Value::Integer(i) => {
                     if i <= 0 {
                         return new_syntax_error("Dimensions in DIM array must be positive");
@@ -212,7 +212,7 @@ impl Machine {
     /// Executes an `IF` statement.
     async fn do_if(&mut self, branches: &[(Expr, Vec<Statement>)]) -> Result<()> {
         for (expr, stmts) in branches {
-            match expr.eval(&self.symbols)? {
+            match expr.eval(&mut self.symbols)? {
                 Value::Boolean(true) => {
                     for s in stmts {
                         self.exec_one(s).await?;
@@ -238,14 +238,14 @@ impl Machine {
         debug_assert!(
             iterator.ref_type() == VarType::Auto || iterator.ref_type() == VarType::Integer
         );
-        let start_value = start.eval(&self.symbols)?;
+        let start_value = start.eval(&mut self.symbols)?;
         match start_value {
             Value::Integer(_) => self.symbols.set_var(iterator, start_value)?,
             _ => return new_syntax_error("FOR supports integer iteration only"),
         }
 
         loop {
-            match end.eval(&self.symbols)? {
+            match end.eval(&mut self.symbols)? {
                 Value::Boolean(false) => {
                     break;
                 }
@@ -265,7 +265,7 @@ impl Machine {
     /// Executes a `WHILE` loop.
     async fn do_while(&mut self, condition: &Expr, body: &[Statement]) -> Result<()> {
         loop {
-            match condition.eval(&self.symbols)? {
+            match condition.eval(&mut self.symbols)? {
                 Value::Boolean(true) => {
                     for s in body {
                         self.exec_one(s).await?;

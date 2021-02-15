@@ -47,7 +47,7 @@ impl Function for ErrorFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>) -> FunctionResult {
+    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
         match args.as_slice() {
             [Value::Text(s)] => {
                 if s == "argument" {
@@ -89,7 +89,7 @@ impl Command for ExitCommand {
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         let arg = match args {
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_symbols())? {
+            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols())? {
                 Value::Integer(n) => {
                     assert!((0..128).contains(&n), "Exit code out of range");
                     n as u8
@@ -177,7 +177,7 @@ impl Command for OutCommand {
         let mut text = String::new();
         for arg in args.iter() {
             if let Some(expr) = arg.0.as_ref() {
-                text += &expr.eval(machine.get_symbols())?.to_string();
+                text += &expr.eval(machine.get_mut_symbols())?.to_string();
             }
             match arg.1 {
                 ArgSep::End => break,
@@ -208,7 +208,7 @@ impl Function for SumFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>) -> FunctionResult {
+    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
         let mut result = Value::Integer(0);
         for a in args {
             result = result.add(&a)?;
@@ -287,7 +287,7 @@ impl Function for TypeCheckFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>) -> FunctionResult {
+    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
         assert!(args.is_empty());
         Ok(self.value.clone())
     }

@@ -305,7 +305,7 @@ Second paragraph of the extended description.",
             &self.metadata
         }
 
-        fn exec(&self, _args: Vec<Value>) -> FunctionResult {
+        fn exec(&self, _args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
             Ok(Value::Text("irrelevant".to_owned()))
         }
     }

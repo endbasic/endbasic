@@ -16,7 +16,7 @@
 //! Evaluator for EndBASIC expressions.
 
 use crate::ast::{Expr, Value, VarRef, VarType};
-use crate::syms::{Array, CallError, CallableMetadata, Function, Symbol, Symbols};
+use crate::syms::{CallError, CallableMetadata, Function, Symbol, Symbols};
 use std::rc::Rc;
 
 /// Evaluation errors.
@@ -283,36 +283,32 @@ impl ToString for Value {
 }
 
 impl Expr {
-    /// Evaluates a reference to `array` with subscripts `args`.
-    fn eval_array_ref(&self, syms: &Symbols, array: &Array, args: &[Expr]) -> Result<Value> {
+    /// Evaluates the subscripts of an array reference.
+    fn eval_array_args(&self, args: &[Value]) -> Result<Vec<i32>> {
         let mut subscripts = Vec::with_capacity(args.len());
         for a in args {
-            match a.eval(syms)? {
-                Value::Integer(i) => subscripts.push(i),
+            match a {
+                Value::Integer(i) => subscripts.push(*i),
                 _ => return Err(Error::new("Array subscripts must be integers")),
             }
         }
-        array.index(&subscripts).map(|v| v.clone())
+        Ok(subscripts)
     }
 
     /// Evaluates a function call specified by `fref` and arguments `args` on the function `f`.
     fn eval_function_call(
         &self,
-        syms: &Symbols,
+        syms: &mut Symbols,
         fref: &VarRef,
-        args: &[Expr],
-        f: &Rc<dyn Function>,
+        values: Vec<Value>,
+        f: Rc<dyn Function>,
     ) -> Result<Value> {
         let metadata = f.metadata();
         if !fref.accepts(metadata.return_type()) {
             return Err(Error::new("Incompatible type annotation for function call"));
         }
 
-        let mut values = Vec::with_capacity(args.len());
-        for a in args {
-            values.push(a.eval(syms)?);
-        }
-        let result = f.exec(values);
+        let result = f.exec(values, syms);
         match result {
             Ok(value) => {
                 debug_assert!(metadata.return_type() != VarType::Auto);
@@ -337,7 +333,7 @@ impl Expr {
     ///
     /// Symbols are resolved by querying `syms`.  Errors in the computation are returned via the
     /// special `Value::Bad` type.
-    pub fn eval(&self, syms: &Symbols) -> Result<Value> {
+    pub fn eval(&self, syms: &mut Symbols) -> Result<Value> {
         match self {
             Expr::Boolean(b) => Ok(Value::Boolean(*b)),
             Expr::Double(d) => Ok(Value::Double(*d)),
@@ -365,12 +361,24 @@ impl Expr {
 
             Expr::Symbol(vref) => Ok(syms.get_var(vref)?.clone()),
 
-            Expr::Call(fref, args) => match syms.get(fref)? {
-                Some(Symbol::Array(array)) => self.eval_array_ref(syms, array, args),
-                Some(Symbol::Function(f)) => self.eval_function_call(syms, fref, args, f),
-                Some(_) => Err(Error::new(format!("{} is not an array or a function", fref))),
-                None => Err(Error::new(format!("Unknown function or array {}", fref))),
-            },
+            Expr::Call(fref, args) => {
+                let mut values = Vec::with_capacity(args.len());
+                for a in args {
+                    values.push(a.eval(syms)?);
+                }
+                match syms.get(fref)? {
+                    Some(Symbol::Array(array)) => {
+                        let subscripts = self.eval_array_args(&values)?;
+                        array.index(&subscripts).map(|v| v.clone())
+                    }
+                    Some(Symbol::Function(f)) => {
+                        let f = f.clone();
+                        self.eval_function_call(syms, fref, values, f)
+                    }
+                    Some(_) => Err(Error::new(format!("{} is not an array or a function", fref))),
+                    None => Err(Error::new(format!("Unknown function or array {}", fref))),
+                }
+            }
         }
     }
 }
@@ -955,11 +963,14 @@ mod tests {
 
     #[test]
     fn test_expr_literals() {
-        let syms = Symbols::default();
-        assert_eq!(Value::Boolean(true), Expr::Boolean(true).eval(&syms).unwrap());
-        assert_eq!(Value::Double(0.0), Expr::Double(0.0).eval(&syms).unwrap());
-        assert_eq!(Value::Integer(0), Expr::Integer(0).eval(&syms).unwrap());
-        assert_eq!(Value::Text("z".to_owned()), Expr::Text("z".to_owned()).eval(&syms).unwrap());
+        let mut syms = Symbols::default();
+        assert_eq!(Value::Boolean(true), Expr::Boolean(true).eval(&mut syms).unwrap());
+        assert_eq!(Value::Double(0.0), Expr::Double(0.0).eval(&mut syms).unwrap());
+        assert_eq!(Value::Integer(0), Expr::Integer(0).eval(&mut syms).unwrap());
+        assert_eq!(
+            Value::Text("z".to_owned()),
+            Expr::Text("z".to_owned()).eval(&mut syms).unwrap()
+        );
     }
 
     #[test]
@@ -979,14 +990,17 @@ mod tests {
         syms.set_var(&int_ref, int_val.clone()).unwrap();
         syms.set_var(&text_ref, text_val.clone()).unwrap();
 
-        assert_eq!(bool_val, Expr::Symbol(bool_ref).eval(&syms).unwrap());
-        assert_eq!(double_val, Expr::Symbol(double_ref).eval(&syms).unwrap());
-        assert_eq!(int_val, Expr::Symbol(int_ref).eval(&syms).unwrap());
-        assert_eq!(text_val, Expr::Symbol(text_ref).eval(&syms).unwrap());
+        assert_eq!(bool_val, Expr::Symbol(bool_ref).eval(&mut syms).unwrap());
+        assert_eq!(double_val, Expr::Symbol(double_ref).eval(&mut syms).unwrap());
+        assert_eq!(int_val, Expr::Symbol(int_ref).eval(&mut syms).unwrap());
+        assert_eq!(text_val, Expr::Symbol(text_ref).eval(&mut syms).unwrap());
 
         assert_eq!(
             "Undefined variable x",
-            format!("{}", Expr::Symbol(VarRef::new("x", VarType::Auto)).eval(&syms).unwrap_err())
+            format!(
+                "{}",
+                Expr::Symbol(VarRef::new("x", VarType::Auto)).eval(&mut syms).unwrap_err()
+            )
         );
     }
 
@@ -999,22 +1013,22 @@ mod tests {
         // expression operator to essentially avoid duplicating all those tests.  We do this by
         // triggering errors and rely on the fact that their messages are different for every
         // operation.
-        let syms = Symbols::default();
+        let mut syms = Symbols::default();
         assert_eq!(
             "Cannot AND Boolean(false) and Integer(0)",
-            format!("{}", Expr::And(a_bool.clone(), an_int.clone()).eval(&syms).unwrap_err())
+            format!("{}", Expr::And(a_bool.clone(), an_int.clone()).eval(&mut syms).unwrap_err())
         );
         assert_eq!(
             "Cannot OR Boolean(false) and Integer(0)",
-            format!("{}", Expr::Or(a_bool.clone(), an_int.clone()).eval(&syms).unwrap_err())
+            format!("{}", Expr::Or(a_bool.clone(), an_int.clone()).eval(&mut syms).unwrap_err())
         );
         assert_eq!(
             "Cannot XOR Boolean(false) and Integer(0)",
-            format!("{}", Expr::Xor(a_bool, an_int.clone()).eval(&syms).unwrap_err())
+            format!("{}", Expr::Xor(a_bool, an_int.clone()).eval(&mut syms).unwrap_err())
         );
         assert_eq!(
             "Cannot apply NOT to Integer(0)",
-            format!("{}", Expr::Not(an_int).eval(&syms).unwrap_err())
+            format!("{}", Expr::Not(an_int).eval(&mut syms).unwrap_err())
         );
     }
 
@@ -1027,30 +1041,39 @@ mod tests {
         // expression operator to essentially avoid duplicating all those tests.  We do this by
         // triggering errors and rely on the fact that their messages are different for every
         // operation.
-        let syms = Symbols::default();
+        let mut syms = Symbols::default();
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with =",
-            format!("{}", Expr::Equal(a_bool.clone(), an_int.clone()).eval(&syms).unwrap_err())
+            format!("{}", Expr::Equal(a_bool.clone(), an_int.clone()).eval(&mut syms).unwrap_err())
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with <>",
-            format!("{}", Expr::NotEqual(a_bool.clone(), an_int.clone()).eval(&syms).unwrap_err())
+            format!(
+                "{}",
+                Expr::NotEqual(a_bool.clone(), an_int.clone()).eval(&mut syms).unwrap_err()
+            )
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with <",
-            format!("{}", Expr::Less(a_bool.clone(), an_int.clone()).eval(&syms).unwrap_err())
+            format!("{}", Expr::Less(a_bool.clone(), an_int.clone()).eval(&mut syms).unwrap_err())
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with <=",
-            format!("{}", Expr::LessEqual(a_bool.clone(), an_int.clone()).eval(&syms).unwrap_err())
+            format!(
+                "{}",
+                Expr::LessEqual(a_bool.clone(), an_int.clone()).eval(&mut syms).unwrap_err()
+            )
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with >",
-            format!("{}", Expr::Greater(a_bool.clone(), an_int.clone()).eval(&syms).unwrap_err())
+            format!(
+                "{}",
+                Expr::Greater(a_bool.clone(), an_int.clone()).eval(&mut syms).unwrap_err()
+            )
         );
         assert_eq!(
             "Cannot compare Boolean(false) and Integer(0) with >=",
-            format!("{}", Expr::GreaterEqual(a_bool, an_int).eval(&syms).unwrap_err())
+            format!("{}", Expr::GreaterEqual(a_bool, an_int).eval(&mut syms).unwrap_err())
         );
     }
 
@@ -1063,26 +1086,32 @@ mod tests {
         // expression operator to essentially avoid duplicating all those tests.  We do this by
         // triggering errors and rely on the fact that their messages are different for every
         // operation.
-        let syms = Symbols::default();
+        let mut syms = Symbols::default();
         assert_eq!(
             "Cannot add Boolean(false) and Integer(0)",
-            format!("{}", Expr::Add(a_bool.clone(), an_int.clone()).eval(&syms).unwrap_err())
+            format!("{}", Expr::Add(a_bool.clone(), an_int.clone()).eval(&mut syms).unwrap_err())
         );
         assert_eq!(
             "Cannot subtract Integer(0) from Boolean(false)",
-            format!("{}", Expr::Subtract(a_bool.clone(), an_int.clone()).eval(&syms).unwrap_err())
+            format!(
+                "{}",
+                Expr::Subtract(a_bool.clone(), an_int.clone()).eval(&mut syms).unwrap_err()
+            )
         );
         assert_eq!(
             "Cannot multiply Boolean(false) by Integer(0)",
-            format!("{}", Expr::Multiply(a_bool.clone(), an_int.clone()).eval(&syms).unwrap_err())
+            format!(
+                "{}",
+                Expr::Multiply(a_bool.clone(), an_int.clone()).eval(&mut syms).unwrap_err()
+            )
         );
         assert_eq!(
             "Cannot divide Boolean(false) by Integer(0)",
-            format!("{}", Expr::Divide(a_bool.clone(), an_int).eval(&syms).unwrap_err())
+            format!("{}", Expr::Divide(a_bool.clone(), an_int).eval(&mut syms).unwrap_err())
         );
         assert_eq!(
             "Cannot negate Boolean(false)",
-            format!("{}", Expr::Negate(a_bool).eval(&syms).unwrap_err())
+            format!("{}", Expr::Negate(a_bool).eval(&mut syms).unwrap_err())
         );
     }
 
@@ -1104,7 +1133,7 @@ mod tests {
                 )),
                 Box::from(Expr::Symbol(yref.clone()))
             )
-            .eval(&syms)
+            .eval(&mut syms)
             .unwrap()
         );
 
@@ -1114,7 +1143,7 @@ mod tests {
                 Box::from(Expr::Symbol(xref)),
                 Box::from(Expr::Add(Box::from(Expr::Integer(7)), Box::from(Expr::Symbol(yref))))
             )
-            .eval(&syms)
+            .eval(&mut syms)
             .unwrap()
         );
 
@@ -1129,7 +1158,7 @@ mod tests {
                         Box::from(Expr::Boolean(true))
                     ))
                 )
-                .eval(&syms)
+                .eval(&mut syms)
                 .unwrap_err()
             )
         );
@@ -1149,14 +1178,14 @@ mod tests {
         assert_eq!(
             Value::Integer(0),
             Expr::Call(VarRef::new("X", VarType::Auto), vec![Expr::Integer(0), Expr::Integer(3)])
-                .eval(&syms)
+                .eval(&mut syms)
                 .unwrap()
         );
 
         assert_eq!(
             Value::Integer(8),
             Expr::Call(VarRef::new("X", VarType::Auto), vec![Expr::Integer(1), Expr::Integer(3)])
-                .eval(&syms)
+                .eval(&mut syms)
                 .unwrap()
         );
 
@@ -1166,7 +1195,7 @@ mod tests {
                 VarRef::new("X", VarType::Integer),
                 vec![Expr::Integer(1), Expr::Integer(3)]
             )
-            .eval(&syms)
+            .eval(&mut syms)
             .unwrap()
         );
 
@@ -1178,7 +1207,7 @@ mod tests {
                     VarRef::new("X", VarType::Double),
                     vec![Expr::Integer(1), Expr::Integer(3)]
                 )
-                .eval(&syms)
+                .eval(&mut syms)
                 .unwrap_err()
             )
         );
@@ -1188,7 +1217,7 @@ mod tests {
             format!(
                 "{}",
                 Expr::Call(VarRef::new("X", VarType::Integer), vec![Expr::Integer(1)])
-                    .eval(&syms)
+                    .eval(&mut syms)
                     .unwrap_err()
             )
         );
@@ -1201,7 +1230,7 @@ mod tests {
                     VarRef::new("X", VarType::Integer),
                     vec![Expr::Integer(0), Expr::Integer(-1)]
                 )
-                .eval(&syms)
+                .eval(&mut syms)
                 .unwrap_err()
             )
         );
@@ -1214,7 +1243,7 @@ mod tests {
                     VarRef::new("X", VarType::Integer),
                     vec![Expr::Integer(10), Expr::Integer(0)]
                 )
-                .eval(&syms)
+                .eval(&mut syms)
                 .unwrap_err()
             )
         );
@@ -1224,7 +1253,7 @@ mod tests {
             format!(
                 "{}",
                 Expr::Call(VarRef::new("y".to_owned(), VarType::Text), vec![])
-                    .eval(&syms)
+                    .eval(&mut syms)
                     .unwrap_err()
             )
         );
@@ -1238,13 +1267,15 @@ mod tests {
 
         assert_eq!(
             Value::Integer(0),
-            Expr::Call(VarRef::new("SUM".to_owned(), VarType::Auto), vec![],).eval(&syms).unwrap()
+            Expr::Call(VarRef::new("SUM".to_owned(), VarType::Auto), vec![],)
+                .eval(&mut syms)
+                .unwrap()
         );
 
         assert_eq!(
             Value::Integer(5),
             Expr::Call(VarRef::new("sum".to_owned(), VarType::Auto), vec![Expr::Integer(5)],)
-                .eval(&syms)
+                .eval(&mut syms)
                 .unwrap()
         );
 
@@ -1254,7 +1285,7 @@ mod tests {
                 VarRef::new("SUM".to_owned(), VarType::Auto),
                 vec![Expr::Integer(5), Expr::Integer(2)],
             )
-            .eval(&syms)
+            .eval(&mut syms)
             .unwrap()
         );
 
@@ -1268,7 +1299,7 @@ mod tests {
                     Expr::Subtract(Box::from(Expr::Integer(100)), Box::from(Expr::Integer(90)))
                 ],
             )
-            .eval(&syms)
+            .eval(&mut syms)
             .unwrap()
         );
 
@@ -1277,7 +1308,7 @@ mod tests {
             format!(
                 "{}",
                 Expr::Call(VarRef::new("SUM".to_owned(), VarType::Text), vec![])
-                    .eval(&syms)
+                    .eval(&mut syms)
                     .unwrap_err()
             )
         );
@@ -1287,7 +1318,7 @@ mod tests {
             format!(
                 "{}",
                 Expr::Call(VarRef::new("SUMA".to_owned(), VarType::Text), vec![])
-                    .eval(&syms)
+                    .eval(&mut syms)
                     .unwrap_err()
             )
         );
@@ -1296,19 +1327,19 @@ mod tests {
     #[test]
     fn test_expr_function_call_type_check() {
         {
-            let syms = SymbolsBuilder::default()
+            let mut syms = SymbolsBuilder::default()
                 .add_function(TypeCheckFunction::new(Value::Boolean(true)))
                 .build();
             assert_eq!(
                 Value::Boolean(true),
                 Expr::Call(VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto), vec![],)
-                    .eval(&syms)
+                    .eval(&mut syms)
                     .unwrap()
             );
         }
 
         {
-            let syms = SymbolsBuilder::default()
+            let mut syms = SymbolsBuilder::default()
                 .add_function(TypeCheckFunction::new(Value::Integer(5)))
                 .build();
             assert_eq!(
@@ -1316,7 +1347,7 @@ mod tests {
                 format!(
                     "{}",
                     Expr::Call(VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto), vec![],)
-                        .eval(&syms)
+                        .eval(&mut syms)
                         .unwrap_err()
                 )
             );
@@ -1325,7 +1356,7 @@ mod tests {
 
     #[test]
     fn test_expr_function_error_check() {
-        let syms = SymbolsBuilder::default().add_function(ErrorFunction::new()).build();
+        let mut syms = SymbolsBuilder::default().add_function(ErrorFunction::new()).build();
 
         assert_eq!(
             "Syntax error in call to ERROR: Bad argument",
@@ -1335,7 +1366,7 @@ mod tests {
                     VarRef::new("ERROR".to_owned(), VarType::Auto),
                     vec![Expr::Text("argument".to_owned())],
                 )
-                .eval(&syms)
+                .eval(&mut syms)
                 .unwrap_err()
             )
         );
@@ -1348,7 +1379,7 @@ mod tests {
                     VarRef::new("ERROR".to_owned(), VarType::Auto),
                     vec![Expr::Text("eval".to_owned())],
                 )
-                .eval(&syms)
+                .eval(&mut syms)
                 .unwrap_err()
             )
         );
@@ -1361,7 +1392,7 @@ mod tests {
                     VarRef::new("ERROR".to_owned(), VarType::Auto),
                     vec![Expr::Text("internal".to_owned())],
                 )
-                .eval(&syms)
+                .eval(&mut syms)
                 .unwrap_err()
             )
         );
@@ -1374,7 +1405,7 @@ mod tests {
                     VarRef::new("ERROR".to_owned(), VarType::Auto),
                     vec![Expr::Text("syntax".to_owned())],
                 )
-                .eval(&syms)
+                .eval(&mut syms)
                 .unwrap_err()
             )
         );
@@ -1382,7 +1413,7 @@ mod tests {
 
     #[test]
     fn test_expr_call_non_function() {
-        let syms = SymbolsBuilder::default()
+        let mut syms = SymbolsBuilder::default()
             .add_var("SOMEVAR", Value::Integer(0))
             .add_command(ExitCommand::new())
             .build();
@@ -1392,7 +1423,7 @@ mod tests {
             format!(
                 "{}",
                 Expr::Call(VarRef::new("SOMEVAR".to_owned(), VarType::Auto), vec![])
-                    .eval(&syms)
+                    .eval(&mut syms)
                     .unwrap_err()
             )
         );
@@ -1402,7 +1433,7 @@ mod tests {
             format!(
                 "{}",
                 Expr::Call(VarRef::new("EXIT".to_owned(), VarType::Auto), vec![])
-                    .eval(&syms)
+                    .eval(&mut syms)
                     .unwrap_err()
             )
         );
