@@ -383,17 +383,24 @@ impl<'a> Checker<'a> {
         self
     }
 
-    /// Adds the `name` array as an array to expect in the final state of the machine.  At the
-    /// moment, we only check that the array is of type `subtype` and has certain `dimensions`.
+    /// Adds the `name` array as an array to expect in the final state of the machine.  The array
+    /// will be tested to have the same `subtype` and `dimensions`, as well as specific `contents`.
+    /// The contents are provided as a collection of subscripts/value pairs to assign to the
+    /// expected array.
     pub fn expect_array<S: Into<String>>(
         mut self,
         name: S,
         subtype: VarType,
         dimensions: &[usize],
+        contents: Vec<(&[i32], Value)>,
     ) -> Self {
         let name = name.into().to_ascii_uppercase();
         assert!(!self.exp_arrays.contains_key(&name));
-        self.exp_arrays.insert(name, Array::new(subtype, dimensions.to_owned()));
+        let mut array = Array::new(subtype, dimensions.to_owned());
+        for (subscripts, value) in contents.into_iter() {
+            array.assign(subscripts, value).unwrap();
+        }
+        self.exp_arrays.insert(name, array);
         self
     }
 
@@ -447,12 +454,14 @@ impl<'a> Checker<'a> {
             Err(e) => assert_eq!(self.exp_result.unwrap_err(), format!("{}", e)),
         };
 
-        let mut arrays: HashMap<&str, &Array> = HashMap::default();
+        let mut arrays = HashMap::default();
         let mut vars = HashMap::default();
         for (name, symbol) in self.tester.machine.get_symbols().as_hashmap() {
             match symbol {
                 Symbol::Array(array) => {
-                    arrays.insert(name, array);
+                    // TODO(jmmv): This array.clone() call is a hack to simplify the equality check
+                    // below.  Should try to avoid it and remove the Clone impl from Array.
+                    arrays.insert(name.to_owned(), array.clone());
                 }
                 Symbol::Command(_) | Symbol::Function(_) => {
                     // We currently don't support user-defined callables at runtime so there is no
@@ -465,12 +474,7 @@ impl<'a> Checker<'a> {
         }
 
         assert_eq!(self.exp_vars, vars);
-        for (name, exp_array) in self.exp_arrays {
-            let array = arrays.remove(name.as_str()).expect("Expected array not present");
-            assert_eq!(exp_array.subtype(), array.subtype());
-            assert_eq!(exp_array.dimensions(), array.dimensions());
-        }
-        assert!(arrays.is_empty());
+        assert_eq!(self.exp_arrays, arrays);
         assert_eq!(self.exp_output, self.tester.console.borrow().captured_out());
         assert_eq!(self.exp_program, self.tester.program.borrow().text());
         assert_eq!(self.exp_store, *self.tester.store.borrow().as_hashmap());
