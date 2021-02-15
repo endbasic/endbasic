@@ -69,7 +69,7 @@ pub type CommandResult = std::result::Result<(), CallError>;
 pub type FunctionResult = std::result::Result<Value, CallError>;
 
 /// Represents a multidimensional array.
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Array {
     /// The type of all elements in the array.
     subtype: VarType,

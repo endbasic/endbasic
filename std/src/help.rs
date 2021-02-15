@@ -429,7 +429,7 @@ mod tests {
         t.run("HELP undoc").expect_err("Cannot describe unknown command or function UNDOC").check();
         t.run("DIM undoc(3): HELP undoc")
             .expect_err("No help available for UNDOC")
-            .expect_array("undoc", VarType::Integer, &[3])
+            .expect_array("undoc", VarType::Integer, &[3], vec![])
             .check();
     }
 }
