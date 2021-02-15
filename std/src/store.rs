@@ -286,7 +286,7 @@ impl Command for DelCommand {
             return Err(CallError::ArgumentError("DEL requires a filename".to_owned()));
         }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
-        match arg0.eval(machine.get_symbols())? {
+        match arg0.eval(machine.get_mut_symbols())? {
             Value::Text(t) => {
                 let name = to_filename(t)?;
                 self.store.borrow_mut().delete(&name)?;
@@ -467,7 +467,7 @@ impl Command for LoadCommand {
             return Err(CallError::ArgumentError("LOAD requires a filename".to_owned()));
         }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
-        match arg0.eval(machine.get_symbols())? {
+        match arg0.eval(machine.get_mut_symbols())? {
             Value::Text(t) => {
                 let name = to_filename(t)?;
                 let content = self.store.borrow().get(&name)?;
@@ -613,7 +613,7 @@ impl Command for SaveCommand {
             return Err(CallError::ArgumentError("SAVE requires a filename".to_owned()));
         }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
-        match arg0.eval(machine.get_symbols())? {
+        match arg0.eval(machine.get_mut_symbols())? {
             Value::Text(t) => {
                 let name = to_filename(t)?;
                 let content = self.program.borrow().text();

@@ -522,7 +522,8 @@ pub trait Function {
     /// Executes the function.
     ///
     /// `args` contains the evaluated arguments as provided in the invocation of the function.
-    fn exec(&self, args: Vec<Value>) -> FunctionResult;
+    /// `symbols` provides mutable access to the current state of the machine's symbols.
+    fn exec(&self, args: Vec<Value>, symbols: &mut Symbols) -> FunctionResult;
 }
 
 /// A trait to define a command that is executed by a `Machine`.

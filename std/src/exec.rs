@@ -92,7 +92,7 @@ impl Command for ExitCommand {
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         let arg = match args {
             [] => 0,
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_symbols())? {
+            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols())? {
                 Value::Integer(n) => {
                     if n < 0 {
                         return Err(CallError::ArgumentError(
@@ -165,7 +165,7 @@ impl Command for SleepCommand {
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         let duration = match args {
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_symbols())? {
+            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols())? {
                 Value::Integer(n) => {
                     if n < 0 {
                         return Err(CallError::ArgumentError(
