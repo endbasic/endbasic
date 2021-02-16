@@ -70,3 +70,50 @@ jobs:
                 name: endbasic-windows-x86_64
                 path: endbasic-windows-x86_64/*
                 retention-days: 1
+
+    create-release:
+        if: startsWith(github.ref, 'refs/tags/')
+        needs: [linux-armv7-rpi, linux-x86_64, macos-x86_64, windows-x86_64]
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v2
+            - run: ./.github/workflows/notes.sh >notes.md || touch notes.md
+            - name: Fetch binary artifacts
+              uses: actions/download-artifact@v2
+              with:
+                path: artifacts
+            - name: Create release draft
+              id: create_release
+              uses: ncipollo/release-action@v1
+              with:
+                  name: Release ${{ github.ref }}
+                  bodyFile: ./notes.md
+                  draft: true
+                  prerelease: false
+                  token: ${{ secrets.GITHUB_TOKEN }}
+            - name: Upload tgz artifacts
+              id: upload_tgzs
+              uses: ncipollo/release-action@v1
+              with:
+                  allowUpdates: true
+                  omitBody: true
+                  omitName: true
+                  replacesArtifacts: false
+                  draft: true
+                  prerelease: false
+                  artifacts: "artifacts/*/*.tgz"
+                  artifactContentType: application/gzip
+                  token: ${{ secrets.GITHUB_TOKEN }}
+            - name: Upload zip artifacts
+              id: upload_zips
+              uses: ncipollo/release-action@v1
+              with:
+                  allowUpdates: true
+                  omitBody: true
+                  omitName: true
+                  replacesArtifacts: false
+                  draft: true
+                  prerelease: false
+                  artifacts: "artifacts/*/*.zip"
+                  artifactContentType: application/zip
+                  token: ${{ secrets.GITHUB_TOKEN }}

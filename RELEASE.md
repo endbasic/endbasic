@@ -18,17 +18,16 @@
     *   `web/package-lock.json`: Update version number.
     *   `.github/workflows/publish-release.yml`: Update tag number.
 
-1.  Once all tests pass, push the new crates out:
+1.  Once all tests pass, merge the PR.
+
+1.  Tag the resulting merged commit as `endbasic-X.Y.Z` and push the tag. This
+    will trigger the release creation workflow.
+
+1.  Wait for the release creation workflow to finish and then go to the
+    *Releases* page to review the newly-created release draft.
+
+1.  Push the new crates out. This is the last step because it's not reversible:
 
     *   `( cd core && cargo publish )`
     *   `( cd std && cargo publish )`
     *   `( cd cli && cargo publish )`
-
-1.  Merge the PR.
-
-1.  Tag the new release in the repository as `release-X.Y.Z` and push the tag.
-
-1.  Visit the *Releases* page in GitHub, create a new release for the new tag
-    and paste the release notes, including the `Released on` header.
-
-1.  Verify that the publish workflow runs for the new tag.
