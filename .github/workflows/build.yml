@@ -18,27 +18,55 @@ name: Build release
 on: [push, pull_request]
 
 jobs:
-    linux-release:
+    linux-armv7-rpi:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions-rs/toolchain@v1
+              with:
+                  profile: minimal
+                  toolchain: stable
+                  default: true
+                  target: armv7-unknown-linux-gnueabihf
+            - uses: actions/checkout@v2
+            - run: sudo apt install gcc-arm-linux-gnueabihf
+            - run: ./.github/workflows/release.sh linux-armv7-rpi
+            - uses: actions/upload-artifact@v2
+              with:
+                name: endbasic-linux-armv7-rpi
+                path: endbasic-linux-armv7-rpi/*
+                retention-days: 1
+
+    linux-x86_64:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v2
-            - run: cargo test --verbose --release
+            - run: ./.github/workflows/release.sh linux-x86_64
+            - uses: actions/upload-artifact@v2
+              with:
+                name: endbasic-linux-x86_64
+                path: endbasic-linux-x86_64/*
+                retention-days: 1
 
-    macos-release:
+    macos-x86_64:
         runs-on: macos-latest
         steps:
             - uses: actions/checkout@v2
-            - run: cargo test --verbose --release
+            - run: ./.github/workflows/release.sh macos-x86_64
+            - uses: actions/upload-artifact@v2
+              with:
+                name: endbasic-macos-x86_64
+                path: endbasic-macos-x86_64/*
+                retention-days: 1
 
-    windows-release:
+    windows-x86_64:
         runs-on: windows-latest
         steps:
             - uses: actions/checkout@v2
-            - run: cargo test --verbose --release
-
-    linux-rpi-feature:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v2
-            - run: cd std && cargo test --features=rpi --verbose
-            - run: cd cli && cargo test --features=rpi --verbose
+            - run: choco install zip
+            - run: ./.github/workflows/release.sh windows-x86_64
+              shell: bash
+            - uses: actions/upload-artifact@v2
+              with:
+                name: endbasic-windows-x86_64
+                path: endbasic-windows-x86_64/*
+                retention-days: 1
