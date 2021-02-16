@@ -1,0 +1,6 @@
+# Copy this file as 'config' for assistance while developing features that
+# target ARM and (on Debian) install the gcc-arm-linux-gnueabihf package.
+[build]
+target = "armv7-unknown-linux-gnueabihf"
+[target.armv7-unknown-linux-gnueabihf]
+linker = "arm-linux-gnueabihf-gcc"
