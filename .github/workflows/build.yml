@@ -13,7 +13,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-name: Build and test
+name: Build release
 
 on: [push, pull_request]
 
@@ -23,39 +23,19 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - run: cargo test --verbose --release
-    linux-test:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v2
-            - run: cargo test --verbose
 
     macos-release:
         runs-on: macos-latest
         steps:
             - uses: actions/checkout@v2
             - run: cargo test --verbose --release
-    macos-test:
-        runs-on: macos-latest
-        steps:
-            - uses: actions/checkout@v2
-            - run: cargo test --verbose
 
     windows-release:
         runs-on: windows-latest
         steps:
             - uses: actions/checkout@v2
             - run: cargo test --verbose --release
-    windows-test:
-        runs-on: windows-latest
-        steps:
-            - uses: actions/checkout@v2
-            - run: cargo test --verbose
 
-    linux-no-features:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v2
-            - run: cd std && cargo build --no-default-features --verbose
     linux-rpi-feature:
         runs-on: ubuntu-latest
         steps:
