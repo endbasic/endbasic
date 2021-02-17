@@ -1,6 +1,6 @@
 [package]
 name = "endbasic-web"
-version = "0.5.1"
+version = "0.5.1" # ENDBASIC-VERSION
 license = "Apache-2.0"
 authors = ["Julio Merino <julio@meroh.net>"]
 categories = ["development-tools", "parser-implementations"]
@@ -23,7 +23,6 @@ default = ["console_error_panic_hook"]
 async-channel = "1.5"
 async-trait = "0.1"
 console_error_panic_hook = { version = "0.1.6", optional = true }
-endbasic-core = { version = "0.5.1", path = "../core" }
 js-sys = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -33,12 +32,16 @@ wasm-bindgen-futures = "0.4"
 xterm-js-rs = "0.1.1"
 
 [dependencies.endbasic]
-version = "0.5.1"
+version = "0.5.1" # ENDBASIC-VERSION
 path = "../cli"
 default-features = false
 
+[dependencies.endbasic-core]
+version = "0.5.1" # ENDBASIC-VERSION
+path = "../core"
+
 [dependencies.endbasic-std]
-version = "0.5.1"
+version = "0.5.1" # ENDBASIC-VERSION
 path = "../std"
 default-features = false
 

@@ -6,17 +6,17 @@
     *   `git fetch`
     *   `git checkout -b release origin/master`.
 
-1.  Create PR to update:
+1.  Create a PR to update:
 
     *   `NEWS.md`: Set next version number, add date, and clean up notes.
     *   `README.md`: Update latest version number and release date.
-    *   `cli/Cargo.toml`: Update version number and `endbasic-*` dependencies.
-    *   `core/Cargo.toml`: Update version number.
-    *   `std/Cargo.toml`: Update version number and `endbasic-*` dependencies.
-    *   `web/Cargo.toml`: Update version number and `endbasic-*` dependencies.
-    *   `web/package.json`: Update version number.
-    *   `web/package-lock.json`: Update version number.
+    *   `*/Cargo.toml`: Update version number and `endbasic-*` dependencies.
+    *   `web/package*.json`: Update version number.
     *   `.github/workflows/publish-release.yml`: Update tag number.
+
+    The `.github/workflows/update-version.sh` script should prepare a PR with
+    all of the required changes. Don't forget to clean up the release notes
+    though.
 
 1.  Once all tests pass, merge the PR.
 

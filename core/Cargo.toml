@@ -1,6 +1,6 @@
 [package]
 name = "endbasic-core"
-version = "0.5.1"
+version = "0.5.1" # ENDBASIC-VERSION
 license = "Apache-2.0"
 authors = ["Julio Merino <julio@meroh.net>"]
 categories = ["development-tools", "parser-implementations"]
