@@ -1,6 +1,6 @@
 [package]
 name = "endbasic-std"
-version = "0.5.1"
+version = "0.5.1" # ENDBASIC-VERSION
 license = "Apache-2.0"
 authors = ["Julio Merino <julio@meroh.net>"]
 categories = ["development-tools", "parser-implementations"]
@@ -18,10 +18,13 @@ rpi = ["rppal"]
 [dependencies]
 async-trait = "0.1"
 crossterm = { version = "0.18", optional = true }
-endbasic-core = { version = "0.5.1", path = "../core" }
 futures-lite = "1.1"
 rppal = { version = "0.11.3", optional = true }
 time = { version = "0.2", features = ["std"] }
+
+[dependencies.endbasic-core]
+version = "0.5.1" # ENDBASIC-VERSION
+path = "../core"
 
 # We don't directly use getrandom but rand does, and we have to customize how
 # getrandom is built if we want it to work in a WASM context.
