@@ -42,7 +42,8 @@
             "ol_multi": 2,
             "ul_single": 3,
             "ul_multi": 3
-        }
+        },
+        "MD033": false
     },
 
     "[rust]": {
