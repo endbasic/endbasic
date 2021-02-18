@@ -9,30 +9,39 @@ not adhere to semantic versioning until 1.0.0.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
-*   Added basic suport for GPIO via the new `GPIO_SETUP`, `GPIO_CLEAR`,
+Summary: support for (multidimensional) arrays and support for GPIO on the
+Raspberry Pi.
+
+New standard library features:
+
+*   Added basic support for GPIO via the new `GPIO_SETUP`, `GPIO_CLEAR`,
     `GPIO_WRITE` commands and the `GPIO_READ` function.  These symbols are
     always available, but at the moment, they are only functional on the
     Raspberry Pi.  Support for this platform must be enabled via the new
     `rpi` feature because the `rppal` dependency does not compile on all
     supported platforms.
 
-*   Added the new demo program `DEMO:GPIO.BAS` to accompany the new support
-    for GPIO.
-
-*   Added support for the `DIM` statement to define variables and arrays.
-
-*   Added support for multidimensional arrays.
-
 *   Added the `SLEEP` command to pause execution for a certain period of time.
-
-*   Modified `INPUT` so that it autodetects the target type of a variable when
-    the variable is already defined, instead of assuming the integer type for
-    unqualified variable references.
 
 *   Readded the `LIST` command to dump the stored program to the console.  This
     was removed in 0.3 with the addition of the full-screen text editor, but
     having quick access to the program's contents is useful to showcase both
     code and output at once.
+
+*   Modified `INPUT` so that it autodetects the target type of a variable when
+    the variable is already defined, instead of assuming the integer type for
+    unqualified variable references.
+
+New command line features:
+
+*   Added the new demo program `DEMO:GPIO.BAS` to accompany the new support
+    for GPIO.
+
+New language features and bug fixes:
+
+*   Added support for the `DIM` statement to define variables and arrays.
+
+*   Added support for multidimensional arrays.
 
 *   Replaced `END WHILE` with `WEND` as the earlier BASICs did.  We could
     probably support both, but for now, sticking to the simpler world of a
