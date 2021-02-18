@@ -9,36 +9,63 @@ EndBASIC is an interpreter for a BASIC-like language and is inspired by
 Amstrad's Locomotive BASIC 1.1 and Microsoft's QuickBASIC 4.5.  Like the former,
 EndBASIC intends to provide an interactive environment that seamlessly merges
 coding with immediate visual feedback.  Like the latter, EndBASIC offers
-higher-level programming constructs and strong typing.  The main idea behind
-EndBASIC is to provide a playground for learning the foundations of programming
-in a simplified environment.
+higher-level programming constructs and strong typing.
 
-EndBASIC is written in Rust.  The parser and interpreter's primary goal is to
-be readable and easy to modify.  A secondary goal is to make the core minimal,
-extensible, and configurable.  Performance is not a goal right now, though it
-likely won't disappoint.
+EndBASIC offers a simplified and restricted environment to learn the foundations
+of programming and focuses on features that can quickly reward the programmer.
+These features include things like a built-in text editor, commands to
+manipulate the screen, and commands to interact with the hardware of a Raspberry
+Pi.  Implementing this kind of features has priority over others such as
+performance or a much richer language.
+
+EndBASIC is written in Rust and runs both on the web and locally on a variety of
+operating systems and platforms, including macOS, Windows, and Linux.
 
 EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 
-## Overview
+**The latest version of EndBASIC is 0.5.1 and was released on 2021-01-25.**
 
-The latest version of EndBASIC is 0.5.1 and was released on 2021-01-25.
+## Quick start on the web
 
-*   For language features, see [`core/README.md`](core/README.md).
-*   For standard library contents, see [`std/README.md`](std/README.md).
-*   For usage details of the command-line interpreter, see
-    [`cli/README.md`](cli/README.md).
-*   For the web interface, see [`web/README.md`](web/README.md).
-*   For changes across versions, see [`NEWS.md`](NEWS.md).
+Open EndBASIC in your browser by visiting: <https://endbasic.jmmv.dev/>
 
-Here is a little demo of the interactive capabilities:
+This should work on all major desktop browsers and on iOS.  Unfortunately, there
+are known issues on Android at the moment.
+
+The web interpreter runs fully locally: any programs you write are persisted in
+your browser's local storage and not uploaded to the cloud.
+
+## Quick start on your machine
+
+Visit the
+[release page](https://github.com/jmmv/endbasic/releases/tag/endbasic-0.5.1) to
+download prebuilt binaries.  Once downloaded, unpack the archive and run the
+`endbasic` binary to get started.
+
+Of course, you can also build and install EndBASIC from source by running the
+following command (assuming you have a Rust toolchain installed): `cargo install
+endbasic`.
+
+## Gallery
+
+Blog posts: <https://jmmv.dev/tags/endbasic/>
+
+Sample code:
+
+*   [`cli/examples`](cli/examples) contains the EndBASIC demo programs.  These
+    are built into the interpreter and can be run with a command like
+    `LOAD "DEMO:TOUR": RUN`.
+*   [`core/examples`](core/examples) and [`std/examples`](std/examples)
+    demonstrate how to embed the EndBASIC interpreter into your own programs.
+
+A little demo of the interactive capabilities:
 
 <a href="assets/repl-demo.gif">
     <img src="assets/repl-demo.gif"
          alt="Video showing the first page of the tour and the guess demo">
 </a>
 
-And here is a photo of a program controlling a Raspberry Pi:
+And a photo of an EndBASIC program controlling a Raspberry Pi:
 
 <a href="assets/gpio-rpi.jpg">
     <img src="assets/gpio-rpi.jpg"
@@ -46,59 +73,16 @@ And here is a photo of a program controlling a Raspberry Pi:
          width="600" height="800">
 </a>
 
-## Quick start
+## More information
 
-Simply open EndBASIC right in your browser by visiting:
+The following documents provide more information:
 
-> <https://endbasic.jmmv.dev/>
-
-The whole interpreter runs locally.  Any programs you write are persisted in
-your browser's local storage and not uploaded to the cloud.
-
-You can also read blog posts on EndBASIC, which cover the motivation behind the
-project, guided tours, etc. by visiting:
-
-> <https://jmmv.dev/tags/endbasic/>
-
-## Installation
-
-There currently are no binary releases for EndBASIC.  To install, first get a
-Rust toolchain (either from your system's package manager, if any, or using
-[`rustup`](https://www.rust-lang.org/learn/get-started)) and then build from
-source using `cargo`:
-
-```shell
-cargo install endbasic
-```
-
-## Examples
-
-EndBASIC comes bundled with a collection of demo programs that you can load and
-run in the REPL and the web.  Type `DIR` to see the list of available demos,
-then type `LOAD "DEMO:NAME.BAS"` to load a specific demo into memory, and then
-run it with `RUN`.  For example:
-
-```text
-Ready
-DIR
-
-    Modified              Size    Name
-    2020-12-22 14:20       651    DEMO:HELLO.BAS
-
-    1 file(s), 651 bytes
-
-Ready
-LOAD "DEMO:HELLO.BAS"
-Ready
-RUN
-What's your name? Julio
-Hello, Julio!
-```
-
-You can also browse various sample files in the `examples` subdirectory of each
-crate.  [`core/examples`](core/examples) and [`std/examples`](std/examples) will
-show you how to embed EndBASIC into your own programs, and
-[`cli/examples`](cli/examples) will show you how EndBASIC code looks like.
+*   For language features, see [`core/README.md`](core/README.md).
+*   For standard library contents, see [`std/README.md`](std/README.md).
+*   For usage details of the command-line interpreter, see
+    [`cli/README.md`](cli/README.md).
+*   For the web interface, see [`web/README.md`](web/README.md).
+*   For changes across versions, see [`NEWS.md`](NEWS.md).
 
 ## Why EndBASIC?
 

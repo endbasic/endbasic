@@ -53,6 +53,7 @@ main() {
     local date="$(date +%Y-%m-%d)"
 
     replace README.md -E "/latest version/s/[0-9]+\\.[0-9]+\\.[0-9]+/${version}/g"
+    replace README.md -E "/releases\/tag/s/[0-9]+\\.[0-9]+\\.[0-9]+/${version}/g"
     replace README.md -E "/released on/s/[0-9]{4}-[0-9]{2}-[0-9]{2}/${date}/g"
 
     replace NEWS.md -E "/Changes in.*X\\.Y\\.Z/s/[X0-9]+\\.[Y0-9]+\\.[Z0-9]+/${version}/g"
