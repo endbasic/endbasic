@@ -5,9 +5,9 @@ the EndBASIC language definition nor the API exposed by this crate.  Expect
 them to change at any time (especially the Rust API).  Version numbers will
 not adhere to semantic versioning until 1.0.0.**
 
-## Changes in version X.Y.Z
+## Changes in version 0.6.0
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2021-02-19.**
 
 Summary: support for (multidimensional) arrays and support for GPIO on the
 Raspberry Pi.
