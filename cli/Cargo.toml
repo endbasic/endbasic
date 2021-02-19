@@ -1,6 +1,6 @@
 [package]
 name = "endbasic"
-version = "0.5.1" # ENDBASIC-VERSION
+version = "0.6.0" # ENDBASIC-VERSION
 license = "Apache-2.0"
 authors = ["Julio Merino <julio@meroh.net>"]
 categories = ["development-tools", "parser-implementations"]
@@ -26,11 +26,11 @@ thiserror = "1.0"
 time = { version = "0.2", features = ["std"] }
 
 [dependencies.endbasic-core]
-version = "0.5.1" # ENDBASIC-VERSION
+version = "0.6.0" # ENDBASIC-VERSION
 path = "../core"
 
 [dependencies.endbasic-std]
-version = "0.5.1" # ENDBASIC-VERSION
+version = "0.6.0" # ENDBASIC-VERSION
 path = "../std"
 default-features = false
 
