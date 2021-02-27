@@ -22,8 +22,9 @@ use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Symbols,
 };
+use radix_trie::{Trie, TrieCommon};
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::rc::Rc;
 
@@ -72,26 +73,211 @@ fn header() -> Vec<String> {
     ]
 }
 
-/// Builds the index of symbols needed to print the summary.
-///
-/// The return value is the index in the form of a (category name -> (name, blurb)) mapping,
-/// followed by the length of the longest command name that was found.
-fn build_index(
-    symbols: &Symbols,
-) -> (BTreeMap<&'static str, BTreeMap<String, &'static str>>, usize) {
-    let mut index = BTreeMap::default();
-    let mut max_length = 0;
-    for symbol in symbols.as_hashmap().values() {
-        if let Some(metadata) = symbol.metadata() {
+/// Handler for a specific help topic.
+trait Topic {
+    /// Returns the name of the topic.
+    fn name(&self) -> &str;
+
+    /// Returns the human-readable, one-line description of this topic.
+    fn title(&self) -> &str;
+
+    /// Indicates whether this topic shows up in the topics summary or not.
+    fn show_in_summary(&self) -> bool;
+
+    /// Dumps the contents of this topic to the `_console`.
+    fn describe(&self, _console: &mut dyn Console) -> io::Result<()>;
+}
+
+/// A help topic to describe a callable.
+struct CallableTopic {
+    name: String,
+    metadata: CallableMetadata,
+}
+
+impl Topic for CallableTopic {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn title(&self) -> &str {
+        self.metadata.description().next().unwrap()
+    }
+
+    fn show_in_summary(&self) -> bool {
+        false
+    }
+
+    fn describe(&self, console: &mut dyn Console) -> io::Result<()> {
+        console.print("")?;
+        if self.metadata.return_type() == VarType::Void {
+            if self.metadata.syntax().is_empty() {
+                console.print(&format!("    {}", self.metadata.name()))?
+            } else {
+                console.print(&format!(
+                    "    {} {}",
+                    self.metadata.name(),
+                    self.metadata.syntax()
+                ))?
+            }
+        } else {
+            console.print(&format!(
+                "    {}{}({})",
+                self.metadata.name(),
+                self.metadata.return_type().annotation(),
+                self.metadata.syntax(),
+            ))?;
+        }
+        for line in self.metadata.description() {
+            console.print("")?;
+            console.print(&format!("    {}", line))?;
+        }
+        console.print("")?;
+        Ok(())
+    }
+}
+
+/// A help topic to describe a category of callables.
+struct CategoryTopic {
+    name: &'static str,
+    metadatas: Vec<CallableMetadata>,
+}
+
+impl Topic for CategoryTopic {
+    fn name(&self) -> &str {
+        self.name
+    }
+
+    fn title(&self) -> &str {
+        self.name
+    }
+
+    fn show_in_summary(&self) -> bool {
+        true
+    }
+
+    fn describe(&self, console: &mut dyn Console) -> io::Result<()> {
+        let mut index = BTreeMap::default();
+        let mut max_length = 0;
+        for metadata in &self.metadatas {
             let name = format!("{}{}", metadata.name(), metadata.return_type().annotation());
             if name.len() > max_length {
                 max_length = name.len();
             }
             let blurb = metadata.description().next().unwrap();
-            index.entry(metadata.category()).or_insert_with(BTreeMap::default).insert(name, blurb);
+            let previous = index.insert(name, blurb);
+            assert!(previous.is_none(), "Names should have been unique");
+        }
+
+        console.print("")?;
+        console.print(&format!("    {}", self.name))?;
+        console.print("")?;
+        for (name, blurb) in index.iter() {
+            let filler = " ".repeat(max_length - name.len());
+            console.print(&format!("    >> {}{}    {}", name, filler, blurb))?;
+        }
+        console.print("")?;
+        console.print("    Type HELP followed by the name of a symbol for details.")?;
+        console.print("")?;
+        Ok(())
+    }
+}
+
+/// A help topic to describe the language's grammar.
+struct LanguageTopic {}
+
+impl Topic for LanguageTopic {
+    fn name(&self) -> &str {
+        "Language reference"
+    }
+
+    fn title(&self) -> &str {
+        "Language reference"
+    }
+
+    fn show_in_summary(&self) -> bool {
+        true
+    }
+
+    fn describe(&self, console: &mut dyn Console) -> io::Result<()> {
+        for line in LANG_REFERENCE.lines() {
+            // Print line by line to honor any possible differences in line feeds.
+            console.print(line)?;
+        }
+        console.print("")?;
+        Ok(())
+    }
+}
+
+/// Maintains the collection of topics as a trie indexed by their name.
+struct Topics(Trie<String, Box<dyn Topic>>);
+
+impl Topics {
+    /// Builds an index of the given `symbols` and returns a new collection of help topics.
+    fn new(symbols: &Symbols) -> Self {
+        fn insert(topics: &mut Trie<String, Box<dyn Topic>>, topic: Box<dyn Topic>) {
+            let key = topic.name().to_ascii_uppercase();
+            topics.insert(key, topic);
+        }
+
+        let mut topics = Trie::default();
+
+        insert(&mut topics, Box::from(LanguageTopic {}));
+
+        let mut categories = HashMap::new();
+        for (name, symbol) in symbols.as_hashmap().iter() {
+            if let Some(metadata) = symbol.metadata() {
+                categories
+                    .entry(metadata.category())
+                    .or_insert_with(Vec::default)
+                    .push(metadata.clone());
+
+                insert(
+                    &mut topics,
+                    Box::from(CallableTopic {
+                        name: format!("{}{}", name, metadata.return_type().annotation()),
+                        metadata: metadata.clone(),
+                    }),
+                );
+            }
+        }
+        for (name, metadatas) in categories.into_iter() {
+            insert(&mut topics, Box::from(CategoryTopic { name, metadatas }));
+        }
+
+        Self(topics)
+    }
+
+    /// Returns the given topic named `name`, where `name` can be a prefix.
+    ///
+    /// If `name` is not long enough to uniquely identify a topic or if the topic does not exist,
+    /// returns an error.
+    fn find(&self, name: &str) -> Result<&dyn Topic, CallError> {
+        let key = name.to_ascii_uppercase();
+
+        match self.0.get_raw_descendant(&key) {
+            Some(subtrie) => {
+                let children: Vec<(&String, &Box<dyn Topic>)> = subtrie.iter().collect();
+                match children[..] {
+                    [(_name, topic)] => Ok(topic.as_ref()),
+                    _ => {
+                        let completions: Vec<String> =
+                            children.iter().map(|(name, _topic)| (*name).to_owned()).collect();
+                        Err(CallError::ArgumentError(format!(
+                            "Ambiguous help topic {}; candidates are: {}",
+                            name,
+                            completions.join(", ")
+                        )))
+                    }
+                }
+            }
+            None => Err(CallError::ArgumentError(format!("Unknown help topic {}", name))),
         }
     }
-    (index, max_length)
+
+    /// Returns an iterator over all the topics.
+    fn values(&self) -> radix_trie::iter::Values<String, Box<dyn Topic>> {
+        self.0.values()
+    }
 }
 
 /// The `HELP` command.
@@ -109,9 +295,12 @@ impl HelpCommand {
                 .with_category("Interpreter manipulation")
                 .with_description(
                     "Prints interactive help.
-Without arguments, shows a summary of all available help topics.
-With a single argument, shows detailed information about the given help topic, command, or \
-function.",
+Without arguments, shows a summary of all available top-level help topics.
+With a single argument, which may be a bare name or a string, shows detailed information about the \
+given help topic, command, or function. Topic names with spaces in them must be double-quoted.
+Topic names are case-insensitive and can be specified as prefixes, in which case the topic whose \
+name starts with the prefix will be shown. For example, the following invocations are all \
+equivalent: HELP CON, HELP console, HELP \"Console manipulation\".",
                 )
                 .build(),
             console,
@@ -119,64 +308,25 @@ function.",
     }
 
     /// Prints a summary of all available help topics.
-    fn summary(&self, symbols: &Symbols) -> io::Result<()> {
-        let (index, max_length) = build_index(symbols);
-
+    fn summary(&self, topics: &Topics) -> io::Result<()> {
         let mut console = self.console.borrow_mut();
         for line in header() {
             console.print(&line)?;
         }
 
-        for (category, by_name) in index.iter() {
-            console.print("")?;
-            console.print(&format!("    >> {} <<", category))?;
-            for (name, blurb) in by_name.iter() {
-                let filler = " ".repeat(max_length - name.len());
-                console.print(&format!("    {}{}    {}", name, filler, blurb))?;
+        console.print("")?;
+        console.print("    Top-level help topics:")?;
+        console.print("")?;
+        for topic in topics.values() {
+            if topic.show_in_summary() {
+                console.print(&format!("    >> {}", topic.title()))?;
             }
         }
+        console.print("")?;
+        console.print("    Type HELP followed by the name of a topic for details.")?;
+        console.print("    Type HELP HELP for details on how to specify topic names.")?;
+        console.print("")?;
 
-        console.print("")?;
-        console.print("    Type HELP followed by a command or function name for details.")?;
-        console.print("    Type HELP LANG for a quick reference guide about the language.")?;
-        console.print("")?;
-        Ok(())
-    }
-
-    /// Describes one command or function.
-    fn describe_callable(&self, metadata: &CallableMetadata) -> io::Result<()> {
-        let mut console = self.console.borrow_mut();
-        console.print("")?;
-        if metadata.return_type() == VarType::Void {
-            if metadata.syntax().is_empty() {
-                console.print(&format!("    {}", metadata.name()))?
-            } else {
-                console.print(&format!("    {} {}", metadata.name(), metadata.syntax()))?
-            }
-        } else {
-            console.print(&format!(
-                "    {}{}({})",
-                metadata.name(),
-                metadata.return_type().annotation(),
-                metadata.syntax(),
-            ))?;
-        }
-        for line in metadata.description() {
-            console.print("")?;
-            console.print(&format!("    {}", line))?;
-        }
-        console.print("")?;
-        Ok(())
-    }
-
-    /// Prints a quick reference of the language syntax.
-    fn describe_lang(&self) -> io::Result<()> {
-        let mut console = self.console.borrow_mut();
-        for line in LANG_REFERENCE.lines() {
-            // Print line by line to honor any possible differences in line feeds.
-            console.print(line)?;
-        }
-        console.print("")?;
         Ok(())
     }
 }
@@ -188,36 +338,21 @@ impl Command for HelpCommand {
     }
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+        let topics = Topics::new(machine.get_symbols());
+
         match args {
-            [] => self.summary(machine.get_symbols())?,
+            [] => {
+                self.summary(&topics)?;
+            }
             [(Some(Expr::Symbol(vref)), ArgSep::End)] => {
-                let name = vref.name().to_ascii_uppercase();
-                if name == "LANG" {
-                    if vref.ref_type() != VarType::Auto {
-                        return Err(CallError::ArgumentError(
-                            "Incompatible type annotation".to_owned(),
-                        ));
-                    }
-                    self.describe_lang()?;
-                } else {
-                    match machine.get_symbols().get(vref)? {
-                        Some(symbol) => match symbol.metadata() {
-                            Some(metadata) => self.describe_callable(metadata)?,
-                            None => {
-                                return Err(CallError::ArgumentError(format!(
-                                    "No help available for {}",
-                                    name
-                                )))
-                            }
-                        },
-                        None => {
-                            return Err(CallError::ArgumentError(format!(
-                                "Cannot describe unknown command or function {}",
-                                name
-                            )))
-                        }
-                    }
-                }
+                let topic = topics.find(&format!("{}", vref))?;
+                let mut console = self.console.borrow_mut();
+                topic.describe(&mut *console)?;
+            }
+            [(Some(Expr::Text(name)), ArgSep::End)] => {
+                let topic = topics.find(name)?;
+                let mut console = self.console.borrow_mut();
+                topic.describe(&mut *console)?;
             }
             _ => {
                 return Err(CallError::ArgumentError(
@@ -279,15 +414,19 @@ Second paragraph of the extended description.",
         }
     }
 
-    /// A function that does nothing.
+    /// A function that does nothing that can take any name.
     pub(crate) struct EmptyFunction {
         metadata: CallableMetadata,
     }
 
     impl EmptyFunction {
         pub(crate) fn new() -> Rc<Self> {
+            EmptyFunction::new_with_name("EMPTY")
+        }
+
+        pub(crate) fn new_with_name(name: &'static str) -> Rc<Self> {
             Rc::from(Self {
-                metadata: CallableMetadataBuilder::new("EMPTY", VarType::Text)
+                metadata: CallableMetadataBuilder::new(name, VarType::Text)
                     .with_syntax("this [would] <be|the> syntax \"specification\"")
                     .with_category("Testing")
                     .with_description(
@@ -332,15 +471,33 @@ mod tests {
             .expect_prints(header())
             .expect_prints([
                 "",
-                "    >> Interpreter manipulation <<",
-                "    HELP          Prints interactive help.",
+                "    Top-level help topics:",
                 "",
-                "    >> Testing <<",
-                "    DO_NOTHING    This is the blurb.",
-                "    EMPTY$        This is the blurb.",
+                "    >> Interpreter manipulation",
+                "    >> Language reference",
+                "    >> Testing",
                 "",
-                "    Type HELP followed by a command or function name for details.",
-                "    Type HELP LANG for a quick reference guide about the language.",
+                "    Type HELP followed by the name of a topic for details.",
+                "    Type HELP HELP for details on how to specify topic names.",
+                "",
+            ])
+            .check();
+    }
+
+    #[test]
+    fn test_help_describe_callables_topic() {
+        tester()
+            .add_command(DoNothingCommand::new())
+            .add_function(EmptyFunction::new())
+            .run("help testing")
+            .expect_prints([
+                "",
+                "    Testing",
+                "",
+                "    >> DO_NOTHING    This is the blurb.",
+                "    >> EMPTY$        This is the blurb.",
+                "",
+                "    Type HELP followed by the name of a symbol for details.",
                 "",
             ])
             .check();
@@ -395,10 +552,56 @@ mod tests {
 
     #[test]
     fn test_help_lang() {
+        for cmd in &["help lang", "help language", r#"help "Language Reference""#] {
+            tester()
+                .run(*cmd)
+                .expect_prints(LANG_REFERENCE.lines().collect::<Vec<&str>>())
+                .expect_prints([""])
+                .check();
+        }
+    }
+
+    #[test]
+    fn test_help_prefix_search() {
+        fn exp_output(name: &str) -> Vec<String> {
+            vec![
+                "".to_owned(),
+                format!("    {}$(this [would] <be|the> syntax \"specification\")", name),
+                "".to_owned(),
+                "    This is the blurb.".to_owned(),
+                "".to_owned(),
+                "    First paragraph of the extended description.".to_owned(),
+                "".to_owned(),
+                "    Second paragraph of the extended description.".to_owned(),
+                "".to_owned(),
+            ]
+        }
+
+        for cmd in &["help aa", "help aab", "help aabc"] {
+            tester()
+                .add_function(EmptyFunction::new_with_name("AABC"))
+                .add_function(EmptyFunction::new_with_name("ABC"))
+                .add_function(EmptyFunction::new_with_name("BC"))
+                .run(*cmd)
+                .expect_prints(exp_output("AABC"))
+                .check();
+        }
+
+        for cmd in &["help b", "help bc"] {
+            tester()
+                .add_function(EmptyFunction::new_with_name("AABC"))
+                .add_function(EmptyFunction::new_with_name("ABC"))
+                .add_function(EmptyFunction::new_with_name("BC"))
+                .run(*cmd)
+                .expect_prints(exp_output("BC"))
+                .check();
+        }
+
         tester()
-            .run("help lang")
-            .expect_prints(LANG_REFERENCE.lines().collect::<Vec<&str>>())
-            .expect_prints([""])
+            .add_function(EmptyFunction::new_with_name("ABC"))
+            .add_function(EmptyFunction::new_with_name("AABC"))
+            .run("help a")
+            .expect_err("Ambiguous help topic a; candidates are: AABC$, ABC$")
             .check();
     }
 
@@ -410,25 +613,25 @@ mod tests {
         t.run("HELP foo bar").expect_err("Unexpected value in expression").check();
         t.run("HELP foo, bar").expect_err("HELP takes zero or only one argument").check();
 
-        t.run("HELP lang%").expect_err("Incompatible type annotation").check();
+        t.run("HELP lang%").expect_err("Unknown help topic lang%").check();
 
-        t.run("HELP foo$").expect_err("Cannot describe unknown command or function FOO").check();
-        t.run("HELP foo").expect_err("Cannot describe unknown command or function FOO").check();
+        t.run("HELP foo$").expect_err("Unknown help topic foo$").check();
+        t.run("HELP foo").expect_err("Unknown help topic foo").check();
 
-        t.run("HELP do_nothing$").expect_err("Incompatible types in do_nothing$ reference").check();
-        t.run("HELP empty?").expect_err("Incompatible types in empty? reference").check();
+        t.run("HELP do_nothing$").expect_err("Unknown help topic do_nothing$").check();
+        t.run("HELP empty?").expect_err("Unknown help topic empty?").check();
 
         let mut t = tester();
-        t.run("HELP undoc").expect_err("Cannot describe unknown command or function UNDOC").check();
+        t.run("HELP undoc").expect_err("Unknown help topic undoc").check();
         t.run("undoc = 3: HELP undoc")
-            .expect_err("No help available for UNDOC")
+            .expect_err("Unknown help topic undoc")
             .expect_var("undoc", 3)
             .check();
 
         let mut t = tester();
-        t.run("HELP undoc").expect_err("Cannot describe unknown command or function UNDOC").check();
+        t.run("HELP undoc").expect_err("Unknown help topic undoc").check();
         t.run("DIM undoc(3): HELP undoc")
-            .expect_err("No help available for UNDOC")
+            .expect_err("Unknown help topic undoc")
             .expect_array("undoc", VarType::Integer, &[3], vec![])
             .check();
     }
