@@ -468,7 +468,7 @@ impl CallableMetadataBuilder {
 ///
 /// The callable is expected to hold onto an instance of this object within its struct to make
 /// queries fast.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct CallableMetadata {
     name: &'static str,
     return_type: VarType,

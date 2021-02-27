@@ -19,6 +19,7 @@ rpi = ["rppal"]
 async-trait = "0.1"
 crossterm = { version = "0.18", optional = true }
 futures-lite = "1.1"
+radix_trie = "0.2.1"
 rppal = { version = "0.11.3", optional = true }
 time = { version = "0.2", features = ["std"] }
 
