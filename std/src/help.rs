@@ -73,6 +73,70 @@ fn header() -> Vec<String> {
     ]
 }
 
+/// Refills a paragraph to fit within a maximum width, returning the formatted lines.
+///
+/// This does not cut words half-way, which means that it may be impossible to fit certain words in
+/// the specified width.  If that happens, lines will overflow.
+fn refill(paragraph: &str, width: usize) -> Vec<String> {
+    if paragraph.is_empty() {
+        return vec!["".to_owned()];
+    }
+
+    let mut lines = vec![];
+
+    let mut line = String::new();
+    for word in paragraph.split_whitespace() {
+        if !line.is_empty() {
+            // Determine how many spaces to inject after a period.  We want 2 spaces to separate
+            // different sentences and 1 otherwise.  The heuristic here isn't great and it'd be
+            // better to respect the original spacing of the paragraph.
+            let spaces = if line.ends_with('.') {
+                let first = word.chars().next().expect("Words cannot be empty");
+                if first == first.to_ascii_uppercase() {
+                    2
+                } else {
+                    1
+                }
+            } else {
+                1
+            };
+
+            if (line.len() + word.len() + spaces) >= width {
+                lines.push(line);
+                line = String::new();
+            } else {
+                for _ in 0..spaces {
+                    line.push(' ');
+                }
+            }
+        }
+        line.push_str(word);
+    }
+    if !line.is_empty() {
+        lines.push(line);
+    }
+
+    lines
+}
+
+/// Same as `refill` but prints the lines to the console instead of returning them.
+///
+/// The width is automatically determined from the console's size.
+fn refill_and_print(console: &mut dyn Console, paragraph: &str) -> io::Result<()> {
+    // TODO(jmmv): This queries the size on every print, which is not very efficient.  Should reuse
+    // this across calls, maybe by having a wrapper over Console and using it throughout.
+    let size = console.size()?;
+    let lines = refill(paragraph, size.column - 8);
+    for line in lines {
+        if line.is_empty() {
+            console.print("")?;
+        } else {
+            console.print(&format!("    {}", line))?;
+        }
+    }
+    Ok(())
+}
+
 /// Handler for a specific help topic.
 trait Topic {
     /// Returns the name of the topic.
@@ -111,25 +175,27 @@ impl Topic for CallableTopic {
         console.print("")?;
         if self.metadata.return_type() == VarType::Void {
             if self.metadata.syntax().is_empty() {
-                console.print(&format!("    {}", self.metadata.name()))?
+                refill_and_print(console, self.metadata.name())?
             } else {
-                console.print(&format!(
-                    "    {} {}",
-                    self.metadata.name(),
-                    self.metadata.syntax()
-                ))?
+                refill_and_print(
+                    console,
+                    &format!("{} {}", self.metadata.name(), self.metadata.syntax()),
+                )?
             }
         } else {
-            console.print(&format!(
-                "    {}{}({})",
-                self.metadata.name(),
-                self.metadata.return_type().annotation(),
-                self.metadata.syntax(),
-            ))?;
+            refill_and_print(
+                console,
+                &format!(
+                    "{}{}({})",
+                    self.metadata.name(),
+                    self.metadata.return_type().annotation(),
+                    self.metadata.syntax(),
+                ),
+            )?;
         }
-        for line in self.metadata.description() {
+        for paragraph in self.metadata.description() {
             console.print("")?;
-            console.print(&format!("    {}", line))?;
+            refill_and_print(console, paragraph)?;
         }
         console.print("")?;
         Ok(())
@@ -168,6 +234,8 @@ impl Topic for CategoryTopic {
             assert!(previous.is_none(), "Names should have been unique");
         }
 
+        // TODO(jmmv): Should use refill_and_print but continuation lines need special handling to
+        // be indented properly.
         console.print("")?;
         console.print(&format!("    {}", self.name))?;
         console.print("")?;
@@ -176,7 +244,7 @@ impl Topic for CategoryTopic {
             console.print(&format!("    >> {}{}    {}", name, filler, blurb))?;
         }
         console.print("")?;
-        console.print("    Type HELP followed by the name of a symbol for details.")?;
+        refill_and_print(console, "    Type HELP followed by the name of a symbol for details.")?;
         console.print("")?;
         Ok(())
     }
@@ -311,11 +379,13 @@ equivalent: HELP CON, HELP console, HELP \"Console manipulation\".",
     fn summary(&self, topics: &Topics) -> io::Result<()> {
         let mut console = self.console.borrow_mut();
         for line in header() {
-            console.print(&line)?;
+            refill_and_print(&mut *console, &line)?;
         }
 
+        // TODO(jmmv): Should use refill_and_print but continuation lines need special handling to
+        // be indented properly.
         console.print("")?;
-        console.print("    Top-level help topics:")?;
+        refill_and_print(&mut *console, "Top-level help topics:")?;
         console.print("")?;
         for topic in topics.values() {
             if topic.show_in_summary() {
@@ -323,8 +393,11 @@ equivalent: HELP CON, HELP console, HELP \"Console manipulation\".",
             }
         }
         console.print("")?;
-        console.print("    Type HELP followed by the name of a topic for details.")?;
-        console.print("    Type HELP HELP for details on how to specify topic names.")?;
+        refill_and_print(&mut *console, "Type HELP followed by the name of a topic for details.")?;
+        refill_and_print(
+            &mut *console,
+            "Type HELP HELP for details on how to specify topic names.",
+        )?;
         console.print("")?;
 
         Ok(())
@@ -455,6 +528,34 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use crate::testutils::*;
+
+    #[test]
+    fn test_refill_empty() {
+        assert_eq!(&[""], refill("", 0).as_slice());
+        assert_eq!(&[""], refill("", 10).as_slice());
+    }
+
+    #[test]
+    fn test_refill_nothing_fits() {
+        assert_eq!(&["this", "is", "some", "text"], refill("this is some text", 0).as_slice());
+        assert_eq!(&["this", "is", "some", "text"], refill("this is some text", 1).as_slice());
+    }
+
+    #[test]
+    fn test_refill_some_lines() {
+        assert_eq!(
+            &["this is a piece", "of text with", "a-fictitious-very-long-word", "within it"],
+            refill("this is a piece of text with a-fictitious-very-long-word within it", 16)
+                .as_slice()
+        );
+    }
+
+    #[test]
+    fn test_refill_reformats_periods() {
+        assert_eq!(&["foo. bar. baz."], refill("foo. bar.    baz.", 100).as_slice());
+        assert_eq!(&["foo.  Bar. baz."], refill("foo. Bar.    baz.", 100).as_slice());
+        assert_eq!(&["[some .. range]"], refill("[some .. range]", 100).as_slice());
+    }
 
     fn tester() -> Tester {
         let tester = Tester::from(Machine::default());
