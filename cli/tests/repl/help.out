@@ -148,7 +148,11 @@ Output from HELP COLOR:
 
     Sets the foreground and background colors.
 
-    Color numbers are given as ANSI numbers and can be between 0 and 255.  If a color number is not specified, then the color is reset to the console's default.  The console default does not necessarily match any other color specifiable in the 0 to 255 range, as it might be transparent.
+    Color numbers are given as ANSI numbers and can be between 0 and 255.
+    If a color number is not specified, then the color is reset to the
+    console's default.  The console default does not necessarily match any
+    other color specifiable in the 0 to 255 range, as it might be
+    transparent.
 
 Output from HELP DEL:
 
@@ -156,7 +160,9 @@ Output from HELP DEL:
 
     Deletes the given program.
 
-    The filename must be a string and must be a basename (no directory components).  The .BAS extension is optional, but if present, it must be .BAS.
+    The filename must be a string and must be a basename (no directory
+    components).  The .BAS extension is optional, but if present, it must
+    be .BAS.
 
 Output from HELP DIR:
 
@@ -184,7 +190,9 @@ Output from HELP GPIO_CLEAR:
 
     Resets the GPIO chip or a specific pin.
 
-    If no pin% is specified, resets the state of all GPIO pins. If a pin% is given, only that pin is reset.  It is OK if the given pin has never been configured before.
+    If no pin% is specified, resets the state of all GPIO pins.  If a pin%
+    is given, only that pin is reset.  It is OK if the given pin has never
+    been configured before.
 
 Output from HELP GPIO_SETUP:
 
@@ -192,11 +200,19 @@ Output from HELP GPIO_SETUP:
 
     Configures a GPIO pin for input or output.
 
-    Before a GPIO pin can be used for reads or writes, it must be configured to be an input or output pin.  Additionally, if pull up or pull down resistors are available and desired, these must be configured upfront too.
+    Before a GPIO pin can be used for reads or writes, it must be
+    configured to be an input or output pin.  Additionally, if pull up or
+    pull down resistors are available and desired, these must be configured
+    upfront too.
 
-    The mode$ has to be one of "IN", "IN-PULL-DOWN", "IN-PULL-UP", or "OUT".  These values are case-insensitive.  The possibility of using the pull-down and pull-up resistors depends on whether they are available in the hardware, and selecting these modes will fail if they are not.
+    The mode$ has to be one of "IN", "IN-PULL-DOWN", "IN-PULL-UP", or
+    "OUT".  These values are case-insensitive.  The possibility of using
+    the pull-down and pull-up resistors depends on whether they are
+    available in the hardware, and selecting these modes will fail if they
+    are not.
 
-    It is OK to reconfigure an already configured pin without clearing its state first.
+    It is OK to reconfigure an already configured pin without clearing its
+    state first.
 
 Output from HELP GPIO_WRITE:
 
@@ -204,7 +220,8 @@ Output from HELP GPIO_WRITE:
 
     Sets the state of a GPIO pin.
 
-    A FALSE value? sets the pin to low, and a TRUE value? sets the pin to high.
+    A FALSE value? sets the pin to low, and a TRUE value? sets the pin to
+    high.
 
 Output from HELP HELP:
 
@@ -212,11 +229,17 @@ Output from HELP HELP:
 
     Prints interactive help.
 
-    Without arguments, shows a summary of all available top-level help topics.
+    Without arguments, shows a summary of all available top-level help
+    topics.
 
-    With a single argument, which may be a bare name or a string, shows detailed information about the given help topic, command, or function. Topic names with spaces in them must be double-quoted.
+    With a single argument, which may be a bare name or a string, shows
+    detailed information about the given help topic, command, or function.
+    Topic names with spaces in them must be double-quoted.
 
-    Topic names are case-insensitive and can be specified as prefixes, in which case the topic whose name starts with the prefix will be shown. For example, the following invocations are all equivalent: HELP CON, HELP console, HELP "Console manipulation".
+    Topic names are case-insensitive and can be specified as prefixes, in
+    which case the topic whose name starts with the prefix will be shown.
+    For example, the following invocations are all equivalent: HELP CON,
+    HELP console, HELP "Console manipulation".
 
 Output from HELP INPUT:
 
@@ -224,9 +247,13 @@ Output from HELP INPUT:
 
     Obtains user input from the console.
 
-    The first expression to this function must be empty or evaluate to a string, and specifies the prompt to print.  If this first argument is followed by the short `;` separator, the prompt is extended with a question mark.
+    The first expression to this function must be empty or evaluate to a
+    string, and specifies the prompt to print.  If this first argument is
+    followed by the short `;` separator, the prompt is extended with a
+    question mark.
 
-    The second expression to this function must be a bare variable reference and indicates the variable to update with the obtained input.
+    The second expression to this function must be a bare variable
+    reference and indicates the variable to update with the obtained input.
 
 Output from HELP LIST:
 
@@ -240,7 +267,9 @@ Output from HELP LOAD:
 
     Loads the given program.
 
-    The filename must be a string and must be a basename (no directory components).  The .BAS extension is optional, but if present, it must be .BAS.
+    The filename must be a string and must be a basename (no directory
+    components).  The .BAS extension is optional, but if present, it must
+    be .BAS.
 
 Output from HELP LOCATE:
 
@@ -260,7 +289,10 @@ Output from HELP PRINT:
 
     Prints a message to the console.
 
-    The expressions given as arguments are all evaluated and converted to strings.  Arguments separated by the short `;` separator are concatenated with a single space, while arguments separated by the long `,` separator are concatenated with a tab character.
+    The expressions given as arguments are all evaluated and converted to
+    strings.  Arguments separated by the short `;` separator are
+    concatenated with a single space, while arguments separated by the long
+    `,` separator are concatenated with a tab character.
 
 Output from HELP RANDOMIZE:
 
@@ -268,7 +300,8 @@ Output from HELP RANDOMIZE:
 
     Reinitializes the pseudo-random number generator.
 
-    If no seed is given, uses system entropy to create a new sequence of random numbers.
+    If no seed is given, uses system entropy to create a new sequence of
+    random numbers.
 
     WARNING: These random numbers offer no cryptographic guarantees.
 
@@ -278,7 +311,8 @@ Output from HELP RUN:
 
     Runs the stored program.
 
-    Note that the program runs in the context of the interpreter so it will pick up any variables and other state that may already be set.
+    Note that the program runs in the context of the interpreter so it will
+    pick up any variables and other state that may already be set.
 
 Output from HELP SAVE:
 
@@ -286,7 +320,9 @@ Output from HELP SAVE:
 
     Saves the current program in memory to the given filename.
 
-    The filename must be a string and must be a basename (no directory components).  The .BAS extension is optional, but if present, it must be .BAS.
+    The filename must be a string and must be a basename (no directory
+    components).  The .BAS extension is optional, but if present, it must
+    be .BAS.
 
 Output from HELP SLEEP:
 
@@ -294,7 +330,9 @@ Output from HELP SLEEP:
 
     Suspends program execution.
 
-    Pauses program execution for the given number of seconds, which can be specified either as an integral or as a floating point number for finer precision.
+    Pauses program execution for the given number of seconds, which can be
+    specified either as an integral or as a floating point number for finer
+    precision.
 
 Output from HELP DTOI:
 
@@ -302,7 +340,9 @@ Output from HELP DTOI:
 
     Rounds the given double to the closest integer.
 
-    If the value is too small or too big to fit in the integer's range, returns the smallest or biggest possible integer that fits, respectively.
+    If the value is too small or too big to fit in the integer's range,
+    returns the smallest or biggest possible integer that fits,
+    respectively.
 
 Output from HELP GPIO_READ:
 
@@ -310,7 +350,8 @@ Output from HELP GPIO_READ:
 
     Reads the state of a GPIO pin.
 
-    Returns FALSE to represent a low value, and TRUE to represent a high value.
+    Returns FALSE to represent a low value, and TRUE to represent a high
+    value.
 
 Output from HELP ITOD:
 
@@ -326,7 +367,8 @@ Output from HELP LEFT:
 
     If n% is 0, returns an empty string.
 
-    If n% is greater than or equal to the number of characters in expr$, returns expr$.
+    If n% is greater than or equal to the number of characters in expr$,
+    returns expr$.
 
 Output from HELP LEN:
 
@@ -346,9 +388,11 @@ Output from HELP MID:
 
     Returns a portion of a string.
 
-    start% indicates the starting position of the substring to extract and it is 1-indexed.
+    start% indicates the starting position of the substring to extract and
+    it is 1-indexed.
 
-    length% indicates the number of characters to extract and, if not specified, defaults to extracting
+    length% indicates the number of characters to extract and, if not
+    specified, defaults to extracting
 
     until the end of the string.
 
@@ -360,7 +404,8 @@ Output from HELP RIGHT:
 
     If n% is 0, returns an empty string.
 
-    If n% is greater than or equal to the number of characters in expr$, returns expr$.
+    If n% is greater than or equal to the number of characters in expr$,
+    returns expr$.
 
 Output from HELP RND:
 
@@ -368,9 +413,12 @@ Output from HELP RND:
 
     Returns a random number in the [0..1] range.
 
-    If n% is zero, returns the previously generated random number.  If n% is positive, returns a new random number.
+    If n% is zero, returns the previously generated random number.  If n%
+    is positive, returns a new random number.
 
-    If you need to generate an integer random number within a specific range, say [0..100], compute it with an expression like DTOI%(RND#(1) * 100.0).
+    If you need to generate an integer random number within a specific
+    range, say [0..100], compute it with an expression like DTOI%(RND#(1) *
+    100.0).
 
     WARNING: These random numbers offer no cryptographic guarantees.
 
