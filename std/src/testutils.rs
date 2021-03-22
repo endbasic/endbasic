@@ -17,7 +17,7 @@
 
 use crate::console::{self, ClearType, Console, Key, Position};
 use crate::gpio;
-use crate::store::{InMemoryDrive, Program, Drive};
+use crate::storage::{Drive, InMemoryDrive, Program};
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{self, Machine, StopReason};

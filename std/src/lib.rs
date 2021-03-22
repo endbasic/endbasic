@@ -32,7 +32,7 @@ pub mod exec;
 pub mod gpio;
 pub mod help;
 pub mod numerics;
-pub mod store;
+pub mod storage;
 pub mod strings;
 #[cfg(feature = "crossterm")]
 pub mod terminal;
@@ -139,19 +139,19 @@ impl MachineBuilder {
 /// program that can be edited interactively.
 pub struct InteractiveMachineBuilder {
     builder: MachineBuilder,
-    program: Option<Rc<RefCell<dyn store::Program>>>,
-    drive: Option<Rc<RefCell<dyn store::Drive>>>,
+    program: Option<Rc<RefCell<dyn storage::Program>>>,
+    drive: Option<Rc<RefCell<dyn storage::Drive>>>,
 }
 
 impl InteractiveMachineBuilder {
     /// Overrides the default stored program with the given one.
-    pub fn with_program(mut self, program: Rc<RefCell<dyn store::Program>>) -> Self {
+    pub fn with_program(mut self, program: Rc<RefCell<dyn storage::Program>>) -> Self {
         self.program = Some(program);
         self
     }
 
     /// Overrides the default drive with the given one.
-    pub fn with_drive(mut self, drive: Rc<RefCell<dyn store::Drive>>) -> Self {
+    pub fn with_drive(mut self, drive: Rc<RefCell<dyn storage::Drive>>) -> Self {
         self.drive = Some(drive);
         self
     }
@@ -168,11 +168,11 @@ impl InteractiveMachineBuilder {
 
         let drive = match self.drive {
             Some(drive) => drive,
-            None => Rc::from(RefCell::from(store::InMemoryDrive::default())),
+            None => Rc::from(RefCell::from(storage::InMemoryDrive::default())),
         };
 
         help::add_all(&mut machine, console.clone());
-        store::add_all(&mut machine, program, console, drive);
+        storage::add_all(&mut machine, program, console, drive);
 
         Ok(machine)
     }

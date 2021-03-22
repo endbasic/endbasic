@@ -16,7 +16,7 @@
 //! Interactive console-based text editor.
 
 use crate::console::{ClearType, Console, Key, Position};
-use crate::store::Program;
+use crate::storage::Program;
 use async_trait::async_trait;
 use std::cmp;
 use std::io;
