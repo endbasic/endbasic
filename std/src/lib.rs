@@ -127,7 +127,7 @@ impl MachineBuilder {
 
     /// Extends the machine with interactive (REPL) features.
     pub fn make_interactive(self) -> InteractiveMachineBuilder {
-        InteractiveMachineBuilder { builder: self, program: None, store: None }
+        InteractiveMachineBuilder { builder: self, program: None, drive: None }
     }
 }
 
@@ -135,12 +135,12 @@ impl MachineBuilder {
 ///
 /// This is a superset of a `ScriptingMachineBuilder`.
 ///
-/// Unless otherwise specified, the interpreter is connected to an in-memory store and to a stored
+/// Unless otherwise specified, the interpreter is connected to an in-memory drive and to a stored
 /// program that can be edited interactively.
 pub struct InteractiveMachineBuilder {
     builder: MachineBuilder,
     program: Option<Rc<RefCell<dyn store::Program>>>,
-    store: Option<Rc<RefCell<dyn store::Store>>>,
+    drive: Option<Rc<RefCell<dyn store::Drive>>>,
 }
 
 impl InteractiveMachineBuilder {
@@ -150,9 +150,9 @@ impl InteractiveMachineBuilder {
         self
     }
 
-    /// Overrides the default in-memory store with the given one.
-    pub fn with_store(mut self, store: Rc<RefCell<dyn store::Store>>) -> Self {
-        self.store = Some(store);
+    /// Overrides the default drive with the given one.
+    pub fn with_drive(mut self, drive: Rc<RefCell<dyn store::Drive>>) -> Self {
+        self.drive = Some(drive);
         self
     }
 
@@ -166,13 +166,13 @@ impl InteractiveMachineBuilder {
             None => Rc::from(RefCell::from(editor::Editor::default())),
         };
 
-        let store = match self.store {
-            Some(store) => store,
-            None => Rc::from(RefCell::from(store::InMemoryStore::default())),
+        let drive = match self.drive {
+            Some(drive) => drive,
+            None => Rc::from(RefCell::from(store::InMemoryDrive::default())),
         };
 
         help::add_all(&mut machine, console.clone());
-        store::add_all(&mut machine, program, console, store);
+        store::add_all(&mut machine, program, console, drive);
 
         Ok(machine)
     }
