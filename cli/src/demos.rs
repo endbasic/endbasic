@@ -13,27 +13,27 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-//! Exposes EndBASIC demos as an overlay to the store.
+//! Exposes EndBASIC demos as an overlay to the drive.
 
-use endbasic_std::store::{Metadata, Store};
+use endbasic_std::store::{Drive, Metadata};
 use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::str;
 
-/// Wraps a `Store` and exposes a bunch of read-only demo files.
+/// Wraps a drive and exposes a bunch of read-only demo files.
 ///
 /// All demo file names are case insensitive.  However, this preserves the case sensitiveness
-/// behavior of the underlying store for any files that are passed through.
+/// behavior of the underlying drive for any files that are passed through.
 ///
 /// This takes ownership of any file names that start with `DEMO:`, which means any such files in
-/// the underlying store become invisible.  This should not be a problem in practice because most
+/// the underlying drive become invisible.  This should not be a problem in practice because most
 /// file systems deny the `:` character in file names.
-pub struct DemoStoreOverlay<S: Store> {
+pub struct DemoDriveOverlay<D: Drive> {
     /// The demos to expose, expressed as a mapping of names to (metadata, content) pairs.
     demos: HashMap<&'static str, (Metadata, String)>,
 
-    /// The wrapped store.
-    delegate: S,
+    /// The wrapped drive.
+    delegate: D,
 }
 
 /// Converts the raw bytes of a demo file into the program string to expose.
@@ -52,9 +52,9 @@ fn process_demo(bytes: &[u8]) -> String {
     }
 }
 
-impl<S: Store> DemoStoreOverlay<S> {
-    /// Creates a new demo store that wraps the `delegate` store.
-    pub fn new(delegate: S) -> Self {
+impl<D: Drive> DemoDriveOverlay<D> {
+    /// Creates a new demo drive that wraps the `delegate` drive.
+    pub fn new(delegate: D) -> Self {
         let mut demos = HashMap::default();
         {
             let content = process_demo(include_bytes!("../examples/guess.bas"));
@@ -91,13 +91,13 @@ impl<S: Store> DemoStoreOverlay<S> {
         Self { demos, delegate }
     }
 
-    /// Disowns and returns the underlying delegate store.
-    pub fn unmount(self) -> S {
+    /// Disowns and returns the underlying delegate drive.
+    pub fn unmount(self) -> D {
         self.delegate
     }
 }
 
-impl<S: Store> Store for DemoStoreOverlay<S> {
+impl<D: Drive> Drive for DemoDriveOverlay<D> {
     fn delete(&mut self, name: &str) -> io::Result<()> {
         let uc_name = name.to_ascii_uppercase();
         match self.demos.get(&uc_name.as_ref()) {
@@ -162,50 +162,50 @@ impl<S: Store> Store for DemoStoreOverlay<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use endbasic_std::store::InMemoryStore;
+    use endbasic_std::store::InMemoryDrive;
 
     #[test]
-    fn test_demo_store_overlay_delete() {
-        let mut store = InMemoryStore::default();
-        store.put("delete.bas", "underlying file").unwrap();
-        store.put("keep.bas", "underlying file").unwrap();
-        store.put("demo:unknown.bas", "should not be touched").unwrap();
-        let store = {
-            let mut store = DemoStoreOverlay::new(store);
+    fn test_demo_drive_overlay_delete() {
+        let mut drive = InMemoryDrive::default();
+        drive.put("delete.bas", "underlying file").unwrap();
+        drive.put("keep.bas", "underlying file").unwrap();
+        drive.put("demo:unknown.bas", "should not be touched").unwrap();
+        let drive = {
+            let mut drive = DemoDriveOverlay::new(drive);
 
-            store.delete("delete.bas").unwrap();
-            assert_eq!(io::ErrorKind::NotFound, store.delete("KEEP.Bas").unwrap_err().kind());
-
-            assert_eq!(
-                io::ErrorKind::PermissionDenied,
-                store.delete("demo:hello.bas").unwrap_err().kind()
-            );
-            assert_eq!(
-                io::ErrorKind::PermissionDenied,
-                store.delete("DEMO:Hello.BAS").unwrap_err().kind()
-            );
+            drive.delete("delete.bas").unwrap();
+            assert_eq!(io::ErrorKind::NotFound, drive.delete("KEEP.Bas").unwrap_err().kind());
 
             assert_eq!(
                 io::ErrorKind::PermissionDenied,
-                store.delete("demo:unknown.bas").unwrap_err().kind()
+                drive.delete("demo:hello.bas").unwrap_err().kind()
+            );
+            assert_eq!(
+                io::ErrorKind::PermissionDenied,
+                drive.delete("DEMO:Hello.BAS").unwrap_err().kind()
             );
 
-            store.unmount()
+            assert_eq!(
+                io::ErrorKind::PermissionDenied,
+                drive.delete("demo:unknown.bas").unwrap_err().kind()
+            );
+
+            drive.unmount()
         };
-        assert_eq!(io::ErrorKind::NotFound, store.get("delete.bas").unwrap_err().kind());
-        assert_eq!("underlying file", store.get("keep.bas").unwrap());
-        assert_eq!(io::ErrorKind::NotFound, store.get("demo:hello.bas").unwrap_err().kind());
-        assert_eq!("should not be touched", store.get("demo:unknown.bas").unwrap());
+        assert_eq!(io::ErrorKind::NotFound, drive.get("delete.bas").unwrap_err().kind());
+        assert_eq!("underlying file", drive.get("keep.bas").unwrap());
+        assert_eq!(io::ErrorKind::NotFound, drive.get("demo:hello.bas").unwrap_err().kind());
+        assert_eq!("should not be touched", drive.get("demo:unknown.bas").unwrap());
     }
 
     #[test]
-    fn test_demo_store_overlay_enumerate() {
-        let mut store = InMemoryStore::default();
-        store.put("under.bas", "underlying file").unwrap();
-        store.put("demo:hidden.bas", "will be clobbered").unwrap();
-        let store = DemoStoreOverlay::new(store);
+    fn test_demo_drive_overlay_enumerate() {
+        let mut drive = InMemoryDrive::default();
+        drive.put("under.bas", "underlying file").unwrap();
+        drive.put("demo:hidden.bas", "will be clobbered").unwrap();
+        let drive = DemoDriveOverlay::new(drive);
 
-        let entries = store.enumerate().unwrap();
+        let entries = drive.enumerate().unwrap();
         assert!(entries.contains_key("under.bas"));
         assert!(entries.contains_key("DEMO:GUESS.BAS"));
         assert!(entries.contains_key("DEMO:HELLO.BAS"));
@@ -215,57 +215,57 @@ mod tests {
     }
 
     #[test]
-    fn test_demo_store_overlay_get() {
-        let mut store = InMemoryStore::default();
-        store.put("under.bas", "underlying file").unwrap();
-        store.put("demo:hidden.bas", "will be clobbered").unwrap();
-        let store = DemoStoreOverlay::new(store);
+    fn test_demo_drive_overlay_get() {
+        let mut drive = InMemoryDrive::default();
+        drive.put("under.bas", "underlying file").unwrap();
+        drive.put("demo:hidden.bas", "will be clobbered").unwrap();
+        let drive = DemoDriveOverlay::new(drive);
 
-        assert_eq!("underlying file", store.get("under.bas").unwrap());
-        assert_eq!(io::ErrorKind::NotFound, store.get("Under.bas").unwrap_err().kind());
+        assert_eq!("underlying file", drive.get("under.bas").unwrap());
+        assert_eq!(io::ErrorKind::NotFound, drive.get("Under.bas").unwrap_err().kind());
 
         assert_eq!(
             process_demo(include_bytes!("../examples/hello.bas")),
-            store.get("demo:hello.bas").unwrap()
+            drive.get("demo:hello.bas").unwrap()
         );
         assert_eq!(
             process_demo(include_bytes!("../examples/hello.bas")),
-            store.get("Demo:Hello.Bas").unwrap()
+            drive.get("Demo:Hello.Bas").unwrap()
         );
 
-        assert_eq!(io::ErrorKind::NotFound, store.get("demo:hidden.bas").unwrap_err().kind());
-        assert_eq!(io::ErrorKind::NotFound, store.get("demo:unknown.bas").unwrap_err().kind());
-        assert_eq!(io::ErrorKind::NotFound, store.get("unknown.bas").unwrap_err().kind());
+        assert_eq!(io::ErrorKind::NotFound, drive.get("demo:hidden.bas").unwrap_err().kind());
+        assert_eq!(io::ErrorKind::NotFound, drive.get("demo:unknown.bas").unwrap_err().kind());
+        assert_eq!(io::ErrorKind::NotFound, drive.get("unknown.bas").unwrap_err().kind());
     }
 
     #[test]
-    fn test_demo_store_overlay_put() {
-        let mut store = InMemoryStore::default();
-        store.put("modify.bas", "previous contents").unwrap();
-        store.put("avoid.bas", "previous contents").unwrap();
-        let store = {
-            let mut store = DemoStoreOverlay::new(store);
+    fn test_demo_drive_overlay_put() {
+        let mut drive = InMemoryDrive::default();
+        drive.put("modify.bas", "previous contents").unwrap();
+        drive.put("avoid.bas", "previous contents").unwrap();
+        let drive = {
+            let mut drive = DemoDriveOverlay::new(drive);
 
-            store.put("modify.bas", "new contents").unwrap();
-
-            assert_eq!(
-                io::ErrorKind::PermissionDenied,
-                store.put("demo:hello.bas", "").unwrap_err().kind()
-            );
-            assert_eq!(
-                io::ErrorKind::PermissionDenied,
-                store.put("DEMO:Hello.BAS", "").unwrap_err().kind()
-            );
+            drive.put("modify.bas", "new contents").unwrap();
 
             assert_eq!(
                 io::ErrorKind::PermissionDenied,
-                store.put("demo:unknown.bas", "").unwrap_err().kind()
+                drive.put("demo:hello.bas", "").unwrap_err().kind()
+            );
+            assert_eq!(
+                io::ErrorKind::PermissionDenied,
+                drive.put("DEMO:Hello.BAS", "").unwrap_err().kind()
             );
 
-            store.unmount()
+            assert_eq!(
+                io::ErrorKind::PermissionDenied,
+                drive.put("demo:unknown.bas", "").unwrap_err().kind()
+            );
+
+            drive.unmount()
         };
-        assert_eq!(io::ErrorKind::NotFound, store.get("demo:unknown.bas").unwrap_err().kind());
-        assert_eq!("new contents", store.get("modify.bas").unwrap());
-        assert_eq!("previous contents", store.get("avoid.bas").unwrap());
+        assert_eq!(io::ErrorKind::NotFound, drive.get("demo:unknown.bas").unwrap_err().kind());
+        assert_eq!("new contents", drive.get("modify.bas").unwrap());
+        assert_eq!("previous contents", drive.get("avoid.bas").unwrap());
     }
 }

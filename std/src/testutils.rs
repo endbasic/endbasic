@@ -17,7 +17,7 @@
 
 use crate::console::{self, ClearType, Console, Key, Position};
 use crate::gpio;
-use crate::store::{InMemoryStore, Program, Store};
+use crate::store::{InMemoryDrive, Program, Drive};
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{self, Machine, StopReason};
@@ -223,7 +223,7 @@ impl Program for RecordedProgram {
 #[must_use]
 pub struct Tester {
     console: Rc<RefCell<MockConsole>>,
-    store: Rc<RefCell<InMemoryStore>>,
+    drive: Rc<RefCell<InMemoryDrive>>,
     program: Rc<RefCell<RecordedProgram>>,
     machine: Machine,
 }
@@ -232,7 +232,7 @@ impl Default for Tester {
     /// Creates a new tester for a fully-equipped (interactive) machine.
     fn default() -> Self {
         let console = Rc::from(RefCell::from(MockConsole::default()));
-        let store = Rc::from(RefCell::from(InMemoryStore::default()));
+        let drive = Rc::from(RefCell::from(InMemoryDrive::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
 
         // Default to the pins set that always returns errors.  We could have implemented a set of
@@ -246,12 +246,12 @@ impl Default for Tester {
             .with_console(console.clone())
             .with_gpio_pins(gpio_pins)
             .make_interactive()
-            .with_store(store.clone())
+            .with_drive(drive.clone())
             .with_program(program.clone())
             .build()
             .unwrap();
 
-        Self { console, store, program, machine }
+        Self { console, drive, program, machine }
     }
 }
 
@@ -259,10 +259,10 @@ impl Tester {
     /// Creates a new tester using the given `Machine`.
     pub fn from(machine: Machine) -> Self {
         let console = Rc::from(RefCell::from(MockConsole::default()));
-        let store = Rc::from(RefCell::from(InMemoryStore::default()));
+        let drive = Rc::from(RefCell::from(InMemoryDrive::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
 
-        Self { console, store, program, machine }
+        Self { console, drive, program, machine }
     }
 
     /// Registers the given builtin command into the machine, which must not yet be registered.
@@ -299,12 +299,12 @@ impl Tester {
         self.console.clone()
     }
 
-    /// Gets the in-memory store from the tester.
+    /// Gets the in-memory drive from the tester.
     ///
     /// This method should generally not be used.  Its primary utility is to hook
     /// externally-instantiated commands into the testing features.
-    pub fn get_store(&self) -> Rc<RefCell<InMemoryStore>> {
-        self.store.clone()
+    pub fn get_drive(&self) -> Rc<RefCell<InMemoryDrive>> {
+        self.drive.clone()
     }
 
     /// Gets the recorded program from the tester.
@@ -327,9 +327,9 @@ impl Tester {
         self
     }
 
-    /// Creates or overwrites a file in the store.
+    /// Creates or overwrites a file in the storage medium.
     pub fn write_file(self, name: &str, content: &str) -> Self {
-        self.store.borrow_mut().put(name, content).unwrap();
+        self.drive.borrow_mut().put(name, content).unwrap();
         self
     }
 
@@ -348,7 +348,7 @@ pub struct Checker<'a> {
     result: exec::Result<StopReason>,
     exp_result: Result<StopReason, String>,
     exp_output: Vec<CapturedOut>,
-    exp_store: HashMap<String, String>,
+    exp_drive: HashMap<String, String>,
     exp_program: String,
     exp_arrays: HashMap<String, Array>,
     exp_vars: HashMap<String, Value>,
@@ -365,7 +365,7 @@ impl<'a> Checker<'a> {
             result,
             exp_result: Ok(StopReason::Eof),
             exp_output: vec![],
-            exp_store: HashMap::default(),
+            exp_drive: HashMap::default(),
             exp_program: String::new(),
             exp_arrays: HashMap::default(),
             exp_vars: HashMap::default(),
@@ -431,11 +431,11 @@ impl<'a> Checker<'a> {
         self
     }
 
-    /// Adds a file to expect in the store with a `name` and specific `content`.
+    /// Adds a file to expect in the drive with a `name` and specific `content`.
     pub fn expect_file<N: Into<String>, C: Into<String>>(mut self, name: N, content: C) -> Self {
         let name = name.into();
-        assert!(!self.exp_store.contains_key(&name));
-        self.exp_store.insert(name, content.into());
+        assert!(!self.exp_drive.contains_key(&name));
+        self.exp_drive.insert(name, content.into());
         self
     }
 
@@ -504,7 +504,7 @@ impl<'a> Checker<'a> {
         assert_eq!(self.exp_arrays, arrays);
         assert_eq!(self.exp_output, self.tester.console.borrow().captured_out());
         assert_eq!(self.exp_program, self.tester.program.borrow().text());
-        assert_eq!(self.exp_store, *self.tester.store.borrow().as_hashmap());
+        assert_eq!(self.exp_drive, *self.tester.drive.borrow().as_hashmap());
     }
 }
 

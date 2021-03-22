@@ -13,9 +13,9 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-//! Implementation of a `Store` that uses the browser's local storage.
+//! Implementation of a drive that uses the browser's local storage.
 
-use endbasic_std::store::{Metadata, Store};
+use endbasic_std::store::{Metadata, Drive};
 use std::collections::BTreeMap;
 use std::io;
 
@@ -55,7 +55,7 @@ impl Key {
     /// Returns the canonical form of this key.
     ///
     /// In essence, this converts the file name in the key to uppercase.  This is necessary to
-    /// migrate older versions of the store that were case sensitive.
+    /// migrate older versions of the drive that were case sensitive.
     fn canonical(&self) -> Self {
         Self(format!("{}{}", Key::PREFIX, self.name().to_ascii_uppercase()))
     }
@@ -64,7 +64,7 @@ impl Key {
     /// not correspond to one of our keys.
     ///
     /// Note that this *does* respect the case of the file name provided in the string.  This is
-    /// necessary to migrate older versions of the store that were case sensitive.
+    /// necessary to migrate older versions of the drive that were case sensitive.
     fn parse(raw: &str) -> Option<Key> {
         if raw.starts_with(Key::PREFIX) && raw.to_ascii_uppercase().ends_with(".BAS") {
             Some(Key(raw.to_owned()))
@@ -115,29 +115,29 @@ impl Entry {
     }
 }
 
-/// Browser-based store implementation that uses the local storage.
-pub struct WebStore {
+/// Browser-based drive implementation that uses the local storage.
+pub struct WebDrive {
     /// Instance of the window's local storage.
     storage: web_sys::Storage,
 
-    /// Clock used by this store to generate mtime values.
+    /// Clock used by this drive to generate mtime values.
     clock: Box<dyn Clock>,
 }
 
-impl WebStore {
-    /// Creates a new store for the current window.
+impl WebDrive {
+    /// Creates a new drive for the current window.
     pub fn from_window() -> Self {
         // TODO(jmmv): Should probably do something fancier here instead of these unwraps...
         let window = web_sys::window().unwrap();
         let storage = window.local_storage().unwrap().unwrap();
-        let mut store = Self { clock: Box::from(JsClock::default()), storage };
-        store.fixup_names().unwrap();
-        store
+        let mut drive = Self { clock: Box::from(JsClock::default()), storage };
+        drive.fixup_names().unwrap();
+        drive
     }
 
-    /// Upgrades the store to support case insensitive behavior.
+    /// Upgrades the drive to support case insensitive behavior.
     ///
-    /// This scans for all existing files in the store and, for any that have names that are not in
+    /// This scans for all existing files in the drive and, for any that have names that are not in
     /// canonical form (all uppercase), renames them to canonical form.
     fn fixup_names(&mut self) -> io::Result<()> {
         let n = match self.storage.length() {
@@ -223,7 +223,7 @@ impl WebStore {
     }
 }
 
-impl Store for WebStore {
+impl Drive for WebDrive {
     fn delete(&mut self, name: &str) -> io::Result<()> {
         let key = Key::for_name(name);
         let key = key.serialized();
@@ -349,40 +349,40 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn test_webstore_fixup_names() {
-        let mut webstore = WebStore::from_window();
-        webstore.storage.clear().unwrap();
-        webstore.storage.set("endbasic-program:lower.bas", "").unwrap();
-        webstore.storage.set("endbasic-program:UPPER.BAS", "").unwrap();
-        webstore.fixup_names().unwrap();
+    fn test_webdrive_fixup_names() {
+        let mut webdrive = WebDrive::from_window();
+        webdrive.storage.clear().unwrap();
+        webdrive.storage.set("endbasic-program:lower.bas", "").unwrap();
+        webdrive.storage.set("endbasic-program:UPPER.BAS", "").unwrap();
+        webdrive.fixup_names().unwrap();
 
-        assert!(webstore.storage.get("endbasic-program:lower.bas").unwrap().is_none());
-        webstore.storage.get("endbasic-program:LOWER.BAS").unwrap();
-        webstore.storage.get("endbasic-program:UPPER.BAS").unwrap();
+        assert!(webdrive.storage.get("endbasic-program:lower.bas").unwrap().is_none());
+        webdrive.storage.get("endbasic-program:LOWER.BAS").unwrap();
+        webdrive.storage.get("endbasic-program:UPPER.BAS").unwrap();
     }
 
     #[wasm_bindgen_test]
-    fn test_webstore_delete_ok() {
-        let mut webstore = WebStore::from_window();
-        webstore.storage.clear().unwrap();
-        webstore.storage.set("endbasic-program:FIRST.BAS", "").unwrap();
-        webstore.storage.set("endbasic-program:FIRST.BAT", "").unwrap();
+    fn test_webdrive_delete_ok() {
+        let mut webdrive = WebDrive::from_window();
+        webdrive.storage.clear().unwrap();
+        webdrive.storage.set("endbasic-program:FIRST.BAS", "").unwrap();
+        webdrive.storage.set("endbasic-program:FIRST.BAT", "").unwrap();
 
-        webstore.delete("first.bas").unwrap();
-        assert!(webstore.storage.get("endbasic-program:FIRST.BAS").unwrap().is_none());
-        webstore.storage.get("endbasic-program:FIRST.BAT").unwrap();
+        webdrive.delete("first.bas").unwrap();
+        assert!(webdrive.storage.get("endbasic-program:FIRST.BAS").unwrap().is_none());
+        webdrive.storage.get("endbasic-program:FIRST.BAT").unwrap();
     }
 
     #[wasm_bindgen_test]
-    fn test_webstore_delete_missing_file() {
-        let mut webstore = WebStore::from_window();
-        webstore.storage.clear().unwrap();
+    fn test_webdrive_delete_missing_file() {
+        let mut webdrive = WebDrive::from_window();
+        webdrive.storage.clear().unwrap();
 
-        assert_eq!("File not found", format!("{}", webstore.delete("first.bas").unwrap_err()));
+        assert_eq!("File not found", format!("{}", webdrive.delete("first.bas").unwrap_err()));
     }
 
     #[wasm_bindgen_test]
-    fn test_webstore_enumerate() {
+    fn test_webdrive_enumerate() {
         let entry1 = Entry {
             version: Entry::VERSION,
             content: "first".to_owned(),
@@ -394,62 +394,62 @@ mod tests {
             mtime: time::OffsetDateTime::from_unix_timestamp(987_654_321),
         };
 
-        let webstore = WebStore::from_window();
-        webstore.storage.clear().unwrap();
-        webstore
+        let webdrive = WebDrive::from_window();
+        webdrive.storage.clear().unwrap();
+        webdrive
             .storage
             .set("endbasic-program:FIRST.BAS", &serde_json::to_string(&entry1).unwrap())
             .unwrap();
-        webstore
+        webdrive
             .storage
             .set("endbasic-program:SECOND SPACES.BAS", &serde_json::to_string(&entry2).unwrap())
             .unwrap();
-        webstore.storage.set("first.bas", "ignore me").unwrap();
-        webstore.storage.set("endbasic-program:", "ignore me").unwrap();
+        webdrive.storage.set("first.bas", "ignore me").unwrap();
+        webdrive.storage.set("endbasic-program:", "ignore me").unwrap();
 
-        let entries = webstore.enumerate().unwrap();
+        let entries = webdrive.enumerate().unwrap();
         assert_eq!(2, entries.len());
         assert_eq!(&entry1.metadata(), entries.get("FIRST.BAS").unwrap());
         assert_eq!(&entry2.metadata(), entries.get("SECOND SPACES.BAS").unwrap());
     }
 
     #[wasm_bindgen_test]
-    fn test_webstore_get() {
+    fn test_webdrive_get() {
         let entry = Entry {
             version: Entry::VERSION,
             content: "second".to_owned(),
             mtime: time::OffsetDateTime::from_unix_timestamp(1234),
         };
 
-        let webstore = WebStore::from_window();
-        webstore.storage.clear().unwrap();
-        webstore.storage.set("endbasic-program:A.BAS", "first").unwrap();
-        webstore
+        let webdrive = WebDrive::from_window();
+        webdrive.storage.clear().unwrap();
+        webdrive.storage.set("endbasic-program:A.BAS", "first").unwrap();
+        webdrive
             .storage
             .set("endbasic-program:B.BAS", &serde_json::to_string(&entry).unwrap())
             .unwrap();
-        webstore.storage.set("endbasic-program:B.BAT", "third").unwrap();
-        webstore.storage.set("B.BAS", "fourth").unwrap();
+        webdrive.storage.set("endbasic-program:B.BAT", "third").unwrap();
+        webdrive.storage.set("B.BAS", "fourth").unwrap();
 
-        assert_eq!(entry.content, webstore.get("B.BAS").unwrap());
+        assert_eq!(entry.content, webdrive.get("B.BAS").unwrap());
     }
 
     #[wasm_bindgen_test]
-    fn test_webstore_put() {
+    fn test_webdrive_put() {
         let entry = Entry {
             version: Entry::VERSION,
             content: "this is some content".to_owned(),
             mtime: time::OffsetDateTime::from_unix_timestamp(1_234_567),
         };
 
-        let mut webstore = WebStore::from_window();
-        webstore.clock = Box::from(FakeClock { now: 1_234_567 });
-        webstore.storage.clear().unwrap();
-        webstore.put("code.bas", &entry.content).unwrap();
+        let mut webdrive = WebDrive::from_window();
+        webdrive.clock = Box::from(FakeClock { now: 1_234_567 });
+        webdrive.storage.clear().unwrap();
+        webdrive.put("code.bas", &entry.content).unwrap();
 
         assert_eq!(
             serde_json::to_string(&entry).unwrap(),
-            webstore.storage.get("endbasic-program:CODE.BAS").unwrap().unwrap()
+            webdrive.storage.get("endbasic-program:CODE.BAS").unwrap().unwrap()
         );
     }
 }

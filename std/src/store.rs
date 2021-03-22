@@ -33,7 +33,7 @@ use std::str;
 /// Category string for all functions provided by this module.
 const CATEGORY: &str = "Stored program manipulation";
 
-/// Metadata of an entry in the store.
+/// Metadata of an entry in a storage medium.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Metadata {
     /// Last modification time of the entry.
@@ -43,8 +43,8 @@ pub struct Metadata {
     pub length: u64,
 }
 
-/// Abstract operations to load and store programs on persistent storage.
-pub trait Store {
+/// Abstract operations to load and store programs on some storage medium.
+pub trait Drive {
     /// Deletes the program given by `name`.
     fn delete(&mut self, name: &str) -> io::Result<()>;
 
@@ -58,20 +58,20 @@ pub trait Store {
     fn put(&mut self, name: &str, content: &str) -> io::Result<()>;
 }
 
-/// An implementation of the store that records all data in memory only.
+/// A drive that records all data in memory only.
 #[derive(Default)]
-pub struct InMemoryStore {
+pub struct InMemoryDrive {
     programs: HashMap<String, String>,
 }
 
-impl InMemoryStore {
+impl InMemoryDrive {
     /// Returns the mapping of stored file names to their contents.
     pub fn as_hashmap(&self) -> &HashMap<String, String> {
         &self.programs
     }
 }
 
-impl Store for InMemoryStore {
+impl Drive for InMemoryDrive {
     fn delete(&mut self, name: &str) -> io::Result<()> {
         match self.programs.remove(name) {
             Some(_) => Ok(()),
@@ -102,22 +102,22 @@ impl Store for InMemoryStore {
     }
 }
 
-/// An implementation of `Store` backed by an on-disk directory.
-pub struct FileStore {
-    /// Path to the directory containing all entries backed by this `Store`.  The directory may
+/// A drive that is backed by an on-disk directory.
+pub struct DirectoryDrive {
+    /// Path to the directory containing all entries backed by this drive.  The directory may
     /// contain files that are not EndBASIC programs, and that's OK, but those files will not be
     /// accessible through this interface.
     dir: PathBuf,
 }
 
-impl FileStore {
-    /// Creates a new store backed by the `dir` directory.
+impl DirectoryDrive {
+    /// Creates a new drive backed by the `dir` directory.
     pub fn new<P: Into<PathBuf>>(dir: P) -> Self {
         Self { dir: dir.into() }
     }
 }
 
-impl Store for FileStore {
+impl Drive for DirectoryDrive {
     fn delete(&mut self, name: &str) -> io::Result<()> {
         let path = self.dir.join(name);
         fs::remove_file(path)
@@ -225,9 +225,9 @@ fn to_filename<S: Into<PathBuf>>(basename: S) -> io::Result<String> {
     Ok(basename.to_str().expect("Path came from a String").to_owned())
 }
 
-/// Shows the contents of directory `path`.
-fn show_dir(store: &dyn Store, console: &mut dyn Console) -> io::Result<()> {
-    let entries = store.enumerate()?;
+/// Shows the contents of the `drive`.
+fn show_dir(drive: &dyn Drive, console: &mut dyn Console) -> io::Result<()> {
+    let entries = drive.enumerate()?;
 
     console.print("")?;
     console.print("    Modified              Size    Name")?;
@@ -254,12 +254,12 @@ fn show_dir(store: &dyn Store, console: &mut dyn Console) -> io::Result<()> {
 /// The `DEL` command.
 pub struct DelCommand {
     metadata: CallableMetadata,
-    store: Rc<RefCell<dyn Store>>,
+    drive: Rc<RefCell<dyn Drive>>,
 }
 
 impl DelCommand {
-    /// Creates a new `DEL` command that deletes a file from the `store`.
-    pub fn new(store: Rc<RefCell<dyn Store>>) -> Rc<Self> {
+    /// Creates a new `DEL` command that deletes a file from the `drive`.
+    pub fn new(drive: Rc<RefCell<dyn Drive>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DEL", VarType::Void)
                 .with_syntax("filename")
@@ -270,7 +270,7 @@ The filename must be a string and must be a basename (no directory components). 
 extension is optional, but if present, it must be .BAS.",
                 )
                 .build(),
-            store,
+            drive,
         })
     }
 }
@@ -289,7 +289,7 @@ impl Command for DelCommand {
         match arg0.eval(machine.get_mut_symbols())? {
             Value::Text(t) => {
                 let name = to_filename(t)?;
-                self.store.borrow_mut().delete(&name)?;
+                self.drive.borrow_mut().delete(&name)?;
             }
             _ => {
                 return Err(CallError::ArgumentError(
@@ -305,12 +305,12 @@ impl Command for DelCommand {
 pub struct DirCommand {
     metadata: CallableMetadata,
     console: Rc<RefCell<dyn Console>>,
-    store: Rc<RefCell<dyn Store>>,
+    drive: Rc<RefCell<dyn Drive>>,
 }
 
 impl DirCommand {
-    /// Creates a new `DIR` command that lists the contents of the `store` on the `console`.
-    pub fn new(console: Rc<RefCell<dyn Console>>, store: Rc<RefCell<dyn Store>>) -> Rc<Self> {
+    /// Creates a new `DIR` command that lists the contents of the `drive` on the `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>, drive: Rc<RefCell<dyn Drive>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DIR", VarType::Void)
                 .with_syntax("")
@@ -318,7 +318,7 @@ impl DirCommand {
                 .with_description("Displays the list of files on disk.")
                 .build(),
             console,
-            store,
+            drive,
         })
     }
 }
@@ -333,7 +333,7 @@ impl Command for DirCommand {
         if !args.is_empty() {
             return Err(CallError::ArgumentError("DIR takes no arguments".to_owned()));
         }
-        show_dir(&*self.store.borrow(), &mut *self.console.borrow_mut())?;
+        show_dir(&*self.drive.borrow(), &mut *self.console.borrow_mut())?;
         Ok(())
     }
 }
@@ -433,13 +433,13 @@ impl Command for ListCommand {
 /// The `LOAD` command.
 pub struct LoadCommand {
     metadata: CallableMetadata,
-    store: Rc<RefCell<dyn Store>>,
+    drive: Rc<RefCell<dyn Drive>>,
     program: Rc<RefCell<dyn Program>>,
 }
 
 impl LoadCommand {
-    /// Creates a new `LOAD` command that loads a program from the `store` into `program`.
-    pub fn new(store: Rc<RefCell<dyn Store>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+    /// Creates a new `LOAD` command that loads a program from the `drive` into `program`.
+    pub fn new(drive: Rc<RefCell<dyn Drive>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOAD", VarType::Void)
                 .with_syntax("filename")
@@ -450,7 +450,7 @@ The filename must be a string and must be a basename (no directory components). 
 extension is optional, but if present, it must be .BAS.",
                 )
                 .build(),
-            store,
+            drive,
             program,
         })
     }
@@ -470,7 +470,7 @@ impl Command for LoadCommand {
         match arg0.eval(machine.get_mut_symbols())? {
             Value::Text(t) => {
                 let name = to_filename(t)?;
-                let content = self.store.borrow().get(&name)?;
+                let content = self.drive.borrow().get(&name)?;
                 self.program.borrow_mut().load(&content);
                 machine.clear();
             }
@@ -579,13 +579,13 @@ impl Command for RunCommand {
 /// The `SAVE` command.
 pub struct SaveCommand {
     metadata: CallableMetadata,
-    store: Rc<RefCell<dyn Store>>,
+    drive: Rc<RefCell<dyn Drive>>,
     program: Rc<RefCell<dyn Program>>,
 }
 
 impl SaveCommand {
-    /// Creates a new `SAVE` command that saves the contents of the `program` in the `store`.
-    pub fn new(store: Rc<RefCell<dyn Store>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+    /// Creates a new `SAVE` command that saves the contents of the `program` in the `drive`.
+    pub fn new(drive: Rc<RefCell<dyn Drive>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SAVE", VarType::Void)
                 .with_syntax("filename")
@@ -596,7 +596,7 @@ The filename must be a string and must be a basename (no directory components). 
 extension is optional, but if present, it must be .BAS.",
                 )
                 .build(),
-            store,
+            drive,
             program,
         })
     }
@@ -617,7 +617,7 @@ impl Command for SaveCommand {
             Value::Text(t) => {
                 let name = to_filename(t)?;
                 let content = self.program.borrow().text();
-                self.store.borrow_mut().put(&name, &content)?;
+                self.drive.borrow_mut().put(&name, &content)?;
             }
             _ => {
                 return Err(CallError::ArgumentError(
@@ -630,21 +630,21 @@ impl Command for SaveCommand {
 }
 
 /// Adds all program editing commands against the stored `program` to the `machine`, using
-/// `console` for interactive editing and using `store` as the on-disk storage for the programs.
+/// `console` for interactive editing and using `drive` as the on-disk storage for the programs.
 pub fn add_all(
     machine: &mut Machine,
     program: Rc<RefCell<dyn Program>>,
     console: Rc<RefCell<dyn Console>>,
-    store: Rc<RefCell<dyn Store>>,
+    drive: Rc<RefCell<dyn Drive>>,
 ) {
-    machine.add_command(DelCommand::new(store.clone()));
-    machine.add_command(DirCommand::new(console.clone(), store.clone()));
+    machine.add_command(DelCommand::new(drive.clone()));
+    machine.add_command(DirCommand::new(console.clone(), drive.clone()));
     machine.add_command(EditCommand::new(console.clone(), program.clone()));
     machine.add_command(ListCommand::new(console.clone(), program.clone()));
-    machine.add_command(LoadCommand::new(store.clone(), program.clone()));
+    machine.add_command(LoadCommand::new(drive.clone(), program.clone()));
     machine.add_command(NewCommand::new(program.clone()));
     machine.add_command(RunCommand::new(console, program.clone()));
-    machine.add_command(SaveCommand::new(store, program));
+    machine.add_command(SaveCommand::new(drive, program));
 }
 
 #[cfg(test)]
@@ -684,40 +684,40 @@ mod tests {
     }
 
     #[test]
-    fn test_filestore_delete_ok() {
+    fn test_directorydrive_delete_ok() {
         let dir = tempfile::tempdir().unwrap();
         write_file(&dir.path().join("a.bas"), &[]);
         write_file(&dir.path().join("a.bat"), &[]);
 
-        let mut store = FileStore::new(&dir.path());
-        store.delete("a.bas").unwrap();
+        let mut drive = DirectoryDrive::new(&dir.path());
+        drive.delete("a.bas").unwrap();
         assert!(!dir.path().join("a.bas").exists());
         assert!(dir.path().join("a.bat").exists());
     }
 
     #[test]
-    fn test_filestore_delete_missing_file() {
+    fn test_directorydrive_delete_missing_file() {
         let dir = tempfile::tempdir().unwrap();
-        let mut store = FileStore::new(&dir.path());
-        assert_eq!(io::ErrorKind::NotFound, store.delete("a.bas").unwrap_err().kind());
+        let mut drive = DirectoryDrive::new(&dir.path());
+        assert_eq!(io::ErrorKind::NotFound, drive.delete("a.bas").unwrap_err().kind());
     }
 
     #[test]
-    fn test_filestore_enumerate_nothing() {
+    fn test_directorydrive_enumerate_nothing() {
         let dir = tempfile::tempdir().unwrap();
 
-        let store = FileStore::new(&dir.path());
-        assert!(store.enumerate().unwrap().is_empty());
+        let drive = DirectoryDrive::new(&dir.path());
+        assert!(drive.enumerate().unwrap().is_empty());
     }
 
     #[test]
-    fn test_filestore_enumerate_some_files() {
+    fn test_directorydrive_enumerate_some_files() {
         let dir = tempfile::tempdir().unwrap();
         write_file(&dir.path().join("empty.bas"), &[]);
         write_file(&dir.path().join("some file.bas"), &["this is not empty"]);
 
-        let store = FileStore::new(&dir.path());
-        let entries = store.enumerate().unwrap();
+        let drive = DirectoryDrive::new(&dir.path());
+        let entries = drive.enumerate().unwrap();
         assert_eq!(2, entries.len());
         let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875);
         assert_eq!(&Metadata { date, length: 0 }, entries.get("empty.bas").unwrap());
@@ -725,31 +725,31 @@ mod tests {
     }
 
     #[test]
-    fn test_filestore_enumerate_treats_missing_dir_as_empty() {
+    fn test_directorydrive_enumerate_treats_missing_dir_as_empty() {
         let dir = tempfile::tempdir().unwrap();
-        let store = FileStore::new(dir.path().join("does-not-exist"));
-        assert!(store.enumerate().unwrap().is_empty());
+        let drive = DirectoryDrive::new(dir.path().join("does-not-exist"));
+        assert!(drive.enumerate().unwrap().is_empty());
     }
 
     #[test]
-    fn test_filestore_enumerate_ignores_non_files() {
+    fn test_directorydrive_enumerate_ignores_non_files() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join("will-be-ignored")).unwrap();
-        let store = FileStore::new(&dir.path());
-        assert!(store.enumerate().unwrap().is_empty());
+        let drive = DirectoryDrive::new(&dir.path());
+        assert!(drive.enumerate().unwrap().is_empty());
     }
 
     #[cfg(not(target_os = "windows"))]
     #[test]
-    fn test_filestore_enumerate_follows_symlinks() {
+    fn test_directorydrive_enumerate_follows_symlinks() {
         use std::os::unix::fs as unix_fs;
 
         let dir = tempfile::tempdir().unwrap();
         write_file(&dir.path().join("some file.bas"), &["this is not empty"]);
         unix_fs::symlink(&Path::new("some file.bas"), &dir.path().join("a link.bas")).unwrap();
 
-        let store = FileStore::new(&dir.path());
-        let entries = store.enumerate().unwrap();
+        let drive = DirectoryDrive::new(&dir.path());
+        let entries = drive.enumerate().unwrap();
         assert_eq!(2, entries.len());
         let metadata =
             Metadata { date: time::OffsetDateTime::from_unix_timestamp(1_588_757_875), length: 18 };
@@ -758,29 +758,29 @@ mod tests {
     }
 
     #[test]
-    fn test_filestore_enumerate_fails_on_non_directory() {
+    fn test_directorydrive_enumerate_fails_on_non_directory() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("not-a-dir");
         write_file(&file, &[]);
-        let store = FileStore::new(&file);
-        assert_eq!(io::ErrorKind::Other, store.enumerate().unwrap_err().kind());
+        let drive = DirectoryDrive::new(&file);
+        assert_eq!(io::ErrorKind::Other, drive.enumerate().unwrap_err().kind());
     }
 
     #[test]
-    fn test_filestore_get() {
+    fn test_directorydrive_get() {
         let dir = tempfile::tempdir().unwrap();
         write_file(&dir.path().join("some file.bas"), &["one line", "two lines"]);
 
-        let store = FileStore::new(&dir.path());
-        assert_eq!("one line\ntwo lines\n", store.get("some file.bas").unwrap());
+        let drive = DirectoryDrive::new(&dir.path());
+        assert_eq!("one line\ntwo lines\n", drive.get("some file.bas").unwrap());
     }
 
     #[test]
-    fn test_filestore_put() {
+    fn test_directorydrive_put() {
         let dir = tempfile::tempdir().unwrap();
 
-        let mut store = FileStore::new(&dir.path());
-        store.put("some file.bas", "a b c\nd e\n").unwrap();
+        let mut drive = DirectoryDrive::new(&dir.path());
+        drive.put("some file.bas", "a b c\nd e\n").unwrap();
         check_file(&dir.path().join("some file.bas"), &["a b c", "d e"]);
     }
 
