@@ -22,7 +22,7 @@
 #![warn(unsafe_code)]
 
 use anyhow::{anyhow, Result};
-use endbasic_std::store::{DirectoryDrive, Drive};
+use endbasic_std::storage::{DirectoryDrive, Drive, InMemoryDrive};
 use endbasic_std::terminal::TerminalConsole;
 use futures_lite::future::block_on;
 use getopts::Options;
@@ -104,9 +104,7 @@ fn get_programs_dir(flag: Option<String>) -> Result<PathBuf> {
 /// Creates a new drive backed by `dir` and overlays the built-in demos.
 fn new_drive_with_demos(dir: &Path) -> Rc<RefCell<dyn Drive>> {
     if dir == Path::new(":memory:") {
-        Rc::from(RefCell::from(endbasic::demos::DemoDriveOverlay::new(
-            endbasic_std::store::InMemoryDrive::default(),
-        )))
+        Rc::from(RefCell::from(endbasic::demos::DemoDriveOverlay::new(InMemoryDrive::default())))
     } else {
         Rc::from(RefCell::from(endbasic::demos::DemoDriveOverlay::new(DirectoryDrive::new(dir))))
     }

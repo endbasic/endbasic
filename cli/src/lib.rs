@@ -23,7 +23,7 @@
 
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_std::console::{self, Console};
-use endbasic_std::store::Drive;
+use endbasic_std::storage::Drive;
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::io;

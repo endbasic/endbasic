@@ -15,7 +15,7 @@
 
 //! Exposes EndBASIC demos as an overlay to the drive.
 
-use endbasic_std::store::{Drive, Metadata};
+use endbasic_std::storage::{Drive, Metadata};
 use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::str;
@@ -162,7 +162,7 @@ impl<D: Drive> Drive for DemoDriveOverlay<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use endbasic_std::store::InMemoryDrive;
+    use endbasic_std::storage::InMemoryDrive;
 
     #[test]
     fn test_demo_drive_overlay_delete() {

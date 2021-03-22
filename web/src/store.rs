@@ -15,7 +15,7 @@
 
 //! Implementation of a drive that uses the browser's local storage.
 
-use endbasic_std::store::{Metadata, Drive};
+use endbasic_std::storage::{Drive, Metadata};
 use std::collections::BTreeMap;
 use std::io;
 
