@@ -256,11 +256,13 @@ impl Default for Tester {
 }
 
 impl Tester {
-    /// Creates a new tester using the given `Machine`.
-    pub fn from(machine: Machine) -> Self {
+    /// Creates a new tester with an empty `Machine`.
+    pub fn empty() -> Self {
         let console = Rc::from(RefCell::from(MockConsole::default()));
         let drive = Rc::from(RefCell::from(InMemoryDrive::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
+
+        let machine = Machine::default();
 
         Self { console, drive, program, machine }
     }

@@ -261,9 +261,7 @@ mod tests {
                 .boxed_local()
         };
 
-        let mut machine = Machine::default();
-        machine.add_command(SleepCommand::new(Box::from(sleep_fake)));
-        let mut t = Tester::from(machine);
+        let mut t = Tester::empty().add_command(SleepCommand::new(Box::from(sleep_fake)));
         t.run("SLEEP 123").expect_err("Got 123000 ms").check();
         t.run("SLEEP 123.1").expect_err("Got 123100 ms").check();
     }
