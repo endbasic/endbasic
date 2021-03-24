@@ -171,8 +171,10 @@ impl InteractiveMachineBuilder {
             None => Rc::from(RefCell::from(storage::InMemoryDrive::default())),
         };
 
+        let storage = Rc::from(RefCell::from(storage::Storage::new(drive)));
+
         help::add_all(&mut machine, console.clone());
-        storage::add_all(&mut machine, program, console, drive);
+        storage::add_all(&mut machine, program, console, storage);
 
         Ok(machine)
     }
