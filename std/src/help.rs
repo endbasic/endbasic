@@ -558,7 +558,7 @@ mod tests {
     }
 
     fn tester() -> Tester {
-        let tester = Tester::from(Machine::default());
+        let tester = Tester::empty();
         let console = tester.get_console();
         tester.add_command(HelpCommand::new(console))
     }
