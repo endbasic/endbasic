@@ -23,7 +23,7 @@
 
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_std::console::{self, Console};
-use endbasic_std::storage::Drive;
+use endbasic_std::storage::Storage;
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::io;
@@ -50,9 +50,9 @@ pub fn print_welcome(console: Rc<RefCell<dyn Console>>) -> io::Result<()> {
 pub fn try_load_autoexec(
     machine: &mut Machine,
     console: Rc<RefCell<dyn Console>>,
-    drive: Rc<RefCell<dyn Drive>>,
+    storage: &Storage,
 ) -> io::Result<()> {
-    match drive.borrow().get("AUTOEXEC.BAS") {
+    match storage.get("AUTOEXEC.BAS") {
         Ok(code) => {
             console.borrow_mut().print("Loading AUTOEXEC.BAS...")?;
             match block_on(machine.exec(&mut code.as_bytes())) {
@@ -125,8 +125,8 @@ mod tests {
     fn test_autoexec_ok() {
         let autoexec = "PRINT \"hello\": global_var = 3";
         let mut tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
-        let (console, drive) = (tester.get_console(), tester.get_drive());
-        try_load_autoexec(tester.get_machine(), console, drive).unwrap();
+        let (console, storage) = (tester.get_console(), tester.get_storage());
+        try_load_autoexec(tester.get_machine(), console, &storage.borrow()).unwrap();
         tester
             .run("")
             .expect_var("global_var", 3)
@@ -139,8 +139,8 @@ mod tests {
     fn test_autoexec_error_is_ignored() {
         let autoexec = "a = 1: b = undef: c = 2";
         let mut tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
-        let (console, drive) = (tester.get_console(), tester.get_drive());
-        try_load_autoexec(tester.get_machine(), console, drive).unwrap();
+        let (console, storage) = (tester.get_console(), tester.get_storage());
+        try_load_autoexec(tester.get_machine(), console, &storage.borrow()).unwrap();
         tester
             .run("after = 5")
             .expect_var("a", 1)
@@ -158,8 +158,8 @@ mod tests {
         let mut tester = Tester::default()
             .write_file("AUTOEXEC.BAS", "a = 1")
             .write_file("autoexec.bas", "a = 2");
-        let (console, drive) = (tester.get_console(), tester.get_drive());
-        try_load_autoexec(tester.get_machine(), console, drive).unwrap();
+        let (console, storage) = (tester.get_console(), tester.get_storage());
+        try_load_autoexec(tester.get_machine(), console, &storage.borrow()).unwrap();
         tester
             .run("")
             .expect_var("a", 1)
@@ -172,8 +172,8 @@ mod tests {
     #[test]
     fn test_autoexec_missing() {
         let mut tester = Tester::default();
-        let (console, drive) = (tester.get_console(), tester.get_drive());
-        try_load_autoexec(tester.get_machine(), console, drive).unwrap();
+        let (console, storage) = (tester.get_console(), tester.get_storage());
+        try_load_autoexec(tester.get_machine(), console, &storage.borrow()).unwrap();
         tester.run("").check();
     }
 }

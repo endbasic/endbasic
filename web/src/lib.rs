@@ -277,16 +277,17 @@ impl WebTerminal {
 
         let console = Rc::from(RefCell::from(XtermJsConsole { terminal, on_key_rx }));
         let drive = store::WebDrive::from_window();
-        let drive = Rc::from(RefCell::from(DemoDriveOverlay::new(drive)));
+        let drive = Box::from(DemoDriveOverlay::new(drive));
+        let storage = Rc::from(RefCell::from(endbasic_std::storage::Storage::new(drive)));
         let mut machine = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
             .with_sleep_fn(Box::from(js_sleep))
             .make_interactive()
-            .with_drive(drive.clone())
+            .with_storage(storage.clone())
             .build()
             .unwrap();
         endbasic::print_welcome(console.clone()).unwrap();
-        endbasic::try_load_autoexec(&mut machine, console.clone(), drive).unwrap();
+        endbasic::try_load_autoexec(&mut machine, console.clone(), &storage.borrow()).unwrap();
         loop {
             let result = endbasic::run_repl_loop(&mut machine, console.clone()).await;
             let mut console = console.borrow_mut();

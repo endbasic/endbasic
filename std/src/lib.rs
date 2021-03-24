@@ -127,7 +127,7 @@ impl MachineBuilder {
 
     /// Extends the machine with interactive (REPL) features.
     pub fn make_interactive(self) -> InteractiveMachineBuilder {
-        InteractiveMachineBuilder { builder: self, program: None, drive: None }
+        InteractiveMachineBuilder::from(self)
     }
 }
 
@@ -140,38 +140,46 @@ impl MachineBuilder {
 pub struct InteractiveMachineBuilder {
     builder: MachineBuilder,
     program: Option<Rc<RefCell<dyn storage::Program>>>,
-    drive: Option<Rc<RefCell<dyn storage::Drive>>>,
+    storage: Option<Rc<RefCell<storage::Storage>>>,
 }
 
 impl InteractiveMachineBuilder {
+    /// Constructs an interactive machine builder from a non-interactive builder.
+    fn from(builder: MachineBuilder) -> Self {
+        InteractiveMachineBuilder { builder, program: None, storage: None }
+    }
+
+    /// Lazily initializes the `storage` field with a default value and returns it.
+    fn get_storage(&mut self) -> Rc<RefCell<storage::Storage>> {
+        if self.storage.is_none() {
+            let drive = Box::from(storage::InMemoryDrive::default());
+            self.storage = Some(Rc::from(RefCell::from(storage::Storage::new(drive))));
+        }
+        self.storage.clone().expect("Must have been initialized by now")
+    }
+
     /// Overrides the default stored program with the given one.
     pub fn with_program(mut self, program: Rc<RefCell<dyn storage::Program>>) -> Self {
         self.program = Some(program);
         self
     }
 
-    /// Overrides the default drive with the given one.
-    pub fn with_drive(mut self, drive: Rc<RefCell<dyn storage::Drive>>) -> Self {
-        self.drive = Some(drive);
+    /// Overrides the default storage with the given one.
+    pub fn with_storage(mut self, storage: Rc<RefCell<storage::Storage>>) -> Self {
+        self.storage = Some(storage);
         self
     }
 
     /// Builds the interpreter.
     pub fn build(mut self) -> Result<Machine> {
         let console = self.builder.get_console()?;
+        let storage = self.get_storage();
         let mut machine = self.builder.build()?;
 
         let program = match self.program {
             Some(program) => program,
             None => Rc::from(RefCell::from(editor::Editor::default())),
         };
-
-        let drive = match self.drive {
-            Some(drive) => drive,
-            None => Rc::from(RefCell::from(storage::InMemoryDrive::default())),
-        };
-
-        let storage = Rc::from(RefCell::from(storage::Storage::new(drive)));
 
         help::add_all(&mut machine, console.clone());
         storage::add_all(&mut machine, program, console, storage);

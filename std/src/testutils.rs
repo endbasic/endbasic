@@ -17,7 +17,7 @@
 
 use crate::console::{self, ClearType, Console, Key, Position};
 use crate::gpio;
-use crate::storage::{Drive, InMemoryDrive, Program};
+use crate::storage::{InMemoryDrive, Program, Storage};
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{self, Machine, StopReason};
@@ -223,7 +223,7 @@ impl Program for RecordedProgram {
 #[must_use]
 pub struct Tester {
     console: Rc<RefCell<MockConsole>>,
-    drive: Rc<RefCell<InMemoryDrive>>,
+    storage: Rc<RefCell<Storage>>,
     program: Rc<RefCell<RecordedProgram>>,
     machine: Machine,
 }
@@ -232,7 +232,6 @@ impl Default for Tester {
     /// Creates a new tester for a fully-equipped (interactive) machine.
     fn default() -> Self {
         let console = Rc::from(RefCell::from(MockConsole::default()));
-        let drive = Rc::from(RefCell::from(InMemoryDrive::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
 
         // Default to the pins set that always returns errors.  We could have implemented a set of
@@ -242,16 +241,19 @@ impl Default for Tester {
         // everywhere instead of having yet another implementation in this module.
         let gpio_pins = Rc::from(RefCell::from(gpio::NoopPins::default()));
 
-        let machine = crate::MachineBuilder::default()
+        let mut builder = crate::MachineBuilder::default()
             .with_console(console.clone())
             .with_gpio_pins(gpio_pins)
             .make_interactive()
-            .with_drive(drive.clone())
-            .with_program(program.clone())
-            .build()
-            .unwrap();
+            .with_program(program.clone());
 
-        Self { console, drive, program, machine }
+        // Grab access to the machine's storage subsystem before we lose track of it, as we will
+        // need this to check its state.
+        let storage = builder.get_storage();
+
+        let machine = builder.build().unwrap();
+
+        Self { console, storage, program, machine }
     }
 }
 
@@ -259,12 +261,13 @@ impl Tester {
     /// Creates a new tester with an empty `Machine`.
     pub fn empty() -> Self {
         let console = Rc::from(RefCell::from(MockConsole::default()));
-        let drive = Rc::from(RefCell::from(InMemoryDrive::default()));
+        let drive = Box::from(InMemoryDrive::default());
+        let storage = Rc::from(RefCell::from(Storage::new(drive)));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
 
         let machine = Machine::default();
 
-        Self { console, drive, program, machine }
+        Self { console, storage, program, machine }
     }
 
     /// Registers the given builtin command into the machine, which must not yet be registered.
@@ -301,20 +304,20 @@ impl Tester {
         self.console.clone()
     }
 
-    /// Gets the in-memory drive from the tester.
-    ///
-    /// This method should generally not be used.  Its primary utility is to hook
-    /// externally-instantiated commands into the testing features.
-    pub fn get_drive(&self) -> Rc<RefCell<InMemoryDrive>> {
-        self.drive.clone()
-    }
-
     /// Gets the recorded program from the tester.
     ///
     /// This method should generally not be used.  Its primary utility is to hook
     /// externally-instantiated commands into the testing features.
     pub fn get_program(&self) -> Rc<RefCell<RecordedProgram>> {
         self.program.clone()
+    }
+
+    /// Gets the storage subsystem from the tester.
+    ///
+    /// This method should generally not be used.  Its primary utility is to hook
+    /// externally-instantiated commands into the testing features.
+    pub fn get_storage(&self) -> Rc<RefCell<Storage>> {
+        self.storage.clone()
     }
 
     /// Sets the initial contents of the recorded program to `text`.  Can only be called once and
@@ -331,7 +334,7 @@ impl Tester {
 
     /// Creates or overwrites a file in the storage medium.
     pub fn write_file(self, name: &str, content: &str) -> Self {
-        self.drive.borrow_mut().put(name, content).unwrap();
+        self.storage.borrow_mut().put(name, content).unwrap();
         self
     }
 
@@ -502,11 +505,20 @@ impl<'a> Checker<'a> {
             }
         }
 
+        let drive_contents = {
+            let drive = self.tester.storage.borrow();
+            let mut files = HashMap::new();
+            for (name, _) in drive.enumerate().unwrap() {
+                files.insert(name.clone(), drive.get(&name).unwrap());
+            }
+            files
+        };
+
         assert_eq!(self.exp_vars, vars);
         assert_eq!(self.exp_arrays, arrays);
         assert_eq!(self.exp_output, self.tester.console.borrow().captured_out());
         assert_eq!(self.exp_program, self.tester.program.borrow().text());
-        assert_eq!(self.exp_drive, *self.tester.drive.borrow().as_hashmap());
+        assert_eq!(self.exp_drive, drive_contents);
     }
 }
 

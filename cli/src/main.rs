@@ -22,7 +22,7 @@
 #![warn(unsafe_code)]
 
 use anyhow::{anyhow, Result};
-use endbasic_std::storage::{DirectoryDrive, Drive, InMemoryDrive};
+use endbasic_std::storage::{DirectoryDrive, Drive, InMemoryDrive, Storage};
 use endbasic_std::terminal::TerminalConsole;
 use futures_lite::future::block_on;
 use getopts::Options;
@@ -101,13 +101,14 @@ fn get_programs_dir(flag: Option<String>) -> Result<PathBuf> {
     Ok(dir.unwrap())
 }
 
-/// Creates a new drive backed by `dir` and overlays the built-in demos.
-fn new_drive_with_demos(dir: &Path) -> Rc<RefCell<dyn Drive>> {
-    if dir == Path::new(":memory:") {
-        Rc::from(RefCell::from(endbasic::demos::DemoDriveOverlay::new(InMemoryDrive::default())))
+/// Creates a new storage backed by `dir` and overlays the built-in demos.
+fn new_storage_with_demos(dir: &Path) -> Rc<RefCell<Storage>> {
+    let drive: Box<dyn Drive> = if dir == Path::new(":memory:") {
+        Box::from(endbasic::demos::DemoDriveOverlay::new(InMemoryDrive::default()))
     } else {
-        Rc::from(RefCell::from(endbasic::demos::DemoDriveOverlay::new(DirectoryDrive::new(dir))))
-    }
+        Box::from(endbasic::demos::DemoDriveOverlay::new(DirectoryDrive::new(dir)))
+    };
+    Rc::from(RefCell::from(Storage::new(drive)))
 }
 
 /// Enters the interactive interpreter.
@@ -116,14 +117,14 @@ fn new_drive_with_demos(dir: &Path) -> Rc<RefCell<dyn Drive>> {
 /// files.  The special name `:memory:` makes the interpreter use an in-memory only drive.
 fn run_repl_loop(dir: &Path) -> endbasic_core::exec::Result<i32> {
     let console = Rc::from(RefCell::from(TerminalConsole::from_stdio()?));
-    let drive = new_drive_with_demos(dir);
+    let storage = new_storage_with_demos(dir);
     let mut machine = endbasic_std::MachineBuilder::default()
         .with_console(console.clone())
         .make_interactive()
-        .with_drive(drive.clone())
+        .with_storage(storage.clone())
         .build()?;
     endbasic::print_welcome(console.clone())?;
-    endbasic::try_load_autoexec(&mut machine, console.clone(), drive)?;
+    endbasic::try_load_autoexec(&mut machine, console.clone(), &storage.borrow())?;
     Ok(block_on(endbasic::run_repl_loop(&mut machine, console))?)
 }
 
@@ -140,7 +141,7 @@ fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
 fn run_interactive<P: AsRef<Path>>(path: P, dir: &Path) -> endbasic_core::exec::Result<i32> {
     let mut machine = endbasic_std::MachineBuilder::default()
         .make_interactive()
-        .with_drive(new_drive_with_demos(dir))
+        .with_storage(new_storage_with_demos(dir))
         .build()?;
     let mut input = File::open(path)?;
     Ok(block_on(machine.exec(&mut input))?.as_exit_code())
