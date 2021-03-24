@@ -16,7 +16,7 @@
 //! Stored program manipulation.
 
 use crate::console::Console;
-use crate::storage::Drive;
+use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::exec::Machine;
@@ -76,9 +76,9 @@ fn to_filename<S: Into<PathBuf>>(basename: S) -> io::Result<String> {
     Ok(basename.to_str().expect("Path came from a String").to_owned())
 }
 
-/// Shows the contents of the `drive`.
-fn show_dir(drive: &dyn Drive, console: &mut dyn Console) -> io::Result<()> {
-    let entries = drive.enumerate()?;
+/// Shows the contents of the current storage location.
+fn show_dir(storage: &Storage, console: &mut dyn Console) -> io::Result<()> {
+    let entries = storage.enumerate()?;
 
     console.print("")?;
     console.print("    Modified              Size    Name")?;
@@ -105,12 +105,12 @@ fn show_dir(drive: &dyn Drive, console: &mut dyn Console) -> io::Result<()> {
 /// The `DEL` command.
 pub struct DelCommand {
     metadata: CallableMetadata,
-    drive: Rc<RefCell<dyn Drive>>,
+    storage: Rc<RefCell<Storage>>,
 }
 
 impl DelCommand {
-    /// Creates a new `DEL` command that deletes a file from the `drive`.
-    pub fn new(drive: Rc<RefCell<dyn Drive>>) -> Rc<Self> {
+    /// Creates a new `DEL` command that deletes a file from `storage`.
+    pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DEL", VarType::Void)
                 .with_syntax("filename")
@@ -121,7 +121,7 @@ The filename must be a string and must be a basename (no directory components). 
 extension is optional, but if present, it must be .BAS.",
                 )
                 .build(),
-            drive,
+            storage,
         })
     }
 }
@@ -140,7 +140,7 @@ impl Command for DelCommand {
         match arg0.eval(machine.get_mut_symbols())? {
             Value::Text(t) => {
                 let name = to_filename(t)?;
-                self.drive.borrow_mut().delete(&name)?;
+                self.storage.borrow_mut().delete(&name)?;
             }
             _ => {
                 return Err(CallError::ArgumentError(
@@ -156,12 +156,12 @@ impl Command for DelCommand {
 pub struct DirCommand {
     metadata: CallableMetadata,
     console: Rc<RefCell<dyn Console>>,
-    drive: Rc<RefCell<dyn Drive>>,
+    storage: Rc<RefCell<Storage>>,
 }
 
 impl DirCommand {
-    /// Creates a new `DIR` command that lists the contents of the `drive` on the `console`.
-    pub fn new(console: Rc<RefCell<dyn Console>>, drive: Rc<RefCell<dyn Drive>>) -> Rc<Self> {
+    /// Creates a new `DIR` command that lists `storage` contents on the `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DIR", VarType::Void)
                 .with_syntax("")
@@ -169,7 +169,7 @@ impl DirCommand {
                 .with_description("Displays the list of files on disk.")
                 .build(),
             console,
-            drive,
+            storage,
         })
     }
 }
@@ -184,7 +184,7 @@ impl Command for DirCommand {
         if !args.is_empty() {
             return Err(CallError::ArgumentError("DIR takes no arguments".to_owned()));
         }
-        show_dir(&*self.drive.borrow(), &mut *self.console.borrow_mut())?;
+        show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut())?;
         Ok(())
     }
 }
@@ -284,13 +284,13 @@ impl Command for ListCommand {
 /// The `LOAD` command.
 pub struct LoadCommand {
     metadata: CallableMetadata,
-    drive: Rc<RefCell<dyn Drive>>,
+    storage: Rc<RefCell<Storage>>,
     program: Rc<RefCell<dyn Program>>,
 }
 
 impl LoadCommand {
-    /// Creates a new `LOAD` command that loads a program from the `drive` into `program`.
-    pub fn new(drive: Rc<RefCell<dyn Drive>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+    /// Creates a new `LOAD` command that loads a program from `storage` into `program`.
+    pub fn new(storage: Rc<RefCell<Storage>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOAD", VarType::Void)
                 .with_syntax("filename")
@@ -301,7 +301,7 @@ The filename must be a string and must be a basename (no directory components). 
 extension is optional, but if present, it must be .BAS.",
                 )
                 .build(),
-            drive,
+            storage,
             program,
         })
     }
@@ -321,7 +321,7 @@ impl Command for LoadCommand {
         match arg0.eval(machine.get_mut_symbols())? {
             Value::Text(t) => {
                 let name = to_filename(t)?;
-                let content = self.drive.borrow().get(&name)?;
+                let content = self.storage.borrow().get(&name)?;
                 self.program.borrow_mut().load(&content);
                 machine.clear();
             }
@@ -430,13 +430,13 @@ impl Command for RunCommand {
 /// The `SAVE` command.
 pub struct SaveCommand {
     metadata: CallableMetadata,
-    drive: Rc<RefCell<dyn Drive>>,
+    storage: Rc<RefCell<Storage>>,
     program: Rc<RefCell<dyn Program>>,
 }
 
 impl SaveCommand {
-    /// Creates a new `SAVE` command that saves the contents of the `program` in the `drive`.
-    pub fn new(drive: Rc<RefCell<dyn Drive>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+    /// Creates a new `SAVE` command that saves the contents of the `program` into `storage`.
+    pub fn new(storage: Rc<RefCell<Storage>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SAVE", VarType::Void)
                 .with_syntax("filename")
@@ -447,7 +447,7 @@ The filename must be a string and must be a basename (no directory components). 
 extension is optional, but if present, it must be .BAS.",
                 )
                 .build(),
-            drive,
+            storage,
             program,
         })
     }
@@ -468,7 +468,7 @@ impl Command for SaveCommand {
             Value::Text(t) => {
                 let name = to_filename(t)?;
                 let content = self.program.borrow().text();
-                self.drive.borrow_mut().put(&name, &content)?;
+                self.storage.borrow_mut().put(&name, &content)?;
             }
             _ => {
                 return Err(CallError::ArgumentError(
@@ -481,21 +481,21 @@ impl Command for SaveCommand {
 }
 
 /// Adds all program editing commands against the stored `program` to the `machine`, using
-/// `console` for interactive editing and using `drive` as the on-disk storage for the programs.
+/// `console` for interactive editing and using `storage` as the on-disk storage for the programs.
 pub fn add_all(
     machine: &mut Machine,
     program: Rc<RefCell<dyn Program>>,
     console: Rc<RefCell<dyn Console>>,
-    drive: Rc<RefCell<dyn Drive>>,
+    storage: Rc<RefCell<Storage>>,
 ) {
-    machine.add_command(DelCommand::new(drive.clone()));
-    machine.add_command(DirCommand::new(console.clone(), drive.clone()));
+    machine.add_command(DelCommand::new(storage.clone()));
+    machine.add_command(DirCommand::new(console.clone(), storage.clone()));
     machine.add_command(EditCommand::new(console.clone(), program.clone()));
     machine.add_command(ListCommand::new(console.clone(), program.clone()));
-    machine.add_command(LoadCommand::new(drive.clone(), program.clone()));
+    machine.add_command(LoadCommand::new(storage.clone(), program.clone()));
     machine.add_command(NewCommand::new(program.clone()));
     machine.add_command(RunCommand::new(console, program.clone()));
-    machine.add_command(SaveCommand::new(drive, program));
+    machine.add_command(SaveCommand::new(storage, program));
 }
 
 #[cfg(test)]
