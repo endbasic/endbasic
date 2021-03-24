@@ -15,10 +15,8 @@
 
 //! Storage-related abstractions and commands.
 
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::io;
-use std::rc::Rc;
 use std::str;
 
 mod cmds;
@@ -58,32 +56,32 @@ pub trait Drive {
 /// At the moment, the storage subsystem is backed by a single drive, so this type is a wrapper
 /// for the `Drive` type.
 pub struct Storage {
-    drive: Rc<RefCell<dyn Drive>>,
+    drive: Box<dyn Drive>,
 }
 
 impl Storage {
     /// Creates a new storage subsytem backed by `drive`.
-    pub fn new(drive: Rc<RefCell<dyn Drive>>) -> Self {
+    pub fn new(drive: Box<dyn Drive>) -> Self {
         Self { drive }
     }
 
     /// Deletes the program given by `name`.
     pub fn delete(&mut self, name: &str) -> io::Result<()> {
-        self.drive.borrow_mut().delete(name)
+        self.drive.delete(name)
     }
 
     /// Returns a sorted list of the entries in the store and their metadata.
     pub fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
-        self.drive.borrow().enumerate()
+        self.drive.enumerate()
     }
 
     /// Loads the contents of the program given by `name`.
     pub fn get(&self, name: &str) -> io::Result<String> {
-        self.drive.borrow().get(name)
+        self.drive.get(name)
     }
 
     /// Saves the in-memory program given by `content` into `name`.
     pub fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
-        self.drive.borrow_mut().put(name, content)
+        self.drive.put(name, content)
     }
 }

@@ -26,13 +26,6 @@ pub struct InMemoryDrive {
     programs: HashMap<String, String>,
 }
 
-impl InMemoryDrive {
-    /// Returns the mapping of stored file names to their contents.
-    pub fn as_hashmap(&self) -> &HashMap<String, String> {
-        &self.programs
-    }
-}
-
 impl Drive for InMemoryDrive {
     fn delete(&mut self, name: &str) -> io::Result<()> {
         match self.programs.remove(name) {
