@@ -35,3 +35,5 @@ DIR ' Two files.
 
 DEL "empty.bas"
 DIR ' One file again.
+
+DIR "demos:"

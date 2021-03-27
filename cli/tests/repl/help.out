@@ -107,7 +107,7 @@ Output from HELP STORED:
     Stored program manipulation
 
     >> DEL     Deletes the given program.
-    >> DIR     Displays the list of files on disk.
+    >> DIR     Displays the list of files on the current or given path.
     >> EDIT    Interactively edits the stored program.
     >> LIST    Prints the currently-loaded program.
     >> LOAD    Loads the given program.
@@ -166,9 +166,9 @@ Output from HELP DEL:
 
 Output from HELP DIR:
 
-    DIR
+    DIR [path$]
 
-    Displays the list of files on disk.
+    Displays the list of files on the current or given path.
 
 Output from HELP EDIT:
 

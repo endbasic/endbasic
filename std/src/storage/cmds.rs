@@ -69,10 +69,13 @@ fn add_extension<S: Into<PathBuf>>(path: S) -> io::Result<String> {
     Ok(path.to_str().expect("Path came from a String").to_owned())
 }
 
-/// Shows the contents of the current storage location.
-fn show_dir(storage: &Storage, console: &mut dyn Console) -> io::Result<()> {
-    let entries = storage.enumerate("")?;
+/// Shows the contents of the given storage location.
+fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> io::Result<()> {
+    let canonical_path = storage.make_canonical(path)?;
+    let entries = storage.enumerate(path)?;
 
+    console.print("")?;
+    console.print(&format!("    Directory of {}", canonical_path))?;
     console.print("")?;
     console.print("    Modified              Size    Name")?;
     let mut total_files = 0;
@@ -157,9 +160,9 @@ impl DirCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DIR", VarType::Void)
-                .with_syntax("")
+                .with_syntax("[path$]")
                 .with_category(CATEGORY)
-                .with_description("Displays the list of files on disk.")
+                .with_description("Displays the list of files on the current or given path.")
                 .build(),
             console,
             storage,
@@ -173,12 +176,25 @@ impl Command for DirCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
-        if !args.is_empty() {
-            return Err(CallError::ArgumentError("DIR takes no arguments".to_owned()));
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+        match args {
+            [] => {
+                show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), "")?;
+                Ok(())
+            }
+            [(Some(path), ArgSep::End)] => match path.eval(machine.get_mut_symbols())? {
+                Value::Text(path) => {
+                    show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), &path)?;
+                    Ok(())
+                }
+                _ => {
+                    return Err(CallError::ArgumentError(
+                        "DIR requires a string as the path".to_owned(),
+                    ))
+                }
+            },
+            _ => Err(CallError::ArgumentError("DIR takes zero or one argument".to_owned())),
         }
-        show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut())?;
-        Ok(())
     }
 }
 
@@ -494,6 +510,7 @@ pub fn add_all(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::{Drive, InMemoryDrive};
     use crate::testutils::*;
 
     #[test]
@@ -525,10 +542,12 @@ mod tests {
     }
 
     #[test]
-    fn test_dir_empty() {
+    fn test_dir_current_empty() {
         Tester::default()
             .run("DIR")
             .expect_prints([
+                "",
+                "    Directory of MEMORY:/",
                 "",
                 "    Modified              Size    Name",
                 "    0 file(s), 0 bytes",
@@ -538,7 +557,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dir_entries_are_sorted() {
+    fn test_dir_current_entries_are_sorted() {
         Tester::default()
             .write_file("empty.bas", "")
             .write_file("some other file.bas", "not empty\n")
@@ -546,6 +565,8 @@ mod tests {
             .write_file("not a bas.txt", "")
             .run("DIR")
             .expect_prints([
+                "",
+                "    Directory of MEMORY:/",
                 "",
                 "    Modified              Size    Name",
                 "    2020-05-06 09:37        11    00AAA.BAS",
@@ -564,8 +585,76 @@ mod tests {
     }
 
     #[test]
+    fn test_dir_other_by_argument() {
+        let mut other = InMemoryDrive::default();
+        other.put("foo.bas", "hello").unwrap();
+
+        let mut t = Tester::default().write_file("empty.bas", "");
+        t.get_storage().borrow_mut().mount("other", Box::from(other)).unwrap();
+
+        let mut prints = vec![
+            "",
+            "    Directory of MEMORY:/",
+            "",
+            "    Modified              Size    Name",
+            "    2020-05-06 09:37         0    empty.bas",
+            "",
+            "    1 file(s), 0 bytes",
+            "",
+        ];
+        t.run("DIR \"memory:\"").expect_prints(prints.clone()).expect_file("empty.bas", "").check();
+
+        prints.extend(&[
+            "",
+            "    Directory of OTHER:/",
+            "",
+            "    Modified              Size    Name",
+            "    2020-05-06 09:37         5    foo.bas",
+            "",
+            "    1 file(s), 5 bytes",
+            "",
+        ]);
+        t.run("DIR \"other:/\"").expect_prints(prints).expect_file("empty.bas", "").check();
+    }
+
+    #[test]
+    fn test_dir_other_by_cwd() {
+        let mut other = InMemoryDrive::default();
+        other.put("foo.bas", "hello").unwrap();
+
+        let mut t = Tester::default().write_file("empty.bas", "");
+        t.get_storage().borrow_mut().mount("other", Box::from(other)).unwrap();
+
+        let mut prints = vec![
+            "",
+            "    Directory of MEMORY:/",
+            "",
+            "    Modified              Size    Name",
+            "    2020-05-06 09:37         0    empty.bas",
+            "",
+            "    1 file(s), 0 bytes",
+            "",
+        ];
+        t.run("DIR").expect_prints(prints.clone()).expect_file("empty.bas", "").check();
+
+        t.get_storage().borrow_mut().cd("other:/").unwrap();
+        prints.extend(&[
+            "",
+            "    Directory of OTHER:/",
+            "",
+            "    Modified              Size    Name",
+            "    2020-05-06 09:37         5    foo.bas",
+            "",
+            "    1 file(s), 5 bytes",
+            "",
+        ]);
+        t.run("DIR").expect_prints(prints).expect_file("foo.bas", "hello").check();
+    }
+
+    #[test]
     fn test_dir_errors() {
-        check_stmt_err("DIR takes no arguments", "DIR 2");
+        check_stmt_err("DIR takes zero or one argument", "DIR 2, 3");
+        check_stmt_err("DIR requires a string as the path", "DIR 2");
     }
 
     #[test]
