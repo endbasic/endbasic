@@ -29,7 +29,6 @@ wasm_bindgen_test_configure!(run_in_browser);
 mod store;
 
 use async_trait::async_trait;
-use endbasic::demos::DemoDriveOverlay;
 use endbasic_core::syms::{self, CommandResult};
 use endbasic_std::console::{ClearType, Console, Key, Position};
 use std::cell::RefCell;
@@ -276,16 +275,18 @@ impl WebTerminal {
         terminal.on_key(on_key_callback.as_ref().unchecked_ref());
 
         let console = Rc::from(RefCell::from(XtermJsConsole { terminal, on_key_rx }));
-        let drive = store::WebDrive::from_window();
-        let drive = Box::from(DemoDriveOverlay::new(drive));
-        let storage = Rc::from(RefCell::from(endbasic_std::storage::Storage::new(drive)));
-        let mut machine = endbasic_std::MachineBuilder::default()
+        let mut builder = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
             .with_sleep_fn(Box::from(js_sleep))
-            .make_interactive()
-            .with_storage(storage.clone())
-            .build()
-            .unwrap();
+            .make_interactive();
+
+        let storage = builder.get_storage();
+        endbasic::setup_storage(
+            &mut storage.borrow_mut(),
+            Some(Box::from(store::WebDrive::from_window())),
+        );
+
+        let mut machine = builder.build().unwrap();
         endbasic::print_welcome(console.clone()).unwrap();
         endbasic::try_load_autoexec(&mut machine, console.clone(), &storage.borrow()).unwrap();
         loop {

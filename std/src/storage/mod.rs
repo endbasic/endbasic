@@ -15,7 +15,8 @@
 
 //! Storage-related abstractions and commands.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::fmt::{self};
 use std::io;
 use std::str;
 
@@ -51,37 +52,612 @@ pub trait Drive {
     fn put(&mut self, name: &str, content: &str) -> io::Result<()>;
 }
 
+/// Unique identifier for a drive.
+///
+/// The name contained in the key is stored in its canonical form.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct DriveKey(String);
+
+impl DriveKey {
+    /// Constructs a drive from a raw string, validating that the name is valid.
+    fn new<T: Into<String>>(drive: T) -> io::Result<DriveKey> {
+        let drive = drive.into();
+        if !DriveKey::is_valid(&drive) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Invalid drive name '{}'", drive),
+            ));
+        }
+        Ok(DriveKey(drive.to_uppercase()))
+    }
+
+    /// Returns true if the given drive name is valid.
+    fn is_valid(s: &str) -> bool {
+        !s.is_empty() && !s.chars().any(|c| c == ':' || c == '\\' || c == '/' || c == '.')
+    }
+}
+
+impl fmt::Display for DriveKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// Representation of an EndBASIC path.
+///
+/// This implementation is not as efficient as it could be, given that many times we don't have to
+/// clone the input string to break it into pieces.  However, owning the components here makes the
+/// implementation much simpler and, for now, should not be a noticeable performance problem.
+#[derive(Debug)]
+struct Location {
+    drive: Option<DriveKey>,
+    path: String,
+}
+
+impl Location {
+    /// Constructs a new path from the contents of `s` after validating it.
+    fn new(s: &str) -> io::Result<Self> {
+        let fields = s.split(':').collect::<Vec<&str>>();
+        let (drive, mut path) = match fields.as_slice() {
+            [drive, path] => (Some(DriveKey::new(*drive)?), *path),
+            [path] => (None, *path),
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Too many : separators in path '{}'", s),
+                ))
+            }
+        };
+
+        if path.is_empty() {
+            path = "/";
+        } else {
+            if !Location::is_path_valid(path)
+                || path == "."
+                || path == ".."
+                || path == "/."
+                || path == "/.."
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Invalid path '{}'", s),
+                ));
+            }
+            let slashes = path.chars().fold(0, |a, c| if c == '/' { a + 1 } else { a });
+            if (slashes == 1 && !path.starts_with('/')) || slashes > 1 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Too many / separators in path '{}'", s),
+                ));
+            }
+        }
+
+        Ok(Self { drive, path: path.to_owned() })
+    }
+
+    /// Convenience function to create a path to the root of a `drive`.
+    fn with_drive_root(drive: DriveKey) -> Self {
+        Self { drive: Some(drive), path: "/".to_owned() }
+    }
+
+    /// Returns true if the given path is valid.
+    fn is_path_valid(s: &str) -> bool {
+        !s.is_empty() && !s.chars().any(|c| c == ':' || c == '\\')
+    }
+
+    /// Returns the last component of this path, or none if there is no referenced file.
+    fn leaf_name(&self) -> Option<&str> {
+        if self.path == "/" {
+            None
+        } else if self.path.starts_with('/') {
+            Some(&self.path[1..])
+        } else {
+            Some(&self.path)
+        }
+    }
+}
+
+impl fmt::Display for Location {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.drive {
+            Some(drive) => write!(f, "{}:{}", drive.0, self.path),
+            None => self.path.fmt(f),
+        }
+    }
+}
+
 /// Storage subsystem representation.
 ///
 /// At the moment, the storage subsystem is backed by a single drive, so this type is a wrapper
 /// for the `Drive` type.
 pub struct Storage {
-    drive: Box<dyn Drive>,
+    /// Mapping of drive names to drives.
+    drives: HashMap<DriveKey, Box<dyn Drive>>,
+
+    /// Name of the active drive, which must be present in `drives`.
+    current: DriveKey,
+}
+
+impl Default for Storage {
+    /// Creates a new storage subsytem backed by an in-memory drive.
+    fn default() -> Self {
+        let drive: Box<dyn Drive> = Box::from(InMemoryDrive::default());
+
+        let mut drives = HashMap::new();
+        let key = DriveKey::new("MEMORY").expect("Hardcoded drive name must be valid");
+        drives.insert(key.clone(), drive);
+        Self { drives, current: key }
+    }
 }
 
 impl Storage {
-    /// Creates a new storage subsytem backed by `drive`.
-    pub fn new(drive: Box<dyn Drive>) -> Self {
-        Self { drive }
+    /// Converts a location, which needn't exist, to its canonical form.
+    pub fn make_canonical(&self, raw_location: &str) -> io::Result<String> {
+        let mut location = Location::new(raw_location)?;
+        if location.drive.is_none() {
+            location.drive = Some(self.current.clone());
+        }
+        Ok(location.to_string())
     }
 
-    /// Deletes the program given by `name`.
-    pub fn delete(&mut self, name: &str) -> io::Result<()> {
-        self.drive.delete(name)
+    /// Attaches a new `drive` with `name`.
+    ///
+    /// The `name` must be valid and must not yet have been registered.
+    pub fn mount(&mut self, name: &str, drive: Box<dyn Drive>) -> io::Result<()> {
+        let key = DriveKey::new(name)?;
+        if self.drives.contains_key(&key) {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("Drive '{}' is already mounted", name),
+            ));
+        }
+        self.drives.insert(key, drive);
+        Ok(())
     }
 
-    /// Returns a sorted list of the entries in the store and their metadata.
-    pub fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
-        self.drive.enumerate()
+    /// Detaches an existing drive named `name`.
+    ///
+    /// The drive `name` must exist, cannot be the current drive, and cannot be the last mounted
+    /// drive.
+    pub fn unmount(&mut self, name: &str) -> io::Result<()> {
+        let key = DriveKey::new(name)?;
+        if !self.drives.contains_key(&key) {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Drive '{}' is not mounted", name),
+            ));
+        }
+        if self.current == key {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("Cannot unmount the current drive '{}'", name),
+            ));
+        }
+        assert!(
+            self.drives.len() > 1,
+            "There must be more than one drive if the current drive is not the given name"
+        );
+        self.drives.remove(&key).expect("Drive presence in map checked above");
+        Ok(())
     }
 
-    /// Loads the contents of the program given by `name`.
-    pub fn get(&self, name: &str) -> io::Result<String> {
-        self.drive.get(name)
+    /// Changes the current location.
+    ///
+    /// Given that we currently do not support directories, the location can only be of the forms
+    /// `DRIVE:` or `DRIVE:/`.
+    pub fn cd(&mut self, location: &str) -> io::Result<()> {
+        let location = Location::new(location)?;
+        if location.leaf_name().is_some() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Cannot cd to a file"));
+        }
+
+        match location.drive {
+            Some(drive) => {
+                if !self.drives.contains_key(&drive) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!("Drive '{}' is not mounted", drive),
+                    ));
+                }
+                self.current = drive;
+                Ok(())
+            }
+            None => Ok(()),
+        }
     }
 
-    /// Saves the in-memory program given by `content` into `name`.
-    pub fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
-        self.drive.put(name, content)
+    /// Returns the current location, used to resolve relative paths.
+    pub fn cwd(&self) -> String {
+        Location::with_drive_root(self.current.clone()).to_string()
+    }
+
+    /// Returns the drive referenced by `location`, or an error if it doesn't exist.
+    fn get_drive(&self, location: &Location) -> io::Result<&dyn Drive> {
+        match &location.drive {
+            Some(key) => match self.drives.get(&key) {
+                Some(drive) => Ok(drive.as_ref()),
+                None => Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("Drive '{}' is not mounted", key),
+                )),
+            },
+            None => Ok(self.drives.get(&self.current).expect("Current drive out of sync").as_ref()),
+        }
+    }
+
+    /// Returns the drive referenced by `location`, or an error if it doesn't exist.
+    fn get_drive_mut(&mut self, location: &Location) -> io::Result<&mut dyn Drive> {
+        match &location.drive {
+            Some(key) => match self.drives.get_mut(&key) {
+                Some(drive) => Ok(drive.as_mut()),
+                None => Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("Drive '{}' is not mounted", key),
+                )),
+            },
+            None => {
+                Ok(self.drives.get_mut(&self.current).expect("Current drive out of sync").as_mut())
+            }
+        }
+    }
+
+    /// Deletes the program given by `raw_location`.
+    pub fn delete(&mut self, raw_location: &str) -> io::Result<()> {
+        let location = Location::new(raw_location)?;
+        match location.leaf_name() {
+            Some(name) => self.get_drive_mut(&location)?.delete(name),
+            None => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Missing file name in path '{}'", raw_location),
+            )),
+        }
+    }
+
+    /// Returns a sorted list of the entries in `raw_location` and their metadata.
+    pub fn enumerate(&self, raw_location: &str) -> io::Result<BTreeMap<String, Metadata>> {
+        let location = Location::new(raw_location)?;
+        match location.leaf_name() {
+            Some(_) => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Location '{}' is not a directory", raw_location),
+            )),
+            None => self.get_drive(&location)?.enumerate(),
+        }
+    }
+
+    /// Loads the contents of the program given by `raw_location`.
+    pub fn get(&self, raw_location: &str) -> io::Result<String> {
+        let location = Location::new(raw_location)?;
+        match location.leaf_name() {
+            Some(name) => self.get_drive(&location)?.get(name),
+            None => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Missing file name in path '{}'", raw_location),
+            )),
+        }
+    }
+
+    /// Saves the in-memory program given by `content` into `raw_location`.
+    pub fn put(&mut self, raw_location: &str, content: &str) -> io::Result<()> {
+        let location = Location::new(raw_location)?;
+        match location.leaf_name() {
+            Some(name) => self.get_drive_mut(&location)?.put(name, content),
+            None => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Missing file name in path '{}'", raw_location),
+            )),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_drivekey_new() {
+        assert_eq!(DriveKey("FOO".to_owned()), DriveKey::new("foo").unwrap());
+        assert_eq!(DriveKey("A".to_owned()), DriveKey::new("A".to_owned()).unwrap());
+    }
+
+    #[test]
+    fn test_drivekey_errors() {
+        assert_eq!("Invalid drive name ''", format!("{}", DriveKey::new("").unwrap_err()));
+        assert_eq!("Invalid drive name 'a:b'", format!("{}", DriveKey::new("a:b").unwrap_err()));
+        assert_eq!("Invalid drive name 'a\\b'", format!("{}", DriveKey::new("a\\b").unwrap_err()));
+        assert_eq!("Invalid drive name 'a/b'", format!("{}", DriveKey::new("a/b").unwrap_err()));
+        assert_eq!("Invalid drive name 'a.b'", format!("{}", DriveKey::new("a.b").unwrap_err()));
+    }
+
+    #[test]
+    fn test_location_new_ok() {
+        fn check(exp_drive: Option<&str>, exp_path: &str, input: &str) {
+            let rp = Location::new(input).unwrap();
+            assert_eq!(exp_drive.map(|s| DriveKey::new(s).unwrap()), rp.drive);
+            assert_eq!(exp_path, rp.path);
+        }
+
+        check(None, "/", "/");
+        check(None, "/foo.bas", "/foo.bas");
+
+        check(Some("A"), "/", "a:");
+        check(Some("ABC"), "/foo.bas", "abc:/foo.bas");
+        check(Some("ABC"), "Foo.Bas", "abc:Foo.Bas");
+    }
+
+    #[test]
+    fn test_location_new_errors() {
+        fn check(exp_error: &str, input: &str) {
+            let e = Location::new(input).unwrap_err();
+            assert_eq!(io::ErrorKind::InvalidInput, e.kind());
+            assert_eq!(exp_error, format!("{}", e));
+        }
+
+        check("Too many : separators in path 'a:b:c'", "a:b:c");
+
+        check("Invalid drive name ''", ":");
+        check("Invalid drive name 'a\\b'", "a\\b:");
+        check("Invalid drive name 'a/b'", "a/b:");
+        check("Invalid drive name 'a.b'", "a.b:");
+
+        check("Invalid path 'a:\\'", "a:\\");
+        check("Invalid path 'a:.'", "a:.");
+        check("Invalid path 'a:..'", "a:..");
+        check("Invalid path 'a:/.'", "a:/.");
+        check("Invalid path 'a:/..'", "a:/..");
+        check("Invalid path '.'", ".");
+        check("Invalid path '..'", "..");
+        check("Invalid path '/.'", "/.");
+        check("Invalid path '/..'", "/..");
+
+        check("Too many / separators in path 'a://.'", "a://.");
+        check("Too many / separators in path 'a:../'", "a:../");
+        check("Too many / separators in path 'a:b/c'", "a:b/c");
+        check("Too many / separators in path 'a:/b/c'", "a:/b/c");
+    }
+
+    #[test]
+    fn test_location_leaf_name() {
+        assert_eq!(None, Location::new("drv:/").unwrap().leaf_name());
+        assert_eq!(None, Location::new("drv:").unwrap().leaf_name());
+
+        assert_eq!(Some("abc.txt"), Location::new("a:/abc.txt").unwrap().leaf_name());
+        assert_eq!(Some("abc.txt"), Location::new("a:abc.txt").unwrap().leaf_name());
+        assert_eq!(Some("abc.txt"), Location::new("abc.txt").unwrap().leaf_name());
+    }
+
+    /// Convenience helper to obtain the sorted list of mounted drive names in canonical form.
+    fn drive_names(storage: &Storage) -> Vec<String> {
+        let mut names = storage.drives.keys().map(DriveKey::to_string).collect::<Vec<String>>();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn test_storage_default() {
+        let storage = Storage::default();
+        assert_eq!("MEMORY:/", storage.cwd());
+    }
+
+    #[test]
+    fn test_storage_make_canonical_ok() {
+        let mut storage = Storage::default();
+        storage.mount("some", Box::from(InMemoryDrive::default())).unwrap();
+
+        assert_eq!("MEMORY:foo.bar", storage.make_canonical("foo.bar").unwrap());
+        assert_eq!("MEMORY:/foo.bar", storage.make_canonical("/foo.bar").unwrap());
+        storage.cd("some:/").unwrap();
+        assert_eq!("SOME:foo.bar", storage.make_canonical("foo.bar").unwrap());
+        assert_eq!("SOME:/foo.bar", storage.make_canonical("/foo.bar").unwrap());
+
+        assert_eq!("MEMORY:a", storage.make_canonical("memory:a").unwrap());
+        assert_eq!("MEMORY:/Abc", storage.make_canonical("memory:/Abc").unwrap());
+        assert_eq!("OTHER:a", storage.make_canonical("Other:a").unwrap());
+        assert_eq!("OTHER:/Abc", storage.make_canonical("Other:/Abc").unwrap());
+    }
+
+    #[test]
+    fn test_storage_make_canonical_errors() {
+        let storage = Storage::default();
+        assert_eq!(
+            "Invalid drive name 'a\\b'",
+            format!("{}", storage.make_canonical("a\\b:c").unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_storage_mount_ok() {
+        let mut storage = Storage::default();
+        storage.mount("zzz1", Box::from(InMemoryDrive::default())).unwrap();
+        storage.mount("A4", Box::from(InMemoryDrive::default())).unwrap();
+
+        assert_eq!("MEMORY:/", storage.cwd());
+        assert_eq!(["A4", "MEMORY", "ZZZ1"], drive_names(&storage).as_slice());
+    }
+
+    #[test]
+    fn test_storage_mount_invalid_name() {
+        let mut storage = Storage::default();
+        assert_eq!(
+            "Invalid drive name 'a:b'",
+            format!("{}", storage.mount("a:b", Box::from(InMemoryDrive::default())).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_storage_mount_already_mounted() {
+        let mut storage = Storage::default();
+        assert_eq!(
+            "Drive 'memory' is already mounted",
+            format!(
+                "{}",
+                storage.mount("memory", Box::from(InMemoryDrive::default())).unwrap_err()
+            )
+        );
+
+        storage.mount("new", Box::from(InMemoryDrive::default())).unwrap();
+        assert_eq!(
+            "Drive 'New' is already mounted",
+            format!("{}", storage.mount("New", Box::from(InMemoryDrive::default())).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_storage_unmount_ok() {
+        let mut storage = Storage::default();
+        storage.mount("other", Box::from(InMemoryDrive::default())).unwrap();
+        assert_eq!("MEMORY:/", storage.cwd());
+        assert_eq!(["MEMORY", "OTHER"], drive_names(&storage).as_slice());
+
+        storage.unmount("other").unwrap();
+        assert_eq!("MEMORY:/", storage.cwd());
+        assert_eq!(["MEMORY"], drive_names(&storage).as_slice());
+    }
+
+    #[test]
+    fn test_storage_unmount_not_mounted_error() {
+        let mut storage = Storage::default();
+        assert_eq!(
+            "Drive 'foo' is not mounted",
+            format!("{}", storage.unmount("foo").unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_storage_unmount_current_drive_error() {
+        let mut storage = Storage::default();
+        storage.mount("other", Box::from(InMemoryDrive::default())).unwrap();
+        assert_eq!(
+            "Cannot unmount the current drive 'memory'",
+            format!("{}", storage.unmount("memory").unwrap_err())
+        );
+        storage.cd("other:").unwrap();
+        storage.unmount("memory").unwrap();
+        assert_eq!("OTHER:/", storage.cwd());
+        assert_eq!(["OTHER"], drive_names(&storage).as_slice());
+    }
+
+    #[test]
+    fn test_storage_cd_and_cwd_ok() {
+        let mut storage = Storage::default();
+        storage.mount("other", Box::from(InMemoryDrive::default())).unwrap();
+        assert_eq!("MEMORY:/", storage.cwd());
+        storage.cd("other:/").unwrap();
+        assert_eq!("OTHER:/", storage.cwd());
+        storage.cd("memory:").unwrap();
+        assert_eq!("MEMORY:/", storage.cwd());
+    }
+
+    #[test]
+    fn test_storage_cd_errors() {
+        let mut storage = Storage::default();
+        assert_eq!("Invalid drive name ''", format!("{}", storage.cd(":foo").unwrap_err()));
+        assert_eq!("Invalid path 'a:b\\c'", format!("{}", storage.cd("a:b\\c").unwrap_err()));
+        assert_eq!("Cannot cd to a file", format!("{}", storage.cd("foo:bar.bas").unwrap_err()));
+        assert_eq!("Drive 'A' is not mounted", format!("{}", storage.cd("a:").unwrap_err()));
+    }
+
+    #[test]
+    fn test_storage_file_ops_with_absolute_paths() {
+        let mut storage = Storage::default();
+        storage.mount("other", Box::from(InMemoryDrive::default())).unwrap();
+
+        storage.put("other:/f1", "some text").unwrap();
+        storage.put("other:f2", "other text").unwrap();
+        {
+            // Ensure that the put operations were routed to the correct objects.
+            let memory_drive = storage.drives.get(&DriveKey::new("memory").unwrap()).unwrap();
+            assert_eq!(0, memory_drive.enumerate().unwrap().len());
+            let other_drive = storage.drives.get(&DriveKey::new("other").unwrap()).unwrap();
+            assert_eq!(2, other_drive.enumerate().unwrap().len());
+        }
+
+        assert_eq!(0, storage.enumerate("memory:").unwrap().len());
+        assert_eq!(0, storage.enumerate("memory:").unwrap().len());
+        assert_eq!(2, storage.enumerate("other:/").unwrap().len());
+        assert_eq!(2, storage.enumerate("other:/").unwrap().len());
+
+        assert_eq!("some text", storage.get("OTHER:f1").unwrap());
+        assert_eq!("other text", storage.get("OTHER:/f2").unwrap());
+
+        storage.delete("other:/f2").unwrap();
+        assert_eq!(0, storage.enumerate("memory:").unwrap().len());
+        assert_eq!(1, storage.enumerate("other:").unwrap().len());
+        storage.delete("other:f1").unwrap();
+        assert_eq!(0, storage.enumerate("memory:").unwrap().len());
+        assert_eq!(0, storage.enumerate("other:").unwrap().len());
+    }
+
+    #[test]
+    fn test_storage_file_ops_with_relative_paths() {
+        let mut storage = Storage::default();
+        storage.mount("other", Box::from(InMemoryDrive::default())).unwrap();
+
+        storage.put("/f1", "some text").unwrap();
+        storage.put("f2", "other text").unwrap();
+        {
+            // Ensure that the put operations were routed to the correct objects.
+            let memory_drive = storage.drives.get(&DriveKey::new("memory").unwrap()).unwrap();
+            assert_eq!(2, memory_drive.enumerate().unwrap().len());
+            let other_drive = storage.drives.get(&DriveKey::new("other").unwrap()).unwrap();
+            assert_eq!(0, other_drive.enumerate().unwrap().len());
+        }
+
+        assert_eq!(2, storage.enumerate("").unwrap().len());
+        assert_eq!(2, storage.enumerate("/").unwrap().len());
+        assert_eq!(0, storage.enumerate("other:").unwrap().len());
+        assert_eq!(0, storage.enumerate("other:/").unwrap().len());
+
+        assert_eq!("some text", storage.get("f1").unwrap());
+        assert_eq!("other text", storage.get("/f2").unwrap());
+
+        storage.delete("/f2").unwrap();
+        assert_eq!(1, storage.enumerate("").unwrap().len());
+        assert_eq!(0, storage.enumerate("other:").unwrap().len());
+        storage.delete("f1").unwrap();
+        assert_eq!(0, storage.enumerate("").unwrap().len());
+        assert_eq!(0, storage.enumerate("other:").unwrap().len());
+    }
+
+    #[test]
+    fn test_storage_delete_errors() {
+        let mut storage = Storage::default();
+        assert_eq!("Invalid drive name ''", format!("{}", storage.delete(":foo").unwrap_err()));
+        assert_eq!("Invalid path 'a:b\\c'", format!("{}", storage.delete("a:b\\c").unwrap_err()));
+        assert_eq!(
+            "Missing file name in path 'a:'",
+            format!("{}", storage.delete("a:").unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_storage_enumerate_errors() {
+        let storage = Storage::default();
+        assert_eq!("Invalid drive name ''", format!("{}", storage.enumerate(":foo").unwrap_err()));
+        assert_eq!(
+            "Invalid path 'a:b\\c'",
+            format!("{}", storage.enumerate("a:b\\c").unwrap_err())
+        );
+        assert_eq!(
+            "Location 'a:/foo' is not a directory",
+            format!("{}", storage.enumerate("a:/foo").unwrap_err())
+        );
+    }
+    #[test]
+    fn test_storage_get_errors() {
+        let storage = Storage::default();
+        assert_eq!("Invalid drive name ''", format!("{}", storage.get(":foo").unwrap_err()));
+        assert_eq!("Invalid path 'a:b\\c'", format!("{}", storage.get("a:b\\c").unwrap_err()));
+        assert_eq!("Missing file name in path 'a:'", format!("{}", storage.get("a:").unwrap_err()));
+    }
+    #[test]
+    fn test_storage_put_errors() {
+        let mut storage = Storage::default();
+        assert_eq!("Invalid drive name ''", format!("{}", storage.put(":foo", "").unwrap_err()));
+        assert_eq!("Invalid path 'a:b\\c'", format!("{}", storage.put("a:b\\c", "").unwrap_err()));
+        assert_eq!(
+            "Missing file name in path 'a:'",
+            format!("{}", storage.put("a:", "").unwrap_err())
+        );
     }
 }

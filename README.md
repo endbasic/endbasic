@@ -54,7 +54,7 @@ Sample code:
 
 *   [`cli/examples`](cli/examples) contains the EndBASIC demo programs.  These
     are built into the interpreter and can be run with a command like
-    `LOAD "DEMO:TOUR": RUN`.
+    `LOAD "DEMOS:/TOUR.BAS": RUN`.
 *   [`core/examples`](core/examples) and [`std/examples`](std/examples)
     demonstrate how to embed the EndBASIC interpreter into your own programs.
 

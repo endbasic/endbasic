@@ -17,7 +17,7 @@
 
 use crate::console::{self, ClearType, Console, Key, Position};
 use crate::gpio;
-use crate::storage::{InMemoryDrive, Program, Storage};
+use crate::storage::{Program, Storage};
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{self, Machine, StopReason};
@@ -261,8 +261,7 @@ impl Tester {
     /// Creates a new tester with an empty `Machine`.
     pub fn empty() -> Self {
         let console = Rc::from(RefCell::from(MockConsole::default()));
-        let drive = Box::from(InMemoryDrive::default());
-        let storage = Rc::from(RefCell::from(Storage::new(drive)));
+        let storage = Rc::from(RefCell::from(Storage::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
 
         let machine = Machine::default();
@@ -508,7 +507,7 @@ impl<'a> Checker<'a> {
         let drive_contents = {
             let drive = self.tester.storage.borrow();
             let mut files = HashMap::new();
-            for (name, _) in drive.enumerate().unwrap() {
+            for (name, _) in drive.enumerate("").unwrap() {
                 files.insert(name.clone(), drive.get(&name).unwrap());
             }
             files

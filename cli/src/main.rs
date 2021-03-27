@@ -22,7 +22,7 @@
 #![warn(unsafe_code)]
 
 use anyhow::{anyhow, Result};
-use endbasic_std::storage::{DirectoryDrive, Drive, InMemoryDrive, Storage};
+use endbasic_std::storage::{DirectoryDrive, Drive};
 use endbasic_std::terminal::TerminalConsole;
 use futures_lite::future::block_on;
 use getopts::Options;
@@ -79,9 +79,9 @@ fn version() {
     println!("License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>");
 }
 
-/// Computes the path to the directory where user programs live if `flag` is none; otherwise
-/// just returns `flag`.
-fn get_programs_dir(flag: Option<String>) -> Result<PathBuf> {
+/// Instantiates the local drive to point to where user programs live, or returns `None` if the
+/// local drive is disabled.
+fn get_local_drive(flag: Option<String>) -> Result<Option<Box<dyn Drive>>> {
     let dir = flag.map(PathBuf::from).or_else(|| {
         dirs::document_dir().map(|d| d.join("endbasic")).or_else(|| {
             // On Linux, dirs::document_dir() seems to return None whenever user-dirs.dirs is
@@ -95,34 +95,25 @@ fn get_programs_dir(flag: Option<String>) -> Result<PathBuf> {
     // when we cannot compute this folder, but that seems like hiding a corner case that is unlikely
     // to surface.  A good reason to do this, however, would be to allow the user to explicitly
     // disable this functionality to keep the interpreter from touching the disk.
-    if dir.is_none() {
-        return Err(anyhow!("Cannot compute default path to the Documents folder"));
+    match dir {
+        Some(dir) if dir == Path::new(":memory:") => Ok(None),
+        Some(dir) => Ok(Some(Box::from(DirectoryDrive::new(dir)))),
+        None => Err(anyhow!("Cannot compute default path to the Documents folder")),
     }
-    Ok(dir.unwrap())
-}
-
-/// Creates a new storage backed by `dir` and overlays the built-in demos.
-fn new_storage_with_demos(dir: &Path) -> Rc<RefCell<Storage>> {
-    let drive: Box<dyn Drive> = if dir == Path::new(":memory:") {
-        Box::from(endbasic::demos::DemoDriveOverlay::new(InMemoryDrive::default()))
-    } else {
-        Box::from(endbasic::demos::DemoDriveOverlay::new(DirectoryDrive::new(dir)))
-    };
-    Rc::from(RefCell::from(Storage::new(drive)))
 }
 
 /// Enters the interactive interpreter.
 ///
-/// `dir` specifies the directory that the interpreter will use for any commands that manipulate
-/// files.  The special name `:memory:` makes the interpreter use an in-memory only drive.
-fn run_repl_loop(dir: &Path) -> endbasic_core::exec::Result<i32> {
+/// `local_drive` is the optional local drive to mount and use as the default location.
+fn run_repl_loop(local_drive: Option<Box<dyn Drive>>) -> endbasic_core::exec::Result<i32> {
     let console = Rc::from(RefCell::from(TerminalConsole::from_stdio()?));
-    let storage = new_storage_with_demos(dir);
-    let mut machine = endbasic_std::MachineBuilder::default()
-        .with_console(console.clone())
-        .make_interactive()
-        .with_storage(storage.clone())
-        .build()?;
+    let mut builder =
+        endbasic_std::MachineBuilder::default().with_console(console.clone()).make_interactive();
+
+    let storage = builder.get_storage();
+    endbasic::setup_storage(&mut storage.borrow_mut(), local_drive);
+
+    let mut machine = builder.build()?;
     endbasic::print_welcome(console.clone())?;
     endbasic::try_load_autoexec(&mut machine, console.clone(), &storage.borrow())?;
     Ok(block_on(endbasic::run_repl_loop(&mut machine, console))?)
@@ -137,12 +128,17 @@ fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
 
 /// Executes the `path` program in a fresh machine allowing any interactive-only calls.
 ///
-/// `dir` has the same meaning as the parameter passed to `run_repl_loop`.
-fn run_interactive<P: AsRef<Path>>(path: P, dir: &Path) -> endbasic_core::exec::Result<i32> {
-    let mut machine = endbasic_std::MachineBuilder::default()
-        .make_interactive()
-        .with_storage(new_storage_with_demos(dir))
-        .build()?;
+/// `local_drive` is the optional local drive to mount and use as the default location.
+fn run_interactive<P: AsRef<Path>>(
+    path: P,
+    local_drive: Option<Box<dyn Drive>>,
+) -> endbasic_core::exec::Result<i32> {
+    let mut builder = endbasic_std::MachineBuilder::default().make_interactive();
+
+    let storage = builder.get_storage();
+    endbasic::setup_storage(&mut storage.borrow_mut(), local_drive);
+
+    let mut machine = builder.build()?;
     let mut input = File::open(path)?;
     Ok(block_on(machine.exec(&mut input))?.as_exit_code())
 }
@@ -170,13 +166,13 @@ fn safe_main(name: &str, args: env::Args) -> Result<i32> {
 
     match matches.free.as_slice() {
         [] => {
-            let programs_dir = get_programs_dir(matches.opt_str("programs-dir"))?;
-            Ok(run_repl_loop(&programs_dir)?)
+            let local_drive = get_local_drive(matches.opt_str("programs-dir"))?;
+            Ok(run_repl_loop(local_drive)?)
         }
         [file] => {
             if matches.opt_present("interactive") {
-                let programs_dir = get_programs_dir(matches.opt_str("programs-dir"))?;
-                Ok(run_interactive(file, &programs_dir)?)
+                let local_drive = get_local_drive(matches.opt_str("programs-dir"))?;
+                Ok(run_interactive(file, local_drive)?)
             } else {
                 Ok(run_script(file)?)
             }

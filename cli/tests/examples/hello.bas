@@ -15,5 +15,5 @@
 
 ' Runs the hello.bas example as a demo.
 
-LOAD "DEMO:HELLO.BAS"
+LOAD "DEMOS:/HELLO.BAS"
 RUN

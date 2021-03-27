@@ -132,7 +132,7 @@ the "COLOR" command and positioning the cursor with "LOCATE":
 [39m[49m
 If you happen to be running on a Raspberry Pi, EndBASIC has some support
 to manipulate its hardware.  At the moment this includes only basic access
-to the GPIO lines.  See the "DEMO:GPIO.BAS" demo for an example.
+to the GPIO lines.  See the "DEMOS:/GPIO.BAS" demo for an example.
 
 Please note that you have to be running on a Raspberry Pi *AND* you must
 have compiled EndBASIC with --features=rpi for this to work.

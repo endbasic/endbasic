@@ -9,6 +9,13 @@ not adhere to semantic versioning until 1.0.0.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
+*   Added support for storage drives.  All file commands now take a path to a
+    file of the form `DRIVE:/PATH` where the drive part and the slash are
+    optional.  By default, three drives are available: `MEMORY:`, which is a
+    trivial memory-backed drive; `DEMOS:`, which contains the read-only demo
+    files; and `LOCAL:`, which points to local storage (either a local directory
+    or to the web browser's local storage).
+
 *   Refactored the `HELP` command to only print a summary of topics by
     default.  As part of this, topics can now be looked up using prefixes of
     their names.

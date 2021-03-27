@@ -15,6 +15,6 @@
 
 ' Runs the guess.bas example as a demo.
 
-LOAD "DEMO:GUESS.BAS"
+LOAD "DEMOS:/GUESS.BAS"
 RANDOMIZE 10
 RUN
