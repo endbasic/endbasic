@@ -2,5 +2,5 @@
     Welcome to EndBASIC X.Y.Z.
 
     Type HELP for interactive usage information.
-    Type LOAD "DEMO:TOUR.BAS": RUN for a guided tour.
+    For a guided tour, type: LOAD "DEMOS:/TOUR.BAS": RUN
 

@@ -140,33 +140,24 @@ impl MachineBuilder {
 pub struct InteractiveMachineBuilder {
     builder: MachineBuilder,
     program: Option<Rc<RefCell<dyn storage::Program>>>,
-    storage: Option<Rc<RefCell<storage::Storage>>>,
+    storage: Rc<RefCell<storage::Storage>>,
 }
 
 impl InteractiveMachineBuilder {
     /// Constructs an interactive machine builder from a non-interactive builder.
     fn from(builder: MachineBuilder) -> Self {
-        InteractiveMachineBuilder { builder, program: None, storage: None }
+        let storage = Rc::from(RefCell::from(storage::Storage::default()));
+        InteractiveMachineBuilder { builder, program: None, storage }
     }
 
     /// Lazily initializes the `storage` field with a default value and returns it.
-    fn get_storage(&mut self) -> Rc<RefCell<storage::Storage>> {
-        if self.storage.is_none() {
-            let drive = Box::from(storage::InMemoryDrive::default());
-            self.storage = Some(Rc::from(RefCell::from(storage::Storage::new(drive))));
-        }
-        self.storage.clone().expect("Must have been initialized by now")
+    pub fn get_storage(&mut self) -> Rc<RefCell<storage::Storage>> {
+        self.storage.clone()
     }
 
     /// Overrides the default stored program with the given one.
     pub fn with_program(mut self, program: Rc<RefCell<dyn storage::Program>>) -> Self {
         self.program = Some(program);
-        self
-    }
-
-    /// Overrides the default storage with the given one.
-    pub fn with_storage(mut self, storage: Rc<RefCell<storage::Storage>>) -> Self {
-        self.storage = Some(storage);
         self
     }
 

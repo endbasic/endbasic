@@ -15,7 +15,7 @@
 
 ' Runs the gpio.bas example using mock GPIO data to drive the program.
 
-LOAD "DEMO:GPIO.BAS"
+LOAD "DEMOS:/GPIO.BAS"
 
 DIM __GPIO_MOCK_DATA(20) AS INTEGER
 __GPIO_MOCK_DATA(2) = 811 ' Return high for pin 8 (button).

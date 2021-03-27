@@ -2,7 +2,7 @@
     Welcome to EndBASIC X.Y.Z.
 
     Type HELP for interactive usage information.
-    Type LOAD "DEMO:TOUR.BAS": RUN for a guided tour.
+    For a guided tour, type: LOAD "DEMOS:/TOUR.BAS": RUN
 
 Before edit
 [?1049h[?25l[38;5;15m[49m[2J[1;1H[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 1, Col 1 [38;5;15m[49m[1;1H

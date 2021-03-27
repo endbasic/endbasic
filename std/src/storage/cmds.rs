@@ -45,18 +45,11 @@ pub trait Program {
     fn text(&self) -> String;
 }
 
-/// Computes the path to a source file given the `dir` where it lives and a `basename`.
-fn to_filename<S: Into<PathBuf>>(basename: S) -> io::Result<String> {
-    let mut basename = basename.into();
+/// Adds an extension to `path` if one is not present.
+fn add_extension<S: Into<PathBuf>>(path: S) -> io::Result<String> {
+    let mut path = path.into();
 
-    if basename.components().fold(0, |count, _| count + 1) != 1 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Filename must be a single path component",
-        ));
-    }
-
-    if let Some(ext) = basename.extension() {
+    if let Some(ext) = path.extension() {
         if ext != "bas" && ext != "BAS" {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid filename extension"));
         }
@@ -65,20 +58,20 @@ fn to_filename<S: Into<PathBuf>>(basename: S) -> io::Result<String> {
         // that an all-uppercase basename wants an all-uppercase extension.  This is fragile on
         // case-sensitive file systems, but there is not a lot we can do.
         let mut ext = "BAS";
-        for ch in basename.to_string_lossy().chars() {
+        for ch in path.to_string_lossy().chars() {
             if ch.is_ascii_lowercase() {
                 ext = "bas";
                 break;
             }
         }
-        basename.set_extension(ext);
+        path.set_extension(ext);
     }
-    Ok(basename.to_str().expect("Path came from a String").to_owned())
+    Ok(path.to_str().expect("Path came from a String").to_owned())
 }
 
 /// Shows the contents of the current storage location.
 fn show_dir(storage: &Storage, console: &mut dyn Console) -> io::Result<()> {
-    let entries = storage.enumerate()?;
+    let entries = storage.enumerate("")?;
 
     console.print("")?;
     console.print("    Modified              Size    Name")?;
@@ -139,7 +132,7 @@ impl Command for DelCommand {
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_mut_symbols())? {
             Value::Text(t) => {
-                let name = to_filename(t)?;
+                let name = add_extension(t)?;
                 self.storage.borrow_mut().delete(&name)?;
             }
             _ => {
@@ -320,7 +313,7 @@ impl Command for LoadCommand {
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_mut_symbols())? {
             Value::Text(t) => {
-                let name = to_filename(t)?;
+                let name = add_extension(t)?;
                 let content = self.storage.borrow().get(&name)?;
                 self.program.borrow_mut().load(&content);
                 machine.clear();
@@ -466,7 +459,7 @@ impl Command for SaveCommand {
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_mut_symbols())? {
             Value::Text(t) => {
-                let name = to_filename(t)?;
+                let name = add_extension(t)?;
                 let content = self.program.borrow().text();
                 self.storage.borrow_mut().put(&name, &content)?;
             }
@@ -645,16 +638,10 @@ mod tests {
             .expect_err(format!("{} requires a string as the filename", cmd))
             .check();
 
-        let mut non_basenames = vec!["./foo.bas", "a/b.bas", "a/b"];
-        if cfg!(target_os = "windows") {
-            non_basenames.push("c:foo.bas");
-        }
-        for p in non_basenames.as_slice() {
-            Tester::default()
-                .run(format!(r#"{} "{}""#, cmd, p))
-                .expect_err("Filename must be a single path component".to_owned())
-                .check();
-        }
+        Tester::default()
+            .run(format!(r#"{} "a/b.bas""#, cmd))
+            .expect_err("Too many / separators in path 'a/b.bas'".to_owned())
+            .check();
 
         for p in &["foo.bak", "foo.ba", "foo.basic"] {
             Tester::default()
