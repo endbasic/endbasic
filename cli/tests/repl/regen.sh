@@ -19,8 +19,10 @@ tmpdir="$(mktemp -d)"
 trap "rm -f \"${tmpdir}\"/*; rmdir \"${tmpdir}\"" EXIT
 
 run() {
+    local local_drive="${1}"; shift
+
     rm -f "${tmpdir}"/*
-    LINES=24 COLUMNS=80 cargo run -- --programs-dir="${tmpdir}" --interactive "${@}"
+    LINES=24 COLUMNS=80 cargo run -- --programs-dir="${local_drive}" --interactive "${@}"
 }
 
 date_re="[0-9]{4}-[0-9]{2}-[0-9]{2} [0-2][0-9]:[0-5][0-9]"
@@ -30,12 +32,17 @@ for outfile in "${@}"; do
     basfile="${outfile%.*}.bas"
     infile="${outfile%.*}.in"
 
+    local_drive="${tmpdir}"
+    case "${outfile}" in
+        *dir.out) local_drive=":memory:"
+    esac
+
     if [ -f "${basfile}" -a -f "${infile}" ]; then
-        run "${basfile}" <"${infile}" >"${outfile}.new"
+        run "${local_drive}" "${basfile}" <"${infile}" >"${outfile}.new"
     elif [ -f "${basfile}" ]; then
-        run "${basfile}" >"${outfile}.new"
+        run "${local_drive}" "${basfile}" >"${outfile}.new"
     elif [ -f "${infile}" ]; then
-        run <"${infile}" >"${outfile}.new"
+        run "${local_drive}" <"${infile}" >"${outfile}.new"
     else
         echo "No input for ${outfile}?" 1>&2
         continue

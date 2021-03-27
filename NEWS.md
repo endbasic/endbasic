@@ -16,6 +16,9 @@ not adhere to semantic versioning until 1.0.0.**
     files; and `LOCAL:`, which points to local storage (either a local directory
     or to the web browser's local storage).
 
+*   Extended the `DIR` command to take an optional path to the directory to
+    show.
+
 *   Refactored the `HELP` command to only print a summary of topics by
     default.  As part of this, topics can now be looked up using prefixes of
     their names.
