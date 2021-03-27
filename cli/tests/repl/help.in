@@ -52,6 +52,9 @@ HELP "STRING"
 ' Help on commands.
 '
 
+PRINT "Output from HELP CD:"
+HELP CD
+
 PRINT "Output from HELP CLEAR:"
 HELP CLEAR
 
