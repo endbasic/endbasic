@@ -98,6 +98,49 @@ fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> io::Res
     Ok(())
 }
 
+/// The `CD` command.
+pub struct CdCommand {
+    metadata: CallableMetadata,
+    storage: Rc<RefCell<Storage>>,
+}
+
+impl CdCommand {
+    /// Creates a new `CD` command that changes the current location in `storage`.
+    pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("CD", VarType::Void)
+                .with_syntax("path$")
+                .with_category(CATEGORY)
+                .with_description("Changes the current path.")
+                .build(),
+            storage,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for CdCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+        if args.len() != 1 {
+            return Err(CallError::ArgumentError("CD takes one argument".to_owned()));
+        }
+        let arg0 = args[0].0.as_ref().expect("Single argument must be present");
+        match arg0.eval(machine.get_mut_symbols())? {
+            Value::Text(t) => {
+                self.storage.borrow_mut().cd(&t)?;
+            }
+            _ => {
+                return Err(CallError::ArgumentError("CD requires a string as the path".to_owned()))
+            }
+        }
+        Ok(())
+    }
+}
+
 /// The `DEL` command.
 pub struct DelCommand {
     metadata: CallableMetadata,
@@ -497,6 +540,7 @@ pub fn add_all(
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 ) {
+    machine.add_command(CdCommand::new(storage.clone()));
     machine.add_command(DelCommand::new(storage.clone()));
     machine.add_command(DirCommand::new(console.clone(), storage.clone()));
     machine.add_command(EditCommand::new(console.clone(), program.clone()));
@@ -512,6 +556,24 @@ mod tests {
     use super::*;
     use crate::storage::{Drive, InMemoryDrive};
     use crate::testutils::*;
+
+    #[test]
+    fn test_cd_ok() {
+        let mut t = Tester::default();
+        t.get_storage().borrow_mut().mount("other", Box::from(InMemoryDrive::default())).unwrap();
+        t.run("CD \"other:\"").check();
+        assert_eq!("OTHER:/", t.get_storage().borrow().cwd());
+        t.run("CD \"memory:/\"").check();
+        assert_eq!("MEMORY:/", t.get_storage().borrow().cwd());
+    }
+
+    #[test]
+    fn test_cd_errors() {
+        check_stmt_err("Drive 'A' is not mounted", "CD \"A:\"");
+        check_stmt_err("CD takes one argument", "CD");
+        check_stmt_err("CD takes one argument", "CD 2, 3");
+        check_stmt_err("CD requires a string as the path", "CD 2");
+    }
 
     #[test]
     fn test_del_ok() {

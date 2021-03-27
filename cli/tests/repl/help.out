@@ -106,6 +106,7 @@ Output from HELP STORED:
 
     Stored program manipulation
 
+    >> CD      Changes the current path.
     >> DEL     Deletes the given program.
     >> DIR     Displays the list of files on the current or given path.
     >> EDIT    Interactively edits the stored program.
@@ -129,6 +130,12 @@ Output from HELP STRING:
     >> RTRIM$    Returns a copy of a string with trailing whitespace removed.
 
     Type HELP followed by the name of a symbol for details.
+
+Output from HELP CD:
+
+    CD path$
+
+    Changes the current path.
 
 Output from HELP CLEAR:
 
