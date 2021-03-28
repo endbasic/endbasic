@@ -52,7 +52,7 @@ for outfile in "${@}"; do
 
     sed -E -e "s,${date_re},YYYY-MM-DD HH:MM,g" \
         -e "s,${version_re},X.Y.Z,g" \
-        -e "s,${tmpdir},/PATH/TO/TMPDIR,g" \
+        -e "s,file://[a-zA-Z0-9/.-]*,file:///PATH/TO/TMPDIR,g" \
         "${outfile}.new" >"${outfile}.tmp"
     mv "${outfile}.tmp" "${outfile}"
     rm -f "${outfile}.new" "${outfile}.tmp"
