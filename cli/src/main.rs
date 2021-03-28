@@ -22,14 +22,15 @@
 #![warn(unsafe_code)]
 
 use anyhow::{anyhow, Result};
-use endbasic_std::storage::{DirectoryDrive, Drive};
+use endbasic_std::storage::Storage;
 use endbasic_std::terminal::TerminalConsole;
 use futures_lite::future::block_on;
 use getopts::Options;
 use std::cell::RefCell;
 use std::env;
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::io;
+use std::path::Path;
 use std::process;
 use std::rc::Rc;
 
@@ -79,16 +80,18 @@ fn version() {
     println!("License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>");
 }
 
-/// Instantiates the local drive to point to where user programs live, or returns `None` if the
-/// local drive is disabled.
-fn get_local_drive(flag: Option<String>) -> Result<Option<Box<dyn Drive>>> {
-    let dir = flag.map(PathBuf::from).or_else(|| {
-        dirs::document_dir().map(|d| d.join("endbasic")).or_else(|| {
-            // On Linux, dirs::document_dir() seems to return None whenever user-dirs.dirs is
-            // not present... which is suboptimal.  Compute a reasonable default based on the
-            // home directory.
-            dirs::home_dir().map(|h| h.join("Documents/endbasic"))
-        })
+/// Returns `flag` if present, or else returns the URI of the default `LOCAL` drive.
+fn get_local_drive_spec(flag: Option<String>) -> Result<String> {
+    let dir = flag.or_else(|| {
+        dirs::document_dir().map(|d| format!("file://{}", d.join("endbasic").display())).or_else(
+            || {
+                // On Linux, dirs::document_dir() seems to return None whenever user-dirs.dirs is
+                // not present... which is suboptimal.  Compute a reasonable default based on the
+                // home directory.
+                dirs::home_dir()
+                    .map(|h| format!("file://{}", h.join("Documents/endbasic").display()))
+            },
+        )
     });
 
     // Instead of aborting on a missing programs directory, we could disable the LOAD/SAVE commands
@@ -96,22 +99,34 @@ fn get_local_drive(flag: Option<String>) -> Result<Option<Box<dyn Drive>>> {
     // to surface.  A good reason to do this, however, would be to allow the user to explicitly
     // disable this functionality to keep the interpreter from touching the disk.
     match dir {
-        Some(dir) if dir == Path::new(":memory:") => Ok(None),
-        Some(dir) => Ok(Some(Box::from(DirectoryDrive::new(dir)))),
+        Some(dir) => Ok(dir),
         None => Err(anyhow!("Cannot compute default path to the Documents folder")),
     }
+}
+
+/// Sets up the common storage drives.
+///
+/// This instantiates non-optional drives, such as `MEMORY:` and `DEMOS:`, maps `LOCAL` the
+/// location given in `local_drive_spec`.
+pub fn setup_storage(storage: &mut Storage, local_drive_spec: &str) -> io::Result<()> {
+    storage.register_scheme("demos", endbasic::demos::demos_drive_factory);
+    storage.mount("demos", "demos://").expect("Demos drive shouldn't fail to mount");
+    storage.register_scheme("file", endbasic_std::storage::directory_drive_factory);
+    storage.mount("local", local_drive_spec)?;
+    storage.cd("local:").expect("Local drive was just registered");
+    Ok(())
 }
 
 /// Enters the interactive interpreter.
 ///
 /// `local_drive` is the optional local drive to mount and use as the default location.
-fn run_repl_loop(local_drive: Option<Box<dyn Drive>>) -> endbasic_core::exec::Result<i32> {
+fn run_repl_loop(local_drive_spec: &str) -> endbasic_core::exec::Result<i32> {
     let console = Rc::from(RefCell::from(TerminalConsole::from_stdio()?));
     let mut builder =
         endbasic_std::MachineBuilder::default().with_console(console.clone()).make_interactive();
 
     let storage = builder.get_storage();
-    endbasic::setup_storage(&mut storage.borrow_mut(), local_drive);
+    setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
 
     let mut machine = builder.build()?;
     endbasic::print_welcome(console.clone())?;
@@ -131,12 +146,12 @@ fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
 /// `local_drive` is the optional local drive to mount and use as the default location.
 fn run_interactive<P: AsRef<Path>>(
     path: P,
-    local_drive: Option<Box<dyn Drive>>,
+    local_drive_spec: &str,
 ) -> endbasic_core::exec::Result<i32> {
     let mut builder = endbasic_std::MachineBuilder::default().make_interactive();
 
     let storage = builder.get_storage();
-    endbasic::setup_storage(&mut storage.borrow_mut(), local_drive);
+    setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
 
     let mut machine = builder.build()?;
     let mut input = File::open(path)?;
@@ -150,7 +165,7 @@ fn safe_main(name: &str, args: env::Args) -> Result<i32> {
     let mut opts = Options::new();
     opts.optflag("h", "help", "show command-line usage information and exit");
     opts.optflag("i", "interactive", "force interactive mode when running a script");
-    opts.optopt("", "programs-dir", "directory where user programs are stored", "PATH");
+    opts.optopt("", "local-drive", "location of the drive to mount as LOCAL", "URI");
     opts.optflag("", "version", "show version information and exit");
     let matches = opts.parse(args)?;
 
@@ -166,13 +181,13 @@ fn safe_main(name: &str, args: env::Args) -> Result<i32> {
 
     match matches.free.as_slice() {
         [] => {
-            let local_drive = get_local_drive(matches.opt_str("programs-dir"))?;
-            Ok(run_repl_loop(local_drive)?)
+            let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
+            Ok(run_repl_loop(&local_drive)?)
         }
         [file] => {
             if matches.opt_present("interactive") {
-                let local_drive = get_local_drive(matches.opt_str("programs-dir"))?;
-                Ok(run_interactive(file, local_drive)?)
+                let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
+                Ok(run_interactive(file, &local_drive)?)
             } else {
                 Ok(run_script(file)?)
             }

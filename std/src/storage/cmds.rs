@@ -560,7 +560,7 @@ mod tests {
     #[test]
     fn test_cd_ok() {
         let mut t = Tester::default();
-        t.get_storage().borrow_mut().mount("other", Box::from(InMemoryDrive::default())).unwrap();
+        t.get_storage().borrow_mut().mount("other", "memory://").unwrap();
         t.run("CD \"other:\"").check();
         assert_eq!("OTHER:/", t.get_storage().borrow().cwd());
         t.run("CD \"memory:/\"").check();
@@ -652,7 +652,7 @@ mod tests {
         other.put("foo.bas", "hello").unwrap();
 
         let mut t = Tester::default().write_file("empty.bas", "");
-        t.get_storage().borrow_mut().mount("other", Box::from(other)).unwrap();
+        t.get_storage().borrow_mut().attach("other", Box::from(other)).unwrap();
 
         let mut prints = vec![
             "",
@@ -685,7 +685,7 @@ mod tests {
         other.put("foo.bas", "hello").unwrap();
 
         let mut t = Tester::default().write_file("empty.bas", "");
-        t.get_storage().borrow_mut().mount("other", Box::from(other)).unwrap();
+        t.get_storage().borrow_mut().attach("other", Box::from(other)).unwrap();
 
         let mut prints = vec![
             "",

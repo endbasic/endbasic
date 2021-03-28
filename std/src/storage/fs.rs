@@ -101,6 +101,18 @@ impl Drive for DirectoryDrive {
     }
 }
 
+/// Instantiates a directory drive backed by `target`.
+pub fn directory_drive_factory(target: &str) -> io::Result<Box<dyn Drive>> {
+    if !target.is_empty() {
+        Ok(Box::from(DirectoryDrive::new(target)))
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Must specify a directory mount an disk drive",
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

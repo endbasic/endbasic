@@ -5,13 +5,13 @@
     For a guided tour, type: LOAD "DEMOS:/TOUR.BAS": RUN
 
 
-    Directory of MEMORY:/
+    Directory of LOCAL:/
 
     Modified              Size    Name
     0 file(s), 0 bytes
 
 
-    Directory of MEMORY:/
+    Directory of LOCAL:/
 
     Modified              Size    Name
     YYYY-MM-DD HH:MM         0    empty.bas
@@ -20,7 +20,7 @@
 
 [?1049h[?25l[38;5;15m[49m[2J[1;1H[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 1, Col 1 [38;5;15m[49m[1;1H
 [1;1H[?25hf[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 1, Col 2 [38;5;15m[49m[1;2H[?25hi[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 1, Col 3 [38;5;15m[49m[1;3H[?25hr[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 1, Col 4 [38;5;15m[49m[1;4H[?25hs[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 1, Col 5 [38;5;15m[49m[1;5H[?25ht[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 1, Col 6 [38;5;15m[49m[1;6H[?25h[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 2, Col 1 [38;5;15m[49m[2;1H[?25hs[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 2, Col 2 [38;5;15m[49m[2;2H[?25he[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 2, Col 3 [38;5;15m[49m[2;3H[?25hc[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 2, Col 4 [38;5;15m[49m[2;4H[?25ho[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 2, Col 5 [38;5;15m[49m[2;5H[?25hn[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 2, Col 6 [38;5;15m[49m[2;6H[?25hd[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 2, Col 7 [38;5;15m[49m[2;7H[?25h[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 3, Col 1 [38;5;15m[49m[3;1H[?25ht[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 3, Col 2 [38;5;15m[49m[3;2H[?25hh[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 3, Col 3 [38;5;15m[49m[3;3H[?25hi[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 3, Col 4 [38;5;15m[49m[3;4H[?25hr[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 3, Col 5 [38;5;15m[49m[3;5H[?25hd[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 3, Col 6 [38;5;15m[49m[3;6H[?25h[?25l[24;1H[38;5;15m[48;5;4m ESC Finish editing                                               | Ln 4, Col 1 [38;5;15m[49m[4;1H[?25h[?1049l
-    Directory of MEMORY:/
+    Directory of LOCAL:/
 
     Modified              Size    Name
     YYYY-MM-DD HH:MM         0    empty.bas
@@ -29,7 +29,7 @@
     2 file(s), 20 bytes
 
 
-    Directory of MEMORY:/
+    Directory of LOCAL:/
 
     Modified              Size    Name
     YYYY-MM-DD HH:MM        20    some lines and a long name.bas

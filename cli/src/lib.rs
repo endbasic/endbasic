@@ -23,7 +23,7 @@
 
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_std::console::{self, Console};
-use endbasic_std::storage::{Drive, Storage};
+use endbasic_std::storage::Storage;
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::io;
@@ -41,21 +41,6 @@ pub fn print_welcome(console: Rc<RefCell<dyn Console>>) -> io::Result<()> {
     console.print("    For a guided tour, type: LOAD \"DEMOS:/TOUR.BAS\": RUN")?;
     console.print("")?;
     Ok(())
-}
-
-/// Sets up the common storage drives.
-///
-/// This instantiates common non-optional drives, such as `MEMORY:` and `DEMOS:` and, if
-/// `local_drive` is not `None`, mounts the latter as `LOCAL:` and sets the current location to
-/// point to it.
-pub fn setup_storage(storage: &mut Storage, local_drive: Option<Box<dyn Drive>>) {
-    storage
-        .mount("demos", Box::from(demos::DemosDrive::default()))
-        .expect("Demos drive shouldn't have been mounted yet");
-    if let Some(local_drive) = local_drive {
-        storage.mount("local", local_drive).expect("Local drive shouldn't have been mounted yet");
-        storage.cd("local:").expect("Local drive was just registered");
-    }
 }
 
 /// Loads the `AUTOEXEC.BAS` file if it exists in the `drive`.

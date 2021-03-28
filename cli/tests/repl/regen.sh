@@ -22,7 +22,8 @@ run() {
     local local_drive="${1}"; shift
 
     rm -f "${tmpdir}"/*
-    LINES=24 COLUMNS=80 cargo run -- --programs-dir="${local_drive}" --interactive "${@}"
+    LINES=24 COLUMNS=80 cargo run -- --local-drive="${local_drive}" \
+        --interactive "${@}"
 }
 
 date_re="[0-9]{4}-[0-9]{2}-[0-9]{2} [0-2][0-9]:[0-5][0-9]"
@@ -32,9 +33,9 @@ for outfile in "${@}"; do
     basfile="${outfile%.*}.bas"
     infile="${outfile%.*}.in"
 
-    local_drive="${tmpdir}"
+    local_drive="file://${tmpdir}"
     case "${outfile}" in
-        *dir.out) local_drive=":memory:"
+        *dir.out) local_drive="memory://" ;;
     esac
 
     if [ -f "${basfile}" -a -f "${infile}" ]; then
