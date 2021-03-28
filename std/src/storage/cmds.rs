@@ -24,6 +24,7 @@ use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
 };
 use std::cell::RefCell;
+use std::cmp;
 use std::io;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -94,6 +95,25 @@ fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> io::Res
         console.print("")?;
     }
     console.print(&format!("    {} file(s), {} bytes", total_files, total_bytes))?;
+    console.print("")?;
+    Ok(())
+}
+
+/// Shows the mounted drives.
+fn show_drives(storage: &Storage, console: &mut dyn Console) -> io::Result<()> {
+    let drive_info = storage.mounted();
+    let max_length = drive_info.keys().fold("Name".len(), |max, name| cmp::max(max, name.len()));
+
+    console.print("")?;
+    let filler = " ".repeat(max_length - "Name".len());
+    console.print(&format!("    Name{}    Target", filler))?;
+    let num_drives = drive_info.len();
+    for (name, uri) in drive_info {
+        let filler = " ".repeat(max_length - name.len());
+        console.print(&format!("    {}{}    {}", name, filler, uri))?;
+    }
+    console.print("")?;
+    console.print(&format!("    {} drive(s)", num_drives))?;
     console.print("")?;
     Ok(())
 }
@@ -387,6 +407,70 @@ impl Command for LoadCommand {
     }
 }
 
+/// The `MOUNT` command.
+pub struct MountCommand {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+    storage: Rc<RefCell<Storage>>,
+}
+
+impl MountCommand {
+    /// Creates a new `MOUNT` command.
+    pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("MOUNT", VarType::Void)
+                .with_syntax("[drive_name$, target$]")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Lists the mounted drives or mounts a new drive.
+With no arguments, prints a list of mounted drives and their targets.
+With two arguments, mounts the drive_name$ to point to the target$.  Drive names are specified \
+without a colon at the end, and targets are given in the form of a URI.",
+                )
+                .build(),
+            console,
+            storage,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for MountCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+        match args {
+            [] => {
+                show_drives(&*self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
+                Ok(())
+            }
+            [(Some(name), ArgSep::Long), (Some(target), ArgSep::End)] => {
+                let name = match name.eval(machine.get_mut_symbols())? {
+                    Value::Text(t) => t,
+                    _ => {
+                        return Err(CallError::ArgumentError(
+                            "Drive name must be a string".to_owned(),
+                        ))
+                    }
+                };
+                let target = match target.eval(machine.get_mut_symbols())? {
+                    Value::Text(t) => t,
+                    _ => {
+                        return Err(CallError::ArgumentError(
+                            "Mount target must be a string".to_owned(),
+                        ))
+                    }
+                };
+                self.storage.borrow_mut().mount(&name, &target)?;
+                Ok(())
+            }
+            _ => Err(CallError::ArgumentError("MOUNT takes zero or two arguments".to_owned())),
+        }
+    }
+}
+
 /// The `NEW` command.
 pub struct NewCommand {
     metadata: CallableMetadata,
@@ -532,6 +616,50 @@ impl Command for SaveCommand {
     }
 }
 
+/// The `UNMOUNT` command.
+pub struct UnmountCommand {
+    metadata: CallableMetadata,
+    storage: Rc<RefCell<Storage>>,
+}
+
+impl UnmountCommand {
+    /// Creates a new `UNMOUNT` command.
+    pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("UNMOUNT", VarType::Void)
+                .with_syntax("drive_name")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Unmounts the given drive.
+Drive names are specified without a colon at the end.",
+                )
+                .build(),
+            storage,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for UnmountCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+        if args.len() != 1 {
+            return Err(CallError::ArgumentError("UNMOUNT takes one argument".to_owned()));
+        }
+        let arg0 = args[0].0.as_ref().expect("Single argument must be present");
+        match arg0.eval(machine.get_mut_symbols())? {
+            Value::Text(t) => {
+                self.storage.borrow_mut().unmount(&t)?;
+            }
+            _ => return Err(CallError::ArgumentError("Drive name must be a string".to_owned())),
+        }
+        Ok(())
+    }
+}
+
 /// Adds all program editing commands against the stored `program` to the `machine`, using
 /// `console` for interactive editing and using `storage` as the on-disk storage for the programs.
 pub fn add_all(
@@ -546,9 +674,11 @@ pub fn add_all(
     machine.add_command(EditCommand::new(console.clone(), program.clone()));
     machine.add_command(ListCommand::new(console.clone(), program.clone()));
     machine.add_command(LoadCommand::new(storage.clone(), program.clone()));
+    machine.add_command(MountCommand::new(console.clone(), storage.clone()));
     machine.add_command(NewCommand::new(program.clone()));
     machine.add_command(RunCommand::new(console, program.clone()));
-    machine.add_command(SaveCommand::new(storage, program));
+    machine.add_command(SaveCommand::new(storage.clone(), program));
+    machine.add_command(UnmountCommand::new(storage));
 }
 
 #[cfg(test)]
@@ -556,6 +686,7 @@ mod tests {
     use super::*;
     use crate::storage::{Drive, InMemoryDrive};
     use crate::testutils::*;
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_cd_ok() {
@@ -652,7 +783,7 @@ mod tests {
         other.put("foo.bas", "hello").unwrap();
 
         let mut t = Tester::default().write_file("empty.bas", "");
-        t.get_storage().borrow_mut().attach("other", Box::from(other)).unwrap();
+        t.get_storage().borrow_mut().attach("other", "z://", Box::from(other)).unwrap();
 
         let mut prints = vec![
             "",
@@ -685,7 +816,7 @@ mod tests {
         other.put("foo.bas", "hello").unwrap();
 
         let mut t = Tester::default().write_file("empty.bas", "");
-        t.get_storage().borrow_mut().attach("other", Box::from(other)).unwrap();
+        t.get_storage().borrow_mut().attach("other", "z://", Box::from(other)).unwrap();
 
         let mut prints = vec![
             "",
@@ -817,6 +948,60 @@ mod tests {
     }
 
     #[test]
+    fn test_mount_list() {
+        let mut t = Tester::default();
+        let other = InMemoryDrive::default();
+        t.get_storage().borrow_mut().attach("o", "origin://", Box::from(other)).unwrap();
+
+        let mut prints = vec![
+            "",
+            "    Name      Target",
+            "    MEMORY    memory://",
+            "    O         origin://",
+            "",
+            "    2 drive(s)",
+            "",
+        ];
+        t.run("MOUNT").expect_prints(prints.clone()).check();
+
+        t.get_storage().borrow_mut().cd("o:").unwrap();
+        t.get_storage().borrow_mut().unmount("memory").unwrap();
+        prints.extend(&[
+            "",
+            "    Name    Target",
+            "    O       origin://",
+            "",
+            "    1 drive(s)",
+            "",
+        ]);
+        t.run("MOUNT").expect_prints(prints.clone()).check();
+    }
+
+    #[test]
+    fn test_mount_mount() {
+        let mut t = Tester::default();
+        t.run("MOUNT \"abc\", \"memory://\"").check();
+
+        let mut exp_info = BTreeMap::default();
+        exp_info.insert("MEMORY", "memory://");
+        exp_info.insert("ABC", "memory://");
+        assert_eq!(exp_info, t.get_storage().borrow().mounted());
+    }
+
+    #[test]
+    fn test_mount_errors() {
+        check_stmt_err("MOUNT takes zero or two arguments", "MOUNT 1");
+        check_stmt_err("MOUNT takes zero or two arguments", "MOUNT 1, 2, 3");
+
+        check_stmt_err("Drive name must be a string", "MOUNT 1, \"a\"");
+        check_stmt_err("Mount target must be a string", "MOUNT \"a\", 1");
+
+        check_stmt_err("Invalid drive name 'a:'", "MOUNT \"a:\", \"memory://\"");
+        check_stmt_err("Mount URI must be of the form scheme://path", "MOUNT \"a\", \"foo//bar\"");
+        check_stmt_err("Unknown mount scheme 'foo'", "MOUNT \"a\", \"foo://bar\"");
+    }
+
+    #[test]
     fn test_new_nothing() {
         Tester::default().run("NEW").check();
     }
@@ -886,5 +1071,28 @@ mod tests {
     #[test]
     fn test_save_errors() {
         check_load_save_common_errors("SAVE");
+    }
+
+    #[test]
+    fn test_unmount_ok() {
+        let mut t = Tester::default();
+        t.get_storage().borrow_mut().mount("other", "memory://").unwrap();
+        t.get_storage().borrow_mut().cd("other:").unwrap();
+        t.run("UNMOUNT \"memory\"").check();
+
+        let mut exp_info = BTreeMap::default();
+        exp_info.insert("OTHER", "memory://");
+        assert_eq!(exp_info, t.get_storage().borrow().mounted());
+    }
+
+    #[test]
+    fn test_unmount_errors() {
+        check_stmt_err("UNMOUNT takes one argument", "UNMOUNT");
+        check_stmt_err("UNMOUNT takes one argument", "UNMOUNT 2, 3");
+
+        check_stmt_err("Drive name must be a string", "UNMOUNT 1");
+
+        check_stmt_err("Invalid drive name 'a:'", "UNMOUNT \"a:\"");
+        check_stmt_err("Drive 'a' is not mounted", "UNMOUNT \"a\"");
     }
 }

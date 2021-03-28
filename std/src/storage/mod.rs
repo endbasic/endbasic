@@ -180,6 +180,12 @@ fn split_uri(uri: &str) -> io::Result<(&str, &str)> {
     }
 }
 
+/// Metadata for a mounted drive.
+struct MountedDrive {
+    uri: String,
+    drive: Box<dyn Drive>,
+}
+
 /// Storage subsystem representation.
 ///
 /// At the moment, the storage subsystem is backed by a single drive, so this type is a wrapper
@@ -189,7 +195,7 @@ pub struct Storage {
     factories: HashMap<String, DriveFactory>,
 
     /// Mapping of drive names to drives.
-    drives: HashMap<DriveKey, Box<dyn Drive>>,
+    drives: HashMap<DriveKey, MountedDrive>,
 
     /// Name of the active drive, which must be present in `drives`.
     current: DriveKey,
@@ -205,7 +211,8 @@ impl Default for Storage {
 
         let mut drives = HashMap::new();
         let key = DriveKey::new("MEMORY").expect("Hardcoded drive name must be valid");
-        drives.insert(key.clone(), drive);
+        let mounted_drive = MountedDrive { uri: "memory://".to_owned(), drive };
+        drives.insert(key.clone(), mounted_drive);
         Self { factories, drives, current: key }
     }
 }
@@ -228,10 +235,10 @@ impl Storage {
         Ok(location.to_string())
     }
 
-    /// Attaches a new `drive` with `name`.
+    /// Attaches a new `drive` with `name`, which was instantiated with `uri`.
     ///
     /// The `name` must be valid and must not yet have been registered.
-    pub fn attach(&mut self, name: &str, drive: Box<dyn Drive>) -> io::Result<()> {
+    fn attach(&mut self, name: &str, uri: &str, drive: Box<dyn Drive>) -> io::Result<()> {
         let key = DriveKey::new(name)?;
         if self.drives.contains_key(&key) {
             return Err(io::Error::new(
@@ -239,7 +246,8 @@ impl Storage {
                 format!("Drive '{}' is already mounted", name),
             ));
         }
-        self.drives.insert(DriveKey::new(name)?, drive);
+        let mounted_drive = MountedDrive { uri: uri.to_owned(), drive };
+        self.drives.insert(DriveKey::new(name)?, mounted_drive);
         Ok(())
     }
 
@@ -257,7 +265,7 @@ impl Storage {
                 ))
             }
         };
-        self.attach(name, drive)
+        self.attach(name, uri, drive)
     }
 
     /// Detaches an existing drive named `name`.
@@ -284,6 +292,16 @@ impl Storage {
         );
         self.drives.remove(&key).expect("Drive presence in map checked above");
         Ok(())
+    }
+
+    /// Returns information about the mounted drives as a mapping of drive names to the URIs that
+    /// were used to mount them.
+    pub fn mounted(&self) -> BTreeMap<&str, &str> {
+        let mut info = BTreeMap::new();
+        for (name, mounted_drive) in &self.drives {
+            info.insert(name.0.as_str(), mounted_drive.uri.as_str());
+        }
+        info
     }
 
     /// Changes the current location.
@@ -320,13 +338,18 @@ impl Storage {
     fn get_drive(&self, location: &Location) -> io::Result<&dyn Drive> {
         match &location.drive {
             Some(key) => match self.drives.get(&key) {
-                Some(drive) => Ok(drive.as_ref()),
+                Some(mounted_drive) => Ok(mounted_drive.drive.as_ref()),
                 None => Err(io::Error::new(
                     io::ErrorKind::NotFound,
                     format!("Drive '{}' is not mounted", key),
                 )),
             },
-            None => Ok(self.drives.get(&self.current).expect("Current drive out of sync").as_ref()),
+            None => Ok(self
+                .drives
+                .get(&self.current)
+                .expect("Current drive out of sync")
+                .drive
+                .as_ref()),
         }
     }
 
@@ -334,15 +357,18 @@ impl Storage {
     fn get_drive_mut(&mut self, location: &Location) -> io::Result<&mut dyn Drive> {
         match &location.drive {
             Some(key) => match self.drives.get_mut(&key) {
-                Some(drive) => Ok(drive.as_mut()),
+                Some(mounted_drive) => Ok(mounted_drive.drive.as_mut()),
                 None => Err(io::Error::new(
                     io::ErrorKind::NotFound,
                     format!("Drive '{}' is not mounted", key),
                 )),
             },
-            None => {
-                Ok(self.drives.get_mut(&self.current).expect("Current drive out of sync").as_mut())
-            }
+            None => Ok(self
+                .drives
+                .get_mut(&self.current)
+                .expect("Current drive out of sync")
+                .drive
+                .as_mut()),
         }
     }
 
@@ -530,8 +556,8 @@ mod tests {
     #[test]
     fn test_storage_attach_ok() {
         let mut storage = Storage::default();
-        storage.attach("zzz1", Box::from(InMemoryDrive::default())).unwrap();
-        storage.attach("A4", Box::from(InMemoryDrive::default())).unwrap();
+        storage.attach("zzz1", "z://", Box::from(InMemoryDrive::default())).unwrap();
+        storage.attach("A4", "z://", Box::from(InMemoryDrive::default())).unwrap();
 
         assert_eq!("MEMORY:/", storage.cwd());
         assert_eq!(["A4", "MEMORY", "ZZZ1"], drive_names(&storage).as_slice());
@@ -542,7 +568,10 @@ mod tests {
         let mut storage = Storage::default();
         assert_eq!(
             "Invalid drive name 'a:b'",
-            format!("{}", storage.attach("a:b", Box::from(InMemoryDrive::default())).unwrap_err())
+            format!(
+                "{}",
+                storage.attach("a:b", "z://", Box::from(InMemoryDrive::default())).unwrap_err()
+            )
         );
     }
 
@@ -553,14 +582,17 @@ mod tests {
             "Drive 'memory' is already mounted",
             format!(
                 "{}",
-                storage.attach("memory", Box::from(InMemoryDrive::default())).unwrap_err()
+                storage.attach("memory", "z://", Box::from(InMemoryDrive::default())).unwrap_err()
             )
         );
 
-        storage.attach("new", Box::from(InMemoryDrive::default())).unwrap();
+        storage.attach("new", "z://", Box::from(InMemoryDrive::default())).unwrap();
         assert_eq!(
             "Drive 'New' is already mounted",
-            format!("{}", storage.attach("New", Box::from(InMemoryDrive::default())).unwrap_err())
+            format!(
+                "{}",
+                storage.attach("New", "z://", Box::from(InMemoryDrive::default())).unwrap_err()
+            )
         );
     }
 
@@ -648,6 +680,18 @@ mod tests {
     }
 
     #[test]
+    fn test_storage_mounted() {
+        let mut storage = Storage::default();
+        storage.register_scheme("fake", in_memory_drive_factory);
+        storage.mount("z", "fAkE://").unwrap();
+
+        let mut exp_info = BTreeMap::default();
+        exp_info.insert("MEMORY", "memory://");
+        exp_info.insert("Z", "fAkE://");
+        assert_eq!(exp_info, storage.mounted());
+    }
+
+    #[test]
     fn test_storage_cd_and_cwd_ok() {
         let mut storage = Storage::default();
         storage.mount("other", "memory://").unwrap();
@@ -677,9 +721,9 @@ mod tests {
         {
             // Ensure that the put operations were routed to the correct objects.
             let memory_drive = storage.drives.get(&DriveKey::new("memory").unwrap()).unwrap();
-            assert_eq!(0, memory_drive.enumerate().unwrap().len());
+            assert_eq!(0, memory_drive.drive.enumerate().unwrap().len());
             let other_drive = storage.drives.get(&DriveKey::new("other").unwrap()).unwrap();
-            assert_eq!(2, other_drive.enumerate().unwrap().len());
+            assert_eq!(2, other_drive.drive.enumerate().unwrap().len());
         }
 
         assert_eq!(0, storage.enumerate("memory:").unwrap().len());
@@ -708,9 +752,9 @@ mod tests {
         {
             // Ensure that the put operations were routed to the correct objects.
             let memory_drive = storage.drives.get(&DriveKey::new("memory").unwrap()).unwrap();
-            assert_eq!(2, memory_drive.enumerate().unwrap().len());
+            assert_eq!(2, memory_drive.drive.enumerate().unwrap().len());
             let other_drive = storage.drives.get(&DriveKey::new("other").unwrap()).unwrap();
-            assert_eq!(0, other_drive.enumerate().unwrap().len());
+            assert_eq!(0, other_drive.drive.enumerate().unwrap().len());
         }
 
         assert_eq!(2, storage.enumerate("").unwrap().len());

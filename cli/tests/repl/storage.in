@@ -1,0 +1,44 @@
+' EndBASIC
+' Copyright 2021 Julio Merino
+'
+' Licensed under the Apache License, Version 2.0 (the "License"); you may not
+' use this file except in compliance with the License.  You may obtain a copy
+' of the License at:
+'
+'     http://www.apache.org/licenses/LICENSE-2.0
+'
+' Unless required by applicable law or agreed to in writing, software
+' distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+' WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+' License for the specific language governing permissions and limitations
+' under the License.
+
+' Interactive session that manipulates storage drives.
+
+' Show default state.
+MOUNT
+DIR
+
+' Load demo content before unmounting the drive, as we will use it later to
+' write some new files.
+LOAD "demos:/hello.bas"
+
+' Replace some default drives with two more.
+MOUNT "A", "memory://"
+MOUNT "B", "memory://"
+CD "A:/"
+UNMOUNT "DEMOS"
+UNMOUNT "MEMORY"
+MOUNT
+
+' Save files in the different drives, using absolute and relative paths, and
+' check the contents.
+SAVE "a:/hello1.bas"
+SAVE "b:hello2.bas"
+NEW
+SAVE "empty1.bas"
+SAVE "a:empty2.bas"
+SAVE "b:/empty3.bas"
+DIR
+DIR "a:/"
+DIR "b:"

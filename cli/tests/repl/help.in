@@ -100,6 +100,9 @@ HELP LOAD
 PRINT "Output from HELP LOCATE:"
 HELP LOCATE
 
+PRINT "Output from HELP MOUNT:"
+HELP MOUNT
+
 PRINT "Output from HELP NEW:"
 HELP NEW
 
@@ -117,6 +120,9 @@ HELP SAVE
 
 PRINT "Output from HELP SLEEP:"
 HELP SLEEP
+
+PRINT "Output from HELP UNMOUNT:"
+HELP UNMOUNT
 
 '
 ' Help on functions.
