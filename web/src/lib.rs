@@ -240,6 +240,15 @@ impl OnScreenKeyboard {
     }
 }
 
+/// Sets up the common storage drives.
+fn setup_storage(storage: &mut endbasic_std::storage::Storage) {
+    storage.register_scheme("demos", endbasic::demos::demos_drive_factory);
+    storage.mount("demos", "demos://").expect("Demos drive shouldn't fail to mount");
+    storage.register_scheme("local", store::web_drive_factory);
+    storage.mount("local", "local://").expect("Web drive shouldn't fail to mount");
+    storage.cd("local:").expect("Local drive was just registered");
+}
+
 /// Connects the EndBASIC interpreter to a web page.
 #[wasm_bindgen]
 pub struct WebTerminal {
@@ -281,10 +290,7 @@ impl WebTerminal {
             .make_interactive();
 
         let storage = builder.get_storage();
-        endbasic::setup_storage(
-            &mut storage.borrow_mut(),
-            Some(Box::from(store::WebDrive::from_window())),
-        );
+        setup_storage(&mut storage.borrow_mut());
 
         let mut machine = builder.build().unwrap();
         endbasic::print_welcome(console.clone()).unwrap();

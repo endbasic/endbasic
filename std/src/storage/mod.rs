@@ -23,9 +23,9 @@ use std::str;
 mod cmds;
 pub use cmds::*;
 mod fs;
-pub use fs::DirectoryDrive;
+pub use fs::*;
 mod mem;
-pub use mem::InMemoryDrive;
+pub use mem::*;
 
 /// Metadata of an entry in a storage medium.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -166,11 +166,28 @@ impl fmt::Display for Location {
     }
 }
 
+/// Function to instantiate a drive given a mount target.
+type DriveFactory = fn(&str) -> io::Result<Box<dyn Drive>>;
+
+/// Given a mount URI, validates it and returns the `(scheme, path)` pair.
+fn split_uri(uri: &str) -> io::Result<(&str, &str)> {
+    match uri.find("://") {
+        Some(pos) if pos > 0 => Ok((&uri[0..pos], &uri[pos + 3..])),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Mount URI must be of the form scheme://path",
+        )),
+    }
+}
+
 /// Storage subsystem representation.
 ///
 /// At the moment, the storage subsystem is backed by a single drive, so this type is a wrapper
 /// for the `Drive` type.
 pub struct Storage {
+    /// Mapping of target scheme names to drive factories.
+    factories: HashMap<String, DriveFactory>,
+
     /// Mapping of drive names to drives.
     drives: HashMap<DriveKey, Box<dyn Drive>>,
 
@@ -181,16 +198,27 @@ pub struct Storage {
 impl Default for Storage {
     /// Creates a new storage subsytem backed by an in-memory drive.
     fn default() -> Self {
+        let mut factories: HashMap<String, DriveFactory> = HashMap::default();
+        factories.insert("memory".to_owned(), in_memory_drive_factory);
+
         let drive: Box<dyn Drive> = Box::from(InMemoryDrive::default());
 
         let mut drives = HashMap::new();
         let key = DriveKey::new("MEMORY").expect("Hardcoded drive name must be valid");
         drives.insert(key.clone(), drive);
-        Self { drives, current: key }
+        Self { factories, drives, current: key }
     }
 }
 
 impl Storage {
+    /// Registers a new drive `factory` to handle the `scheme`.  Must not have previously been
+    /// registered and the `scheme` must be in lowercase.
+    pub fn register_scheme(&mut self, scheme: &str, factory: DriveFactory) {
+        assert_eq!(scheme.to_lowercase(), scheme);
+        let previous = self.factories.insert(scheme.to_owned(), factory);
+        assert!(previous.is_none(), "Tried to register {} twice", scheme);
+    }
+
     /// Converts a location, which needn't exist, to its canonical form.
     pub fn make_canonical(&self, raw_location: &str) -> io::Result<String> {
         let mut location = Location::new(raw_location)?;
@@ -203,7 +231,7 @@ impl Storage {
     /// Attaches a new `drive` with `name`.
     ///
     /// The `name` must be valid and must not yet have been registered.
-    pub fn mount(&mut self, name: &str, drive: Box<dyn Drive>) -> io::Result<()> {
+    pub fn attach(&mut self, name: &str, drive: Box<dyn Drive>) -> io::Result<()> {
         let key = DriveKey::new(name)?;
         if self.drives.contains_key(&key) {
             return Err(io::Error::new(
@@ -211,8 +239,25 @@ impl Storage {
                 format!("Drive '{}' is already mounted", name),
             ));
         }
-        self.drives.insert(key, drive);
+        self.drives.insert(DriveKey::new(name)?, drive);
         Ok(())
+    }
+
+    /// Instantiates and attaches a new `drive` with `name` that points to `uri`.
+    ///
+    /// The `name` must be valid and must not yet have been registered.
+    pub fn mount(&mut self, name: &str, uri: &str) -> io::Result<()> {
+        let (scheme, path) = split_uri(uri)?;
+        let drive = match self.factories.get(&scheme.to_lowercase()) {
+            Some(factory) => factory(path)?,
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Unknown mount scheme '{}'", scheme),
+                ))
+            }
+        };
+        self.attach(name, drive)
     }
 
     /// Detaches an existing drive named `name`.
@@ -355,6 +400,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_split_uri_ok() {
+        assert_eq!(("the-scheme", ""), split_uri("the-scheme://").unwrap());
+        assert_eq!(("foo", "/some:/target"), split_uri("foo:///some:/target").unwrap());
+        assert_eq!(("foo", "bar://baz"), split_uri("foo://bar://baz").unwrap());
+    }
+
+    #[test]
+    fn test_split_uri_errors() {
+        for uri in &["", "://abc", "foo:/", "bar//", "/baz/"] {
+            assert_eq!(
+                "Mount URI must be of the form scheme://path",
+                format!("{}", split_uri(uri).unwrap_err())
+            );
+        }
+    }
+
+    #[test]
     fn test_drivekey_new() {
         assert_eq!(DriveKey("FOO".to_owned()), DriveKey::new("foo").unwrap());
         assert_eq!(DriveKey("A".to_owned()), DriveKey::new("A".to_owned()).unwrap());
@@ -442,7 +504,7 @@ mod tests {
     #[test]
     fn test_storage_make_canonical_ok() {
         let mut storage = Storage::default();
-        storage.mount("some", Box::from(InMemoryDrive::default())).unwrap();
+        storage.mount("some", "memory://").unwrap();
 
         assert_eq!("MEMORY:foo.bar", storage.make_canonical("foo.bar").unwrap());
         assert_eq!("MEMORY:/foo.bar", storage.make_canonical("/foo.bar").unwrap());
@@ -466,46 +528,94 @@ mod tests {
     }
 
     #[test]
-    fn test_storage_mount_ok() {
+    fn test_storage_attach_ok() {
         let mut storage = Storage::default();
-        storage.mount("zzz1", Box::from(InMemoryDrive::default())).unwrap();
-        storage.mount("A4", Box::from(InMemoryDrive::default())).unwrap();
+        storage.attach("zzz1", Box::from(InMemoryDrive::default())).unwrap();
+        storage.attach("A4", Box::from(InMemoryDrive::default())).unwrap();
 
         assert_eq!("MEMORY:/", storage.cwd());
         assert_eq!(["A4", "MEMORY", "ZZZ1"], drive_names(&storage).as_slice());
     }
 
     #[test]
-    fn test_storage_mount_invalid_name() {
+    fn test_storage_attach_invalid_name() {
         let mut storage = Storage::default();
         assert_eq!(
             "Invalid drive name 'a:b'",
-            format!("{}", storage.mount("a:b", Box::from(InMemoryDrive::default())).unwrap_err())
+            format!("{}", storage.attach("a:b", Box::from(InMemoryDrive::default())).unwrap_err())
         );
     }
 
     #[test]
-    fn test_storage_mount_already_mounted() {
+    fn test_storage_attach_already_attached() {
         let mut storage = Storage::default();
         assert_eq!(
             "Drive 'memory' is already mounted",
             format!(
                 "{}",
-                storage.mount("memory", Box::from(InMemoryDrive::default())).unwrap_err()
+                storage.attach("memory", Box::from(InMemoryDrive::default())).unwrap_err()
             )
         );
 
-        storage.mount("new", Box::from(InMemoryDrive::default())).unwrap();
+        storage.attach("new", Box::from(InMemoryDrive::default())).unwrap();
         assert_eq!(
             "Drive 'New' is already mounted",
-            format!("{}", storage.mount("New", Box::from(InMemoryDrive::default())).unwrap_err())
+            format!("{}", storage.attach("New", Box::from(InMemoryDrive::default())).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_storage_mount_ok() {
+        let mut storage = Storage::default();
+        storage.register_scheme("fake", in_memory_drive_factory);
+        storage.mount("a", "memory://").unwrap();
+        storage.mount("z", "fAkE://").unwrap();
+
+        assert_eq!(["A", "MEMORY", "Z"], drive_names(&storage).as_slice());
+    }
+
+    #[test]
+    fn test_storage_mount_path_redirection() {
+        let root = tempfile::tempdir().unwrap();
+        let dir1 = root.path().join("first");
+        let dir2 = root.path().join("second");
+
+        let mut storage = Storage::default();
+        storage.register_scheme("file", directory_drive_factory);
+        storage.mount("c", &format!("file://{}", dir1.display())).unwrap();
+        storage.mount("d", &format!("file://{}", dir2.display())).unwrap();
+
+        storage.put("c:file1.txt", "hi").unwrap();
+        storage.put("d:file2.txt", "bye").unwrap();
+
+        assert!(dir1.join("file1.txt").exists());
+        assert!(!dir1.join("file2.txt").exists());
+        assert!(!dir2.join("file1.txt").exists());
+        assert!(dir2.join("file2.txt").exists());
+    }
+
+    #[test]
+    fn test_storage_mount_unknown_scheme() {
+        let mut storage = Storage::default();
+        assert_eq!(
+            "Unknown mount scheme 'fake'",
+            format!("{}", storage.mount("a", "fake://abc").unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_storage_mount_invalid_path_for_scheme() {
+        let mut storage = Storage::default();
+        assert_eq!(
+            "Cannot specify a path to mount an in-memory drive",
+            format!("{}", storage.mount("a", "memory://abc").unwrap_err())
         );
     }
 
     #[test]
     fn test_storage_unmount_ok() {
         let mut storage = Storage::default();
-        storage.mount("other", Box::from(InMemoryDrive::default())).unwrap();
+        storage.mount("other", "memory://").unwrap();
         assert_eq!("MEMORY:/", storage.cwd());
         assert_eq!(["MEMORY", "OTHER"], drive_names(&storage).as_slice());
 
@@ -526,7 +636,7 @@ mod tests {
     #[test]
     fn test_storage_unmount_current_drive_error() {
         let mut storage = Storage::default();
-        storage.mount("other", Box::from(InMemoryDrive::default())).unwrap();
+        storage.mount("other", "memory://").unwrap();
         assert_eq!(
             "Cannot unmount the current drive 'memory'",
             format!("{}", storage.unmount("memory").unwrap_err())
@@ -540,7 +650,7 @@ mod tests {
     #[test]
     fn test_storage_cd_and_cwd_ok() {
         let mut storage = Storage::default();
-        storage.mount("other", Box::from(InMemoryDrive::default())).unwrap();
+        storage.mount("other", "memory://").unwrap();
         assert_eq!("MEMORY:/", storage.cwd());
         storage.cd("other:/").unwrap();
         assert_eq!("OTHER:/", storage.cwd());
@@ -560,7 +670,7 @@ mod tests {
     #[test]
     fn test_storage_file_ops_with_absolute_paths() {
         let mut storage = Storage::default();
-        storage.mount("other", Box::from(InMemoryDrive::default())).unwrap();
+        storage.mount("other", "memory://").unwrap();
 
         storage.put("other:/f1", "some text").unwrap();
         storage.put("other:f2", "other text").unwrap();
@@ -591,7 +701,7 @@ mod tests {
     #[test]
     fn test_storage_file_ops_with_relative_paths() {
         let mut storage = Storage::default();
-        storage.mount("other", Box::from(InMemoryDrive::default())).unwrap();
+        storage.mount("other", "memory://").unwrap();
 
         storage.put("/f1", "some text").unwrap();
         storage.put("f2", "other text").unwrap();

@@ -172,8 +172,7 @@ fn test_cli_autoexec_is_ignored() {
     check(
         bin_path("endbasic"),
         &[
-            "--programs-dir",
-            dir.path().to_str().unwrap(),
+            &format!("--local-drive=file://{}", dir.path().to_str().unwrap()),
             &src_str("cli/tests/cli/interactive.bas"),
         ],
         1,
@@ -472,7 +471,7 @@ fn test_repl_autoexec() {
     fs::copy(&src_path("cli/tests/repl/autoexec.bas"), &dir.path().join("AUTOEXEC.BAS")).unwrap();
     check(
         bin_path("endbasic"),
-        &["--programs-dir", dir.path().to_str().unwrap()],
+        &[&format!("--local-drive=file://{}", dir.path().to_str().unwrap())],
         0,
         Behavior::File(src_path("cli/tests/repl/hello.bas")),
         Behavior::File(src_path("cli/tests/repl/autoexec.out")),
@@ -508,7 +507,7 @@ fn test_repl_console() {
 fn test_repl_dir() {
     check(
         bin_path("endbasic"),
-        &["--programs-dir=:memory:"],
+        &["--local-drive=memory://"],
         0,
         Behavior::File(src_path("cli/tests/repl/dir.in")),
         Behavior::File(src_path("cli/tests/repl/dir.out")),
@@ -601,7 +600,7 @@ fn test_repl_load_save() {
     assert!(!dir.path().join("hello2.bas").exists());
     check(
         bin_path("endbasic"),
-        &["--programs-dir", dir.path().to_str().unwrap()],
+        &[&format!("--local-drive=file://{}", dir.path().to_str().unwrap())],
         0,
         Behavior::File(src_path("cli/tests/repl/load-save.in")),
         Behavior::File(src_path("cli/tests/repl/load-save.out")),

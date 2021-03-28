@@ -56,3 +56,15 @@ impl Drive for InMemoryDrive {
         Ok(())
     }
 }
+
+/// Instantiates an in-memory drive.
+pub fn in_memory_drive_factory(target: &str) -> io::Result<Box<dyn Drive>> {
+    if target.is_empty() {
+        Ok(Box::from(InMemoryDrive::default()))
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Cannot specify a path to mount an in-memory drive",
+        ))
+    }
+}

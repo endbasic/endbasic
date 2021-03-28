@@ -294,6 +294,18 @@ impl Drive for WebDrive {
     }
 }
 
+/// Instantiates a web drive factory.
+pub fn web_drive_factory(target: &str) -> io::Result<Box<dyn Drive>> {
+    if target.is_empty() {
+        Ok(Box::from(WebDrive::from_window()))
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Cannot specify a path to mount a web local drive",
+        ))
+    }
+}
+
 #[cfg(test)]
 mod testutils {
     use super::*;

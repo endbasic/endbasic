@@ -28,6 +28,10 @@ not adhere to semantic versioning until 1.0.0.**
 *   Made the output of `HELP` fit within the screen for easier readability
     instead of allowing long paragraphs to wrap at unpredictable points.
 
+*   Renamed the `--programs-dir` flag to `--local-drive` and removed the special
+    handling of the `:memory:` value.  Instead, this can now take arbitrary URIs
+    to refer to drive targets.
+
 ## Changes in version 0.6.0
 
 **Released on 2021-02-19.**

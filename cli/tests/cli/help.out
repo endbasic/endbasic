@@ -3,8 +3,8 @@ Usage: endbasic [options] [program-file]
 Options:
     -h, --help          show command-line usage information and exit
     -i, --interactive   force interactive mode when running a script
-        --programs-dir PATH
-                        directory where user programs are stored
+        --local-drive URI
+                        location of the drive to mount as LOCAL
         --version       show version information and exit
 
 Report bugs to: https://github.com/jmmv/endbasic/issues

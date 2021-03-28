@@ -111,6 +111,18 @@ impl Drive for DemosDrive {
     }
 }
 
+/// Instantiates an in-memory drive.
+pub fn demos_drive_factory(target: &str) -> io::Result<Box<dyn Drive>> {
+    if target.is_empty() {
+        Ok(Box::from(DemosDrive::default()))
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Cannot specify a path to mount a demos drive",
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
