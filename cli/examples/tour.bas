@@ -142,6 +142,39 @@ INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
 CLS
 COLOR 11
 PRINT
+PRINT " EndBASIC tour: The file system"
+PRINT "================================"
+COLOR
+PRINT
+PRINT "In the previous page, you learned how to create files and how to save and"
+PRINT "load them.  Those examples used relative paths.  However, EndBASIC supports"
+PRINT "multiple drives (although it does not yet support directories)."
+PRINT
+PRINT "Paths in EndBASIC have the form DRIVE:FILE or DRIVE:/FILE.  Given that"
+PRINT "directories are not yet supported, both are equivalent, but their meaning"
+PRINT "might change in the future.  All commands that operate on paths accept these"
+PRINT "syntaxes.  Note that the DRIVE: part is optional: when not specified, the"
+PRINT "current drive (shown by the DIR command) will be used."
+PRINT
+PRINT "You can use the MOUNT command to display the list of currently-mounted drives"
+PRINT "and to attach new ones.  Pay attention to the default MOUNT output as it"
+PRINT "shows some of the possible URIs you can use to mount other drives."
+PRINT "For example, if you want to gain access to an arbitrary directory in the"
+PRINT "system, you could do:"
+PRINT
+PRINT "    MOUNT \"TMP\", \"file:///var/tmp\""
+PRINT "    CD \"TMP:/\""
+PRINT
+PRINT "Pay attention to the double quotes surrounding these arguments: these are"
+PRINT "EndBASIC commands and thus you must provide the arguments as strings.  You"
+PRINT "are bound to trip over this a few times due to muscle memory..."
+PRINT
+COLOR 11
+INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
+
+CLS
+COLOR 11
+PRINT
 PRINT " EndBASIC tour: Screen manipulation"
 PRINT "===================================="
 COLOR
@@ -182,8 +215,6 @@ PRINT
 PRINT "Please note that you have to be running on a Raspberry Pi *AND* you must"
 PRINT "have compiled EndBASIC with --features=rpi for this to work."
 PRINT
-COLOR
-PRINT
 COLOR 11
 INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
 
@@ -196,7 +227,13 @@ COLOR
 PRINT
 PRINT "And that's it for the tour.  You can now type EDIT to see the code that"
 PRINT "took you over this journey, load other demo files or... just go forth and"
-PRINT "explore.  HELP and DIR are your friends at any point."
+PRINT "explore.  HELP, MOUNT, and DIR are your friends at any point, but so that"
+PRINT "you don't feel too lost, run this now:"
+PRINT
+COLOR 1
+PRINT "    CD \"DEMOS:/\""
+PRINT "    DIR"
+COLOR
 PRINT
 PRINT "If you like what you have seen so far, please head to the project's GitHub"
 PRINT "page and give it a star:"

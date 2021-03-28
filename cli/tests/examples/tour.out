@@ -99,6 +99,33 @@ If you are in the browser, rest assured that all programs are stored in
 your browser's local storage.  Nothing goes to the cloud.
 
 [38;5;11m[49m[2J[1;1H[38;5;11m[49m
+ EndBASIC tour: The file system
+================================
+[39m[49m
+In the previous page, you learned how to create files and how to save and
+load them.  Those examples used relative paths.  However, EndBASIC supports
+multiple drives (although it does not yet support directories).
+
+Paths in EndBASIC have the form DRIVE:FILE or DRIVE:/FILE.  Given that
+directories are not yet supported, both are equivalent, but their meaning
+might change in the future.  All commands that operate on paths accept these
+syntaxes.  Note that the DRIVE: part is optional: when not specified, the
+current drive (shown by the DIR command) will be used.
+
+You can use the MOUNT command to display the list of currently-mounted drives
+and to attach new ones.  Pay attention to the default MOUNT output as it
+shows some of the possible URIs you can use to mount other drives.
+For example, if you want to gain access to an arbitrary directory in the
+system, you could do:
+
+    MOUNT "TMP", "file:///PATH/TO/TMPDIR"
+    CD "TMP:/"
+
+Pay attention to the double quotes surrounding these arguments: these are
+EndBASIC commands and thus you must provide the arguments as strings.  You
+are bound to trip over this a few times due to muscle memory...
+
+[38;5;11m[49m[2J[1;1H[38;5;11m[49m
  EndBASIC tour: Screen manipulation
 ====================================
 [39m[49m
@@ -137,15 +164,18 @@ to the GPIO lines.  See the "DEMOS:/GPIO.BAS" demo for an example.
 Please note that you have to be running on a Raspberry Pi *AND* you must
 have compiled EndBASIC with --features=rpi for this to work.
 
-[39m[49m
 [38;5;11m[49m[2J[1;1H[38;5;11m[49m
  EndBASIC tour: Enjoy
 ======================
 [39m[49m
 And that's it for the tour.  You can now type EDIT to see the code that
 took you over this journey, load other demo files or... just go forth and
-explore.  HELP and DIR are your friends at any point.
+explore.  HELP, MOUNT, and DIR are your friends at any point, but so that
+you don't feel too lost, run this now:
 
+[38;5;1m[49m    CD "DEMOS:/"
+    DIR
+[39m[49m
 If you like what you have seen so far, please head to the project's GitHub
 page and give it a star:
 [38;5;12m[49m
