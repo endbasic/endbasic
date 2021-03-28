@@ -1,0 +1,58 @@
+
+    Welcome to EndBASIC X.Y.Z.
+
+    Type HELP for interactive usage information.
+    For a guided tour, type: LOAD "DEMOS:/TOUR.BAS": RUN
+
+
+    Name      Target
+    DEMOS     demos://
+    LOCAL     file:///PATH/TO/TMPDIR
+    MEMORY    memory://
+
+    3 drive(s)
+
+
+    Directory of LOCAL:/
+
+    Modified              Size    Name
+    0 file(s), 0 bytes
+
+
+    Name     Target
+    A        memory://
+    B        memory://
+    LOCAL    file:///PATH/TO/TMPDIR
+
+    3 drive(s)
+
+
+    Directory of A:/
+
+    Modified              Size    Name
+    YYYY-MM-DD HH:MM         0    empty1.bas
+    YYYY-MM-DD HH:MM         0    empty2.bas
+    YYYY-MM-DD HH:MM       651    hello1.bas
+
+    3 file(s), 651 bytes
+
+
+    Directory of A:/
+
+    Modified              Size    Name
+    YYYY-MM-DD HH:MM         0    empty1.bas
+    YYYY-MM-DD HH:MM         0    empty2.bas
+    YYYY-MM-DD HH:MM       651    hello1.bas
+
+    3 file(s), 651 bytes
+
+
+    Directory of B:/
+
+    Modified              Size    Name
+    YYYY-MM-DD HH:MM         0    empty3.bas
+    YYYY-MM-DD HH:MM       651    hello2.bas
+
+    2 file(s), 651 bytes
+
+End of input by CTRL-D

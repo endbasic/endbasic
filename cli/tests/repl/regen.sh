@@ -36,6 +36,7 @@ for outfile in "${@}"; do
     local_drive="file://${tmpdir}"
     case "${outfile}" in
         *dir.out) local_drive="memory://" ;;
+        *storage.out) local_drive="file://${tmpdir}" ;;
     esac
 
     if [ -f "${basfile}" -a -f "${infile}" ]; then
@@ -49,7 +50,9 @@ for outfile in "${@}"; do
         continue
     fi
 
-    sed -E "s,${date_re},YYYY-MM-DD HH:MM,g;s,${version_re},X.Y.Z,g" \
+    sed -E -e "s,${date_re},YYYY-MM-DD HH:MM,g" \
+        -e "s,${version_re},X.Y.Z,g" \
+        -e "s,${tmpdir},/PATH/TO/TMPDIR,g" \
         "${outfile}.new" >"${outfile}.tmp"
     mv "${outfile}.tmp" "${outfile}"
     rm -f "${outfile}.new" "${outfile}.tmp"

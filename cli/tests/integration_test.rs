@@ -29,6 +29,9 @@ use std::process;
 /// Matches a formatted date.
 const DATE_RE: &str = "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-2][0-9]:[0-5][0-9]";
 
+/// Matches a `file://` URI.
+const FILE_URI_RE: &str = "file://[a-zA-Z0-9/.-]*";
+
 /// Matches a version number.
 const VERSION_RE: &str = "[0-9]+\\.[0-9]+\\.[0-9]+";
 
@@ -108,7 +111,10 @@ fn apply_mocks(input: String) -> String {
     let input = version_re.replace_all(&input, "X.Y.Z").to_owned();
 
     let date_re = regex::Regex::new(DATE_RE).unwrap();
-    date_re.replace_all(&input, "YYYY-MM-DD HH:MM").into()
+    let input = date_re.replace_all(&input, "YYYY-MM-DD HH:MM").to_owned();
+
+    let file_uri_re = regex::Regex::new(FILE_URI_RE).unwrap();
+    file_uri_re.replace_all(&input, "file:///PATH/TO/TMPDIR").into()
 }
 
 /// Runs `bin` with arguments `args` and checks its behavior against expectations.
@@ -617,6 +623,18 @@ fn test_repl_state_sharing() {
         0,
         Behavior::File(src_path("cli/tests/repl/state-sharing.in")),
         Behavior::File(src_path("cli/tests/repl/state-sharing.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_repl_storage() {
+    check(
+        bin_path("endbasic"),
+        &["--local-drive=file:///some/unused/directory"],
+        0,
+        Behavior::File(src_path("cli/tests/repl/storage.in")),
+        Behavior::File(src_path("cli/tests/repl/storage.out")),
         Behavior::Null,
     );
 }

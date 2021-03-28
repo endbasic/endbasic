@@ -41,8 +41,8 @@ not intend to be fully compatible with them.  The library currently contains:
 *   Hardware interaction: `GPIO_CLEAR`, `GPIO_READ`, `GPIO_SETUP`, `GPIO_WRITE`.
 *   Interpreter interaction: `CLEAR`, `EXIT`, `HELP`.
 *   Numerics: `DTOI`, `ITOD`, `RANDOMIZE`, `RND`.
-*   Program manipulation: `CD`, `DEL`, `DIR`, `EDIT`, `LIST`, `LOAD`, `NEW`,
-    `RUN`, `SAVE`.
+*   Program manipulation: `CD`, `DEL`, `DIR`, `EDIT`, `LIST`, `LOAD`, `MOUNT`,
+    `NEW`, `RUN`, `SAVE`, `UNMOUNT`.
 *   Strings: `LEFT`, `LEN`, `LTRIM`, `MID`, `RIGHT`, `RTRIM`.
 
 ## Design principles

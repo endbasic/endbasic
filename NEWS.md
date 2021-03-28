@@ -21,6 +21,13 @@ not adhere to semantic versioning until 1.0.0.**
 *   Extended the `DIR` command to take an optional path to the directory to
     show.
 
+*   Added the `MOUNT` and `UNMOUNT` commands to inspect and manipulate the
+    mounted drives.  Note that this now allows users to mount arbitrary parts
+    of the external file system within the EndBASIC namespace, when in theory
+    it wasn't possible to escape the programs directory before.  This is
+    intentional, but if there is a need, we can put restrictions in place
+    again.
+
 *   Refactored the `HELP` command to only print a summary of topics by
     default.  As part of this, topics can now be looked up using prefixes of
     their names.

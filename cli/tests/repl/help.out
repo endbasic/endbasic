@@ -106,15 +106,17 @@ Output from HELP STORED:
 
     Stored program manipulation
 
-    >> CD      Changes the current path.
-    >> DEL     Deletes the given program.
-    >> DIR     Displays the list of files on the current or given path.
-    >> EDIT    Interactively edits the stored program.
-    >> LIST    Prints the currently-loaded program.
-    >> LOAD    Loads the given program.
-    >> NEW     Clears the stored program from memory.
-    >> RUN     Runs the stored program.
-    >> SAVE    Saves the current program in memory to the given filename.
+    >> CD         Changes the current path.
+    >> DEL        Deletes the given program.
+    >> DIR        Displays the list of files on the current or given path.
+    >> EDIT       Interactively edits the stored program.
+    >> LIST       Prints the currently-loaded program.
+    >> LOAD       Loads the given program.
+    >> MOUNT      Lists the mounted drives or mounts a new drive.
+    >> NEW        Clears the stored program from memory.
+    >> RUN        Runs the stored program.
+    >> SAVE       Saves the current program in memory to the given filename.
+    >> UNMOUNT    Unmounts the given drive.
 
     Type HELP followed by the name of a symbol for details.
 
@@ -284,6 +286,18 @@ Output from HELP LOCATE:
 
     Moves the cursor to the given position.
 
+Output from HELP MOUNT:
+
+    MOUNT [drive_name$, target$]
+
+    Lists the mounted drives or mounts a new drive.
+
+    With no arguments, prints a list of mounted drives and their targets.
+
+    With two arguments, mounts the drive_name$ to point to the target$.
+    Drive names are specified without a colon at the end, and targets are
+    given in the form of a URI.
+
 Output from HELP NEW:
 
     NEW
@@ -340,6 +354,14 @@ Output from HELP SLEEP:
     Pauses program execution for the given number of seconds, which can be
     specified either as an integral or as a floating point number for finer
     precision.
+
+Output from HELP UNMOUNT:
+
+    UNMOUNT drive_name
+
+    Unmounts the given drive.
+
+    Drive names are specified without a colon at the end.
 
 Output from HELP DTOI:
 
