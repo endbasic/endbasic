@@ -602,8 +602,8 @@ impl<'a> Parser<'a> {
         self.expect_and_consume(Token::Then, "No THEN in IF statement")?;
         self.expect_and_consume(Token::Eol, "Expecting newline after THEN")?;
 
-        let mut branches = vec![];
-        branches.push((expr, self.parse_until(&[Token::Elseif, Token::Else, Token::End])?));
+        let mut branches =
+            vec![(expr, self.parse_until(&[Token::Elseif, Token::Else, Token::End])?)];
         loop {
             let peeked = self.lexer.peek()?;
             match peeked {
