@@ -493,7 +493,8 @@ impl CallableMetadata {
         self.syntax
     }
 
-    /// Gets the callable's category.
+    /// Gets the callable's category as a collection of lines.  The first line is the title of the
+    /// category, and any extra lines are additional information for it.
     pub fn category(&self) -> &'static str {
         self.category
     }

@@ -14,21 +14,46 @@ Output from HELP:
 
     Top-level help topics:
 
-    >> Console manipulation
-    >> File system interaction
-    >> Hardware manipulation
-    >> Interpreter manipulation
+    >> Console
+    >> File system
+    >> Hardware interface
+    >> Interpreter
     >> Language reference
-    >> Numerical manipulation
-    >> Stored program manipulation
-    >> String manipulation
+    >> Numerical functions
+    >> Stored program
+    >> String functions
 
     Type HELP followed by the name of a topic for details.
     Type HELP HELP for details on how to specify topic names.
 
 Output from HELP CONSOLE:
 
-    Console manipulation
+    Console
+
+    The EndBASIC console is the text-based display you are seeing: both the
+    interpreter and the effects of all commands happen within the same
+    console.  There is no separate output window as other didactical
+    interpreters provide.
+
+    The console is a matrix of variable size.  The upper left position is
+    row 0 and column 0.  Each position in this matrix contains a character
+    and a color attribute.  The color attribute indicates the foreground
+    and background colors of that character.  There is a default attribute
+    to match the default settings of your terminal, which might not be a
+    color: for example, in a terminal emulator configured with a black tint
+    (aka a transparent terminal), the default color respects the
+    transparency whereas color 0 (black) does not.
+
+    If you are writing a script and do not want the script to interfere
+    with other parts of the console, you should restrict the script to
+    using only the INPUT and PRINT commands.
+
+    Be aware that the console currently reacts poorly to size changes.
+    Avoid resizing your terminal or web browser.  If you do resize them,
+    however, restart the interpreter.
+
+    Graphics are currently not supported but they are within the realm of
+    possibility for a later version.
 
     >> CLS       Clears the screen.
     >> COLOR     Sets the foreground and background colors.
@@ -40,7 +65,34 @@ Output from HELP CONSOLE:
 
 Output from HELP "FILE SYSTEM":
 
-    File system interaction
+    File system
+
+    The EndBASIC storage subsystem is organized as a collection of drives,
+    each identified by a case-insensitive name.  Drives can be backed by a
+    multitude of file systems with different behaviors, and their targets
+    are specified as URIs.  Special targets include: memory://, which
+    points to an in-memory read/write drive; and demos://, which points to
+    a read-only drive with sample programs.  Other targets may be available
+    such as file:// to access a local directory or local:// to access
+    web-local storage, depending on the context.  The output of the MOUNT
+    command can help to identify which targets are available.
+
+    All commands that operate with files take a path.  Paths in EndBASIC
+    can be of the form FILENAME.EXT, in which case they refer to a file in
+    the current drive; or DRIVE:/FILENAME.EXT and DRIVE:FILENAME.EXT, in
+    which case they refer to a file in the specified drive.  Note that the
+    slash before the file name is currently optional because EndBASIC does
+    not support directories yet.  Furthermore, if .EXT is missing, a .BAS
+    extension is assumed.
+
+    Be aware that the commands below must be invoked using proper EndBASIC
+    syntax.  In particular, this means that path arguments must be
+    double-quoted and multiple arguments have to be separated by a comma
+    (not a space).  If you have used commands like CD, DIR, or MOUNT in
+    other contexts, this is likely to confuse you.
+
+    See the "Strored program" help topic for information on how to load,
+    modify, and save programs.
 
     >> CD         Changes the current path.
     >> DIR        Displays the list of files on the current or given path.
@@ -51,7 +103,13 @@ Output from HELP "FILE SYSTEM":
 
 Output from HELP HARDWARE:
 
-    Hardware manipulation
+    Hardware interface
+
+    EndBASIC provides features to manipulate external hardware.  These
+    features are currently limited to GPIO interaction on a Raspberry Pi
+    and are only available when EndBASIC has explicitly been built with the
+    --features=rpi option.  Support for other busses and platforms may come
+    later.
 
     >> GPIO_CLEAR    Resets the GPIO chip or a specific pin.
     >> GPIO_READ?    Reads the state of a GPIO pin.
@@ -62,7 +120,7 @@ Output from HELP HARDWARE:
 
 Output from HELP INTERPRETER:
 
-    Interpreter manipulation
+    Interpreter
 
     >> CLEAR    Clears all variables to restore initial state.
     >> EXIT     Exits the interpreter.
@@ -105,7 +163,7 @@ Output from HELP LANG:
 
 Output from HELP NUMERICAL:
 
-    Numerical manipulation
+    Numerical functions
 
     >> DTOI%        Rounds the given double to the closest integer.
     >> ITOD#        Converts the given integer to a double.
@@ -116,7 +174,23 @@ Output from HELP NUMERICAL:
 
 Output from HELP STORED:
 
-    Stored program manipulation
+    Stored program
+
+    The EndBASIC interpreter has a piece of read/write memory called the
+    "stored program".  This memory serves to maintain the code of a program
+    you edit and manipulate right from the interpreter.
+
+    The common flow to interact with a stored program is to load a program
+    from disk using the LOAD command, modify its contents via the EDIT
+    command, execute the program via the RUN command, and finally save the
+    new or modified program via the SAVE command.
+
+    Be aware that the stored program's content is lost whenever you load a
+    program, exit the interpreter, or use the NEW command, so don't forget
+    to save it.
+
+    See the "File system" help topic for information on where the programs
+    can be saved and loaded from.
 
     >> DEL     Deletes the given program.
     >> EDIT    Interactively edits the stored program.
@@ -130,7 +204,7 @@ Output from HELP STORED:
 
 Output from HELP STRING:
 
-    String manipulation
+    String functions
 
     >> LEFT$     Returns a given number of characters from the left side of a string.
     >> LEN%      Returns the length of the string in expr$.

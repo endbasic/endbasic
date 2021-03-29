@@ -26,8 +26,8 @@ use std::rc::Rc;
 use std::thread;
 use std::time::Duration;
 
-/// Category string for all functions and commands provided by this module.
-const CATEGORY: &str = "Interpreter manipulation";
+/// Category description for all symbols provided by this module.
+pub(crate) const CATEGORY: &str = "Interpreter";
 
 /// The `CLEAR` command.
 pub struct ClearCommand {

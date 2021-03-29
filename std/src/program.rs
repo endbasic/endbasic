@@ -29,8 +29,18 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::str;
 
-/// Category string for all functions provided by this module.
-const CATEGORY: &str = "Stored program manipulation";
+/// Category description for all symbols provided by this module.
+const CATEGORY: &str = "Stored program
+The EndBASIC interpreter has a piece of read/write memory called the \"stored program\".  This \
+memory serves to maintain the code of a program you edit and manipulate right from the \
+interpreter.
+The common flow to interact with a stored program is to load a program from disk using the LOAD \
+command, modify its contents via the EDIT command, execute the program via the RUN command, and \
+finally save the new or modified program via the SAVE command.
+Be aware that the stored program's content is lost whenever you load a program, exit the \
+interpreter, or use the NEW command, so don't forget to save it.
+See the \"File system\" help topic for information on where the programs can be saved and loaded \
+from.";
 
 /// Representation of the single program that we can keep in memory.
 #[async_trait(?Send)]

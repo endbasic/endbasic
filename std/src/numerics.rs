@@ -28,8 +28,8 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::rc::Rc;
 
-/// Category string for all functions provided by this module.
-const CATEGORY: &str = "Numerical manipulation";
+/// Category description for all symbols provided by this module.
+const CATEGORY: &str = "Numerical functions";
 
 /// Tracks the state of the PRNG used by the random number manipulation functions and commands.
 ///

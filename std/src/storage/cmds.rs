@@ -29,8 +29,25 @@ use std::io;
 use std::rc::Rc;
 use std::str;
 
-/// Category string for all functions provided by this module.
-const CATEGORY: &str = "File system interaction";
+/// Category description for all symbols provided by this module.
+const CATEGORY: &str = "File system
+The EndBASIC storage subsystem is organized as a collection of drives, each identified by a \
+case-insensitive name.  Drives can be backed by a multitude of file systems with different \
+behaviors, and their targets are specified as URIs.  Special targets include: memory://, which \
+points to an in-memory read/write drive; and demos://, which points to a read-only drive with \
+sample programs.  Other targets may be available such as file:// to access a local directory or \
+local:// to access web-local storage, depending on the context.  The output of the MOUNT command \
+can help to identify which targets are available.
+All commands that operate with files take a path.  Paths in EndBASIC can be of the form \
+FILENAME.EXT, in which case they refer to a file in the current drive; or DRIVE:/FILENAME.EXT and \
+DRIVE:FILENAME.EXT, in which case they refer to a file in the specified drive.  Note that the \
+slash before the file name is currently optional because EndBASIC does not support directories \
+yet.  Furthermore, if .EXT is missing, a .BAS extension is assumed.
+Be aware that the commands below must be invoked using proper EndBASIC syntax.  In particular, \
+this means that path arguments must be double-quoted and multiple arguments have to be separated \
+by a comma (not a space).  If you have used commands like CD, DIR, or MOUNT in other contexts, \
+this is likely to confuse you.
+See the \"Strored program\" help topic for information on how to load, modify, and save programs.";
 
 /// Shows the contents of the given storage location.
 fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> io::Result<()> {

@@ -23,8 +23,8 @@ use endbasic_core::syms::{
 use std::cmp::min;
 use std::rc::Rc;
 
-/// Category string for all functions provided by this module.
-const CATEGORY: &str = "String manipulation";
+/// Category description for all symbols provided by this module.
+const CATEGORY: &str = "String functions";
 
 /// The `LEFT` function.
 pub struct LeftFunction {
