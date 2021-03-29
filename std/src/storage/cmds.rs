@@ -715,7 +715,7 @@ mod tests {
                 .write_file("foo.bas", "line 1\n  line 2\n")
                 .run(format!(r#"DEL "{}""#, p))
                 .expect_program("Leave me alone")
-                .expect_file("bar.bas", "")
+                .expect_file("MEMORY:/bar.bas", "")
                 .check();
         }
     }
@@ -730,7 +730,7 @@ mod tests {
             .write_file("mismatched-extension.bat", "")
             .run(r#"DEL "mismatched-extension""#)
             .expect_err("Entry not found")
-            .expect_file("mismatched-extension.bat", "")
+            .expect_file("MEMORY:/mismatched-extension.bat", "")
             .check();
     }
 
@@ -770,10 +770,10 @@ mod tests {
                 "    4 file(s), 21 bytes",
                 "",
             ])
-            .expect_file("empty.bas", "")
-            .expect_file("some other file.bas", "not empty\n")
-            .expect_file("00AAA.BAS", "first\nfile\n")
-            .expect_file("not a bas.txt", "")
+            .expect_file("MEMORY:/empty.bas", "")
+            .expect_file("MEMORY:/some other file.bas", "not empty\n")
+            .expect_file("MEMORY:/00AAA.BAS", "first\nfile\n")
+            .expect_file("MEMORY:/not a bas.txt", "")
             .check();
     }
 
@@ -795,7 +795,11 @@ mod tests {
             "    1 file(s), 0 bytes",
             "",
         ];
-        t.run("DIR \"memory:\"").expect_prints(prints.clone()).expect_file("empty.bas", "").check();
+        t.run("DIR \"memory:\"")
+            .expect_prints(prints.clone())
+            .expect_file("MEMORY:/empty.bas", "")
+            .expect_file("OTHER:/foo.bas", "hello")
+            .check();
 
         prints.extend(&[
             "",
@@ -807,7 +811,11 @@ mod tests {
             "    1 file(s), 5 bytes",
             "",
         ]);
-        t.run("DIR \"other:/\"").expect_prints(prints).expect_file("empty.bas", "").check();
+        t.run("DIR \"other:/\"")
+            .expect_prints(prints)
+            .expect_file("MEMORY:/empty.bas", "")
+            .expect_file("OTHER:/foo.bas", "hello")
+            .check();
     }
 
     #[test]
@@ -828,7 +836,11 @@ mod tests {
             "    1 file(s), 0 bytes",
             "",
         ];
-        t.run("DIR").expect_prints(prints.clone()).expect_file("empty.bas", "").check();
+        t.run("DIR")
+            .expect_prints(prints.clone())
+            .expect_file("MEMORY:/empty.bas", "")
+            .expect_file("OTHER:/foo.bas", "hello")
+            .check();
 
         t.get_storage().borrow_mut().cd("other:/").unwrap();
         prints.extend(&[
@@ -841,7 +853,11 @@ mod tests {
             "    1 file(s), 5 bytes",
             "",
         ]);
-        t.run("DIR").expect_prints(prints).expect_file("foo.bas", "hello").check();
+        t.run("DIR")
+            .expect_prints(prints)
+            .expect_file("MEMORY:/empty.bas", "")
+            .expect_file("OTHER:/foo.bas", "hello")
+            .check();
     }
 
     #[test]
@@ -903,10 +919,10 @@ mod tests {
                 .write_file("Baz.bas", content)
                 .run(format!(r#"LOAD "{}""#, p))
                 .expect_program("line 1\n\n  line 2\n")
-                .expect_file("foo.bas", content)
-                .expect_file("foo.bak", "")
-                .expect_file("BAR.BAS", content)
-                .expect_file("Baz.bas", content)
+                .expect_file("MEMORY:/foo.bas", content)
+                .expect_file("MEMORY:/foo.bak", "")
+                .expect_file("MEMORY:/BAR.BAS", content)
+                .expect_file("MEMORY:/Baz.bas", content)
                 .check();
         }
     }
@@ -943,7 +959,7 @@ mod tests {
             .write_file("mismatched-extension.bat", "")
             .run(r#"LOAD "mismatched-extension""#)
             .expect_err("Entry not found")
-            .expect_file("mismatched-extension.bat", "")
+            .expect_file("MEMORY:/mismatched-extension.bat", "")
             .check();
     }
 
@@ -1053,11 +1069,11 @@ mod tests {
     fn test_save_ok() {
         let content = "\n some line   \n ";
         for (explicit, actual) in &[
-            ("first", "first.bas"),
-            ("second.bas", "second.bas"),
-            ("THIRD", "THIRD.BAS"),
-            ("FOURTH.BAS", "FOURTH.BAS"),
-            ("Fifth", "Fifth.bas"),
+            ("first", "MEMORY:/first.bas"),
+            ("second.bas", "MEMORY:/second.bas"),
+            ("THIRD", "MEMORY:/THIRD.BAS"),
+            ("FOURTH.BAS", "MEMORY:/FOURTH.BAS"),
+            ("Fifth", "MEMORY:/Fifth.bas"),
         ] {
             Tester::default()
                 .set_program(content)

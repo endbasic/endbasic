@@ -352,7 +352,7 @@ pub struct Checker<'a> {
     result: exec::Result<StopReason>,
     exp_result: Result<StopReason, String>,
     exp_output: Vec<CapturedOut>,
-    exp_drive: HashMap<String, String>,
+    exp_drives: HashMap<String, String>,
     exp_program: String,
     exp_arrays: HashMap<String, Array>,
     exp_vars: HashMap<String, Value>,
@@ -369,7 +369,7 @@ impl<'a> Checker<'a> {
             result,
             exp_result: Ok(StopReason::Eof),
             exp_output: vec![],
-            exp_drive: HashMap::default(),
+            exp_drives: HashMap::default(),
             exp_program: String::new(),
             exp_arrays: HashMap::default(),
             exp_vars: HashMap::default(),
@@ -436,10 +436,12 @@ impl<'a> Checker<'a> {
     }
 
     /// Adds a file to expect in the drive with a `name` and specific `content`.
+    ///
+    /// `name` must be the absolute path to the file that is expected, including the drive name.
     pub fn expect_file<N: Into<String>, C: Into<String>>(mut self, name: N, content: C) -> Self {
         let name = name.into();
-        assert!(!self.exp_drive.contains_key(&name));
-        self.exp_drive.insert(name, content.into());
+        assert!(!self.exp_drives.contains_key(&name));
+        self.exp_drives.insert(name, content.into());
         self
     }
 
@@ -505,10 +507,15 @@ impl<'a> Checker<'a> {
         }
 
         let drive_contents = {
-            let drive = self.tester.storage.borrow();
             let mut files = HashMap::new();
-            for (name, _) in drive.enumerate("").unwrap() {
-                files.insert(name.clone(), drive.get(&name).unwrap());
+            let storage = self.tester.storage.borrow();
+            for drive_name in storage.mounted().keys() {
+                let root = format!("{}:/", drive_name);
+                for (name, _) in storage.enumerate(&root).unwrap() {
+                    let path = format!("{}{}", root, name);
+                    let content = storage.get(&path).unwrap();
+                    files.insert(path, content);
+                }
             }
             files
         };
@@ -517,7 +524,7 @@ impl<'a> Checker<'a> {
         assert_eq!(self.exp_arrays, arrays);
         assert_eq!(self.exp_output, self.tester.console.borrow().captured_out());
         assert_eq!(self.exp_program, self.tester.program.borrow().text());
-        assert_eq!(self.exp_drive, drive_contents);
+        assert_eq!(self.exp_drives, drive_contents);
     }
 }
 

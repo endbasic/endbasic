@@ -131,7 +131,7 @@ mod tests {
             .run("")
             .expect_var("global_var", 3)
             .expect_prints(["Loading AUTOEXEC.BAS...", "hello"])
-            .expect_file("AUTOEXEC.BAS", autoexec)
+            .expect_file("MEMORY:/AUTOEXEC.BAS", autoexec)
             .check();
     }
 
@@ -149,7 +149,7 @@ mod tests {
                 "Loading AUTOEXEC.BAS...",
                 "AUTOEXEC.BAS failed: Undefined variable undef",
             ])
-            .expect_file("AUTOEXEC.BAS", autoexec)
+            .expect_file("MEMORY:/AUTOEXEC.BAS", autoexec)
             .check();
     }
 
@@ -164,8 +164,8 @@ mod tests {
             .run("")
             .expect_var("a", 1)
             .expect_prints(["Loading AUTOEXEC.BAS..."])
-            .expect_file("AUTOEXEC.BAS", "a = 1")
-            .expect_file("autoexec.bas", "a = 2")
+            .expect_file("MEMORY:/AUTOEXEC.BAS", "a = 1")
+            .expect_file("MEMORY:/autoexec.bas", "a = 2")
             .check();
     }
 
