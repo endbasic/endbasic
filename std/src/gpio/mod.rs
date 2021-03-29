@@ -35,8 +35,11 @@ mod rpi;
 #[cfg(feature = "rpi")]
 pub(crate) use rpi::RppalPins;
 
-/// Category string for all functions provided by this module.
-const CATEGORY: &str = "Hardware manipulation";
+/// Category description for all symbols provided by this module.
+const CATEGORY: &str = "Hardware interface
+EndBASIC provides features to manipulate external hardware.  These features are currently limited \
+to GPIO interaction on a Raspberry Pi and are only available when EndBASIC has explicitly been \
+built with the --features=rpi option.  Support for other busses and platforms may come later.";
 
 /// Pin identifier.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

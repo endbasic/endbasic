@@ -30,7 +30,7 @@ use std::process;
 const DATE_RE: &str = "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-2][0-9]:[0-5][0-9]";
 
 /// Matches a `file://` URI.
-const FILE_URI_RE: &str = "file://[a-zA-Z0-9/.-]*";
+const FILE_URI_RE: &str = "file://[a-zA-Z0-9/.-]+";
 
 /// Matches a version number.
 const VERSION_RE: &str = "[0-9]+\\.[0-9]+\\.[0-9]+";

@@ -25,6 +25,24 @@ use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
 
+/// Category description for all symbols provided by this module.
+const CATEGORY: &str = "Console
+The EndBASIC console is the text-based display you are seeing: both the interpreter and the \
+effects of all commands happen within the same console.  There is no separate output window as \
+other didactical interpreters provide.
+The console is a matrix of variable size.  The upper left position is row 0 and column 0.  \
+Each position in this matrix contains a character and a color attribute.  The color attribute \
+indicates the foreground and background colors of that character.  There is a default attribute \
+to match the default settings of your terminal, which might not be a color: for example, in a \
+terminal emulator configured with a black tint (aka a transparent terminal), the default color \
+respects the transparency whereas color 0 (black) does not.
+If you are writing a script and do not want the script to interfere with other parts of the \
+console, you should restrict the script to using only the INPUT and PRINT commands.
+Be aware that the console currently reacts poorly to size changes.  Avoid resizing your terminal \
+or web browser.  If you do resize them, however, restart the interpreter.
+Graphics are currently not supported but they are within the realm of possibility for a later \
+version.";
+
 /// Decoded key presses as returned by the console.
 #[derive(Clone, Debug)]
 pub enum Key {
@@ -316,7 +334,7 @@ impl ClsCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CLS", VarType::Void)
                 .with_syntax("")
-                .with_category("Console manipulation")
+                .with_category(CATEGORY)
                 .with_description("Clears the screen.")
                 .build(),
             console,
@@ -351,7 +369,7 @@ impl ColorCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("COLOR", VarType::Void)
                 .with_syntax("[fg%][, [bg%]]")
-                .with_category("Console manipulation")
+                .with_category(CATEGORY)
                 .with_description(
                     "Sets the foreground and background colors.
 Color numbers are given as ANSI numbers and can be between 0 and 255.  If a color number is not \
@@ -415,7 +433,7 @@ impl InputCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("INPUT", VarType::Void)
                 .with_syntax("[\"prompt\"] <;|,> variableref")
-                .with_category("Console manipulation")
+                .with_category(CATEGORY)
                 .with_description(
                     "Obtains user input from the console.
 The first expression to this function must be empty or evaluate to a string, and specifies \
@@ -501,7 +519,7 @@ impl LocateCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOCATE", VarType::Void)
                 .with_syntax("row%, column%")
-                .with_category("Console manipulation")
+                .with_category(CATEGORY)
                 .with_description("Moves the cursor to the given position.")
                 .build(),
             console,
@@ -572,7 +590,7 @@ impl PrintCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("PRINT", VarType::Void)
                 .with_syntax("[expr1 [<;|,> .. exprN]]")
-                .with_category("Console manipulation")
+                .with_category(CATEGORY)
                 .with_description(
                     "Prints a message to the console.
 The expressions given as arguments are all evaluated and converted to strings.  Arguments \

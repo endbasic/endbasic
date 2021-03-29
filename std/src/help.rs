@@ -16,6 +16,7 @@
 //! Interactive help support.
 
 use crate::console::Console;
+use crate::exec::CATEGORY;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, VarType};
 use endbasic_core::exec::Machine;
@@ -222,9 +223,16 @@ impl Topic for CategoryTopic {
     }
 
     fn describe(&self, console: &mut dyn Console) -> io::Result<()> {
+        let description = self.metadatas.get(0).expect("Must have at least one symbol").category();
+
         let mut index = BTreeMap::default();
         let mut max_length = 0;
         for metadata in &self.metadatas {
+            debug_assert_eq!(
+                description,
+                metadata.category(),
+                "All commands registered in this category must be equivalent"
+            );
             let name = format!("{}{}", metadata.name(), metadata.return_type().annotation());
             if name.len() > max_length {
                 max_length = name.len();
@@ -234,13 +242,15 @@ impl Topic for CategoryTopic {
             assert!(previous.is_none(), "Names should have been unique");
         }
 
-        // TODO(jmmv): Should use refill_and_print but continuation lines need special handling to
-        // be indented properly.
         console.print("")?;
-        console.print(&format!("    {}", self.name))?;
-        console.print("")?;
+        for line in description.lines() {
+            refill_and_print(console, line)?;
+            console.print("")?;
+        }
         for (name, blurb) in index.iter() {
             let filler = " ".repeat(max_length - name.len());
+            // TODO(jmmv): Should use refill_and_print but continuation lines need special handling
+            // to be indented properly.
             console.print(&format!("    >> {}{}    {}", name, filler, blurb))?;
         }
         console.print("")?;
@@ -294,8 +304,9 @@ impl Topics {
         let mut categories = HashMap::new();
         for (name, symbol) in symbols.as_hashmap().iter() {
             if let Some(metadata) = symbol.metadata() {
+                let category_title = metadata.category().lines().next().unwrap();
                 categories
-                    .entry(metadata.category())
+                    .entry(category_title)
                     .or_insert_with(Vec::default)
                     .push(metadata.clone());
 
@@ -360,7 +371,7 @@ impl HelpCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("HELP", VarType::Void)
                 .with_syntax("[topic]")
-                .with_category("Interpreter manipulation")
+                .with_category(CATEGORY)
                 .with_description(
                     "Prints interactive help.
 Without arguments, shows a summary of all available top-level help topics.
@@ -461,7 +472,10 @@ pub(crate) mod testutils {
             Rc::from(Self {
                 metadata: CallableMetadataBuilder::new("DO_NOTHING", VarType::Void)
                     .with_syntax("this [would] <be|the> syntax \"specification\"")
-                    .with_category("Testing")
+                    .with_category(
+                        "Testing
+This is a sample category for testing.",
+                    )
                     .with_description(
                         "This is the blurb.
 First paragraph of the extended description.
@@ -501,7 +515,10 @@ Second paragraph of the extended description.",
             Rc::from(Self {
                 metadata: CallableMetadataBuilder::new(name, VarType::Text)
                     .with_syntax("this [would] <be|the> syntax \"specification\"")
-                    .with_category("Testing")
+                    .with_category(
+                        "Testing
+This is a sample category for testing.",
+                    )
                     .with_description(
                         "This is the blurb.
 First paragraph of the extended description.
@@ -574,7 +591,7 @@ mod tests {
                 "",
                 "    Top-level help topics:",
                 "",
-                "    >> Interpreter manipulation",
+                "    >> Interpreter",
                 "    >> Language reference",
                 "    >> Testing",
                 "",
@@ -594,6 +611,8 @@ mod tests {
             .expect_prints([
                 "",
                 "    Testing",
+                "",
+                "    This is a sample category for testing.",
                 "",
                 "    >> DO_NOTHING    This is the blurb.",
                 "    >> EMPTY$        This is the blurb.",
