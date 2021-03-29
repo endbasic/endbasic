@@ -39,10 +39,10 @@ not intend to be fully compatible with them.  The library currently contains:
 *   Console manipulation: `CLS`, `COLOR`, `INPUT`, `LOCATE`, `PRINT`.
 *   Date and time manipulation: `SLEEP`.
 *   Hardware interaction: `GPIO_CLEAR`, `GPIO_READ`, `GPIO_SETUP`, `GPIO_WRITE`.
+*   File system interaction: `CD`, `DIR`, `MOUNT`, `UNMOUNT`.
 *   Interpreter interaction: `CLEAR`, `EXIT`, `HELP`.
 *   Numerics: `DTOI`, `ITOD`, `RANDOMIZE`, `RND`.
-*   Program manipulation: `CD`, `DEL`, `DIR`, `EDIT`, `LIST`, `LOAD`, `MOUNT`,
-    `NEW`, `RUN`, `SAVE`, `UNMOUNT`.
+*   Program manipulation: ``DEL`, `EDIT`, `LIST`, `LOAD`,`NEW`, `RUN`, `SAVE`.
 *   Strings: `LEFT`, `LEN`, `LTRIM`, `MID`, `RIGHT`, `RTRIM`.
 
 ## Design principles

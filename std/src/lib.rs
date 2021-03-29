@@ -32,6 +32,7 @@ pub mod exec;
 pub mod gpio;
 pub mod help;
 pub mod numerics;
+pub mod program;
 pub mod storage;
 pub mod strings;
 #[cfg(feature = "crossterm")]
@@ -139,7 +140,7 @@ impl MachineBuilder {
 /// program that can be edited interactively.
 pub struct InteractiveMachineBuilder {
     builder: MachineBuilder,
-    program: Option<Rc<RefCell<dyn storage::Program>>>,
+    program: Option<Rc<RefCell<dyn program::Program>>>,
     storage: Rc<RefCell<storage::Storage>>,
 }
 
@@ -156,7 +157,7 @@ impl InteractiveMachineBuilder {
     }
 
     /// Overrides the default stored program with the given one.
-    pub fn with_program(mut self, program: Rc<RefCell<dyn storage::Program>>) -> Self {
+    pub fn with_program(mut self, program: Rc<RefCell<dyn program::Program>>) -> Self {
         self.program = Some(program);
         self
     }
@@ -173,7 +174,8 @@ impl InteractiveMachineBuilder {
         };
 
         help::add_all(&mut machine, console.clone());
-        storage::add_all(&mut machine, program, console, storage);
+        program::add_all(&mut machine, program, console.clone(), storage.clone());
+        storage::add_all(&mut machine, console, storage);
 
         Ok(machine)
     }

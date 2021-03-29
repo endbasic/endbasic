@@ -15,6 +15,7 @@ Output from HELP:
     Top-level help topics:
 
     >> Console manipulation
+    >> File system interaction
     >> Hardware manipulation
     >> Interpreter manipulation
     >> Language reference
@@ -34,6 +35,17 @@ Output from HELP CONSOLE:
     >> INPUT     Obtains user input from the console.
     >> LOCATE    Moves the cursor to the given position.
     >> PRINT     Prints a message to the console.
+
+    Type HELP followed by the name of a symbol for details.
+
+Output from HELP "FILE SYSTEM":
+
+    File system interaction
+
+    >> CD         Changes the current path.
+    >> DIR        Displays the list of files on the current or given path.
+    >> MOUNT      Lists the mounted drives or mounts a new drive.
+    >> UNMOUNT    Unmounts the given drive.
 
     Type HELP followed by the name of a symbol for details.
 
@@ -106,17 +118,13 @@ Output from HELP STORED:
 
     Stored program manipulation
 
-    >> CD         Changes the current path.
-    >> DEL        Deletes the given program.
-    >> DIR        Displays the list of files on the current or given path.
-    >> EDIT       Interactively edits the stored program.
-    >> LIST       Prints the currently-loaded program.
-    >> LOAD       Loads the given program.
-    >> MOUNT      Lists the mounted drives or mounts a new drive.
-    >> NEW        Clears the stored program from memory.
-    >> RUN        Runs the stored program.
-    >> SAVE       Saves the current program in memory to the given filename.
-    >> UNMOUNT    Unmounts the given drive.
+    >> DEL     Deletes the given program.
+    >> EDIT    Interactively edits the stored program.
+    >> LIST    Prints the currently-loaded program.
+    >> LOAD    Loads the given program.
+    >> NEW     Clears the stored program from memory.
+    >> RUN     Runs the stored program.
+    >> SAVE    Saves the current program in memory to the given filename.
 
     Type HELP followed by the name of a symbol for details.
 
