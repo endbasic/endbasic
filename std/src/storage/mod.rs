@@ -18,6 +18,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{self};
 use std::io;
+use std::path::PathBuf;
 use std::str;
 
 mod cmds;
@@ -50,6 +51,11 @@ pub trait Drive {
 
     /// Saves the in-memory program given by `content` into `name`.
     fn put(&mut self, name: &str, content: &str) -> io::Result<()>;
+
+    /// Gets the system-addressable path of the file `_name`, if any.
+    fn system_path(&self, _name: &str) -> Option<PathBuf> {
+        None
+    }
 }
 
 /// Unique identifier for a drive.
@@ -419,11 +425,21 @@ impl Storage {
             )),
         }
     }
+
+    /// Gets the system-addressable path of `raw_location`, if any.
+    pub fn system_path(&self, raw_location: &str) -> io::Result<Option<PathBuf>> {
+        let location = Location::new(raw_location)?;
+        match location.leaf_name() {
+            Some(name) => Ok(self.get_drive(&location)?.system_path(name)),
+            None => Ok(self.get_drive(&location)?.system_path("")),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn test_split_uri_ok() {
@@ -797,6 +813,7 @@ mod tests {
             format!("{}", storage.enumerate("a:/foo").unwrap_err())
         );
     }
+
     #[test]
     fn test_storage_get_errors() {
         let storage = Storage::default();
@@ -804,6 +821,7 @@ mod tests {
         assert_eq!("Invalid path 'a:b\\c'", format!("{}", storage.get("a:b\\c").unwrap_err()));
         assert_eq!("Missing file name in path 'a:'", format!("{}", storage.get("a:").unwrap_err()));
     }
+
     #[test]
     fn test_storage_put_errors() {
         let mut storage = Storage::default();
@@ -813,5 +831,65 @@ mod tests {
             "Missing file name in path 'a:'",
             format!("{}", storage.put("a:", "").unwrap_err())
         );
+    }
+
+    #[test]
+    fn test_storage_system_path_ok() {
+        let mut storage = Storage::default();
+        storage
+            .attach(
+                "c",
+                "file:///non-existent/dir",
+                Box::from(DirectoryDrive::new("/non-existent/dir")),
+            )
+            .unwrap();
+
+        assert!(storage.system_path("memory:/foo").unwrap().is_none());
+        assert_eq!(
+            Path::new("/non-existent/dir/some name"),
+            storage.system_path("c:/some name").unwrap().unwrap()
+        );
+        assert_eq!(
+            Path::new("/non-existent/dir/xyz"),
+            storage.system_path("c:xyz").unwrap().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_storage_system_path_of_cwd() {
+        let mut storage = Storage::default();
+        storage
+            .attach(
+                "c",
+                "file:///non-existent/dir",
+                Box::from(DirectoryDrive::new("/non-existent/dir")),
+            )
+            .unwrap();
+
+        assert!(storage.system_path(&storage.cwd()).unwrap().is_none());
+
+        storage.cd("c:/").unwrap();
+        assert_eq!(
+            Path::new("/non-existent/dir"),
+            storage.system_path(&storage.cwd()).unwrap().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_storage_system_path_errors() {
+        let mut storage = Storage::default();
+        storage
+            .attach(
+                "c",
+                "file:///non-existent/dir",
+                Box::from(DirectoryDrive::new("/non-existent/dir")),
+            )
+            .unwrap();
+
+        assert_eq!(
+            "Too many / separators in path 'c:a/b'",
+            format!("{}", storage.system_path("c:a/b").unwrap_err())
+        );
+        assert_eq!("Invalid path 'c:..'", format!("{}", storage.system_path("c:..").unwrap_err()));
     }
 }

@@ -99,6 +99,10 @@ impl Drive for DirectoryDrive {
         let mut writer = io::BufWriter::new(output);
         writer.write_all(content.as_bytes())
     }
+
+    fn system_path(&self, name: &str) -> Option<PathBuf> {
+        Some(self.dir.join(name))
+    }
 }
 
 /// Instantiates a directory drive backed by `target`.
@@ -247,5 +251,11 @@ mod tests {
         let mut drive = DirectoryDrive::new(&dir.path());
         drive.put("some file.bas", "a b c\nd e\n").unwrap();
         check_file(&dir.path().join("some file.bas"), &["a b c", "d e"]);
+    }
+
+    #[test]
+    fn test_directorydrive_system_path() {
+        let drive = DirectoryDrive::new("/non-existent/dir");
+        assert_eq!(Path::new("/non-existent/dir/foo"), drive.system_path("foo").unwrap());
     }
 }

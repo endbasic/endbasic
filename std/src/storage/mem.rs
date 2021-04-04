@@ -68,3 +68,14 @@ pub fn in_memory_drive_factory(target: &str) -> io::Result<Box<dyn Drive>> {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_inmemorydrive_system_path() {
+        let drive = InMemoryDrive::default();
+        assert!(drive.system_path("foo").is_none());
+    }
+}

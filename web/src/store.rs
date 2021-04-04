@@ -464,4 +464,10 @@ mod tests {
             webdrive.storage.get("endbasic-program:CODE.BAS").unwrap().unwrap()
         );
     }
+
+    #[wasm_bindgen_test]
+    fn test_webdrive_system_path() {
+        let webdrive = WebDrive::from_window();
+        assert!(webdrive.system_path("foo").is_none());
+    }
 }

@@ -179,4 +179,10 @@ mod tests {
             drive.put("unknown.bas", "").unwrap_err().kind()
         );
     }
+
+    #[test]
+    fn test_demos_drive_system_path() {
+        let drive = DemosDrive::default();
+        assert!(drive.system_path("foo").is_none());
+    }
 }
