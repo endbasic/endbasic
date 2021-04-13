@@ -439,7 +439,6 @@ impl Storage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     #[test]
     fn test_split_uri_ok() {
@@ -835,54 +834,54 @@ mod tests {
 
     #[test]
     fn test_storage_system_path_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir = dir.path().canonicalize().unwrap();
+
         let mut storage = Storage::default();
         storage
             .attach(
                 "c",
-                "file:///non-existent/dir",
-                Box::from(DirectoryDrive::new("/non-existent/dir")),
+                &format!("file://{}", dir.display()),
+                Box::from(DirectoryDrive::new(dir.clone()).unwrap()),
             )
             .unwrap();
 
         assert!(storage.system_path("memory:/foo").unwrap().is_none());
-        assert_eq!(
-            Path::new("/non-existent/dir/some name"),
-            storage.system_path("c:/some name").unwrap().unwrap()
-        );
-        assert_eq!(
-            Path::new("/non-existent/dir/xyz"),
-            storage.system_path("c:xyz").unwrap().unwrap()
-        );
+        assert_eq!(dir.join("some name"), storage.system_path("c:/some name").unwrap().unwrap());
+        assert_eq!(dir.join("xyz"), storage.system_path("c:xyz").unwrap().unwrap());
     }
 
     #[test]
     fn test_storage_system_path_of_cwd() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir = dir.path().canonicalize().unwrap();
+
         let mut storage = Storage::default();
         storage
             .attach(
                 "c",
-                "file:///non-existent/dir",
-                Box::from(DirectoryDrive::new("/non-existent/dir")),
+                &format!("file://{}", dir.display()),
+                Box::from(DirectoryDrive::new(dir.clone()).unwrap()),
             )
             .unwrap();
 
         assert!(storage.system_path(&storage.cwd()).unwrap().is_none());
 
         storage.cd("c:/").unwrap();
-        assert_eq!(
-            Path::new("/non-existent/dir"),
-            storage.system_path(&storage.cwd()).unwrap().unwrap()
-        );
+        assert_eq!(dir, storage.system_path(&storage.cwd()).unwrap().unwrap());
     }
 
     #[test]
     fn test_storage_system_path_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir = dir.path();
+
         let mut storage = Storage::default();
         storage
             .attach(
                 "c",
-                "file:///non-existent/dir",
-                Box::from(DirectoryDrive::new("/non-existent/dir")),
+                &format!("file://{}", dir.display()),
+                Box::from(DirectoryDrive::new(dir).unwrap()),
             )
             .unwrap();
 
