@@ -50,22 +50,24 @@ pub fn print_welcome(console: Rc<RefCell<dyn Console>>) -> io::Result<()> {
 pub fn try_load_autoexec(
     machine: &mut Machine,
     console: Rc<RefCell<dyn Console>>,
-    storage: &Storage,
+    storage: Rc<RefCell<Storage>>,
 ) -> io::Result<()> {
-    match storage.get("AUTOEXEC.BAS") {
-        Ok(code) => {
-            console.borrow_mut().print("Loading AUTOEXEC.BAS...")?;
-            match block_on(machine.exec(&mut code.as_bytes())) {
-                Ok(_) => Ok(()),
-                Err(e) => {
-                    console.borrow_mut().print(&format!("AUTOEXEC.BAS failed: {}", e))?;
-                    Ok(())
-                }
-            }
-        }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+    let code = match storage.borrow().get("AUTOEXEC.BAS") {
+        Ok(code) => code,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
         Err(e) => {
-            console.borrow_mut().print(&format!("AUTOEXEC.BAS exists but cannot be read: {}", e))
+            return console
+                .borrow_mut()
+                .print(&format!("AUTOEXEC.BAS exists but cannot be read: {}", e));
+        }
+    };
+
+    console.borrow_mut().print("Loading AUTOEXEC.BAS...")?;
+    match block_on(machine.exec(&mut code.as_bytes())) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            console.borrow_mut().print(&format!("AUTOEXEC.BAS failed: {}", e))?;
+            Ok(())
         }
     }
 }
@@ -123,10 +125,13 @@ mod tests {
 
     #[test]
     fn test_autoexec_ok() {
-        let autoexec = "PRINT \"hello\": global_var = 3";
+        // The code in the autoexec test file should access, in a mutable fashion, all the resources
+        // that the try_load_autoexec function uses to ensure the function's code doesn't hold onto
+        // references while executing the autoexec code and causing a borrowing violation.
+        let autoexec = "PRINT \"hello\": global_var = 3: CD \"MEMORY:/\"";
         let mut tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
         let (console, storage) = (tester.get_console(), tester.get_storage());
-        try_load_autoexec(tester.get_machine(), console, &storage.borrow()).unwrap();
+        try_load_autoexec(tester.get_machine(), console, storage).unwrap();
         tester
             .run("")
             .expect_var("global_var", 3)
@@ -140,7 +145,7 @@ mod tests {
         let autoexec = "a = 1: b = undef: c = 2";
         let mut tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
         let (console, storage) = (tester.get_console(), tester.get_storage());
-        try_load_autoexec(tester.get_machine(), console, &storage.borrow()).unwrap();
+        try_load_autoexec(tester.get_machine(), console, storage).unwrap();
         tester
             .run("after = 5")
             .expect_var("a", 1)
@@ -159,7 +164,7 @@ mod tests {
             .write_file("AUTOEXEC.BAS", "a = 1")
             .write_file("autoexec.bas", "a = 2");
         let (console, storage) = (tester.get_console(), tester.get_storage());
-        try_load_autoexec(tester.get_machine(), console, &storage.borrow()).unwrap();
+        try_load_autoexec(tester.get_machine(), console, storage).unwrap();
         tester
             .run("")
             .expect_var("a", 1)
@@ -173,7 +178,7 @@ mod tests {
     fn test_autoexec_missing() {
         let mut tester = Tester::default();
         let (console, storage) = (tester.get_console(), tester.get_storage());
-        try_load_autoexec(tester.get_machine(), console, &storage.borrow()).unwrap();
+        try_load_autoexec(tester.get_machine(), console, storage).unwrap();
         tester.run("").check();
     }
 }
