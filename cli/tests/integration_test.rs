@@ -30,7 +30,7 @@ use std::process;
 const DATE_RE: &str = "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-2][0-9]:[0-5][0-9]";
 
 /// Matches a `file://` URI.
-const FILE_URI_RE: &str = "file://[a-zA-Z0-9/.-]+";
+const FILE_URI_RE: &str = "file://[^ \n\"]+";
 
 /// Matches a version number.
 const VERSION_RE: &str = "[0-9]+\\.[0-9]+\\.[0-9]+";
@@ -629,12 +629,15 @@ fn test_repl_state_sharing() {
 
 #[test]
 fn test_repl_storage() {
+    let dir = tempfile::tempdir().unwrap();
+    let dir = dir.path().join("create-me");
     check(
         bin_path("endbasic"),
-        &["--local-drive=file:///some/unused/directory"],
+        &[&format!("--local-drive=file://{}", dir.to_str().unwrap())],
         0,
         Behavior::File(src_path("cli/tests/repl/storage.in")),
         Behavior::File(src_path("cli/tests/repl/storage.out")),
         Behavior::Null,
     );
+    assert!(dir.exists());
 }
