@@ -109,6 +109,9 @@ HELP MOUNT
 PRINT "Output from HELP NEW:"
 HELP NEW
 
+PRINT "Output from HELP PWD:"
+HELP PWD
+
 PRINT "Output from HELP PRINT:"
 HELP PRINT
 
