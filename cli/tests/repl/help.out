@@ -97,6 +97,7 @@ Output from HELP "FILE SYSTEM":
     >> CD         Changes the current path.
     >> DIR        Displays the list of files on the current or given path.
     >> MOUNT      Lists the mounted drives or mounts a new drive.
+    >> PWD        Prints the current working location.
     >> UNMOUNT    Unmounts the given drive.
 
     Type HELP followed by the name of a symbol for details.
@@ -385,6 +386,16 @@ Output from HELP NEW:
     NEW
 
     Clears the stored program from memory.
+
+Output from HELP PWD:
+
+    PWD
+
+    Prints the current working location.
+
+    If the EndBASIC path representing the current location is backed by a
+    real path that is accessible by the underlying operating system,
+    displays such path as well.
 
 Output from HELP PRINT:
 

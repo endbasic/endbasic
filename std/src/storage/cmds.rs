@@ -254,6 +254,60 @@ impl Command for MountCommand {
     }
 }
 
+/// The `PWD` command.
+pub struct PwdCommand {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+    storage: Rc<RefCell<Storage>>,
+}
+
+impl PwdCommand {
+    /// Creates a new `PWD` command that prints the current directory of `storage` to the `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("PWD", VarType::Void)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Prints the current working location.
+If the EndBASIC path representing the current location is backed by a real path that is accessible \
+by the underlying operating system, displays such path as well.",
+                )
+                .build(),
+            console,
+            storage,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for PwdCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
+            return Err(CallError::ArgumentError("PWD takes zero arguments".to_owned()));
+        }
+
+        let storage = self.storage.borrow();
+        let cwd = storage.cwd();
+        let system_cwd = storage.system_path(&cwd).expect("cwd must return a valid path");
+
+        let console = &mut *self.console.borrow_mut();
+        console.print("")?;
+        console.print(&format!("    Working directory: {}", cwd))?;
+        match system_cwd {
+            Some(path) => console.print(&format!("    System location: {}", path.display()))?,
+            None => console.print("    No system location available")?,
+        }
+        console.print("")?;
+
+        Ok(())
+    }
+}
+
 /// The `UNMOUNT` command.
 pub struct UnmountCommand {
     metadata: CallableMetadata,
@@ -308,12 +362,13 @@ pub fn add_all(
     machine.add_command(CdCommand::new(storage.clone()));
     machine.add_command(DirCommand::new(console.clone(), storage.clone()));
     machine.add_command(MountCommand::new(console.clone(), storage.clone()));
+    machine.add_command(PwdCommand::new(console.clone(), storage.clone()));
     machine.add_command(UnmountCommand::new(storage));
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::storage::{Drive, InMemoryDrive};
+    use crate::storage::{directory_drive_factory, Drive, InMemoryDrive};
     use crate::testutils::*;
     use std::collections::BTreeMap;
 
@@ -519,6 +574,44 @@ mod tests {
         check_stmt_err("Invalid drive name 'a:'", "MOUNT \"a:\", \"memory://\"");
         check_stmt_err("Mount URI must be of the form scheme://path", "MOUNT \"a\", \"foo//bar\"");
         check_stmt_err("Unknown mount scheme 'foo'", "MOUNT \"a\", \"foo://bar\"");
+    }
+
+    #[test]
+    fn test_pwd_without_system_path() {
+        let mut t = Tester::default();
+
+        t.run("PWD")
+            .expect_prints([
+                "",
+                "    Working directory: MEMORY:/",
+                "    No system location available",
+                "",
+            ])
+            .check();
+    }
+
+    #[test]
+    fn test_pwd_with_system_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir = dir.path().canonicalize().unwrap();
+
+        let mut t = Tester::default();
+        {
+            let storage = t.get_storage();
+            let storage = &mut *storage.borrow_mut();
+            storage.register_scheme("file", directory_drive_factory);
+            storage.mount("other", &format!("file://{}", dir.display())).unwrap();
+            storage.cd("other:/").unwrap();
+        }
+
+        t.run("PWD")
+            .expect_prints([
+                "",
+                "    Working directory: OTHER:/",
+                &format!("    System location: {}", dir.join("").display()),
+                "",
+            ])
+            .check();
     }
 
     #[test]
