@@ -210,7 +210,7 @@ fn test_cli_help() {
 fn test_cli_interactive() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/cli/interactive.bas")],
+        &["--local-drive=memory://", &src_str("cli/tests/cli/interactive.bas")],
         1,
         Behavior::Null,
         Behavior::Null,
@@ -219,7 +219,7 @@ fn test_cli_interactive() {
 
     check(
         bin_path("endbasic"),
-        &["-i", &src_str("cli/tests/cli/interactive.bas")],
+        &["--local-drive=memory://", "-i", &src_str("cli/tests/cli/interactive.bas")],
         0,
         Behavior::Null,
         Behavior::File(src_path("cli/tests/cli/interactive.out")),
@@ -228,7 +228,7 @@ fn test_cli_interactive() {
 
     check(
         bin_path("endbasic"),
-        &["--interactive", &src_str("cli/tests/cli/interactive.bas")],
+        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/cli/interactive.bas")],
         0,
         Behavior::Null,
         Behavior::File(src_path("cli/tests/cli/interactive.out")),
@@ -319,7 +319,7 @@ fn test_cli_version() {
 fn test_example_gpio() {
     check(
         bin_path("endbasic"),
-        &["--interactive", &src_str("cli/tests/examples/gpio.bas")],
+        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/examples/gpio.bas")],
         0,
         Behavior::File(src_path("cli/tests/examples/gpio.in")),
         Behavior::File(src_path("cli/tests/examples/gpio.out")),
@@ -331,7 +331,7 @@ fn test_example_gpio() {
 fn test_example_guess() {
     check(
         bin_path("endbasic"),
-        &["--interactive", &src_str("cli/tests/examples/guess.bas")],
+        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/examples/guess.bas")],
         0,
         Behavior::File(src_path("cli/tests/examples/guess.in")),
         Behavior::File(src_path("cli/tests/examples/guess.out")),
@@ -343,7 +343,7 @@ fn test_example_guess() {
 fn test_example_hello() {
     check(
         bin_path("endbasic"),
-        &["--interactive", &src_str("cli/tests/examples/hello.bas")],
+        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/examples/hello.bas")],
         0,
         Behavior::File(src_path("cli/tests/examples/hello.in")),
         Behavior::File(src_path("cli/tests/examples/hello.out")),
@@ -355,7 +355,7 @@ fn test_example_hello() {
 fn test_example_tour() {
     check(
         bin_path("endbasic"),
-        &["--interactive", &src_str("cli/tests/examples/tour.bas")],
+        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/examples/tour.bas")],
         0,
         Behavior::File(src_path("cli/tests/examples/tour.in")),
         Behavior::File(src_path("cli/tests/examples/tour.out")),
@@ -367,7 +367,7 @@ fn test_example_tour() {
 fn test_lang_control_flow() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/lang/control-flow.bas")],
+        &["--local-drive=memory://", &src_str("cli/tests/lang/control-flow.bas")],
         0,
         Behavior::Null,
         Behavior::File(src_path("cli/tests/lang/control-flow.out")),
@@ -379,7 +379,7 @@ fn test_lang_control_flow() {
 fn test_lang_exec_error() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/lang/exec-error.bas")],
+        &["--local-drive=memory://", &src_str("cli/tests/lang/exec-error.bas")],
         1,
         Behavior::Null,
         Behavior::File(src_path("cli/tests/lang/exec-error.out")),
@@ -391,7 +391,7 @@ fn test_lang_exec_error() {
 fn test_lang_hello() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/lang/hello.bas")],
+        &["--local-drive=memory://", &src_str("cli/tests/lang/hello.bas")],
         0,
         Behavior::Null,
         Behavior::File(src_path("cli/tests/lang/hello.out")),
@@ -403,7 +403,7 @@ fn test_lang_hello() {
 fn test_lang_lexer_error() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/lang/lexer-error.bas")],
+        &["--local-drive=memory://", &src_str("cli/tests/lang/lexer-error.bas")],
         1,
         Behavior::Null,
         Behavior::File(src_path("cli/tests/lang/lexer-error.out")),
@@ -415,7 +415,7 @@ fn test_lang_lexer_error() {
 fn test_lang_matrix() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/lang/matrix.bas")],
+        &["--local-drive=memory://", &src_str("cli/tests/lang/matrix.bas")],
         0,
         Behavior::Null,
         Behavior::File(src_path("cli/tests/lang/matrix.out")),
@@ -427,7 +427,7 @@ fn test_lang_matrix() {
 fn test_lang_parser_error() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/lang/parser-error.bas")],
+        &["--local-drive=memory://", &src_str("cli/tests/lang/parser-error.bas")],
         1,
         Behavior::Null,
         Behavior::File(src_path("cli/tests/lang/parser-error.out")),
@@ -439,7 +439,7 @@ fn test_lang_parser_error() {
 fn test_lang_types() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/lang/types.bas")],
+        &["--local-drive=memory://", &src_str("cli/tests/lang/types.bas")],
         0,
         Behavior::Null,
         Behavior::File(src_path("cli/tests/lang/types.out")),
@@ -451,7 +451,7 @@ fn test_lang_types() {
 fn test_lang_utf8() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/lang/utf8.bas")],
+        &["--local-drive=memory://", &src_str("cli/tests/lang/utf8.bas")],
         0,
         Behavior::File(src_path("cli/tests/lang/utf8.in")),
         Behavior::File(src_path("cli/tests/lang/utf8.out")),
@@ -463,7 +463,7 @@ fn test_lang_utf8() {
 fn test_lang_yes_no() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/lang/yes-no.bas")],
+        &["--local-drive=memory://", &src_str("cli/tests/lang/yes-no.bas")],
         0,
         Behavior::File(src_path("cli/tests/lang/yes-no.in")),
         Behavior::File(src_path("cli/tests/lang/yes-no.out")),
@@ -489,7 +489,7 @@ fn test_repl_autoexec() {
 fn test_repl_colors() {
     check(
         bin_path("endbasic"),
-        &[],
+        &["--local-drive=memory://"],
         0,
         Behavior::File(src_path("cli/tests/repl/colors.in")),
         Behavior::File(src_path("cli/tests/repl/colors.out")),
@@ -501,7 +501,7 @@ fn test_repl_colors() {
 fn test_repl_console() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/repl/console.bas")],
+        &["--local-drive=memory://", &src_str("cli/tests/repl/console.bas")],
         0,
         Behavior::Null,
         Behavior::File(src_path("cli/tests/repl/console.out")),
@@ -525,7 +525,7 @@ fn test_repl_dir() {
 fn test_repl_editor() {
     check(
         bin_path("endbasic"),
-        &[],
+        &["--local-drive=memory://"],
         0,
         Behavior::File(src_path("cli/tests/repl/editor.in")),
         Behavior::File(src_path("cli/tests/repl/editor.out")),
@@ -537,7 +537,7 @@ fn test_repl_editor() {
 fn test_repl_exit_nonzero() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/repl/exit-nonzero.bas")],
+        &["--local-drive=memory://", &src_str("cli/tests/repl/exit-nonzero.bas")],
         78,
         Behavior::Null,
         Behavior::Null,
@@ -546,7 +546,7 @@ fn test_repl_exit_nonzero() {
 
     check(
         bin_path("endbasic"),
-        &[],
+        &["--local-drive=memory://"],
         78,
         Behavior::File(src_path("cli/tests/repl/exit-nonzero.bas")),
         Behavior::File(src_path("cli/tests/repl/exit.out")),
@@ -558,7 +558,7 @@ fn test_repl_exit_nonzero() {
 fn test_repl_exit_zero() {
     check(
         bin_path("endbasic"),
-        &[&src_str("cli/tests/repl/exit-zero.bas")],
+        &["--local-drive=memory://", &src_str("cli/tests/repl/exit-zero.bas")],
         0,
         Behavior::Null,
         Behavior::Null,
@@ -567,7 +567,7 @@ fn test_repl_exit_zero() {
 
     check(
         bin_path("endbasic"),
-        &[],
+        &["--local-drive=memory://"],
         0,
         Behavior::File(src_path("cli/tests/repl/exit-zero.bas")),
         Behavior::File(src_path("cli/tests/repl/exit.out")),
@@ -579,7 +579,7 @@ fn test_repl_exit_zero() {
 fn test_repl_help() {
     check(
         bin_path("endbasic"),
-        &[],
+        &["--local-drive=memory://"],
         0,
         Behavior::File(src_path("cli/tests/repl/help.in")),
         Behavior::File(src_path("cli/tests/repl/help.out")),
@@ -591,7 +591,7 @@ fn test_repl_help() {
 fn test_repl_interactive() {
     check(
         bin_path("endbasic"),
-        &[],
+        &["--local-drive=memory://"],
         0,
         Behavior::File(src_path("cli/tests/repl/interactive.in")),
         Behavior::File(src_path("cli/tests/repl/interactive.out")),
@@ -619,7 +619,7 @@ fn test_repl_load_save() {
 fn test_repl_state_sharing() {
     check(
         bin_path("endbasic"),
-        &[],
+        &["--local-drive=memory://"],
         0,
         Behavior::File(src_path("cli/tests/repl/state-sharing.in")),
         Behavior::File(src_path("cli/tests/repl/state-sharing.out")),
