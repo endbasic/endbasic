@@ -334,7 +334,7 @@ impl Tester {
 
     /// Creates or overwrites a file in the storage medium.
     pub fn write_file(self, name: &str, content: &str) -> Self {
-        self.storage.borrow_mut().put(name, content).unwrap();
+        block_on(self.storage.borrow_mut().put(name, content)).unwrap();
         self
     }
 
@@ -512,9 +512,9 @@ impl<'a> Checker<'a> {
             let storage = self.tester.storage.borrow();
             for drive_name in storage.mounted().keys() {
                 let root = format!("{}:/", drive_name);
-                for (name, _) in storage.enumerate(&root).unwrap() {
+                for (name, _) in block_on(storage.enumerate(&root)).unwrap() {
                     let path = format!("{}{}", root, name);
-                    let content = storage.get(&path).unwrap();
+                    let content = block_on(storage.get(&path)).unwrap();
                     files.insert(path, content);
                 }
             }

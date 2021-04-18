@@ -16,7 +16,6 @@
 //! Storage-related abstractions and commands.
 
 use async_trait::async_trait;
-use futures_lite::future::block_on;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{self};
 use std::io;
@@ -382,10 +381,10 @@ impl Storage {
     }
 
     /// Deletes the program given by `raw_location`.
-    pub fn delete(&mut self, raw_location: &str) -> io::Result<()> {
+    pub async fn delete(&mut self, raw_location: &str) -> io::Result<()> {
         let location = Location::new(raw_location)?;
         match location.leaf_name() {
-            Some(name) => block_on(self.get_drive_mut(&location)?.delete(name)),
+            Some(name) => self.get_drive_mut(&location)?.delete(name).await,
             None => Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 format!("Missing file name in path '{}'", raw_location),
@@ -394,22 +393,22 @@ impl Storage {
     }
 
     /// Returns a sorted list of the entries in `raw_location` and their metadata.
-    pub fn enumerate(&self, raw_location: &str) -> io::Result<BTreeMap<String, Metadata>> {
+    pub async fn enumerate(&self, raw_location: &str) -> io::Result<BTreeMap<String, Metadata>> {
         let location = Location::new(raw_location)?;
         match location.leaf_name() {
             Some(_) => Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 format!("Location '{}' is not a directory", raw_location),
             )),
-            None => block_on(self.get_drive(&location)?.enumerate()),
+            None => self.get_drive(&location)?.enumerate().await,
         }
     }
 
     /// Loads the contents of the program given by `raw_location`.
-    pub fn get(&self, raw_location: &str) -> io::Result<String> {
+    pub async fn get(&self, raw_location: &str) -> io::Result<String> {
         let location = Location::new(raw_location)?;
         match location.leaf_name() {
-            Some(name) => block_on(self.get_drive(&location)?.get(name)),
+            Some(name) => self.get_drive(&location)?.get(name).await,
             None => Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 format!("Missing file name in path '{}'", raw_location),
@@ -418,10 +417,10 @@ impl Storage {
     }
 
     /// Saves the in-memory program given by `content` into `raw_location`.
-    pub fn put(&mut self, raw_location: &str, content: &str) -> io::Result<()> {
+    pub async fn put(&mut self, raw_location: &str, content: &str) -> io::Result<()> {
         let location = Location::new(raw_location)?;
         match location.leaf_name() {
-            Some(name) => block_on(self.get_drive_mut(&location)?.put(name, content)),
+            Some(name) => self.get_drive_mut(&location)?.put(name, content).await,
             None => Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 format!("Missing file name in path '{}'", raw_location),
@@ -442,6 +441,7 @@ impl Storage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_lite::future::block_on;
 
     #[test]
     fn test_split_uri_ok() {
@@ -635,8 +635,8 @@ mod tests {
         storage.mount("c", &format!("file://{}", dir1.display())).unwrap();
         storage.mount("d", &format!("file://{}", dir2.display())).unwrap();
 
-        storage.put("c:file1.txt", "hi").unwrap();
-        storage.put("d:file2.txt", "bye").unwrap();
+        block_on(storage.put("c:file1.txt", "hi")).unwrap();
+        block_on(storage.put("d:file2.txt", "bye")).unwrap();
 
         assert!(dir1.join("file1.txt").exists());
         assert!(!dir1.join("file2.txt").exists());
@@ -734,8 +734,8 @@ mod tests {
         let mut storage = Storage::default();
         storage.mount("other", "memory://").unwrap();
 
-        storage.put("other:/f1", "some text").unwrap();
-        storage.put("other:f2", "other text").unwrap();
+        block_on(storage.put("other:/f1", "some text")).unwrap();
+        block_on(storage.put("other:f2", "other text")).unwrap();
         {
             // Ensure that the put operations were routed to the correct objects.
             let memory_drive = storage.drives.get(&DriveKey::new("memory").unwrap()).unwrap();
@@ -744,20 +744,20 @@ mod tests {
             assert_eq!(2, block_on(other_drive.drive.enumerate()).unwrap().len());
         }
 
-        assert_eq!(0, storage.enumerate("memory:").unwrap().len());
-        assert_eq!(0, storage.enumerate("memory:").unwrap().len());
-        assert_eq!(2, storage.enumerate("other:/").unwrap().len());
-        assert_eq!(2, storage.enumerate("other:/").unwrap().len());
+        assert_eq!(0, block_on(storage.enumerate("memory:")).unwrap().len());
+        assert_eq!(0, block_on(storage.enumerate("memory:")).unwrap().len());
+        assert_eq!(2, block_on(storage.enumerate("other:/")).unwrap().len());
+        assert_eq!(2, block_on(storage.enumerate("other:/")).unwrap().len());
 
-        assert_eq!("some text", storage.get("OTHER:f1").unwrap());
-        assert_eq!("other text", storage.get("OTHER:/f2").unwrap());
+        assert_eq!("some text", block_on(storage.get("OTHER:f1")).unwrap());
+        assert_eq!("other text", block_on(storage.get("OTHER:/f2")).unwrap());
 
-        storage.delete("other:/f2").unwrap();
-        assert_eq!(0, storage.enumerate("memory:").unwrap().len());
-        assert_eq!(1, storage.enumerate("other:").unwrap().len());
-        storage.delete("other:f1").unwrap();
-        assert_eq!(0, storage.enumerate("memory:").unwrap().len());
-        assert_eq!(0, storage.enumerate("other:").unwrap().len());
+        block_on(storage.delete("other:/f2")).unwrap();
+        assert_eq!(0, block_on(storage.enumerate("memory:")).unwrap().len());
+        assert_eq!(1, block_on(storage.enumerate("other:")).unwrap().len());
+        block_on(storage.delete("other:f1")).unwrap();
+        assert_eq!(0, block_on(storage.enumerate("memory:")).unwrap().len());
+        assert_eq!(0, block_on(storage.enumerate("other:")).unwrap().len());
     }
 
     #[test]
@@ -765,8 +765,8 @@ mod tests {
         let mut storage = Storage::default();
         storage.mount("other", "memory://").unwrap();
 
-        storage.put("/f1", "some text").unwrap();
-        storage.put("f2", "other text").unwrap();
+        block_on(storage.put("/f1", "some text")).unwrap();
+        block_on(storage.put("f2", "other text")).unwrap();
         {
             // Ensure that the put operations were routed to the correct objects.
             let memory_drive = storage.drives.get(&DriveKey::new("memory").unwrap()).unwrap();
@@ -775,63 +775,87 @@ mod tests {
             assert_eq!(0, block_on(other_drive.drive.enumerate()).unwrap().len());
         }
 
-        assert_eq!(2, storage.enumerate("").unwrap().len());
-        assert_eq!(2, storage.enumerate("/").unwrap().len());
-        assert_eq!(0, storage.enumerate("other:").unwrap().len());
-        assert_eq!(0, storage.enumerate("other:/").unwrap().len());
+        assert_eq!(2, block_on(storage.enumerate("")).unwrap().len());
+        assert_eq!(2, block_on(storage.enumerate("/")).unwrap().len());
+        assert_eq!(0, block_on(storage.enumerate("other:")).unwrap().len());
+        assert_eq!(0, block_on(storage.enumerate("other:/")).unwrap().len());
 
-        assert_eq!("some text", storage.get("f1").unwrap());
-        assert_eq!("other text", storage.get("/f2").unwrap());
+        assert_eq!("some text", block_on(storage.get("f1")).unwrap());
+        assert_eq!("other text", block_on(storage.get("/f2")).unwrap());
 
-        storage.delete("/f2").unwrap();
-        assert_eq!(1, storage.enumerate("").unwrap().len());
-        assert_eq!(0, storage.enumerate("other:").unwrap().len());
-        storage.delete("f1").unwrap();
-        assert_eq!(0, storage.enumerate("").unwrap().len());
-        assert_eq!(0, storage.enumerate("other:").unwrap().len());
+        block_on(storage.delete("/f2")).unwrap();
+        assert_eq!(1, block_on(storage.enumerate("")).unwrap().len());
+        assert_eq!(0, block_on(storage.enumerate("other:")).unwrap().len());
+        block_on(storage.delete("f1")).unwrap();
+        assert_eq!(0, block_on(storage.enumerate("")).unwrap().len());
+        assert_eq!(0, block_on(storage.enumerate("other:")).unwrap().len());
     }
 
     #[test]
     fn test_storage_delete_errors() {
         let mut storage = Storage::default();
-        assert_eq!("Invalid drive name ''", format!("{}", storage.delete(":foo").unwrap_err()));
-        assert_eq!("Invalid path 'a:b\\c'", format!("{}", storage.delete("a:b\\c").unwrap_err()));
+        assert_eq!(
+            "Invalid drive name ''",
+            format!("{}", block_on(storage.delete(":foo")).unwrap_err())
+        );
+        assert_eq!(
+            "Invalid path 'a:b\\c'",
+            format!("{}", block_on(storage.delete("a:b\\c")).unwrap_err())
+        );
         assert_eq!(
             "Missing file name in path 'a:'",
-            format!("{}", storage.delete("a:").unwrap_err())
+            format!("{}", block_on(storage.delete("a:")).unwrap_err())
         );
     }
 
     #[test]
     fn test_storage_enumerate_errors() {
         let storage = Storage::default();
-        assert_eq!("Invalid drive name ''", format!("{}", storage.enumerate(":foo").unwrap_err()));
+        assert_eq!(
+            "Invalid drive name ''",
+            format!("{}", block_on(storage.enumerate(":foo")).unwrap_err())
+        );
         assert_eq!(
             "Invalid path 'a:b\\c'",
-            format!("{}", storage.enumerate("a:b\\c").unwrap_err())
+            format!("{}", block_on(storage.enumerate("a:b\\c")).unwrap_err())
         );
         assert_eq!(
             "Location 'a:/foo' is not a directory",
-            format!("{}", storage.enumerate("a:/foo").unwrap_err())
+            format!("{}", block_on(storage.enumerate("a:/foo")).unwrap_err())
         );
     }
 
     #[test]
     fn test_storage_get_errors() {
         let storage = Storage::default();
-        assert_eq!("Invalid drive name ''", format!("{}", storage.get(":foo").unwrap_err()));
-        assert_eq!("Invalid path 'a:b\\c'", format!("{}", storage.get("a:b\\c").unwrap_err()));
-        assert_eq!("Missing file name in path 'a:'", format!("{}", storage.get("a:").unwrap_err()));
+        assert_eq!(
+            "Invalid drive name ''",
+            format!("{}", block_on(storage.get(":foo")).unwrap_err())
+        );
+        assert_eq!(
+            "Invalid path 'a:b\\c'",
+            format!("{}", block_on(storage.get("a:b\\c")).unwrap_err())
+        );
+        assert_eq!(
+            "Missing file name in path 'a:'",
+            format!("{}", block_on(storage.get("a:")).unwrap_err())
+        );
     }
 
     #[test]
     fn test_storage_put_errors() {
         let mut storage = Storage::default();
-        assert_eq!("Invalid drive name ''", format!("{}", storage.put(":foo", "").unwrap_err()));
-        assert_eq!("Invalid path 'a:b\\c'", format!("{}", storage.put("a:b\\c", "").unwrap_err()));
+        assert_eq!(
+            "Invalid drive name ''",
+            format!("{}", block_on(storage.put(":foo", "")).unwrap_err())
+        );
+        assert_eq!(
+            "Invalid path 'a:b\\c'",
+            format!("{}", block_on(storage.put("a:b\\c", "")).unwrap_err())
+        );
         assert_eq!(
             "Missing file name in path 'a:'",
-            format!("{}", storage.put("a:", "").unwrap_err())
+            format!("{}", block_on(storage.put("a:", "")).unwrap_err())
         );
     }
 
