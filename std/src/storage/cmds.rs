@@ -370,6 +370,7 @@ pub fn add_all(
 mod tests {
     use crate::storage::{directory_drive_factory, Drive, InMemoryDrive};
     use crate::testutils::*;
+    use futures_lite::future::block_on;
     use std::collections::BTreeMap;
 
     #[test]
@@ -436,7 +437,7 @@ mod tests {
     #[test]
     fn test_dir_other_by_argument() {
         let mut other = InMemoryDrive::default();
-        other.put("foo.bas", "hello").unwrap();
+        block_on(other.put("foo.bas", "hello")).unwrap();
 
         let mut t = Tester::default().write_file("empty.bas", "");
         t.get_storage().borrow_mut().attach("other", "z://", Box::from(other)).unwrap();
@@ -477,7 +478,7 @@ mod tests {
     #[test]
     fn test_dir_other_by_cwd() {
         let mut other = InMemoryDrive::default();
-        other.put("foo.bas", "hello").unwrap();
+        block_on(other.put("foo.bas", "hello")).unwrap();
 
         let mut t = Tester::default().write_file("empty.bas", "");
         t.get_storage().borrow_mut().attach("other", "z://", Box::from(other)).unwrap();

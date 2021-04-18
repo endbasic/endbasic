@@ -16,6 +16,7 @@
 //! File system-based implementation of the storage system.
 
 use crate::storage::{Drive, Metadata};
+use async_trait::async_trait;
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -50,13 +51,14 @@ impl DirectoryDrive {
     }
 }
 
+#[async_trait(?Send)]
 impl Drive for DirectoryDrive {
-    fn delete(&mut self, name: &str) -> io::Result<()> {
+    async fn delete(&mut self, name: &str) -> io::Result<()> {
         let path = self.dir.join(name);
         fs::remove_file(path)
     }
 
-    fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
+    async fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
         let mut entries = BTreeMap::default();
         match fs::read_dir(&self.dir) {
             Ok(dirents) => {
@@ -95,7 +97,7 @@ impl Drive for DirectoryDrive {
         Ok(entries)
     }
 
-    fn get(&self, name: &str) -> io::Result<String> {
+    async fn get(&self, name: &str) -> io::Result<String> {
         let path = self.dir.join(name);
         let input = File::open(&path)?;
         let mut content = String::new();
@@ -103,7 +105,7 @@ impl Drive for DirectoryDrive {
         Ok(content)
     }
 
-    fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
+    async fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
         let path = self.dir.join(name);
         let output = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
         let mut writer = io::BufWriter::new(output);
@@ -130,6 +132,7 @@ pub fn directory_drive_factory(target: &str) -> io::Result<Box<dyn Drive>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_lite::future::block_on;
     use std::fs;
     use std::io::{BufRead, Write};
     use std::path::Path;
@@ -169,7 +172,7 @@ mod tests {
         write_file(&dir.path().join("a.bat"), &[]);
 
         let mut drive = DirectoryDrive::new(&dir.path()).unwrap();
-        drive.delete("a.bas").unwrap();
+        block_on(drive.delete("a.bas")).unwrap();
         assert!(!dir.path().join("a.bas").exists());
         assert!(dir.path().join("a.bat").exists());
     }
@@ -178,7 +181,7 @@ mod tests {
     fn test_directorydrive_delete_missing_file() {
         let dir = tempfile::tempdir().unwrap();
         let mut drive = DirectoryDrive::new(&dir.path()).unwrap();
-        assert_eq!(io::ErrorKind::NotFound, drive.delete("a.bas").unwrap_err().kind());
+        assert_eq!(io::ErrorKind::NotFound, block_on(drive.delete("a.bas")).unwrap_err().kind());
     }
 
     #[test]
@@ -186,7 +189,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
 
         let drive = DirectoryDrive::new(&dir.path()).unwrap();
-        assert!(drive.enumerate().unwrap().is_empty());
+        assert!(block_on(drive.enumerate()).unwrap().is_empty());
     }
 
     #[test]
@@ -196,7 +199,7 @@ mod tests {
         write_file(&dir.path().join("some file.bas"), &["this is not empty"]);
 
         let drive = DirectoryDrive::new(&dir.path()).unwrap();
-        let entries = drive.enumerate().unwrap();
+        let entries = block_on(drive.enumerate()).unwrap();
         assert_eq!(2, entries.len());
         let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875);
         assert_eq!(&Metadata { date, length: 0 }, entries.get("empty.bas").unwrap());
@@ -207,7 +210,7 @@ mod tests {
     fn test_directorydrive_enumerate_treats_missing_dir_as_empty() {
         let dir = tempfile::tempdir().unwrap();
         let drive = DirectoryDrive::new(dir.path().join("does-not-exist")).unwrap();
-        assert!(drive.enumerate().unwrap().is_empty());
+        assert!(block_on(drive.enumerate()).unwrap().is_empty());
     }
 
     #[test]
@@ -215,7 +218,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join("will-be-ignored")).unwrap();
         let drive = DirectoryDrive::new(&dir.path()).unwrap();
-        assert!(drive.enumerate().unwrap().is_empty());
+        assert!(block_on(drive.enumerate()).unwrap().is_empty());
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -228,7 +231,7 @@ mod tests {
         unix_fs::symlink(&Path::new("some file.bas"), &dir.path().join("a link.bas")).unwrap();
 
         let drive = DirectoryDrive::new(&dir.path()).unwrap();
-        let entries = drive.enumerate().unwrap();
+        let entries = block_on(drive.enumerate()).unwrap();
         assert_eq!(2, entries.len());
         let metadata =
             Metadata { date: time::OffsetDateTime::from_unix_timestamp(1_588_757_875), length: 18 };
@@ -242,7 +245,7 @@ mod tests {
         let file = dir.path().join("not-a-dir");
         write_file(&file, &[]);
         let drive = DirectoryDrive::new(&file).unwrap();
-        assert_eq!(io::ErrorKind::Other, drive.enumerate().unwrap_err().kind());
+        assert_eq!(io::ErrorKind::Other, block_on(drive.enumerate()).unwrap_err().kind());
     }
 
     #[test]
@@ -251,7 +254,7 @@ mod tests {
         write_file(&dir.path().join("some file.bas"), &["one line", "two lines"]);
 
         let drive = DirectoryDrive::new(&dir.path()).unwrap();
-        assert_eq!("one line\ntwo lines\n", drive.get("some file.bas").unwrap());
+        assert_eq!("one line\ntwo lines\n", block_on(drive.get("some file.bas")).unwrap());
     }
 
     #[test]
@@ -259,7 +262,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
 
         let mut drive = DirectoryDrive::new(&dir.path()).unwrap();
-        drive.put("some file.bas", "a b c\nd e\n").unwrap();
+        block_on(drive.put("some file.bas", "a b c\nd e\n")).unwrap();
         check_file(&dir.path().join("some file.bas"), &["a b c", "d e"]);
     }
 

@@ -15,6 +15,7 @@
 
 //! Exposes EndBASIC demos as a read-only drive.
 
+use async_trait::async_trait;
 use endbasic_std::storage::{Drive, Metadata};
 use std::collections::{BTreeMap, HashMap};
 use std::io;
@@ -82,12 +83,13 @@ impl Default for DemosDrive {
     }
 }
 
+#[async_trait(?Send)]
 impl Drive for DemosDrive {
-    fn delete(&mut self, _name: &str) -> io::Result<()> {
+    async fn delete(&mut self, _name: &str) -> io::Result<()> {
         Err(io::Error::new(io::ErrorKind::PermissionDenied, "The demos drive is read-only"))
     }
 
-    fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
+    async fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
         let mut entries = BTreeMap::new();
         for (name, (metadata, _content)) in self.demos.iter() {
             entries.insert(name.to_string(), metadata.clone());
@@ -95,7 +97,7 @@ impl Drive for DemosDrive {
         Ok(entries)
     }
 
-    fn get(&self, name: &str) -> io::Result<String> {
+    async fn get(&self, name: &str) -> io::Result<String> {
         let uc_name = name.to_ascii_uppercase();
         match self.demos.get(&uc_name.as_ref()) {
             Some(value) => {
@@ -106,7 +108,7 @@ impl Drive for DemosDrive {
         }
     }
 
-    fn put(&mut self, _name: &str, _content: &str) -> io::Result<()> {
+    async fn put(&mut self, _name: &str, _content: &str) -> io::Result<()> {
         Err(io::Error::new(io::ErrorKind::PermissionDenied, "The demos drive is read-only"))
     }
 }
@@ -126,17 +128,24 @@ pub fn demos_drive_factory(target: &str) -> io::Result<Box<dyn Drive>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_lite::future::block_on;
 
     #[test]
     fn test_demos_drive_delete() {
         let mut drive = DemosDrive::default();
 
-        assert_eq!(io::ErrorKind::PermissionDenied, drive.delete("hello.bas").unwrap_err().kind());
-        assert_eq!(io::ErrorKind::PermissionDenied, drive.delete("Hello.BAS").unwrap_err().kind());
+        assert_eq!(
+            io::ErrorKind::PermissionDenied,
+            block_on(drive.delete("hello.bas")).unwrap_err().kind()
+        );
+        assert_eq!(
+            io::ErrorKind::PermissionDenied,
+            block_on(drive.delete("Hello.BAS")).unwrap_err().kind()
+        );
 
         assert_eq!(
             io::ErrorKind::PermissionDenied,
-            drive.delete("unknown.bas").unwrap_err().kind()
+            block_on(drive.delete("unknown.bas")).unwrap_err().kind()
         );
     }
 
@@ -144,7 +153,7 @@ mod tests {
     fn test_demos_drive_enumerate() {
         let drive = DemosDrive::default();
 
-        let entries = drive.enumerate().unwrap();
+        let entries = block_on(drive.enumerate()).unwrap();
         assert!(entries.contains_key("GPIO.BAS"));
         assert!(entries.contains_key("GUESS.BAS"));
         assert!(entries.contains_key("HELLO.BAS"));
@@ -155,15 +164,15 @@ mod tests {
     fn test_demos_drive_get() {
         let drive = DemosDrive::default();
 
-        assert_eq!(io::ErrorKind::NotFound, drive.get("unknown.bas").unwrap_err().kind());
+        assert_eq!(io::ErrorKind::NotFound, block_on(drive.get("unknown.bas")).unwrap_err().kind());
 
         assert_eq!(
             process_demo(include_bytes!("../examples/hello.bas")),
-            drive.get("hello.bas").unwrap()
+            block_on(drive.get("hello.bas")).unwrap()
         );
         assert_eq!(
             process_demo(include_bytes!("../examples/hello.bas")),
-            drive.get("Hello.Bas").unwrap()
+            block_on(drive.get("Hello.Bas")).unwrap()
         );
     }
 
@@ -171,12 +180,18 @@ mod tests {
     fn test_demos_drive_put() {
         let mut drive = DemosDrive::default();
 
-        assert_eq!(io::ErrorKind::PermissionDenied, drive.put("hello.bas", "").unwrap_err().kind());
-        assert_eq!(io::ErrorKind::PermissionDenied, drive.put("Hello.BAS", "").unwrap_err().kind());
+        assert_eq!(
+            io::ErrorKind::PermissionDenied,
+            block_on(drive.put("hello.bas", "")).unwrap_err().kind()
+        );
+        assert_eq!(
+            io::ErrorKind::PermissionDenied,
+            block_on(drive.put("Hello.BAS", "")).unwrap_err().kind()
+        );
 
         assert_eq!(
             io::ErrorKind::PermissionDenied,
-            drive.put("unknown.bas", "").unwrap_err().kind()
+            block_on(drive.put("unknown.bas", "")).unwrap_err().kind()
         );
     }
 

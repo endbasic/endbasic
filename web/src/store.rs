@@ -15,6 +15,7 @@
 
 //! Implementation of a drive that uses the browser's local storage.
 
+use async_trait::async_trait;
 use endbasic_std::storage::{Drive, Metadata};
 use std::collections::BTreeMap;
 use std::io;
@@ -223,8 +224,9 @@ impl WebDrive {
     }
 }
 
+#[async_trait(?Send)]
 impl Drive for WebDrive {
-    fn delete(&mut self, name: &str) -> io::Result<()> {
+    async fn delete(&mut self, name: &str) -> io::Result<()> {
         let key = Key::for_name(name);
         let key = key.serialized();
 
@@ -243,7 +245,7 @@ impl Drive for WebDrive {
         }
     }
 
-    fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
+    async fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
         let mut entries = BTreeMap::new();
 
         let n = match self.storage.length() {
@@ -271,12 +273,12 @@ impl Drive for WebDrive {
         Ok(entries)
     }
 
-    fn get(&self, name: &str) -> io::Result<String> {
+    async fn get(&self, name: &str) -> io::Result<String> {
         let entry = self.get_entry(&Key::for_name(name))?;
         Ok(entry.content)
     }
 
-    fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
+    async fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
         let key = Key::for_name(name);
 
         // There is no information we care about the old entry so we can replace it all in one go
@@ -374,27 +376,30 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn test_webdrive_delete_ok() {
+    async fn test_webdrive_delete_ok() {
         let mut webdrive = WebDrive::from_window();
         webdrive.storage.clear().unwrap();
         webdrive.storage.set("endbasic-program:FIRST.BAS", "").unwrap();
         webdrive.storage.set("endbasic-program:FIRST.BAT", "").unwrap();
 
-        webdrive.delete("first.bas").unwrap();
+        webdrive.delete("first.bas").await.unwrap();
         assert!(webdrive.storage.get("endbasic-program:FIRST.BAS").unwrap().is_none());
         webdrive.storage.get("endbasic-program:FIRST.BAT").unwrap();
     }
 
     #[wasm_bindgen_test]
-    fn test_webdrive_delete_missing_file() {
+    async fn test_webdrive_delete_missing_file() {
         let mut webdrive = WebDrive::from_window();
         webdrive.storage.clear().unwrap();
 
-        assert_eq!("File not found", format!("{}", webdrive.delete("first.bas").unwrap_err()));
+        assert_eq!(
+            "File not found",
+            format!("{}", webdrive.delete("first.bas").await.unwrap_err())
+        );
     }
 
     #[wasm_bindgen_test]
-    fn test_webdrive_enumerate() {
+    async fn test_webdrive_enumerate() {
         let entry1 = Entry {
             version: Entry::VERSION,
             content: "first".to_owned(),
@@ -419,14 +424,14 @@ mod tests {
         webdrive.storage.set("first.bas", "ignore me").unwrap();
         webdrive.storage.set("endbasic-program:", "ignore me").unwrap();
 
-        let entries = webdrive.enumerate().unwrap();
+        let entries = webdrive.enumerate().await.unwrap();
         assert_eq!(2, entries.len());
         assert_eq!(&entry1.metadata(), entries.get("FIRST.BAS").unwrap());
         assert_eq!(&entry2.metadata(), entries.get("SECOND SPACES.BAS").unwrap());
     }
 
     #[wasm_bindgen_test]
-    fn test_webdrive_get() {
+    async fn test_webdrive_get() {
         let entry = Entry {
             version: Entry::VERSION,
             content: "second".to_owned(),
@@ -443,11 +448,11 @@ mod tests {
         webdrive.storage.set("endbasic-program:B.BAT", "third").unwrap();
         webdrive.storage.set("B.BAS", "fourth").unwrap();
 
-        assert_eq!(entry.content, webdrive.get("B.BAS").unwrap());
+        assert_eq!(entry.content, webdrive.get("B.BAS").await.unwrap());
     }
 
     #[wasm_bindgen_test]
-    fn test_webdrive_put() {
+    async fn test_webdrive_put() {
         let entry = Entry {
             version: Entry::VERSION,
             content: "this is some content".to_owned(),
@@ -457,7 +462,7 @@ mod tests {
         let mut webdrive = WebDrive::from_window();
         webdrive.clock = Box::from(FakeClock { now: 1_234_567 });
         webdrive.storage.clear().unwrap();
-        webdrive.put("code.bas", &entry.content).unwrap();
+        webdrive.put("code.bas", &entry.content).await.unwrap();
 
         assert_eq!(
             serde_json::to_string(&entry).unwrap(),
