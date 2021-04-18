@@ -130,7 +130,7 @@ fn run_repl_loop(local_drive_spec: &str) -> endbasic_core::exec::Result<i32> {
 
     let mut machine = builder.build()?;
     endbasic::print_welcome(console.clone())?;
-    endbasic::try_load_autoexec(&mut machine, console.clone(), storage)?;
+    block_on(endbasic::try_load_autoexec(&mut machine, console.clone(), storage))?;
     Ok(block_on(endbasic::run_repl_loop(&mut machine, console))?)
 }
 

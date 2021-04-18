@@ -50,9 +50,9 @@ this is likely to confuse you.
 See the \"Strored program\" help topic for information on how to load, modify, and save programs.";
 
 /// Shows the contents of the given storage location.
-fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> io::Result<()> {
+async fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> io::Result<()> {
     let canonical_path = storage.make_canonical(path)?;
-    let entries = storage.enumerate(path)?;
+    let entries = storage.enumerate(path).await?;
 
     console.print("")?;
     console.print(&format!("    Directory of {}", canonical_path))?;
@@ -171,12 +171,13 @@ impl Command for DirCommand {
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         match args {
             [] => {
-                show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), "")?;
+                show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), "").await?;
                 Ok(())
             }
             [(Some(path), ArgSep::End)] => match path.eval(machine.get_mut_symbols())? {
                 Value::Text(path) => {
-                    show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), &path)?;
+                    show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), &path)
+                        .await?;
                     Ok(())
                 }
                 _ => {

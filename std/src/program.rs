@@ -120,7 +120,7 @@ impl Command for DelCommand {
         match arg0.eval(machine.get_mut_symbols())? {
             Value::Text(t) => {
                 let name = add_extension(t)?;
-                self.storage.borrow_mut().delete(&name)?;
+                self.storage.borrow_mut().delete(&name).await?;
             }
             _ => {
                 return Err(CallError::ArgumentError(
@@ -264,7 +264,7 @@ impl Command for LoadCommand {
         match arg0.eval(machine.get_mut_symbols())? {
             Value::Text(t) => {
                 let name = add_extension(t)?;
-                let content = self.storage.borrow().get(&name)?;
+                let content = self.storage.borrow().get(&name).await?;
                 self.program.borrow_mut().load(&content);
                 machine.clear();
             }
@@ -411,7 +411,7 @@ impl Command for SaveCommand {
             Value::Text(t) => {
                 let name = add_extension(t)?;
                 let content = self.program.borrow().text();
-                self.storage.borrow_mut().put(&name, &content)?;
+                self.storage.borrow_mut().put(&name, &content).await?;
             }
             _ => {
                 return Err(CallError::ArgumentError(

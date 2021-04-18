@@ -294,7 +294,7 @@ impl WebTerminal {
 
         let mut machine = builder.build().unwrap();
         endbasic::print_welcome(console.clone()).unwrap();
-        endbasic::try_load_autoexec(&mut machine, console.clone(), storage).unwrap();
+        endbasic::try_load_autoexec(&mut machine, console.clone(), storage).await.unwrap();
         loop {
             let result = endbasic::run_repl_loop(&mut machine, console.clone()).await;
             let mut console = console.borrow_mut();
