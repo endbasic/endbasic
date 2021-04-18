@@ -13,17 +13,17 @@ edition = "2018"
 
 [features]
 default = ["bin"]
-bin = ["endbasic-std/crossterm"]
+bin = ["endbasic-std/crossterm", "tokio"]
 rpi = ["endbasic-std/rpi"]
 
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
 dirs = "2.0"
-futures-lite = "1.1"
 getopts = "0.2"
 thiserror = "1.0"
 time = { version = "0.2", features = ["std"] }
+tokio = { version = "1", features =  ["full"], optional = true }
 
 [dependencies.endbasic-core]
 version = "0.6.0" # ENDBASIC-VERSION
@@ -35,5 +35,6 @@ path = "../std"
 default-features = false
 
 [dev-dependencies]
+futures-lite = "1.1"
 regex = "1"
 tempfile = "3"
