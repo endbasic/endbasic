@@ -24,7 +24,6 @@
 use anyhow::{anyhow, Result};
 use endbasic_std::storage::Storage;
 use endbasic_std::terminal::TerminalConsole;
-use futures_lite::future::block_on;
 use getopts::Options;
 use std::cell::RefCell;
 use std::env;
@@ -120,7 +119,7 @@ pub fn setup_storage(storage: &mut Storage, local_drive_spec: &str) -> io::Resul
 /// Enters the interactive interpreter.
 ///
 /// `local_drive` is the optional local drive to mount and use as the default location.
-fn run_repl_loop(local_drive_spec: &str) -> endbasic_core::exec::Result<i32> {
+async fn run_repl_loop(local_drive_spec: &str) -> endbasic_core::exec::Result<i32> {
     let console = Rc::from(RefCell::from(TerminalConsole::from_stdio()?));
     let mut builder =
         endbasic_std::MachineBuilder::default().with_console(console.clone()).make_interactive();
@@ -130,21 +129,21 @@ fn run_repl_loop(local_drive_spec: &str) -> endbasic_core::exec::Result<i32> {
 
     let mut machine = builder.build()?;
     endbasic::print_welcome(console.clone())?;
-    block_on(endbasic::try_load_autoexec(&mut machine, console.clone(), storage))?;
-    Ok(block_on(endbasic::run_repl_loop(&mut machine, console))?)
+    endbasic::try_load_autoexec(&mut machine, console.clone(), storage).await?;
+    Ok(endbasic::run_repl_loop(&mut machine, console).await?)
 }
 
 /// Executes the `path` program in a fresh machine.
-fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
+async fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
     let mut machine = endbasic_std::MachineBuilder::default().build()?;
     let mut input = File::open(path)?;
-    Ok(block_on(machine.exec(&mut input))?.as_exit_code())
+    Ok(machine.exec(&mut input).await?.as_exit_code())
 }
 
 /// Executes the `path` program in a fresh machine allowing any interactive-only calls.
 ///
 /// `local_drive` is the optional local drive to mount and use as the default location.
-fn run_interactive<P: AsRef<Path>>(
+async fn run_interactive<P: AsRef<Path>>(
     path: P,
     local_drive_spec: &str,
 ) -> endbasic_core::exec::Result<i32> {
@@ -155,11 +154,11 @@ fn run_interactive<P: AsRef<Path>>(
 
     let mut machine = builder.build()?;
     let mut input = File::open(path)?;
-    Ok(block_on(machine.exec(&mut input))?.as_exit_code())
+    Ok(machine.exec(&mut input).await?.as_exit_code())
 }
 
 /// Version of `main` that returns errors to the caller for reporting.
-fn safe_main(name: &str, args: env::Args) -> Result<i32> {
+async fn safe_main(name: &str, args: env::Args) -> Result<i32> {
     let args: Vec<String> = args.collect();
 
     let mut opts = Options::new();
@@ -182,23 +181,24 @@ fn safe_main(name: &str, args: env::Args) -> Result<i32> {
     match matches.free.as_slice() {
         [] => {
             let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
-            Ok(run_repl_loop(&local_drive)?)
+            Ok(run_repl_loop(&local_drive).await?)
         }
         [file] => {
             if matches.opt_present("interactive") {
                 let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
-                Ok(run_interactive(file, &local_drive)?)
+                Ok(run_interactive(file, &local_drive).await?)
             } else {
-                Ok(run_script(file)?)
+                Ok(run_script(file).await?)
             }
         }
         [_, ..] => Err(UsageError::new("Too many arguments").into()),
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let (name, args) = program_name(env::args(), "endbasic");
-    let exit_code = match safe_main(&name, args) {
+    let exit_code = match safe_main(&name, args).await {
         Ok(code) => code,
         Err(e) => {
             if let Some(e) = e.downcast_ref::<UsageError>() {
