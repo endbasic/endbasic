@@ -16,6 +16,7 @@
 //! In-memory implementation of the storage system.
 
 use crate::storage::{Drive, Metadata};
+use async_trait::async_trait;
 use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::str;
@@ -26,15 +27,16 @@ pub struct InMemoryDrive {
     programs: HashMap<String, String>,
 }
 
+#[async_trait(?Send)]
 impl Drive for InMemoryDrive {
-    fn delete(&mut self, name: &str) -> io::Result<()> {
+    async fn delete(&mut self, name: &str) -> io::Result<()> {
         match self.programs.remove(name) {
             Some(_) => Ok(()),
             None => Err(io::Error::new(io::ErrorKind::NotFound, "Entry not found")),
         }
     }
 
-    fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
+    async fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
         let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875);
 
         let mut entries = BTreeMap::new();
@@ -44,14 +46,14 @@ impl Drive for InMemoryDrive {
         Ok(entries)
     }
 
-    fn get(&self, name: &str) -> io::Result<String> {
+    async fn get(&self, name: &str) -> io::Result<String> {
         match self.programs.get(name) {
             Some(content) => Ok(content.to_owned()),
             None => Err(io::Error::new(io::ErrorKind::NotFound, "Entry not found")),
         }
     }
 
-    fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
+    async fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
         self.programs.insert(name.to_owned(), content.to_owned());
         Ok(())
     }

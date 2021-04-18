@@ -15,6 +15,8 @@
 
 //! Storage-related abstractions and commands.
 
+use async_trait::async_trait;
+use futures_lite::future::block_on;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{self};
 use std::io;
@@ -39,18 +41,19 @@ pub struct Metadata {
 }
 
 /// Abstract operations to load and store programs on some storage medium.
+#[async_trait(?Send)]
 pub trait Drive {
     /// Deletes the program given by `name`.
-    fn delete(&mut self, name: &str) -> io::Result<()>;
+    async fn delete(&mut self, name: &str) -> io::Result<()>;
 
     /// Returns a sorted list of the entries in the store and their metadata.
-    fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>>;
+    async fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>>;
 
     /// Loads the contents of the program given by `name`.
-    fn get(&self, name: &str) -> io::Result<String>;
+    async fn get(&self, name: &str) -> io::Result<String>;
 
     /// Saves the in-memory program given by `content` into `name`.
-    fn put(&mut self, name: &str, content: &str) -> io::Result<()>;
+    async fn put(&mut self, name: &str, content: &str) -> io::Result<()>;
 
     /// Gets the system-addressable path of the file `_name`, if any.
     fn system_path(&self, _name: &str) -> Option<PathBuf> {
@@ -382,7 +385,7 @@ impl Storage {
     pub fn delete(&mut self, raw_location: &str) -> io::Result<()> {
         let location = Location::new(raw_location)?;
         match location.leaf_name() {
-            Some(name) => self.get_drive_mut(&location)?.delete(name),
+            Some(name) => block_on(self.get_drive_mut(&location)?.delete(name)),
             None => Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 format!("Missing file name in path '{}'", raw_location),
@@ -398,7 +401,7 @@ impl Storage {
                 io::ErrorKind::NotFound,
                 format!("Location '{}' is not a directory", raw_location),
             )),
-            None => self.get_drive(&location)?.enumerate(),
+            None => block_on(self.get_drive(&location)?.enumerate()),
         }
     }
 
@@ -406,7 +409,7 @@ impl Storage {
     pub fn get(&self, raw_location: &str) -> io::Result<String> {
         let location = Location::new(raw_location)?;
         match location.leaf_name() {
-            Some(name) => self.get_drive(&location)?.get(name),
+            Some(name) => block_on(self.get_drive(&location)?.get(name)),
             None => Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 format!("Missing file name in path '{}'", raw_location),
@@ -418,7 +421,7 @@ impl Storage {
     pub fn put(&mut self, raw_location: &str, content: &str) -> io::Result<()> {
         let location = Location::new(raw_location)?;
         match location.leaf_name() {
-            Some(name) => self.get_drive_mut(&location)?.put(name, content),
+            Some(name) => block_on(self.get_drive_mut(&location)?.put(name, content)),
             None => Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 format!("Missing file name in path '{}'", raw_location),
@@ -736,9 +739,9 @@ mod tests {
         {
             // Ensure that the put operations were routed to the correct objects.
             let memory_drive = storage.drives.get(&DriveKey::new("memory").unwrap()).unwrap();
-            assert_eq!(0, memory_drive.drive.enumerate().unwrap().len());
+            assert_eq!(0, block_on(memory_drive.drive.enumerate()).unwrap().len());
             let other_drive = storage.drives.get(&DriveKey::new("other").unwrap()).unwrap();
-            assert_eq!(2, other_drive.drive.enumerate().unwrap().len());
+            assert_eq!(2, block_on(other_drive.drive.enumerate()).unwrap().len());
         }
 
         assert_eq!(0, storage.enumerate("memory:").unwrap().len());
@@ -767,9 +770,9 @@ mod tests {
         {
             // Ensure that the put operations were routed to the correct objects.
             let memory_drive = storage.drives.get(&DriveKey::new("memory").unwrap()).unwrap();
-            assert_eq!(2, memory_drive.drive.enumerate().unwrap().len());
+            assert_eq!(2, block_on(memory_drive.drive.enumerate()).unwrap().len());
             let other_drive = storage.drives.get(&DriveKey::new("other").unwrap()).unwrap();
-            assert_eq!(0, other_drive.drive.enumerate().unwrap().len());
+            assert_eq!(0, block_on(other_drive.drive.enumerate()).unwrap().len());
         }
 
         assert_eq!(2, storage.enumerate("").unwrap().len());
