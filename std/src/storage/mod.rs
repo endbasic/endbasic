@@ -39,14 +39,33 @@ pub struct Metadata {
     pub length: u64,
 }
 
+/// Collection of entries in the store and their metadata.  Used to represent the result of the
+/// `Drive::enumerate` call.
+#[derive(Debug)]
+pub struct DriveFiles {
+    dirents: BTreeMap<String, Metadata>,
+}
+
+impl DriveFiles {
+    /// Creates a new collection of files with the given `dirents`.
+    pub fn new(dirents: BTreeMap<String, Metadata>) -> Self {
+        Self { dirents }
+    }
+
+    /// Returns the collection of files in this result.
+    pub fn dirents(&self) -> &BTreeMap<String, Metadata> {
+        &self.dirents
+    }
+}
+
 /// Abstract operations to load and store programs on some storage medium.
 #[async_trait(?Send)]
 pub trait Drive {
     /// Deletes the program given by `name`.
     async fn delete(&mut self, name: &str) -> io::Result<()>;
 
-    /// Returns a sorted list of the entries in the store and their metadata.
-    async fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>>;
+    /// Returns the entries in the store and their metadata.
+    async fn enumerate(&self) -> io::Result<DriveFiles>;
 
     /// Loads the contents of the program given by `name`.
     async fn get(&self, name: &str) -> io::Result<String>;
@@ -393,7 +412,7 @@ impl Storage {
     }
 
     /// Returns a sorted list of the entries in `raw_location` and their metadata.
-    pub async fn enumerate(&self, raw_location: &str) -> io::Result<BTreeMap<String, Metadata>> {
+    pub async fn enumerate(&self, raw_location: &str) -> io::Result<DriveFiles> {
         let location = Location::new(raw_location)?;
         match location.leaf_name() {
             Some(_) => Err(io::Error::new(
@@ -739,25 +758,25 @@ mod tests {
         {
             // Ensure that the put operations were routed to the correct objects.
             let memory_drive = storage.drives.get(&DriveKey::new("memory").unwrap()).unwrap();
-            assert_eq!(0, block_on(memory_drive.drive.enumerate()).unwrap().len());
+            assert_eq!(0, block_on(memory_drive.drive.enumerate()).unwrap().dirents().len());
             let other_drive = storage.drives.get(&DriveKey::new("other").unwrap()).unwrap();
-            assert_eq!(2, block_on(other_drive.drive.enumerate()).unwrap().len());
+            assert_eq!(2, block_on(other_drive.drive.enumerate()).unwrap().dirents().len());
         }
 
-        assert_eq!(0, block_on(storage.enumerate("memory:")).unwrap().len());
-        assert_eq!(0, block_on(storage.enumerate("memory:")).unwrap().len());
-        assert_eq!(2, block_on(storage.enumerate("other:/")).unwrap().len());
-        assert_eq!(2, block_on(storage.enumerate("other:/")).unwrap().len());
+        assert_eq!(0, block_on(storage.enumerate("memory:")).unwrap().dirents().len());
+        assert_eq!(0, block_on(storage.enumerate("memory:")).unwrap().dirents().len());
+        assert_eq!(2, block_on(storage.enumerate("other:/")).unwrap().dirents().len());
+        assert_eq!(2, block_on(storage.enumerate("other:/")).unwrap().dirents().len());
 
         assert_eq!("some text", block_on(storage.get("OTHER:f1")).unwrap());
         assert_eq!("other text", block_on(storage.get("OTHER:/f2")).unwrap());
 
         block_on(storage.delete("other:/f2")).unwrap();
-        assert_eq!(0, block_on(storage.enumerate("memory:")).unwrap().len());
-        assert_eq!(1, block_on(storage.enumerate("other:")).unwrap().len());
+        assert_eq!(0, block_on(storage.enumerate("memory:")).unwrap().dirents().len());
+        assert_eq!(1, block_on(storage.enumerate("other:")).unwrap().dirents().len());
         block_on(storage.delete("other:f1")).unwrap();
-        assert_eq!(0, block_on(storage.enumerate("memory:")).unwrap().len());
-        assert_eq!(0, block_on(storage.enumerate("other:")).unwrap().len());
+        assert_eq!(0, block_on(storage.enumerate("memory:")).unwrap().dirents().len());
+        assert_eq!(0, block_on(storage.enumerate("other:")).unwrap().dirents().len());
     }
 
     #[test]
@@ -770,25 +789,25 @@ mod tests {
         {
             // Ensure that the put operations were routed to the correct objects.
             let memory_drive = storage.drives.get(&DriveKey::new("memory").unwrap()).unwrap();
-            assert_eq!(2, block_on(memory_drive.drive.enumerate()).unwrap().len());
+            assert_eq!(2, block_on(memory_drive.drive.enumerate()).unwrap().dirents().len());
             let other_drive = storage.drives.get(&DriveKey::new("other").unwrap()).unwrap();
-            assert_eq!(0, block_on(other_drive.drive.enumerate()).unwrap().len());
+            assert_eq!(0, block_on(other_drive.drive.enumerate()).unwrap().dirents().len());
         }
 
-        assert_eq!(2, block_on(storage.enumerate("")).unwrap().len());
-        assert_eq!(2, block_on(storage.enumerate("/")).unwrap().len());
-        assert_eq!(0, block_on(storage.enumerate("other:")).unwrap().len());
-        assert_eq!(0, block_on(storage.enumerate("other:/")).unwrap().len());
+        assert_eq!(2, block_on(storage.enumerate("")).unwrap().dirents().len());
+        assert_eq!(2, block_on(storage.enumerate("/")).unwrap().dirents().len());
+        assert_eq!(0, block_on(storage.enumerate("other:")).unwrap().dirents().len());
+        assert_eq!(0, block_on(storage.enumerate("other:/")).unwrap().dirents().len());
 
         assert_eq!("some text", block_on(storage.get("f1")).unwrap());
         assert_eq!("other text", block_on(storage.get("/f2")).unwrap());
 
         block_on(storage.delete("/f2")).unwrap();
-        assert_eq!(1, block_on(storage.enumerate("")).unwrap().len());
-        assert_eq!(0, block_on(storage.enumerate("other:")).unwrap().len());
+        assert_eq!(1, block_on(storage.enumerate("")).unwrap().dirents().len());
+        assert_eq!(0, block_on(storage.enumerate("other:")).unwrap().dirents().len());
         block_on(storage.delete("f1")).unwrap();
-        assert_eq!(0, block_on(storage.enumerate("")).unwrap().len());
-        assert_eq!(0, block_on(storage.enumerate("other:")).unwrap().len());
+        assert_eq!(0, block_on(storage.enumerate("")).unwrap().dirents().len());
+        assert_eq!(0, block_on(storage.enumerate("other:")).unwrap().dirents().len());
     }
 
     #[test]

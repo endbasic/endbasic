@@ -52,7 +52,7 @@ See the \"Strored program\" help topic for information on how to load, modify, a
 /// Shows the contents of the given storage location.
 async fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> io::Result<()> {
     let canonical_path = storage.make_canonical(path)?;
-    let entries = storage.enumerate(path).await?;
+    let files = storage.enumerate(path).await?;
 
     console.print("")?;
     console.print(&format!("    Directory of {}", canonical_path))?;
@@ -60,7 +60,7 @@ async fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> i
     console.print("    Modified              Size    Name")?;
     let mut total_files = 0;
     let mut total_bytes = 0;
-    for (name, details) in entries {
+    for (name, details) in files.dirents() {
         console.print(&format!(
             "    {}    {:6}    {}",
             details.date.format("%F %H:%M"),
