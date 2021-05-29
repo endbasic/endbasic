@@ -5,3 +5,6 @@ members = [
     "std",
     "web",
 ]
+
+[profile.dev]
+split-debuginfo = "unpacked"
