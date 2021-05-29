@@ -74,6 +74,9 @@ async fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> i
         console.print("")?;
     }
     console.print(&format!("    {} file(s), {} bytes", total_files, total_bytes))?;
+    if let (Some(disk_quota), Some(disk_free)) = (files.disk_quota(), files.disk_free()) {
+        console.print(&format!("    {} of {} bytes free", disk_free.bytes, disk_quota.bytes))?;
+    }
     console.print("")?;
     Ok(())
 }
@@ -369,7 +372,7 @@ pub fn add_all(
 
 #[cfg(test)]
 mod tests {
-    use crate::storage::{directory_drive_factory, Drive, InMemoryDrive};
+    use crate::storage::{directory_drive_factory, DiskSpace, Drive, InMemoryDrive};
     use crate::testutils::*;
     use futures_lite::future::block_on;
     use std::collections::BTreeMap;
@@ -402,6 +405,28 @@ mod tests {
                 "",
                 "    Modified              Size    Name",
                 "    0 file(s), 0 bytes",
+                "",
+            ])
+            .check();
+    }
+
+    #[test]
+    fn test_dir_with_disk_free() {
+        let mut other = InMemoryDrive::default();
+        other.fake_disk_quota = Some(DiskSpace::new(456, 0));
+        other.fake_disk_free = Some(DiskSpace::new(123, 0));
+
+        let mut t = Tester::default();
+        t.get_storage().borrow_mut().attach("other", "z://", Box::from(other)).unwrap();
+
+        t.run("DIR \"OTHER:/\"")
+            .expect_prints([
+                "",
+                "    Directory of OTHER:/",
+                "",
+                "    Modified              Size    Name",
+                "    0 file(s), 0 bytes",
+                "    123 of 456 bytes free",
                 "",
             ])
             .check();

@@ -270,7 +270,7 @@ impl Drive for WebDrive {
             }
         }
 
-        Ok(DriveFiles::new(entries))
+        Ok(DriveFiles::new(entries, None, None))
     }
 
     async fn get(&self, name: &str) -> io::Result<String> {
