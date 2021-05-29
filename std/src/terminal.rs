@@ -23,7 +23,7 @@ use std::collections::VecDeque;
 use std::env;
 use std::io::{self, Write};
 
-//// Converts a `crossterm::ErrorKind` to an `io::Error`.
+/// Converts a `crossterm::ErrorKind` to an `io::Error`.
 fn crossterm_error_to_io_error(e: crossterm::ErrorKind) -> io::Error {
     match e {
         crossterm::ErrorKind::IoError(e) => e,
