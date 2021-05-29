@@ -94,7 +94,8 @@ impl Drive for DirectoryDrive {
                 }
             }
         }
-        Ok(DriveFiles::new(entries))
+        // TODO(jmmv): Calculate total and free disk space.
+        Ok(DriveFiles::new(entries, None, None))
     }
 
     async fn get(&self, name: &str) -> io::Result<String> {

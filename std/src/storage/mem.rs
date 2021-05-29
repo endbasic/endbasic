@@ -15,7 +15,7 @@
 
 //! In-memory implementation of the storage system.
 
-use crate::storage::{Drive, DriveFiles, Metadata};
+use crate::storage::{DiskSpace, Drive, DriveFiles, Metadata};
 use async_trait::async_trait;
 use std::collections::{BTreeMap, HashMap};
 use std::io;
@@ -25,6 +25,12 @@ use std::str;
 #[derive(Default)]
 pub struct InMemoryDrive {
     programs: HashMap<String, String>,
+
+    // TODO(jmmv): These fields are currently exposed only to allow testing for the consumers of
+    // these details and are not enforced in the drive.  It might be nice to actually implement
+    // proper support for this.
+    pub(crate) fake_disk_quota: Option<DiskSpace>,
+    pub(crate) fake_disk_free: Option<DiskSpace>,
 }
 
 #[async_trait(?Send)]
@@ -43,7 +49,7 @@ impl Drive for InMemoryDrive {
         for (name, contents) in &self.programs {
             entries.insert(name.clone(), Metadata { date, length: contents.len() as u64 });
         }
-        Ok(DriveFiles::new(entries))
+        Ok(DriveFiles::new(entries, self.fake_disk_quota, self.fake_disk_free))
     }
 
     async fn get(&self, name: &str) -> io::Result<String> {

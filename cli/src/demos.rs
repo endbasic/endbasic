@@ -16,7 +16,7 @@
 //! Exposes EndBASIC demos as a read-only drive.
 
 use async_trait::async_trait;
-use endbasic_std::storage::{Drive, DriveFiles, Metadata};
+use endbasic_std::storage::{DiskSpace, Drive, DriveFiles, Metadata};
 use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::str;
@@ -91,10 +91,22 @@ impl Drive for DemosDrive {
 
     async fn enumerate(&self) -> io::Result<DriveFiles> {
         let mut entries = BTreeMap::new();
-        for (name, (metadata, _content)) in self.demos.iter() {
+        let mut bytes = 0;
+        for (name, (metadata, content)) in self.demos.iter() {
             entries.insert(name.to_string(), metadata.clone());
+            bytes += content.len();
         }
-        Ok(DriveFiles::new(entries))
+        let files = self.demos.len();
+
+        let disk_quota = if bytes <= std::u64::MAX as usize && files <= std::u64::MAX as usize {
+            Some(DiskSpace::new(bytes as u64, files as u64))
+        } else {
+            // Cannot represent the amount of disk within a DiskSpace.
+            None
+        };
+        let disk_free = Some(DiskSpace::new(0, 0));
+
+        Ok(DriveFiles::new(entries, disk_quota, disk_free))
     }
 
     async fn get(&self, name: &str) -> io::Result<String> {
@@ -158,6 +170,10 @@ mod tests {
         assert!(files.dirents().contains_key("GUESS.BAS"));
         assert!(files.dirents().contains_key("HELLO.BAS"));
         assert!(files.dirents().contains_key("TOUR.BAS"));
+
+        assert!(files.disk_quota().unwrap().bytes() > 0);
+        assert_eq!(4, files.disk_quota().unwrap().files());
+        assert_eq!(DiskSpace::new(0, 0), files.disk_free().unwrap());
     }
 
     #[test]

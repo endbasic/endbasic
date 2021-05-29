@@ -39,22 +39,62 @@ pub struct Metadata {
     pub length: u64,
 }
 
+/// Representation of some amount of disk space.  Can be used to express both quotas and usage.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DiskSpace {
+    bytes: u64,
+    files: u64,
+}
+
+impl DiskSpace {
+    /// Creates a new representation of disk space.
+    pub fn new(bytes: u64, files: u64) -> Self {
+        Self { bytes, files }
+    }
+
+    /// Returns the amount of bytes in this disk space.
+    pub fn bytes(&self) -> u64 {
+        self.bytes
+    }
+
+    /// Returns the number of files in this disk space.
+    pub fn files(&self) -> u64 {
+        self.files
+    }
+}
+
 /// Collection of entries in the store and their metadata.  Used to represent the result of the
 /// `Drive::enumerate` call.
 #[derive(Debug)]
 pub struct DriveFiles {
     dirents: BTreeMap<String, Metadata>,
+    disk_quota: Option<DiskSpace>,
+    disk_free: Option<DiskSpace>,
 }
 
 impl DriveFiles {
     /// Creates a new collection of files with the given `dirents`.
-    pub fn new(dirents: BTreeMap<String, Metadata>) -> Self {
-        Self { dirents }
+    pub fn new(
+        dirents: BTreeMap<String, Metadata>,
+        disk_quota: Option<DiskSpace>,
+        disk_free: Option<DiskSpace>,
+    ) -> Self {
+        Self { dirents, disk_quota, disk_free }
     }
 
     /// Returns the collection of files in this result.
     pub fn dirents(&self) -> &BTreeMap<String, Metadata> {
         &self.dirents
+    }
+
+    /// Returns the user's disk quota, if known.
+    pub fn disk_quota(&self) -> &Option<DiskSpace> {
+        &self.disk_quota
+    }
+
+    /// Returns the disk free space, if known.
+    pub fn disk_free(&self) -> &Option<DiskSpace> {
+        &self.disk_free
     }
 }
 
