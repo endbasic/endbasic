@@ -16,7 +16,7 @@
 //! Exposes EndBASIC demos as a read-only drive.
 
 use async_trait::async_trait;
-use endbasic_std::storage::{Drive, Metadata};
+use endbasic_std::storage::{Drive, DriveFiles, Metadata};
 use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::str;
@@ -89,12 +89,12 @@ impl Drive for DemosDrive {
         Err(io::Error::new(io::ErrorKind::PermissionDenied, "The demos drive is read-only"))
     }
 
-    async fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
+    async fn enumerate(&self) -> io::Result<DriveFiles> {
         let mut entries = BTreeMap::new();
         for (name, (metadata, _content)) in self.demos.iter() {
             entries.insert(name.to_string(), metadata.clone());
         }
-        Ok(entries)
+        Ok(DriveFiles::new(entries))
     }
 
     async fn get(&self, name: &str) -> io::Result<String> {
@@ -153,11 +153,11 @@ mod tests {
     fn test_demos_drive_enumerate() {
         let drive = DemosDrive::default();
 
-        let entries = block_on(drive.enumerate()).unwrap();
-        assert!(entries.contains_key("GPIO.BAS"));
-        assert!(entries.contains_key("GUESS.BAS"));
-        assert!(entries.contains_key("HELLO.BAS"));
-        assert!(entries.contains_key("TOUR.BAS"));
+        let files = block_on(drive.enumerate()).unwrap();
+        assert!(files.dirents().contains_key("GPIO.BAS"));
+        assert!(files.dirents().contains_key("GUESS.BAS"));
+        assert!(files.dirents().contains_key("HELLO.BAS"));
+        assert!(files.dirents().contains_key("TOUR.BAS"));
     }
 
     #[test]

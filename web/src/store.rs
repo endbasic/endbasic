@@ -16,7 +16,7 @@
 //! Implementation of a drive that uses the browser's local storage.
 
 use async_trait::async_trait;
-use endbasic_std::storage::{Drive, Metadata};
+use endbasic_std::storage::{Drive, DriveFiles, Metadata};
 use std::collections::BTreeMap;
 use std::io;
 
@@ -245,7 +245,7 @@ impl Drive for WebDrive {
         }
     }
 
-    async fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
+    async fn enumerate(&self) -> io::Result<DriveFiles> {
         let mut entries = BTreeMap::new();
 
         let n = match self.storage.length() {
@@ -270,7 +270,7 @@ impl Drive for WebDrive {
             }
         }
 
-        Ok(entries)
+        Ok(DriveFiles::new(entries))
     }
 
     async fn get(&self, name: &str) -> io::Result<String> {
@@ -424,10 +424,10 @@ mod tests {
         webdrive.storage.set("first.bas", "ignore me").unwrap();
         webdrive.storage.set("endbasic-program:", "ignore me").unwrap();
 
-        let entries = webdrive.enumerate().await.unwrap();
-        assert_eq!(2, entries.len());
-        assert_eq!(&entry1.metadata(), entries.get("FIRST.BAS").unwrap());
-        assert_eq!(&entry2.metadata(), entries.get("SECOND SPACES.BAS").unwrap());
+        let files = webdrive.enumerate().await.unwrap();
+        assert_eq!(2, files.dirents().len());
+        assert_eq!(&entry1.metadata(), files.dirents().get("FIRST.BAS").unwrap());
+        assert_eq!(&entry2.metadata(), files.dirents().get("SECOND SPACES.BAS").unwrap());
     }
 
     #[wasm_bindgen_test]

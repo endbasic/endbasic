@@ -15,7 +15,7 @@
 
 //! In-memory implementation of the storage system.
 
-use crate::storage::{Drive, Metadata};
+use crate::storage::{Drive, DriveFiles, Metadata};
 use async_trait::async_trait;
 use std::collections::{BTreeMap, HashMap};
 use std::io;
@@ -36,14 +36,14 @@ impl Drive for InMemoryDrive {
         }
     }
 
-    async fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
+    async fn enumerate(&self) -> io::Result<DriveFiles> {
         let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875);
 
         let mut entries = BTreeMap::new();
         for (name, contents) in &self.programs {
             entries.insert(name.clone(), Metadata { date, length: contents.len() as u64 });
         }
-        Ok(entries)
+        Ok(DriveFiles::new(entries))
     }
 
     async fn get(&self, name: &str) -> io::Result<String> {

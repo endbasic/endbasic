@@ -15,7 +15,7 @@
 
 //! File system-based implementation of the storage system.
 
-use crate::storage::{Drive, Metadata};
+use crate::storage::{Drive, DriveFiles, Metadata};
 use async_trait::async_trait;
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
@@ -58,7 +58,7 @@ impl Drive for DirectoryDrive {
         fs::remove_file(path)
     }
 
-    async fn enumerate(&self) -> io::Result<BTreeMap<String, Metadata>> {
+    async fn enumerate(&self) -> io::Result<DriveFiles> {
         let mut entries = BTreeMap::default();
         match fs::read_dir(&self.dir) {
             Ok(dirents) => {
@@ -94,7 +94,7 @@ impl Drive for DirectoryDrive {
                 }
             }
         }
-        Ok(entries)
+        Ok(DriveFiles::new(entries))
     }
 
     async fn get(&self, name: &str) -> io::Result<String> {
@@ -189,7 +189,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
 
         let drive = DirectoryDrive::new(&dir.path()).unwrap();
-        assert!(block_on(drive.enumerate()).unwrap().is_empty());
+        assert!(block_on(drive.enumerate()).unwrap().dirents().is_empty());
     }
 
     #[test]
@@ -199,18 +199,18 @@ mod tests {
         write_file(&dir.path().join("some file.bas"), &["this is not empty"]);
 
         let drive = DirectoryDrive::new(&dir.path()).unwrap();
-        let entries = block_on(drive.enumerate()).unwrap();
-        assert_eq!(2, entries.len());
+        let files = block_on(drive.enumerate()).unwrap();
+        assert_eq!(2, files.dirents().len());
         let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875);
-        assert_eq!(&Metadata { date, length: 0 }, entries.get("empty.bas").unwrap());
-        assert_eq!(&Metadata { date, length: 18 }, entries.get("some file.bas").unwrap());
+        assert_eq!(&Metadata { date, length: 0 }, files.dirents().get("empty.bas").unwrap());
+        assert_eq!(&Metadata { date, length: 18 }, files.dirents().get("some file.bas").unwrap());
     }
 
     #[test]
     fn test_directorydrive_enumerate_treats_missing_dir_as_empty() {
         let dir = tempfile::tempdir().unwrap();
         let drive = DirectoryDrive::new(dir.path().join("does-not-exist")).unwrap();
-        assert!(block_on(drive.enumerate()).unwrap().is_empty());
+        assert!(block_on(drive.enumerate()).unwrap().dirents().is_empty());
     }
 
     #[test]
@@ -218,7 +218,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join("will-be-ignored")).unwrap();
         let drive = DirectoryDrive::new(&dir.path()).unwrap();
-        assert!(block_on(drive.enumerate()).unwrap().is_empty());
+        assert!(block_on(drive.enumerate()).unwrap().dirents().is_empty());
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -231,12 +231,12 @@ mod tests {
         unix_fs::symlink(&Path::new("some file.bas"), &dir.path().join("a link.bas")).unwrap();
 
         let drive = DirectoryDrive::new(&dir.path()).unwrap();
-        let entries = block_on(drive.enumerate()).unwrap();
-        assert_eq!(2, entries.len());
+        let files = block_on(drive.enumerate()).unwrap();
+        assert_eq!(2, files.dirents().len());
         let metadata =
             Metadata { date: time::OffsetDateTime::from_unix_timestamp(1_588_757_875), length: 18 };
-        assert_eq!(&metadata, entries.get("some file.bas").unwrap());
-        assert_eq!(&metadata, entries.get("a link.bas").unwrap());
+        assert_eq!(&metadata, files.dirents().get("some file.bas").unwrap());
+        assert_eq!(&metadata, files.dirents().get("a link.bas").unwrap());
     }
 
     #[test]

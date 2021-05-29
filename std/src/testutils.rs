@@ -512,7 +512,7 @@ impl<'a> Checker<'a> {
             let storage = self.tester.storage.borrow();
             for drive_name in storage.mounted().keys() {
                 let root = format!("{}:/", drive_name);
-                for (name, _) in block_on(storage.enumerate(&root)).unwrap() {
+                for name in block_on(storage.enumerate(&root)).unwrap().dirents().keys() {
                     let path = format!("{}{}", root, name);
                     let content = block_on(storage.get(&path)).unwrap();
                     files.insert(path, content);
