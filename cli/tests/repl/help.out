@@ -15,6 +15,7 @@ Output from HELP:
     Top-level help topics:
 
     >> Array functions
+    >> Cloud access
     >> Console
     >> File system
     >> Hardware interface
@@ -33,6 +34,25 @@ Output from HELP ARRAY:
 
     >> LBOUND%    Returns the lower bound for the given dimension of the array.
     >> UBOUND%    Returns the upper bound for the given dimension of the array.
+
+    Type HELP followed by the name of a symbol for details.
+
+Output from HELP CLOUD:
+
+    Cloud access
+
+    The EndBASIC service, should you choose to create an account in, is a
+    cloud service that provides online file sharing across users of
+    EndBASIC.  The commands below allow you interact with this service once
+    you have created an account.
+
+    During account creation time, you are assigned a unique, persistent
+    drive in which you can store files privately.  You can later choose to
+    share individual files with the public or with specific individuals, at
+    which point those people will be able to see them by mounting your
+    drive.
+
+    >> LOGIN    Logs into the user's account.
 
     Type HELP followed by the name of a symbol for details.
 
@@ -378,6 +398,16 @@ Output from HELP LOCATE:
     LOCATE row%, column%
 
     Moves the cursor to the given position.
+
+Output from HELP LOGIN:
+
+    LOGIN username$ [password$]
+
+    Logs into the user's account.
+
+    On a successful login, this mounts your personal drive under the
+    CLOUD:/ location, which you can access with any other file-related
+    commands.
 
 Output from HELP MOUNT:
 
