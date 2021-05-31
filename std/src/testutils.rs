@@ -18,6 +18,7 @@
 use crate::console::{self, ClearType, Console, Key, Position};
 use crate::gpio;
 use crate::program::Program;
+use crate::service::{AccessToken, LoginRequest, LoginResult, Service};
 use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
@@ -115,10 +116,9 @@ impl MockConsole {
     pub fn set_size(&mut self, size: Position) {
         self.size = size;
     }
-}
 
-impl Drop for MockConsole {
-    fn drop(&mut self) {
+    /// Ensures that all prerecorded input characters were consumed.
+    fn verify_all_used(&mut self) {
         assert!(
             self.golden_in.is_empty(),
             "Not all golden input chars were consumed; {} left",
@@ -220,12 +220,76 @@ impl Program for RecordedProgram {
     }
 }
 
+/// Service client implementation that allows specifying expectations on requests and yields the
+/// responses previously recorded into it.
+#[derive(Default)]
+pub struct MockService {
+    access_token: Option<AccessToken>,
+
+    mock_login: VecDeque<(LoginRequest, io::Result<LoginResult>)>,
+}
+
+impl MockService {
+    /// The valid username that the mock service recognizes.
+    pub(crate) const USERNAME: &'static str = "mock-username";
+
+    /// The valid password that the mock service recognizes.
+    pub(crate) const PASSWORD: &'static str = "mock-password";
+
+    /// Records the behavior of an upcoming login operation with a request that looks like
+    /// `exp_request` and that returns `result`.
+    #[cfg(test)]
+    pub(crate) fn add_mock_login(
+        &mut self,
+        exp_request: LoginRequest,
+        result: io::Result<LoginResult>,
+    ) {
+        self.mock_login.push_back((exp_request, result));
+    }
+
+    /// Ensures that all requests and responses have been consumed.
+    fn verify_all_used(&mut self) {
+        assert!(self.mock_login.is_empty(), "Mock requests not fully consumed");
+    }
+}
+
+#[async_trait(?Send)]
+impl Service for MockService {
+    async fn authenticate(&mut self, username: &str, password: &str) -> io::Result<AccessToken> {
+        assert!(self.access_token.is_none(), "authenticate called more than once");
+
+        if username != MockService::USERNAME {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "Unknown user"));
+        }
+        if password != MockService::PASSWORD {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "Invalid password"));
+        }
+
+        let access_token = format!("{}", rand::random::<u64>());
+        self.access_token = Some(AccessToken::new(access_token.clone()));
+        Ok(AccessToken::new(access_token))
+    }
+
+    async fn login(
+        &mut self,
+        access_token: &AccessToken,
+        request: &LoginRequest,
+    ) -> io::Result<LoginResult> {
+        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
+
+        let mock = self.mock_login.pop_front().expect("No mock requests available");
+        assert_eq!(&mock.0, request);
+        mock.1
+    }
+}
+
 /// Builder pattern to prepare an EndBASIC machine for testing purposes.
 #[must_use]
 pub struct Tester {
     console: Rc<RefCell<MockConsole>>,
     storage: Rc<RefCell<Storage>>,
     program: Rc<RefCell<RecordedProgram>>,
+    service: Rc<RefCell<MockService>>,
     machine: Machine,
 }
 
@@ -234,6 +298,7 @@ impl Default for Tester {
     fn default() -> Self {
         let console = Rc::from(RefCell::from(MockConsole::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
+        let service = Rc::from(RefCell::from(MockService::default()));
 
         // Default to the pins set that always returns errors.  We could have implemented a set of
         // fake pins here to track GPIO state changes in a nicer way, similar to how we track all
@@ -246,7 +311,8 @@ impl Default for Tester {
             .with_console(console.clone())
             .with_gpio_pins(gpio_pins)
             .make_interactive()
-            .with_program(program.clone());
+            .with_program(program.clone())
+            .with_service(service.clone());
 
         // Grab access to the machine's storage subsystem before we lose track of it, as we will
         // need this to check its state.
@@ -254,7 +320,7 @@ impl Default for Tester {
 
         let machine = builder.build().unwrap();
 
-        Self { console, storage, program, machine }
+        Self { console, storage, program, service, machine }
     }
 }
 
@@ -264,10 +330,11 @@ impl Tester {
         let console = Rc::from(RefCell::from(MockConsole::default()));
         let storage = Rc::from(RefCell::from(Storage::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
+        let service = Rc::from(RefCell::from(MockService::default()));
 
         let machine = Machine::default();
 
-        Self { console, storage, program, machine }
+        Self { console, storage, program, service, machine }
     }
 
     /// Registers the given builtin command into the machine, which must not yet be registered.
@@ -318,6 +385,14 @@ impl Tester {
     /// externally-instantiated commands into the testing features.
     pub fn get_storage(&self) -> Rc<RefCell<Storage>> {
         self.storage.clone()
+    }
+
+    /// Gets the mock service client from the tester.
+    ///
+    /// This method should generally not be used.  Its primary utility is to hook
+    /// externally-instantiated commands into the testing features.
+    pub fn get_service(&self) -> Rc<RefCell<MockService>> {
+        self.service.clone()
     }
 
     /// Sets the initial contents of the recorded program to `text`.  Can only be called once and
@@ -526,6 +601,9 @@ impl<'a> Checker<'a> {
         assert_eq!(self.exp_output, self.tester.console.borrow().captured_out());
         assert_eq!(self.exp_program, self.tester.program.borrow().text());
         assert_eq!(self.exp_drives, drive_contents);
+
+        self.tester.console.borrow_mut().verify_all_used();
+        self.tester.service.borrow_mut().verify_all_used();
     }
 }
 

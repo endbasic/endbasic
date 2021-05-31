@@ -16,6 +16,9 @@ not adhere to semantic versioning until 1.0.0.**
     files; and `LOCAL:`, which points to local storage (either a local directory
     or to the web browser's local storage).
 
+*   Added the `LOGIN` command to authenticate against the EndBASIC service and
+    to mount the user's own drive.
+
 *   Added the `CD` command to change the current drive and the `PWD` command to
     print the current location.
 
