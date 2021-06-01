@@ -18,7 +18,10 @@
 use crate::console::{self, ClearType, Console, Key, Position};
 use crate::gpio;
 use crate::program::Program;
-use crate::service::{AccessToken, LoginRequest, LoginResult, Service};
+use crate::service::{
+    AccessToken, GetFileRequest, GetFileResponse, GetFilesResponse, LoginRequest, LoginResult,
+    PatchFileRequest, Service,
+};
 use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
@@ -227,6 +230,10 @@ pub struct MockService {
     access_token: Option<AccessToken>,
 
     mock_login: VecDeque<(LoginRequest, io::Result<LoginResult>)>,
+    mock_get_files: VecDeque<(String, io::Result<GetFilesResponse>)>,
+    mock_get_file: VecDeque<((String, String, GetFileRequest), io::Result<GetFileResponse>)>,
+    mock_patch_file: VecDeque<((String, String, PatchFileRequest), io::Result<()>)>,
+    mock_delete_file: VecDeque<((String, String), io::Result<()>)>,
 }
 
 impl MockService {
@@ -235,6 +242,13 @@ impl MockService {
 
     /// The valid password that the mock service recognizes.
     pub(crate) const PASSWORD: &'static str = "mock-password";
+
+    /// Performs an explicit authentication for those tests that don't go through the `LOGIN`
+    /// command logic.
+    #[cfg(test)]
+    pub(crate) async fn do_authenticate(&mut self) -> AccessToken {
+        self.authenticate(MockService::USERNAME, MockService::PASSWORD).await.unwrap()
+    }
 
     /// Records the behavior of an upcoming login operation with a request that looks like
     /// `exp_request` and that returns `result`.
@@ -247,9 +261,66 @@ impl MockService {
         self.mock_login.push_back((exp_request, result));
     }
 
+    /// Records the behavior of an upcoming "get files" operation for `username` and that returns
+    /// `result`.
+    #[cfg(test)]
+    pub(crate) fn add_mock_get_files(
+        &mut self,
+        username: &str,
+        result: io::Result<GetFilesResponse>,
+    ) {
+        let exp_request = username.to_owned();
+        self.mock_get_files.push_back((exp_request, result));
+    }
+
+    /// Records the behavior of an upcoming "get file" operation for the `username`/`filename`
+    /// pair with a request that looks like `exp_request` and that returns `result`.
+    #[cfg(test)]
+    pub(crate) fn add_mock_get_file(
+        &mut self,
+        username: &str,
+        filename: &str,
+        exp_request: GetFileRequest,
+        result: io::Result<GetFileResponse>,
+    ) {
+        let exp_request = (username.to_owned(), filename.to_owned(), exp_request);
+        self.mock_get_file.push_back((exp_request, result));
+    }
+
+    /// Records the behavior of an upcoming "patch file" operation for the `username`/`filename`
+    /// pair with a request that looks like `exp_request` and that returns `result`.
+    #[cfg(test)]
+    pub(crate) fn add_mock_patch_file(
+        &mut self,
+        username: &str,
+        filename: &str,
+        exp_request: PatchFileRequest,
+        result: io::Result<()>,
+    ) {
+        let exp_request = (username.to_owned(), filename.to_owned(), exp_request);
+        self.mock_patch_file.push_back((exp_request, result));
+    }
+
+    /// Records the behavior of an upcoming "delete file" operation for the `username`/`filename`
+    /// pair and that returns `result`.
+    #[cfg(test)]
+    pub(crate) fn add_mock_delete_file(
+        &mut self,
+        username: &str,
+        filename: &str,
+        result: io::Result<()>,
+    ) {
+        let exp_request = (username.to_owned(), filename.to_owned());
+        self.mock_delete_file.push_back((exp_request, result));
+    }
+
     /// Ensures that all requests and responses have been consumed.
-    fn verify_all_used(&mut self) {
+    pub(crate) fn verify_all_used(&mut self) {
         assert!(self.mock_login.is_empty(), "Mock requests not fully consumed");
+        assert!(self.mock_get_files.is_empty(), "Mock requests not fully consumed");
+        assert!(self.mock_get_file.is_empty(), "Mock requests not fully consumed");
+        assert!(self.mock_patch_file.is_empty(), "Mock requests not fully consumed");
+        assert!(self.mock_delete_file.is_empty(), "Mock requests not fully consumed");
     }
 }
 
@@ -279,6 +350,64 @@ impl Service for MockService {
 
         let mock = self.mock_login.pop_front().expect("No mock requests available");
         assert_eq!(&mock.0, request);
+        mock.1
+    }
+
+    async fn get_files(
+        &mut self,
+        access_token: &AccessToken,
+        username: &str,
+    ) -> io::Result<GetFilesResponse> {
+        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
+
+        let mock = self.mock_get_files.pop_front().expect("No mock requests available");
+        assert_eq!(&mock.0, username);
+        mock.1
+    }
+
+    async fn get_file(
+        &mut self,
+        access_token: &AccessToken,
+        username: &str,
+        filename: &str,
+        request: &GetFileRequest,
+    ) -> io::Result<GetFileResponse> {
+        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
+
+        let mock = self.mock_get_file.pop_front().expect("No mock requests available");
+        assert_eq!(&mock.0 .0, username);
+        assert_eq!(&mock.0 .1, filename);
+        assert_eq!(&mock.0 .2, request);
+        mock.1
+    }
+
+    async fn patch_file(
+        &mut self,
+        access_token: &AccessToken,
+        username: &str,
+        filename: &str,
+        request: &PatchFileRequest,
+    ) -> io::Result<()> {
+        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
+
+        let mock = self.mock_patch_file.pop_front().expect("No mock requests available");
+        assert_eq!(&mock.0 .0, username);
+        assert_eq!(&mock.0 .1, filename);
+        assert_eq!(&mock.0 .2, request);
+        mock.1
+    }
+
+    async fn delete_file(
+        &mut self,
+        access_token: &AccessToken,
+        username: &str,
+        filename: &str,
+    ) -> io::Result<()> {
+        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
+
+        let mock = self.mock_delete_file.pop_front().expect("No mock requests available");
+        assert_eq!(&mock.0 .0, username);
+        assert_eq!(&mock.0 .1, filename);
         mock.1
     }
 }
@@ -586,6 +715,14 @@ impl<'a> Checker<'a> {
             let mut files = HashMap::new();
             let storage = self.tester.storage.borrow();
             for drive_name in storage.mounted().keys() {
+                if *drive_name == "CLOUD" {
+                    // TODO(jmmv): Verifying the cloud drive is hard because we would need to mock
+                    // out the requests issued by the checks below.  Ignore it for now.  Note that
+                    // we also would need a way to tell whether a drive is cloud-based or not
+                    // because there can be more than one.
+                    continue;
+                }
+
                 let root = format!("{}:/", drive_name);
                 for name in block_on(storage.enumerate(&root)).unwrap().dirents().keys() {
                     let path = format!("{}{}", root, name);

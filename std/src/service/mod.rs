@@ -15,6 +15,7 @@
 
 //! EndBASIC service client.
 
+use crate::storage::DiskSpace;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -22,12 +23,15 @@ use std::io;
 
 mod cloud;
 pub(crate) use cloud::CloudService;
+mod drive;
+pub(crate) use drive::{cloud_drive_factory, CloudDrive};
 mod cmds;
 pub(crate) use cmds::add_all;
 
 /// An opaque access token obtained during authentication and used for all subsequent requests
 /// against the server.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 pub struct AccessToken(String);
 
 impl AccessToken {
@@ -68,6 +72,89 @@ pub struct LoginResponse {
     motd: Vec<String>,
 }
 
+/// Representation of a single directory entry as returned by the server.
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(Debug, Serialize))]
+pub struct DirectoryEntry {
+    filename: String,
+    mtime: u64,
+    length: u64,
+}
+
+/// Representation of a directory enumeration response.
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(Debug, Serialize))]
+pub struct GetFilesResponse {
+    files: Vec<DirectoryEntry>,
+    disk_quota: Option<DiskSpace>,
+    disk_free: Option<DiskSpace>,
+}
+
+/// Representation of a file query.
+#[derive(Debug, Default, PartialEq, Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
+pub struct GetFileRequest {
+    get_content: bool,
+    get_readers: bool,
+}
+
+impl GetFileRequest {
+    /// Requests the file's content from the server.
+    fn with_get_content(mut self) -> Self {
+        self.get_content = true;
+        self
+    }
+}
+
+/// Representation of the response to a file query.
+#[derive(Default, Deserialize)]
+#[cfg_attr(test, derive(Debug, PartialEq, Serialize))]
+pub struct GetFileResponse {
+    /// Base64-encoded file content.
+    content: Option<String>,
+
+    #[serde(rename = "readers")]
+    _readers: Option<Vec<String>>,
+}
+
+impl GetFileResponse {
+    /// Processes the content of the response, ensuring it is valid base64.
+    fn decoded_content(&self) -> io::Result<Option<Vec<u8>>> {
+        match self.content.as_ref() {
+            Some(content) => match base64::decode(content) {
+                Ok(content) => Ok(Some(content)),
+                Err(e) => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("File content is not properly base64-encoded: {}", e),
+                )),
+            },
+            None => Ok(None),
+        }
+    }
+}
+
+/// Representation of an atomic file update.
+#[derive(Debug, Default, PartialEq, Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
+pub struct PatchFileRequest {
+    /// Base64-encoded file content.
+    content: Option<String>,
+
+    #[serde(rename = "remove_readers")]
+    _remove_readers: Option<Vec<String>>,
+
+    #[serde(rename = "add_readers")]
+    _add_readers: Option<Vec<String>>,
+}
+
+impl PatchFileRequest {
+    /// Updates the file's content with `content`.  The content is automatically base64-encoded.
+    fn with_content<C: AsRef<[u8]>>(mut self, content: C) -> Self {
+        self.content = Some(base64::encode(content));
+        self
+    }
+}
+
 /// Response to a login request, which varies in type depending on whether the login completed
 /// successfully or failed due to insufficient information.
 pub type LoginResult = Result<LoginResponse, ErrorResponse>;
@@ -85,4 +172,41 @@ pub trait Service {
         access_token: &AccessToken,
         request: &LoginRequest,
     ) -> io::Result<LoginResult>;
+
+    /// Sends a request to the server to obtain the list of files owned by `username` with a
+    /// previously-acquired `access_token`.
+    async fn get_files(
+        &mut self,
+        access_token: &AccessToken,
+        username: &str,
+    ) -> io::Result<GetFilesResponse>;
+
+    /// Sends a request to the server to obtain the metadata and/or the contents of `filename` owned
+    /// by `username` as specified in `request` with a previously-acquired `access_token`.
+    async fn get_file(
+        &mut self,
+        access_token: &AccessToken,
+        username: &str,
+        filename: &str,
+        request: &GetFileRequest,
+    ) -> io::Result<GetFileResponse>;
+
+    /// Sends a request to the server to update the metadata and/or the contents of `filename` owned
+    /// by `username` as specified in `request` with a previously-acquired `access_token`.
+    async fn patch_file(
+        &mut self,
+        access_token: &AccessToken,
+        username: &str,
+        filename: &str,
+        request: &PatchFileRequest,
+    ) -> io::Result<()>;
+
+    /// Sends a request to the server to delete `filename` owned by `username` with a
+    /// previously-acquired `access_token`.
+    async fn delete_file(
+        &mut self,
+        access_token: &AccessToken,
+        username: &str,
+        filename: &str,
+    ) -> io::Result<()>;
 }

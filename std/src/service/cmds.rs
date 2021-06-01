@@ -164,9 +164,11 @@ access with any other file-related commands.",
             };
         }
 
-        // TODO(jmmv): Replace with the actual mount drive once we have it.  At this point, this is
-        // only here as a checkpoint for tests.
-        self.storage.borrow_mut().mount("CLOUD", "memory://")?;
+        self.storage.borrow_mut().register_scheme("cloud", cloud_drive_factory);
+
+        let drive = CloudDrive::new(self.service.clone(), access_token, username.clone());
+        let mut storage = self.storage.borrow_mut();
+        storage.attach("CLOUD", &format!("cloud://{}", username), Box::from(drive))?;
 
         Ok(())
     }
@@ -179,6 +181,15 @@ impl Command for LoginCommand {
     }
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+        if self.storage.borrow().has_scheme("cloud") {
+            // TODO(jmmv): To support authenticating more than once in one session, we have to
+            // either refresh the access tokens of any mounted drive or unmount them all.  Plus we
+            // have to avoid re-registering or re-creating the "cloud" scheme.
+            return Err(CallError::InternalError(
+                "Support for calling LOGIN twice in the same session is not implemented".to_owned(),
+            ));
+        }
+
         let (username, password) = match args {
             [(Some(username), ArgSep::End)] => match username.eval(machine.get_mut_symbols())? {
                 Value::Text(username) => {
@@ -386,6 +397,24 @@ mod tests {
             .expect_err("Invalid password")
             .check();
         assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
+    }
+
+    #[test]
+    fn test_login_twice_not_supported() {
+        let mut t = Tester::default();
+        t.get_service().borrow_mut().add_mock_login(
+            LoginRequest { data: HashMap::default() },
+            Ok(Ok(LoginResponse { username: MockService::USERNAME.to_owned(), motd: vec![] })),
+        );
+        assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
+        t.run(format!(
+            r#"LOGIN "{}", "{}": LOGIN "a", "b""#,
+            MockService::USERNAME,
+            MockService::PASSWORD
+        ))
+        .expect_err("Support for calling LOGIN twice in the same session is not implemented")
+        .check();
+        assert!(t.get_storage().borrow().mounted().contains_key("CLOUD"));
     }
 
     #[test]
