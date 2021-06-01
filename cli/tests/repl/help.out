@@ -52,6 +52,11 @@ Output from HELP CLOUD:
     which point those people will be able to see them by mounting your
     drive.
 
+    Once logged in, the cloud:// file system scheme becomes available.  You
+    can use it to mount other people's drives by specifying their username
+    as the path.  For example, a command like the following would mount
+    user-123's shared files as a new drive X: MOUNT "X", "cloud://user-123"
+
     >> LOGIN    Logs into the user's account.
 
     Type HELP followed by the name of a symbol for details.
@@ -407,7 +412,8 @@ Output from HELP LOGIN:
 
     On a successful login, this mounts your personal drive under the
     CLOUD:/ location, which you can access with any other file-related
-    commands.
+    commands.  Using the cloud:// file system scheme, you can mount other
+    people's drives with the MOUNT command.
 
 Output from HELP MOUNT:
 

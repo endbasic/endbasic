@@ -24,14 +24,13 @@ use std::io;
 mod cloud;
 pub(crate) use cloud::CloudService;
 mod drive;
-pub(crate) use drive::{CloudDrive, CloudDriveFactory};
+pub(crate) use drive::CloudDriveFactory;
 mod cmds;
 pub(crate) use cmds::add_all;
 
 /// An opaque access token obtained during authentication and used for all subsequent requests
 /// against the server.
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AccessToken(String);
 
 impl AccessToken {

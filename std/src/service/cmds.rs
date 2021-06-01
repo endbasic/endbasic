@@ -36,7 +36,10 @@ online file sharing across users of EndBASIC.  The commands below allow you inte
 service once you have created an account.
 During account creation time, you are assigned a unique, persistent drive in which you can store \
 files privately.  You can later choose to share individual files with the public or with specific \
-individuals, at which point those people will be able to see them by mounting your drive.";
+individuals, at which point those people will be able to see them by mounting your drive.
+Once logged in, the cloud:// file system scheme becomes available.  You can use it to mount other \
+people's drives by specifying their username as the path.  For example, a command like the \
+following would mount user-123's shared files as a new drive X: MOUNT \"X\", \"cloud://user-123\"";
 
 /// The `LOGIN` command.
 pub struct LoginCommand {
@@ -60,7 +63,8 @@ impl LoginCommand {
                 .with_description(
                     "Logs into the user's account.
 On a successful login, this mounts your personal drive under the CLOUD:/ location, which you can \
-access with any other file-related commands.",
+access with any other file-related commands.  Using the cloud:// file system scheme, you can mount \
+other people's drives with the MOUNT command.",
                 )
                 .build(),
             service,
@@ -164,11 +168,12 @@ access with any other file-related commands.",
             };
         }
 
-        self.storage.borrow_mut().register_scheme("cloud", Box::from(CloudDriveFactory::default()));
-
-        let drive = CloudDrive::new(self.service.clone(), access_token, username.clone());
         let mut storage = self.storage.borrow_mut();
-        storage.attach("CLOUD", &format!("cloud://{}", username), Box::from(drive))?;
+        storage.register_scheme(
+            "cloud",
+            Box::from(CloudDriveFactory::new(self.service.clone(), access_token)),
+        );
+        storage.mount("CLOUD", &format!("cloud://{}", username))?;
 
         Ok(())
     }

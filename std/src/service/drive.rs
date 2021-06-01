@@ -25,7 +25,7 @@ use std::rc::Rc;
 use std::str;
 
 /// A drive backed by a remote EndBASIC service.
-pub struct CloudDrive {
+struct CloudDrive {
     service: Rc<RefCell<dyn Service>>,
     access_token: AccessToken,
     username: String,
@@ -34,7 +34,7 @@ pub struct CloudDrive {
 impl CloudDrive {
     /// Creates a new cloud drive against `service` to access the files owned by `username` and
     /// using the `access_token` for authorization.
-    pub fn new<S: Into<String>>(
+    fn new<S: Into<String>>(
         service: Rc<RefCell<dyn Service>>,
         access_token: AccessToken,
         username: S,
@@ -93,15 +93,32 @@ impl Drive for CloudDrive {
 }
 
 /// Factory for cloud drives.
-#[derive(Default)]
-pub struct CloudDriveFactory {}
+pub struct CloudDriveFactory {
+    service: Rc<RefCell<dyn Service>>,
+    access_token: AccessToken,
+}
+
+impl CloudDriveFactory {
+    /// Creates a new cloud drive factory that uses `service` and `access_token` to connect to the
+    /// remote service.
+    pub(crate) fn new(service: Rc<RefCell<dyn Service>>, access_token: AccessToken) -> Self {
+        Self { service, access_token }
+    }
+}
 
 impl DriveFactory for CloudDriveFactory {
-    fn create(&self, _target: &str) -> io::Result<Box<dyn Drive>> {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            "Mounting other people's drives is not yet supported",
-        ))
+    fn create(&self, target: &str) -> io::Result<Box<dyn Drive>> {
+        if !target.is_empty() {
+            // TODO(jmmv): It might be nice to issue a "get files" request here and validate that
+            // the drive is actually accessible to the caller user before mounting it, but doing
+            // so requires turning this trait into async.
+            Ok(Box::from(CloudDrive::new(self.service.clone(), self.access_token.clone(), target)))
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Must specify a username to mount a cloud-backed drive",
+            ))
+        }
     }
 }
 
@@ -241,5 +258,63 @@ mod tests {
         let service = Rc::from(RefCell::from(MockService::default()));
         let drive = CloudDrive::new(service, AccessToken::new(""), "");
         assert!(drive.system_path("foo").is_none());
+    }
+
+    #[test]
+    fn test_login_and_mount_other_user() {
+        let mut t = Tester::default();
+        t.get_service().borrow_mut().add_mock_login(
+            LoginRequest { data: HashMap::default() },
+            Ok(Ok(LoginResponse { username: MockService::USERNAME.to_owned(), motd: vec![] })),
+        );
+        t.get_service().borrow_mut().add_mock_get_files(
+            MockService::USERNAME,
+            Ok(GetFilesResponse {
+                files: vec![DirectoryEntry {
+                    filename: "one".to_owned(),
+                    mtime: 1622556024,
+                    length: 15,
+                }],
+                disk_quota: Some(DiskSpace::new(10000, 100)),
+                disk_free: Some(DiskSpace::new(123, 45)),
+            }),
+        );
+        t.get_service().borrow_mut().add_mock_get_files(
+            "user2",
+            Ok(GetFilesResponse {
+                files: vec![DirectoryEntry {
+                    filename: "two".to_owned(),
+                    mtime: 1622556024,
+                    length: 17,
+                }],
+                disk_quota: None,
+                disk_free: None,
+            }),
+        );
+        t.run(format!(
+            r#"LOGIN "{}", "{}": MOUNT "x", "cloud://user2": DIR "cloud:/": DIR "x:/""#,
+            MockService::USERNAME,
+            MockService::PASSWORD
+        ))
+        .expect_prints([
+            "",
+            "    Directory of CLOUD:/",
+            "",
+            "    Modified              Size    Name",
+            "    2021-06-01 14:00        15    one",
+            "",
+            "    1 file(s), 15 bytes",
+            "    123 of 10000 bytes free",
+            "",
+            "",
+            "    Directory of X:/",
+            "",
+            "    Modified              Size    Name",
+            "    2021-06-01 14:00        17    two",
+            "",
+            "    1 file(s), 17 bytes",
+            "",
+        ])
+        .check();
     }
 }

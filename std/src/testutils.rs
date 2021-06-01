@@ -359,7 +359,6 @@ impl Service for MockService {
         username: &str,
     ) -> io::Result<GetFilesResponse> {
         assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
-
         let mock = self.mock_get_files.pop_front().expect("No mock requests available");
         assert_eq!(&mock.0, username);
         mock.1
@@ -714,12 +713,10 @@ impl<'a> Checker<'a> {
         let drive_contents = {
             let mut files = HashMap::new();
             let storage = self.tester.storage.borrow();
-            for drive_name in storage.mounted().keys() {
-                if *drive_name == "CLOUD" {
-                    // TODO(jmmv): Verifying the cloud drive is hard because we would need to mock
-                    // out the requests issued by the checks below.  Ignore it for now.  Note that
-                    // we also would need a way to tell whether a drive is cloud-based or not
-                    // because there can be more than one.
+            for (drive_name, target) in storage.mounted().iter() {
+                if target.starts_with("cloud://") {
+                    // TODO(jmmv): Verifying the cloud drives is hard because we would need to mock
+                    // out the requests issued by the checks below.  Ignore them for now.
                     continue;
                 }
 
