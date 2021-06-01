@@ -16,6 +16,9 @@
 //! Storage-related abstractions and commands.
 
 use async_trait::async_trait;
+use serde::Deserialize;
+#[cfg(test)]
+use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{self};
 use std::io;
@@ -40,7 +43,8 @@ pub struct Metadata {
 }
 
 /// Representation of some amount of disk space.  Can be used to express both quotas and usage.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct DiskSpace {
     bytes: u64,
     files: u64,
@@ -293,6 +297,11 @@ impl Storage {
         assert!(previous.is_none(), "Tried to register {} twice", scheme);
     }
 
+    /// Returns true if the `scheme` is already registered.
+    pub(crate) fn has_scheme(&self, scheme: &str) -> bool {
+        self.factories.contains_key(scheme)
+    }
+
     /// Converts a location, which needn't exist, to its canonical form.
     pub fn make_canonical(&self, raw_location: &str) -> io::Result<String> {
         let mut location = Location::new(raw_location)?;
@@ -305,7 +314,12 @@ impl Storage {
     /// Attaches a new `drive` with `name`, which was instantiated with `uri`.
     ///
     /// The `name` must be valid and must not yet have been registered.
-    fn attach(&mut self, name: &str, uri: &str, drive: Box<dyn Drive>) -> io::Result<()> {
+    pub(crate) fn attach(
+        &mut self,
+        name: &str,
+        uri: &str,
+        drive: Box<dyn Drive>,
+    ) -> io::Result<()> {
         let key = DriveKey::new(name)?;
         if self.drives.contains_key(&key) {
             return Err(io::Error::new(
@@ -671,6 +685,14 @@ mod tests {
                 storage.attach("New", "z://", Box::from(InMemoryDrive::default())).unwrap_err()
             )
         );
+    }
+
+    #[test]
+    fn test_storage_has_scheme() {
+        let mut storage = Storage::default();
+        storage.register_scheme("fake", in_memory_drive_factory);
+        assert!(storage.has_scheme("fake"));
+        assert!(!storage.has_scheme("fakes"));
     }
 
     #[test]

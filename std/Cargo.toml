@@ -17,6 +17,7 @@ rpi = ["rppal"]
 
 [dependencies]
 async-trait = "0.1"
+base64 = "0.13"
 bytes = "1.0"
 crossterm = { version = "0.18", optional = true }
 futures-lite = "1.1"
