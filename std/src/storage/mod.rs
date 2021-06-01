@@ -317,12 +317,7 @@ impl Storage {
     /// Attaches a new `drive` with `name`, which was instantiated with `uri`.
     ///
     /// The `name` must be valid and must not yet have been registered.
-    pub(crate) fn attach(
-        &mut self,
-        name: &str,
-        uri: &str,
-        drive: Box<dyn Drive>,
-    ) -> io::Result<()> {
+    fn attach(&mut self, name: &str, uri: &str, drive: Box<dyn Drive>) -> io::Result<()> {
         let key = DriveKey::new(name)?;
         if self.drives.contains_key(&key) {
             return Err(io::Error::new(
