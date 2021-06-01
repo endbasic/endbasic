@@ -108,9 +108,12 @@ fn get_local_drive_spec(flag: Option<String>) -> Result<String> {
 /// This instantiates non-optional drives, such as `MEMORY:` and `DEMOS:`, maps `LOCAL` the
 /// location given in `local_drive_spec`.
 pub fn setup_storage(storage: &mut Storage, local_drive_spec: &str) -> io::Result<()> {
-    storage.register_scheme("demos", endbasic::demos::demos_drive_factory);
+    storage.register_scheme("demos", Box::from(endbasic::demos::DemoDriveFactory::default()));
     storage.mount("demos", "demos://").expect("Demos drive shouldn't fail to mount");
-    storage.register_scheme("file", endbasic_std::storage::directory_drive_factory);
+    storage.register_scheme(
+        "file",
+        Box::from(endbasic_std::storage::DirectoryDriveFactory::default()),
+    );
     storage.mount("local", local_drive_spec)?;
     storage.cd("local:").expect("Local drive was just registered");
     Ok(())

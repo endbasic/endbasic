@@ -24,7 +24,7 @@ use std::io;
 mod cloud;
 pub(crate) use cloud::CloudService;
 mod drive;
-pub(crate) use drive::{cloud_drive_factory, CloudDrive};
+pub(crate) use drive::{CloudDrive, CloudDriveFactory};
 mod cmds;
 pub(crate) use cmds::add_all;
 

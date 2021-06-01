@@ -15,7 +15,7 @@
 
 //! File system-based implementation of the storage system.
 
-use crate::storage::{Drive, DriveFiles, Metadata};
+use crate::storage::{Drive, DriveFactory, DriveFiles, Metadata};
 use async_trait::async_trait;
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
@@ -118,15 +118,20 @@ impl Drive for DirectoryDrive {
     }
 }
 
-/// Instantiates a directory drive backed by `target`.
-pub fn directory_drive_factory(target: &str) -> io::Result<Box<dyn Drive>> {
-    if !target.is_empty() {
-        Ok(Box::from(DirectoryDrive::new(target)?))
-    } else {
-        Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Must specify a directory mount an disk drive",
-        ))
+/// Factory for directory-backed drives.
+#[derive(Default)]
+pub struct DirectoryDriveFactory {}
+
+impl DriveFactory for DirectoryDriveFactory {
+    fn create(&self, target: &str) -> io::Result<Box<dyn Drive>> {
+        if !target.is_empty() {
+            Ok(Box::from(DirectoryDrive::new(target)?))
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Must specify a directory to mount a disk-backed drive",
+            ))
+        }
     }
 }
 

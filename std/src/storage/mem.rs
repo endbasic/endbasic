@@ -15,7 +15,7 @@
 
 //! In-memory implementation of the storage system.
 
-use crate::storage::{DiskSpace, Drive, DriveFiles, Metadata};
+use crate::storage::{DiskSpace, Drive, DriveFactory, DriveFiles, Metadata};
 use async_trait::async_trait;
 use std::collections::{BTreeMap, HashMap};
 use std::io;
@@ -65,15 +65,20 @@ impl Drive for InMemoryDrive {
     }
 }
 
-/// Instantiates an in-memory drive.
-pub fn in_memory_drive_factory(target: &str) -> io::Result<Box<dyn Drive>> {
-    if target.is_empty() {
-        Ok(Box::from(InMemoryDrive::default()))
-    } else {
-        Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Cannot specify a path to mount an in-memory drive",
-        ))
+/// Factory for in-memory drives.
+#[derive(Default)]
+pub struct InMemoryDriveFactory {}
+
+impl DriveFactory for InMemoryDriveFactory {
+    fn create(&self, target: &str) -> io::Result<Box<dyn Drive>> {
+        if target.is_empty() {
+            Ok(Box::from(InMemoryDrive::default()))
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Cannot specify a path to mount an in-memory drive",
+            ))
+        }
     }
 }
 

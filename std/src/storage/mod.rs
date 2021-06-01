@@ -237,8 +237,11 @@ impl fmt::Display for Location {
     }
 }
 
-/// Function to instantiate a drive given a mount target.
-type DriveFactory = fn(&str) -> io::Result<Box<dyn Drive>>;
+/// Trait to instantiate drives of a given type.
+pub trait DriveFactory {
+    /// Creates a new drive for `target`.
+    fn create(&self, target: &str) -> io::Result<Box<dyn Drive>>;
+}
 
 /// Given a mount URI, validates it and returns the `(scheme, path)` pair.
 fn split_uri(uri: &str) -> io::Result<(&str, &str)> {
@@ -263,7 +266,7 @@ struct MountedDrive {
 /// for the `Drive` type.
 pub struct Storage {
     /// Mapping of target scheme names to drive factories.
-    factories: HashMap<String, DriveFactory>,
+    factories: HashMap<String, Box<dyn DriveFactory>>,
 
     /// Mapping of drive names to drives.
     drives: HashMap<DriveKey, MountedDrive>,
@@ -275,8 +278,8 @@ pub struct Storage {
 impl Default for Storage {
     /// Creates a new storage subsytem backed by an in-memory drive.
     fn default() -> Self {
-        let mut factories: HashMap<String, DriveFactory> = HashMap::default();
-        factories.insert("memory".to_owned(), in_memory_drive_factory);
+        let mut factories: HashMap<String, Box<dyn DriveFactory>> = HashMap::default();
+        factories.insert("memory".to_owned(), Box::from(InMemoryDriveFactory::default()));
 
         let drive: Box<dyn Drive> = Box::from(InMemoryDrive::default());
 
@@ -291,7 +294,7 @@ impl Default for Storage {
 impl Storage {
     /// Registers a new drive `factory` to handle the `scheme`.  Must not have previously been
     /// registered and the `scheme` must be in lowercase.
-    pub fn register_scheme(&mut self, scheme: &str, factory: DriveFactory) {
+    pub fn register_scheme(&mut self, scheme: &str, factory: Box<dyn DriveFactory>) {
         assert_eq!(scheme.to_lowercase(), scheme);
         let previous = self.factories.insert(scheme.to_owned(), factory);
         assert!(previous.is_none(), "Tried to register {} twice", scheme);
@@ -338,7 +341,7 @@ impl Storage {
     pub fn mount(&mut self, name: &str, uri: &str) -> io::Result<()> {
         let (scheme, path) = split_uri(uri)?;
         let drive = match self.factories.get(&scheme.to_lowercase()) {
-            Some(factory) => factory(path)?,
+            Some(factory) => factory.create(path)?,
             None => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
@@ -690,7 +693,7 @@ mod tests {
     #[test]
     fn test_storage_has_scheme() {
         let mut storage = Storage::default();
-        storage.register_scheme("fake", in_memory_drive_factory);
+        storage.register_scheme("fake", Box::from(InMemoryDriveFactory::default()));
         assert!(storage.has_scheme("fake"));
         assert!(!storage.has_scheme("fakes"));
     }
@@ -698,7 +701,7 @@ mod tests {
     #[test]
     fn test_storage_mount_ok() {
         let mut storage = Storage::default();
-        storage.register_scheme("fake", in_memory_drive_factory);
+        storage.register_scheme("fake", Box::from(InMemoryDriveFactory::default()));
         storage.mount("a", "memory://").unwrap();
         storage.mount("z", "fAkE://").unwrap();
 
@@ -712,7 +715,7 @@ mod tests {
         let dir2 = root.path().join("second");
 
         let mut storage = Storage::default();
-        storage.register_scheme("file", directory_drive_factory);
+        storage.register_scheme("file", Box::from(DirectoryDriveFactory::default()));
         storage.mount("c", &format!("file://{}", dir1.display())).unwrap();
         storage.mount("d", &format!("file://{}", dir2.display())).unwrap();
 
@@ -781,7 +784,7 @@ mod tests {
     #[test]
     fn test_storage_mounted() {
         let mut storage = Storage::default();
-        storage.register_scheme("fake", in_memory_drive_factory);
+        storage.register_scheme("fake", Box::from(InMemoryDriveFactory::default()));
         storage.mount("z", "fAkE://").unwrap();
 
         let mut exp_info = BTreeMap::default();
