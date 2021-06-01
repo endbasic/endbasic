@@ -242,9 +242,9 @@ impl OnScreenKeyboard {
 
 /// Sets up the common storage drives.
 fn setup_storage(storage: &mut endbasic_std::storage::Storage) {
-    storage.register_scheme("demos", endbasic::demos::demos_drive_factory);
+    storage.register_scheme("demos", Box::from(endbasic::demos::DemoDriveFactory::default()));
     storage.mount("demos", "demos://").expect("Demos drive shouldn't fail to mount");
-    storage.register_scheme("local", store::web_drive_factory);
+    storage.register_scheme("local", Box::from(store::WebDriveFactory::default()));
     storage.mount("local", "local://").expect("Web drive shouldn't fail to mount");
     storage.cd("local:").expect("Local drive was just registered");
 }

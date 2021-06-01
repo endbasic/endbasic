@@ -16,7 +16,7 @@
 //! Cloud-based implementation of an EndBASIC storage drive.
 
 use crate::service::*;
-use crate::storage::{Drive, DriveFiles, Metadata};
+use crate::storage::{Drive, DriveFactory, DriveFiles, Metadata};
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -92,9 +92,17 @@ impl Drive for CloudDrive {
     }
 }
 
-/// Instantiates an in-memory drive.
-pub fn cloud_drive_factory(_target: &str) -> io::Result<Box<dyn Drive>> {
-    Err(io::Error::new(io::ErrorKind::Other, "Mounting other people's drives is not yet supported"))
+/// Factory for cloud drives.
+#[derive(Default)]
+pub struct CloudDriveFactory {}
+
+impl DriveFactory for CloudDriveFactory {
+    fn create(&self, _target: &str) -> io::Result<Box<dyn Drive>> {
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            "Mounting other people's drives is not yet supported",
+        ))
+    }
 }
 
 #[cfg(test)]

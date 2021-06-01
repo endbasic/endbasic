@@ -16,7 +16,7 @@
 //! Exposes EndBASIC demos as a read-only drive.
 
 use async_trait::async_trait;
-use endbasic_std::storage::{DiskSpace, Drive, DriveFiles, Metadata};
+use endbasic_std::storage::{DiskSpace, Drive, DriveFactory, DriveFiles, Metadata};
 use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::str;
@@ -125,15 +125,20 @@ impl Drive for DemosDrive {
     }
 }
 
-/// Instantiates an in-memory drive.
-pub fn demos_drive_factory(target: &str) -> io::Result<Box<dyn Drive>> {
-    if target.is_empty() {
-        Ok(Box::from(DemosDrive::default()))
-    } else {
-        Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Cannot specify a path to mount a demos drive",
-        ))
+/// Factory for demo drives.
+#[derive(Default)]
+pub struct DemoDriveFactory {}
+
+impl DriveFactory for DemoDriveFactory {
+    fn create(&self, target: &str) -> io::Result<Box<dyn Drive>> {
+        if target.is_empty() {
+            Ok(Box::from(DemosDrive::default()))
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Cannot specify a path to mount a demos drive",
+            ))
+        }
     }
 }
 

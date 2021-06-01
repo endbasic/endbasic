@@ -164,7 +164,7 @@ access with any other file-related commands.",
             };
         }
 
-        self.storage.borrow_mut().register_scheme("cloud", cloud_drive_factory);
+        self.storage.borrow_mut().register_scheme("cloud", Box::from(CloudDriveFactory::default()));
 
         let drive = CloudDrive::new(self.service.clone(), access_token, username.clone());
         let mut storage = self.storage.borrow_mut();

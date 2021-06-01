@@ -372,7 +372,7 @@ pub fn add_all(
 
 #[cfg(test)]
 mod tests {
-    use crate::storage::{directory_drive_factory, DiskSpace, Drive, InMemoryDrive};
+    use crate::storage::{DirectoryDriveFactory, DiskSpace, Drive, InMemoryDrive};
     use crate::testutils::*;
     use futures_lite::future::block_on;
     use std::collections::BTreeMap;
@@ -626,7 +626,7 @@ mod tests {
         {
             let storage = t.get_storage();
             let storage = &mut *storage.borrow_mut();
-            storage.register_scheme("file", directory_drive_factory);
+            storage.register_scheme("file", Box::from(DirectoryDriveFactory::default()));
             storage.mount("other", &format!("file://{}", dir.display())).unwrap();
             storage.cd("other:/").unwrap();
         }
