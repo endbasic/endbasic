@@ -34,21 +34,36 @@ jobs:
 
     linux-test:
         runs-on: ubuntu-latest
+        env:
+            TEST_ACCOUNT_1_USERNAME: ${{ secrets.TEST_ACCOUNT_1_USERNAME }}
+            TEST_ACCOUNT_1_PASSWORD: ${{ secrets.TEST_ACCOUNT_1_PASSWORD }}
+            TEST_ACCOUNT_2_USERNAME: ${{ secrets.TEST_ACCOUNT_2_USERNAME }}
+            TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
             - uses: actions/checkout@v2
-            - run: cargo test --verbose
+            - run: cargo test --verbose -- --include-ignored
 
     macos-test:
         runs-on: macos-latest
+        env:
+            TEST_ACCOUNT_1_USERNAME: ${{ secrets.TEST_ACCOUNT_1_USERNAME }}
+            TEST_ACCOUNT_1_PASSWORD: ${{ secrets.TEST_ACCOUNT_1_PASSWORD }}
+            TEST_ACCOUNT_2_USERNAME: ${{ secrets.TEST_ACCOUNT_2_USERNAME }}
+            TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
             - uses: actions/checkout@v2
-            - run: cargo test --verbose
+            - run: cargo test --verbose -- --include-ignored
 
     windows-test:
         runs-on: windows-latest
+        env:
+            TEST_ACCOUNT_1_USERNAME: ${{ secrets.TEST_ACCOUNT_1_USERNAME }}
+            TEST_ACCOUNT_1_PASSWORD: ${{ secrets.TEST_ACCOUNT_1_PASSWORD }}
+            TEST_ACCOUNT_2_USERNAME: ${{ secrets.TEST_ACCOUNT_2_USERNAME }}
+            TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
             - uses: actions/checkout@v2
-            - run: cargo test --verbose
+            - run: cargo test --verbose -- --include-ignored
 
     linux-test-no-features:
         runs-on: ubuntu-latest
