@@ -103,6 +103,12 @@ impl GetFileRequest {
         self.get_content = true;
         self
     }
+
+    /// Requests the file's readers from the server.
+    fn with_get_readers(mut self) -> Self {
+        self.get_readers = true;
+        self
+    }
 }
 
 /// Representation of the response to a file query.
@@ -112,8 +118,7 @@ pub struct GetFileResponse {
     /// Base64-encoded file content.
     content: Option<String>,
 
-    #[serde(rename = "readers")]
-    _readers: Option<Vec<String>>,
+    readers: Option<Vec<String>>,
 }
 
 impl GetFileResponse {
@@ -139,17 +144,28 @@ pub struct PatchFileRequest {
     /// Base64-encoded file content.
     content: Option<String>,
 
-    #[serde(rename = "remove_readers")]
-    _remove_readers: Option<Vec<String>>,
-
-    #[serde(rename = "add_readers")]
-    _add_readers: Option<Vec<String>>,
+    add_readers: Option<Vec<String>>,
+    remove_readers: Option<Vec<String>>,
 }
 
 impl PatchFileRequest {
     /// Updates the file's content with `content`.  The content is automatically base64-encoded.
     fn with_content<C: AsRef<[u8]>>(mut self, content: C) -> Self {
         self.content = Some(base64::encode(content));
+        self
+    }
+
+    /// Adds `readers` to the file's reader ACLs.
+    #[cfg(test)]
+    fn with_add_readers<R: Into<Vec<String>>>(mut self, readers: R) -> Self {
+        self.add_readers = Some(readers.into());
+        self
+    }
+
+    /// Removes `readers` from the file's reader ACLs.
+    #[cfg(test)]
+    fn with_remove_readers<R: Into<Vec<String>>>(mut self, readers: R) -> Self {
+        self.remove_readers = Some(readers.into());
         self
     }
 }

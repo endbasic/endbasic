@@ -16,7 +16,7 @@
 //! Cloud-based implementation of an EndBASIC storage drive.
 
 use crate::service::*;
-use crate::storage::{Drive, DriveFactory, DriveFiles, Metadata};
+use crate::storage::{Drive, DriveFactory, DriveFiles, FileAcls, Metadata};
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -83,8 +83,48 @@ impl Drive for CloudDrive {
         }
     }
 
+    async fn get_acls(&self, filename: &str) -> io::Result<FileAcls> {
+        let request = GetFileRequest::default().with_get_readers();
+        let response = self
+            .service
+            .borrow_mut()
+            .get_file(&self.access_token, &self.username, filename, &request)
+            .await?;
+        match response.readers {
+            Some(readers) => Ok(FileAcls::default().with_readers(readers)),
+            None => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Server response is missing the readers list".to_string(),
+            )),
+        }
+    }
+
     async fn put(&mut self, filename: &str, content: &str) -> io::Result<()> {
         let request = PatchFileRequest::default().with_content(content.as_bytes());
+        self.service
+            .borrow_mut()
+            .patch_file(&self.access_token, &self.username, filename, &request)
+            .await
+    }
+
+    async fn update_acls(
+        &mut self,
+        filename: &str,
+        add: &FileAcls,
+        remove: &FileAcls,
+    ) -> io::Result<()> {
+        let mut request = PatchFileRequest::default();
+
+        let add = add.readers();
+        if !add.is_empty() {
+            request.add_readers = Some(add.to_vec());
+        }
+
+        let remove = remove.readers();
+        if !remove.is_empty() {
+            request.remove_readers = Some(remove.to_vec());
+        }
+
         self.service
             .borrow_mut()
             .patch_file(&self.access_token, &self.username, filename, &request)
@@ -224,6 +264,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_clouddrive_get_acls() {
+        let service = Rc::from(RefCell::from(MockService::default()));
+        let access_token = service.borrow_mut().do_authenticate().await;
+        let drive = CloudDrive::new(service.clone(), access_token, "the-user");
+
+        let request = GetFileRequest::default().with_get_readers();
+        let response = GetFileResponse {
+            readers: Some(vec!["r1".to_owned(), "r2".to_owned()]),
+            ..Default::default()
+        };
+        service.borrow_mut().add_mock_get_file("the-user", "the-filename", request, Ok(response));
+        let result = drive.get_acls("the-filename").await.unwrap();
+        assert_eq!(FileAcls::default().with_readers(["r1".to_owned(), "r2".to_owned()]), result);
+
+        service.take().verify_all_used();
+    }
+
+    #[tokio::test]
+    async fn test_clouddrive_get_acls_no_readers() {
+        let service = Rc::from(RefCell::from(MockService::default()));
+        let access_token = service.borrow_mut().do_authenticate().await;
+        let drive = CloudDrive::new(service.clone(), access_token, "the-user");
+
+        let request = GetFileRequest::default().with_get_readers();
+        let response = GetFileResponse::default();
+        service.borrow_mut().add_mock_get_file("the-user", "the-filename", request, Ok(response));
+        let err = drive.get_acls("the-filename").await.unwrap_err();
+        assert_eq!(io::ErrorKind::InvalidData, err.kind());
+        assert!(format!("{}", err).contains("missing the readers list"));
+
+        service.take().verify_all_used();
+    }
+
+    #[tokio::test]
     async fn test_clouddrive_put_new() {
         let service = Rc::from(RefCell::from(MockService::default()));
         let access_token = service.borrow_mut().do_authenticate().await;
@@ -249,6 +323,28 @@ mod tests {
         let request = PatchFileRequest::default().with_content("some other content");
         service.borrow_mut().add_mock_patch_file("the-user", "the-filename", request, Ok(()));
         drive.put("the-filename", "some other content").await.unwrap();
+
+        service.take().verify_all_used();
+    }
+
+    #[tokio::test]
+    async fn test_clouddrive_put_acls() {
+        let service = Rc::from(RefCell::from(MockService::default()));
+        let access_token = service.borrow_mut().do_authenticate().await;
+        let mut drive = CloudDrive::new(service.clone(), access_token, "the-user");
+
+        let request = PatchFileRequest::default()
+            .with_add_readers(["r1".to_owned(), "r2".to_owned()])
+            .with_remove_readers(["r2".to_owned(), "r3".to_owned()]);
+        service.borrow_mut().add_mock_patch_file("the-user", "the-filename", request, Ok(()));
+        drive
+            .update_acls(
+                "the-filename",
+                &FileAcls::default().with_readers(["r1".to_owned(), "r2".to_owned()]),
+                &FileAcls::default().with_readers(["r2".to_owned(), "r3".to_owned()]),
+            )
+            .await
+            .unwrap();
 
         service.take().verify_all_used();
     }
