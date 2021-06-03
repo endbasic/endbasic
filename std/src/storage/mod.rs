@@ -42,6 +42,26 @@ pub struct Metadata {
     pub length: u64,
 }
 
+/// Describes the ACLs of a file.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FileAcls {
+    /// List of principals that are allowed to read the file.
+    pub readers: Vec<String>,
+}
+
+impl FileAcls {
+    /// Extends this set of ACLs with the given `readers`.
+    pub fn with_readers<T: Into<Vec<String>>>(mut self, readers: T) -> Self {
+        self.readers.extend(readers.into());
+        self
+    }
+
+    /// Gets the list of principals that are allowed to read the file.
+    pub fn readers(&self) -> &[String] {
+        &self.readers
+    }
+}
+
 /// Representation of some amount of disk space.  Can be used to express both quotas and usage.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
@@ -114,8 +134,24 @@ pub trait Drive {
     /// Loads the contents of the program given by `name`.
     async fn get(&self, name: &str) -> io::Result<String>;
 
+    /// Gets the ACLs of the file `_name`.
+    async fn get_acls(&self, _name: &str) -> io::Result<FileAcls> {
+        Err(io::Error::new(io::ErrorKind::Other, "Operation not supported by drive"))
+    }
+
     /// Saves the in-memory program given by `content` into `name`.
     async fn put(&mut self, name: &str, content: &str) -> io::Result<()>;
+
+    /// Updates the ACLs of the file `_name` by extending them with the contents of `_add` and
+    /// removing the existing entries listed in `_remove`.
+    async fn update_acls(
+        &mut self,
+        _name: &str,
+        _add: &FileAcls,
+        _remove: &FileAcls,
+    ) -> io::Result<()> {
+        Err(io::Error::new(io::ErrorKind::Other, "Operation not supported by drive"))
+    }
 
     /// Gets the system-addressable path of the file `_name`, if any.
     fn system_path(&self, _name: &str) -> Option<PathBuf> {
@@ -487,11 +523,41 @@ impl Storage {
         }
     }
 
+    /// Gets the ACLs of the file `raw_location`.
+    pub async fn get_acls(&self, raw_location: &str) -> io::Result<FileAcls> {
+        let location = Location::new(raw_location)?;
+        match location.leaf_name() {
+            Some(name) => self.get_drive(&location)?.get_acls(name).await,
+            None => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Missing file name in path '{}'", raw_location),
+            )),
+        }
+    }
+
     /// Saves the in-memory program given by `content` into `raw_location`.
     pub async fn put(&mut self, raw_location: &str, content: &str) -> io::Result<()> {
         let location = Location::new(raw_location)?;
         match location.leaf_name() {
             Some(name) => self.get_drive_mut(&location)?.put(name, content).await,
+            None => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Missing file name in path '{}'", raw_location),
+            )),
+        }
+    }
+
+    /// Updates the ACLs of the file `raw_location` by extending them with the contents of `add` and
+    /// removing the existing entries listed in `remove`.
+    pub async fn update_acls(
+        &mut self,
+        raw_location: &str,
+        add: &FileAcls,
+        remove: &FileAcls,
+    ) -> io::Result<()> {
+        let location = Location::new(raw_location)?;
+        match location.leaf_name() {
+            Some(name) => self.get_drive_mut(&location)?.update_acls(name, add, remove).await,
             None => Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 format!("Missing file name in path '{}'", raw_location),

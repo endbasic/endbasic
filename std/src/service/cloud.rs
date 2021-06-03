@@ -460,6 +460,44 @@ mod tests {
 
     #[test]
     #[ignore = "Requires environment configuration and is expensive"]
+    fn test_acls() {
+        #[tokio::main]
+        async fn run(context: &mut TestContext) {
+            let mut service = context.service();
+
+            let access_token1 = context.do_authenticate(1).await;
+            let username1 = context.do_login(&access_token1).await;
+            let (filename, content) = context.random_file();
+
+            let request = PatchFileRequest::default().with_content(content.clone());
+            service.patch_file(&access_token1, &username1, &filename, &request).await.unwrap();
+
+            let access_token2 = context.do_authenticate(2).await;
+            let username2 = context.do_login(&access_token2).await;
+
+            // Read username1's file as username2 before it is shared.
+            let request = GetFileRequest::default().with_get_content();
+            let err = service
+                .get_file(&access_token2, &username1, &filename, &request)
+                .await
+                .unwrap_err();
+            assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
+
+            // Share username1's file with username2.
+            let request = PatchFileRequest::default().with_add_readers([username2]);
+            service.patch_file(&access_token1, &username1, &filename, &request).await.unwrap();
+
+            // Read username1's file as username2 again, now that it is shared.
+            let request = GetFileRequest::default().with_get_content();
+            let response =
+                service.get_file(&access_token2, &username1, &filename, &request).await.unwrap();
+            assert_eq!(content.as_bytes(), response.decoded_content().unwrap().unwrap());
+        }
+        run(&mut TestContext::default());
+    }
+
+    #[test]
+    #[ignore = "Requires environment configuration and is expensive"]
     fn test_delete_file_ok() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
