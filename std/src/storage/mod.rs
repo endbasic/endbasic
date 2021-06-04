@@ -60,6 +60,11 @@ impl FileAcls {
     pub fn readers(&self) -> &[String] {
         &self.readers
     }
+
+    /// Modifies the readers list by appending `reader` to it.
+    pub(crate) fn add_reader<R: Into<String>>(&mut self, reader: R) {
+        self.readers.push(reader.into());
+    }
 }
 
 /// Representation of some amount of disk space.  Can be used to express both quotas and usage.
