@@ -17,7 +17,7 @@
 
 use crate::console::{read_line, Console};
 use crate::service::*;
-use crate::storage::Storage;
+use crate::storage::{FileAcls, Storage};
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::exec::Machine;
@@ -239,6 +239,148 @@ impl Command for LoginCommand {
     }
 }
 
+/// The `SHARE` command.
+///
+/// Note that this command is not exclusively for use by the cloud drive as this interacts with the
+/// generic storage layer.  As a result, one might say that this command belongs where other disk
+/// commands such as `DIR` are defined, but given that ACLs are primarily a cloud concept in our
+/// case, it makes sense to keep it here.
+pub struct ShareCommand {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+    storage: Rc<RefCell<Storage>>,
+}
+
+impl ShareCommand {
+    /// Creates a new `SHARE` command.
+    pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("SHARE", VarType::Void)
+                .with_syntax("filename$ [, acl1$, .., aclN$]")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Displays or modifies the ACLs of a file.
+If given only a filename$, this command prints out the ACLs of the file.
+Otherwise, when given a list of ACL changes, applies those changes to the file.  The acl1$ to \
+aclN$ arguments are strings of the form \"username+r\" or \"username-r\", where the former adds \
+\"username\" to the users allowed to read the file, and the latter removes \"username\" from the \
+list of users allowed to read the file.
+You can use the special \"public+r\" ACL to share a file with everyone.
+Note that this command only works for cloud-based drives as it is designed to share files \
+among users of the EndBASIC service.",
+                )
+                .build(),
+            console,
+            storage,
+        })
+    }
+}
+
+impl ShareCommand {
+    /// Parses a textual ACL specification and adds it to `add` or `remove.
+    fn parse_acl(mut acl: String, add: &mut FileAcls, remove: &mut FileAcls) -> CommandResult {
+        let change = if acl.len() < 3 { String::new() } else { acl.split_off(acl.len() - 2) };
+        let username = acl; // For clarity after splitting off the ACL change request.
+        match (username, change.as_str()) {
+            (username, "+r") if !username.is_empty() => add.add_reader(username),
+            (username, "+R") if !username.is_empty() => add.add_reader(username),
+            (username, "-r") if !username.is_empty() => remove.add_reader(username),
+            (username, "-R") if !username.is_empty() => remove.add_reader(username),
+            (username, change) => {
+                return Err(CallError::ArgumentError(format!(
+                    "Invalid ACL '{}{}': must be of the form \"username+r\" or \"username-r\"",
+                    username, change
+                )))
+            }
+        }
+        Ok(())
+    }
+
+    /// Fetches and prints the ACLs for `filename`.
+    async fn show_acls(&self, filename: &str) -> CommandResult {
+        let acls = self.storage.borrow().get_acls(filename).await?;
+
+        let mut console = self.console.borrow_mut();
+        console.print("")?;
+        if acls.readers().is_empty() {
+            console.print(&format!("    No ACLs on {}", filename))?;
+        } else {
+            console.print(&format!("    Reader ACLs on {}:", filename))?;
+            for acl in acls.readers() {
+                console.print(&format!("    {}", acl))?;
+            }
+        }
+        console.print("")?;
+
+        Ok(())
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for ShareCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+        if args.is_empty() {
+            return Err(CallError::ArgumentError(
+                "SHARE requires one or more arguments".to_owned(),
+            ));
+        }
+
+        let filename = match &args[0].0 {
+            Some(e) => match e.eval(machine.get_mut_symbols())? {
+                Value::Text(t) => t,
+                _ => {
+                    return Err(CallError::ArgumentError(
+                        "SHARE requires a string as the filename".to_owned(),
+                    ))
+                }
+            },
+            None => {
+                return Err(CallError::ArgumentError(
+                    "SHARE requires a string as the filename".to_owned(),
+                ))
+            }
+        };
+        if args[0].1 == ArgSep::End {
+            return self.show_acls(&filename).await;
+        } else if args[0].1 != ArgSep::Long {
+            return Err(CallError::ArgumentError(
+                "SHARE requires arguments to be separated by commas".to_owned(),
+            ));
+        }
+
+        let mut add = FileAcls::default();
+        let mut remove = FileAcls::default();
+        for arg in &args[1..] {
+            match arg {
+                (None, _) => {
+                    return Err(CallError::ArgumentError(
+                        "SHARE arguments cannot be empty".to_owned(),
+                    ))
+                }
+                (_, ArgSep::Short) => {
+                    return Err(CallError::ArgumentError(
+                        "SHARE requires arguments to be separated by commas".to_owned(),
+                    ))
+                }
+                (Some(acl), _) => match acl.eval(machine.get_mut_symbols())? {
+                    Value::Text(t) => ShareCommand::parse_acl(t, &mut add, &mut remove)?,
+                    _ => {
+                        return Err(CallError::ArgumentError(
+                            "SHARE requires strings as ACL changes".to_owned(),
+                        ))
+                    }
+                },
+            }
+        }
+        self.storage.borrow_mut().update_acls(&filename, &add, &remove).await?;
+        Ok(())
+    }
+}
+
 /// Adds all remote manipulation commands for `service` to the `machine`, using `console` to
 /// display information and `storage` to manipulate the remote drives.
 pub(crate) fn add_all(
@@ -247,7 +389,8 @@ pub(crate) fn add_all(
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 ) {
-    machine.add_command(LoginCommand::new(service, console, storage));
+    machine.add_command(LoginCommand::new(service, console.clone(), storage.clone()));
+    machine.add_command(ShareCommand::new(console, storage));
 }
 
 #[cfg(test)]
@@ -429,5 +572,84 @@ mod tests {
         check_stmt_err("LOGIN requires a string as the username", r#"LOGIN 3"#);
         check_stmt_err("LOGIN requires a string as the username", r#"LOGIN 3, "a""#);
         check_stmt_err("LOGIN requires a string as the password", r#"LOGIN "a", 3"#);
+    }
+
+    #[test]
+    fn test_share_parse_acl_ok() {
+        let mut add = FileAcls::default();
+        let mut remove = FileAcls::default();
+
+        ShareCommand::parse_acl("user1+r".to_owned(), &mut add, &mut remove).unwrap();
+        ShareCommand::parse_acl("user2+R".to_owned(), &mut add, &mut remove).unwrap();
+        ShareCommand::parse_acl("X-r".to_owned(), &mut add, &mut remove).unwrap();
+        ShareCommand::parse_acl("Y-R".to_owned(), &mut add, &mut remove).unwrap();
+        assert_eq!(&["user1".to_owned(), "user2".to_owned()], add.readers());
+        assert_eq!(&["X".to_owned(), "Y".to_owned()], remove.readers());
+    }
+
+    #[test]
+    fn test_share_parse_acl_errors() {
+        let mut add = FileAcls::default().with_readers(["before1".to_owned()]);
+        let mut remove = FileAcls::default().with_readers(["before2".to_owned()]);
+
+        for acl in &["", "r", "+r", "-r", "foo+", "bar-"] {
+            let err = ShareCommand::parse_acl(acl.to_string(), &mut add, &mut remove).unwrap_err();
+            let message = format!("{:?}", err);
+            assert!(message.contains("Invalid ACL"));
+            assert!(message.contains(acl));
+        }
+
+        assert_eq!(&["before1".to_owned()], add.readers());
+        assert_eq!(&["before2".to_owned()], remove.readers());
+    }
+
+    #[tokio::test]
+    async fn test_share_print_no_acls() {
+        let mut t = Tester::default();
+        t.get_storage().borrow_mut().put("MEMORY:/FOO", "").await.unwrap();
+        t.run(r#"SHARE "MEMORY:/FOO""#)
+            .expect_prints(["", "    No ACLs on MEMORY:/FOO", ""])
+            .expect_file("MEMORY:/FOO", "")
+            .check();
+    }
+
+    #[tokio::test]
+    async fn test_share_print_some_acls() {
+        let mut t = Tester::default();
+        {
+            let storage = t.get_storage();
+            let mut storage = storage.borrow_mut();
+            storage.put("MEMORY:/FOO", "").await.unwrap();
+            storage
+                .update_acls(
+                    "MEMORY:/FOO",
+                    &FileAcls::default().with_readers(["some".to_owned(), "person".to_owned()]),
+                    &FileAcls::default(),
+                )
+                .await
+                .unwrap();
+        }
+        t.run(r#"SHARE "MEMORY:/FOO""#)
+            .expect_prints(["", "    Reader ACLs on MEMORY:/FOO:", "    person", "    some", ""])
+            .expect_file("MEMORY:/FOO", "")
+            .check();
+    }
+
+    #[test]
+    fn test_share_errors() {
+        check_stmt_err("SHARE requires one or more arguments", r#"SHARE"#);
+        check_stmt_err("SHARE requires a string as the filename", r#"SHARE 1"#);
+        check_stmt_err("SHARE requires a string as the filename", r#"SHARE , "a""#);
+        check_stmt_err("SHARE requires arguments to be separated by commas", r#"SHARE "a"; "b""#);
+        check_stmt_err(
+            "SHARE requires arguments to be separated by commas",
+            r#"SHARE "a", "b"; "c""#,
+        );
+        check_stmt_err("SHARE arguments cannot be empty", r#"SHARE "a", , "b""#);
+        check_stmt_err("SHARE requires strings as ACL changes", r#"SHARE "a", 3, "b""#);
+        check_stmt_err(
+            r#"Invalid ACL 'foobar': must be of the form "username+r" or "username-r""#,
+            r#"SHARE "a", "foobar""#,
+        );
     }
 }

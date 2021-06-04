@@ -19,6 +19,9 @@ not adhere to semantic versioning until 1.0.0.**
 *   Added the `LOGIN` command to authenticate against the EndBASIC service and
     to mount the user's own drive, and implemented support for remote drives.
 
+*   Added the `SHARE` command to set reader ACLs on files hosted in the
+    EndBASIC service, allowing users to share files among themselves.
+
 *   Added the `CD` command to change the current drive and the `PWD` command to
     print the current location.
 

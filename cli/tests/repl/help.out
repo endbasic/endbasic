@@ -58,6 +58,7 @@ Output from HELP CLOUD:
     user-123's shared files as a new drive X: MOUNT "X", "cloud://user-123"
 
     >> LOGIN    Logs into the user's account.
+    >> SHARE    Displays or modifies the ACLs of a file.
 
     Type HELP followed by the name of a symbol for details.
 
@@ -483,6 +484,26 @@ Output from HELP SAVE:
     The filename must be a string and must be a basename (no directory
     components).  The .BAS extension is optional, but if present, it must
     be .BAS.
+
+Output from HELP SHARE:
+
+    SHARE filename$ [, acl1$, .., aclN$]
+
+    Displays or modifies the ACLs of a file.
+
+    If given only a filename$, this command prints out the ACLs of the
+    file.
+
+    Otherwise, when given a list of ACL changes, applies those changes to
+    the file.  The acl1$ to aclN$ arguments are strings of the form
+    "username+r" or "username-r", where the former adds "username" to the
+    users allowed to read the file, and the latter removes "username" from
+    the list of users allowed to read the file.
+
+    You can use the special "public+r" ACL to share a file with everyone.
+
+    Note that this command only works for cloud-based drives as it is
+    designed to share files among users of the EndBASIC service.
 
 Output from HELP SLEEP:
 
