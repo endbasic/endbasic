@@ -15,7 +15,7 @@
 
 //! Commands to interact with the cloud service.
 
-use crate::console::{read_line, Console};
+use crate::console::{read_line, read_line_secure, Console};
 use crate::service::*;
 use crate::storage::{FileAcls, Storage};
 use async_trait::async_trait;
@@ -198,9 +198,8 @@ impl Command for LoginCommand {
         let (username, password) = match args {
             [(Some(username), ArgSep::End)] => match username.eval(machine.get_mut_symbols())? {
                 Value::Text(username) => {
-                    // TODO(jmmv): Implement a safe version of read_line that does not echo input.
                     let password =
-                        read_line(&mut *self.console.borrow_mut(), "Password: ", "", None).await?;
+                        read_line_secure(&mut *self.console.borrow_mut(), "Password: ").await?;
                     (username, password)
                 }
                 _ => {
@@ -396,6 +395,7 @@ pub(crate) fn add_all(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::console::ClearType;
     use crate::testutils::*;
 
     #[test]
@@ -419,10 +419,23 @@ mod tests {
         );
         let storage = t.get_storage();
         assert!(!storage.borrow().mounted().contains_key("CLOUD"));
+
+        t.get_console().borrow_mut().set_interactive(true);
+        let mut exp_output = vec![
+            CapturedOut::Clear(ClearType::UntilNewLine),
+            CapturedOut::Write(b"Password: ".to_vec()),
+        ];
+        for _ in 0..MockService::PASSWORD.len() {
+            exp_output.push(CapturedOut::Write(vec![b'*']));
+        }
+        exp_output.push(CapturedOut::Write(vec![b'\r', b'\n']));
+
         t.add_input_chars(MockService::PASSWORD)
             .add_input_chars("\n")
             .run(format!(r#"LOGIN "{}""#, MockService::USERNAME))
+            .expect_output(exp_output)
             .check();
+
         assert!(storage.borrow().mounted().contains_key("CLOUD"));
     }
 

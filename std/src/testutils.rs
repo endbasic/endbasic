@@ -78,6 +78,9 @@ pub struct MockConsole {
 
     /// The size of the mock console.
     size: Position,
+
+    /// Whether the console is interactive or not.
+    interactive: bool,
 }
 
 impl Default for MockConsole {
@@ -86,6 +89,7 @@ impl Default for MockConsole {
             golden_in: VecDeque::new(),
             captured_out: vec![],
             size: Position { row: std::usize::MAX, column: std::usize::MAX },
+            interactive: false,
         }
     }
 }
@@ -118,6 +122,11 @@ impl MockConsole {
     /// Sets the size of the mock console.
     pub fn set_size(&mut self, size: Position) {
         self.size = size;
+    }
+
+    /// Sets whether the mock console is interactive or not.
+    pub fn set_interactive(&mut self, interactive: bool) {
+        self.interactive = interactive;
     }
 
     /// Ensures that all prerecorded input characters were consumed.
@@ -153,7 +162,7 @@ impl Console for MockConsole {
     }
 
     fn is_interactive(&self) -> bool {
-        false
+        self.interactive
     }
 
     fn leave_alt(&mut self) -> io::Result<()> {
