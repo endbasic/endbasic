@@ -63,8 +63,8 @@ jobs:
               with:
                   profile: minimal
                   # Target a minimum version that ships with common systems
-                  # out there.  In particular, Raspbian as of 2021-02-10.
-                  toolchain: 1.42
+                  # out there.  In particular, Raspbian as of 2021-06-06.
+                  toolchain: 1.48
                   default: true
             - uses: actions/checkout@v2
             # On old toolchains, we only care about being able to build.
