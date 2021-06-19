@@ -205,7 +205,7 @@ pub struct RecordedProgram {
 #[async_trait(?Send)]
 impl Program for RecordedProgram {
     async fn edit(&mut self, console: &mut dyn Console) -> io::Result<()> {
-        let append = console::read_line(console, "", "").await?;
+        let append = console::read_line(console, "", "", None).await?;
         self.content.push_str(&append);
         self.content.push('\n');
         Ok(())

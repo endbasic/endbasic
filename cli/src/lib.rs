@@ -81,13 +81,14 @@ pub async fn run_repl_loop(
     console: Rc<RefCell<dyn Console>>,
 ) -> io::Result<i32> {
     let mut stop_reason = StopReason::Eof;
+    let mut history = vec![];
     while stop_reason == StopReason::Eof {
         let line = {
             let mut console = console.borrow_mut();
             if console.is_interactive() {
                 console.print("Ready")?;
             }
-            console::read_line(&mut *console, "", "").await
+            console::read_line(&mut *console, "", "", Some(&mut history)).await
         };
 
         match line {
