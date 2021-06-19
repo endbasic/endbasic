@@ -170,11 +170,13 @@ pub trait Console {
 }
 
 /// Reads a line of text interactively from the console, using the given `prompt` and pre-filling
-/// the input with `previous`.
+/// the input with `previous`.  If `history` is not `None`, then this appends the newly entered line
+/// into the history and allows navigating through it.
 async fn read_line_interactive(
     console: &mut dyn Console,
     prompt: &str,
     previous: &str,
+    mut history: Option<&mut Vec<String>>,
 ) -> io::Result<String> {
     let mut line = String::from(previous);
     console.clear(ClearType::UntilNewLine)?;
@@ -192,10 +194,63 @@ async fn read_line_interactive(
     // Insertion position *within* the line, without accounting for the prompt.
     let mut pos = line.len();
 
+    let mut history_pos;
+    match history.as_mut() {
+        Some(history) => {
+            history.push(line.clone());
+            history_pos = history.len() - 1;
+        }
+        None => history_pos = 0,
+    }
+
     loop {
         match console.read_key().await? {
-            Key::ArrowUp | Key::ArrowDown => {
-                // TODO(jmmv): Implement history tracking.
+            Key::ArrowUp => {
+                if let Some(history) = history.as_mut() {
+                    if history_pos == 0 {
+                        continue;
+                    }
+
+                    history[history_pos] = line;
+                    history_pos -= 1;
+                    line = history[history_pos].clone();
+
+                    console.hide_cursor()?;
+                    if pos > 0 {
+                        console.move_within_line(-(pos as i16))?;
+                        console.clear(ClearType::UntilNewLine)?;
+                    }
+                    if !line.is_empty() {
+                        console.write(line.as_bytes())?;
+                    }
+                    console.show_cursor()?;
+
+                    pos = line.len();
+                }
+            }
+
+            Key::ArrowDown => {
+                if let Some(history) = history.as_mut() {
+                    if history_pos == history.len() - 1 {
+                        continue;
+                    }
+
+                    history[history_pos] = line;
+                    history_pos += 1;
+                    line = history[history_pos].clone();
+
+                    console.hide_cursor()?;
+                    if pos > 0 {
+                        console.move_within_line(-(pos as i16))?;
+                        console.clear(ClearType::UntilNewLine)?;
+                    }
+                    if !line.is_empty() {
+                        console.write(line.as_bytes())?;
+                    }
+                    console.show_cursor()?;
+
+                    pos = line.len();
+                }
             }
 
             Key::ArrowLeft => {
@@ -274,6 +329,15 @@ async fn read_line_interactive(
             Key::Unknown(_) => (),
         }
     }
+
+    if let Some(history) = history.as_mut() {
+        if line.is_empty() {
+            history.pop();
+        } else {
+            let last = history.len() - 1;
+            history[last] = line.clone();
+        }
+    }
     Ok(line)
 }
 
@@ -314,9 +378,10 @@ pub async fn read_line(
     console: &mut dyn Console,
     prompt: &str,
     previous: &str,
+    history: Option<&mut Vec<String>>,
 ) -> io::Result<String> {
     if console.is_interactive() {
-        read_line_interactive(console, prompt, previous).await
+        read_line_interactive(console, prompt, previous, history).await
     } else {
         read_line_raw(console).await
     }
@@ -487,7 +552,7 @@ impl Command for InputCommand {
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
         loop {
-            match read_line(&mut *console, &prompt, &previous_answer).await {
+            match read_line(&mut *console, &prompt, &previous_answer, None).await {
                 Ok(answer) => match Value::parse_as(vref.ref_type(), answer.trim_end()) {
                     Ok(value) => {
                         machine.get_mut_symbols().set_var(&vref, value)?;
@@ -647,8 +712,10 @@ mod tests {
         keys: Vec<Key>,
         prompt: &'static str,
         previous: &'static str,
+        history: Option<Vec<String>>,
         exp_line: &'static str,
         exp_output: Vec<CapturedOut>,
+        exp_history: Option<Vec<String>>,
     }
 
     impl Default for ReadLineInteractiveTest {
@@ -659,8 +726,10 @@ mod tests {
                 keys: vec![],
                 prompt: "",
                 previous: "",
+                history: None,
                 exp_line: "",
                 exp_output: vec![CapturedOut::Clear(ClearType::UntilNewLine)],
+                exp_history: None,
             }
         }
     }
@@ -716,6 +785,14 @@ mod tests {
             self
         }
 
+        /// Enables history tracking and sets the history to use for the test as `history` and
+        /// expects that `history` matches `exp_history` upon test completion.
+        fn set_history(mut self, history: Vec<String>, exp_history: Vec<String>) -> Self {
+            self.history = Some(history);
+            self.exp_history = Some(exp_history);
+            self
+        }
+
         /// Adds a final return key to the golden input, a newline to the expected output, and
         /// executes the test.
         fn accept(mut self) {
@@ -725,10 +802,22 @@ mod tests {
             let mut console = MockConsole::default();
             console.add_input_keys(&self.keys);
             console.set_size(Position { row: 5, column: 15 });
-            let line =
-                block_on(read_line_interactive(&mut console, self.prompt, self.previous)).unwrap();
+            let line = match self.history.as_mut() {
+                Some(mut history) => block_on(read_line_interactive(
+                    &mut console,
+                    self.prompt,
+                    self.previous,
+                    Some(&mut history),
+                ))
+                .unwrap(),
+                None => {
+                    block_on(read_line_interactive(&mut console, self.prompt, self.previous, None))
+                        .unwrap()
+                }
+            };
             assert_eq!(self.exp_line, &line);
             assert_eq!(self.exp_output.as_slice(), console.captured_out());
+            assert_eq!(self.exp_history, self.history);
         }
     }
 
@@ -938,9 +1027,155 @@ mod tests {
     }
 
     #[test]
-    fn test_read_line_interactive_history_not_implemented() {
+    fn test_read_line_interactive_history_not_enabled_by_default() {
         ReadLineInteractiveTest::default().add_key(Key::ArrowUp).accept();
         ReadLineInteractiveTest::default().add_key(Key::ArrowDown).accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_history_empty() {
+        ReadLineInteractiveTest::default()
+            .set_history(vec![], vec!["foobarbaz".to_owned()])
+            //
+            .add_key_chars("foo")
+            .add_output_bytes(b"foo")
+            //
+            .add_key(Key::ArrowUp)
+            //
+            .add_key_chars("bar")
+            .add_output_bytes(b"bar")
+            //
+            .add_key(Key::ArrowDown)
+            //
+            .add_key_chars("baz")
+            .add_output_bytes(b"baz")
+            //
+            .set_line("foobarbaz")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_skips_empty_lines() {
+        ReadLineInteractiveTest::default()
+            .set_history(vec!["first".to_owned()], vec!["first".to_owned()])
+            // -
+            .add_key_chars("x")
+            .add_output(CapturedOut::Write(b"x".to_vec()))
+            // -
+            .add_key(Key::Backspace)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output_bytes(b"")
+            .add_output_bytes(b" ")
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_history_navigate_up_down() {
+        ReadLineInteractiveTest::default()
+            .set_prompt("? ")
+            .add_output(CapturedOut::Write(b"? ".to_vec()))
+            //
+            .set_history(
+                vec!["first".to_owned(), "second".to_owned(), "third".to_owned()],
+                vec!["first".to_owned(), "second".to_owned(), "third".to_owned()],
+            )
+            //
+            .add_key(Key::ArrowUp)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::Write(b"third".to_vec()))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowUp)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-5))
+            .add_output(CapturedOut::Clear(ClearType::UntilNewLine))
+            .add_output(CapturedOut::Write(b"second".to_vec()))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowUp)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-6))
+            .add_output(CapturedOut::Clear(ClearType::UntilNewLine))
+            .add_output(CapturedOut::Write(b"first".to_vec()))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowUp)
+            //
+            .add_key(Key::ArrowDown)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-5))
+            .add_output(CapturedOut::Clear(ClearType::UntilNewLine))
+            .add_output(CapturedOut::Write(b"second".to_vec()))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowDown)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-6))
+            .add_output(CapturedOut::Clear(ClearType::UntilNewLine))
+            .add_output(CapturedOut::Write(b"third".to_vec()))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowDown)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-5))
+            .add_output(CapturedOut::Clear(ClearType::UntilNewLine))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowDown)
+            //
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_history_navigate_and_edit() {
+        ReadLineInteractiveTest::default()
+            .set_prompt("? ")
+            .add_output(CapturedOut::Write(b"? ".to_vec()))
+            //
+            .set_history(
+                vec!["first".to_owned(), "second".to_owned(), "third".to_owned()],
+                vec![
+                    "first".to_owned(),
+                    "second".to_owned(),
+                    "third".to_owned(),
+                    "sec ond".to_owned(),
+                ],
+            )
+            //
+            .add_key(Key::ArrowUp)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::Write(b"third".to_vec()))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowUp)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-5))
+            .add_output(CapturedOut::Clear(ClearType::UntilNewLine))
+            .add_output(CapturedOut::Write(b"second".to_vec()))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key_chars(" ")
+            .add_output(CapturedOut::HideCursor)
+            .add_output_bytes(b" ")
+            .add_output(CapturedOut::Write(b"ond".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-3))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("sec ond")
+            .accept();
     }
 
     #[test]

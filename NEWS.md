@@ -42,6 +42,8 @@ not adhere to semantic versioning until 1.0.0.**
     handling of the `:memory:` value.  Instead, this can now take arbitrary URIs
     to refer to drive targets.
 
+*   Added input history tracking to the REPL interface.
+
 ## Changes in version 0.6.0
 
 **Released on 2021-02-19.**
