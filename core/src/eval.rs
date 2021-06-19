@@ -282,13 +282,28 @@ impl ToString for Value {
     }
 }
 
+/// Evaluates all arguments given to a function.
+///
+/// This is a convenience function to simplify the processing of arguments because most functions
+/// do not care about unevaluated expressions.  However, using this function is inefficient in many
+/// occasions because we are allocating a vector that we don't need.
+// TODO(jmmv): Per the efficiency comment above, consider eliminating this function.
+pub fn eval_all(exprs: &[Expr], syms: &mut Symbols) -> Result<Vec<Value>> {
+    let mut values = Vec::with_capacity(exprs.len());
+    for expr in exprs {
+        values.push(expr.eval(syms)?);
+    }
+    Ok(values)
+}
+
 impl Expr {
     /// Evaluates the subscripts of an array reference.
-    fn eval_array_args(&self, args: &[Value]) -> Result<Vec<i32>> {
+    fn eval_array_args(&self, syms: &mut Symbols, args: &[Expr]) -> Result<Vec<i32>> {
+        let values = eval_all(args, syms)?;
         let mut subscripts = Vec::with_capacity(args.len());
-        for a in args {
-            match a {
-                Value::Integer(i) => subscripts.push(*i),
+        for v in values {
+            match v {
+                Value::Integer(i) => subscripts.push(i),
                 _ => return Err(Error::new("Array subscripts must be integers")),
             }
         }
@@ -300,7 +315,7 @@ impl Expr {
         &self,
         syms: &mut Symbols,
         fref: &VarRef,
-        values: Vec<Value>,
+        args: &[Expr],
         f: Rc<dyn Function>,
     ) -> Result<Value> {
         let metadata = f.metadata();
@@ -308,7 +323,7 @@ impl Expr {
             return Err(Error::new("Incompatible type annotation for function call"));
         }
 
-        let result = f.exec(values, syms);
+        let result = f.exec(args, syms);
         match result {
             Ok(value) => {
                 debug_assert!(metadata.return_type() != VarType::Auto);
@@ -362,21 +377,25 @@ impl Expr {
             Expr::Symbol(vref) => Ok(syms.get_var(vref)?.clone()),
 
             Expr::Call(fref, args) => {
-                let mut values = Vec::with_capacity(args.len());
-                for a in args {
-                    values.push(a.eval(syms)?);
-                }
                 match syms.get(fref)? {
-                    Some(Symbol::Array(array)) => {
-                        let subscripts = self.eval_array_args(&values)?;
-                        array.index(&subscripts).map(|v| v.clone())
-                    }
+                    Some(Symbol::Array(_)) => (), // Fallthrough.
                     Some(Symbol::Function(f)) => {
                         let f = f.clone();
-                        self.eval_function_call(syms, fref, values, f)
+                        return self.eval_function_call(syms, fref, args, f);
                     }
-                    Some(_) => Err(Error::new(format!("{} is not an array or a function", fref))),
-                    None => Err(Error::new(format!("Unknown function or array {}", fref))),
+                    Some(_) => {
+                        return Err(Error::new(format!("{} is not an array or a function", fref)))
+                    }
+                    None => return Err(Error::new(format!("Unknown function or array {}", fref))),
+                }
+
+                // We have to handle arrays outside of the match above because we cannot hold a
+                // reference to the array while we evaluate subscripts.  This implies that we have
+                // to do a second lookup of the array right below, which isn't great...
+                let subscripts = self.eval_array_args(syms, args)?;
+                match syms.get(fref)? {
+                    Some(Symbol::Array(array)) => array.index(&subscripts).map(|v| v.clone()),
+                    _ => unreachable!(),
                 }
             }
         }

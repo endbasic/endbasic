@@ -522,9 +522,13 @@ pub trait Function {
 
     /// Executes the function.
     ///
-    /// `args` contains the evaluated arguments as provided in the invocation of the function.
+    /// `args` contains the unevaluated arguments as provided in the invocation of the function.
+    /// These are needed to support functions that need unevaluated symbol references (such as
+    /// `LBOUND(array)`).  Because most functions don't support this kind of input, they should use
+    /// `eval::eval_all` to process all arguments.
+    ///
     /// `symbols` provides mutable access to the current state of the machine's symbols.
-    fn exec(&self, args: Vec<Value>, symbols: &mut Symbols) -> FunctionResult;
+    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult;
 }
 
 /// A trait to define a command that is executed by a `Machine`.
