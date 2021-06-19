@@ -16,7 +16,7 @@
 //! Test utilities.
 
 use crate::ast::{ArgSep, Expr, Value, VarType};
-use crate::eval::Error;
+use crate::eval::{eval_all, Error};
 use crate::exec::Machine;
 use crate::syms::{
     Array, CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -47,7 +47,8 @@ impl Function for ErrorFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
+    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols)?;
         match args.as_slice() {
             [Value::Text(s)] => {
                 if s == "argument" {
@@ -208,10 +209,11 @@ impl Function for SumFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
+    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
         let mut result = Value::Integer(0);
         for a in args {
-            result = result.add(&a)?;
+            let value = a.eval(symbols)?;
+            result = result.add(&value)?;
         }
         Ok(result)
     }
@@ -287,7 +289,7 @@ impl Function for TypeCheckFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
+    fn exec(&self, args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
         assert!(args.is_empty());
         Ok(self.value.clone())
     }

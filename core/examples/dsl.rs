@@ -74,7 +74,7 @@ impl Function for NumLightsFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
+    fn exec(&self, args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }

@@ -266,10 +266,11 @@ impl Function for GpioReadFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>, symbols: &mut Symbols) -> FunctionResult {
-        match args.as_slice() {
+    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        match args {
             [pin] => {
-                let pin = Pin::parse_value(pin)?;
+                let pin = pin.eval(symbols)?;
+                let pin = Pin::parse_value(&pin)?;
                 let value = match MockPins::try_new(symbols) {
                     Some(mut pins) => pins.read(pin)?,
                     None => self.pins.borrow_mut().read(pin)?,

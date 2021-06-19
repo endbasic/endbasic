@@ -17,6 +17,7 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
+use endbasic_core::eval::eval_all;
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -93,7 +94,8 @@ impl Function for DtoiFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
+    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols)?;
         match args.as_slice() {
             [Value::Double(n)] => Ok(Value::Integer(*n as i32)),
             _ => Err(CallError::SyntaxError),
@@ -124,7 +126,8 @@ impl Function for ItodFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
+    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols)?;
         match args.as_slice() {
             [Value::Integer(n)] => Ok(Value::Double(*n as f64)),
             _ => Err(CallError::SyntaxError),
@@ -219,7 +222,8 @@ impl Function for RndFunction {
         &self.metadata
     }
 
-    fn exec(&self, args: Vec<Value>, _symbols: &mut Symbols) -> FunctionResult {
+    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols)?;
         match args.as_slice() {
             [] => Ok(Value::Double(self.prng.borrow_mut().next())),
             [Value::Integer(n)] => match n.cmp(&0) {
