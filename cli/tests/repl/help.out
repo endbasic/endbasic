@@ -14,6 +14,7 @@ Output from HELP:
 
     Top-level help topics:
 
+    >> Array functions
     >> Console
     >> File system
     >> Hardware interface
@@ -25,6 +26,15 @@ Output from HELP:
 
     Type HELP followed by the name of a topic for details.
     Type HELP HELP for details on how to specify topic names.
+
+Output from HELP ARRAY:
+
+    Array functions
+
+    >> LBOUND%    Returns the lower bound for the given dimension of the array.
+    >> UBOUND%    Returns the upper bound for the given dimension of the array.
+
+    Type HELP followed by the name of a symbol for details.
 
 Output from HELP CONSOLE:
 
@@ -498,6 +508,18 @@ Output from HELP LEN:
 
     Returns the length of the string in expr$.
 
+Output from HELP LBOUND:
+
+    LBOUND%(array[, dimension%])
+
+    Returns the lower bound for the given dimension of the array.
+
+    The lower bound is the smallest available subscript that can be
+    provided to array indexing operations.
+
+    For one-dimensional arrays, the dimension% is optional.  For
+    multi-dimensional arrays, the dimension% is a 1-indexed integer.
+
 Output from HELP LTRIM:
 
     LTRIM$(expr$)
@@ -549,5 +571,17 @@ Output from HELP RTRIM:
     RTRIM$(expr$)
 
     Returns a copy of a string with trailing whitespace removed.
+
+Output from HELP UBOUND:
+
+    UBOUND%(array[, dimension%])
+
+    Returns the upper bound for the given dimension of the array.
+
+    The upper bound is the largest available subscript that can be provided
+    to array indexing operations.
+
+    For one-dimensional arrays, the dimension% is optional.  For
+    multi-dimensional arrays, the dimension% is a 1-indexed integer.
 
 End of input by CTRL-D

@@ -36,6 +36,7 @@ interpreter individually.
 EndBASIC's standard library is inspired by other BASIC interpreters but does
 not intend to be fully compatible with them.  The library currently contains:
 
+*   Arrays: `LBOUND`, `UBOUND`.
 *   Console manipulation: `CLS`, `COLOR`, `INPUT`, `LOCATE`, `PRINT`.
 *   Date and time manipulation: `SLEEP`.
 *   Hardware interaction: `GPIO_CLEAR`, `GPIO_READ`, `GPIO_SETUP`, `GPIO_WRITE`.
