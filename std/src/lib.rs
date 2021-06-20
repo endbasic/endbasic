@@ -26,6 +26,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 // TODO(jmmv): Should narrow the exposed interface by 1.0.0.
+pub mod arrays;
 pub mod console;
 mod editor;
 pub mod exec;
@@ -118,6 +119,7 @@ impl MachineBuilder {
     /// Builds the interpreter.
     pub fn build(mut self) -> Result<Machine> {
         let mut machine = Machine::default();
+        arrays::add_all(&mut machine);
         console::add_all(&mut machine, self.get_console()?);
         gpio::add_all(&mut machine, self.get_gpio_pins());
         exec::add_all(&mut machine, self.sleep_fn);

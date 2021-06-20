@@ -29,6 +29,8 @@ not adhere to semantic versioning until 1.0.0.**
     intentional, but if there is a need, we can put restrictions in place
     again.
 
+*   Added the array functions `LBOUND` and `UBOUND`.
+
 *   Refactored the `HELP` command to only print a summary of topics by
     default.  As part of this, topics can now be looked up using prefixes of
     their names.
