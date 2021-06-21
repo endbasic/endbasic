@@ -157,6 +157,7 @@ mod tests {
     }
 
     impl io::Read for FaultyReader {
+        #[allow(clippy::branches_sharing_code)]
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             if self.current_read == self.fail_at_read {
                 self.current_read += 1;
