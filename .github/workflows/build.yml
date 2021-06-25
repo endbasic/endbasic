@@ -28,6 +28,7 @@ jobs:
                   default: true
                   target: armv7-unknown-linux-gnueabihf
             - uses: actions/checkout@v2
+            - run: sudo apt update
             - run: sudo apt install gcc-arm-linux-gnueabihf
             - run: ./.github/workflows/release.sh linux-armv7-rpi
             - uses: actions/upload-artifact@v2
