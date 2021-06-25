@@ -15,7 +15,7 @@
 
 //! Interactive help support.
 
-use crate::console::Console;
+use crate::console::{refill_and_print, Console};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, VarType};
@@ -72,70 +72,6 @@ fn header() -> Vec<String> {
         format!("    Project page at <{}>", env!("CARGO_PKG_HOMEPAGE")),
         "    License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>".to_owned(),
     ]
-}
-
-/// Refills a paragraph to fit within a maximum width, returning the formatted lines.
-///
-/// This does not cut words half-way, which means that it may be impossible to fit certain words in
-/// the specified width.  If that happens, lines will overflow.
-fn refill(paragraph: &str, width: usize) -> Vec<String> {
-    if paragraph.is_empty() {
-        return vec!["".to_owned()];
-    }
-
-    let mut lines = vec![];
-
-    let mut line = String::new();
-    for word in paragraph.split_whitespace() {
-        if !line.is_empty() {
-            // Determine how many spaces to inject after a period.  We want 2 spaces to separate
-            // different sentences and 1 otherwise.  The heuristic here isn't great and it'd be
-            // better to respect the original spacing of the paragraph.
-            let spaces = if line.ends_with('.') {
-                let first = word.chars().next().expect("Words cannot be empty");
-                if first == first.to_ascii_uppercase() {
-                    2
-                } else {
-                    1
-                }
-            } else {
-                1
-            };
-
-            if (line.len() + word.len() + spaces) >= width {
-                lines.push(line);
-                line = String::new();
-            } else {
-                for _ in 0..spaces {
-                    line.push(' ');
-                }
-            }
-        }
-        line.push_str(word);
-    }
-    if !line.is_empty() {
-        lines.push(line);
-    }
-
-    lines
-}
-
-/// Same as `refill` but prints the lines to the console instead of returning them.
-///
-/// The width is automatically determined from the console's size.
-fn refill_and_print(console: &mut dyn Console, paragraph: &str) -> io::Result<()> {
-    // TODO(jmmv): This queries the size on every print, which is not very efficient.  Should reuse
-    // this across calls, maybe by having a wrapper over Console and using it throughout.
-    let size = console.size()?;
-    let lines = refill(paragraph, size.column - 8);
-    for line in lines {
-        if line.is_empty() {
-            console.print("")?;
-        } else {
-            console.print(&format!("    {}", line))?;
-        }
-    }
-    Ok(())
 }
 
 /// Handler for a specific help topic.
@@ -545,34 +481,6 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use crate::testutils::*;
-
-    #[test]
-    fn test_refill_empty() {
-        assert_eq!(&[""], refill("", 0).as_slice());
-        assert_eq!(&[""], refill("", 10).as_slice());
-    }
-
-    #[test]
-    fn test_refill_nothing_fits() {
-        assert_eq!(&["this", "is", "some", "text"], refill("this is some text", 0).as_slice());
-        assert_eq!(&["this", "is", "some", "text"], refill("this is some text", 1).as_slice());
-    }
-
-    #[test]
-    fn test_refill_some_lines() {
-        assert_eq!(
-            &["this is a piece", "of text with", "a-fictitious-very-long-word", "within it"],
-            refill("this is a piece of text with a-fictitious-very-long-word within it", 16)
-                .as_slice()
-        );
-    }
-
-    #[test]
-    fn test_refill_reformats_periods() {
-        assert_eq!(&["foo. bar. baz."], refill("foo. bar.    baz.", 100).as_slice());
-        assert_eq!(&["foo.  Bar. baz."], refill("foo. Bar.    baz.", 100).as_slice());
-        assert_eq!(&["[some .. range]"], refill("[some .. range]", 100).as_slice());
-    }
 
     fn tester() -> Tester {
         let tester = Tester::empty();
