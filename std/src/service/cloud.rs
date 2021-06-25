@@ -18,6 +18,7 @@
 use crate::service::*;
 use async_trait::async_trait;
 use bytes::Buf;
+use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest::StatusCode;
 use std::collections::HashMap;
@@ -76,6 +77,20 @@ pub(crate) struct CloudService {
     client: reqwest::Client,
 }
 
+impl CloudService {
+    /// Returns the default headers to add to every request.
+    fn default_headers(&self) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-endbasic-client-version",
+            env!("CARGO_PKG_VERSION")
+                .parse()
+                .expect("Package version should have been serializable"),
+        );
+        headers
+    }
+}
+
 #[async_trait(?Send)]
 impl Service for CloudService {
     async fn authenticate(&mut self, username: &str, password: &str) -> io::Result<AccessToken> {
@@ -113,6 +128,7 @@ impl Service for CloudService {
         let response = self
             .client
             .post(&format!("{}/api/login", API_ADDRESS))
+            .headers(self.default_headers())
             .body(serde_json::to_vec(&request)?)
             .bearer_auth(access_token.as_str())
             .send()
@@ -141,6 +157,7 @@ impl Service for CloudService {
         let response = self
             .client
             .get(&format!("{}/api/users/{}/files", API_ADDRESS, username))
+            .headers(self.default_headers())
             .bearer_auth(access_token.as_str())
             .send()
             .await
@@ -165,6 +182,7 @@ impl Service for CloudService {
         let response = self
             .client
             .get(&format!("{}/api/users/{}/files/{}", API_ADDRESS, username, filename))
+            .headers(self.default_headers())
             .query(&request)
             .bearer_auth(access_token.as_str())
             .send()
@@ -190,6 +208,7 @@ impl Service for CloudService {
         let response = self
             .client
             .patch(&format!("{}/api/users/{}/files/{}", API_ADDRESS, username, filename))
+            .headers(self.default_headers())
             .body(serde_json::to_vec(&request)?)
             .bearer_auth(access_token.as_str())
             .send()
@@ -210,6 +229,7 @@ impl Service for CloudService {
         let response = self
             .client
             .delete(&format!("{}/api/users/{}/files/{}", API_ADDRESS, username, filename))
+            .headers(self.default_headers())
             .header("Content-Length", 0)
             .bearer_auth(access_token.as_str())
             .send()
