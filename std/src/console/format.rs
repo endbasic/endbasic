@@ -64,19 +64,24 @@ fn refill(paragraph: &str, width: usize) -> Vec<String> {
     lines
 }
 
-/// Same as `refill` but prints the lines to the console instead of returning them.
+/// Same as `refill` but prints the lines to the console instead of returning them and prefixes them
+/// with an optional `indent`.
 ///
 /// The width is automatically determined from the console's size.
-pub(crate) fn refill_and_print(console: &mut dyn Console, paragraph: &str) -> io::Result<()> {
+pub(crate) fn refill_and_print(
+    console: &mut dyn Console,
+    paragraph: &str,
+    indent: &str,
+) -> io::Result<()> {
     // TODO(jmmv): This queries the size on every print, which is not very efficient.  Should reuse
     // this across calls, maybe by having a wrapper over Console and using it throughout.
     let size = console.size()?;
-    let lines = refill(paragraph, size.column - 8);
+    let lines = refill(paragraph, size.column - 4 - indent.len());
     for line in lines {
         if line.is_empty() {
             console.print("")?;
         } else {
-            console.print(&format!("    {}", line))?;
+            console.print(&format!("{}{}", indent, line))?;
         }
     }
     Ok(())

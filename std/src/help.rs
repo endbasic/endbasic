@@ -112,11 +112,12 @@ impl Topic for CallableTopic {
         console.print("")?;
         if self.metadata.return_type() == VarType::Void {
             if self.metadata.syntax().is_empty() {
-                refill_and_print(console, self.metadata.name())?
+                refill_and_print(console, self.metadata.name(), "    ")?
             } else {
                 refill_and_print(
                     console,
                     &format!("{} {}", self.metadata.name(), self.metadata.syntax()),
+                    "    ",
                 )?
             }
         } else {
@@ -128,11 +129,12 @@ impl Topic for CallableTopic {
                     self.metadata.return_type().annotation(),
                     self.metadata.syntax(),
                 ),
+                "    ",
             )?;
         }
         for paragraph in self.metadata.description() {
             console.print("")?;
-            refill_and_print(console, paragraph)?;
+            refill_and_print(console, paragraph, "    ")?;
         }
         console.print("")?;
         Ok(())
@@ -180,7 +182,7 @@ impl Topic for CategoryTopic {
 
         console.print("")?;
         for line in description.lines() {
-            refill_and_print(console, line)?;
+            refill_and_print(console, line, "    ")?;
             console.print("")?;
         }
         for (name, blurb) in index.iter() {
@@ -190,7 +192,11 @@ impl Topic for CategoryTopic {
             console.print(&format!("    >> {}{}    {}", name, filler, blurb))?;
         }
         console.print("")?;
-        refill_and_print(console, "    Type HELP followed by the name of a symbol for details.")?;
+        refill_and_print(
+            console,
+            "    Type HELP followed by the name of a symbol for details.",
+            "    ",
+        )?;
         console.print("")?;
         Ok(())
     }
@@ -326,13 +332,13 @@ equivalent: HELP CON, HELP console, HELP \"Console manipulation\".",
     fn summary(&self, topics: &Topics) -> io::Result<()> {
         let mut console = self.console.borrow_mut();
         for line in header() {
-            refill_and_print(&mut *console, &line)?;
+            refill_and_print(&mut *console, &line, "    ")?;
         }
 
         // TODO(jmmv): Should use refill_and_print but continuation lines need special handling to
         // be indented properly.
         console.print("")?;
-        refill_and_print(&mut *console, "Top-level help topics:")?;
+        refill_and_print(&mut *console, "Top-level help topics:", "    ")?;
         console.print("")?;
         for topic in topics.values() {
             if topic.show_in_summary() {
@@ -340,10 +346,15 @@ equivalent: HELP CON, HELP console, HELP \"Console manipulation\".",
             }
         }
         console.print("")?;
-        refill_and_print(&mut *console, "Type HELP followed by the name of a topic for details.")?;
+        refill_and_print(
+            &mut *console,
+            "Type HELP followed by the name of a topic for details.",
+            "    ",
+        )?;
         refill_and_print(
             &mut *console,
             "Type HELP HELP for details on how to specify topic names.",
+            "    ",
         )?;
         console.print("")?;
 

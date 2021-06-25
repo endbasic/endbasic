@@ -15,7 +15,7 @@
 
 //! Commands to interact with the cloud service.
 
-use crate::console::{read_line, read_line_secure, Console};
+use crate::console::{read_line, read_line_secure, refill_and_print, Console};
 use crate::service::*;
 use crate::storage::{FileAcls, Storage};
 use async_trait::async_trait;
@@ -141,12 +141,10 @@ other people's drives with the MOUNT command.",
                 Ok(Ok(response)) => {
                     let console = &mut *self.console.borrow_mut();
                     if !response.motd.is_empty() {
-                        // TODO(jmmv): This should probably use the code in the help module to
-                        // refill paragraphs, but we ought to generalize that first.
                         console.print("")?;
                         console.print("----- BEGIN SERVER MOTD -----")?;
                         for line in response.motd {
-                            console.print(&line)?;
+                            refill_and_print(console, &line, "")?;
                         }
                         console.print("-----  END SERVER MOTD  -----")?;
                         console.print("")?;
