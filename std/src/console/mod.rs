@@ -20,6 +20,8 @@ use std::io;
 
 mod cmds;
 pub(crate) use cmds::add_all;
+mod format;
+pub(crate) use format::refill_and_print;
 mod readline;
 pub use readline::read_line;
 pub(crate) use readline::read_line_secure;
