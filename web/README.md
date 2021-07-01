@@ -32,4 +32,4 @@ a minimal web interface to it.
 
 Visit the following address for a live deployment of the EndBASIC interpreter!
 
-> https://endbasic.jmmv.dev/
+> https://repl.endbasic.dev/

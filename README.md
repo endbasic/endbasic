@@ -27,7 +27,7 @@ EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 
 ## Quick start on the web
 
-Open EndBASIC in your browser by visiting: <https://endbasic.jmmv.dev/>
+Open EndBASIC in your browser by visiting: <https://repl.endbasic.dev/>
 
 This should work on all major desktop browsers and on iOS.  Unfortunately, there
 are known issues on Android at the moment.
