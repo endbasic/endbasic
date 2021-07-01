@@ -6,8 +6,8 @@ authors = ["Julio Merino <julio@meroh.net>"]
 categories = ["development-tools", "parser-implementations"]
 keywords = ["basic", "interpreter", "learning", "programming"]
 description = "The EndBASIC programming language - standard library"
-homepage = "https://github.com/jmmv/endbasic"
-repository = "https://github.com/jmmv/endbasic"
+homepage = "https://github.com/endbasic/endbasic"
+repository = "https://github.com/endbasic/endbasic"
 readme = "README.md"
 edition = "2018"
 

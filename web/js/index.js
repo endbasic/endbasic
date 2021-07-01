@@ -23,7 +23,7 @@ $('#build-id').text(buildId);
 
 var template = "Build ID: " + buildId;
 $('#report-issue').attr(
-    "href", "https://github.com/jmmv/endbasic/issues/new?body=" + template);
+    "href", "https://github.com/endbasic/endbasic/issues/new?body=" + template);
 
 var term = new xterm.Terminal();
 term.setOption("fontSize", 18);

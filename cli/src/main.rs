@@ -68,8 +68,8 @@ fn program_name(mut args: env::Args, default_name: &'static str) -> (String, env
 fn help(name: &str, opts: &Options) {
     let brief = format!("Usage: {} [options] [program-file]", name);
     println!("{}", opts.usage(&brief));
-    println!("Report bugs to: https://github.com/jmmv/endbasic/issues");
-    println!("EndBASIC home page: https://github.com/jmmv/endbasic");
+    println!("Report bugs to: https://github.com/endbasic/endbasic/issues");
+    println!("EndBASIC home page: https://github.com/endbasic/endbasic");
 }
 
 /// Prints version information following the GNU Standards format.

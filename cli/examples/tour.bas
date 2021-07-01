@@ -239,7 +239,7 @@ PRINT "If you like what you have seen so far, please head to the project's GitHu
 PRINT "page and give it a star:"
 COLOR 12
 PRINT
-PRINT "    https://github.com/jmmv/endbasic/"
+PRINT "    https://github.com/endbasic/endbasic/"
 PRINT
 COLOR
 PRINT "Then, visit my blog and subscribe to receive fresh EndBASIC content or..."

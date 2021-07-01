@@ -1,9 +1,9 @@
 # The EndBASIC programming language
 
-![Build and test](https://github.com/jmmv/endbasic/workflows/Build%20and%20test/badge.svg)
-![Health checks](https://github.com/jmmv/endbasic/workflows/Health%20checks/badge.svg)
-![Deploy to staging](https://github.com/jmmv/endbasic/workflows/Deploy%20to%20staging/badge.svg)
-![Deploy to release](https://github.com/jmmv/endbasic/workflows/Deploy%20to%20release/badge.svg)
+![Build and test](https://github.com/endbasic/endbasic/workflows/Build%20and%20test/badge.svg)
+![Health checks](https://github.com/endbasic/endbasic/workflows/Health%20checks/badge.svg)
+![Deploy to staging](https://github.com/endbasic/endbasic/workflows/Deploy%20to%20staging/badge.svg)
+![Deploy to release](https://github.com/endbasic/endbasic/workflows/Deploy%20to%20release/badge.svg)
 
 EndBASIC is an interpreter for a BASIC-like language and is inspired by
 Amstrad's Locomotive BASIC 1.1 and Microsoft's QuickBASIC 4.5.  Like the former,
@@ -38,7 +38,7 @@ your browser's local storage and not uploaded to the cloud.
 ## Quick start on your machine
 
 Visit the
-[release page](https://github.com/jmmv/endbasic/releases/tag/endbasic-0.6.0) to
+[release page](https://github.com/endbasic/endbasic/releases/tag/endbasic-0.6.0) to
 download prebuilt binaries.  Once downloaded, unpack the archive and run the
 `endbasic` binary to get started.
 
