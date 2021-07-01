@@ -2,7 +2,7 @@
 name = "endbasic-core"
 version = "0.6.0" # ENDBASIC-VERSION
 license = "Apache-2.0"
-authors = ["Julio Merino <julio@meroh.net>"]
+authors = ["Julio Merino <jmmv@endbasic.dev>"]
 categories = ["development-tools", "parser-implementations"]
 keywords = ["basic", "interpreter", "learning", "programming"]
 description = "The EndBASIC programming language - core"
