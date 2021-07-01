@@ -13,7 +13,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-name: Deploy to staging
+name: Deploy to repl-staging.endbasic.dev
 
 on:
     push:
@@ -28,9 +28,9 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - run: ./.github/workflows/publish.sh
-            - uses: tsunematsu21/actions-publish-gh-pages@v1.0.1
+            - uses: JamesIves/github-pages-deploy-action@4.1.4
               with:
-                dir: web/dist
-                repo: endbasic/staging
+                folder: web/dist
+                repository-name: endbasic/repl-staging.endbasic.dev
                 branch: gh-pages
-                token: ${{ secrets.SERVICE_ACCOUNT_ACCESS_TOKEN }}
+                ssh-key: ${{ secrets.REPL_STAGING_ENDBASIC_DEV_DEPLOY_KEY }}
