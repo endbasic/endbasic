@@ -1,9 +1,9 @@
 # The EndBASIC programming language - CLI
 
-![Build and test](https://github.com/jmmv/endbasic/workflows/Build%20and%20test/badge.svg)
-![Health checks](https://github.com/jmmv/endbasic/workflows/Health%20checks/badge.svg)
-![Deploy to staging](https://github.com/jmmv/endbasic/workflows/Deploy%20to%20staging/badge.svg)
-![Deploy to release](https://github.com/jmmv/endbasic/workflows/Deploy%20to%20release/badge.svg)
+![Build and test](https://github.com/endbasic/endbasic/workflows/Build%20and%20test/badge.svg)
+![Health checks](https://github.com/endbasic/endbasic/workflows/Health%20checks/badge.svg)
+![Deploy to staging](https://github.com/endbasic/endbasic/workflows/Deploy%20to%20staging/badge.svg)
+![Deploy to release](https://github.com/endbasic/endbasic/workflows/Deploy%20to%20release/badge.svg)
 [![Crates.io](https://img.shields.io/crates/v/endbasic.svg)](https://crates.io/crates/endbasic/)
 [![Docs.rs](https://docs.rs/endbasic/badge.svg)](https://docs.rs/endbasic/)
 

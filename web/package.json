@@ -10,7 +10,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/jmmv/endbasic.git"
+        "url": "git+https://github.com/endbasic/endbasic.git"
     },
     "keywords": [
         "basic",
@@ -21,9 +21,9 @@
     "author": "Julio Merino <julio@meroh.net>",
     "license": "Apache-2.0",
     "bugs": {
-        "url": "https://github.com/jmmv/endbasic/issues"
+        "url": "https://github.com/endbasic/endbasic/issues"
     },
-    "homepage": "https://github.com/jmmv/endbasic",
+    "homepage": "https://github.com/endbasic/endbasic",
     "dependencies": {
         "jquery": "3.5.1",
         "xterm": "4.8.1",
