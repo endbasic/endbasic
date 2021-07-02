@@ -27,7 +27,8 @@ EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 
 ## Quick start on the web
 
-Open EndBASIC in your browser by visiting: <https://repl.endbasic.dev/>
+Open EndBASIC in your browser by visiting <https://repl.endbasic.dev/> or go
+the project's website at <https://www.endbasic.dev/>.
 
 This should work on all major desktop browsers and on iOS.  Unfortunately, there
 are known issues on Android at the moment.
@@ -38,40 +39,13 @@ your browser's local storage and not uploaded to the cloud.
 ## Quick start on your machine
 
 Visit the
-[release page](https://github.com/endbasic/endbasic/releases/tag/endbasic-0.6.0) to
-download prebuilt binaries.  Once downloaded, unpack the archive and run the
+[release page](https://github.com/endbasic/endbasic/releases/tag/endbasic-0.6.0)
+to download prebuilt binaries.  Once downloaded, unpack the archive and run the
 `endbasic` binary to get started.
 
 Of course, you can also build and install EndBASIC from source by running the
 following command (assuming you have a Rust toolchain installed): `cargo install
 endbasic`.
-
-## Gallery
-
-Blog posts: <https://jmmv.dev/tags/endbasic/>
-
-Sample code:
-
-*   [`cli/examples`](cli/examples) contains the EndBASIC demo programs.  These
-    are built into the interpreter and can be run with a command like
-    `LOAD "DEMOS:/TOUR.BAS": RUN`.
-*   [`core/examples`](core/examples) and [`std/examples`](std/examples)
-    demonstrate how to embed the EndBASIC interpreter into your own programs.
-
-A little demo of the interactive capabilities:
-
-<a href="assets/repl-demo.gif">
-    <img src="assets/repl-demo.gif"
-         alt="Video showing the first page of the tour and the guess demo">
-</a>
-
-And a photo of an EndBASIC program controlling a Raspberry Pi:
-
-<a href="assets/gpio-rpi.jpg">
-    <img src="assets/gpio-rpi.jpg"
-         alt="Raspberry Pi with an EndBASIC program to control its GPIO"
-         width="600" height="800">
-</a>
 
 ## More information
 
