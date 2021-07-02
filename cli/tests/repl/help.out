@@ -46,6 +46,9 @@ Output from HELP CLOUD:
     EndBASIC.  The commands below allow you interact with this service once
     you have created an account.
 
+    To create an account, visit https://www.endbasic.dev/service.html and
+    come back here once the account is ready.
+
     During account creation time, you are assigned a unique, persistent
     drive in which you can store files privately.  You can later choose to
     share individual files with the public or with specific individuals, at
@@ -415,6 +418,9 @@ Output from HELP LOGIN:
     CLOUD:/ location, which you can access with any other file-related
     commands.  Using the cloud:// file system scheme, you can mount other
     people's drives with the MOUNT command.
+
+    To create an account, visit https://www.endbasic.dev/service.html and
+    come back here once the account is ready.
 
 Output from HELP MOUNT:
 
