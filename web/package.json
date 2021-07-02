@@ -23,7 +23,7 @@
     "bugs": {
         "url": "https://github.com/endbasic/endbasic/issues"
     },
-    "homepage": "https://github.com/endbasic/endbasic",
+    "homepage": "https://www.endbasic.dev/",
     "dependencies": {
         "jquery": "3.5.1",
         "xterm": "4.8.1",
