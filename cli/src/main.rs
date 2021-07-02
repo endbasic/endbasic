@@ -70,7 +70,7 @@ fn help(name: &str, opts: &Options) {
     let brief = format!("Usage: {} [options] [program-file]", name);
     println!("{}", opts.usage(&brief));
     println!("Report bugs to: https://github.com/endbasic/endbasic/issues");
-    println!("EndBASIC home page: https://github.com/endbasic/endbasic");
+    println!("EndBASIC home page: https://www.endbasic.dev/");
 }
 
 /// Prints version information following the GNU Standards format.
