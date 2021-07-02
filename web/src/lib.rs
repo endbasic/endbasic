@@ -317,7 +317,12 @@ impl WebTerminal {
 /// Gets the build details for display on the interface.
 #[wasm_bindgen]
 pub fn get_build_id() -> String {
-    format!("{} built on {}", env!("VERGEN_SHA_SHORT"), env!("VERGEN_BUILD_DATE"))
+    format!(
+        "{} built from {} on {}",
+        env!("CARGO_PKG_VERSION"),
+        env!("VERGEN_SHA_SHORT"),
+        env!("VERGEN_BUILD_DATE")
+    )
 }
 
 /// Module initialization.
