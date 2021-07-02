@@ -34,6 +34,8 @@ const CATEGORY: &str = "Cloud access
 The EndBASIC service, should you choose to create an account in, is a cloud service that provides \
 online file sharing across users of EndBASIC.  The commands below allow you interact with this \
 service once you have created an account.
+To create an account, visit https://www.endbasic.dev/service.html and come back here once the \
+account is ready.
 During account creation time, you are assigned a unique, persistent drive in which you can store \
 files privately.  You can later choose to share individual files with the public or with specific \
 individuals, at which point those people will be able to see them by mounting your drive.
@@ -64,7 +66,9 @@ impl LoginCommand {
                     "Logs into the user's account.
 On a successful login, this mounts your personal drive under the CLOUD:/ location, which you can \
 access with any other file-related commands.  Using the cloud:// file system scheme, you can mount \
-other people's drives with the MOUNT command.",
+other people's drives with the MOUNT command.
+To create an account, visit https://www.endbasic.dev/service.html and come back here once the \
+account is ready.",
                 )
                 .build(),
             service,
