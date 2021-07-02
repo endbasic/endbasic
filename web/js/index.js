@@ -26,6 +26,7 @@ $('#report-issue').attr(
     "href", "https://github.com/endbasic/endbasic/issues/new?body=" + template);
 
 var term = new xterm.Terminal();
+term.setOption("fontFamily", '"IBM Plex Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace');
 term.setOption("fontSize", 18);
 const fitAddon = new xterm_fit_addon.FitAddon();
 term.loadAddon(fitAddon);
