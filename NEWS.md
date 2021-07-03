@@ -5,9 +5,21 @@ the EndBASIC language definition nor the API exposed by this crate.  Expect
 them to change at any time (especially the Rust API).  Version numbers will
 not adhere to semantic versioning until 1.0.0.**
 
-## Changes in version X.Y.Z
+**IMPORTANT: Similarly, there are no guarantees that old releases will be able
+to talk to the cloud service.  If you use the web interface, this should not be
+a problem, but if you use local builds, please try to stay on the latest release
+for the time being.**
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+## Changes in version 0.7.0
+
+**Released on 2021-07-03.**
+
+This is a huge release and its primary goal is to offer integration with the new
+EndBASIC cloud service.  To reach that goal, this release adds disk drives, new
+commands specifically for cloud interaction, and comes with various usability
+improvements to make the whole experience better.
+
+Support for disk drives:
 
 *   Added support for storage drives.  All file commands now take a path to a
     file of the form `DRIVE:/PATH` where the drive part and the slash are
@@ -15,12 +27,6 @@ not adhere to semantic versioning until 1.0.0.**
     trivial memory-backed drive; `DEMOS:`, which contains the read-only demo
     files; and `LOCAL:`, which points to local storage (either a local directory
     or to the web browser's local storage).
-
-*   Added the `LOGIN` command to authenticate against the EndBASIC service and
-    to mount the user's own drive, and implemented support for remote drives.
-
-*   Added the `SHARE` command to set reader ACLs on files hosted in the
-    EndBASIC service, allowing users to share files among themselves.
 
 *   Added the `CD` command to change the current drive and the `PWD` command to
     print the current location.
@@ -35,7 +41,22 @@ not adhere to semantic versioning until 1.0.0.**
     intentional, but if there is a need, we can put restrictions in place
     again.
 
-*   Added the array functions `LBOUND` and `UBOUND`.
+*   Renamed the `--programs-dir` flag to `--local-drive` and removed the special
+    handling of the `:memory:` value.  Instead, this can now take arbitrary URIs
+    to refer to drive targets.
+
+Support for the EndBASIC cloud service:
+
+*   Added the `LOGIN` command to authenticate against the EndBASIC service and
+    to mount the user's own drive.
+
+*   Added a new `cloud://` mount target scheme to specify the drives of other
+    users.
+
+*   Added the `SHARE` command to set reader ACLs on files hosted in the
+    EndBASIC service, allowing users to share files among themselves.
+
+Usability improvements:
 
 *   Refactored the `HELP` command to only print a summary of topics by
     default.  As part of this, topics can now be looked up using prefixes of
@@ -44,11 +65,11 @@ not adhere to semantic versioning until 1.0.0.**
 *   Made the output of `HELP` fit within the screen for easier readability
     instead of allowing long paragraphs to wrap at unpredictable points.
 
-*   Renamed the `--programs-dir` flag to `--local-drive` and removed the special
-    handling of the `:memory:` value.  Instead, this can now take arbitrary URIs
-    to refer to drive targets.
-
 *   Added input history tracking to the REPL interface.
+
+Miscellaneous additions:
+
+*   Added the array functions `LBOUND` and `UBOUND`.
 
 ## Changes in version 0.6.0
 

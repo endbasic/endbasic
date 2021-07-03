@@ -18,7 +18,7 @@ name: Deploy to repl.endbasic.dev
 on:
     push:
         tags:
-            - endbasic-0.6.0
+            - endbasic-0.7.0
 
 jobs:
     publish:
