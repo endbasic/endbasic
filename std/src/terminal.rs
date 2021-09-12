@@ -15,7 +15,7 @@
 
 //! Console representation and manipulation.
 
-use crate::console::{ClearType, Console, Key, Position};
+use crate::console::{CharsXY, ClearType, Console, Key};
 use async_trait::async_trait;
 use crossterm::{cursor, event, execute, style, terminal, tty::IsTty, QueueableCommand};
 use std::cmp::Ordering;
@@ -197,16 +197,16 @@ impl Console for TerminalConsole {
         execute!(io::stdout(), terminal::LeaveAlternateScreen).map_err(crossterm_error_to_io_error)
     }
 
-    fn locate(&mut self, pos: Position) -> io::Result<()> {
-        if pos.row > std::u16::MAX as usize {
+    fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
+        if pos.y > std::u16::MAX as usize {
             return Err(io::Error::new(io::ErrorKind::Other, "Row out of range"));
         }
-        let row = pos.row as u16;
+        let row = pos.y as u16;
 
-        if pos.column > std::u16::MAX as usize {
+        if pos.x > std::u16::MAX as usize {
             return Err(io::Error::new(io::ErrorKind::Other, "Column out of range"));
         }
-        let column = pos.column as u16;
+        let column = pos.x as u16;
 
         execute!(io::stdout(), cursor::MoveTo(column, row)).map_err(crossterm_error_to_io_error)
     }
@@ -248,20 +248,20 @@ impl Console for TerminalConsole {
         execute!(io::stdout(), cursor::Show).map_err(crossterm_error_to_io_error)
     }
 
-    fn size(&self) -> io::Result<Position> {
+    fn size(&self) -> io::Result<CharsXY> {
         // Must be careful to not query the terminal size if both LINES and COLUMNS are set, because
         // the query fails when we don't have a PTY and we still need to run under these conditions
         // for testing purposes.
         let lines = get_env_var_as_usize("LINES");
         let columns = get_env_var_as_usize("COLUMNS");
         let size = match (lines, columns) {
-            (Some(l), Some(c)) => Position { row: l, column: c },
+            (Some(l), Some(c)) => CharsXY { x: c, y: l },
             (l, c) => {
                 let (actual_columns, actual_lines) =
                     terminal::size().map_err(crossterm_error_to_io_error)?;
-                Position {
-                    row: l.unwrap_or(actual_lines as usize),
-                    column: c.unwrap_or(actual_columns as usize),
+                CharsXY {
+                    y: l.unwrap_or(actual_lines as usize),
+                    x: c.unwrap_or(actual_columns as usize),
                 }
             }
         };

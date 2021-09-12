@@ -31,7 +31,7 @@ mod store;
 
 use async_trait::async_trait;
 use endbasic_core::syms::{self, CommandResult};
-use endbasic_std::console::{ClearType, Console, Key, Position};
+use endbasic_std::console::{CharsXY, ClearType, Console, Key};
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::future::Future;
@@ -162,8 +162,8 @@ impl Console for XtermJsConsole {
         Ok(())
     }
 
-    fn locate(&mut self, pos: Position) -> io::Result<()> {
-        self.terminal.write(&format!("\u{001b}[{};{}H", pos.row + 1, pos.column + 1));
+    fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
+        self.terminal.write(&format!("\u{001b}[{};{}H", pos.y + 1, pos.x + 1));
         Ok(())
     }
 
@@ -191,11 +191,8 @@ impl Console for XtermJsConsole {
         Ok(())
     }
 
-    fn size(&self) -> io::Result<Position> {
-        Ok(Position {
-            row: self.terminal.get_rows() as usize,
-            column: self.terminal.get_cols() as usize,
-        })
+    fn size(&self) -> io::Result<CharsXY> {
+        Ok(CharsXY { x: self.terminal.get_cols() as usize, y: self.terminal.get_rows() as usize })
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
