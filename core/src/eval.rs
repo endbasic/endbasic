@@ -340,7 +340,7 @@ impl Expr {
                 }
                 Ok(value)
             }
-            Err(e) => Err(Error::from_call_error(&metadata, e)),
+            Err(e) => Err(Error::from_call_error(metadata, e)),
         }
     }
 
