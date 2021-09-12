@@ -82,14 +82,21 @@ pub enum ClearType {
     UntilNewLine,
 }
 
-/// Represents a position in the console, using character-based coordinates.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Represents a coordinate for character-based console operations.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CharsXY {
     /// The column number, starting from zero.
     pub x: usize,
 
     /// The row number, starting from zero.
     pub y: usize,
+}
+
+impl CharsXY {
+    /// Constructs a new coordinate at the given `(x, y)` position.
+    pub fn new(x: usize, y: usize) -> Self {
+        Self { x, y }
+    }
 }
 
 impl std::ops::Sub for CharsXY {
