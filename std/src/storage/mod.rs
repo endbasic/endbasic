@@ -457,7 +457,7 @@ impl Storage {
     /// Returns the drive referenced by `location`, or an error if it doesn't exist.
     fn get_drive(&self, location: &Location) -> io::Result<&dyn Drive> {
         match &location.drive {
-            Some(key) => match self.drives.get(&key) {
+            Some(key) => match self.drives.get(key) {
                 Some(mounted_drive) => Ok(mounted_drive.drive.as_ref()),
                 None => Err(io::Error::new(
                     io::ErrorKind::NotFound,
@@ -476,7 +476,7 @@ impl Storage {
     /// Returns the drive referenced by `location`, or an error if it doesn't exist.
     fn get_drive_mut(&mut self, location: &Location) -> io::Result<&mut dyn Drive> {
         match &location.drive {
-            Some(key) => match self.drives.get_mut(&key) {
+            Some(key) => match self.drives.get_mut(key) {
                 Some(mounted_drive) => Ok(mounted_drive.drive.as_mut()),
                 None => Err(io::Error::new(
                     io::ErrorKind::NotFound,

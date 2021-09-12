@@ -164,7 +164,7 @@ impl Machine {
     /// Assigns the value of `expr` to the variable `vref`.
     fn assign(&mut self, vref: &VarRef, expr: &Expr) -> Result<()> {
         let value = expr.eval(&mut self.symbols)?;
-        self.symbols.set_var(&vref, value)?;
+        self.symbols.set_var(vref, value)?;
         Ok(())
     }
 
@@ -295,7 +295,7 @@ impl Machine {
                     Some(_) => return new_syntax_error(format!("{} is not a command", name)),
                     None => return new_syntax_error(format!("Unknown builtin {}", name)),
                 };
-                cmd.exec(&args, self)
+                cmd.exec(args, self)
                     .await
                     .map_err(|e| Error::from_call_error(cmd.metadata(), e))?;
             }

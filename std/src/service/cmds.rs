@@ -134,7 +134,7 @@ account is ready.",
 
     /// Performs the login workflow against the server.
     async fn do_login(&self, username: &str, password: &str) -> CommandResult {
-        let access_token = self.service.borrow_mut().authenticate(&username, &password).await?;
+        let access_token = self.service.borrow_mut().authenticate(username, password).await?;
 
         let mut first = true;
         let mut data = HashMap::new();

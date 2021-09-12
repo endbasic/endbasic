@@ -346,7 +346,7 @@ mod tests {
         let password = "this is an invalid password for the test account";
 
         let mut service = CloudService::default();
-        let err = service.authenticate(&username, &password).await.unwrap_err();
+        let err = service.authenticate(&username, password).await.unwrap_err();
         assert_eq!(io::ErrorKind::PermissionDenied, err.kind());
     }
 
@@ -430,11 +430,11 @@ mod tests {
         let mut service = context.service();
 
         let request = PatchFileRequest::default().with_content(content);
-        service.patch_file(&access_token, &username, &filename, &request).await.unwrap();
+        service.patch_file(&access_token, &username, filename, &request).await.unwrap();
 
         let request = GetFileRequest::default().with_get_content();
         let response =
-            service.get_file(&access_token, &username, &filename, &request).await.unwrap();
+            service.get_file(&access_token, &username, filename, &request).await.unwrap();
         assert_eq!(content, response.decoded_content().unwrap().unwrap());
     }
 
