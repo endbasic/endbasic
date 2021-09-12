@@ -251,7 +251,11 @@ mod tests {
         let file = dir.path().join("not-a-dir");
         write_file(&file, &[]);
         let drive = DirectoryDrive::new(&file).unwrap();
-        assert_eq!(io::ErrorKind::Other, block_on(drive.enumerate()).unwrap_err().kind());
+        // TODO(jmmv): Check for the specific error that's returned.  We used to check against
+        // `Other` but Rust 1.55 started returning `NotADirectory` instead -- and unfortunately
+        // using the latter relies on an unstable feature.  So addressing this is non-trivial
+        // right now, but will be over time.
+        block_on(drive.enumerate()).unwrap_err();
     }
 
     #[test]
