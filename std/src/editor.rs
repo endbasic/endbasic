@@ -15,7 +15,7 @@
 
 //! Interactive console-based text editor.
 
-use crate::console::{ClearType, Console, Key, Position};
+use crate::console::{CharsXY, ClearType, Console, Key};
 use crate::program::Program;
 use async_trait::async_trait;
 use std::cmp;
@@ -47,10 +47,10 @@ pub struct Editor {
     content: Vec<String>,
 
     /// Position of the top-left character of the file visible in the console.
-    viewport_pos: Position,
+    viewport_pos: CharsXY,
 
     /// Insertion position within the file.
-    file_pos: Position,
+    file_pos: CharsXY,
 
     /// Last edited column, used when moving vertically to preserve the insertion point even when
     /// traversing shorter lines.
@@ -62,8 +62,8 @@ impl Default for Editor {
     fn default() -> Self {
         Self {
             content: vec![],
-            viewport_pos: Position { row: 0, column: 0 },
-            file_pos: Position { row: 0, column: 0 },
+            viewport_pos: CharsXY { x: 0, y: 0 },
+            file_pos: CharsXY { x: 0, y: 0 },
             insert_col: 0,
         }
     }
@@ -76,21 +76,21 @@ impl Editor {
     /// It is the responsibility of the caller to move the cursor back to the appropriate location
     /// after calling this function, and the caller should also hide the cursor before calling this
     /// function.
-    fn refresh_status(&self, console: &mut dyn Console, console_size: Position) -> io::Result<()> {
+    fn refresh_status(&self, console: &mut dyn Console, console_size: CharsXY) -> io::Result<()> {
         let keys = " ESC Finish editing ";
         // Even though we track file positions as 0-indexed, display them as 1-indexed for a better
         // user experience given that this is what all other editor seem to do.
-        let pos = format!(" | Ln {}, Col {} ", self.file_pos.row + 1, self.file_pos.column + 1);
+        let pos = format!(" | Ln {}, Col {} ", self.file_pos.y + 1, self.file_pos.x + 1);
 
-        let mut status = String::with_capacity(console_size.column);
+        let mut status = String::with_capacity(console_size.x);
         status.push_str(keys);
-        while status.len() < console_size.column - pos.len() {
+        while status.len() < console_size.x - pos.len() {
             status.push(' ');
         }
         status.push_str(&pos);
-        status.truncate(console_size.column);
+        status.truncate(console_size.x);
 
-        console.locate(Position { row: console_size.row - 1, column: 0 })?;
+        console.locate(CharsXY { x: 0, y: console_size.y - 1 })?;
         console.color(STATUS_COLOR.0, STATUS_COLOR.1)?;
         console.write(status.as_bytes())?;
         Ok(())
@@ -101,20 +101,20 @@ impl Editor {
     /// It is the responsibility of the caller to move the cursor back to the appropriate location
     /// after calling this function, and the caller should also hide the cursor before calling this
     /// function.
-    fn refresh(&self, console: &mut dyn Console, console_size: Position) -> io::Result<()> {
+    fn refresh(&self, console: &mut dyn Console, console_size: CharsXY) -> io::Result<()> {
         console.color(TEXT_COLOR.0, TEXT_COLOR.1)?;
         console.clear(ClearType::All)?;
         self.refresh_status(console, console_size)?;
         console.color(TEXT_COLOR.0, TEXT_COLOR.1)?;
-        console.locate(Position { row: 0, column: 0 })?;
+        console.locate(CharsXY { x: 0, y: 0 })?;
 
-        let mut row = self.viewport_pos.row;
+        let mut row = self.viewport_pos.y;
         let mut printed_rows = 0;
-        while row < self.content.len() && printed_rows < console_size.row - 1 {
+        while row < self.content.len() && printed_rows < console_size.y - 1 {
             let line = &self.content[row];
-            if line.len() >= self.viewport_pos.column {
-                let last = cmp::min(line.len(), self.viewport_pos.column + console_size.column);
-                let view = &line[self.viewport_pos.column..last];
+            if line.len() >= self.viewport_pos.x {
+                let last = cmp::min(line.len(), self.viewport_pos.x + console_size.x);
+                let view = &line[self.viewport_pos.x..last];
                 console.print(view)?;
             } else {
                 console.print("")?;
@@ -137,18 +137,18 @@ impl Editor {
         loop {
             // The key handling below only deals with moving the insertion position within the file
             // but does not bother to update the viewport. Adjust it now, if necessary.
-            if self.file_pos.row < self.viewport_pos.row {
-                self.viewport_pos.row -= 1;
+            if self.file_pos.y < self.viewport_pos.y {
+                self.viewport_pos.y -= 1;
                 need_refresh = true;
-            } else if self.file_pos.row > self.viewport_pos.row + console_size.row - 2 {
-                self.viewport_pos.row += 1;
+            } else if self.file_pos.y > self.viewport_pos.y + console_size.y - 2 {
+                self.viewport_pos.y += 1;
                 need_refresh = true;
             }
-            if self.file_pos.column < self.viewport_pos.column {
-                self.viewport_pos.column = self.file_pos.column;
+            if self.file_pos.x < self.viewport_pos.x {
+                self.viewport_pos.x = self.file_pos.x;
                 need_refresh = true;
-            } else if self.file_pos.column >= self.viewport_pos.column + console_size.column {
-                self.viewport_pos.column = self.file_pos.column - console_size.column + 1;
+            } else if self.file_pos.x >= self.viewport_pos.x + console_size.x {
+                self.viewport_pos.x = self.file_pos.x - console_size.x + 1;
                 need_refresh = true;
             }
 
@@ -168,89 +168,89 @@ impl Editor {
                 Key::Escape | Key::Eof | Key::Interrupt => break,
 
                 Key::ArrowUp => {
-                    if self.file_pos.row > 0 {
-                        self.file_pos.row -= 1;
+                    if self.file_pos.y > 0 {
+                        self.file_pos.y -= 1;
                     }
 
-                    let line = &self.content[self.file_pos.row];
-                    self.file_pos.column = cmp::min(self.insert_col, line.len());
+                    let line = &self.content[self.file_pos.y];
+                    self.file_pos.x = cmp::min(self.insert_col, line.len());
                 }
 
                 Key::ArrowDown => {
-                    if self.file_pos.row < self.content.len() - 1 {
-                        self.file_pos.row += 1;
+                    if self.file_pos.y < self.content.len() - 1 {
+                        self.file_pos.y += 1;
                     }
 
-                    let line = &self.content[self.file_pos.row];
-                    self.file_pos.column = cmp::min(self.insert_col, line.len());
+                    let line = &self.content[self.file_pos.y];
+                    self.file_pos.x = cmp::min(self.insert_col, line.len());
                 }
 
                 Key::ArrowLeft => {
-                    if self.file_pos.column > 0 {
-                        self.file_pos.column -= 1;
-                        self.insert_col = self.file_pos.column;
+                    if self.file_pos.x > 0 {
+                        self.file_pos.x -= 1;
+                        self.insert_col = self.file_pos.x;
                     }
                 }
 
                 Key::ArrowRight => {
-                    if self.file_pos.column < self.content[self.file_pos.row].len() {
-                        self.file_pos.column += 1;
-                        self.insert_col = self.file_pos.column;
+                    if self.file_pos.x < self.content[self.file_pos.y].len() {
+                        self.file_pos.x += 1;
+                        self.insert_col = self.file_pos.x;
                     }
                 }
 
                 Key::Backspace => {
-                    if self.file_pos.column > 0 {
-                        let line = &mut self.content[self.file_pos.row];
-                        if self.file_pos.column == line.len() {
+                    if self.file_pos.x > 0 {
+                        let line = &mut self.content[self.file_pos.y];
+                        if self.file_pos.x == line.len() {
                             console.write(b"\x08 \x08")?;
                         } else {
                             // TODO(jmmv): Refresh only the affected line.
                             need_refresh = true;
                         }
-                        line.remove(self.file_pos.column - 1);
-                        self.file_pos.column -= 1;
-                    } else if self.file_pos.row > 0 {
-                        let line = self.content.remove(self.file_pos.row);
-                        let prev = &mut self.content[self.file_pos.row - 1];
-                        self.file_pos.column = prev.len();
+                        line.remove(self.file_pos.x - 1);
+                        self.file_pos.x -= 1;
+                    } else if self.file_pos.y > 0 {
+                        let line = self.content.remove(self.file_pos.y);
+                        let prev = &mut self.content[self.file_pos.y - 1];
+                        self.file_pos.x = prev.len();
                         prev.push_str(&line);
-                        self.file_pos.row -= 1;
+                        self.file_pos.y -= 1;
                         need_refresh = true;
                     }
-                    self.insert_col = self.file_pos.column;
+                    self.insert_col = self.file_pos.x;
                 }
 
                 Key::Char(ch) => {
                     let mut buf = [0; 4];
 
-                    let line = &mut self.content[self.file_pos.row];
-                    if self.file_pos.column + 1 < line.len() {
+                    let line = &mut self.content[self.file_pos.y];
+                    if self.file_pos.x + 1 < line.len() {
                         // TODO(jmmv): Refresh only the affected line.
                         need_refresh = true;
                     }
-                    line.insert(self.file_pos.column, ch);
-                    self.file_pos.column += 1;
-                    self.insert_col = self.file_pos.column;
+                    line.insert(self.file_pos.x, ch);
+                    self.file_pos.x += 1;
+                    self.insert_col = self.file_pos.x;
 
-                    if cursor_pos.column < console_size.column - 1 && !need_refresh {
+                    if cursor_pos.x < console_size.x - 1 && !need_refresh {
                         console.write(ch.encode_utf8(&mut buf).as_bytes())?;
                     }
                 }
 
                 Key::NewLine | Key::CarriageReturn => {
-                    let indent = copy_indent(&self.content[self.file_pos.row]);
+                    let indent = copy_indent(&self.content[self.file_pos.y]);
                     let indent_len = indent.len();
-                    if self.file_pos.row < self.content.len() - 1 {
-                        let new = self.content[self.file_pos.row].split_off(self.file_pos.column);
-                        self.content.insert(self.file_pos.row + 1, indent + &new);
+                    if self.file_pos.y < self.content.len() - 1 {
+                        let new = self.content[self.file_pos.y].split_off(self.file_pos.x);
+                        self.content.insert(self.file_pos.y + 1, indent + &new);
                         need_refresh = true;
                     } else {
-                        self.content.insert(self.file_pos.row + 1, indent);
+                        self.content.insert(self.file_pos.y + 1, indent);
                     }
-                    self.file_pos.column = indent_len;
-                    self.file_pos.row += 1;
-                    self.insert_col = self.file_pos.column;
+                    self.file_pos.x = indent_len;
+                    self.file_pos.y += 1;
+                    self.insert_col = self.file_pos.x;
                 }
 
                 // TODO(jmmv): Should do something smarter with unknown keys.
@@ -273,8 +273,8 @@ impl Program for Editor {
 
     fn load(&mut self, text: &str) {
         self.content = text.lines().map(|l| l.to_owned()).collect();
-        self.viewport_pos = Position { row: 0, column: 0 };
-        self.file_pos = Position { row: 0, column: 0 };
+        self.viewport_pos = CharsXY { x: 0, y: 0 };
+        self.file_pos = CharsXY { x: 0, y: 0 };
         self.insert_col = 0;
     }
 
@@ -289,15 +289,15 @@ mod tests {
     use crate::testutils::*;
     use futures_lite::future::block_on;
 
-    /// Syntactic sugar to easily instantiate a `Position` at the `row` plus `column` pair.
-    fn rowcol(row: usize, column: usize) -> Position {
-        Position { row, column }
+    /// Syntactic sugar to easily instantiate a `CharsXY` at `row` plus `column`.
+    fn rowcol(row: usize, column: usize) -> CharsXY {
+        CharsXY { x: column, y: row }
     }
 
     /// Builder pattern to construct the expected sequence of side-effects on the console.
     #[must_use]
     struct OutputBuilder {
-        console_size: Position,
+        console_size: CharsXY,
         output: Vec<CapturedOut>,
     }
 
@@ -305,7 +305,7 @@ mod tests {
         /// Constructs a new output builder with just the command to enter the alternate screen.
         /// `console_size` holds the size of the mock console, which is used to determine where to
         /// print the status bar.
-        fn new(console_size: Position) -> Self {
+        fn new(console_size: CharsXY) -> Self {
             Self { console_size, output: vec![CapturedOut::EnterAlt] }
         }
 
@@ -315,11 +315,11 @@ mod tests {
         /// Note that, although `file_pos` is 0-indexed (to make it easier to reason about where
         /// file changes actually happen in the internal buffers), we display the position as
         /// 1-indexed here as the code under test does.
-        fn refresh_status(mut self, file_pos: Position) -> Self {
-            let row = file_pos.row + 1;
-            let column = file_pos.column + 1;
+        fn refresh_status(mut self, file_pos: CharsXY) -> Self {
+            let row = file_pos.y + 1;
+            let column = file_pos.x + 1;
 
-            self.output.push(CapturedOut::Locate(rowcol(self.console_size.row - 1, 0)));
+            self.output.push(CapturedOut::Locate(rowcol(self.console_size.y - 1, 0)));
             self.output.push(CapturedOut::Color(STATUS_COLOR.0, STATUS_COLOR.1));
             let mut status = String::from(" ESC Finish editing");
             if row < 10 && column < 10 {
@@ -336,7 +336,7 @@ mod tests {
 
         /// Records the console changes needed to incrementally update the editor, without going
         /// through a full refresh, assuming a `file_pos` position.
-        fn quick_refresh(mut self, file_pos: Position, cursor: Position) -> Self {
+        fn quick_refresh(mut self, file_pos: CharsXY, cursor: CharsXY) -> Self {
             self.output.push(CapturedOut::HideCursor);
             self = self.refresh_status(file_pos);
             self.output.push(CapturedOut::Color(TEXT_COLOR.0, TEXT_COLOR.1));
@@ -348,7 +348,7 @@ mod tests {
         /// Records the console changes needed to refresh the whole console view.  The status line
         /// is updated to reflect `file_pos`; the editor is pre-populated with the lines specified
         /// in `previous`; and the `cursor` is placed at the given location.
-        fn refresh(mut self, file_pos: Position, previous: &[&str], cursor: Position) -> Self {
+        fn refresh(mut self, file_pos: CharsXY, previous: &[&str], cursor: CharsXY) -> Self {
             self.output.push(CapturedOut::HideCursor);
             self.output.push(CapturedOut::Color(TEXT_COLOR.0, TEXT_COLOR.1));
             self.output.push(CapturedOut::Clear(ClearType::All));

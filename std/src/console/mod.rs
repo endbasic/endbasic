@@ -82,21 +82,21 @@ pub enum ClearType {
     UntilNewLine,
 }
 
-/// Represents a position in the console.
+/// Represents a position in the console, using character-based coordinates.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Position {
-    /// The row number, starting from zero.
-    pub row: usize,
-
+pub struct CharsXY {
     /// The column number, starting from zero.
-    pub column: usize,
+    pub x: usize,
+
+    /// The row number, starting from zero.
+    pub y: usize,
 }
 
-impl std::ops::Sub for Position {
+impl std::ops::Sub for CharsXY {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self::Output {
-        Position { row: self.row - other.row, column: self.column - other.column }
+        CharsXY { x: self.x - other.x, y: self.y - other.y }
     }
 }
 
@@ -127,7 +127,7 @@ pub trait Console {
     fn leave_alt(&mut self) -> io::Result<()>;
 
     /// Moves the cursor to the given position, which must be within the screen.
-    fn locate(&mut self, pos: Position) -> io::Result<()>;
+    fn locate(&mut self, pos: CharsXY) -> io::Result<()>;
 
     /// Moves the cursor within the line.  Positive values move right, negative values move left.
     fn move_within_line(&mut self, off: i16) -> io::Result<()>;
@@ -146,7 +146,7 @@ pub trait Console {
     /// Queries the size of the console.
     ///
     /// The returned position represents the first row and column that lay *outside* of the console.
-    fn size(&self) -> io::Result<Position>;
+    fn size(&self) -> io::Result<CharsXY>;
 
     /// Writes the raw `bytes` into the console.
     fn write(&mut self, bytes: &[u8]) -> io::Result<()>;

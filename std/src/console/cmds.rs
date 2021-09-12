@@ -16,7 +16,7 @@
 //! Commands for console interaction.
 
 use crate::console::readline::read_line;
-use crate::console::{ClearType, Console, Position};
+use crate::console::{CharsXY, ClearType, Console};
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::exec::Machine;
@@ -296,7 +296,7 @@ impl Command for LocateCommand {
             None => return Err(CallError::ArgumentError("Column cannot be empty".to_owned())),
         };
 
-        self.console.borrow_mut().locate(Position { row, column })?;
+        self.console.borrow_mut().locate(CharsXY { x: column, y: row })?;
         Ok(())
     }
 }
@@ -498,12 +498,12 @@ mod tests {
     fn test_locate_ok() {
         Tester::default()
             .run("LOCATE 0, 0")
-            .expect_output([CapturedOut::Locate(Position { row: 0, column: 0 })])
+            .expect_output([CapturedOut::Locate(CharsXY { x: 0, y: 0 })])
             .check();
 
         Tester::default()
             .run("LOCATE 1000, 2000")
-            .expect_output([CapturedOut::Locate(Position { row: 1000, column: 2000 })])
+            .expect_output([CapturedOut::Locate(CharsXY { x: 2000, y: 1000 })])
             .check();
     }
 

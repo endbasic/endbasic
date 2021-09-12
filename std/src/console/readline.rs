@@ -45,7 +45,7 @@ async fn read_line_interactive(
         // Assumes that the prompt was printed at column 0.  If that was not the case, line length
         // calculation does not work.
         let console_size = console.size()?;
-        console_size.column - prompt.len()
+        console_size.x - prompt.len()
     };
 
     // Insertion position *within* the line, without accounting for the prompt.
@@ -276,7 +276,7 @@ pub(crate) async fn read_line_secure(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::console::Position;
+    use crate::console::CharsXY;
     use crate::testutils::*;
     use futures_lite::future::block_on;
 
@@ -383,7 +383,7 @@ mod tests {
 
             let mut console = MockConsole::default();
             console.add_input_keys(&self.keys);
-            console.set_size(Position { row: 5, column: 15 });
+            console.set_size(CharsXY { x: 15, y: 5 });
             let line = match self.history.as_mut() {
                 Some(mut history) => block_on(read_line_interactive(
                     &mut console,
@@ -820,7 +820,7 @@ mod tests {
         let mut console = MockConsole::default();
         console.set_interactive(true);
         console.add_input_keys(&[Key::Char('1'), Key::Char('5'), Key::NewLine]);
-        console.set_size(Position { row: 5, column: 15 });
+        console.set_size(CharsXY { x: 15, y: 5 });
         let line = block_on(read_line_secure(&mut console, "> ")).unwrap();
         assert_eq!("15", &line);
         assert_eq!(

@@ -15,7 +15,7 @@
 
 //! Test utilities for consumers of the EndBASIC interpreter.
 
-use crate::console::{self, ClearType, Console, Key, Position};
+use crate::console::{self, CharsXY, ClearType, Console, Key};
 use crate::gpio;
 use crate::program::Program;
 use crate::service::{
@@ -53,7 +53,7 @@ pub enum CapturedOut {
     LeaveAlt,
 
     /// Represents a call to `Console::locate`.
-    Locate(Position),
+    Locate(CharsXY),
 
     /// Represents a call to `Console::move_within_line`.
     MoveWithinLine(i16),
@@ -77,7 +77,7 @@ pub struct MockConsole {
     captured_out: Vec<CapturedOut>,
 
     /// The size of the mock console.
-    size: Position,
+    size: CharsXY,
 
     /// Whether the console is interactive or not.
     interactive: bool,
@@ -88,7 +88,7 @@ impl Default for MockConsole {
         Self {
             golden_in: VecDeque::new(),
             captured_out: vec![],
-            size: Position { row: std::usize::MAX, column: std::usize::MAX },
+            size: CharsXY { x: std::usize::MAX, y: std::usize::MAX },
             interactive: false,
         }
     }
@@ -120,7 +120,7 @@ impl MockConsole {
     }
 
     /// Sets the size of the mock console.
-    pub fn set_size(&mut self, size: Position) {
+    pub fn set_size(&mut self, size: CharsXY) {
         self.size = size;
     }
 
@@ -170,7 +170,7 @@ impl Console for MockConsole {
         Ok(())
     }
 
-    fn locate(&mut self, pos: Position) -> io::Result<()> {
+    fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
         self.captured_out.push(CapturedOut::Locate(pos));
         Ok(())
     }
@@ -197,7 +197,7 @@ impl Console for MockConsole {
         Ok(())
     }
 
-    fn size(&self) -> io::Result<Position> {
+    fn size(&self) -> io::Result<CharsXY> {
         Ok(self.size)
     }
 
