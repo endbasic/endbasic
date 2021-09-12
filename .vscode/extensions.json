@@ -1,0 +1,8 @@
+{
+    "recommendations": [
+        "bungcip.better-toml",
+        "davidanson.vscode-markdownlint",
+        "matklad.rust-analyzer",
+        "streetsidesoftware.code-spell-checker"
+    ]
+}
