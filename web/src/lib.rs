@@ -192,7 +192,7 @@ impl Console for XtermJsConsole {
     }
 
     fn size(&self) -> io::Result<CharsXY> {
-        Ok(CharsXY { x: self.terminal.get_cols() as usize, y: self.terminal.get_rows() as usize })
+        Ok(CharsXY::new(self.terminal.get_cols() as usize, self.terminal.get_rows() as usize))
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {

@@ -296,7 +296,7 @@ impl Command for LocateCommand {
             None => return Err(CallError::ArgumentError("Column cannot be empty".to_owned())),
         };
 
-        self.console.borrow_mut().locate(CharsXY { x: column, y: row })?;
+        self.console.borrow_mut().locate(CharsXY::new(column, row))?;
         Ok(())
     }
 }
@@ -498,12 +498,12 @@ mod tests {
     fn test_locate_ok() {
         Tester::default()
             .run("LOCATE 0, 0")
-            .expect_output([CapturedOut::Locate(CharsXY { x: 0, y: 0 })])
+            .expect_output([CapturedOut::Locate(CharsXY::default())])
             .check();
 
         Tester::default()
             .run("LOCATE 1000, 2000")
-            .expect_output([CapturedOut::Locate(CharsXY { x: 2000, y: 1000 })])
+            .expect_output([CapturedOut::Locate(CharsXY::new(2000, 1000))])
             .check();
     }
 

@@ -62,8 +62,8 @@ impl Default for Editor {
     fn default() -> Self {
         Self {
             content: vec![],
-            viewport_pos: CharsXY { x: 0, y: 0 },
-            file_pos: CharsXY { x: 0, y: 0 },
+            viewport_pos: CharsXY::default(),
+            file_pos: CharsXY::default(),
             insert_col: 0,
         }
     }
@@ -90,7 +90,7 @@ impl Editor {
         status.push_str(&pos);
         status.truncate(console_size.x);
 
-        console.locate(CharsXY { x: 0, y: console_size.y - 1 })?;
+        console.locate(CharsXY::new(0, console_size.y - 1))?;
         console.color(STATUS_COLOR.0, STATUS_COLOR.1)?;
         console.write(status.as_bytes())?;
         Ok(())
@@ -106,7 +106,7 @@ impl Editor {
         console.clear(ClearType::All)?;
         self.refresh_status(console, console_size)?;
         console.color(TEXT_COLOR.0, TEXT_COLOR.1)?;
-        console.locate(CharsXY { x: 0, y: 0 })?;
+        console.locate(CharsXY::default())?;
 
         let mut row = self.viewport_pos.y;
         let mut printed_rows = 0;
@@ -273,8 +273,8 @@ impl Program for Editor {
 
     fn load(&mut self, text: &str) {
         self.content = text.lines().map(|l| l.to_owned()).collect();
-        self.viewport_pos = CharsXY { x: 0, y: 0 };
-        self.file_pos = CharsXY { x: 0, y: 0 };
+        self.viewport_pos = CharsXY::default();
+        self.file_pos = CharsXY::default();
         self.insert_col = 0;
     }
 
@@ -291,7 +291,7 @@ mod tests {
 
     /// Syntactic sugar to easily instantiate a `CharsXY` at `row` plus `column`.
     fn rowcol(row: usize, column: usize) -> CharsXY {
-        CharsXY { x: column, y: row }
+        CharsXY::new(column, row)
     }
 
     /// Builder pattern to construct the expected sequence of side-effects on the console.

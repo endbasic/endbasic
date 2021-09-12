@@ -255,14 +255,14 @@ impl Console for TerminalConsole {
         let lines = get_env_var_as_usize("LINES");
         let columns = get_env_var_as_usize("COLUMNS");
         let size = match (lines, columns) {
-            (Some(l), Some(c)) => CharsXY { x: c, y: l },
+            (Some(l), Some(c)) => CharsXY::new(c, l),
             (l, c) => {
                 let (actual_columns, actual_lines) =
                     terminal::size().map_err(crossterm_error_to_io_error)?;
-                CharsXY {
-                    y: l.unwrap_or(actual_lines as usize),
-                    x: c.unwrap_or(actual_columns as usize),
-                }
+                CharsXY::new(
+                    c.unwrap_or(actual_columns as usize),
+                    l.unwrap_or(actual_lines as usize),
+                )
             }
         };
         Ok(size)
