@@ -17,6 +17,7 @@
 
 use async_trait::async_trait;
 use std::io;
+use std::str;
 
 mod cmds;
 pub(crate) use cmds::add_all;
@@ -77,6 +78,9 @@ pub enum ClearType {
 
     /// Clears only the current line without moving the cursor.
     CurrentLine,
+
+    /// Clears the previous character.
+    PreviousChar,
 
     /// Clears from the cursor position to the end of the line without moving the cursor.
     UntilNewLine,
@@ -141,6 +145,8 @@ pub trait Console {
 
     /// Writes `text` to the console, followed by a newline or CRLF pair depending on the needs of
     /// the console to advance a line.
+    ///
+    /// The input `text` is not supposed to contain any control characters, such as CR or LF.
     // TODO(jmmv): Remove this in favor of write?
     fn print(&mut self, text: &str) -> io::Result<()>;
 
@@ -156,5 +162,54 @@ pub trait Console {
     fn size(&self) -> io::Result<CharsXY>;
 
     /// Writes the raw `bytes` into the console.
+    ///
+    /// The input `bytes` are not supposed to contain any control characters, such as CR or LF.
     fn write(&mut self, bytes: &[u8]) -> io::Result<()>;
+}
+
+/// Checks if a given string has control characters.
+pub fn has_control_chars_str(s: &str) -> bool {
+    for ch in s.chars() {
+        if ch.is_control() {
+            return true;
+        }
+    }
+    false
+}
+
+/// Checks if a byte array has ASCII control characters.
+pub fn has_control_chars_u8(s: &[u8]) -> bool {
+    for ch in s {
+        if *ch < 32 {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_has_control_chars_str() {
+        use crate::console::has_control_chars_str;
+
+        assert!(!has_control_chars_str(""));
+        assert!(!has_control_chars_str("foo bar^baz"));
+
+        assert!(has_control_chars_str("foo\nbar"));
+        assert!(has_control_chars_str("foo\rbar"));
+        assert!(has_control_chars_str("foo\x08bar"));
+    }
+
+    #[test]
+    fn test_has_control_chars_u8() {
+        use crate::console::has_control_chars_u8;
+
+        assert!(!has_control_chars_u8(b""));
+        assert!(!has_control_chars_u8(b"foo bar^baz"));
+
+        assert!(has_control_chars_u8(b"foo\nbar"));
+        assert!(has_control_chars_u8(b"foo\rbar"));
+        assert!(has_control_chars_u8(b"foo\x08bar"));
+    }
 }

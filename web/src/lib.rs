@@ -123,6 +123,9 @@ impl Console for XtermJsConsole {
             ClearType::CurrentLine => {
                 self.terminal.write("\u{001b}[2K");
             }
+            ClearType::PreviousChar => {
+                self.terminal.write("\x08 \x08");
+            }
             ClearType::UntilNewLine => {
                 self.terminal.write("\u{001b}[K");
             }
@@ -177,6 +180,8 @@ impl Console for XtermJsConsole {
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
+        debug_assert!(!endbasic_std::console::has_control_chars_str(text));
+
         self.terminal.write(text);
         self.terminal.write("\u{001b}[K\r\n");
         Ok(())
@@ -196,6 +201,8 @@ impl Console for XtermJsConsole {
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        debug_assert!(!endbasic_std::console::has_control_chars_u8(bytes));
+
         // TODO(jmmv): Should not have to convert to UTF-8 here because it might not be and the
         // terminal should not care (?).
         self.terminal.write(&String::from_utf8_lossy(bytes));

@@ -203,7 +203,7 @@ impl Editor {
                     if self.file_pos.x > 0 {
                         let line = &mut self.content[self.file_pos.y];
                         if self.file_pos.x == line.len() {
-                            console.write(b"\x08 \x08")?;
+                            console.clear(ClearType::PreviousChar)?;
                         } else {
                             // TODO(jmmv): Refresh only the affected line.
                             need_refresh = true;

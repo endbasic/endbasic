@@ -181,6 +181,8 @@ impl Console for MockConsole {
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
+        debug_assert!(!console::has_control_chars_str(text));
+
         self.captured_out.push(CapturedOut::Print(text.to_owned()));
         Ok(())
     }
@@ -202,6 +204,8 @@ impl Console for MockConsole {
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        debug_assert!(!console::has_control_chars_u8(bytes));
+
         self.captured_out.push(CapturedOut::Write(bytes.to_owned()));
         Ok(())
     }

@@ -154,6 +154,7 @@ impl Console for TerminalConsole {
         let how = match how {
             ClearType::All => terminal::ClearType::All,
             ClearType::CurrentLine => terminal::ClearType::CurrentLine,
+            ClearType::PreviousChar => return self.write(b"\x08 \x08"),
             ClearType::UntilNewLine => terminal::ClearType::UntilNewLine,
         };
         let mut output = io::stdout();
@@ -221,6 +222,8 @@ impl Console for TerminalConsole {
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
+        debug_assert!(!crate::console::has_control_chars_str(text));
+
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
         stdout.write_all(text.as_bytes())?;
@@ -269,6 +272,8 @@ impl Console for TerminalConsole {
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        debug_assert!(!crate::console::has_control_chars_u8(bytes));
+
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
         stdout.write_all(bytes)?;

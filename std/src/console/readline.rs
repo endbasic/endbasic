@@ -147,7 +147,7 @@ async fn read_line_interactive(
                 // instead of one.  Not sure if we should do this or if instead we should ensure
                 // the golden data we feed to the tests has single-character line endings.
                 if cfg!(not(target_os = "windows")) {
-                    console.write(&[b'\r', b'\n'])?;
+                    console.print("")?;
                     break;
                 }
             }
@@ -190,7 +190,7 @@ async fn read_line_interactive(
             Key::Interrupt => return Err(io::Error::new(io::ErrorKind::Interrupted, "Ctrl+C")),
 
             Key::NewLine => {
-                console.write(&[b'\r', b'\n'])?;
+                console.print("")?;
                 break;
             }
 
@@ -379,7 +379,7 @@ mod tests {
         /// executes the test.
         fn accept(mut self) {
             self.keys.push(Key::NewLine);
-            self.exp_output.push(CapturedOut::Write(vec![b'\r', b'\n']));
+            self.exp_output.push(CapturedOut::Print("".to_owned()));
 
             let mut console = MockConsole::default();
             console.add_input_keys(&self.keys);
@@ -829,7 +829,7 @@ mod tests {
                 CapturedOut::Write(vec![b'>', b' ']),
                 CapturedOut::Write(vec![b'*']),
                 CapturedOut::Write(vec![b'*']),
-                CapturedOut::Write(vec![b'\r', b'\n']),
+                CapturedOut::Print("".to_owned()),
             ],
             console.captured_out()
         );
