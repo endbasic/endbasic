@@ -430,7 +430,7 @@ mod tests {
         for _ in 0..MockService::PASSWORD.len() {
             exp_output.push(CapturedOut::Write(vec![b'*']));
         }
-        exp_output.push(CapturedOut::Write(vec![b'\r', b'\n']));
+        exp_output.push(CapturedOut::Print("".to_owned()));
 
         t.add_input_chars(MockService::PASSWORD)
             .add_input_chars("\n")

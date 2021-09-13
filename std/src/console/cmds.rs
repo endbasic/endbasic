@@ -341,7 +341,12 @@ impl Command for PrintCommand {
             match arg.1 {
                 ArgSep::End => break,
                 ArgSep::Short => text += " ",
-                ArgSep::Long => text += "\t",
+                ArgSep::Long => {
+                    text += " ";
+                    while text.len() % 8 != 0 {
+                        text += " ";
+                    }
+                }
             }
         }
         self.console.borrow_mut().print(&text)?;
@@ -527,8 +532,10 @@ mod tests {
     fn test_print_ok() {
         Tester::default().run("PRINT").expect_prints([""]).check();
         Tester::default().run("PRINT ;").expect_prints([" "]).check();
-        Tester::default().run("PRINT ,").expect_prints(["\t"]).check();
-        Tester::default().run("PRINT ;,;,").expect_prints([" \t \t"]).check();
+        Tester::default().run("PRINT ,").expect_prints(["        "]).check();
+        Tester::default().run("PRINT ;,;,").expect_prints(["                "]).check();
+        Tester::default().run("PRINT \"abcdefg\", 1").expect_prints(["abcdefg 1"]).check();
+        Tester::default().run("PRINT \"abcdefgh\", 1").expect_prints(["abcdefgh        1"]).check();
 
         Tester::default().run("PRINT 3").expect_prints(["3"]).check();
         Tester::default().run("PRINT 3 = 5").expect_prints(["FALSE"]).check();
@@ -536,11 +543,11 @@ mod tests {
             .run("PRINT true;123;\"foo bar\"")
             .expect_prints(["TRUE 123 foo bar"])
             .check();
-        Tester::default().run("PRINT 6,1;3,5").expect_prints(["6\t1 3\t5"]).check();
+        Tester::default().run("PRINT 6,1;3,5").expect_prints(["6       1 3     5"]).check();
 
         Tester::default()
             .run(r#"word = "foo": PRINT word, word: PRINT word + "s""#)
-            .expect_prints(["foo\tfoo", "foos"])
+            .expect_prints(["foo     foo", "foos"])
             .expect_var("word", "foo")
             .check();
     }
