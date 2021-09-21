@@ -91,9 +91,6 @@ Output from HELP CONSOLE:
     Avoid resizing your terminal or web browser.  If you do resize them,
     however, restart the interpreter.
 
-    Graphics are currently not supported but they are within the realm of
-    possibility for a later version.
-
     >> CLS       Clears the screen.
     >> COLOR     Sets the foreground and background colors.
     >> INPUT     Obtains user input from the console.

@@ -21,6 +21,10 @@ use std::str;
 
 mod cmds;
 pub(crate) use cmds::add_all;
+#[cfg(feature = "sdl")]
+mod colors;
+#[cfg(feature = "sdl")]
+pub(crate) use colors::ansi_color_to_rgb;
 mod format;
 pub(crate) use format::refill_and_print;
 mod readline;
@@ -108,6 +112,31 @@ impl std::ops::Sub for CharsXY {
 
     fn sub(self, other: Self) -> Self::Output {
         CharsXY { x: self.x - other.x, y: self.y - other.y }
+    }
+}
+
+impl std::ops::Mul<PixelsXY> for CharsXY {
+    type Output = PixelsXY;
+
+    fn mul(self, rhs: PixelsXY) -> Self::Output {
+        PixelsXY { x: self.x * rhs.x, y: self.y * rhs.y }
+    }
+}
+
+/// Represents a coordinate for pixel-based console operations.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PixelsXY {
+    /// The column number, starting from zero.
+    pub x: usize,
+
+    /// The row number, starting from zero.
+    pub y: usize,
+}
+
+impl PixelsXY {
+    /// Constructs a new coordinate at the given `(x, y)` position.
+    pub fn new(x: usize, y: usize) -> Self {
+        Self { x, y }
     }
 }
 

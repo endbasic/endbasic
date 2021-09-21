@@ -14,6 +14,7 @@ edition = "2018"
 [features]
 default = ["crossterm"]
 rpi = ["rppal"]
+sdl = ["sdl2"]
 
 [dependencies]
 async-trait = "0.1"
@@ -21,6 +22,7 @@ base64 = "0.13"
 bytes = "1.0"
 crossterm = { version = "0.18", optional = true }
 futures-lite = "1.1"
+once_cell = "1.8"
 radix_trie = "0.2.1"
 rppal = { version = "0.11.3", optional = true }
 serde = { version = "1.0", features = ["derive"] }
@@ -46,6 +48,12 @@ features = ["small_rng", "std", "std_rng"]
 version = "0.11"
 default-features = false
 features = ["rustls-tls"]
+
+[dependencies.sdl2]
+version = "0.34"
+optional = true
+default-features = false
+features = ["ttf"]
 
 [dev-dependencies]
 filetime = "0.2"

@@ -10,6 +10,9 @@ Options:
         --version       show version information and exit
 
 CONSOLE-SPEC can be one of the following:
+    graphics:SPEC    enables the graphical console and configures it
+                     with the settings in SPEC, which is of the form:
+                     WIDTHxHEIGHT,TTF_FONT_PATH,FONT_SIZE
     text             enables the text-based console
 
 Report bugs to: https://github.com/endbasic/endbasic/issues
