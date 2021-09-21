@@ -41,9 +41,7 @@ respects the transparency whereas color 0 (black) does not.
 If you are writing a script and do not want the script to interfere with other parts of the \
 console, you should restrict the script to using only the INPUT and PRINT commands.
 Be aware that the console currently reacts poorly to size changes.  Avoid resizing your terminal \
-or web browser.  If you do resize them, however, restart the interpreter.
-Graphics are currently not supported but they are within the realm of possibility for a later \
-version.";
+or web browser.  If you do resize them, however, restart the interpreter.";
 
 /// The `CLS` command.
 pub struct ClsCommand {

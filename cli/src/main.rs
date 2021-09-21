@@ -23,6 +23,9 @@
 #![warn(unsafe_code)]
 
 use anyhow::{anyhow, Result};
+use endbasic_std::console::Console;
+#[cfg(feature = "sdl")]
+use endbasic_std::sdl::SdlConsole;
 use endbasic_std::storage::Storage;
 use endbasic_std::terminal::TerminalConsole;
 use getopts::Options;
@@ -69,6 +72,14 @@ fn program_name(mut args: env::Args, default_name: &'static str) -> (String, env
 fn help(name: &str, opts: &Options) {
     let brief = format!("Usage: {} [options] [program-file]", name);
     println!("{}", opts.usage(&brief));
+    println!("CONSOLE-SPEC can be one of the following:");
+    if cfg!(feature = "sdl") {
+        println!("    graphics:SPEC    enables the graphical console and configures it");
+        println!("                     with the settings in SPEC, which is of the form:");
+        println!("                     WIDTHxHEIGHT,TTF_FONT_PATH,FONT_SIZE");
+    }
+    println!("    text             enables the text-based console");
+    println!();
     println!("Report bugs to: https://github.com/endbasic/endbasic/issues");
     println!("EndBASIC home page: https://www.endbasic.dev/");
 }
@@ -104,6 +115,39 @@ fn get_local_drive_spec(flag: Option<String>) -> Result<String> {
     }
 }
 
+/// Creates the graphical console when SDL support is built in.
+#[cfg(feature = "sdl")]
+fn setup_graphics_console(spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
+    let spec = endbasic::parse_graphics_spec(spec)?;
+    Ok(Rc::from(RefCell::from(SdlConsole::new(spec.0, spec.1, spec.2, spec.3)?)))
+}
+
+/// Errors out during the creation of the graphical console when SDL support is not compiled in.
+#[cfg(not(feature = "sdl"))]
+fn setup_graphics_console(_spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
+    // TODO(jmmv): Make this io::ErrorKind::Unsupported when our MSRV allows it.
+    Err(io::Error::new(io::ErrorKind::InvalidInput, "SDL support not compiled in"))
+}
+
+/// Sets up the console.
+fn setup_console(console_spec: Option<String>) -> io::Result<Rc<RefCell<dyn Console>>> {
+    let console: Rc<RefCell<dyn Console>> = match console_spec.as_deref() {
+        None | Some("text") => Rc::from(RefCell::from(TerminalConsole::from_stdio()?)),
+
+        Some(text) if text.starts_with("graphics:") => {
+            setup_graphics_console(&text["graphics:".len()..])?
+        }
+
+        Some(text) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Invalid console spec {}", text),
+            ))
+        }
+    };
+    Ok(console)
+}
+
 /// Sets up the common storage drives.
 ///
 /// This instantiates non-optional drives, such as `MEMORY:` and `DEMOS:`, maps `LOCAL` the
@@ -123,8 +167,10 @@ pub fn setup_storage(storage: &mut Storage, local_drive_spec: &str) -> io::Resul
 /// Enters the interactive interpreter.
 ///
 /// `local_drive` is the optional local drive to mount and use as the default location.
-async fn run_repl_loop(local_drive_spec: &str) -> endbasic_core::exec::Result<i32> {
-    let console = Rc::from(RefCell::from(TerminalConsole::from_stdio()?));
+async fn run_repl_loop(
+    console: Rc<RefCell<dyn Console>>,
+    local_drive_spec: &str,
+) -> endbasic_core::exec::Result<i32> {
     let mut builder =
         endbasic_std::MachineBuilder::default().with_console(console.clone()).make_interactive();
 
@@ -166,6 +212,7 @@ async fn safe_main(name: &str, args: env::Args) -> Result<i32> {
     let args: Vec<String> = args.collect();
 
     let mut opts = Options::new();
+    opts.optopt("", "console", "type and properties of the console to use", "CONSOLE-SPEC");
     opts.optflag("h", "help", "show command-line usage information and exit");
     opts.optflag("i", "interactive", "force interactive mode when running a script");
     opts.optopt("", "local-drive", "location of the drive to mount as LOCAL", "URI");
@@ -184,8 +231,9 @@ async fn safe_main(name: &str, args: env::Args) -> Result<i32> {
 
     match matches.free.as_slice() {
         [] => {
+            let console = setup_console(matches.opt_str("console"))?;
             let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
-            Ok(run_repl_loop(&local_drive).await?)
+            Ok(run_repl_loop(console, &local_drive).await?)
         }
         [file] => {
             if matches.opt_present("interactive") {

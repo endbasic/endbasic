@@ -10,6 +10,13 @@ to talk to the cloud service.  If you use the web interface, this should not be
 a problem, but if you use local builds, please try to stay on the latest release
 for the time being.**
 
+## Changes in version X.Y.Z
+
+**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+
+*   Added a graphical console based on SDL2 behind a new optional `sdl`
+    feature.
+
 ## Changes in version 0.7.0
 
 **Released on 2021-07-03.**
