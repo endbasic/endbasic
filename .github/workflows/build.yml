@@ -37,44 +37,48 @@ jobs:
                 path: endbasic-linux-armv7-rpi/*
                 retention-days: 1
 
-    linux-x86_64:
+    linux-x86_64-sdl:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v2
-            - run: ./.github/workflows/release.sh linux-x86_64
+            - run: sudo apt update
+            - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
+            - run: ./.github/workflows/release.sh linux-x86_64-sdl
             - uses: actions/upload-artifact@v2
               with:
-                name: endbasic-linux-x86_64
-                path: endbasic-linux-x86_64/*
+                name: endbasic-linux-x86_64-sdl
+                path: endbasic-linux-x86_64-sdl/*
                 retention-days: 1
 
-    macos-x86_64:
+    macos-x86_64-sdl:
         runs-on: macos-latest
         steps:
             - uses: actions/checkout@v2
-            - run: ./.github/workflows/release.sh macos-x86_64
+            - run: brew install sdl2 sdl2_ttf
+            - run: ./.github/workflows/release.sh macos-x86_64-sdl
             - uses: actions/upload-artifact@v2
               with:
-                name: endbasic-macos-x86_64
-                path: endbasic-macos-x86_64/*
+                name: endbasic-macos-x86_64-sdl
+                path: endbasic-macos-x86_64-sdl/*
                 retention-days: 1
 
-    windows-x86_64:
+    windows-x86_64-sdl:
         runs-on: windows-latest
         steps:
             - uses: actions/checkout@v2
-            - run: choco install zip
-            - run: ./.github/workflows/release.sh windows-x86_64
+            - run: choco install unzip zip
+            - run: ./.github/workflows/setup-sdl.ps1
+            - run: ./.github/workflows/release.sh windows-x86_64-sdl
               shell: bash
             - uses: actions/upload-artifact@v2
               with:
-                name: endbasic-windows-x86_64
-                path: endbasic-windows-x86_64/*
+                name: endbasic-windows-x86_64-sdl
+                path: endbasic-windows-x86_64-sdl/*
                 retention-days: 1
 
     create-release:
         if: startsWith(github.ref, 'refs/tags/')
-        needs: [linux-armv7-rpi, linux-x86_64, macos-x86_64, windows-x86_64]
+        needs: [linux-armv7-rpi, linux-x86_64-sdl, macos-x86_64-sdl, windows-x86_64-sdl]
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v2
