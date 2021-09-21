@@ -1,3 +1,7 @@
 Cargo.lock
 config.mk
 target
+
+# Created by setup-sdl.ps1.
+libs
+dlls

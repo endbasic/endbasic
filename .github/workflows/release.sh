@@ -23,6 +23,14 @@ err() {
     exit 1
 }
 
+sanity_check() {
+    local bin="${1}"; shift
+
+    local ret=0
+    echo "EXIT 123" | "${bin}" || ret="${?}"
+    [ "${ret}" -eq 123 ] || err "Packaged endbasic doesn't seem to work"
+}
+
 main() {
     [ "${#}" -eq 1 ] || err "Must provide a release configuration"
     local name="${1}"; shift
@@ -43,36 +51,68 @@ main() {
     esac
     [ -n "${version}" ] || err "Cannot determine version number"
 
+    local distname="endbasic-${version}-${name}"
+    local outdir="endbasic-${name}"
+    mkdir -p "${distname}" "${outdir}"
+
+    cp LICENSE NEWS.md NOTICE README.md "${distname}"
+
     local ext=
     local target=
     case "${name}" in
         linux-armv7-rpi)
             [ ! -f .cargo/config ] || err "Won't override existing .cargo/config"
             cp .cargo/config.rpi .cargo/config
+            # TODO(jmmv): Should enable --features=sdl but need to figure out how to cross-build
+            # for it.
             ( cd cli && cargo build --release --verbose --features=rpi )
             rm -f .cargo/config
-            target=./target/armv7-unknown-linux-gnueabihf/release/endbasic
+
+            cp ./target/armv7-unknown-linux-gnueabihf/release/endbasic "${distname}"
+
+            ext=tgz
+            ;;
+
+        macos*)
+            ( cd cli && cargo build --release --verbose --features=sdl )
+
+            cp ./target/release/endbasic "${distname}/endbasic.bin"
+            cp .github/workflows/macos-launcher.sh "${distname}/endbasic"
+
+            # Bundle the necessary shared libraries as provided by Homebrew.
+            cp /usr/local/opt/sdl2/lib/libSDL2-*.dylib "${distname}"
+            cp /usr/local/opt/sdl2/LICENSE.txt "${distname}/LICENSE.sdl2"
+            cp /usr/local/opt/sdl2_ttf/lib/libSDL2_ttf-*.dylib "${distname}"
+            cp /usr/local/opt/sdl2_ttf/COPYING.txt "${distname}/LICENSE.sdl2_ttf"
+            cp /usr/local/opt/freetype/lib/libfreetype.*.dylib "${distname}"
+            cp /usr/local/opt/freetype/LICENSE.TXT "${distname}/LICENSE.freetype"
+            cp /usr/local/opt/libpng/lib/libpng16.*.dylib "${distname}"
+            cp /usr/local/opt/libpng/LICENSE "${distname}/LICENSE.libpng"
+
+            brew uninstall --ignore-dependencies sdl2 sdl2_ttf freetype libpng
+            sanity_check "${distname}/endbasic"
             ext=tgz
             ;;
 
         windows*)
-            ( cd cli && cargo build --release --verbose )
-            target=./target/release/endbasic.exe
+            ( cd cli && LIB="$(pwd)/libs" cargo build --release --verbose --features=sdl )
+
+            cp ./target/release/endbasic.exe "${distname}"
+            cp dlls/* "${distname}"
+
+            sanity_check "${distname}/endbasic.exe"
             ext=zip
             ;;
 
         *)
-            ( cd cli && cargo build --release --verbose )
-            target=./target/release/endbasic
+            ( cd cli && cargo build --release --verbose --features=sdl )
+
+            cp ./target/release/endbasic "${distname}"
+
+            sanity_check "${distname}/endbasic"
             ext=tgz
             ;;
     esac
-
-    local distname="endbasic-${version}-${name}"
-    local outdir="endbasic-${name}"
-    mkdir -p "${distname}" "${outdir}"
-
-    cp LICENSE NEWS.md NOTICE README.md "${target}" "${distname}"
     case "${ext}" in
         tgz)
             tar czvf "${outdir}/${distname}.${ext}" "${distname}"

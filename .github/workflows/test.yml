@@ -30,6 +30,8 @@ jobs:
                   default: true
                   components: clippy, rustfmt
             - uses: actions/checkout@v2
+            - run: sudo apt update
+            - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             - run: ./.github/workflows/lint.sh
 
     linux-test:
@@ -41,6 +43,8 @@ jobs:
             TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
             - uses: actions/checkout@v2
+            - run: sudo apt update
+            - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             - run: cargo test --verbose -- --include-ignored
 
     macos-test:
@@ -52,6 +56,7 @@ jobs:
             TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
             - uses: actions/checkout@v2
+            - run: brew install sdl2 sdl2_ttf
             - run: cargo test --verbose -- --include-ignored
 
     windows-test:
@@ -63,7 +68,10 @@ jobs:
             TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
             - uses: actions/checkout@v2
-            - run: cargo test --verbose -- --include-ignored
+            - run: choco install unzip
+            - run: ./.github/workflows/setup-sdl.ps1
+            - run: '$env:LIB = $(Join-Path $(Get-Location) "libs");
+              cargo test --verbose -- --include-ignored'
 
     linux-test-no-features:
         runs-on: ubuntu-latest
@@ -82,6 +90,8 @@ jobs:
                   toolchain: 1.48
                   default: true
             - uses: actions/checkout@v2
+            - run: sudo apt update
+            - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             # On old toolchains, we only care about being able to build.
             - run: cd cli && cargo build --verbose
             # And because we do this primarily for Raspbian, make sure the
@@ -92,4 +102,6 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v2
+            - run: sudo apt update
+            - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             - run: ./.github/workflows/package.sh
