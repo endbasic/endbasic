@@ -24,8 +24,6 @@
 
 use anyhow::{anyhow, Result};
 use endbasic_std::console::Console;
-#[cfg(feature = "sdl")]
-use endbasic_std::sdl::SdlConsole;
 use endbasic_std::storage::Storage;
 use endbasic_std::terminal::TerminalConsole;
 use getopts::Options;
@@ -115,27 +113,13 @@ fn get_local_drive_spec(flag: Option<String>) -> Result<String> {
     }
 }
 
-/// Creates the graphical console when SDL support is built in.
-#[cfg(feature = "sdl")]
-fn setup_graphics_console(spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
-    let spec = endbasic::parse_graphics_spec(spec)?;
-    Ok(Rc::from(RefCell::from(SdlConsole::new(spec.0, spec.1, spec.2, spec.3)?)))
-}
-
-/// Errors out during the creation of the graphical console when SDL support is not compiled in.
-#[cfg(not(feature = "sdl"))]
-fn setup_graphics_console(_spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
-    // TODO(jmmv): Make this io::ErrorKind::Unsupported when our MSRV allows it.
-    Err(io::Error::new(io::ErrorKind::InvalidInput, "SDL support not compiled in"))
-}
-
 /// Sets up the console.
 fn setup_console(console_spec: Option<String>) -> io::Result<Rc<RefCell<dyn Console>>> {
     let console: Rc<RefCell<dyn Console>> = match console_spec.as_deref() {
         None | Some("text") => Rc::from(RefCell::from(TerminalConsole::from_stdio()?)),
 
         Some(text) if text.starts_with("graphics:") => {
-            setup_graphics_console(&text["graphics:".len()..])?
+            endbasic::setup_graphics_console(&text["graphics:".len()..])?
         }
 
         Some(text) => {
