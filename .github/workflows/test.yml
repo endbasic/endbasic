@@ -45,7 +45,7 @@ jobs:
             - uses: actions/checkout@v2
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
-            - run: cargo test --verbose -- --include-ignored
+            - run: cargo test --verbose --features=sdl -- --include-ignored
 
     macos-test:
         runs-on: macos-latest
@@ -57,7 +57,7 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - run: brew install sdl2 sdl2_ttf
-            - run: cargo test --verbose -- --include-ignored
+            - run: cargo test --verbose --features=sdl -- --include-ignored
 
     windows-test:
         runs-on: windows-latest
@@ -71,7 +71,7 @@ jobs:
             - run: choco install unzip
             - run: ./.github/workflows/setup-sdl.ps1
             - run: '$env:LIB = $(Join-Path $(Get-Location) "libs");
-              cargo test --verbose -- --include-ignored'
+              cargo test --verbose --features=sdl -- --include-ignored'
 
     linux-test-no-features:
         runs-on: ubuntu-latest
@@ -96,7 +96,7 @@ jobs:
             - run: cd cli && cargo build --verbose
             # And because we do this primarily for Raspbian, make sure the
             # relevant features build there too.
-            - run: cd cli && cargo build --features=rpi --verbose
+            - run: cd cli && cargo build --features=rpi,sdl --verbose
 
     cargo-package:
         runs-on: ubuntu-latest
