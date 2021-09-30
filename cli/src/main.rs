@@ -74,8 +74,10 @@ fn help(name: &str, opts: &Options) {
     if cfg!(feature = "sdl") {
         println!("    graphics[:SPEC]     enables the graphical console and configures it");
         println!("                        with the settings in SPEC, which is of the form:");
-        println!("                        WIDTHxHEIGHT,TTF_FONT_PATH,FONT_SIZE");
+        println!("                        RESOLUTION,TTF_FONT_PATH,FONT_SIZE");
         println!("                        individual components of the SPEC can be omitted");
+        println!("                        RESOLUTION can be one of 'fs' (for full screen),");
+        println!("                        'WIDTHxHEIGHT' or 'WIDTHxHEIGHTfs'");
     }
     println!("    text                enables the text-based console");
     println!();

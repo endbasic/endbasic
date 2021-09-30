@@ -222,6 +222,49 @@ fn rect_usize(x1: usize, y1: usize, width: usize, height: usize) -> io::Result<R
     Ok(Rect::new(x1, y1, width, height))
 }
 
+/// Configures the resolution of the graphical console.
+#[derive(Debug, PartialEq)]
+pub enum Resolution {
+    /// Tells the console to start in full screen mode at the current desktop resolution.
+    FullScreenDesktop,
+
+    /// Tells the console to start in full screen mode at the given resolution.
+    FullScreen((u32, u32)),
+
+    /// Tells the console to start in windowed mode at the given resolution.
+    Windowed((u32, u32)),
+}
+
+impl Resolution {
+    /// Creates a new instance of this enum of type `FullScreenDesktop`.
+    pub fn full_screen_desktop() -> Self {
+        Self::FullScreenDesktop
+    }
+
+    /// Ensures that the given resolution is valid to some extent.
+    fn validate_width_and_height(width: u32, height: u32) -> io::Result<()> {
+        if width == 0 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Console width cannot be 0"));
+        }
+        if height == 0 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Console height cannot be 0"));
+        }
+        Ok(())
+    }
+
+    /// Creates a new instance of this enum of type `FullScreen` after validating the parameters.
+    pub fn full_screen(width: u32, height: u32) -> io::Result<Self> {
+        Resolution::validate_width_and_height(width, height)?;
+        Ok(Self::FullScreen((width, height)))
+    }
+
+    /// Creates a new instance of this enum of type `Windowed` after validating the parameters.
+    pub fn windowed(width: u32, height: u32) -> io::Result<Self> {
+        Resolution::validate_width_and_height(width, height)?;
+        Ok(Self::Windowed((width, height)))
+    }
+}
+
 /// Implementation of the EndBASIC console on top of an SDL2 window.
 pub struct SdlConsole {
     /// SDL2 library context.  Must remain alive for the lifetime of the console: if it is dropped
@@ -273,19 +316,12 @@ pub struct SdlConsole {
 impl SdlConsole {
     /// Initializes a new SDL console.
     ///
-    /// The console is sized to `width * height` pixels.  Also loads the desired font from
+    /// The console is sized to `resolution` pixels.  Also loads the desired font from
     /// `font_path` at `font_size` and uses it to calculate the size of the console in characters.
     ///
     /// There can only be one active `SdlConsole` at any given time given that this initializes and
     /// owns the SDL context.
-    pub fn new(width: u32, height: u32, font_path: &Path, font_size: u16) -> io::Result<Self> {
-        if width == 0 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Console width cannot be 0"));
-        }
-        if height == 0 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Console height cannot be 0"));
-        }
-
+    pub fn new(resolution: Resolution, font_path: &Path, font_size: u16) -> io::Result<Self> {
         let font = MonospacedFont::load(font_path, font_size)?;
 
         let context = sdl2::init().map_err(string_error_to_io_error)?;
@@ -295,12 +331,26 @@ impl SdlConsole {
         video.text_input().start();
 
         let mut title = format!("EndBASIC {}", env!("CARGO_PKG_VERSION"));
-        let mut window = video
-            .window(&title, width, height)
-            .position_centered()
-            .opengl()
-            .build()
-            .map_err(window_build_error_to_io_error)?;
+        let mut window = match resolution {
+            Resolution::FullScreenDesktop => {
+                let mut window = video.window(&title, 0, 0);
+                window.fullscreen_desktop();
+                window
+            }
+            Resolution::FullScreen(size) => {
+                let mut window = video.window(&title, size.0, size.1);
+                window.fullscreen();
+                window
+            }
+            Resolution::Windowed(size) => {
+                let mut window = video.window(&title, size.0, size.1);
+                window.position_centered();
+                window
+            }
+        }
+        .opengl()
+        .build()
+        .map_err(window_build_error_to_io_error)?;
 
         let size_pixels = {
             let (width, height) = window.drawable_size();

@@ -127,14 +127,14 @@ pub async fn run_repl_loop(
 #[cfg(feature = "sdl")]
 pub fn setup_graphics_console(spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
     let spec = sdl::parse_graphics_spec(spec)?;
-    let console = match spec.2 {
+    let console = match spec.1 {
         None => {
             let default_font = sdl::TempFont::default_font()?;
-            SdlConsole::new(spec.0, spec.1, &default_font.path(), spec.3)?
+            SdlConsole::new(spec.0, &default_font.path(), spec.2)?
             // The console has been created at this point, so it should be safe to drop
             // default_font and clean up the on-disk file backing it up.
         }
-        Some(font_path) => SdlConsole::new(spec.0, spec.1, font_path, spec.3)?,
+        Some(font_path) => SdlConsole::new(spec.0, font_path, spec.2)?,
     };
     Ok(Rc::from(RefCell::from(console)))
 }
