@@ -10,7 +10,7 @@ Options:
         --version       show version information and exit
 
 CONSOLE-SPEC can be one of the following:
-    text             enables the text-based console
+    text                enables the text-based console
 
 Report bugs to: https://github.com/endbasic/endbasic/issues
 EndBASIC home page: https://www.endbasic.dev/
