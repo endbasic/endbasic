@@ -72,11 +72,12 @@ fn help(name: &str, opts: &Options) {
     println!("{}", opts.usage(&brief));
     println!("CONSOLE-SPEC can be one of the following:");
     if cfg!(feature = "sdl") {
-        println!("    graphics:SPEC    enables the graphical console and configures it");
-        println!("                     with the settings in SPEC, which is of the form:");
-        println!("                     WIDTHxHEIGHT,TTF_FONT_PATH,FONT_SIZE");
+        println!("    graphics[:SPEC]     enables the graphical console and configures it");
+        println!("                        with the settings in SPEC, which is of the form:");
+        println!("                        WIDTHxHEIGHT,TTF_FONT_PATH,FONT_SIZE");
+        println!("                        individual components of the SPEC can be omitted");
     }
-    println!("    text             enables the text-based console");
+    println!("    text                enables the text-based console");
     println!();
     println!("Report bugs to: https://github.com/endbasic/endbasic/issues");
     println!("EndBASIC home page: https://www.endbasic.dev/");
@@ -118,6 +119,7 @@ fn setup_console(console_spec: Option<String>) -> io::Result<Rc<RefCell<dyn Cons
     let console: Rc<RefCell<dyn Console>> = match console_spec.as_deref() {
         None | Some("text") => Rc::from(RefCell::from(TerminalConsole::from_stdio()?)),
 
+        Some("graphics") => endbasic::setup_graphics_console("")?,
         Some(text) if text.starts_with("graphics:") => {
             endbasic::setup_graphics_console(&text["graphics:".len()..])?
         }
