@@ -56,13 +56,12 @@ fn font_error_to_io_error(e: FontError) -> io::Error {
 
 /// Converts an `InitError` to an `io::Error`.
 fn init_error_to_io_error(e: &'static InitError) -> io::Error {
-    let kind = match e {
+    match e {
         InitError::AlreadyInitializedError => {
             panic!("Initialization from once_cell should happen only once")
         }
-        InitError::InitializationError(_) => io::ErrorKind::Other,
-    };
-    io::Error::new(kind, e)
+        InitError::InitializationError(e) => io::Error::new(e.kind(), format!("{}", e)),
+    }
 }
 
 /// Converts an `IntegerOrSdlError` to an `io::Error`.
