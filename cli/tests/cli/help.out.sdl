@@ -12,8 +12,10 @@ Options:
 CONSOLE-SPEC can be one of the following:
     graphics[:SPEC]     enables the graphical console and configures it
                         with the settings in SPEC, which is of the form:
-                        WIDTHxHEIGHT,TTF_FONT_PATH,FONT_SIZE
+                        RESOLUTION,TTF_FONT_PATH,FONT_SIZE
                         individual components of the SPEC can be omitted
+                        RESOLUTION can be one of 'fs' (for full screen),
+                        'WIDTHxHEIGHT' or 'WIDTHxHEIGHTfs'
     text                enables the text-based console
 
 Report bugs to: https://github.com/endbasic/endbasic/issues
