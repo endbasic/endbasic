@@ -22,10 +22,11 @@ use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
 use sdl2::pixels::{Color, PixelFormatEnum};
 use sdl2::rect::Rect;
-use sdl2::render::{TextureCreator, TextureValueError, UpdateTextureError, WindowCanvas};
+use sdl2::render::{SurfaceCanvas, TextureCreator, TextureValueError, UpdateTextureError};
+use sdl2::surface::{Surface, SurfaceContext};
 use sdl2::ttf::{Font, FontError, InitError, Sdl2TtfContext};
-use sdl2::video::{WindowBuildError, WindowContext};
-use sdl2::{EventPump, IntegerOrSdlError, Sdl};
+use sdl2::video::{Window, WindowBuildError};
+use sdl2::{EventPump, Sdl};
 use std::cmp;
 use std::convert::TryFrom;
 use std::io;
@@ -62,15 +63,6 @@ fn init_error_to_io_error(e: &'static InitError) -> io::Error {
         }
         InitError::InitializationError(e) => io::Error::new(e.kind(), format!("{}", e)),
     }
-}
-
-/// Converts an `IntegerOrSdlError` to an `io::Error`.
-fn integer_or_sdl_error_to_io_error(e: IntegerOrSdlError) -> io::Error {
-    let kind = match e {
-        IntegerOrSdlError::IntegerOverflows(_, _) => io::ErrorKind::InvalidInput,
-        IntegerOrSdlError::SdlError(_) => io::ErrorKind::Other,
-    };
-    io::Error::new(kind, e)
 }
 
 /// Converts a flat string error message to an `io::Error`.
@@ -276,14 +268,18 @@ pub struct SdlConsole {
     /// Event pump to read keyboard events from.
     event_pump: EventPump,
 
-    /// Canvas in which to draw the console.
-    canvas: WindowCanvas,
+    /// Window that hosts the console.
+    window: Window,
+
+    /// Off-screen canvas in which to draw the console.  Use `present_canvas` to copy the contents
+    /// of this surface onto the window.
+    canvas: SurfaceCanvas<'static>,
 
     /// The pixel format used in the `canvas`; cached to avoid calls into SDL.
     pixel_format: PixelFormatEnum,
 
     /// The texture creator for the `canvas`; cached to avoid calls into SDL.
-    texture_creator: TextureCreator<WindowContext>,
+    texture_creator: TextureCreator<SurfaceContext<'static>>,
 
     /// Size of the console in pixels.
     size_pixels: PixelsXY,
@@ -366,14 +362,17 @@ impl SdlConsole {
         );
         window.set_title(&title).expect("There should have been no NULLs in the formatted title");
 
-        let canvas = window.into_canvas().build().map_err(integer_or_sdl_error_to_io_error)?;
-        let pixel_format = canvas.default_pixel_format();
+        let pixel_format = window.window_pixel_format();
+        let surface = Surface::new(size_pixels.x as u32, size_pixels.y as u32, pixel_format)
+            .map_err(string_error_to_io_error)?;
+        let canvas = surface.into_canvas().map_err(string_error_to_io_error)?;
         let texture_creator = canvas.texture_creator();
 
         let mut console = Self {
             _context: context,
             font,
             event_pump,
+            window,
             canvas,
             pixel_format,
             texture_creator,
@@ -390,6 +389,18 @@ impl SdlConsole {
         console.clear(ClearType::All)?;
 
         Ok(console)
+    }
+
+    /// Renders the current contents of `self.canvas` onto the output window.
+    fn present_canvas(&mut self) -> io::Result<()> {
+        let mut window_surface =
+            self.window.surface(&self.event_pump).map_err(string_error_to_io_error)?;
+        self.canvas
+            .surface()
+            .blit(None, &mut window_surface, None)
+            .map_err(string_error_to_io_error)?;
+        window_surface.finish().map_err(string_error_to_io_error)?;
+        Ok(())
     }
 
     /// Draws the cursor at the current position and saves the previous contents of the screen so
@@ -456,41 +467,35 @@ impl SdlConsole {
             return Ok(());
         }
 
-        let upper_rect = rect_usize(
-            0,
-            self.font.glyph_size.y,
-            self.size_pixels.x,
-            self.size_pixels.y - self.font.glyph_size.y,
-        )?;
-        let upper_rect_shifted =
-            rect_usize(0, 0, self.size_pixels.x, self.size_pixels.y - self.font.glyph_size.y)?;
-        let bottom_rect = rect_usize(
-            0,
-            self.size_pixels.y - self.font.glyph_size.y,
-            self.size_pixels.x,
-            self.font.glyph_size.y,
-        )?;
-
-        // TODO(jmmv): Reading pixels, according to the documentation, is slow... and in practice,
-        // this makes the console feel like it crawls.  We should find another way of rendering it
-        // so that it is fast.
-        let pixels = self
-            .canvas
-            .read_pixels(upper_rect, self.pixel_format)
+        let mut shifted = {
+            let src = self.canvas.surface();
+            let mut temp = Surface::new(src.width(), src.height(), self.pixel_format)
+                .map_err(string_error_to_io_error)?;
+            src.blit(
+                rect_usize(
+                    0,
+                    self.font.glyph_size.y,
+                    self.size_pixels.x,
+                    self.size_pixels.y - self.font.glyph_size.y,
+                )?,
+                &mut temp,
+                None,
+            )
             .map_err(string_error_to_io_error)?;
-        let pitch = self.size_pixels.x * self.pixel_format.byte_size_per_pixel();
-
-        let mut texture = self
-            .texture_creator
-            .create_texture_static(None, upper_rect.width(), upper_rect.height())
-            .map_err(texture_value_error_to_io_error)?;
-        texture.update(None, &pixels, pitch).map_err(update_texture_error_to_io_error)?;
-
-        self.canvas.clear();
-        self.canvas.copy(&texture, None, upper_rect_shifted).map_err(string_error_to_io_error)?;
-
-        self.canvas.set_draw_color(self.bg_color);
-        self.canvas.fill_rect(bottom_rect).map_err(string_error_to_io_error)?;
+            temp
+        };
+        shifted
+            .fill_rect(
+                rect_usize(
+                    0,
+                    self.size_pixels.y - self.font.glyph_size.y,
+                    self.size_pixels.x,
+                    self.font.glyph_size.y,
+                )?,
+                self.bg_color,
+            )
+            .map_err(string_error_to_io_error)?;
+        shifted.blit(None, self.canvas.surface_mut(), None).map_err(string_error_to_io_error)?;
 
         self.cursor_pos.x = 0;
         Ok(())
@@ -588,7 +593,7 @@ impl Console for SdlConsole {
 
         self.canvas.set_draw_color(self.fg_color);
         self.draw_cursor()?;
-        self.canvas.present();
+        self.present_canvas()?;
         Ok(())
     }
 
@@ -630,7 +635,7 @@ impl Console for SdlConsole {
     fn hide_cursor(&mut self) -> io::Result<()> {
         self.clear_cursor()?;
         self.cursor_visible = false;
-        self.canvas.present();
+        self.present_canvas()?;
         Ok(())
     }
 
@@ -666,7 +671,7 @@ impl Console for SdlConsole {
         self.fg_color = fg_color;
         self.bg_color = bg_color;
         self.draw_cursor()?;
-        self.canvas.present();
+        self.present_canvas()?;
 
         debug_assert!(self.alt_backup.is_none());
         Ok(())
@@ -676,7 +681,7 @@ impl Console for SdlConsole {
         self.clear_cursor()?;
         self.cursor_pos = pos;
         self.draw_cursor()?;
-        self.canvas.present();
+        self.present_canvas()?;
         Ok(())
     }
 
@@ -688,7 +693,7 @@ impl Console for SdlConsole {
             self.cursor_pos.x += usize::try_from(off).expect("offset must have fit in usize");
         }
         self.draw_cursor()?;
-        self.canvas.present();
+        self.present_canvas()?;
         Ok(())
     }
 
@@ -702,7 +707,7 @@ impl Console for SdlConsole {
         }
         self.open_line()?;
         self.draw_cursor()?;
-        self.canvas.present();
+        self.present_canvas()?;
         Ok(())
     }
 
@@ -754,7 +759,7 @@ impl Console for SdlConsole {
             self.cursor_visible = false;
             return Err(e);
         }
-        self.canvas.present();
+        self.present_canvas()?;
         Ok(())
     }
 
@@ -773,7 +778,7 @@ impl Console for SdlConsole {
         self.cursor_pos.x += bytes.len();
 
         self.draw_cursor()?;
-        self.canvas.present();
+        self.present_canvas()?;
         Ok(())
     }
 }
