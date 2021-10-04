@@ -782,3 +782,323 @@ impl Console for SdlConsole {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod testutils {
+    use super::*;
+    use flate2::read::GzDecoder;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use sdl2::rwops::RWops;
+    use std::env;
+    use std::fs::File;
+    use std::io::{self, BufReader, Read};
+    use std::path::PathBuf;
+    use std::sync::{Mutex, MutexGuard};
+
+    /// Set this to true to regenerate the golden images instead of verifying them.  The
+    /// checked-in value should always be false (and if it is not, all tests fail).
+    const REGEN_BMPS: bool = false;
+
+    /// Global lock to ensure we only instantiate a single `SdlConsole` at once.
+    ///
+    /// We could instead wrap a global `SdlConsole` with the mutex, but then the tests would
+    /// sharing possibly-stale state in the presence of bugs.
+    static TEST_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+    /// Computes the path to the directory where this test's binary lives.
+    fn self_dir() -> PathBuf {
+        let self_exe = env::current_exe().expect("Cannot get self's executable path");
+        let dir = self_exe.parent().expect("Cannot get self's directory");
+        assert!(dir.ends_with("target/debug/deps") || dir.ends_with("target/release/deps"));
+        dir.to_owned()
+    }
+
+    /// Computes the path to the source file `name`.
+    fn src_path(name: &str) -> PathBuf {
+        let test_dir = self_dir();
+        let debug_or_release_dir = test_dir.parent().expect("Failed to get parent directory");
+        let target_dir = debug_or_release_dir.parent().expect("Failed to get parent directory");
+        let dir = target_dir.parent().expect("Failed to get parent directory");
+
+        // Sanity-check that we landed in the right location.
+        assert!(dir.join("Cargo.toml").exists());
+
+        dir.join(name)
+    }
+
+    /// Context for tests that validate the SDL console.
+    #[must_use]
+    pub(crate) struct SdlTest {
+        /// The SDL console under test.
+        console: SdlConsole,
+
+        /// Guard to ensure there is a single `SdlConsole` alive at any given time. This must come
+        /// after `console` because the Rust drop rules dictate that struct elements are dropped in
+        /// the order in which they are defined.
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    impl SdlTest {
+        /// Creates a new test context and ensures no other test is running at the same time.
+        pub(crate) fn new() -> Self {
+            let lock = TEST_LOCK.lock().unwrap();
+            let console = SdlConsole::new(
+                Resolution::windowed(800, 600).unwrap(),
+                &src_path("cli/src/IBMPlexMono-Regular-6.0.0.ttf"),
+                16,
+            )
+            .unwrap();
+            Self { _lock: lock, console }
+        }
+
+        /// Obtains access to the SDL console.
+        pub(crate) fn console(&mut self) -> &mut SdlConsole {
+            &mut self.console
+        }
+
+        /// Verifies that the current state of the console matches a golden imagine.  `bmp_basename`
+        /// indicates the name of the BMP image to use, without an extension.
+        pub(crate) fn verify(self, bmp_basename: &'static str) {
+            let golden_bmp_gz = src_path("std/src").join(format!("{}.bmp.gz", bmp_basename));
+
+            let surface = self.console.window.surface(&self.console.event_pump).unwrap();
+
+            if REGEN_BMPS {
+                let golden_bmp = src_path("std/src").join(format!("{}.bmp", bmp_basename));
+                surface.save_bmp(&golden_bmp).unwrap();
+                let mut input = BufReader::new(File::open(golden_bmp).unwrap());
+                let output = File::create(golden_bmp_gz).unwrap();
+                let mut encoder = GzEncoder::new(output, Compression::default());
+                io::copy(&mut input, &mut encoder).unwrap();
+                encoder.finish().unwrap();
+
+                // We could delete the `golden_bmp` file here, but it's easier to keep it around
+                // for manual validation of the new images.
+
+                drop(self); // Avoid poisoning the mutex when panicking.
+                panic!("Golden data regenerated; flip REGEN_BMPS back to false");
+            }
+
+            let input = BufReader::new(File::open(golden_bmp_gz).unwrap());
+            let mut decoder = GzDecoder::new(input);
+            let mut buffer = vec![];
+            decoder.read_to_end(&mut buffer).unwrap();
+            let mut rwops = RWops::from_bytes(buffer.as_slice()).unwrap();
+            let golden = Surface::load_bmp_rw(&mut rwops)
+                .unwrap()
+                .into_canvas()
+                .unwrap()
+                .read_pixels(None, self.console.pixel_format)
+                .unwrap();
+
+            let mut actual =
+                Surface::new(surface.width(), surface.height(), self.console.pixel_format).unwrap();
+            surface.blit(None, &mut actual, None).unwrap();
+            let actual =
+                actual.into_canvas().unwrap().read_pixels(None, self.console.pixel_format).unwrap();
+
+            // Compare images for equality.  In theory, they should be pixel-perfect across
+            // platforms, but in practice, I'm encountering minor color variations (e.g. FreeBSD
+            // renders colors that differ by one compared to Windows) that I haven't been able to
+            // explain.  Cope with those here by tolerating minor differences in the comparison.
+            let mut equal = true;
+            assert_eq!(golden.len(), actual.len());
+            for i in 0..golden.len() {
+                let pixel1 = golden[i];
+                let pixel2 = actual[i];
+
+                let pixel2min = if pixel2 == 0 { pixel2 } else { pixel2 - 1 };
+                let pixel2max = if pixel2 == 255 { pixel2 } else { pixel2 + 1 };
+
+                if pixel1 < pixel2min || pixel1 > pixel2max {
+                    eprintln!("Diff at pixel {}: {} vs. {}", i, pixel1, pixel2);
+                    equal = false;
+                }
+            }
+            assert!(equal, "Images do not match; see test output");
+
+            // assert_eq!(golden, actual);
+            // assert!(golden == actual, "Image contents don't match");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::testutils::*;
+    use super::*;
+    use futures_lite::future::block_on;
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_empty() {
+        let test = SdlTest::new();
+        test.verify("sdl-empty");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_colors() {
+        let mut test = SdlTest::new();
+
+        test.console().print("Default colors").unwrap();
+        test.console().print("").unwrap();
+        test.console().color(Some(14), Some(4)).unwrap();
+        test.console().print("Cyan on blue").unwrap();
+        test.console().color(None, Some(1)).unwrap();
+        test.console().print("Default on red").unwrap();
+        test.console().color(Some(11), None).unwrap();
+        test.console().print("Yellow on default").unwrap();
+        test.console().color(None, None).unwrap();
+        test.console().print("").unwrap();
+        test.console().print("Back to default colors").unwrap();
+
+        test.verify("sdl-colors");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_scroll_and_wrap() {
+        let mut test = SdlTest::new();
+
+        let mut long_line = String::new();
+        for i in 0..128 {
+            long_line.push((b'a' + (i % 26)) as char);
+        }
+
+        for i in 0..15 {
+            test.console().print(&format!("Line {}", i)).unwrap();
+        }
+        test.console().print(&long_line).unwrap();
+        for i in 0..10 {
+            test.console().print(&format!("Line {}", i)).unwrap();
+        }
+        test.console().print(&long_line).unwrap();
+        test.console().print("End").unwrap();
+
+        test.verify("sdl-scroll-and-wrap");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_clear() {
+        let mut test = SdlTest::new();
+
+        test.console().print("Before clearing the console").unwrap();
+        test.console().color(None, Some(4)).unwrap();
+        test.console().clear(ClearType::All).unwrap();
+        test.console().print("After clearing the console in blue").unwrap();
+
+        test.console().write(b"A line that will be erased").unwrap();
+        test.console().clear(ClearType::CurrentLine).unwrap();
+
+        test.console().write(b"A line with corrections1.").unwrap();
+        test.console().clear(ClearType::PreviousChar).unwrap();
+        test.console().clear(ClearType::PreviousChar).unwrap();
+        test.console().print(&"!".to_owned()).unwrap();
+
+        test.console().write(b"Remove part of this").unwrap();
+        test.console().move_within_line(-8).unwrap();
+        test.console().clear(ClearType::UntilNewLine).unwrap();
+        test.console().write(b" -- done").unwrap();
+
+        test.verify("sdl-clear");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_move_cursor() {
+        let mut test = SdlTest::new();
+
+        test.console().write(b"Move cursor over parts of this text").unwrap();
+        for _ in 0..15 {
+            test.console().move_within_line(-1).unwrap();
+        }
+        for _ in 0..5 {
+            test.console().move_within_line(1).unwrap();
+        }
+
+        test.verify("sdl-move-cursor");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_hide_cursor() {
+        let mut test = SdlTest::new();
+
+        test.console().hide_cursor().unwrap();
+        test.console().write(b"Cursor hidden").unwrap();
+
+        test.verify("sdl-hide-cursor");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_enter_alt() {
+        let mut test = SdlTest::new();
+
+        test.console().print("Before entering the alternate console").unwrap();
+        test.console().enter_alt().unwrap();
+        test.console().print("After entering the alternate console").unwrap();
+
+        test.verify("sdl-enter-alt");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_leave_alt() {
+        let mut test = SdlTest::new();
+
+        test.console().print("Before entering the alternate console").unwrap();
+        test.console().enter_alt().unwrap();
+        test.console().print("After entering the alternate console").unwrap();
+        test.console().leave_alt().unwrap();
+
+        test.verify("sdl-leave-alt");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_read_key() {
+        let mut test = SdlTest::new();
+
+        /// Synthesizes an `Event::KeyDown` event for a single key press.
+        fn key_down(keycode: Keycode, keymod: Mod) -> Event {
+            Event::KeyDown {
+                keycode: Some(keycode),
+                scancode: None,
+                keymod,
+                timestamp: 0,
+                repeat: false,
+                window_id: 0,
+            }
+        }
+
+        let ev = test.console()._context.event().unwrap();
+
+        ev.push_event(Event::Quit { timestamp: 0 }).unwrap();
+        assert_eq!(Key::Eof, block_on(test.console().read_key()).unwrap());
+
+        ev.push_event(key_down(Keycode::C, Mod::LCTRLMOD)).unwrap();
+        assert_eq!(Key::Interrupt, block_on(test.console().read_key()).unwrap());
+        ev.push_event(key_down(Keycode::C, Mod::RCTRLMOD)).unwrap();
+        assert_eq!(Key::Interrupt, block_on(test.console().read_key()).unwrap());
+
+        ev.push_event(key_down(Keycode::D, Mod::LCTRLMOD)).unwrap();
+        assert_eq!(Key::Eof, block_on(test.console().read_key()).unwrap());
+        ev.push_event(key_down(Keycode::D, Mod::RCTRLMOD)).unwrap();
+        assert_eq!(Key::Eof, block_on(test.console().read_key()).unwrap());
+
+        ev.push_event(key_down(Keycode::D, Mod::LALTMOD)).unwrap();
+        match block_on(test.console().read_key()).unwrap() {
+            Key::Unknown(_) => (),
+            _ => panic!("Unknown key down event not detected as such"),
+        };
+
+        // TODO(jmmv): We aren't testing textual input because push_event doesn't support injecting
+        // Event::TextInput events.
+
+        test.verify("sdl-read-key");
+    }
+}

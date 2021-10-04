@@ -33,6 +33,7 @@ pub(crate) use readline::read_line_secure;
 
 /// Decoded key presses as returned by the console.
 #[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum Key {
     /// The cursor down key.
     ArrowDown,
