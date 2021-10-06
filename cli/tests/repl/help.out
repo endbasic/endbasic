@@ -18,6 +18,7 @@ Output from HELP:
     >> Cloud access
     >> Console
     >> File system
+    >> Graphics
     >> Hardware interface
     >> Interpreter
     >> Language reference
@@ -69,18 +70,21 @@ Output from HELP CONSOLE:
 
     Console
 
-    The EndBASIC console is the text-based display you are seeing: both the
+    The EndBASIC console is the display you are seeing: both the
     interpreter and the effects of all commands happen within the same
     console.  There is no separate output window as other didactical
-    interpreters provide.
+    interpreters provide.  This unified console supports text and,
+    depending on the output backend, graphics.  This help section focuses
+    on the textual console; for information about graphics, run HELP
+    GRAPHICS.
 
-    The console is a matrix of variable size.  The upper left position is
-    row 0 and column 0.  Each position in this matrix contains a character
-    and a color attribute.  The color attribute indicates the foreground
-    and background colors of that character.  There is a default attribute
-    to match the default settings of your terminal, which might not be a
-    color: for example, in a terminal emulator configured with a black tint
-    (aka a transparent terminal), the default color respects the
+    The text console is a matrix of variable size.  The upper left position
+    is row 0 and column 0.  Each position in this matrix contains a
+    character and a color attribute.  The color attribute indicates the
+    foreground and background colors of that character.  There is a default
+    attribute to match the default settings of your terminal, which might
+    not be a color: for example, in a terminal emulator configured with a
+    black tint (aka a transparent terminal), the default color respects the
     transparency whereas color 0 (black) does not.
 
     If you are writing a script and do not want the script to interfere
@@ -135,6 +139,21 @@ Output from HELP "FILE SYSTEM":
     >> MOUNT      Lists the mounted drives or mounts a new drive.
     >> PWD        Prints the current working location.
     >> UNMOUNT    Unmounts the given drive.
+
+    Type HELP followed by the name of a symbol for details.
+
+Output from HELP GRAPHICS:
+
+    Graphics
+
+    The EndBASIC console overlays text and graphics in the same canvas.
+    The consequence of this design choice is that the console has two
+    coordinate systems: the character-based system, used by
+
+    the commands described in HELP CONSOLE, and the pixel-based system,
+    used by the commands described in this section.
+
+    >> GFX_LINE    Draws a line from (x1,y1) to (x2,y2).
 
     Type HELP followed by the name of a symbol for details.
 
@@ -311,6 +330,14 @@ Output from HELP EXIT:
     Exits the interpreter.
 
     The optional code indicates the return value to return to the system.
+
+Output from HELP GFX_LINE:
+
+    GFX_LINE x1%, y1%, x2%, y2%
+
+    Draws a line from (x1,y1) to (x2,y2).
+
+    The line is drawn using the foreground color as selected by COLOR.
 
 Output from HELP GPIO_CLEAR:
 

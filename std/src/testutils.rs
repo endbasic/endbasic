@@ -15,7 +15,7 @@
 
 //! Test utilities for consumers of the EndBASIC interpreter.
 
-use crate::console::{self, CharsXY, ClearType, Console, Key};
+use crate::console::{self, CharsXY, ClearType, Console, Key, PixelsXY};
 use crate::gpio;
 use crate::program::Program;
 use crate::service::{
@@ -66,6 +66,9 @@ pub enum CapturedOut {
 
     /// Represents a call to `Console::write`.
     Write(Vec<u8>),
+
+    /// Represents a call to `Console::draw_line`.
+    DrawLine(PixelsXY, PixelsXY),
 }
 
 /// A console that supplies golden input and captures all output.
@@ -207,6 +210,11 @@ impl Console for MockConsole {
         debug_assert!(!console::has_control_chars_u8(bytes));
 
         self.captured_out.push(CapturedOut::Write(bytes.to_owned()));
+        Ok(())
+    }
+
+    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
+        self.captured_out.push(CapturedOut::DrawLine(x1y1, x2y2));
         Ok(())
     }
 }

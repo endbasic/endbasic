@@ -31,6 +31,7 @@ pub mod arrays;
 pub mod console;
 mod editor;
 pub mod exec;
+pub mod gfx;
 pub mod gpio;
 pub mod help;
 pub mod numerics;
@@ -125,6 +126,7 @@ impl MachineBuilder {
         let mut machine = Machine::default();
         arrays::add_all(&mut machine);
         console::add_all(&mut machine, self.get_console()?);
+        gfx::add_all(&mut machine, self.get_console()?);
         gpio::add_all(&mut machine, self.get_gpio_pins());
         exec::add_all(&mut machine, self.sleep_fn);
         numerics::add_all(&mut machine);

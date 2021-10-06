@@ -195,6 +195,11 @@ pub trait Console {
     ///
     /// The input `bytes` are not supposed to contain any control characters, such as CR or LF.
     fn write(&mut self, bytes: &[u8]) -> io::Result<()>;
+
+    /// Draws a line from `_x1y1` to `_x2y2` using the current drawing color.
+    fn draw_line(&mut self, _x1y1: PixelsXY, _x2y2: PixelsXY) -> io::Result<()> {
+        Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
+    }
 }
 
 /// Checks if a given string has control characters.
