@@ -417,7 +417,7 @@ impl SdlConsole {
         let height = self.font.glyph_size.y;
         let rect = rect_usize(pos.x, pos.y, width, height)?;
 
-        // TODO(jmmv): Assert that self.cursor_backup is empty, but this is quite problematic...
+        assert!(self.cursor_backup.is_empty());
         self.cursor_backup =
             self.canvas.read_pixels(rect, self.pixel_format).map_err(string_error_to_io_error)?;
 
@@ -431,7 +431,7 @@ impl SdlConsole {
     ///
     /// Does not present the canvas.
     fn clear_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible {
+        if !self.cursor_visible || self.cursor_backup.is_empty() {
             return Ok(());
         }
 
@@ -448,7 +448,6 @@ impl SdlConsole {
                 u32::try_from(height).expect("Glyph height is too large"),
             )
             .map_err(texture_value_error_to_io_error)?;
-        // TODO(jmmv): Assert that self.cursor_backup is not empty, but this is quite problematic...
         texture
             .update(None, &self.cursor_backup, width * self.pixel_format.byte_size_per_pixel())
             .map_err(update_texture_error_to_io_error)?;
@@ -562,14 +561,21 @@ impl Console for SdlConsole {
                 self.canvas.clear();
                 self.cursor_pos.y = 0;
                 self.cursor_pos.x = 0;
+
+                // We intentionally do not draw the cursor here and wait until the first time we write text
+                // to the console.  This allows the user to clear the screen and render graphics if they
+                // want to without interference.
+                self.cursor_backup.clear();
             }
             ClearType::CurrentLine => {
+                self.clear_cursor()?;
                 let height = self.font.glyph_size.y;
                 let y1 = self.cursor_pos.y * height;
                 self.canvas
                     .fill_rect(rect_usize(0, y1, self.size_pixels.x, height)?)
                     .map_err(string_error_to_io_error)?;
                 self.cursor_pos.x = 0;
+                self.draw_cursor()?;
             }
             ClearType::PreviousChar => {
                 if self.cursor_pos.x > 0 {
@@ -583,16 +589,16 @@ impl Console for SdlConsole {
                 }
             }
             ClearType::UntilNewLine => {
+                self.clear_cursor()?;
                 let pos = self.cursor_pos * self.font.glyph_size;
                 let height = self.font.glyph_size.y;
                 self.canvas
                     .fill_rect(rect_usize(pos.x, pos.y, self.size_pixels.x - pos.x, height)?)
                     .map_err(string_error_to_io_error)?;
+                self.draw_cursor()?;
             }
         }
 
-        self.canvas.set_draw_color(self.fg_color);
-        self.draw_cursor()?;
         self.present_canvas()?;
         Ok(())
     }
@@ -654,6 +660,8 @@ impl Console for SdlConsole {
             }
         };
 
+        self.clear_cursor()?;
+
         {
             let mut texture = self
                 .texture_creator
@@ -700,9 +708,8 @@ impl Console for SdlConsole {
     fn print(&mut self, text: &str) -> io::Result<()> {
         debug_assert!(!crate::console::has_control_chars_str(text));
 
-        if text.is_empty() {
-            self.clear_cursor()?;
-        } else {
+        self.clear_cursor()?;
+        if !text.is_empty() {
             self.raw_write_wrapped(text.as_bytes())?;
         }
         self.open_line()?;
@@ -774,9 +781,9 @@ impl Console for SdlConsole {
             return Ok(());
         }
 
+        self.clear_cursor()?;
         self.raw_write_wrapped(bytes)?;
         self.cursor_pos.x += bytes.len();
-
         self.draw_cursor()?;
         self.present_canvas()?;
         Ok(())
