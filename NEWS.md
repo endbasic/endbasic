@@ -17,6 +17,8 @@ for the time being.**
 *   Added a graphical console based on SDL2 behind a new optional `sdl`
     feature.
 
+*   Added the `GFX_LINE` graphics command.
+
 ## Changes in version 0.7.0
 
 **Released on 2021-07-03.**

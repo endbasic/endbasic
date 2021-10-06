@@ -21,14 +21,14 @@ use once_cell::sync::Lazy;
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
 use sdl2::pixels::{Color, PixelFormatEnum};
-use sdl2::rect::Rect;
+use sdl2::rect::{Point, Rect};
 use sdl2::render::{SurfaceCanvas, TextureCreator, TextureValueError, UpdateTextureError};
 use sdl2::surface::{Surface, SurfaceContext};
 use sdl2::ttf::{Font, FontError, InitError, Sdl2TtfContext};
 use sdl2::video::{Window, WindowBuildError};
 use sdl2::{EventPump, Sdl};
 use std::cmp;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::io;
 use std::path::Path;
 
@@ -211,6 +211,34 @@ fn rect_usize(x1: usize, y1: usize, width: usize, height: usize) -> io::Result<R
     let height = usize_to_u32(height, "height")?;
 
     Ok(Rect::new(x1, y1, width, height))
+}
+
+impl TryInto<Point> for PixelsXY {
+    type Error = io::Error;
+
+    fn try_into(self) -> Result<Point, Self::Error> {
+        let x: i32 = match self.x.try_into() {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Invalid x coordinate {}: {}", self.x, e),
+                ))
+            }
+        };
+
+        let y: i32 = match self.y.try_into() {
+            Ok(y) => y,
+            Err(e) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Invalid y coordinate {}: {}", self.y, e),
+                ))
+            }
+        };
+
+        Ok(Point::new(x, y))
+    }
 }
 
 /// Configures the resolution of the graphical console.
@@ -788,6 +816,14 @@ impl Console for SdlConsole {
         self.present_canvas()?;
         Ok(())
     }
+
+    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
+        let x1y1: Point = x1y1.try_into()?;
+        let x2y2: Point = x2y2.try_into()?;
+        self.canvas.set_draw_color(self.fg_color);
+        self.canvas.draw_line(x1y1, x2y2).map_err(string_error_to_io_error)?;
+        self.present_canvas()
+    }
 }
 
 #[cfg(test)]
@@ -924,9 +960,6 @@ mod testutils {
                 }
             }
             assert!(equal, "Images do not match; see test output");
-
-            // assert_eq!(golden, actual);
-            // assert!(golden == actual, "Image contents don't match");
         }
     }
 }
@@ -1107,5 +1140,22 @@ mod tests {
         // Event::TextInput events.
 
         test.verify("sdl-read-key");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_draw() {
+        let mut test = SdlTest::new();
+
+        test.console().color(Some(15), None).unwrap();
+        test.console().draw_line(PixelsXY { x: 10, y: 50 }, PixelsXY { x: 110, y: 60 }).unwrap();
+        test.console().color(Some(12), Some(1)).unwrap();
+        test.console().draw_line(PixelsXY { x: 120, y: 70 }, PixelsXY { x: 20, y: 60 }).unwrap();
+
+        test.console().color(None, None).unwrap();
+        test.console().locate(CharsXY { x: 4, y: 22 }).unwrap();
+        test.console().write(b"Done!").unwrap();
+
+        test.verify("sdl-draw");
     }
 }
