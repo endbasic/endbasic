@@ -69,6 +69,12 @@ pub enum CapturedOut {
 
     /// Represents a call to `Console::draw_line`.
     DrawLine(PixelsXY, PixelsXY),
+
+    /// Represents a call to `Console::draw_rect`.
+    DrawRect(PixelsXY, PixelsXY),
+
+    /// Represents a call to `Console::draw_rect_filled`.
+    DrawRectFilled(PixelsXY, PixelsXY),
 }
 
 /// A console that supplies golden input and captures all output.
@@ -215,6 +221,16 @@ impl Console for MockConsole {
 
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         self.captured_out.push(CapturedOut::DrawLine(x1y1, x2y2));
+        Ok(())
+    }
+
+    fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
+        self.captured_out.push(CapturedOut::DrawRect(x1y1, x2y2));
+        Ok(())
+    }
+
+    fn draw_rect_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
+        self.captured_out.push(CapturedOut::DrawRectFilled(x1y1, x2y2));
         Ok(())
     }
 }
