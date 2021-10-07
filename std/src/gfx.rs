@@ -98,15 +98,131 @@ impl Command for GfxLineCommand {
     }
 }
 
+/// The `GFX_RECT` command.
+pub struct GfxRectCommand {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxRectCommand {
+    /// Creates a new `GFX_RECT` command that draws an empty rectangle on `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_RECT", VarType::Void)
+                .with_syntax("x1%, y1%, x2%, y2%")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Draws a rectangle from (x1,y1) to (x2,y2).
+The outline of the rectangle is drawn using the foreground color as selected by COLOR and the \
+area of the rectangle is left untouched.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for GfxRectCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+        let (x1y1, x2y2) = match args {
+            [(Some(x1), ArgSep::Long), (Some(y1), ArgSep::Long), (Some(x2), ArgSep::Long), (Some(y2), ArgSep::End)] => {
+                (parse_coordinates(x1, y1, machine)?, parse_coordinates(x2, y2, machine)?)
+            }
+            _ => {
+                return Err(CallError::ArgumentError(
+                    "GFX_RECT takes four integer arguments separated by commas".to_owned(),
+                ))
+            }
+        };
+
+        self.console.borrow_mut().draw_rect(x1y1, x2y2)?;
+        Ok(())
+    }
+}
+
+/// The `GFX_RECTF` command.
+pub struct GfxRectfCommand {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxRectfCommand {
+    /// Creates a new `GFX_RECTF` command that draws a filled rectangle on `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_RECTF", VarType::Void)
+                .with_syntax("x1%, y1%, x2%, y2%")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Draws a filled rectangle from (x1,y1) to (x2,y2).
+The outline and area of the rectangle are drawn using the foreground color as selected by COLOR.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for GfxRectfCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+        let (x1y1, x2y2) = match args {
+            [(Some(x1), ArgSep::Long), (Some(y1), ArgSep::Long), (Some(x2), ArgSep::Long), (Some(y2), ArgSep::End)] => {
+                (parse_coordinates(x1, y1, machine)?, parse_coordinates(x2, y2, machine)?)
+            }
+            _ => {
+                return Err(CallError::ArgumentError(
+                    "GFX_RECTF takes four integer arguments separated by commas".to_owned(),
+                ))
+            }
+        };
+
+        self.console.borrow_mut().draw_rect_filled(x1y1, x2y2)?;
+        Ok(())
+    }
+}
+
 /// Adds all console-related commands for the given `console` to the `machine`.
 pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
-    machine.add_command(GfxLineCommand::new(console));
+    machine.add_command(GfxLineCommand::new(console.clone()));
+    machine.add_command(GfxRectCommand::new(console.clone()));
+    machine.add_command(GfxRectfCommand::new(console));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testutils::*;
+
+    /// Verifies error conditions for a command named `name` that takes to X/Y pairs.
+    fn check_errors_two_xy(name: &'static str) {
+        for args in &["1, 2, , 4", "1, 2, 3", "1, 2, 3, 4, 5", "2; 3, 4"] {
+            check_stmt_err(
+                &format!("{} takes four integer arguments separated by commas", name),
+                &format!("{} {}", name, args),
+            );
+        }
+
+        for args in &["-1, 1, 1, 1", "1, -1, 1, 1", "1, 1, -1, 1", "1, 1, 1, -1"] {
+            check_stmt_err("Coordinate -1 out of range", &format!("{} {}", name, args));
+        }
+
+        for args in &["\"a\", 1, 1, 1", "1, \"a\", 1, 1", "1, 1, \"a\", 1", "1, 1, 1, \"a\""] {
+            check_stmt_err(
+                "Coordinate Text(\"a\") must be an integer",
+                &format!("{} {}", name, args),
+            );
+        }
+    }
 
     #[test]
     fn test_gfx_line_ok() {
@@ -121,31 +237,38 @@ mod tests {
 
     #[test]
     fn test_gfx_line_errors() {
-        for cmd in &[
-            "GFX_LINE 1, 2, , 4",
-            "GFX_LINE 1, 2, 3",
-            "GFX_LINE 1, 2, 3, 4, 5",
-            "GFX_LINE 1, 2; 3, 4",
-        ] {
-            check_stmt_err("GFX_LINE takes four integer arguments separated by commas", cmd);
-        }
+        check_errors_two_xy("GFX_LINE");
+    }
 
-        for cmd in &[
-            "GFX_LINE -1, 1, 1, 1",
-            "GFX_LINE 1, -1, 1, 1",
-            "GFX_LINE 1, 1, -1, 1",
-            "GFX_LINE 1, 1, 1, -1",
-        ] {
-            check_stmt_err("Coordinate -1 out of range", cmd);
-        }
+    #[test]
+    fn test_gfx_rect_ok() {
+        Tester::default()
+            .run("GFX_RECT 1, 2, 3, 4")
+            .expect_output([CapturedOut::DrawRect(
+                PixelsXY { x: 1, y: 2 },
+                PixelsXY { x: 3, y: 4 },
+            )])
+            .check();
+    }
 
-        for cmd in &[
-            "GFX_LINE \"a\", 1, 1, 1",
-            "GFX_LINE 1, \"a\", 1, 1",
-            "GFX_LINE 1, 1, \"a\", 1",
-            "GFX_LINE 1, 1, 1, \"a\"",
-        ] {
-            check_stmt_err("Coordinate Text(\"a\") must be an integer", cmd);
-        }
+    #[test]
+    fn test_gfx_rect_errors() {
+        check_errors_two_xy("GFX_RECT");
+    }
+
+    #[test]
+    fn test_gfx_rectf_ok() {
+        Tester::default()
+            .run("GFX_RECTF 1, 2, 3, 4")
+            .expect_output([CapturedOut::DrawRectFilled(
+                PixelsXY { x: 1, y: 2 },
+                PixelsXY { x: 3, y: 4 },
+            )])
+            .check();
+    }
+
+    #[test]
+    fn test_gfx_rectf_errors() {
+        check_errors_two_xy("GFX_RECTF");
     }
 }

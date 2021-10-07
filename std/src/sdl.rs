@@ -179,36 +179,51 @@ impl<'a> MonospacedFont<'a> {
     }
 }
 
+/// Converts a `usize` `value` coordinate named `name` to an `i32` with bounds checking.
+fn usize_to_i32(value: usize, name: &'static str) -> io::Result<i32> {
+    match i32::try_from(value) {
+        Ok(value) => Ok(value),
+        Err(e) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Bad {} {}: {}", name, value, e),
+            ))
+        }
+    }
+}
+
+/// Converts a `usize` `value` coordinate named `name` to an `u32` with bounds checking.
+fn usize_to_u32(value: usize, name: &'static str) -> io::Result<u32> {
+    match u32::try_from(value) {
+        Ok(value) => Ok(value),
+        Err(e) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Bad {} {}: {}", name, value, e),
+            ))
+        }
+    }
+}
+
 /// Constructs an SDL `Rect` from `usize` values, making sure they are in range.
 fn rect_usize(x1: usize, y1: usize, width: usize, height: usize) -> io::Result<Rect> {
-    fn usize_to_i32(value: usize, name: &'static str) -> io::Result<i32> {
-        match i32::try_from(value) {
-            Ok(value) => Ok(value),
-            Err(e) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("Bad {} {}: {}", name, value, e),
-                ))
-            }
-        }
-    }
-
-    fn usize_to_u32(value: usize, name: &'static str) -> io::Result<u32> {
-        match u32::try_from(value) {
-            Ok(value) => Ok(value),
-            Err(e) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("Bad {} {}: {}", name, value, e),
-                ))
-            }
-        }
-    }
-
     let x1 = usize_to_i32(x1, "x1 coordinate")?;
     let y1 = usize_to_i32(y1, "y1 coordinate")?;
     let width = usize_to_u32(width, "width")?;
     let height = usize_to_u32(height, "height")?;
+
+    Ok(Rect::new(x1, y1, width, height))
+}
+
+/// Constructs an SDL `Rect` from `PixelsXY` values, making sure they are in range.
+fn rect_pixelsxy(x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<Rect> {
+    let (x1, x2) = if x1y1.x < x2y2.x { (x1y1.x, x2y2.x) } else { (x2y2.x, x1y1.x) };
+    let (y1, y2) = if x1y1.y < x2y2.y { (x1y1.y, x2y2.y) } else { (x2y2.y, x1y1.y) };
+
+    let width = usize_to_u32(x2 - x1, "width")?;
+    let height = usize_to_u32(y2 - y1, "height")?;
+    let x1 = usize_to_i32(x1, "x1 coordinate")?;
+    let y1 = usize_to_i32(y1, "y1 coordinate")?;
 
     Ok(Rect::new(x1, y1, width, height))
 }
@@ -824,6 +839,20 @@ impl Console for SdlConsole {
         self.canvas.draw_line(x1y1, x2y2).map_err(string_error_to_io_error)?;
         self.present_canvas()
     }
+
+    fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
+        let rect = rect_pixelsxy(x1y1, x2y2)?;
+        self.canvas.set_draw_color(self.fg_color);
+        self.canvas.draw_rect(rect).map_err(string_error_to_io_error)?;
+        self.present_canvas()
+    }
+
+    fn draw_rect_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
+        let rect = rect_pixelsxy(x1y1, x2y2)?;
+        self.canvas.set_draw_color(self.fg_color);
+        self.canvas.fill_rect(rect).map_err(string_error_to_io_error)?;
+        self.present_canvas()
+    }
 }
 
 #[cfg(test)]
@@ -969,6 +998,26 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use futures_lite::future::block_on;
+
+    #[test]
+    fn test_rect_pixelsxy() {
+        assert_eq!(
+            Rect::new(10, 20, 100, 200),
+            rect_pixelsxy(PixelsXY { x: 10, y: 20 }, PixelsXY { x: 110, y: 220 }).unwrap()
+        );
+        assert_eq!(
+            Rect::new(10, 20, 100, 200),
+            rect_pixelsxy(PixelsXY { x: 110, y: 20 }, PixelsXY { x: 10, y: 220 }).unwrap()
+        );
+        assert_eq!(
+            Rect::new(10, 20, 100, 200),
+            rect_pixelsxy(PixelsXY { x: 10, y: 220 }, PixelsXY { x: 110, y: 20 }).unwrap()
+        );
+        assert_eq!(
+            Rect::new(10, 20, 100, 200),
+            rect_pixelsxy(PixelsXY { x: 110, y: 220 }, PixelsXY { x: 10, y: 20 }).unwrap()
+        );
+    }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
@@ -1151,6 +1200,13 @@ mod tests {
         test.console().draw_line(PixelsXY { x: 10, y: 50 }, PixelsXY { x: 110, y: 60 }).unwrap();
         test.console().color(Some(12), Some(1)).unwrap();
         test.console().draw_line(PixelsXY { x: 120, y: 70 }, PixelsXY { x: 20, y: 60 }).unwrap();
+
+        test.console().color(Some(15), None).unwrap();
+        test.console()
+            .draw_rect_filled(PixelsXY { x: 380, y: 180 }, PixelsXY { x: 220, y: 120 })
+            .unwrap();
+        test.console().color(Some(10), None).unwrap();
+        test.console().draw_rect(PixelsXY { x: 200, y: 100 }, PixelsXY { x: 400, y: 200 }).unwrap();
 
         test.console().color(None, None).unwrap();
         test.console().locate(CharsXY { x: 4, y: 22 }).unwrap();
