@@ -157,6 +157,7 @@ Output from HELP GRAPHICS:
     >> GFX_PIXEL    Draws a pixel at (x,y).
     >> GFX_RECT     Draws a rectangle from (x1,y1) to (x2,y2).
     >> GFX_RECTF    Draws a filled rectangle from (x1,y1) to (x2,y2).
+    >> GFX_SYNC     Controls the video syncing flag and/or forces a sync.
 
     Type HELP followed by the name of a symbol for details.
 
@@ -367,6 +368,32 @@ Output from HELP GFX_RECTF:
 
     The outline and area of the rectangle are drawn using the foreground
     color as selected by COLOR.
+
+Output from HELP GFX_SYNC:
+
+    GFX_SYNC [enabled?]
+
+    Controls the video syncing flag and/or forces a sync.
+
+    With no arguments, this command triggers a video sync without updating
+    the video syncing flag.  When enabled? is specified, this updates the
+    video syncing flag accordingly and triggers a video sync if enabled? is
+    TRUE.
+
+    When video syncing is enabled, all console commands immediately refresh
+    the console.  This is useful to see the effects of the commands right
+    away, which is why this is the default mode in the interpreter.
+    However, this is a *very* inefficient way of drawing.
+
+    When video syncing is disabled, all console updates are buffered until
+    video syncing is enabled again.  This is perfect to draw complex
+    graphics efficiently.  If this is what you want to do, you should
+    disable syncing first, render a frame, call GFX_SYNC to flush the
+    frame, repeat until you are done, and then enable video syncing again.
+
+    WARNING: Be aware that if you disable video syncing in the interactive
+    interpreter, you will not be able to see what you are typing any longer
+    until you reenable video syncing.
 
 Output from HELP GPIO_CLEAR:
 

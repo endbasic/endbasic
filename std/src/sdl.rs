@@ -349,6 +349,9 @@ pub struct SdlConsole {
 
     /// State of the console right before entering the "alternate" console.
     alt_backup: Option<(Vec<u8>, CharsXY, Color, Color)>,
+
+    /// Whether video syncing is enabled or not.
+    sync_enabled: bool,
 }
 
 impl SdlConsole {
@@ -427,6 +430,7 @@ impl SdlConsole {
             bg_color: DEFAULT_BG_COLOR,
             fg_color: DEFAULT_FG_COLOR,
             alt_backup: None,
+            sync_enabled: true,
         };
 
         console.clear(ClearType::All)?;
@@ -434,16 +438,25 @@ impl SdlConsole {
         Ok(console)
     }
 
-    /// Renders the current contents of `self.canvas` onto the output window.
-    fn present_canvas(&mut self) -> io::Result<()> {
+    /// Renders the current contents of `self.canvas` onto the output window irrespective of the
+    /// status of the sync flag.
+    fn force_present_canvas(&mut self) -> io::Result<()> {
         let mut window_surface =
             self.window.surface(&self.event_pump).map_err(string_error_to_io_error)?;
         self.canvas
             .surface()
             .blit(None, &mut window_surface, None)
             .map_err(string_error_to_io_error)?;
-        window_surface.finish().map_err(string_error_to_io_error)?;
-        Ok(())
+        window_surface.finish().map_err(string_error_to_io_error)
+    }
+
+    /// Renders the current contents of `self.canvas` onto the output window.
+    fn present_canvas(&mut self) -> io::Result<()> {
+        if self.sync_enabled {
+            self.force_present_canvas()
+        } else {
+            Ok(())
+        }
     }
 
     /// Draws the cursor at the current position and saves the previous contents of the screen so
@@ -642,8 +655,7 @@ impl Console for SdlConsole {
             }
         }
 
-        self.present_canvas()?;
-        Ok(())
+        self.present_canvas()
     }
 
     fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
@@ -684,8 +696,7 @@ impl Console for SdlConsole {
     fn hide_cursor(&mut self) -> io::Result<()> {
         self.clear_cursor()?;
         self.cursor_visible = false;
-        self.present_canvas()?;
-        Ok(())
+        self.present_canvas()
     }
 
     fn is_interactive(&self) -> bool {
@@ -732,8 +743,7 @@ impl Console for SdlConsole {
         self.clear_cursor()?;
         self.cursor_pos = pos;
         self.draw_cursor()?;
-        self.present_canvas()?;
-        Ok(())
+        self.present_canvas()
     }
 
     fn move_within_line(&mut self, off: i16) -> io::Result<()> {
@@ -744,8 +754,7 @@ impl Console for SdlConsole {
             self.cursor_pos.x += usize::try_from(off).expect("offset must have fit in usize");
         }
         self.draw_cursor()?;
-        self.present_canvas()?;
-        Ok(())
+        self.present_canvas()
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
@@ -757,8 +766,7 @@ impl Console for SdlConsole {
         }
         self.open_line()?;
         self.draw_cursor()?;
-        self.present_canvas()?;
-        Ok(())
+        self.present_canvas()
     }
 
     async fn read_key(&mut self) -> io::Result<Key> {
@@ -809,8 +817,7 @@ impl Console for SdlConsole {
             self.cursor_visible = false;
             return Err(e);
         }
-        self.present_canvas()?;
-        Ok(())
+        self.present_canvas()
     }
 
     fn size(&self) -> io::Result<CharsXY> {
@@ -828,8 +835,7 @@ impl Console for SdlConsole {
         self.raw_write_wrapped(bytes)?;
         self.cursor_pos.x += bytes.len();
         self.draw_cursor()?;
-        self.present_canvas()?;
-        Ok(())
+        self.present_canvas()
     }
 
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
@@ -859,6 +865,22 @@ impl Console for SdlConsole {
         self.canvas.set_draw_color(self.fg_color);
         self.canvas.fill_rect(rect).map_err(string_error_to_io_error)?;
         self.present_canvas()
+    }
+
+    fn sync_now(&mut self) -> io::Result<()> {
+        if self.sync_enabled {
+            Ok(())
+        } else {
+            self.force_present_canvas()
+        }
+    }
+
+    fn set_sync(&mut self, enabled: bool) -> io::Result<()> {
+        if !self.sync_enabled {
+            self.force_present_canvas()?;
+        }
+        self.sync_enabled = enabled;
+        Ok(())
     }
 }
 
@@ -1225,5 +1247,19 @@ mod tests {
         test.console().write(b"Done!").unwrap();
 
         test.verify("sdl-draw");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_sync() {
+        let mut test = SdlTest::new();
+
+        test.console().print("Before disabling sync").unwrap();
+        test.console().set_sync(false).unwrap();
+        test.console().print("After disabling sync").unwrap();
+        test.console().sync_now().unwrap();
+        test.console().print("With sync disabled").unwrap();
+
+        test.verify("sdl-sync");
     }
 }

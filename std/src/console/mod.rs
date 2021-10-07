@@ -215,6 +215,25 @@ pub trait Console {
     fn draw_rect_filled(&mut self, _x1y1: PixelsXY, _x2y2: PixelsXY) -> io::Result<()> {
         Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
     }
+
+    /// Causes any buffered output to be synced.
+    ///
+    /// This is a no-op when video syncing is enabled because output is never buffered in that case.
+    fn sync_now(&mut self) -> io::Result<()> {
+        Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
+    }
+
+    /// Enables or disables video syncing.
+    ///
+    /// When enabled, all graphical operations immediately updated the rendering target, which is
+    /// useful for interactive behavior because we want to see an immediate response.  When
+    /// disabled, all operations are buffered, which is useful for scripts (as otherwise rendering
+    /// is too slow).
+    ///
+    /// Flushes any pending updates when enabled.
+    fn set_sync(&mut self, _enabled: bool) -> io::Result<()> {
+        Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
+    }
 }
 
 /// Checks if a given string has control characters.
