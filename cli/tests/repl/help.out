@@ -154,6 +154,7 @@ Output from HELP GRAPHICS:
     used by the commands described in this section.
 
     >> GFX_LINE     Draws a line from (x1,y1) to (x2,y2).
+    >> GFX_PIXEL    Draws a pixel at (x,y).
     >> GFX_RECT     Draws a rectangle from (x1,y1) to (x2,y2).
     >> GFX_RECTF    Draws a filled rectangle from (x1,y1) to (x2,y2).
 
@@ -340,6 +341,14 @@ Output from HELP GFX_LINE:
     Draws a line from (x1,y1) to (x2,y2).
 
     The line is drawn using the foreground color as selected by COLOR.
+
+Output from HELP GFX_PIXEL:
+
+    GFX_PIXEL x%, y%
+
+    Draws a pixel at (x,y).
+
+    The pixel is drawn using the foreground color as selected by COLOR.
 
 Output from HELP GFX_RECT:
 
