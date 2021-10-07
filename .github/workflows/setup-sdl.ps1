@@ -31,8 +31,11 @@ Copy-Item .\SDL2-2.0.16\lib\x64\*.txt,.\SDL2_ttf-2.0.15\lib\x64\*.txt dlls
 
 Remove-Item -Recurse -Force .\SDL2-2.0.16,.\SDL2_ttf-2.0.15,SDL2*.zip
 
-New-Item -Type Directory target,target\debug,target\debug\deps,target\release,target\release\deps
-Copy-Item dlls\* target\debug
-Copy-Item dlls\* target\debug\deps
-Copy-Item dlls\* target\release
-Copy-Item dlls\* target\release\deps
+foreach ($dir in
+    "target",
+    "target\debug", "target\debug\deps", "target\debug\examples",
+    "target\release", "target\release\deps", "target\release\examples") {
+    New-Item -Type Directory $dir
+    Copy-Item dlls\* $dir
+    Copy-Item libs\* $dir
+}
