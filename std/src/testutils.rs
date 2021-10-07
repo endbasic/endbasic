@@ -78,6 +78,12 @@ pub enum CapturedOut {
 
     /// Represents a call to `Console::draw_rect_filled`.
     DrawRectFilled(PixelsXY, PixelsXY),
+
+    /// Represents a call to `Console::sync_now`.
+    SyncNow,
+
+    /// Represents a call to `Console::set_sync`.
+    SetSync(bool),
 }
 
 /// A console that supplies golden input and captures all output.
@@ -239,6 +245,16 @@ impl Console for MockConsole {
 
     fn draw_rect_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         self.captured_out.push(CapturedOut::DrawRectFilled(x1y1, x2y2));
+        Ok(())
+    }
+
+    fn sync_now(&mut self) -> io::Result<()> {
+        self.captured_out.push(CapturedOut::SyncNow);
+        Ok(())
+    }
+
+    fn set_sync(&mut self, enabled: bool) -> io::Result<()> {
+        self.captured_out.push(CapturedOut::SetSync(enabled));
         Ok(())
     }
 }

@@ -235,12 +235,74 @@ impl Command for GfxRectfCommand {
     }
 }
 
+/// The `GFX_SYNC` command.
+pub struct GfxSyncCommand {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxSyncCommand {
+    /// Creates a new `GFX_SYNC` command that controls video syncing on `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_SYNC", VarType::Void)
+                .with_syntax("[enabled?]")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Controls the video syncing flag and/or forces a sync.
+With no arguments, this command triggers a video sync without updating the video syncing flag.  \
+When enabled? is specified, this updates the video syncing flag accordingly and triggers a video \
+sync if enabled? is TRUE.
+When video syncing is enabled, all console commands immediately refresh the console.  This is \
+useful to see the effects of the commands right away, which is why this is the default mode in the \
+interpreter.  However, this is a *very* inefficient way of drawing.
+When video syncing is disabled, all console updates are buffered until video syncing is enabled \
+again.  This is perfect to draw complex graphics efficiently.  If this is what you want to do, \
+you should disable syncing first, render a frame, call GFX_SYNC to flush the frame, repeat until \
+you are done, and then enable video syncing again.
+WARNING: Be aware that if you disable video syncing in the interactive interpreter, you will not \
+be able to see what you are typing any longer until you reenable video syncing.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for GfxSyncCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+        match args {
+            [] => self.console.borrow_mut().sync_now()?,
+            [(Some(b), ArgSep::End)] => match b.eval(machine.get_mut_symbols())? {
+                Value::Boolean(b) => self.console.borrow_mut().set_sync(b)?,
+                _ => {
+                    return Err(CallError::ArgumentError(
+                        "Argument to GFX_SYNC must be a boolean".to_owned(),
+                    ))
+                }
+            },
+            _ => {
+                return Err(CallError::ArgumentError(
+                    "GFX_SYNC takes zero or one argument".to_owned(),
+                ))
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Adds all console-related commands for the given `console` to the `machine`.
 pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
     machine.add_command(GfxLineCommand::new(console.clone()));
     machine.add_command(GfxPixelCommand::new(console.clone()));
     machine.add_command(GfxRectCommand::new(console.clone()));
-    machine.add_command(GfxRectfCommand::new(console));
+    machine.add_command(GfxRectfCommand::new(console.clone()));
+    machine.add_command(GfxSyncCommand::new(console));
 }
 
 #[cfg(test)]
@@ -338,5 +400,21 @@ mod tests {
     #[test]
     fn test_gfx_rectf_errors() {
         check_errors_two_xy("GFX_RECTF");
+    }
+
+    #[test]
+    fn test_gfx_sync_ok() {
+        Tester::default().run("GFX_SYNC").expect_output([CapturedOut::SyncNow]).check();
+        Tester::default().run("GFX_SYNC TRUE").expect_output([CapturedOut::SetSync(true)]).check();
+        Tester::default()
+            .run("GFX_SYNC FALSE")
+            .expect_output([CapturedOut::SetSync(false)])
+            .check();
+    }
+
+    #[test]
+    fn test_gfx_sync_errors() {
+        check_stmt_err("GFX_SYNC takes zero or one argument", "GFX_SYNC 2, 3");
+        check_stmt_err("Argument to GFX_SYNC must be a boolean", "GFX_SYNC 2");
     }
 }

@@ -17,8 +17,8 @@ for the time being.**
 *   Added a graphical console based on SDL2 behind a new optional `sdl`
     feature.
 
-*   Added the `GFX_LINE`, `GFX_PIXEL`, `GFX_RECT`, and `GFX_RECTF` graphics
-    commands.
+*   Added the `GFX_LINE`, `GFX_PIXEL`, `GFX_RECT`, `GFX_RECTF`, and `GFX_SYNC`
+    graphics commands.
 
 ## Changes in version 0.7.0
 
