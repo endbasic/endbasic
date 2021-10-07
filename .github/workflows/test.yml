@@ -70,8 +70,7 @@ jobs:
             - uses: actions/checkout@v2
             - run: choco install unzip
             - run: ./.github/workflows/setup-sdl.ps1
-            - run: '$env:LIB = $(Join-Path $(Get-Location) "libs");
-              cargo test --verbose --features=sdl -- --include-ignored'
+            - run: cargo test --verbose --features=sdl -- --include-ignored
 
     linux-test-no-features:
         runs-on: ubuntu-latest
