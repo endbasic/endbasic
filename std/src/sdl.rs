@@ -840,6 +840,13 @@ impl Console for SdlConsole {
         self.present_canvas()
     }
 
+    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
+        let xy: Point = xy.try_into()?;
+        self.canvas.set_draw_color(self.fg_color);
+        self.canvas.draw_point(xy).map_err(string_error_to_io_error)?;
+        self.present_canvas()
+    }
+
     fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         let rect = rect_pixelsxy(x1y1, x2y2)?;
         self.canvas.set_draw_color(self.fg_color);
@@ -1207,6 +1214,11 @@ mod tests {
             .unwrap();
         test.console().color(Some(10), None).unwrap();
         test.console().draw_rect(PixelsXY { x: 200, y: 100 }, PixelsXY { x: 400, y: 200 }).unwrap();
+
+        test.console().color(Some(14), None).unwrap();
+        for i in 0..8 {
+            test.console().draw_pixel(PixelsXY { x: i * 100, y: 300 }).unwrap();
+        }
 
         test.console().color(None, None).unwrap();
         test.console().locate(CharsXY { x: 4, y: 22 }).unwrap();

@@ -98,6 +98,50 @@ impl Command for GfxLineCommand {
     }
 }
 
+/// The `GFX_PIXEL` command.
+pub struct GfxPixelCommand {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxPixelCommand {
+    /// Creates a new `GFX_PIXEL` command that draws a single pixel on `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_PIXEL", VarType::Void)
+                .with_syntax("x%, y%")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Draws a pixel at (x,y).
+The pixel is drawn using the foreground color as selected by COLOR.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for GfxPixelCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+        let xy = match args {
+            [(Some(x), ArgSep::Long), (Some(y), ArgSep::End)] => parse_coordinates(x, y, machine)?,
+            _ => {
+                return Err(CallError::ArgumentError(
+                    "GFX_PIXEL takes two integer arguments separated by commas".to_owned(),
+                ))
+            }
+        };
+
+        self.console.borrow_mut().draw_pixel(xy)?;
+        Ok(())
+    }
+}
+
 /// The `GFX_RECT` command.
 pub struct GfxRectCommand {
     metadata: CallableMetadata,
@@ -194,6 +238,7 @@ impl Command for GfxRectfCommand {
 /// Adds all console-related commands for the given `console` to the `machine`.
 pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
     machine.add_command(GfxLineCommand::new(console.clone()));
+    machine.add_command(GfxPixelCommand::new(console.clone()));
     machine.add_command(GfxRectCommand::new(console.clone()));
     machine.add_command(GfxRectfCommand::new(console));
 }
@@ -238,6 +283,29 @@ mod tests {
     #[test]
     fn test_gfx_line_errors() {
         check_errors_two_xy("GFX_LINE");
+    }
+
+    #[test]
+    fn test_gfx_pixel_ok() {
+        Tester::default()
+            .run("GFX_PIXEL 1, 2")
+            .expect_output([CapturedOut::DrawPixel(PixelsXY { x: 1, y: 2 })])
+            .check();
+    }
+
+    #[test]
+    fn test_gfx_pixel_errors() {
+        for cmd in &["GFX_PIXEL , 2", "GFX_PIXEL 1, 2, 3", "GFX_PIXEL 1", "GFX_PIXEL 1; 2"] {
+            check_stmt_err("GFX_PIXEL takes two integer arguments separated by commas", cmd);
+        }
+
+        for cmd in &["GFX_PIXEL -1, 1", "GFX_PIXEL 1, -1"] {
+            check_stmt_err("Coordinate -1 out of range", cmd);
+        }
+
+        for cmd in &["GFX_PIXEL \"a\", 1", "GFX_PIXEL 1, \"a\""] {
+            check_stmt_err("Coordinate Text(\"a\") must be an integer", cmd);
+        }
     }
 
     #[test]
