@@ -275,6 +275,10 @@ impl Topics {
     fn find(&self, name: &str) -> Result<&dyn Topic, CallError> {
         let key = name.to_ascii_uppercase();
 
+        if let Some(topic) = self.0.get(&key) {
+            return Ok(topic.as_ref());
+        }
+
         match self.0.get_raw_descendant(&key) {
             Some(subtrie) => {
                 let children: Vec<(&String, &Box<dyn Topic>)> = subtrie.iter().collect();
@@ -414,10 +418,15 @@ pub(crate) mod testutils {
     }
 
     impl DoNothingCommand {
-        /// Creates a new instance of the command.
-        pub fn new() -> Rc<Self> {
+        /// Creates a new instance of the command with the name `DO_NOTHING`.
+        pub(crate) fn new() -> Rc<Self> {
+            DoNothingCommand::new_with_name("DO_NOTHING")
+        }
+
+        /// Creates a new instance of the command with a given `name`.
+        pub fn new_with_name(name: &'static str) -> Rc<Self> {
             Rc::from(Self {
-                metadata: CallableMetadataBuilder::new("DO_NOTHING", VarType::Void)
+                metadata: CallableMetadataBuilder::new(name, VarType::Void)
                     .with_syntax("this [would] <be|the> syntax \"specification\"")
                     .with_category(
                         "Testing
@@ -454,10 +463,12 @@ Second paragraph of the extended description.",
     }
 
     impl EmptyFunction {
+        /// Creates a new instance of the function with the name `EMPTY`.
         pub(crate) fn new() -> Rc<Self> {
             EmptyFunction::new_with_name("EMPTY")
         }
 
+        /// Creates a new instance of the function with a given `name`.
         pub(crate) fn new_with_name(name: &'static str) -> Rc<Self> {
             Rc::from(Self {
                 metadata: CallableMetadataBuilder::new(name, VarType::Text)
@@ -602,10 +613,15 @@ mod tests {
 
     #[test]
     fn test_help_prefix_search() {
-        fn exp_output(name: &str) -> Vec<String> {
+        fn exp_output(name: &str, is_function: bool) -> Vec<String> {
+            let spec = if is_function {
+                format!("    {}(this [would] <be|the> syntax \"specification\")", name)
+            } else {
+                format!("    {} this [would] <be|the> syntax \"specification\"", name)
+            };
             vec![
                 "".to_owned(),
-                format!("    {}$(this [would] <be|the> syntax \"specification\")", name),
+                spec,
                 "".to_owned(),
                 "    This is the blurb.".to_owned(),
                 "".to_owned(),
@@ -622,7 +638,7 @@ mod tests {
                 .add_function(EmptyFunction::new_with_name("ABC"))
                 .add_function(EmptyFunction::new_with_name("BC"))
                 .run(*cmd)
-                .expect_prints(exp_output("AABC"))
+                .expect_prints(exp_output("AABC$", true))
                 .check();
         }
 
@@ -632,15 +648,24 @@ mod tests {
                 .add_function(EmptyFunction::new_with_name("ABC"))
                 .add_function(EmptyFunction::new_with_name("BC"))
                 .run(*cmd)
-                .expect_prints(exp_output("BC"))
+                .expect_prints(exp_output("BC$", true))
                 .check();
         }
 
         tester()
+            .add_command(DoNothingCommand::new_with_name("AAAB"))
+            .add_command(DoNothingCommand::new_with_name("AAAA"))
+            .add_command(DoNothingCommand::new_with_name("AAAAA"))
+            .run("help aaaa")
+            .expect_prints(exp_output("AAAA", false))
+            .check();
+
+        tester()
+            .add_command(DoNothingCommand::new_with_name("AB"))
             .add_function(EmptyFunction::new_with_name("ABC"))
             .add_function(EmptyFunction::new_with_name("AABC"))
             .run("help a")
-            .expect_err("Ambiguous help topic a; candidates are: AABC$, ABC$")
+            .expect_err("Ambiguous help topic a; candidates are: AABC$, AB, ABC$")
             .check();
     }
 
