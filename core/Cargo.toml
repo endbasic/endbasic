@@ -12,6 +12,7 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
+async-recursion = "0.3"
 async-trait = "0.1"
 thiserror = "1.0"
 
