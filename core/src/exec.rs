@@ -19,9 +19,8 @@ use crate::ast::{Expr, Statement, Value, VarRef, VarType};
 use crate::eval;
 use crate::parser::{self, Parser};
 use crate::syms::{CallError, CallableMetadata, Command, Function, Symbol, Symbols};
-use std::future::Future;
+use async_recursion::async_recursion;
 use std::io;
-use std::pin::Pin;
 use std::rc::Rc;
 
 /// Execution errors.
@@ -279,6 +278,7 @@ impl Machine {
     }
 
     /// Executes a single statement.
+    #[async_recursion(?Send)]
     async fn exec_one<'a>(&'a mut self, stmt: &'a Statement) -> Result<()> {
         if self.stop_reason.is_some() {
             return Ok(());
@@ -304,24 +304,13 @@ impl Machine {
                 self.dim_array(varname, subtype, dimensions)?
             }
             Statement::If(branches) => {
-                // Change this to using FutureExt::boxed_local if we ever depend on the futures or
-                // futures_lite crate directly.
-                let f: Pin<Box<dyn Future<Output = Result<()>>>> = Box::pin(self.do_if(branches));
-                f.await?;
+                self.do_if(branches).await?;
             }
             Statement::For(iterator, start, end, next, body) => {
-                // Change this to using FutureExt::boxed_local if we ever depend on the futures or
-                // futures_lite crate directly.
-                let f: Pin<Box<dyn Future<Output = Result<()>>>> =
-                    Box::pin(self.do_for(iterator, start, end, next, body));
-                f.await?;
+                self.do_for(iterator, start, end, next, body).await?;
             }
             Statement::While(condition, body) => {
-                // Change this to using FutureExt::boxed_local if we ever depend on the futures or
-                // futures_lite crate directly.
-                let f: Pin<Box<dyn Future<Output = Result<()>>>> =
-                    Box::pin(self.do_while(condition, body));
-                f.await?;
+                self.do_while(condition, body).await?;
             }
         }
         Ok(())
