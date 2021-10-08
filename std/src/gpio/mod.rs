@@ -58,8 +58,8 @@ impl Pin {
     }
 
     /// Obtains a pin number from an expression.
-    fn parse(expr: &Expr, machine: &mut Machine) -> Result<Pin, CallError> {
-        Pin::parse_value(&expr.eval(machine.get_mut_symbols())?)
+    async fn parse(expr: &Expr, machine: &mut Machine) -> Result<Pin, CallError> {
+        Pin::parse_value(&expr.eval(machine.get_mut_symbols()).await?)
     }
 
     /// Obtains a pin number from a value.
@@ -89,8 +89,8 @@ pub enum PinMode {
 
 impl PinMode {
     /// Obtains a `PinMode` from an expression.
-    fn parse(expr: &Expr, machine: &mut Machine) -> Result<PinMode, CallError> {
-        match expr.eval(machine.get_mut_symbols())? {
+    async fn parse(expr: &Expr, machine: &mut Machine) -> Result<PinMode, CallError> {
+        match expr.eval(machine.get_mut_symbols()).await? {
             Value::Text(s) => match s.to_ascii_uppercase().as_ref() {
                 "IN" => Ok(PinMode::In),
                 "IN-PULL-UP" => Ok(PinMode::InPullUp),
@@ -104,8 +104,8 @@ impl PinMode {
 }
 
 /// Obtains a pin value from an expression.
-fn parse_value(expr: &Expr, machine: &mut Machine) -> Result<bool, CallError> {
-    match expr.eval(machine.get_mut_symbols())? {
+async fn parse_value(expr: &Expr, machine: &mut Machine) -> Result<bool, CallError> {
+    match expr.eval(machine.get_mut_symbols()).await? {
         Value::Boolean(b) => Ok(b),
         v => Err(CallError::ArgumentError(format!("Pin value {:?} must be boolean", v))),
     }
@@ -171,8 +171,8 @@ impl Command for GpioSetupCommand {
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         match args {
             [(Some(pin), ArgSep::Long), (Some(mode), ArgSep::End)] => {
-                let pin = Pin::parse(pin, machine)?;
-                let mode = PinMode::parse(mode, machine)?;
+                let pin = Pin::parse(pin, machine).await?;
+                let mode = PinMode::parse(mode, machine).await?;
 
                 match MockPins::try_new(machine.get_mut_symbols()) {
                     Some(mut pins) => pins.setup(pin, mode)?,
@@ -226,7 +226,7 @@ impl Command for GpioClearCommand {
                 Ok(())
             }
             [(Some(pin), ArgSep::End)] => {
-                let pin = Pin::parse(pin, machine)?;
+                let pin = Pin::parse(pin, machine).await?;
                 match MockPins::try_new(machine.get_mut_symbols()) {
                     Some(mut pins) => pins.clear(pin)?,
                     None => self.pins.borrow_mut().clear(pin)?,
@@ -261,15 +261,16 @@ Returns FALSE to represent a low value, and TRUE to represent a high value.",
     }
 }
 
+#[async_trait(?Send)]
 impl Function for GpioReadFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
         match args {
             [pin] => {
-                let pin = pin.eval(symbols)?;
+                let pin = pin.eval(symbols).await?;
                 let pin = Pin::parse_value(&pin)?;
                 let value = match MockPins::try_new(symbols) {
                     Some(mut pins) => pins.read(pin)?,
@@ -314,8 +315,8 @@ impl Command for GpioWriteCommand {
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         match args {
             [(Some(pin), ArgSep::Long), (Some(value), ArgSep::End)] => {
-                let pin = Pin::parse(pin, machine)?;
-                let value = parse_value(value, machine)?;
+                let pin = Pin::parse(pin, machine).await?;
+                let value = parse_value(value, machine).await?;
                 match MockPins::try_new(machine.get_mut_symbols()) {
                     Some(mut pins) => pins.write(pin, value)?,
                     None => self.pins.borrow_mut().write(pin, value)?,

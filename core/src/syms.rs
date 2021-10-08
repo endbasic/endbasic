@@ -513,6 +513,7 @@ impl CallableMetadata {
 ///
 /// Idiomatically, these objects need to provide a `new()` method that returns an `Rc<Callable>`, as
 /// that's the type used throughout the execution engine.
+#[async_trait(?Send)]
 pub trait Function {
     /// Returns the metadata for this function.
     ///
@@ -528,7 +529,7 @@ pub trait Function {
     /// `eval::eval_all` to process all arguments.
     ///
     /// `symbols` provides mutable access to the current state of the machine's symbols.
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult;
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult;
 }
 
 /// A trait to define a command that is executed by a `Machine`.

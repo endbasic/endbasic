@@ -15,6 +15,7 @@
 
 //! String functions for EndBASIC.
 
+use async_trait::async_trait;
 use endbasic_core::ast::{Expr, Value, VarType};
 use endbasic_core::eval::eval_all;
 use endbasic_core::exec::Machine;
@@ -49,13 +50,14 @@ If n% is greater than or equal to the number of characters in expr$, returns exp
     }
 }
 
+#[async_trait(?Send)]
 impl Function for LeftFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols)?;
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s), Value::Integer(n)] => {
                 if n < &0 {
@@ -88,13 +90,14 @@ impl LenFunction {
     }
 }
 
+#[async_trait(?Send)]
 impl Function for LenFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols)?;
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s)] => {
                 if s.len() > std::i32::MAX as usize {
@@ -126,13 +129,14 @@ impl LtrimFunction {
     }
 }
 
+#[async_trait(?Send)]
 impl Function for LtrimFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols)?;
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s)] => Ok(Value::Text(s.trim_start().to_owned())),
             _ => Err(CallError::SyntaxError),
@@ -163,13 +167,14 @@ until the end of the string.",
     }
 }
 
+#[async_trait(?Send)]
 impl Function for MidFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols)?;
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s), Value::Integer(start), Value::Integer(length)] => {
                 if *start < 0 {
@@ -209,13 +214,14 @@ If n% is greater than or equal to the number of characters in expr$, returns exp
     }
 }
 
+#[async_trait(?Send)]
 impl Function for RightFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols)?;
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s), Value::Integer(n)] => {
                 if n < &0 {
@@ -248,13 +254,14 @@ impl RtrimFunction {
     }
 }
 
+#[async_trait(?Send)]
 impl Function for RtrimFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols)?;
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s)] => Ok(Value::Text(s.trim_end().to_owned())),
             _ => Err(CallError::SyntaxError),
