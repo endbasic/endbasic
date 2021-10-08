@@ -33,8 +33,8 @@ the commands described in HELP CONSOLE, and the pixel-based system, used by the 
 in this section.";
 
 /// Parses an expression that represents a single coordinate.
-fn parse_coordinate(expr: &Expr, machine: &mut Machine) -> Result<usize, CallError> {
-    match expr.eval(machine.get_mut_symbols())? {
+async fn parse_coordinate(expr: &Expr, machine: &mut Machine) -> Result<usize, CallError> {
+    match expr.eval(machine.get_mut_symbols()).await? {
         Value::Integer(i) if i >= 0 => Ok(i as usize),
         Value::Integer(i) => {
             Err(CallError::ArgumentError(format!("Coordinate {} out of range", i)))
@@ -44,12 +44,15 @@ fn parse_coordinate(expr: &Expr, machine: &mut Machine) -> Result<usize, CallErr
 }
 
 /// Parses a pair of expressions that represent an (x,y) coordinate pair.
-fn parse_coordinates(
+async fn parse_coordinates(
     xexpr: &Expr,
     yexpr: &Expr,
     machine: &mut Machine,
 ) -> Result<PixelsXY, CallError> {
-    Ok(PixelsXY { x: parse_coordinate(xexpr, machine)?, y: parse_coordinate(yexpr, machine)? })
+    Ok(PixelsXY {
+        x: parse_coordinate(xexpr, machine).await?,
+        y: parse_coordinate(yexpr, machine).await?,
+    })
 }
 
 /// The `GFX_LINE` command.
@@ -84,7 +87,10 @@ impl Command for GfxLineCommand {
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         let (x1y1, x2y2) = match args {
             [(Some(x1), ArgSep::Long), (Some(y1), ArgSep::Long), (Some(x2), ArgSep::Long), (Some(y2), ArgSep::End)] => {
-                (parse_coordinates(x1, y1, machine)?, parse_coordinates(x2, y2, machine)?)
+                (
+                    parse_coordinates(x1, y1, machine).await?,
+                    parse_coordinates(x2, y2, machine).await?,
+                )
             }
             _ => {
                 return Err(CallError::ArgumentError(
@@ -129,7 +135,9 @@ impl Command for GfxPixelCommand {
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         let xy = match args {
-            [(Some(x), ArgSep::Long), (Some(y), ArgSep::End)] => parse_coordinates(x, y, machine)?,
+            [(Some(x), ArgSep::Long), (Some(y), ArgSep::End)] => {
+                parse_coordinates(x, y, machine).await?
+            }
             _ => {
                 return Err(CallError::ArgumentError(
                     "GFX_PIXEL takes two integer arguments separated by commas".to_owned(),
@@ -175,7 +183,10 @@ impl Command for GfxRectCommand {
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         let (x1y1, x2y2) = match args {
             [(Some(x1), ArgSep::Long), (Some(y1), ArgSep::Long), (Some(x2), ArgSep::Long), (Some(y2), ArgSep::End)] => {
-                (parse_coordinates(x1, y1, machine)?, parse_coordinates(x2, y2, machine)?)
+                (
+                    parse_coordinates(x1, y1, machine).await?,
+                    parse_coordinates(x2, y2, machine).await?,
+                )
             }
             _ => {
                 return Err(CallError::ArgumentError(
@@ -221,7 +232,10 @@ impl Command for GfxRectfCommand {
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         let (x1y1, x2y2) = match args {
             [(Some(x1), ArgSep::Long), (Some(y1), ArgSep::Long), (Some(x2), ArgSep::Long), (Some(y2), ArgSep::End)] => {
-                (parse_coordinates(x1, y1, machine)?, parse_coordinates(x2, y2, machine)?)
+                (
+                    parse_coordinates(x1, y1, machine).await?,
+                    parse_coordinates(x2, y2, machine).await?,
+                )
             }
             _ => {
                 return Err(CallError::ArgumentError(
@@ -278,7 +292,7 @@ impl Command for GfxSyncCommand {
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         match args {
             [] => self.console.borrow_mut().sync_now()?,
-            [(Some(b), ArgSep::End)] => match b.eval(machine.get_mut_symbols())? {
+            [(Some(b), ArgSep::End)] => match b.eval(machine.get_mut_symbols()).await? {
                 Value::Boolean(b) => self.console.borrow_mut().set_sync(b)?,
                 _ => {
                     return Err(CallError::ArgumentError(

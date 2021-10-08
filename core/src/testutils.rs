@@ -42,13 +42,14 @@ impl ErrorFunction {
     }
 }
 
+#[async_trait(?Send)]
 impl Function for ErrorFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols)?;
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s)] => {
                 if s == "argument" {
@@ -90,7 +91,7 @@ impl Command for ExitCommand {
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         let arg = match args {
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols())? {
+            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols()).await? {
                 Value::Integer(n) => {
                     assert!((0..128).contains(&n), "Exit code out of range");
                     n as u8
@@ -178,7 +179,7 @@ impl Command for OutCommand {
         let mut text = String::new();
         for arg in args.iter() {
             if let Some(expr) = arg.0.as_ref() {
-                text += &expr.eval(machine.get_mut_symbols())?.to_string();
+                text += &expr.eval(machine.get_mut_symbols()).await?.to_string();
             }
             match arg.1 {
                 ArgSep::End => break,
@@ -204,15 +205,16 @@ impl SumFunction {
     }
 }
 
+#[async_trait(?Send)]
 impl Function for SumFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
         let mut result = Value::Integer(0);
         for a in args {
-            let value = a.eval(symbols)?;
+            let value = a.eval(symbols).await?;
             result = result.add(&value)?;
         }
         Ok(result)
@@ -284,12 +286,13 @@ impl TypeCheckFunction {
     }
 }
 
+#[async_trait(?Send)]
 impl Function for TypeCheckFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
         assert!(args.is_empty());
         Ok(self.value.clone())
     }

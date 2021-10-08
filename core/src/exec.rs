@@ -161,23 +161,28 @@ impl Machine {
     }
 
     /// Assigns the value of `expr` to the variable `vref`.
-    fn assign(&mut self, vref: &VarRef, expr: &Expr) -> Result<()> {
-        let value = expr.eval(&mut self.symbols)?;
+    async fn assign(&mut self, vref: &VarRef, expr: &Expr) -> Result<()> {
+        let value = expr.eval(&mut self.symbols).await?;
         self.symbols.set_var(vref, value)?;
         Ok(())
     }
 
     /// Assigns the value of `expr` to the array `vref` in the position `subscripts`.
-    fn assign_array(&mut self, vref: &VarRef, subscripts: &[Expr], expr: &Expr) -> Result<()> {
+    async fn assign_array(
+        &mut self,
+        vref: &VarRef,
+        subscripts: &[Expr],
+        expr: &Expr,
+    ) -> Result<()> {
         let mut ds = Vec::with_capacity(subscripts.len());
         for ss_expr in subscripts {
-            match ss_expr.eval(&mut self.symbols)? {
+            match ss_expr.eval(&mut self.symbols).await? {
                 Value::Integer(i) => ds.push(i),
                 v => return new_syntax_error(format!("Subscript {:?} must be an integer", v)),
             }
         }
 
-        let value = expr.eval(&mut self.symbols)?;
+        let value = expr.eval(&mut self.symbols).await?;
 
         match self.symbols.get_mut(vref)? {
             Some(Symbol::Array(array)) => {
@@ -191,10 +196,15 @@ impl Machine {
 
     /// Defines a new array `name` of type `subtype` with `dimensions`.  The array must not yet
     /// exist, and the name may not overlap function or variable names.
-    pub fn dim_array(&mut self, name: &str, subtype: &VarType, dimensions: &[Expr]) -> Result<()> {
+    pub async fn dim_array(
+        &mut self,
+        name: &str,
+        subtype: &VarType,
+        dimensions: &[Expr],
+    ) -> Result<()> {
         let mut ds = Vec::with_capacity(dimensions.len());
         for dim_expr in dimensions {
-            match dim_expr.eval(&mut self.symbols)? {
+            match dim_expr.eval(&mut self.symbols).await? {
                 Value::Integer(i) => {
                     if i <= 0 {
                         return new_syntax_error("Dimensions in DIM array must be positive");
@@ -211,7 +221,7 @@ impl Machine {
     /// Executes an `IF` statement.
     async fn do_if(&mut self, branches: &[(Expr, Vec<Statement>)]) -> Result<()> {
         for (expr, stmts) in branches {
-            match expr.eval(&mut self.symbols)? {
+            match expr.eval(&mut self.symbols).await? {
                 Value::Boolean(true) => {
                     for s in stmts {
                         self.exec_one(s).await?;
@@ -237,14 +247,14 @@ impl Machine {
         debug_assert!(
             iterator.ref_type() == VarType::Auto || iterator.ref_type() == VarType::Integer
         );
-        let start_value = start.eval(&mut self.symbols)?;
+        let start_value = start.eval(&mut self.symbols).await?;
         match start_value {
             Value::Integer(_) => self.symbols.set_var(iterator, start_value)?,
             _ => return new_syntax_error("FOR supports integer iteration only"),
         }
 
         loop {
-            match end.eval(&mut self.symbols)? {
+            match end.eval(&mut self.symbols).await? {
                 Value::Boolean(false) => {
                     break;
                 }
@@ -256,7 +266,7 @@ impl Machine {
                 self.exec_one(s).await?;
             }
 
-            self.assign(iterator, next)?;
+            self.assign(iterator, next).await?;
         }
         Ok(())
     }
@@ -264,7 +274,7 @@ impl Machine {
     /// Executes a `WHILE` loop.
     async fn do_while(&mut self, condition: &Expr, body: &[Statement]) -> Result<()> {
         loop {
-            match condition.eval(&mut self.symbols)? {
+            match condition.eval(&mut self.symbols).await? {
                 Value::Boolean(true) => {
                     for s in body {
                         self.exec_one(s).await?;
@@ -286,9 +296,9 @@ impl Machine {
 
         match stmt {
             Statement::ArrayAssignment(vref, subscripts, value) => {
-                self.assign_array(vref, subscripts, value)?
+                self.assign_array(vref, subscripts, value).await?
             }
-            Statement::Assignment(vref, expr) => self.assign(vref, expr)?,
+            Statement::Assignment(vref, expr) => self.assign(vref, expr).await?,
             Statement::BuiltinCall(name, args) => {
                 let cmd = match self.symbols.get(&VarRef::new(name, VarType::Auto))? {
                     Some(Symbol::Command(cmd)) => cmd.clone(),
@@ -301,7 +311,7 @@ impl Machine {
             }
             Statement::Dim(varname, vartype) => self.symbols.dim(varname, *vartype)?,
             Statement::DimArray(varname, dimensions, subtype) => {
-                self.dim_array(varname, subtype, dimensions)?
+                self.dim_array(varname, subtype, dimensions).await?
             }
             Statement::If(branches) => {
                 self.do_if(branches).await?;

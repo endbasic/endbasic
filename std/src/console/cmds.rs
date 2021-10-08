@@ -123,9 +123,12 @@ impl Command for ColorCommand {
             }
         };
 
-        fn get_color(e: &Option<Expr>, machine: &mut Machine) -> Result<Option<u8>, CallError> {
+        async fn get_color(
+            e: &Option<Expr>,
+            machine: &mut Machine,
+        ) -> Result<Option<u8>, CallError> {
             match e {
-                Some(e) => match e.eval(machine.get_mut_symbols())? {
+                Some(e) => match e.eval(machine.get_mut_symbols()).await? {
                     Value::Integer(i) if i >= 0 && i <= std::u8::MAX as i32 => Ok(Some(i as u8)),
                     Value::Integer(_) => {
                         Err(CallError::ArgumentError("Color out of range".to_owned()))
@@ -136,8 +139,8 @@ impl Command for ColorCommand {
             }
         }
 
-        let fg = get_color(fg_expr, machine)?;
-        let bg = get_color(bg_expr, machine)?;
+        let fg = get_color(fg_expr, machine).await?;
+        let bg = get_color(bg_expr, machine).await?;
 
         self.console.borrow_mut().color(fg, bg)?;
         Ok(())
@@ -183,7 +186,7 @@ impl Command for InputCommand {
         }
 
         let mut prompt = match &args[0].0 {
-            Some(e) => match e.eval(machine.get_mut_symbols())? {
+            Some(e) => match e.eval(machine.get_mut_symbols()).await? {
                 Value::Text(t) => t,
                 _ => {
                     return Err(CallError::ArgumentError(
@@ -269,7 +272,7 @@ impl Command for LocateCommand {
         debug_assert!(column_arg.1 == ArgSep::End);
 
         let row = match &row_arg.0 {
-            Some(arg) => match arg.eval(machine.get_mut_symbols())? {
+            Some(arg) => match arg.eval(machine.get_mut_symbols()).await? {
                 Value::Integer(i) => {
                     if i < 0 {
                         return Err(CallError::ArgumentError("Row cannot be negative".to_owned()));
@@ -282,7 +285,7 @@ impl Command for LocateCommand {
         };
 
         let column = match &column_arg.0 {
-            Some(arg) => match arg.eval(machine.get_mut_symbols())? {
+            Some(arg) => match arg.eval(machine.get_mut_symbols()).await? {
                 Value::Integer(i) => {
                     if i < 0 {
                         return Err(CallError::ArgumentError(
@@ -336,7 +339,7 @@ impl Command for PrintCommand {
         let mut text = String::new();
         for arg in args.iter() {
             if let Some(expr) = arg.0.as_ref() {
-                text += &expr.eval(machine.get_mut_symbols())?.to_string();
+                text += &expr.eval(machine.get_mut_symbols()).await?.to_string();
             }
             match arg.1 {
                 ArgSep::End => break,

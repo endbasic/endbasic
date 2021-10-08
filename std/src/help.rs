@@ -487,12 +487,13 @@ Second paragraph of the extended description.",
         }
     }
 
+    #[async_trait(?Send)]
     impl Function for EmptyFunction {
         fn metadata(&self) -> &CallableMetadata {
             &self.metadata
         }
 
-        fn exec(&self, _args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
+        async fn exec(&self, _args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
             Ok(Value::Text("irrelevant".to_owned()))
         }
     }

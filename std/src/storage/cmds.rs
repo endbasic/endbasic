@@ -131,7 +131,7 @@ impl Command for CdCommand {
             return Err(CallError::ArgumentError("CD takes one argument".to_owned()));
         }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
-        match arg0.eval(machine.get_mut_symbols())? {
+        match arg0.eval(machine.get_mut_symbols()).await? {
             Value::Text(t) => {
                 self.storage.borrow_mut().cd(&t)?;
             }
@@ -177,7 +177,7 @@ impl Command for DirCommand {
                 show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), "").await?;
                 Ok(())
             }
-            [(Some(path), ArgSep::End)] => match path.eval(machine.get_mut_symbols())? {
+            [(Some(path), ArgSep::End)] => match path.eval(machine.get_mut_symbols()).await? {
                 Value::Text(path) => {
                     show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), &path)
                         .await?;
@@ -234,7 +234,7 @@ impl Command for MountCommand {
                 Ok(())
             }
             [(Some(name), ArgSep::Long), (Some(target), ArgSep::End)] => {
-                let name = match name.eval(machine.get_mut_symbols())? {
+                let name = match name.eval(machine.get_mut_symbols()).await? {
                     Value::Text(t) => t,
                     _ => {
                         return Err(CallError::ArgumentError(
@@ -242,7 +242,7 @@ impl Command for MountCommand {
                         ))
                     }
                 };
-                let target = match target.eval(machine.get_mut_symbols())? {
+                let target = match target.eval(machine.get_mut_symbols()).await? {
                     Value::Text(t) => t,
                     _ => {
                         return Err(CallError::ArgumentError(
@@ -346,7 +346,7 @@ impl Command for UnmountCommand {
             return Err(CallError::ArgumentError("UNMOUNT takes one argument".to_owned()));
         }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
-        match arg0.eval(machine.get_mut_symbols())? {
+        match arg0.eval(machine.get_mut_symbols()).await? {
             Value::Text(t) => {
                 self.storage.borrow_mut().unmount(&t)?;
             }

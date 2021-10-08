@@ -69,12 +69,13 @@ impl NumLightsFunction {
     }
 }
 
+#[async_trait(?Send)]
 impl Function for NumLightsFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -115,7 +116,7 @@ impl Command for SwitchLightCommand {
             return Err(CallError::SyntaxError);
         }
         let expr = args[0].0.as_ref().expect("A single argument can never be empty");
-        match expr.eval(machine.get_mut_symbols())? {
+        match expr.eval(machine.get_mut_symbols()).await? {
             Value::Integer(i) => {
                 let lights = &mut *self.lights.borrow_mut();
                 if i < 1 {

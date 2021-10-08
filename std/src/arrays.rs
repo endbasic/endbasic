@@ -15,6 +15,7 @@
 
 //! Array-related functions for EndBASIC.
 
+use async_trait::async_trait;
 use endbasic_core::ast::{Expr, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
@@ -28,7 +29,8 @@ const CATEGORY: &str = "Array functions";
 
 /// Extracts the array reference and the dimension number from the list of arguments passed to
 /// either `LBOUND` or `UBOUND`.
-fn parse_bound_args<'a>(
+#[allow(clippy::needless_lifetimes)]
+async fn parse_bound_args<'a>(
     args: &[Expr],
     symbols: &'a mut Symbols,
 ) -> Result<(&'a Array, usize), CallError> {
@@ -40,7 +42,7 @@ fn parse_bound_args<'a>(
     };
 
     let dim = match iter.next() {
-        Some(expr) => match expr.eval(symbols)? {
+        Some(expr) => match expr.eval(symbols).await? {
             Value::Integer(i) => {
                 if i < 0 {
                     return Err(CallError::ArgumentError(format!(
@@ -117,13 +119,14 @@ dimension% is a 1-indexed integer.",
     }
 }
 
+#[async_trait(?Send)]
 impl Function for LboundFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let (_array, _dim) = parse_bound_args(args, symbols)?;
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let (_array, _dim) = parse_bound_args(args, symbols).await?;
         Ok(Value::Integer(0))
     }
 }
@@ -152,13 +155,14 @@ dimension% is a 1-indexed integer.",
     }
 }
 
+#[async_trait(?Send)]
 impl Function for UboundFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let (array, dim) = parse_bound_args(args, symbols)?;
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let (array, dim) = parse_bound_args(args, symbols).await?;
         Ok(Value::Integer((array.dimensions()[dim - 1] - 1) as i32))
     }
 }

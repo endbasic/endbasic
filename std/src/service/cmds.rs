@@ -198,20 +198,22 @@ impl Command for LoginCommand {
         }
 
         let (username, password) = match args {
-            [(Some(username), ArgSep::End)] => match username.eval(machine.get_mut_symbols())? {
-                Value::Text(username) => {
-                    let password =
-                        read_line_secure(&mut *self.console.borrow_mut(), "Password: ").await?;
-                    (username, password)
+            [(Some(username), ArgSep::End)] => {
+                match username.eval(machine.get_mut_symbols()).await? {
+                    Value::Text(username) => {
+                        let password =
+                            read_line_secure(&mut *self.console.borrow_mut(), "Password: ").await?;
+                        (username, password)
+                    }
+                    _ => {
+                        return Err(CallError::ArgumentError(
+                            "LOGIN requires a string as the username".to_owned(),
+                        ))
+                    }
                 }
-                _ => {
-                    return Err(CallError::ArgumentError(
-                        "LOGIN requires a string as the username".to_owned(),
-                    ))
-                }
-            },
+            }
             [(Some(username), ArgSep::Long), (Some(password), ArgSep::End)] => {
-                let username = match username.eval(machine.get_mut_symbols())? {
+                let username = match username.eval(machine.get_mut_symbols()).await? {
                     Value::Text(username) => username,
                     _ => {
                         return Err(CallError::ArgumentError(
@@ -219,7 +221,7 @@ impl Command for LoginCommand {
                         ))
                     }
                 };
-                let password = match password.eval(machine.get_mut_symbols())? {
+                let password = match password.eval(machine.get_mut_symbols()).await? {
                     Value::Text(password) => password,
                     _ => {
                         return Err(CallError::ArgumentError(
@@ -331,7 +333,7 @@ impl Command for ShareCommand {
         }
 
         let filename = match &args[0].0 {
-            Some(e) => match e.eval(machine.get_mut_symbols())? {
+            Some(e) => match e.eval(machine.get_mut_symbols()).await? {
                 Value::Text(t) => t,
                 _ => {
                     return Err(CallError::ArgumentError(
@@ -367,7 +369,7 @@ impl Command for ShareCommand {
                         "SHARE requires arguments to be separated by commas".to_owned(),
                     ))
                 }
-                (Some(acl), _) => match acl.eval(machine.get_mut_symbols())? {
+                (Some(acl), _) => match acl.eval(machine.get_mut_symbols()).await? {
                     Value::Text(t) => ShareCommand::parse_acl(t, &mut add, &mut remove)?,
                     _ => {
                         return Err(CallError::ArgumentError(

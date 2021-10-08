@@ -89,13 +89,14 @@ biggest possible integer that fits, respectively.",
     }
 }
 
+#[async_trait(?Send)]
 impl Function for DtoiFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols)?;
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols).await?;
         match args.as_slice() {
             [Value::Double(n)] => Ok(Value::Integer(*n as i32)),
             _ => Err(CallError::SyntaxError),
@@ -121,13 +122,14 @@ impl ItodFunction {
     }
 }
 
+#[async_trait(?Send)]
 impl Function for ItodFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols)?;
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols).await?;
         match args.as_slice() {
             [Value::Integer(n)] => Ok(Value::Double(*n as f64)),
             _ => Err(CallError::SyntaxError),
@@ -170,7 +172,7 @@ impl Command for RandomizeCommand {
             [] => {
                 *self.prng.borrow_mut() = Prng::new_from_entryopy();
             }
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols())? {
+            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols()).await? {
                 Value::Integer(n) => {
                     *self.prng.borrow_mut() = Prng::new_from_seed(n);
                 }
@@ -217,13 +219,14 @@ WARNING: These random numbers offer no cryptographic guarantees.",
     }
 }
 
+#[async_trait(?Send)]
 impl Function for RndFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols)?;
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols).await?;
         match args.as_slice() {
             [] => Ok(Value::Double(self.prng.borrow_mut().next())),
             [Value::Integer(n)] => match n.cmp(&0) {
