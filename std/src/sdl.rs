@@ -256,6 +256,49 @@ impl TryInto<Point> for PixelsXY {
     }
 }
 
+/// Given an SDL `event`, converts it to a `Key` event if it is a key press; otherwise, returns
+/// `None` for unknown events.
+fn parse_event(event: Event) -> io::Result<Option<Key>> {
+    match event {
+        Event::Quit { .. } => {
+            // TODO(jmmv): This isn't really a key so we should be handling it in some other way.
+            // For now, we recognize it here so that closing the window causes the interpreter to
+            // exit... but that only works when the interpreter is waiting for input (which means
+            // that this also confuses INKEY).
+            Ok(Some(Key::Eof))
+        }
+
+        Event::KeyDown { keycode: Some(keycode), keymod, .. } => match keycode {
+            Keycode::C if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
+                Ok(Some(Key::Interrupt))
+            }
+            Keycode::D if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
+                Ok(Some(Key::Eof))
+            }
+
+            Keycode::Backspace => Ok(Some(Key::Backspace)),
+            Keycode::Escape => Ok(Some(Key::Escape)),
+            Keycode::Return => Ok(Some(Key::NewLine)),
+
+            Keycode::Down => Ok(Some(Key::ArrowDown)),
+            Keycode::Left => Ok(Some(Key::ArrowLeft)),
+            Keycode::Right => Ok(Some(Key::ArrowRight)),
+            Keycode::Up => Ok(Some(Key::ArrowUp)),
+
+            _ => Ok(None),
+        },
+
+        Event::TextInput { text, .. } => {
+            let mut chars = text.chars();
+            let first =
+                chars.next().unwrap_or_else(|| panic!("Cannot handle TextInput event: {:?}", text));
+            Ok(Some(Key::Char(first)))
+        }
+
+        _ => Ok(None),
+    }
+}
+
 /// Configures the resolution of the graphical console.
 #[derive(Debug, PartialEq)]
 pub enum Resolution {
@@ -769,45 +812,28 @@ impl Console for SdlConsole {
         self.present_canvas()
     }
 
+    async fn poll_key(&mut self) -> io::Result<Option<Key>> {
+        loop {
+            let event = self.event_pump.poll_event();
+            match event {
+                Some(event) => {
+                    if let Some(key) = parse_event(event)? {
+                        return Ok(Some(key));
+                    }
+                    // Non-key event; try again.
+                }
+                None => return Ok(None),
+            }
+        }
+    }
+
     async fn read_key(&mut self) -> io::Result<Key> {
         loop {
             let event = self.event_pump.wait_event();
-            match event {
-                Event::Quit { .. } => return Ok(Key::Eof),
-
-                Event::KeyDown { keycode: Some(keycode), keymod, .. } => {
-                    let key = match keycode {
-                        Keycode::C if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                            Key::Interrupt
-                        }
-                        Keycode::D if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                            Key::Eof
-                        }
-
-                        Keycode::Backspace => Key::Backspace,
-                        Keycode::Escape => Key::Escape,
-                        Keycode::Return => Key::NewLine,
-
-                        Keycode::Down => Key::ArrowDown,
-                        Keycode::Left => Key::ArrowLeft,
-                        Keycode::Right => Key::ArrowRight,
-                        Keycode::Up => Key::ArrowUp,
-
-                        _ => Key::Unknown(format!("code={}, mod={}", keycode, keymod)),
-                    };
-                    return Ok(key);
-                }
-
-                Event::TextInput { text, .. } => {
-                    let mut chars = text.chars();
-                    let first = chars
-                        .next()
-                        .unwrap_or_else(|| panic!("Cannot handle TextInput event: {:?}", text));
-                    return Ok(Key::Char(first));
-                }
-
-                _ => (),
+            if let Some(event) = parse_event(event)? {
+                return Ok(event);
             }
+            // Non-key event; try again.
         }
     }
 
@@ -1027,6 +1053,9 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use futures_lite::future::block_on;
+    use sdl2::mouse::MouseButton;
+    use std::thread;
+    use std::time::Duration;
 
     #[test]
     fn test_rect_pixelsxy() {
@@ -1176,22 +1205,92 @@ mod tests {
         test.verify("sdl-leave-alt");
     }
 
+    /// Synthesizes an `Event::KeyDown` event for a single key press.
+    fn key_down(keycode: Keycode, keymod: Mod) -> Event {
+        Event::KeyDown {
+            keycode: Some(keycode),
+            scancode: None,
+            keymod,
+            timestamp: 0,
+            repeat: false,
+            window_id: 0,
+        }
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_poll_key() {
+        let mut test = SdlTest::new();
+
+        let ev = test.console()._context.event().unwrap();
+
+        /// Ensure the console doesn't return a key press for a brief period of time.
+        ///
+        /// Given that this is based on timing, the console could still report an event long after
+        /// we finished polling.  This is fine: if the console works well, we shouldn't receive
+        /// spurious events here, which means that under normal conditions, this is not flaky.
+        /// However, if there is a bug somewhere, this is not guaranteed to catch it reliably.
+        fn assert_poll_is_none(console: &mut SdlConsole) {
+            let mut millis = 10;
+            while millis > 0 {
+                assert_eq!(None, block_on(console.poll_key()).unwrap());
+                thread::sleep(Duration::from_millis(1));
+                millis -= 1;
+            }
+        }
+
+        /// Waits for `console.poll_key` to return `exp_key` and fails the test if it returns any
+        /// other key.
+        fn assert_poll_is_key(console: &mut SdlConsole, exp_key: Key) {
+            loop {
+                match block_on(console.poll_key()).unwrap() {
+                    Some(key) if key == exp_key => break,
+                    Some(key) => panic!("Unexpected key {:?}", key),
+                    None => (),
+                }
+                thread::sleep(Duration::from_millis(1));
+            }
+        }
+
+        assert_poll_is_none(test.console());
+
+        ev.push_event(Event::Quit { timestamp: 0 }).unwrap();
+        assert_poll_is_key(test.console(), Key::Eof);
+        assert_poll_is_none(test.console());
+
+        ev.push_event(key_down(Keycode::C, Mod::LCTRLMOD)).unwrap();
+        assert_poll_is_key(test.console(), Key::Interrupt);
+        assert_poll_is_none(test.console());
+
+        // TODO(jmmv): We aren't testing textual input because push_event doesn't support injecting
+        // Event::TextInput events.  At least check that individual key presses are ignored, because
+        // those would otherwise "hide" the follow-up text input events.
+        ev.push_event(key_down(Keycode::A, Mod::empty())).unwrap();
+        assert_poll_is_none(test.console());
+
+        // Check that non-keyboard events are ignored until a key event is received.
+        ev.push_event(Event::MouseButtonDown {
+            timestamp: 0,
+            window_id: 0,
+            which: 0,
+            mouse_btn: MouseButton::Left,
+            clicks: 0,
+            x: 0,
+            y: 0,
+        })
+        .unwrap();
+        ev.push_event(Event::JoyButtonUp { timestamp: 0, which: 0, button_idx: 0 }).unwrap();
+        ev.push_event(key_down(Keycode::C, Mod::LCTRLMOD)).unwrap();
+        assert_poll_is_key(test.console(), Key::Interrupt);
+        assert_poll_is_none(test.console());
+
+        test.verify("sdl-empty");
+    }
+
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_read_key() {
         let mut test = SdlTest::new();
-
-        /// Synthesizes an `Event::KeyDown` event for a single key press.
-        fn key_down(keycode: Keycode, keymod: Mod) -> Event {
-            Event::KeyDown {
-                keycode: Some(keycode),
-                scancode: None,
-                keymod,
-                timestamp: 0,
-                repeat: false,
-                window_id: 0,
-            }
-        }
 
         let ev = test.console()._context.event().unwrap();
 
@@ -1208,16 +1307,18 @@ mod tests {
         ev.push_event(key_down(Keycode::D, Mod::RCTRLMOD)).unwrap();
         assert_eq!(Key::Eof, block_on(test.console().read_key()).unwrap());
 
-        ev.push_event(key_down(Keycode::D, Mod::LALTMOD)).unwrap();
+        ev.push_event(key_down(Keycode::D, Mod::empty())).unwrap();
+        ev.push_event(key_down(Keycode::Up, Mod::empty())).unwrap();
         match block_on(test.console().read_key()).unwrap() {
-            Key::Unknown(_) => (),
-            _ => panic!("Unknown key down event not detected as such"),
+            Key::ArrowUp => (),
+            Key::Char('d') => panic!("Char key not ignored as intended"),
+            key => panic!("Unexpected key {:?}", key),
         };
 
         // TODO(jmmv): We aren't testing textual input because push_event doesn't support injecting
         // Event::TextInput events.
 
-        test.verify("sdl-read-key");
+        test.verify("sdl-empty");
     }
 
     #[test]

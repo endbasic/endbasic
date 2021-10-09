@@ -97,6 +97,7 @@ Output from HELP CONSOLE:
 
     >> CLS       Clears the screen.
     >> COLOR     Sets the foreground and background colors.
+    >> INKEY$    Checks for an available key press and returns it.
     >> INPUT     Obtains user input from the console.
     >> LOCATE    Moves the cursor to the given position.
     >> PRINT     Prints a message to the console.
@@ -451,6 +452,30 @@ Output from HELP HELP:
     which case the topic whose name starts with the prefix will be shown.
     For example, the following invocations are all equivalent: HELP CON,
     HELP console, HELP "Console manipulation".
+
+Output from HELP INKEY:
+
+    INKEY$()
+
+    Checks for an available key press and returns it.
+
+    If a key press is available to be read, returns its name.  Otherwise,
+    returns the empty string.  The returned key matches its name, number,
+    or symbol and maintains case.  In other words, pressing the X key will
+    return 'x' or 'X' depending on the SHIFT modifier.
+
+    The following special keys are recognized: arrow keys (UP, DOWN, LEFT,
+    RIGHT), backspace (BS), enter (ENTER), escape (ESC), CTRL+D (EOF), and
+    CTRL+C (INT).
+
+    This function never blocks.  To wait for a key press, you need to
+    explicitly poll the keyboard.  For example, to wait until the escape
+    key is pressed, you could do:
+
+    k$ = "": WHILE k$ = <> "ESC": k = INKEY$(): SLEEP 0.01: WEND
+
+    This non-blocking design lets you to combine the reception of multiple
+    evens, such as from GPIO_INPUT?, within the same loop.
 
 Output from HELP INPUT:
 

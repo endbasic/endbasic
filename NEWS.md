@@ -20,6 +20,8 @@ for the time being.**
 *   Added the `GFX_LINE`, `GFX_PIXEL`, `GFX_RECT`, `GFX_RECTF`, and `GFX_SYNC`
     graphics commands.
 
+*   Added the `INKEY` function.
+
 ## Changes in version 0.7.0
 
 **Released on 2021-07-03.**
