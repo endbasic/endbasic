@@ -22,6 +22,7 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
+use async_channel::TryRecvError;
 #[cfg(test)]
 use wasm_bindgen_test::wasm_bindgen_test_configure;
 #[cfg(test)]
@@ -185,6 +186,14 @@ impl Console for XtermJsConsole {
         self.terminal.write(text);
         self.terminal.write("\u{001b}[K\r\n");
         Ok(())
+    }
+
+    async fn poll_key(&mut self) -> io::Result<Option<Key>> {
+        match self.on_key_rx.try_recv() {
+            Ok(k) => Ok(Some(k)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Closed) => panic!("Channel unexpectedly closed"),
+        }
     }
 
     async fn read_key(&mut self) -> io::Result<Key> {

@@ -22,6 +22,7 @@ use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::env;
 use std::io::{self, Write};
+use std::time::Duration;
 
 /// Converts a `crossterm::ErrorKind` to an `io::Error`.
 fn crossterm_error_to_io_error(e: crossterm::ErrorKind) -> io::Error {
@@ -117,33 +118,39 @@ impl TerminalConsole {
     }
 
     /// Reads a single key from the connected TTY.  This assumes the TTY is in raw mode.
-    fn read_key_from_tty(&mut self) -> io::Result<Key> {
-        loop {
-            if let event::Event::Key(ev) = event::read().map_err(crossterm_error_to_io_error)? {
-                match ev.code {
-                    event::KeyCode::Backspace => return Ok(Key::Backspace),
-                    event::KeyCode::Esc => return Ok(Key::Escape),
-                    event::KeyCode::Up => return Ok(Key::ArrowUp),
-                    event::KeyCode::Down => return Ok(Key::ArrowDown),
-                    event::KeyCode::Left => return Ok(Key::ArrowLeft),
-                    event::KeyCode::Right => return Ok(Key::ArrowRight),
+    ///
+    /// If the next event extracted from the terminal is *not* a key press, returns None.  The
+    /// caller should then retry until it gets a key.
+    fn try_read_key_from_tty(&mut self) -> io::Result<Option<Key>> {
+        let ev = event::read().map_err(crossterm_error_to_io_error)?;
+        match ev {
+            event::Event::Key(ev) => {
+                let key = match ev.code {
+                    event::KeyCode::Backspace => Key::Backspace,
+                    event::KeyCode::Esc => Key::Escape,
+                    event::KeyCode::Up => Key::ArrowUp,
+                    event::KeyCode::Down => Key::ArrowDown,
+                    event::KeyCode::Left => Key::ArrowLeft,
+                    event::KeyCode::Right => Key::ArrowRight,
                     event::KeyCode::Char('c') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        return Ok(Key::Interrupt)
+                        Key::Interrupt
                     }
                     event::KeyCode::Char('d') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        return Ok(Key::Eof)
+                        Key::Eof
                     }
                     event::KeyCode::Char('j') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        return Ok(Key::NewLine)
+                        Key::NewLine
                     }
                     event::KeyCode::Char('m') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        return Ok(Key::NewLine)
+                        Key::NewLine
                     }
-                    event::KeyCode::Char(ch) => return Ok(Key::Char(ch)),
-                    event::KeyCode::Enter => return Ok(Key::NewLine),
-                    _ => return Ok(Key::Unknown(format!("{:?}", ev))),
-                }
+                    event::KeyCode::Char(ch) => Key::Char(ch),
+                    event::KeyCode::Enter => Key::NewLine,
+                    _ => Key::Unknown(format!("{:?}", ev)),
+                };
+                Ok(Some(key))
             }
+            _ => Ok(None),
         }
     }
 }
@@ -244,9 +251,32 @@ impl Console for TerminalConsole {
         Ok(())
     }
 
+    async fn poll_key(&mut self) -> io::Result<Option<Key>> {
+        if self.is_tty {
+            loop {
+                if !event::poll(Duration::default()).map_err(crossterm_error_to_io_error)? {
+                    return Ok(None);
+                }
+
+                let key = self.try_read_key_from_tty()?;
+                if key.is_some() {
+                    return Ok(key);
+                }
+                // Non-key event; try again.
+            }
+        } else {
+            Err(io::Error::new(io::ErrorKind::Other, "Cannot poll keys from stdin"))
+        }
+    }
+
     async fn read_key(&mut self) -> io::Result<Key> {
         if self.is_tty {
-            self.read_key_from_tty()
+            loop {
+                if let Some(key) = self.try_read_key_from_tty()? {
+                    return Ok(key);
+                }
+                // Non-key event; try again.
+            }
         } else {
             self.read_key_from_stdin()
         }

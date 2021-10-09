@@ -205,6 +205,13 @@ impl Console for MockConsole {
         Ok(())
     }
 
+    async fn poll_key(&mut self) -> io::Result<Option<Key>> {
+        match self.golden_in.pop_front() {
+            Some(ch) => Ok(Some(ch)),
+            None => Ok(None),
+        }
+    }
+
     async fn read_key(&mut self) -> io::Result<Key> {
         match self.golden_in.pop_front() {
             Some(ch) => Ok(ch),
@@ -541,6 +548,12 @@ impl Tester {
     /// Adds the `golden_in` characters as console input.
     pub fn add_input_chars(self, golden_in: &str) -> Self {
         self.console.borrow_mut().add_input_chars(golden_in);
+        self
+    }
+
+    /// Adds a bunch of keys as golden input to the console.
+    pub fn add_input_keys(self, keys: &[Key]) -> Self {
+        self.console.borrow_mut().add_input_keys(keys);
         self
     }
 

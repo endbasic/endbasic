@@ -180,6 +180,9 @@ pub trait Console {
     // TODO(jmmv): Remove this in favor of write?
     fn print(&mut self, text: &str) -> io::Result<()>;
 
+    /// Returns the next key press if any is available.
+    async fn poll_key(&mut self) -> io::Result<Option<Key>>;
+
     /// Waits for and returns the next key press.
     async fn read_key(&mut self) -> io::Result<Key>;
 

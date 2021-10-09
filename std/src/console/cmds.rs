@@ -16,12 +16,13 @@
 //! Commands for console interaction.
 
 use crate::console::readline::read_line;
-use crate::console::{CharsXY, ClearType, Console};
+use crate::console::{CharsXY, ClearType, Console, Key};
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
+    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
+    FunctionResult, Symbols,
 };
 use std::cell::RefCell;
 use std::io;
@@ -144,6 +145,70 @@ impl Command for ColorCommand {
 
         self.console.borrow_mut().color(fg, bg)?;
         Ok(())
+    }
+}
+
+/// The `INKEY` function.
+pub struct InKeyFunction {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl InKeyFunction {
+    /// Creates a new `INKEY` function that waits for a key press.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("INKEY", VarType::Text)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Checks for an available key press and returns it.
+If a key press is available to be read, returns its name.  Otherwise, returns the empty string.  \
+The returned key matches its name, number, or symbol and maintains case.  In other words, \
+pressing the X key will return 'x' or 'X' depending on the SHIFT modifier.
+The following special keys are recognized: arrow keys (UP, DOWN, LEFT, RIGHT), backspace (BS), \
+enter (ENTER), escape (ESC), CTRL+D (EOF), and CTRL+C (INT).
+This function never blocks.  To wait for a key press, you need to explicitly poll the keyboard.  \
+For example, to wait until the escape key is pressed, you could do:
+k$ = \"\": WHILE k$ = <> \"ESC\": k = INKEY$(): SLEEP 0.01: WEND
+This non-blocking design lets you to combine the reception of multiple evens, such as from \
+GPIO_INPUT?, within the same loop.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for InKeyFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
+        if !args.is_empty() {
+            return Err(CallError::ArgumentError("no arguments allowed".to_owned()));
+        }
+
+        let key = self.console.borrow_mut().poll_key().await?;
+        Ok(match key {
+            Some(Key::ArrowDown) => Value::Text("DOWN".to_owned()),
+            Some(Key::ArrowLeft) => Value::Text("LEFT".to_owned()),
+            Some(Key::ArrowRight) => Value::Text("RIGHT".to_owned()),
+            Some(Key::ArrowUp) => Value::Text("UP".to_owned()),
+
+            Some(Key::Backspace) => Value::Text("BS".to_owned()),
+            Some(Key::CarriageReturn) => Value::Text("ENTER".to_owned()),
+            Some(Key::Char(x)) => Value::Text(format!("{}", x)),
+            Some(Key::Escape) => Value::Text("ESC".to_owned()),
+            Some(Key::Eof) => Value::Text("EOF".to_owned()),
+            Some(Key::Interrupt) => Value::Text("INT".to_owned()),
+            Some(Key::NewLine) => Value::Text("ENTER".to_owned()),
+            Some(Key::Unknown(_)) => Value::Text("".to_owned()),
+
+            None => Value::Text("".to_owned()),
+        })
     }
 }
 
@@ -361,6 +426,7 @@ impl Command for PrintCommand {
 pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
     machine.add_command(ClsCommand::new(console.clone()));
     machine.add_command(ColorCommand::new(console.clone()));
+    machine.add_function(InKeyFunction::new(console.clone()));
     machine.add_command(InputCommand::new(console.clone()));
     machine.add_command(LocateCommand::new(console.clone()));
     machine.add_command(PrintCommand::new(console));
@@ -405,6 +471,33 @@ mod tests {
 
         check_stmt_err("Color must be an integer", "COLOR TRUE, 0");
         check_stmt_err("Color must be an integer", "COLOR 0, TRUE");
+    }
+
+    #[test]
+    fn test_inkey_ok() {
+        Tester::default()
+            .run("result = INKEY()")
+            .expect_var("result", Value::Text("".to_owned()))
+            .check();
+
+        Tester::default()
+            .add_input_chars("x")
+            .run("result = INKEY()")
+            .expect_var("result", Value::Text("x".to_owned()))
+            .check();
+
+        Tester::default()
+            .add_input_keys(&[Key::CarriageReturn, Key::Backspace, Key::NewLine])
+            .run("r1 = INKEY(): r2 = INKEY(): r3 = INKEY()")
+            .expect_var("r1", Value::Text("ENTER".to_owned()))
+            .expect_var("r2", Value::Text("BS".to_owned()))
+            .expect_var("r3", Value::Text("ENTER".to_owned()))
+            .check();
+    }
+
+    #[test]
+    fn test_inkey_errors() {
+        check_expr_error("Syntax error in call to INKEY: no arguments allowed", "INKEY(1)");
     }
 
     #[test]
