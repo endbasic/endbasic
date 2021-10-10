@@ -225,7 +225,7 @@ impl Editor {
                     let mut buf = [0; 4];
 
                     let line = &mut self.content[self.file_pos.y];
-                    if self.file_pos.x + 1 < line.len() {
+                    if self.file_pos.x < line.len() {
                         // TODO(jmmv): Refresh only the affected line.
                         need_refresh = true;
                     }
@@ -470,6 +470,30 @@ mod tests {
         ob = ob.refresh(rowcol(0, 4), &["abc previous content"], rowcol(0, 4));
 
         run_editor("previous content", "abc previous content\n", cb, ob);
+    }
+
+    #[test]
+    fn test_insert_before_last_character() {
+        let mut cb = MockConsole::default();
+        cb.set_size(rowcol(10, 40));
+        let mut ob = OutputBuilder::new(rowcol(10, 40));
+        ob = ob.refresh(rowcol(0, 0), &[""], rowcol(0, 0));
+
+        cb.add_input_chars("abc");
+        ob = ob.add(CapturedOut::Write(b"a".to_vec()));
+        ob = ob.quick_refresh(rowcol(0, 1), rowcol(0, 1));
+        ob = ob.add(CapturedOut::Write(b"b".to_vec()));
+        ob = ob.quick_refresh(rowcol(0, 2), rowcol(0, 2));
+        ob = ob.add(CapturedOut::Write(b"c".to_vec()));
+        ob = ob.quick_refresh(rowcol(0, 3), rowcol(0, 3));
+
+        cb.add_input_keys(&[Key::ArrowLeft]);
+        ob = ob.quick_refresh(rowcol(0, 2), rowcol(0, 2));
+
+        cb.add_input_chars("d");
+        ob = ob.refresh(rowcol(0, 3), &["abdc"], rowcol(0, 3));
+
+        run_editor("", "abdc\n", cb, ob);
     }
 
     #[test]
