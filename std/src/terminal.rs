@@ -154,7 +154,12 @@ impl Console for TerminalConsole {
         let how = match how {
             ClearType::All => terminal::ClearType::All,
             ClearType::CurrentLine => terminal::ClearType::CurrentLine,
-            ClearType::PreviousChar => return self.write(b"\x08 \x08"),
+            ClearType::PreviousChar => {
+                let stdout = io::stdout();
+                let mut stdout = stdout.lock();
+                stdout.write_all(b"\x08 \x08")?;
+                return stdout.flush();
+            }
             ClearType::UntilNewLine => terminal::ClearType::UntilNewLine,
         };
         let mut output = io::stdout();
