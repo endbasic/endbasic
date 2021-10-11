@@ -228,6 +228,10 @@ Output from HELP NUMERICAL:
 
     >> DTOI%        Rounds the given double to the closest integer.
     >> ITOD#        Converts the given integer to a double.
+    >> MAXD#        Returns the maximum number out of a set of doubles.
+    >> MAXI%        Returns the maximum number out of a set of integers.
+    >> MIND#        Returns the minimum number out of a set of doubles.
+    >> MINI%        Returns the minimum number out of a set of integers.
     >> RANDOMIZE    Reinitializes the pseudo-random number generator.
     >> RND#         Returns a random number in the [0..1] range.
 
@@ -710,6 +714,30 @@ Output from HELP LTRIM:
     LTRIM$(expr$)
 
     Returns a copy of a string with leading whitespace removed.
+
+Output from HELP MIND:
+
+    MIND#(expr#[, .., expr#])
+
+    Returns the minimum number out of a set of doubles.
+
+Output from HELP MINI:
+
+    MINI%(expr%[, .., expr%])
+
+    Returns the minimum number out of a set of integers.
+
+Output from HELP MAXD:
+
+    MAXD#(expr#[, .., expr#])
+
+    Returns the maximum number out of a set of doubles.
+
+Output from HELP MAXI:
+
+    MAXI%(expr%[, .., expr%])
+
+    Returns the maximum number out of a set of integers.
 
 Output from HELP MID:
 
