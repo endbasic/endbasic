@@ -22,6 +22,9 @@ for the time being.**
 
 *   Added the `INKEY` function.
 
+*   Extended the `CLEAR` and `NEW` commands so that they reset various
+    properties of the machine, not just variables.
+
 ## Changes in version 0.7.0
 
 **Released on 2021-07-03.**

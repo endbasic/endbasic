@@ -183,7 +183,7 @@ Output from HELP INTERPRETER:
 
     Interpreter
 
-    >> CLEAR    Clears all variables to restore initial state.
+    >> CLEAR    Restores initial machine state but keeps the stored program.
     >> EXIT     Exits the interpreter.
     >> HELP     Prints interactive help.
     >> SLEEP    Suspends program execution.
@@ -257,7 +257,7 @@ Output from HELP STORED:
     >> EDIT    Interactively edits the stored program.
     >> LIST    Prints the currently-loaded program.
     >> LOAD    Loads the given program.
-    >> NEW     Clears the stored program from memory.
+    >> NEW     Restores initial machine state and creates a new program.
     >> RUN     Runs the stored program.
     >> SAVE    Saves the current program in memory to the given filename.
 
@@ -286,7 +286,13 @@ Output from HELP CLEAR:
 
     CLEAR
 
-    Clears all variables to restore initial state.
+    Restores initial machine state but keeps the stored program.
+
+    This command resets the machine to a semi-pristine state by clearing
+    all user-defined variables and restoring the state of shared resources.
+
+    The stored program is kept in memory.  To clear that too, use NEW (but
+    don't forget to first SAVE your program!).
 
 Output from HELP CLS:
 
@@ -543,7 +549,14 @@ Output from HELP NEW:
 
     NEW
 
-    Clears the stored program from memory.
+    Restores initial machine state and creates a new program.
+
+    This command resets the machine to a pristine state by clearing all
+    user-defined variables and restoring the state of shared resources.
+
+    The stored program is also discarded from memory, so don't forget to
+    SAVE it first! To reset resources but avoid clearing the stored
+    program, use CLEAR instead.
 
 Output from HELP PWD:
 
