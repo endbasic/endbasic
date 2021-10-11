@@ -61,6 +61,7 @@
         "Amstrad's",
         "bindgen",
         "builtins",
+        "clearables",
         "clippy",
         "endbasic",
         "eval",

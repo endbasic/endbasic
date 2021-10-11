@@ -41,7 +41,13 @@ impl ClearCommand {
             metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void)
                 .with_syntax("")
                 .with_category(CATEGORY)
-                .with_description("Clears all variables to restore initial state.")
+                .with_description(
+                    "Restores initial machine state but keeps the stored program.
+This command resets the machine to a semi-pristine state by clearing all user-defined variables \
+and restoring the state of shared resources.
+The stored program is kept in memory.  To clear that too, use NEW (but don't forget to first \
+SAVE your program!).",
+                )
                 .build(),
         })
     }

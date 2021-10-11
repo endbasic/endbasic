@@ -92,14 +92,31 @@ impl StopReason {
     }
 }
 
+/// Trait for objects that maintain state that can be reset to defaults.
+pub trait Clearable {
+    /// Resets any state held by the object to default values.
+    fn reset_state(&self);
+}
+
 /// Executes an EndBASIC program and tracks its state.
 #[derive(Default)]
 pub struct Machine {
     symbols: Symbols,
+    clearables: Vec<Box<dyn Clearable>>,
     stop_reason: Option<StopReason>,
 }
 
 impl Machine {
+    /// Registers the given clearable.
+    ///
+    /// In the common case, functions and commands hold a reference to the out-of-machine state
+    /// they interact with.  This state is invisible from here, but we may need to have access
+    /// to it to reset it as part of the `clear` operation.  In those cases, such state must be
+    /// registered via this hook.
+    pub fn add_clearable(&mut self, clearable: Box<dyn Clearable>) {
+        self.clearables.push(clearable);
+    }
+
     /// Registers the given builtin command, which must not yet be registered.
     pub fn add_command(&mut self, command: Rc<dyn Command>) {
         self.symbols.add_command(command)
@@ -112,7 +129,10 @@ impl Machine {
 
     /// Resets the state of the machine by clearing all variable.
     pub fn clear(&mut self) {
-        self.symbols.clear()
+        self.symbols.clear();
+        for clearable in self.clearables.as_slice() {
+            clearable.reset_state();
+        }
     }
 
     /// Tells the machine to stop execution at the next statement boundary.
@@ -351,18 +371,36 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
+    /// A clearable that tracks whether it has been called.
+    struct MockClearable {
+        cleared: Rc<RefCell<bool>>,
+    }
+
+    impl Clearable for MockClearable {
+        fn reset_state(&self) {
+            *self.cleared.borrow_mut() = true;
+        }
+    }
+
     #[test]
     fn test_clear() {
         let mut machine = Machine::default();
+
+        let cleared = Rc::from(RefCell::from(false));
+        let clearable = Box::from(MockClearable { cleared: cleared.clone() });
+        machine.add_clearable(clearable);
+
         assert_eq!(
             StopReason::Eof,
             block_on(machine.exec(&mut b"a = TRUE: b = 1".as_ref())).expect("Execution failed")
         );
         assert!(machine.get_var_as_bool("a").is_ok());
         assert!(machine.get_var_as_int("b").is_ok());
+        assert!(!*cleared.borrow());
         machine.clear();
         assert!(machine.get_var_as_bool("a").is_err());
         assert!(machine.get_var_as_int("b").is_err());
+        assert!(*cleared.borrow());
     }
 
     #[test]

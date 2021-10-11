@@ -291,7 +291,14 @@ impl NewCommand {
             metadata: CallableMetadataBuilder::new("NEW", VarType::Void)
                 .with_syntax("")
                 .with_category(CATEGORY)
-                .with_description("Clears the stored program from memory.")
+                .with_description(
+                    "Restores initial machine state and creates a new program.
+This command resets the machine to a pristine state by clearing all user-defined variables \
+and restoring the state of shared resources.
+The stored program is also discarded from memory, so don't forget to SAVE it first!  To reset \
+resources but avoid clearing the stored program, use CLEAR instead.
+",
+                )
                 .build(),
             program,
         })
