@@ -339,8 +339,8 @@ impl RunCommand {
                 .with_category(CATEGORY)
                 .with_description(
                     "Runs the stored program.
-Note that the program runs in the context of the interpreter so it will pick up any variables \
-and other state that may already be set.",
+This issues a CLEAR operation before starting the program to prevent previous leftover state \
+from interfering with the new execution.",
                 )
                 .build(),
             console,
@@ -359,6 +359,7 @@ impl Command for RunCommand {
         if !args.is_empty() {
             return Err(CallError::ArgumentError("RUN takes no arguments".to_owned()));
         }
+        machine.clear();
         let program = self.program.borrow().text();
         let stop_reason = match machine.exec(&mut program.as_bytes()).await {
             Ok(stop_reason) => stop_reason,
@@ -598,15 +599,17 @@ mod tests {
     }
 
     #[test]
-    fn test_run_something_that_shares_state() {
-        let program = "PRINT var: var = var + 1";
+    fn test_run_clears_before_execution_only() {
+        let program = "DIM a(1) AS INTEGER: a(0) = 123";
         let mut t = Tester::default().set_program(program);
-        t.run("var = 7: RUN")
-            .expect_prints(["7"])
-            .expect_var("var", 8)
+        t.run("DIM a(1) AS STRING: RUN")
+            .expect_array_simple("a", VarType::Integer, vec![123.into()])
             .expect_program(program)
             .check();
-        t.run("RUN").expect_prints(["7", "8"]).expect_var("var", 9).expect_program(program).check();
+        t.run("RUN")
+            .expect_array_simple("a", VarType::Integer, vec![123.into()])
+            .expect_program(program)
+            .check();
     }
 
     #[test]

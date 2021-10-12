@@ -25,21 +25,23 @@ CLEAR
 PRINT a
 
 EDIT ' Insert stored program until an escape character.
-PRINT "counter is"; counter
-counter = counter + 1
+DIM a(1) AS INTEGER
+a(0) = 123
+PRINT "a(0) is"; a(0)
 
 
-counter = 100
+DIM a(1) AS STRING
+a(0) = "Will not conflict"
 RUN
 RUN
 RUN
 
+PRINT "a(0) before CLEAR is"; a(0)
 CLEAR ' Reset variables but not the stored program.
-RUN
-counter = 20
-RUN
+PRINT "a(0) after CLEAR is"; a(0)
+RUN ' Still runs the program.
 
-PRINT "counter before reset is"; counter
+PRINT "a(0) before NEW is"; a(0)
 NEW ' Reset everything.
-PRINT "counter after reset is"; counter
+PRINT "a(0) after NEW is"; a(0)
 RUN ' Doesn't do anything.
