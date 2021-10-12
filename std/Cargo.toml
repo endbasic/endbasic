@@ -59,4 +59,4 @@ features = ["ttf"]
 flate2 = "1.0"
 filetime = "0.2"
 tempfile = "3"
-tokio = "1"
+tokio = { version = "1", features =  ["full"] }
