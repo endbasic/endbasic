@@ -1,7 +1,7 @@
-[2J[1;1H[38;5;11m[49m
+[2J[1;1H[38;5;11m
  EndBASIC tour: Welcome!
 =========================
-[39m[49m
+[39m
 Welcome to the EndBASIC tour demo program.  I'm glad you have made it this far!
 
 EndBASIC is an interpreter for a BASIC-like language and is inspired by
@@ -18,15 +18,15 @@ this interface is highly experimental and has many rough edges.  In particular,
 things will go wrong if you try to resize the browser window.  Just reload
 the page for a "reboot".
 
-[38;5;9m[49mWhen not in the tour, use the HELP command to access the interactive help
+[38;5;9mWhen not in the tour, use the HELP command to access the interactive help
 system.
-[39m[49m
+[39m
 Without further ado, let's get started!
 
-[38;5;11m[49m[2J[1;1H[38;5;11m[49m
+[38;5;11m[2J[1;1H
  EndBASIC tour: The basics
 ===========================
-[39m[49m
+[39m
 There are four primitive types:
 
 * Booleans (?): Literals TRUE and FALSE.
@@ -49,10 +49,10 @@ those are via HELP.
 
 There are no line numbers and no plans to add them... so, sorry, no GOTO!
 
-[38;5;11m[49m[2J[1;1H[38;5;11m[49m
+[38;5;11m[2J[1;1H
  EndBASIC tour: Control flow
 =============================
-[39m[49m
+[39m
 Fully-specified if statements look like this:
 
     IF a% = 1 THEN
@@ -75,10 +75,10 @@ For loops look like this:
         PRINT a
     NEXT
 
-[38;5;11m[49m[2J[1;1H[38;5;11m[49m
+[38;5;11m[2J[1;1H
  EndBASIC tour: File manipulation
 ==================================
-[39m[49m
+[39m
 Given that you are reading this tour, you have already encountered how to
 load a program and run it.  But here is how you'd go about creating a new
 program from scratch:
@@ -98,10 +98,10 @@ a different name.
 If you are in the browser, rest assured that all programs are stored in
 your browser's local storage.  Nothing goes to the cloud.
 
-[38;5;11m[49m[2J[1;1H[38;5;11m[49m
+[38;5;11m[2J[1;1H
  EndBASIC tour: The file system
 ================================
-[39m[49m
+[39m
 In the previous page, you learned how to create files and how to save and
 load them.  Those examples used relative paths.  However, EndBASIC supports
 multiple drives (although it does not yet support directories).
@@ -125,10 +125,10 @@ Pay attention to the double quotes surrounding these arguments: these are
 EndBASIC commands and thus you must provide the arguments as strings.  You
 are bound to trip over this a few times due to muscle memory...
 
-[38;5;11m[49m[2J[1;1H[38;5;11m[49m
+[38;5;11m[2J[1;1H
  EndBASIC tour: Screen manipulation
 ====================================
-[39m[49m
+[39m
 You have several commands at your disposal to manipulate the contents of
 the screen.  Visual features are particularly interesting for teaching
 purposes, so expect more in this regard.
@@ -136,27 +136,27 @@ purposes, so expect more in this regard.
 For example, we can print the foundational colors by selecting them with
 the "COLOR" command and positioning the cursor with "LOCATE":
 
-[12;5H[38;5;0m[49mThis is color 0
-[13;5H[38;5;1m[49mThis is color 1
-[14;5H[38;5;2m[49mThis is color 2
-[15;5H[38;5;3m[49mThis is color 3
-[16;5H[38;5;4m[49mThis is color 4
-[17;5H[38;5;5m[49mThis is color 5
-[18;5H[38;5;6m[49mThis is color 6
-[19;5H[38;5;7m[49mThis is color 7
-[12;24H[38;5;8m[49mThis is color 8
-[13;24H[38;5;9m[49mThis is color 9
-[14;24H[38;5;10m[49mThis is color 10
-[15;24H[38;5;11m[49mThis is color 11
-[16;24H[38;5;12m[49mThis is color 12
-[17;24H[38;5;13m[49mThis is color 13
-[18;24H[38;5;14m[49mThis is color 14
-[19;24H[38;5;15m[49mThis is color 15
-[39m[49m
-[38;5;11m[49m[2J[1;1H[38;5;11m[49m
+[12;5H[38;5;0mThis is color 0
+[13;5H[38;5;1mThis is color 1
+[14;5H[38;5;2mThis is color 2
+[15;5H[38;5;3mThis is color 3
+[16;5H[38;5;4mThis is color 4
+[17;5H[38;5;5mThis is color 5
+[18;5H[38;5;6mThis is color 6
+[19;5H[38;5;7mThis is color 7
+[12;24H[38;5;8mThis is color 8
+[13;24H[38;5;9mThis is color 9
+[14;24H[38;5;10mThis is color 10
+[15;24H[38;5;11mThis is color 11
+[16;24H[38;5;12mThis is color 12
+[17;24H[38;5;13mThis is color 13
+[18;24H[38;5;14mThis is color 14
+[19;24H[38;5;15mThis is color 15
+[39m
+[38;5;11m[2J[1;1H
  EndBASIC tour: Hardware access
 ================================
-[39m[49m
+[39m
 If you happen to be running on a Raspberry Pi, EndBASIC has some support
 to manipulate its hardware.  At the moment this includes only basic access
 to the GPIO lines.  See the "DEMOS:/GPIO.BAS" demo for an example.
@@ -164,29 +164,29 @@ to the GPIO lines.  See the "DEMOS:/GPIO.BAS" demo for an example.
 Please note that you have to be running on a Raspberry Pi *AND* you must
 have compiled EndBASIC with --features=rpi for this to work.
 
-[38;5;11m[49m[2J[1;1H[38;5;11m[49m
+[38;5;11m[2J[1;1H
  EndBASIC tour: Enjoy
 ======================
-[39m[49m
+[39m
 And that's it for the tour.  You can now type EDIT to see the code that
 took you over this journey, load other demo files or... just go forth and
 explore.  HELP, MOUNT, and DIR are your friends at any point, but so that
 you don't feel too lost, run this now:
 
-[38;5;1m[49m    CD "DEMOS:/"
+[38;5;1m    CD "DEMOS:/"
     DIR
-[39m[49m
+[39m
 If you like what you have seen so far, please head to the project's GitHub
 page and give it a star:
-[38;5;12m[49m
+[38;5;12m
     https://github.com/endbasic/endbasic/
 
-[39m[49mThen, visit my blog and subscribe to receive fresh EndBASIC content or...
+[39mThen, visit my blog and subscribe to receive fresh EndBASIC content or...
 you know, to keep me motivated in writing stuff and building this project:
-[38;5;12m[49m
+[38;5;12m
     https://jmmv.dev/
 
-[39m[49mThank you! :-)
+[39mThank you! :-)
 
-[38;5;10m[49m-- Brought to you by Julio Merino <jmmv@>
-[39m[49m
+[38;5;10m-- Brought to you by Julio Merino <jmmv@>
+[39m

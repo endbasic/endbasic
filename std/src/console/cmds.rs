@@ -16,7 +16,7 @@
 //! Commands for console interaction.
 
 use crate::console::readline::read_line;
-use crate::console::{CharsXY, ClearType, Console, Key};
+use crate::console::{CharsXY, ClearType, Console, ConsoleClearable, Key};
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::exec::Machine;
@@ -424,6 +424,7 @@ impl Command for PrintCommand {
 
 /// Adds all console-related commands for the given `console` to the `machine`.
 pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
+    machine.add_clearable(ConsoleClearable::new(console.clone()));
     machine.add_command(ClsCommand::new(console.clone()));
     machine.add_command(ColorCommand::new(console.clone()));
     machine.add_function(InKeyFunction::new(console.clone()));

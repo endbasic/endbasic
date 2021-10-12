@@ -55,6 +55,18 @@ pub struct TerminalConsole {
     /// Line-oriented buffer to hold input when not operating in raw mode.
     buffer: VecDeque<Key>,
 
+    /// Current foreground color.
+    fg_color: Option<u8>,
+
+    /// Current background color.
+    bg_color: Option<u8>,
+
+    /// Whether the cursor is visible or not.
+    cursor_visible: bool,
+
+    /// Whether we are in the alternate console or not.
+    alt_active: bool,
+
     /// Whether a background color is active.  If so, we need to flush the contents of every line
     /// we print so that the color applies to the whole line.
     need_line_flush: bool,
@@ -75,7 +87,15 @@ impl TerminalConsole {
         if is_tty {
             terminal::enable_raw_mode().map_err(crossterm_error_to_io_error)?;
         }
-        Ok(Self { is_tty, buffer: VecDeque::default(), need_line_flush: false })
+        Ok(Self {
+            is_tty,
+            buffer: VecDeque::default(),
+            fg_color: None,
+            bg_color: None,
+            cursor_visible: true,
+            alt_active: false,
+            need_line_flush: false,
+        })
     }
 
     /// Converts a line of text read from stdin into a sequence of key presses.
@@ -178,28 +198,46 @@ impl Console for TerminalConsole {
     }
 
     fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
+        if fg == self.fg_color && bg == self.bg_color {
+            return Ok(());
+        }
+
         let mut output = io::stdout();
-        let fg = match fg {
-            None => style::Color::Reset,
-            Some(color) => style::Color::AnsiValue(color),
-        };
-        let bg = match bg {
-            None => style::Color::Reset,
-            Some(color) => style::Color::AnsiValue(color),
-        };
-        output.queue(style::SetForegroundColor(fg)).map_err(crossterm_error_to_io_error)?;
-        output.queue(style::SetBackgroundColor(bg)).map_err(crossterm_error_to_io_error)?;
-        output.flush()?;
-        self.need_line_flush = bg != style::Color::Reset;
-        Ok(())
+        if fg != self.fg_color {
+            let ct_fg = match fg {
+                None => style::Color::Reset,
+                Some(color) => style::Color::AnsiValue(color),
+            };
+            output.queue(style::SetForegroundColor(ct_fg)).map_err(crossterm_error_to_io_error)?;
+            self.fg_color = fg;
+        }
+        if bg != self.bg_color {
+            let ct_bg = match bg {
+                None => style::Color::Reset,
+                Some(color) => style::Color::AnsiValue(color),
+            };
+            output.queue(style::SetBackgroundColor(ct_bg)).map_err(crossterm_error_to_io_error)?;
+            self.bg_color = bg;
+        }
+        self.need_line_flush = bg.is_some();
+        output.flush()
     }
 
     fn enter_alt(&mut self) -> io::Result<()> {
-        execute!(io::stdout(), terminal::EnterAlternateScreen).map_err(crossterm_error_to_io_error)
+        if !self.alt_active {
+            execute!(io::stdout(), terminal::EnterAlternateScreen)
+                .map_err(crossterm_error_to_io_error)?;
+            self.alt_active = true;
+        }
+        Ok(())
     }
 
     fn hide_cursor(&mut self) -> io::Result<()> {
-        execute!(io::stdout(), cursor::Hide).map_err(crossterm_error_to_io_error)
+        if self.cursor_visible {
+            execute!(io::stdout(), cursor::Hide).map_err(crossterm_error_to_io_error)?;
+            self.cursor_visible = false;
+        }
+        Ok(())
     }
 
     fn is_interactive(&self) -> bool {
@@ -207,7 +245,12 @@ impl Console for TerminalConsole {
     }
 
     fn leave_alt(&mut self) -> io::Result<()> {
-        execute!(io::stdout(), terminal::LeaveAlternateScreen).map_err(crossterm_error_to_io_error)
+        if self.alt_active {
+            execute!(io::stdout(), terminal::LeaveAlternateScreen)
+                .map_err(crossterm_error_to_io_error)?;
+            self.alt_active = false;
+        }
+        Ok(())
     }
 
     fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
@@ -283,7 +326,11 @@ impl Console for TerminalConsole {
     }
 
     fn show_cursor(&mut self) -> io::Result<()> {
-        execute!(io::stdout(), cursor::Show).map_err(crossterm_error_to_io_error)
+        if !self.cursor_visible {
+            execute!(io::stdout(), cursor::Show).map_err(crossterm_error_to_io_error)?;
+            self.cursor_visible = true;
+        }
+        Ok(())
     }
 
     fn size(&self) -> io::Result<CharsXY> {
