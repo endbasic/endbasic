@@ -30,18 +30,19 @@ Button pressed! Blinking LED on pin 18 ...
 2
 1
 Dumping GPIO trace...
-__GPIO_MOCK_DATA        0       803
-__GPIO_MOCK_DATA        1       1804
-__GPIO_MOCK_DATA        2       811
+__GPIO_MOCK_DATA        0       -1
+__GPIO_MOCK_DATA        1       803
+__GPIO_MOCK_DATA        2       1804
 __GPIO_MOCK_DATA        3       811
-__GPIO_MOCK_DATA        4       810
-__GPIO_MOCK_DATA        5       1821
-__GPIO_MOCK_DATA        6       1820
-__GPIO_MOCK_DATA        7       1821
-__GPIO_MOCK_DATA        8       1820
-__GPIO_MOCK_DATA        9       1821
-__GPIO_MOCK_DATA        10      1820
-__GPIO_MOCK_DATA        11      1821
-__GPIO_MOCK_DATA        12      1820
-__GPIO_MOCK_DATA        13      1821
-__GPIO_MOCK_DATA        14      1820
+__GPIO_MOCK_DATA        4       811
+__GPIO_MOCK_DATA        5       810
+__GPIO_MOCK_DATA        6       1821
+__GPIO_MOCK_DATA        7       1820
+__GPIO_MOCK_DATA        8       1821
+__GPIO_MOCK_DATA        9       1820
+__GPIO_MOCK_DATA        10      1821
+__GPIO_MOCK_DATA        11      1820
+__GPIO_MOCK_DATA        12      1821
+__GPIO_MOCK_DATA        13      1820
+__GPIO_MOCK_DATA        14      1821
+__GPIO_MOCK_DATA        15      1820

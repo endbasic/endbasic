@@ -17,7 +17,7 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
-use endbasic_core::exec::Machine;
+use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
     FunctionResult, Symbols,
@@ -131,6 +131,27 @@ pub trait Pins {
 
     /// Writes `v` to the given `pin`, which must have been previously setup as an output pin.
     fn write(&mut self, pin: Pin, v: bool) -> io::Result<()>;
+}
+
+/// Resets the state of the pins in a best-effort manner.
+pub(crate) struct PinsClearable {
+    pins: Rc<RefCell<dyn Pins>>,
+}
+
+impl PinsClearable {
+    /// Creates a new clearable for `pins`.
+    pub(crate) fn new(pins: Rc<RefCell<dyn Pins>>) -> Box<Self> {
+        Box::from(Self { pins })
+    }
+}
+
+impl Clearable for PinsClearable {
+    fn reset_state(&self, syms: &mut Symbols) {
+        let _ = match MockPins::try_new(syms) {
+            Some(mut pins) => pins.clear_all(),
+            None => self.pins.borrow_mut().clear_all(),
+        };
+    }
 }
 
 /// The `GPIO_SETUP` command.
@@ -330,6 +351,7 @@ impl Command for GpioWriteCommand {
 
 /// Adds all symbols provided by this module to the given `machine`.
 pub fn add_all(machine: &mut Machine, pins: Rc<RefCell<dyn Pins>>) {
+    machine.add_clearable(PinsClearable::new(pins.clone()));
     machine.add_command(GpioClearCommand::new(pins.clone()));
     machine.add_command(GpioSetupCommand::new(pins.clone()));
     machine.add_command(GpioWriteCommand::new(pins.clone()));

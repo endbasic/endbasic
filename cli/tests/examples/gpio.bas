@@ -18,9 +18,9 @@
 LOAD "DEMOS:/GPIO.BAS"
 
 DIM __GPIO_MOCK_DATA(20) AS INTEGER
-__GPIO_MOCK_DATA(2) = 811 ' Return high for pin 8 (button).
 __GPIO_MOCK_DATA(3) = 811 ' Return high for pin 8 (button).
-__GPIO_MOCK_DATA(4) = 810 ' Return low for pin 8 (button).
+__GPIO_MOCK_DATA(4) = 811 ' Return high for pin 8 (button).
+__GPIO_MOCK_DATA(5) = 810 ' Return low for pin 8 (button).
 __GPIO_MOCK_LAST = 0
 
 RUN
