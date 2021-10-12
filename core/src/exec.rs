@@ -94,8 +94,9 @@ impl StopReason {
 
 /// Trait for objects that maintain state that can be reset to defaults.
 pub trait Clearable {
-    /// Resets any state held by the object to default values.
-    fn reset_state(&self);
+    /// Resets any state held by the object to default values.  `syms` contain the symbols of the
+    /// machine before they are cleared, in case some state is held in them too.
+    fn reset_state(&self, syms: &mut Symbols);
 }
 
 /// Executes an EndBASIC program and tracks its state.
@@ -129,10 +130,10 @@ impl Machine {
 
     /// Resets the state of the machine by clearing all variable.
     pub fn clear(&mut self) {
-        self.symbols.clear();
         for clearable in self.clearables.as_slice() {
-            clearable.reset_state();
+            clearable.reset_state(&mut self.symbols);
         }
+        self.symbols.clear();
     }
 
     /// Tells the machine to stop execution at the next statement boundary.
@@ -377,7 +378,11 @@ mod tests {
     }
 
     impl Clearable for MockClearable {
-        fn reset_state(&self) {
+        fn reset_state(&self, syms: &mut Symbols) {
+            // Make sure we can see the symbols before they are cleared.
+            assert!(syms.get_var(&VarRef::new("a", VarType::Boolean)).is_ok());
+            assert!(syms.get_var(&VarRef::new("b", VarType::Integer)).is_ok());
+
             *self.cleared.borrow_mut() = true;
         }
     }

@@ -270,7 +270,10 @@ impl Symbols {
 
     /// Clears all user-defined symbols.
     pub fn clear(&mut self) {
-        self.by_name.retain(|_, symbol| !symbol.user_defined());
+        // TODO(jmmv): Preserving symbols that start with __ is a hack that was added to support
+        // the already-existing GPIO tests when RUN was changed to issue a CLEAR upfront.  This
+        // is undocumented behavior and we should find a nicer way to do this.
+        self.by_name.retain(|name, symbol| name.starts_with("__") || !symbol.user_defined());
     }
 
     /// Defines a new variable `name` of type `vartype`.  The variable must not yet exist.
@@ -736,17 +739,20 @@ mod tests {
             .add_command(ExitCommand::new())
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
+            .add_var("__SYSTEM_VAR", Value::Integer(42))
             .build();
 
         assert!(syms.get(&VarRef::new("SOMEARRAY", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("EXIT", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SUM", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SOMEVAR", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("__SYSTEM_VAR", VarType::Auto)).unwrap().is_some());
         syms.clear();
         assert!(!syms.get(&VarRef::new("SOMEARRAY", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("EXIT", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SUM", VarType::Auto)).unwrap().is_some());
         assert!(!syms.get(&VarRef::new("SOMEVAR", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("__SYSTEM_VAR", VarType::Auto)).unwrap().is_some());
     }
 
     #[test]
