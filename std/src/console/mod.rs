@@ -16,7 +16,11 @@
 //! Console representation and manipulation.
 
 use async_trait::async_trait;
+use endbasic_core::exec::Clearable;
+use endbasic_core::syms::Symbols;
+use std::cell::RefCell;
 use std::io;
+use std::rc::Rc;
 use std::str;
 
 mod cmds;
@@ -236,6 +240,28 @@ pub trait Console {
     /// Flushes any pending updates when enabled.
     fn set_sync(&mut self, _enabled: bool) -> io::Result<()> {
         Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
+    }
+}
+
+/// Resets the state of a console in a best-effort manner.
+pub(crate) struct ConsoleClearable {
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl ConsoleClearable {
+    /// Creates a new clearable for `console`.
+    pub(crate) fn new(console: Rc<RefCell<dyn Console>>) -> Box<Self> {
+        Box::from(Self { console })
+    }
+}
+
+impl Clearable for ConsoleClearable {
+    fn reset_state(&self, _syms: &mut Symbols) {
+        let mut console = self.console.borrow_mut();
+        let _ = console.leave_alt();
+        let _ = console.color(None, None);
+        let _ = console.show_cursor();
+        let _ = console.set_sync(true);
     }
 }
 

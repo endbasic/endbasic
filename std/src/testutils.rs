@@ -713,6 +713,17 @@ impl<'a> Checker<'a> {
         self
     }
 
+    /// Adds tracking for all the side-effects of a clear operation on the machine.
+    pub fn expect_clear(mut self) -> Self {
+        self.exp_output.append(&mut vec![
+            CapturedOut::LeaveAlt,
+            CapturedOut::Color(None, None),
+            CapturedOut::ShowCursor,
+            CapturedOut::SetSync(true),
+        ]);
+        self
+    }
+
     /// Adds a file to expect in the drive with a `name` and specific `content`.
     ///
     /// `name` must be the absolute path to the file that is expected, including the drive name.

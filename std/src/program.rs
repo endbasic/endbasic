@@ -294,7 +294,8 @@ impl NewCommand {
                 .with_description(
                     "Restores initial machine state and creates a new program.
 This command resets the machine to a pristine state by clearing all user-defined variables \
-and restoring the state of shared resources.
+and restoring the state of shared resources.  These resources include: the console, whose color \
+and video syncing bit are reset.
 The stored program is also discarded from memory, so don't forget to SAVE it first!  To reset \
 resources but avoid clearing the stored program, use CLEAR instead.
 ",
@@ -533,6 +534,7 @@ mod tests {
                 .write_file("BAR.BAS", content)
                 .write_file("Baz.bas", content)
                 .run(format!(r#"LOAD "{}""#, p))
+                .expect_clear()
                 .expect_program("line 1\n\n  line 2\n")
                 .expect_file("MEMORY:/foo.bas", content)
                 .expect_file("MEMORY:/foo.bak", "")
@@ -580,12 +582,12 @@ mod tests {
 
     #[test]
     fn test_new_nothing() {
-        Tester::default().run("NEW").check();
+        Tester::default().run("NEW").expect_clear().check();
     }
 
     #[test]
     fn test_new_clears_program_and_variables() {
-        Tester::default().set_program("some stuff").run("a = 3: NEW").check();
+        Tester::default().set_program("some stuff").run("a = 3: NEW").expect_clear().check();
     }
 
     #[test]
@@ -595,7 +597,7 @@ mod tests {
 
     #[test]
     fn test_run_nothing() {
-        Tester::default().run("RUN").check();
+        Tester::default().run("RUN").expect_clear().check();
     }
 
     #[test]
@@ -604,10 +606,13 @@ mod tests {
         let mut t = Tester::default().set_program(program);
         t.run("DIM a(1) AS STRING: RUN")
             .expect_array_simple("a", VarType::Integer, vec![123.into()])
+            .expect_clear()
             .expect_program(program)
             .check();
         t.run("RUN")
             .expect_array_simple("a", VarType::Integer, vec![123.into()])
+            .expect_clear()
+            .expect_clear()
             .expect_program(program)
             .check();
     }
@@ -618,6 +623,7 @@ mod tests {
         Tester::default()
             .set_program(program)
             .run(r#"RUN: PRINT "after""#)
+            .expect_clear()
             .expect_prints(["5", "Program exited with code 1", "after"])
             .expect_program(program)
             .check();

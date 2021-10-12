@@ -23,7 +23,8 @@ for the time being.**
 *   Added the `INKEY` function.
 
 *   Extended the `CLEAR` and `NEW` commands so that they reset various
-    properties of the machine, not just variables.
+    properties of the machine, not just variables.  This includes the state of
+    the console, whose color and video syncing bit are reset.
 
 *   Modified the `RUN` command to issue a `CLEAR` upfront.  Maintaining the
     previous state of the machine was just too confusing and error-prone due

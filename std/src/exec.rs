@@ -44,7 +44,8 @@ impl ClearCommand {
                 .with_description(
                     "Restores initial machine state but keeps the stored program.
 This command resets the machine to a semi-pristine state by clearing all user-defined variables \
-and restoring the state of shared resources.
+and restoring the state of shared resources.  These resources include: the console, whose color \
+and video syncing bit are reset.
 The stored program is kept in memory.  To clear that too, use NEW (but don't forget to first \
 SAVE your program!).",
                 )
@@ -219,8 +220,12 @@ mod tests {
 
     #[test]
     fn test_clear_ok() {
-        Tester::default().run("a = 1: CLEAR").check();
-        Tester::default().run("DIM a(2): CLEAR: DIM a(5) AS STRING: CLEAR").check();
+        Tester::default().run("a = 1: CLEAR").expect_clear().check();
+        Tester::default()
+            .run("DIM a(2): CLEAR: DIM a(5) AS STRING: CLEAR")
+            .expect_clear()
+            .expect_clear()
+            .check();
     }
 
     #[test]
