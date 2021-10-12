@@ -295,7 +295,7 @@ impl NewCommand {
                     "Restores initial machine state and creates a new program.
 This command resets the machine to a pristine state by clearing all user-defined variables \
 and restoring the state of shared resources.  These resources include: the console, whose color \
-and video syncing bit are reset.
+and video syncing bit are reset; and the GPIO pins, which are set to their default state.
 The stored program is also discarded from memory, so don't forget to SAVE it first!  To reset \
 resources but avoid clearing the stored program, use CLEAR instead.
 ",
