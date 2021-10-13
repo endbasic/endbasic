@@ -21,7 +21,7 @@ use crossterm::{cursor, event, execute, style, terminal, tty::IsTty, QueueableCo
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::env;
-use std::io::{self, Write};
+use std::io::{self, StdoutLock, Write};
 use std::time::Duration;
 
 /// Converts a `crossterm::ErrorKind` to an `io::Error`.
@@ -70,6 +70,9 @@ pub struct TerminalConsole {
     /// Whether a background color is active.  If so, we need to flush the contents of every line
     /// we print so that the color applies to the whole line.
     need_line_flush: bool,
+
+    /// Whether video syncing is enabled or not.
+    sync_enabled: bool,
 }
 
 impl Drop for TerminalConsole {
@@ -95,6 +98,7 @@ impl TerminalConsole {
             cursor_visible: true,
             alt_active: false,
             need_line_flush: false,
+            sync_enabled: true,
         })
     }
 
@@ -173,6 +177,15 @@ impl TerminalConsole {
             _ => Ok(None),
         }
     }
+
+    /// Flushes the console, which has already been written to via `lock`, if syncing is enabled.
+    fn maybe_flush(&self, mut lock: StdoutLock<'_>) -> io::Result<()> {
+        if self.sync_enabled {
+            lock.flush()
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[async_trait(?Send)]
@@ -185,16 +198,17 @@ impl Console for TerminalConsole {
                 let stdout = io::stdout();
                 let mut stdout = stdout.lock();
                 stdout.write_all(b"\x08 \x08")?;
-                return stdout.flush();
+                return self.maybe_flush(stdout);
             }
             ClearType::UntilNewLine => terminal::ClearType::UntilNewLine,
         };
-        let mut output = io::stdout();
-        output.queue(terminal::Clear(how)).map_err(crossterm_error_to_io_error)?;
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
+        stdout.queue(terminal::Clear(how)).map_err(crossterm_error_to_io_error)?;
         if how == terminal::ClearType::All {
-            output.queue(cursor::MoveTo(0, 0)).map_err(crossterm_error_to_io_error)?;
+            stdout.queue(cursor::MoveTo(0, 0)).map_err(crossterm_error_to_io_error)?;
         }
-        output.flush()
+        self.maybe_flush(stdout)
     }
 
     fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
@@ -202,13 +216,14 @@ impl Console for TerminalConsole {
             return Ok(());
         }
 
-        let mut output = io::stdout();
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
         if fg != self.fg_color {
             let ct_fg = match fg {
                 None => style::Color::Reset,
                 Some(color) => style::Color::AnsiValue(color),
             };
-            output.queue(style::SetForegroundColor(ct_fg)).map_err(crossterm_error_to_io_error)?;
+            stdout.queue(style::SetForegroundColor(ct_fg)).map_err(crossterm_error_to_io_error)?;
             self.fg_color = fg;
         }
         if bg != self.bg_color {
@@ -216,11 +231,11 @@ impl Console for TerminalConsole {
                 None => style::Color::Reset,
                 Some(color) => style::Color::AnsiValue(color),
             };
-            output.queue(style::SetBackgroundColor(ct_bg)).map_err(crossterm_error_to_io_error)?;
+            stdout.queue(style::SetBackgroundColor(ct_bg)).map_err(crossterm_error_to_io_error)?;
             self.bg_color = bg;
         }
         self.need_line_flush = bg.is_some();
-        output.flush()
+        self.maybe_flush(stdout)
     }
 
     fn enter_alt(&mut self) -> io::Result<()> {
@@ -359,6 +374,22 @@ impl Console for TerminalConsole {
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
         stdout.write_all(bytes)?;
-        stdout.flush()
+        self.maybe_flush(stdout)
+    }
+
+    fn sync_now(&mut self) -> io::Result<()> {
+        if self.sync_enabled {
+            Ok(())
+        } else {
+            io::stdout().flush()
+        }
+    }
+
+    fn set_sync(&mut self, enabled: bool) -> io::Result<()> {
+        if !self.sync_enabled {
+            io::stdout().flush()?;
+        }
+        self.sync_enabled = enabled;
+        Ok(())
     }
 }
