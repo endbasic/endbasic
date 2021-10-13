@@ -76,6 +76,9 @@ HELP CLS
 PRINT "Output from HELP COLOR:"
 HELP COLOR
 
+PRINT "Output from HELP DEG:"
+HELP DEG
+
 PRINT "Output from HELP DEL:"
 HELP DEL
 
@@ -142,6 +145,9 @@ HELP PWD
 PRINT "Output from HELP PRINT:"
 HELP PRINT
 
+PRINT "Output from HELP RAD:"
+HELP RAD
+
 PRINT "Output from HELP RANDOMIZE:"
 HELP RANDOMIZE
 
@@ -163,6 +169,12 @@ HELP UNMOUNT
 '
 ' Help on functions.
 '
+
+PRINT "Output from HELP ATN:"
+HELP ATN
+
+PRINT "Output from HELP COS:"
+HELP COS
 
 PRINT "Output from HELP DTOI:"
 HELP DTOI
@@ -203,6 +215,9 @@ HELP MAXI
 PRINT "Output from HELP MID:"
 HELP MID
 
+PRINT "Output from HELP PI:"
+HELP PI
+
 PRINT "Output from HELP RIGHT:"
 HELP RIGHT
 
@@ -211,6 +226,12 @@ HELP RND
 
 PRINT "Output from HELP RTRIM:"
 HELP RTRIM
+
+PRINT "Output from HELP SIN:"
+HELP SIN
+
+PRINT "Output from HELP TAN:"
+HELP TAN
 
 PRINT "Output from HELP UBOUND:"
 HELP UBOUND

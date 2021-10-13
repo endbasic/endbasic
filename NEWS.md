@@ -24,6 +24,9 @@ for the time being.**
 
 *   Added the `MIND`, `MINI`, `MAXD`, and `MAXI` functions.
 
+*   Added the `DEG` and `RAD` trigonometric commands and the `ATN`, `COS`, `PI`,
+    `SIN` and `TAN` functions.
+
 *   Extended the `CLEAR` and `NEW` commands so that they reset various
     properties of the machine, not just variables.  This includes the state of
     the console, whose color and video syncing bit are reset; and the GPIO pins,
