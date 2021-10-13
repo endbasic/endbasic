@@ -838,10 +838,12 @@ impl Console for SdlConsole {
     }
 
     fn show_cursor(&mut self) -> io::Result<()> {
-        self.cursor_visible = true;
-        if let Err(e) = self.draw_cursor() {
-            self.cursor_visible = false;
-            return Err(e);
+        if !self.cursor_visible {
+            self.cursor_visible = true;
+            if let Err(e) = self.draw_cursor() {
+                self.cursor_visible = false;
+                return Err(e);
+            }
         }
         self.present_canvas()
     }
@@ -1175,6 +1177,7 @@ mod tests {
         let mut test = SdlTest::new();
 
         test.console().hide_cursor().unwrap();
+        test.console().hide_cursor().unwrap();
         test.console().write(b"Cursor hidden").unwrap();
 
         test.verify("sdl-hide-cursor");
@@ -1348,6 +1351,17 @@ mod tests {
         test.console().write(b"Done!").unwrap();
 
         test.verify("sdl-draw");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_show_cursor() {
+        let mut test = SdlTest::new();
+
+        test.console().show_cursor().unwrap();
+        test.console().show_cursor().unwrap();
+
+        test.verify("sdl-empty");
     }
 
     #[test]
