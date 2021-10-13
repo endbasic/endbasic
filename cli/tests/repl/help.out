@@ -226,14 +226,21 @@ Output from HELP NUMERICAL:
 
     Numerical functions
 
+    >> ATN#         Computes the arc-tangent of a number.
+    >> COS#         Computes the cosine of an angle.
+    >> DEG          Sets degrees mode of calculation.
     >> DTOI%        Rounds the given double to the closest integer.
     >> ITOD#        Converts the given integer to a double.
     >> MAXD#        Returns the maximum number out of a set of doubles.
     >> MAXI%        Returns the maximum number out of a set of integers.
     >> MIND#        Returns the minimum number out of a set of doubles.
     >> MINI%        Returns the minimum number out of a set of integers.
+    >> PI#          Returns the Archimedes' constant.
+    >> RAD          Sets radians mode of calculation.
     >> RANDOMIZE    Reinitializes the pseudo-random number generator.
     >> RND#         Returns a random number in the [0..1] range.
+    >> SIN#         Computes the sine of an angle.
+    >> TAN#         Computes the tangent of an angle.
 
     Type HELP followed by the name of a symbol for details.
 
@@ -317,6 +324,16 @@ Output from HELP COLOR:
     console's default.  The console default does not necessarily match any
     other color specifiable in the 0 to 255 range, as it might be
     transparent.
+
+Output from HELP DEG:
+
+    DEG
+
+    Sets degrees mode of calculation.
+
+    The default condition for the trigonometric functions is to use
+    radians.  DEG configures the environment to use degrees until
+    instructed otherwise.
 
 Output from HELP DEL:
 
@@ -563,6 +580,16 @@ Output from HELP PRINT:
     concatenated with a single space, while arguments separated by the long
     `,` separator are concatenated with a tab character.
 
+Output from HELP RAD:
+
+    RAD
+
+    Sets radians mode of calculation.
+
+    The default condition for the trigonometric functions is to use radians
+    but it can be set to degrees with the DEG command.  RAD restores the
+    environment to use radians mode.
+
 Output from HELP RANDOMIZE:
 
     RANDOMIZE [seed%]
@@ -630,6 +657,24 @@ Output from HELP UNMOUNT:
     Unmounts the given drive.
 
     Drive names are specified without a colon at the end.
+
+Output from HELP ATN:
+
+    ATN#(n%|n#)
+
+    Computes the arc-tangent of a number.
+
+    The resulting angle is measured in degrees or radians depending on the
+    angle mode as selected by the DEG and RAD commands.
+
+Output from HELP COS:
+
+    COS#(angle%|angle#)
+
+    Computes the cosine of an angle.
+
+    The input angle% or angle# is measured in degrees or radians depending
+    on the angle mode as selected by the DEG and RAD commands.
 
 Output from HELP DTOI:
 
@@ -753,6 +798,12 @@ Output from HELP MID:
 
     until the end of the string.
 
+Output from HELP PI:
+
+    PI#()
+
+    Returns the Archimedes' constant.
+
 Output from HELP RIGHT:
 
     RIGHT$(expr$, n%)
@@ -784,6 +835,24 @@ Output from HELP RTRIM:
     RTRIM$(expr$)
 
     Returns a copy of a string with trailing whitespace removed.
+
+Output from HELP SIN:
+
+    SIN#(angle%|angle#)
+
+    Computes the sine of an angle.
+
+    The input angle% or angle# is measured in degrees or radians depending
+    on the angle mode as selected by the DEG and RAD commands.
+
+Output from HELP TAN:
+
+    TAN#(angle%|angle#)
+
+    Computes the tangent of an angle.
+
+    The input angle% or angle# is measured in degrees or radians depending
+    on the angle mode as selected by the DEG and RAD commands.
 
 Output from HELP UBOUND:
 

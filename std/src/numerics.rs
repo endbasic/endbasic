@@ -18,7 +18,7 @@
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::eval::eval_all;
-use endbasic_core::exec::Machine;
+use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
     FunctionResult, Symbols,
@@ -31,6 +31,44 @@ use std::rc::Rc;
 
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "Numerical functions";
+
+/// Indicates the calculation mode for trigonometric functions.
+pub enum AngleMode {
+    /// Specifies degrees mode of calculation.
+    Degrees,
+
+    /// Specifies radians mode of calculation.
+    Radians,
+}
+
+struct ClearableAngleMode {
+    angle_mode: Rc<RefCell<AngleMode>>,
+}
+
+impl Clearable for ClearableAngleMode {
+    fn reset_state(&self, _syms: &mut Symbols) {
+        *self.angle_mode.borrow_mut() = AngleMode::Radians;
+    }
+}
+
+/// Gets the single argument to a trigonometric function, which is its angle.  Applies units
+/// conversion based on `angle_mode`.
+async fn get_angle(
+    args: &[Expr],
+    symbols: &mut Symbols,
+    angle_mode: &AngleMode,
+) -> Result<f64, CallError> {
+    let args = eval_all(args, symbols).await?;
+    let angle = match args.as_slice() {
+        [Value::Double(n)] => *n,
+        [Value::Integer(n)] => *n as f64,
+        _ => return Err(CallError::SyntaxError),
+    };
+    match angle_mode {
+        AngleMode::Degrees => Ok(angle.to_radians()),
+        AngleMode::Radians => Ok(angle),
+    }
+}
 
 /// Tracks the state of the PRNG used by the random number manipulation functions and commands.
 ///
@@ -64,6 +102,125 @@ impl Prng {
     fn next(&mut self) -> f64 {
         self.last = self.prng.next_u32();
         self.last()
+    }
+}
+
+/// The `ATN` function.
+pub struct AtnFunction {
+    metadata: CallableMetadata,
+    angle_mode: Rc<RefCell<AngleMode>>,
+}
+
+impl AtnFunction {
+    /// Creates a new instance of the function.
+    pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("ATN", VarType::Double)
+                .with_syntax("n%|n#")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Computes the arc-tangent of a number.
+The resulting angle is measured in degrees or radians depending on the angle mode as selected by \
+the DEG and RAD commands.",
+                )
+                .build(),
+            angle_mode,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for AtnFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(args, symbols).await?;
+        let n = match args.as_slice() {
+            [Value::Double(n)] => *n,
+            [Value::Integer(n)] => *n as f64,
+            _ => return Err(CallError::SyntaxError),
+        };
+        match *self.angle_mode.borrow() {
+            AngleMode::Degrees => Ok(Value::Double(n.atan().to_degrees())),
+            AngleMode::Radians => Ok(Value::Double(n.atan())),
+        }
+    }
+}
+
+/// The `COS` function.
+pub struct CosFunction {
+    metadata: CallableMetadata,
+    angle_mode: Rc<RefCell<AngleMode>>,
+}
+
+impl CosFunction {
+    /// Creates a new instance of the function.
+    pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("COS", VarType::Double)
+                .with_syntax("angle%|angle#")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Computes the cosine of an angle.
+The input angle% or angle# is measured in degrees or radians depending on the angle mode as \
+selected by the DEG and RAD commands.",
+                )
+                .build(),
+            angle_mode,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for CosFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let angle = get_angle(args, symbols, &self.angle_mode.borrow()).await?;
+        Ok(Value::Double(angle.cos()))
+    }
+}
+
+/// The `DEG` command.
+pub struct DegCommand {
+    metadata: CallableMetadata,
+    angle_mode: Rc<RefCell<AngleMode>>,
+}
+
+impl DegCommand {
+    /// Creates a new instance of the command.
+    pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("DEG", VarType::Void)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Sets degrees mode of calculation.
+The default condition for the trigonometric functions is to use radians.  DEG configures the \
+environment to use degrees until instructed otherwise.",
+                )
+                .build(),
+            angle_mode,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for DegCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
+            return Err(CallError::ArgumentError("DEG takes no arguments".to_owned()));
+        }
+        *self.angle_mode.borrow_mut() = AngleMode::Degrees;
+        Ok(())
     }
 }
 
@@ -301,6 +458,77 @@ impl Function for MaxiFunction {
     }
 }
 
+/// The `PI` function.
+pub struct PiFunction {
+    metadata: CallableMetadata,
+}
+
+impl PiFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("PI", VarType::Double)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description("Returns the Archimedes' constant.")
+                .build(),
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for PiFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
+        if !args.is_empty() {
+            return Err(CallError::ArgumentError("no arguments allowed".to_owned()));
+        }
+        Ok(Value::Double(std::f64::consts::PI))
+    }
+}
+
+/// The `RAD` command.
+pub struct RadCommand {
+    metadata: CallableMetadata,
+    angle_mode: Rc<RefCell<AngleMode>>,
+}
+
+impl RadCommand {
+    /// Creates a new instance of the command.
+    pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("RAD", VarType::Void)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Sets radians mode of calculation.
+The default condition for the trigonometric functions is to use radians but it can be set to \
+degrees with the DEG command.  RAD restores the environment to use radians mode.",
+                )
+                .build(),
+            angle_mode,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for RadCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
+            return Err(CallError::ArgumentError("RAD takes no arguments".to_owned()));
+        }
+        *self.angle_mode.borrow_mut() = AngleMode::Radians;
+        Ok(())
+    }
+}
+
 /// The `RANDOMIZE` command.
 pub struct RandomizeCommand {
     metadata: CallableMetadata,
@@ -403,22 +631,145 @@ impl Function for RndFunction {
     }
 }
 
+/// The `SIN` function.
+pub struct SinFunction {
+    metadata: CallableMetadata,
+    angle_mode: Rc<RefCell<AngleMode>>,
+}
+
+impl SinFunction {
+    /// Creates a new instance of the function.
+    pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("SIN", VarType::Double)
+                .with_syntax("angle%|angle#")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Computes the sine of an angle.
+The input angle% or angle# is measured in degrees or radians depending on the angle mode as \
+selected by the DEG and RAD commands.",
+                )
+                .build(),
+            angle_mode,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for SinFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let angle = get_angle(args, symbols, &self.angle_mode.borrow()).await?;
+        Ok(Value::Double(angle.sin()))
+    }
+}
+
+/// The `TAN` function.
+pub struct TanFunction {
+    metadata: CallableMetadata,
+    angle_mode: Rc<RefCell<AngleMode>>,
+}
+
+impl TanFunction {
+    /// Creates a new instance of the function.
+    pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("TAN", VarType::Double)
+                .with_syntax("angle%|angle#")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Computes the tangent of an angle.
+The input angle% or angle# is measured in degrees or radians depending on the angle mode as \
+selected by the DEG and RAD commands.",
+                )
+                .build(),
+            angle_mode,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for TanFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+        let angle = get_angle(args, symbols, &self.angle_mode.borrow()).await?;
+        Ok(Value::Double(angle.tan()))
+    }
+}
+
 /// Adds all symbols provided by this module to the given `machine`.
 pub fn add_all(machine: &mut Machine) {
+    let angle_mode = Rc::from(RefCell::from(AngleMode::Radians));
     let prng = Rc::from(RefCell::from(Prng::new_from_entryopy()));
+    machine.add_clearable(Box::from(ClearableAngleMode { angle_mode: angle_mode.clone() }));
     machine.add_command(RandomizeCommand::new(prng.clone()));
+    machine.add_command(DegCommand::new(angle_mode.clone()));
+    machine.add_function(AtnFunction::new(angle_mode.clone()));
+    machine.add_function(CosFunction::new(angle_mode.clone()));
     machine.add_function(DtoiFunction::new());
     machine.add_function(ItodFunction::new());
     machine.add_function(MindFunction::new());
     machine.add_function(MiniFunction::new());
     machine.add_function(MaxdFunction::new());
     machine.add_function(MaxiFunction::new());
+    machine.add_function(PiFunction::new());
+    machine.add_command(RadCommand::new(angle_mode.clone()));
     machine.add_function(RndFunction::new(prng));
+    machine.add_function(SinFunction::new(angle_mode.clone()));
+    machine.add_function(TanFunction::new(angle_mode));
 }
 
 #[cfg(test)]
 mod tests {
     use crate::testutils::*;
+
+    #[test]
+    fn test_atn() {
+        check_expr_ok(123f64.atan(), "ATN(123)");
+        check_expr_ok(45.5f64.atan(), "ATN(45.5)");
+
+        check_expr_error("Syntax error in call to ATN: expected n%|n#", "ATN()");
+        check_expr_error("Syntax error in call to ATN: expected n%|n#", "ATN(FALSE)");
+        check_expr_error("Syntax error in call to ATN: expected n%|n#", "ATN(3, 4)");
+    }
+
+    #[test]
+    fn test_cos() {
+        check_expr_ok(123f64.cos(), "COS(123)");
+        check_expr_ok(45.5f64.cos(), "COS(45.5)");
+
+        check_expr_error("Syntax error in call to COS: expected angle%|angle#", "COS()");
+        check_expr_error("Syntax error in call to COS: expected angle%|angle#", "COS(FALSE)");
+        check_expr_error("Syntax error in call to COS: expected angle%|angle#", "COS(3, 4)");
+    }
+
+    #[test]
+    fn test_deg_rad_commands() {
+        let mut t = Tester::default();
+        t.run("result = SIN(90)").expect_var("result", 90f64.sin()).check();
+        t.run("DEG: result = SIN(90)").expect_var("result", 1.0).check();
+        t.run("RAD: result = SIN(90)").expect_var("result", 90f64.sin()).check();
+    }
+
+    #[test]
+    fn test_deg_rad_reset_on_clear() {
+        let mut t = Tester::default();
+        t.run("DEG").check();
+        t.get_machine().clear();
+        t.run("result = SIN(90)").expect_clear().expect_var("result", 90f64.sin()).check();
+    }
+
+    #[test]
+    fn test_deg_rad_errors() {
+        check_stmt_err("DEG takes no arguments", "DEG 1");
+        check_stmt_err("RAD takes no arguments", "RAD 1");
+    }
 
     #[test]
     fn test_dtoi() {
@@ -509,6 +860,13 @@ mod tests {
     }
 
     #[test]
+    fn test_pi() {
+        check_expr_ok(std::f64::consts::PI, "PI()");
+
+        check_expr_error("Syntax error in call to PI: no arguments allowed", "PI(3)");
+    }
+
+    #[test]
     fn test_randomize_and_rnd() {
         // These tests could lead to flakiness if the PRNG happens to yield the same number twice
         // in a row because we did not previously configure the seed.  It is very unlikely though,
@@ -531,5 +889,25 @@ mod tests {
 
         check_stmt_err("Random seed must be an integer", "RANDOMIZE 3.0");
         check_stmt_err("RANDOMIZE takes zero or one argument", "RANDOMIZE ,");
+    }
+
+    #[test]
+    fn test_sin() {
+        check_expr_ok(123f64.sin(), "SIN(123)");
+        check_expr_ok(45.5f64.sin(), "SIN(45.5)");
+
+        check_expr_error("Syntax error in call to SIN: expected angle%|angle#", "SIN()");
+        check_expr_error("Syntax error in call to SIN: expected angle%|angle#", "SIN(FALSE)");
+        check_expr_error("Syntax error in call to SIN: expected angle%|angle#", "SIN(3, 4)");
+    }
+
+    #[test]
+    fn test_tan() {
+        check_expr_ok(123f64.tan(), "TAN(123)");
+        check_expr_ok(45.5f64.tan(), "TAN(45.5)");
+
+        check_expr_error("Syntax error in call to TAN: expected angle%|angle#", "TAN()");
+        check_expr_error("Syntax error in call to TAN: expected angle%|angle#", "TAN(FALSE)");
+        check_expr_error("Syntax error in call to TAN: expected angle%|angle#", "TAN(3, 4)");
     }
 }
