@@ -23,6 +23,7 @@ use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
 };
 use std::cell::RefCell;
+use std::convert::TryFrom;
 use std::rc::Rc;
 
 /// Category description for all symbols provided by this module.
@@ -33,12 +34,12 @@ the commands described in HELP CONSOLE, and the pixel-based system, used by the 
 in this section.";
 
 /// Parses an expression that represents a single coordinate.
-async fn parse_coordinate(expr: &Expr, machine: &mut Machine) -> Result<usize, CallError> {
+async fn parse_coordinate(expr: &Expr, machine: &mut Machine) -> Result<i16, CallError> {
     match expr.eval(machine.get_mut_symbols()).await? {
-        Value::Integer(i) if i >= 0 => Ok(i as usize),
-        Value::Integer(i) => {
-            Err(CallError::ArgumentError(format!("Coordinate {} out of range", i)))
-        }
+        Value::Integer(i) => match i16::try_from(i) {
+            Ok(i) => Ok(i),
+            Err(_) => Err(CallError::ArgumentError(format!("Coordinate {} out of range", i))),
+        },
         _ => Err(CallError::ArgumentError(format!("Coordinate {:?} must be an integer", expr))),
     }
 }
@@ -333,8 +334,12 @@ mod tests {
             );
         }
 
-        for args in &["-1, 1, 1, 1", "1, -1, 1, 1", "1, 1, -1, 1", "1, 1, 1, -1"] {
-            check_stmt_err("Coordinate -1 out of range", &format!("{} {}", name, args));
+        for args in &["-40000, 1, 1, 1", "1, -40000, 1, 1", "1, 1, -40000, 1", "1, 1, 1, -40000"] {
+            check_stmt_err("Coordinate -40000 out of range", &format!("{} {}", name, args));
+        }
+
+        for args in &["40000, 1, 1, 1", "1, 40000, 1, 1", "1, 1, 40000, 1", "1, 1, 1, 40000"] {
+            check_stmt_err("Coordinate 40000 out of range", &format!("{} {}", name, args));
         }
 
         for args in &["\"a\", 1, 1, 1", "1, \"a\", 1, 1", "1, 1, \"a\", 1", "1, 1, 1, \"a\""] {
@@ -354,6 +359,14 @@ mod tests {
                 PixelsXY { x: 3, y: 4 },
             )])
             .check();
+
+        Tester::default()
+            .run("GFX_LINE -31000, -32000, 31000, 32000")
+            .expect_output([CapturedOut::DrawLine(
+                PixelsXY { x: -31000, y: -32000 },
+                PixelsXY { x: 31000, y: 32000 },
+            )])
+            .check();
     }
 
     #[test]
@@ -367,6 +380,16 @@ mod tests {
             .run("GFX_PIXEL 1, 2")
             .expect_output([CapturedOut::DrawPixel(PixelsXY { x: 1, y: 2 })])
             .check();
+
+        Tester::default()
+            .run("GFX_PIXEL -31000, -32000")
+            .expect_output([CapturedOut::DrawPixel(PixelsXY { x: -31000, y: -32000 })])
+            .check();
+
+        Tester::default()
+            .run("GFX_PIXEL 31000, 32000")
+            .expect_output([CapturedOut::DrawPixel(PixelsXY { x: 31000, y: 32000 })])
+            .check();
     }
 
     #[test]
@@ -375,8 +398,8 @@ mod tests {
             check_stmt_err("GFX_PIXEL takes two integer arguments separated by commas", cmd);
         }
 
-        for cmd in &["GFX_PIXEL -1, 1", "GFX_PIXEL 1, -1"] {
-            check_stmt_err("Coordinate -1 out of range", cmd);
+        for cmd in &["GFX_PIXEL -40000, 1", "GFX_PIXEL 1, -40000"] {
+            check_stmt_err("Coordinate -40000 out of range", cmd);
         }
 
         for cmd in &["GFX_PIXEL \"a\", 1", "GFX_PIXEL 1, \"a\""] {
@@ -393,6 +416,14 @@ mod tests {
                 PixelsXY { x: 3, y: 4 },
             )])
             .check();
+
+        Tester::default()
+            .run("GFX_RECT -31000, -32000, 31000, 32000")
+            .expect_output([CapturedOut::DrawRect(
+                PixelsXY { x: -31000, y: -32000 },
+                PixelsXY { x: 31000, y: 32000 },
+            )])
+            .check();
     }
 
     #[test]
@@ -407,6 +438,14 @@ mod tests {
             .expect_output([CapturedOut::DrawRectFilled(
                 PixelsXY { x: 1, y: 2 },
                 PixelsXY { x: 3, y: 4 },
+            )])
+            .check();
+
+        Tester::default()
+            .run("GFX_RECTF -31000, -32000, 31000, 32000")
+            .expect_output([CapturedOut::DrawRectFilled(
+                PixelsXY { x: -31000, y: -32000 },
+                PixelsXY { x: 31000, y: 32000 },
             )])
             .check();
     }

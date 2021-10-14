@@ -120,27 +120,22 @@ impl std::ops::Sub for CharsXY {
     }
 }
 
-impl std::ops::Mul<PixelsXY> for CharsXY {
-    type Output = PixelsXY;
-
-    fn mul(self, rhs: PixelsXY) -> Self::Output {
-        PixelsXY { x: self.x * rhs.x, y: self.y * rhs.y }
-    }
-}
-
 /// Represents a coordinate for pixel-based console operations.
+///
+/// Coordinates can be off-screen, which means they can be negative and/or can exceed the
+/// bottom-right margin.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PixelsXY {
-    /// The column number, starting from zero.
-    pub x: usize,
+    /// The column number.
+    pub x: i16,
 
-    /// The row number, starting from zero.
-    pub y: usize,
+    /// The row number.
+    pub y: i16,
 }
 
 impl PixelsXY {
     /// Constructs a new coordinate at the given `(x, y)` position.
-    pub fn new(x: usize, y: usize) -> Self {
+    pub fn new(x: i16, y: i16) -> Self {
         Self { x, y }
     }
 }

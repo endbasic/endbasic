@@ -28,7 +28,7 @@ use sdl2::ttf::{Font, FontError, InitError, Sdl2TtfContext};
 use sdl2::video::{Window, WindowBuildError};
 use sdl2::{EventPump, Sdl};
 use std::cmp;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::io;
 use std::path::Path;
 
@@ -107,10 +107,89 @@ fn window_build_error_to_io_error(e: WindowBuildError) -> io::Error {
     io::Error::new(kind, e)
 }
 
+/// Converts a `usize` into an `i16`, capping out of bounds values.
+fn clamp_usize_as_i16(value: usize) -> i16 {
+    if value > (i16::MAX as usize) {
+        i16::MAX
+    } else {
+        value as i16
+    }
+}
+
+/// Converts a `usize` into an `u16`, capping out of bounds values.
+fn clamp_usize_as_u16(value: usize) -> u16 {
+    if value > usize::from(u16::MAX) {
+        u16::MAX
+    } else {
+        value as u16
+    }
+}
+
+/// Converts a `u32` into an `u16`, capping out of bounds values.
+fn clamp_u32_as_u16(value: u32) -> u16 {
+    if value > u32::from(u16::MAX) {
+        u16::MAX
+    } else {
+        value as u16
+    }
+}
+
+/// Represents a rectangular size in pixels.
+#[derive(Clone, Copy)]
+struct SizeInPixels {
+    /// The width in pixels.
+    width: u16,
+
+    /// The height in pixels.
+    height: u16,
+}
+
+impl std::ops::Mul<SizeInPixels> for CharsXY {
+    type Output = PixelsXY;
+
+    fn mul(self, rhs: SizeInPixels) -> Self::Output {
+        PixelsXY {
+            x: clamp_usize_as_i16(self.x * usize::from(rhs.width)),
+            y: clamp_usize_as_i16(self.y * usize::from(rhs.height)),
+        }
+    }
+}
+
+impl From<PixelsXY> for Point {
+    fn from(p: PixelsXY) -> Point {
+        Point::new(i32::from(p.x), i32::from(p.y))
+    }
+}
+
+/// Constructs an SDL `Rect` from a `PixelsXY` `origin` and a `PixelsSize` `size`.
+fn rect_origin_size(origin: PixelsXY, size: SizeInPixels) -> Rect {
+    Rect::new(
+        i32::from(origin.x),
+        i32::from(origin.y),
+        u32::from(size.width),
+        u32::from(size.height),
+    )
+}
+
+/// Constructs an SDL `Rect` from two `PixelsXY` points.
+fn rect_points(x1y1: PixelsXY, x2y2: PixelsXY) -> Rect {
+    let (x1, x2) = if x1y1.x < x2y2.x { (x1y1.x, x2y2.x) } else { (x2y2.x, x1y1.x) };
+    let (y1, y2) = if x1y1.y < x2y2.y { (x1y1.y, x2y2.y) } else { (x2y2.y, x1y1.y) };
+
+    let width =
+        u32::try_from(i32::from(x2) - i32::from(x1)).expect("Width must have been non-negative");
+    let height =
+        u32::try_from(i32::from(y2) - i32::from(y1)).expect("Height must have been non-negative");
+    let x1 = i32::from(x1);
+    let y1 = i32::from(y1);
+
+    Rect::new(x1, y1, width, height)
+}
+
 /// Wrapper around a monospaced SDL font.
 struct MonospacedFont<'a> {
     font: Font<'a, 'static>,
-    glyph_size: PixelsXY,
+    glyph_size: SizeInPixels,
 }
 
 impl<'a> MonospacedFont<'a> {
@@ -139,7 +218,7 @@ impl<'a> MonospacedFont<'a> {
                 }
             };
 
-            let width = match usize::try_from(metrics.advance) {
+            let width = match u16::try_from(metrics.advance) {
                 Ok(0) => {
                     return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid font width 0"))
                 }
@@ -152,107 +231,36 @@ impl<'a> MonospacedFont<'a> {
                 }
             };
 
-            let height = match usize::try_from(font.height()) {
+            let height = match u16::try_from(font.height()) {
                 Ok(0) => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid font height"))
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Invalid font height 0",
+                    ))
                 }
                 Ok(height) => height,
                 Err(e) => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
-                        format!("Invalid font height 0: {}", e),
+                        format!("Invalid font height {}: {}", font.height(), e),
                     ))
                 }
             };
 
-            PixelsXY::new(width, height)
+            SizeInPixels { width, height }
         };
 
         Ok(MonospacedFont { font, glyph_size })
     }
 
     /// Computes the number of characters that fit within the given pixels `area`.
-    fn chars_in_area(&self, area: PixelsXY) -> CharsXY {
-        debug_assert!(area.x > 0);
-        debug_assert!(area.y > 0);
-        CharsXY::new(area.x / self.glyph_size.x, area.y / self.glyph_size.y)
-    }
-}
-
-/// Converts a `usize` `value` coordinate named `name` to an `i32` with bounds checking.
-fn usize_to_i32(value: usize, name: &'static str) -> io::Result<i32> {
-    match i32::try_from(value) {
-        Ok(value) => Ok(value),
-        Err(e) => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("Bad {} {}: {}", name, value, e),
-            ))
-        }
-    }
-}
-
-/// Converts a `usize` `value` coordinate named `name` to an `u32` with bounds checking.
-fn usize_to_u32(value: usize, name: &'static str) -> io::Result<u32> {
-    match u32::try_from(value) {
-        Ok(value) => Ok(value),
-        Err(e) => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("Bad {} {}: {}", name, value, e),
-            ))
-        }
-    }
-}
-
-/// Constructs an SDL `Rect` from `usize` values, making sure they are in range.
-fn rect_usize(x1: usize, y1: usize, width: usize, height: usize) -> io::Result<Rect> {
-    let x1 = usize_to_i32(x1, "x1 coordinate")?;
-    let y1 = usize_to_i32(y1, "y1 coordinate")?;
-    let width = usize_to_u32(width, "width")?;
-    let height = usize_to_u32(height, "height")?;
-
-    Ok(Rect::new(x1, y1, width, height))
-}
-
-/// Constructs an SDL `Rect` from `PixelsXY` values, making sure they are in range.
-fn rect_pixelsxy(x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<Rect> {
-    let (x1, x2) = if x1y1.x < x2y2.x { (x1y1.x, x2y2.x) } else { (x2y2.x, x1y1.x) };
-    let (y1, y2) = if x1y1.y < x2y2.y { (x1y1.y, x2y2.y) } else { (x2y2.y, x1y1.y) };
-
-    let width = usize_to_u32(x2 - x1, "width")?;
-    let height = usize_to_u32(y2 - y1, "height")?;
-    let x1 = usize_to_i32(x1, "x1 coordinate")?;
-    let y1 = usize_to_i32(y1, "y1 coordinate")?;
-
-    Ok(Rect::new(x1, y1, width, height))
-}
-
-impl TryInto<Point> for PixelsXY {
-    type Error = io::Error;
-
-    fn try_into(self) -> Result<Point, Self::Error> {
-        let x: i32 = match self.x.try_into() {
-            Ok(x) => x,
-            Err(e) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Invalid x coordinate {}: {}", self.x, e),
-                ))
-            }
-        };
-
-        let y: i32 = match self.y.try_into() {
-            Ok(y) => y,
-            Err(e) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Invalid y coordinate {}: {}", self.y, e),
-                ))
-            }
-        };
-
-        Ok(Point::new(x, y))
+    fn chars_in_area(&self, area: SizeInPixels) -> CharsXY {
+        debug_assert!(area.width > 0);
+        debug_assert!(area.height > 0);
+        CharsXY::new(
+            usize::from(area.width / self.glyph_size.width),
+            usize::from(area.height / self.glyph_size.height),
+        )
     }
 }
 
@@ -368,7 +376,7 @@ pub struct SdlConsole {
     texture_creator: TextureCreator<SurfaceContext<'static>>,
 
     /// Size of the console in pixels.
-    size_pixels: PixelsXY,
+    size_pixels: SizeInPixels,
 
     /// Size of the console in characters.  This is derived from `size_pixels` and the `font` glyph
     /// metrics.
@@ -438,22 +446,20 @@ impl SdlConsole {
 
         let size_pixels = {
             let (width, height) = window.drawable_size();
-            PixelsXY::new(
-                usize::try_from(width).expect("Width must fit in usize"),
-                usize::try_from(height).expect("Height must fit in usize"),
-            )
+            SizeInPixels { width: clamp_u32_as_u16(width), height: clamp_u32_as_u16(height) }
         };
         let size_chars = font.chars_in_area(size_pixels);
 
         title += &format!(
             " - {}x{} pixels, {}x{} chars",
-            size_pixels.x, size_pixels.y, size_chars.x, size_chars.y
+            size_pixels.width, size_pixels.height, size_chars.x, size_chars.y
         );
         window.set_title(&title).expect("There should have been no NULLs in the formatted title");
 
         let pixel_format = window.window_pixel_format();
-        let surface = Surface::new(size_pixels.x as u32, size_pixels.y as u32, pixel_format)
-            .map_err(string_error_to_io_error)?;
+        let surface =
+            Surface::new(u32::from(size_pixels.width), u32::from(size_pixels.height), pixel_format)
+                .map_err(string_error_to_io_error)?;
         let canvas = surface.into_canvas().map_err(string_error_to_io_error)?;
         let texture_creator = canvas.texture_creator();
 
@@ -511,10 +517,7 @@ impl SdlConsole {
             return Ok(());
         }
 
-        let pos = self.cursor_pos * self.font.glyph_size;
-        let width = self.font.glyph_size.x;
-        let height = self.font.glyph_size.y;
-        let rect = rect_usize(pos.x, pos.y, width, height)?;
+        let rect = rect_origin_size(self.cursor_pos * self.font.glyph_size, self.font.glyph_size);
 
         assert!(self.cursor_backup.is_empty());
         self.cursor_backup =
@@ -534,21 +537,19 @@ impl SdlConsole {
             return Ok(());
         }
 
-        let pos = self.cursor_pos * self.font.glyph_size;
-        let width = self.font.glyph_size.x;
-        let height = self.font.glyph_size.y;
-        let rect = rect_usize(pos.x, pos.y, width, height)?;
+        let rect = rect_origin_size(self.cursor_pos * self.font.glyph_size, self.font.glyph_size);
 
         let mut texture = self
             .texture_creator
-            .create_texture_static(
-                None,
-                u32::try_from(width).expect("Glyph width is too large"),
-                u32::try_from(height).expect("Glyph height is too large"),
-            )
+            .create_texture_static(None, rect.width(), rect.height())
             .map_err(texture_value_error_to_io_error)?;
         texture
-            .update(None, &self.cursor_backup, width * self.pixel_format.byte_size_per_pixel())
+            .update(
+                None,
+                &self.cursor_backup,
+                usize::try_from(rect.width()).expect("Width must fit in usize")
+                    * self.pixel_format.byte_size_per_pixel(),
+            )
             .map_err(update_texture_error_to_io_error)?;
         self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)?;
         self.cursor_backup.clear();
@@ -570,12 +571,12 @@ impl SdlConsole {
             let mut temp = Surface::new(src.width(), src.height(), self.pixel_format)
                 .map_err(string_error_to_io_error)?;
             src.blit(
-                rect_usize(
+                Rect::new(
                     0,
-                    self.font.glyph_size.y,
-                    self.size_pixels.x,
-                    self.size_pixels.y - self.font.glyph_size.y,
-                )?,
+                    i32::from(self.font.glyph_size.height),
+                    u32::from(self.size_pixels.width),
+                    u32::from(self.size_pixels.height - self.font.glyph_size.height),
+                ),
                 &mut temp,
                 None,
             )
@@ -584,12 +585,12 @@ impl SdlConsole {
         };
         shifted
             .fill_rect(
-                rect_usize(
+                Rect::new(
                     0,
-                    self.size_pixels.y - self.font.glyph_size.y,
-                    self.size_pixels.x,
-                    self.font.glyph_size.y,
-                )?,
+                    i32::from(self.size_pixels.height - self.font.glyph_size.height),
+                    u32::from(self.size_pixels.width),
+                    u32::from(self.font.glyph_size.height),
+                ),
                 self.bg_color,
             )
             .map_err(string_error_to_io_error)?;
@@ -605,6 +606,13 @@ impl SdlConsole {
     fn raw_write(&mut self, bytes: &[u8], start: PixelsXY) -> io::Result<()> {
         debug_assert!(!bytes.is_empty(), "SDL does not like empty strings");
 
+        let len = {
+            if bytes.len() > (u16::MAX as usize) {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "String too long"));
+            }
+            bytes.len() as u16
+        };
+
         let surface = self
             .font
             .font
@@ -616,12 +624,12 @@ impl SdlConsole {
             .create_texture_from_surface(&surface)
             .map_err(texture_value_error_to_io_error)?;
 
-        let rect = rect_usize(
-            start.x,
-            start.y,
-            bytes.len() * self.font.glyph_size.x,
-            self.font.glyph_size.y,
-        )?;
+        let rect = Rect::new(
+            i32::from(start.x),
+            i32::from(start.y),
+            u32::from(len) * u32::from(self.font.glyph_size.width),
+            u32::from(self.font.glyph_size.height),
+        );
         self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)?;
 
         Ok(())
@@ -668,21 +676,26 @@ impl Console for SdlConsole {
             }
             ClearType::CurrentLine => {
                 self.clear_cursor()?;
-                let height = self.font.glyph_size.y;
-                let y1 = self.cursor_pos.y * height;
                 self.canvas
-                    .fill_rect(rect_usize(0, y1, self.size_pixels.x, height)?)
+                    .fill_rect(Rect::new(
+                        0,
+                        i32::from(
+                            clamp_usize_as_u16(self.cursor_pos.y) * self.font.glyph_size.height,
+                        ),
+                        u32::from(self.size_pixels.width),
+                        u32::from(self.font.glyph_size.height),
+                    ))
                     .map_err(string_error_to_io_error)?;
                 self.cursor_pos.x = 0;
                 self.draw_cursor()?;
             }
             ClearType::PreviousChar => {
                 if self.cursor_pos.x > 0 {
-                    let pos = self.cursor_pos * self.font.glyph_size;
-                    let width = self.font.glyph_size.x;
-                    let height = self.font.glyph_size.y;
                     self.canvas
-                        .fill_rect(rect_usize(pos.x, pos.y, width, height)?)
+                        .fill_rect(rect_origin_size(
+                            self.cursor_pos * self.font.glyph_size,
+                            self.font.glyph_size,
+                        ))
                         .map_err(string_error_to_io_error)?;
                     self.cursor_pos.x -= 1;
                 }
@@ -690,9 +703,17 @@ impl Console for SdlConsole {
             ClearType::UntilNewLine => {
                 self.clear_cursor()?;
                 let pos = self.cursor_pos * self.font.glyph_size;
-                let height = self.font.glyph_size.y;
+                debug_assert!(pos.x >= 0, "Inputs to pos are unsigned");
+                debug_assert!(pos.y >= 0, "Inputs to pos are unsigned");
+                let height = self.font.glyph_size.height;
                 self.canvas
-                    .fill_rect(rect_usize(pos.x, pos.y, self.size_pixels.x - pos.x, height)?)
+                    .fill_rect(Rect::new(
+                        i32::from(pos.x),
+                        i32::from(pos.y),
+                        u32::try_from(i32::from(self.size_pixels.width) - i32::from(pos.x))
+                            .expect("pos must have been positive"),
+                        u32::from(height),
+                    ))
                     .map_err(string_error_to_io_error)?;
                 self.draw_cursor()?;
             }
@@ -762,10 +783,18 @@ impl Console for SdlConsole {
         {
             let mut texture = self
                 .texture_creator
-                .create_texture_static(None, self.size_pixels.x as u32, self.size_pixels.y as u32)
+                .create_texture_static(
+                    None,
+                    u32::from(self.size_pixels.width),
+                    u32::from(self.size_pixels.height),
+                )
                 .map_err(texture_value_error_to_io_error)?;
             texture
-                .update(None, &pixels, self.size_pixels.x * self.pixel_format.byte_size_per_pixel())
+                .update(
+                    None,
+                    &pixels,
+                    usize::from(self.size_pixels.width) * self.pixel_format.byte_size_per_pixel(),
+                )
                 .map_err(update_texture_error_to_io_error)?;
 
             self.canvas.clear();
@@ -867,29 +896,26 @@ impl Console for SdlConsole {
     }
 
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        let x1y1: Point = x1y1.try_into()?;
-        let x2y2: Point = x2y2.try_into()?;
         self.canvas.set_draw_color(self.fg_color);
         self.canvas.draw_line(x1y1, x2y2).map_err(string_error_to_io_error)?;
         self.present_canvas()
     }
 
     fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
-        let xy: Point = xy.try_into()?;
         self.canvas.set_draw_color(self.fg_color);
         self.canvas.draw_point(xy).map_err(string_error_to_io_error)?;
         self.present_canvas()
     }
 
     fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        let rect = rect_pixelsxy(x1y1, x2y2)?;
+        let rect = rect_points(x1y1, x2y2);
         self.canvas.set_draw_color(self.fg_color);
         self.canvas.draw_rect(rect).map_err(string_error_to_io_error)?;
         self.present_canvas()
     }
 
     fn draw_rect_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        let rect = rect_pixelsxy(x1y1, x2y2)?;
+        let rect = rect_points(x1y1, x2y2);
         self.canvas.set_draw_color(self.fg_color);
         self.canvas.fill_rect(rect).map_err(string_error_to_io_error)?;
         self.present_canvas()
@@ -1060,22 +1086,75 @@ mod tests {
     use std::time::Duration;
 
     #[test]
-    fn test_rect_pixelsxy() {
+    fn test_clamp_usize_as_i16() {
+        assert_eq!(0, clamp_usize_as_i16(0));
+        assert_eq!(10, clamp_usize_as_i16(10));
+        assert_eq!(i16::MAX, clamp_usize_as_i16(usize::try_from(i16::MAX).unwrap()));
+        assert_eq!(i16::MAX, clamp_usize_as_i16(usize::try_from(i32::MAX).unwrap()));
+    }
+
+    #[test]
+    fn test_clamp_usize_as_u16() {
+        assert_eq!(0, clamp_usize_as_u16(0));
+        assert_eq!(10, clamp_usize_as_u16(10));
+        assert_eq!(u16::MAX, clamp_usize_as_u16(usize::from(u16::MAX)));
+        assert_eq!(u16::MAX, clamp_usize_as_u16(usize::try_from(u32::MAX).unwrap()));
+    }
+
+    #[test]
+    fn test_clamp_u32_as_u16() {
+        assert_eq!(0, clamp_u32_as_u16(0));
+        assert_eq!(10, clamp_u32_as_u16(10));
+        assert_eq!(u16::MAX, clamp_u32_as_u16(u32::from(u16::MAX)));
+        assert_eq!(u16::MAX, clamp_u32_as_u16(u32::MAX));
+    }
+
+    #[test]
+    fn test_rect_origin_size() {
+        assert_eq!(
+            Rect::new(-31000, -32000, 63000, 64000),
+            rect_origin_size(
+                PixelsXY { x: -31000, y: -32000 },
+                SizeInPixels { width: 63000, height: 64000 }
+            )
+        );
+    }
+
+    #[test]
+    fn test_rect_points() {
         assert_eq!(
             Rect::new(10, 20, 100, 200),
-            rect_pixelsxy(PixelsXY { x: 10, y: 20 }, PixelsXY { x: 110, y: 220 }).unwrap()
+            rect_points(PixelsXY { x: 10, y: 20 }, PixelsXY { x: 110, y: 220 })
         );
         assert_eq!(
             Rect::new(10, 20, 100, 200),
-            rect_pixelsxy(PixelsXY { x: 110, y: 20 }, PixelsXY { x: 10, y: 220 }).unwrap()
+            rect_points(PixelsXY { x: 110, y: 20 }, PixelsXY { x: 10, y: 220 })
         );
         assert_eq!(
             Rect::new(10, 20, 100, 200),
-            rect_pixelsxy(PixelsXY { x: 10, y: 220 }, PixelsXY { x: 110, y: 20 }).unwrap()
+            rect_points(PixelsXY { x: 10, y: 220 }, PixelsXY { x: 110, y: 20 })
         );
         assert_eq!(
             Rect::new(10, 20, 100, 200),
-            rect_pixelsxy(PixelsXY { x: 110, y: 220 }, PixelsXY { x: 10, y: 20 }).unwrap()
+            rect_points(PixelsXY { x: 110, y: 220 }, PixelsXY { x: 10, y: 20 })
+        );
+
+        assert_eq!(
+            Rect::new(-31000, -32000, 31005, 32010),
+            rect_points(PixelsXY { x: 5, y: -32000 }, PixelsXY { x: -31000, y: 10 })
+        );
+        assert_eq!(
+            Rect::new(10, 5, 30990, 31995),
+            rect_points(PixelsXY { x: 31000, y: 5 }, PixelsXY { x: 10, y: 32000 })
+        );
+
+        assert_eq!(
+            Rect::new(-31000, -32000, 62000, 64000),
+            rect_points(PixelsXY { x: -31000, y: -32000 }, PixelsXY { x: 31000, y: 32000 })
+        );
+        assert_eq!(
+            Rect::new(-31000, -32000, 62000, 64000),
+            rect_points(PixelsXY { x: 31000, y: 32000 }, PixelsXY { x: -31000, y: -32000 })
         );
     }
 
@@ -1328,27 +1407,49 @@ mod tests {
     #[ignore = "Requires a graphical environment"]
     fn test_draw() {
         let mut test = SdlTest::new();
+        let console = test.console();
 
-        test.console().color(Some(15), None).unwrap();
-        test.console().draw_line(PixelsXY { x: 10, y: 50 }, PixelsXY { x: 110, y: 60 }).unwrap();
-        test.console().color(Some(12), Some(1)).unwrap();
-        test.console().draw_line(PixelsXY { x: 120, y: 70 }, PixelsXY { x: 20, y: 60 }).unwrap();
-
-        test.console().color(Some(15), None).unwrap();
-        test.console()
-            .draw_rect_filled(PixelsXY { x: 380, y: 180 }, PixelsXY { x: 220, y: 120 })
-            .unwrap();
-        test.console().color(Some(10), None).unwrap();
-        test.console().draw_rect(PixelsXY { x: 200, y: 100 }, PixelsXY { x: 400, y: 200 }).unwrap();
-
-        test.console().color(Some(14), None).unwrap();
-        for i in 0..8 {
-            test.console().draw_pixel(PixelsXY { x: i * 100, y: 300 }).unwrap();
+        fn xy(x: i16, y: i16) -> PixelsXY {
+            PixelsXY { x, y }
         }
 
-        test.console().color(None, None).unwrap();
-        test.console().locate(CharsXY { x: 4, y: 22 }).unwrap();
-        test.console().write(b"Done!").unwrap();
+        // Draw some stuff that is completely visible.
+        console.color(Some(15), None).unwrap();
+        console.draw_line(xy(10, 50), xy(110, 60)).unwrap();
+        console.color(Some(12), Some(1)).unwrap();
+        console.draw_line(xy(120, 70), xy(20, 60)).unwrap();
+
+        console.color(Some(15), None).unwrap();
+        console.draw_rect_filled(xy(380, 180), xy(220, 120)).unwrap();
+        console.color(Some(10), None).unwrap();
+        console.draw_rect(xy(200, 100), xy(400, 200)).unwrap();
+
+        console.color(Some(14), None).unwrap();
+        for i in 0..8 {
+            console.draw_pixel(xy(i * 100, 300)).unwrap();
+        }
+
+        // Draw some stuff that is completely off screen.
+        console.color(Some(15), None).unwrap();
+        console.draw_pixel(xy(-1, 1)).unwrap();
+        console.draw_pixel(xy(801, 601)).unwrap();
+        console.draw_pixel(xy(-1, 0)).unwrap();
+        console.draw_pixel(xy(0, 601)).unwrap();
+        console.draw_line(xy(-1000, -2000), xy(-50, -30)).unwrap();
+        console.draw_rect(xy(-10, -10), xy(-5, -5)).unwrap();
+        console.draw_rect(xy(-10, -10), xy(810, 610)).unwrap();
+        console.draw_rect(xy(810, 610), xy(815, 615)).unwrap();
+
+        // Draw some stuff that is partially visible.
+        console.color(Some(15), None).unwrap();
+        console.draw_line(xy(-1000, 500), xy(100, 520)).unwrap();
+        console.draw_rect(xy(-10, 400), xy(10, 450)).unwrap();
+        console.draw_rect(xy(790, 410), xy(810, 440)).unwrap();
+        console.draw_rect_filled(xy(500, -10), xy(510, 610)).unwrap();
+
+        console.color(None, None).unwrap();
+        console.locate(CharsXY { x: 4, y: 22 }).unwrap();
+        console.write(b"Done!").unwrap();
 
         test.verify("sdl-draw");
     }
@@ -1376,5 +1477,23 @@ mod tests {
         test.console().print("With sync disabled").unwrap();
 
         test.verify("sdl-sync");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_write_too_long() {
+        let mut test = SdlTest::new();
+
+        let len = usize::from(u16::MAX) + 1;
+        let bytes = vec![b'x'; len];
+        // We have to reach into raw_write here because the public write() wraps text and would
+        // never trigger this problem (until we expose unwrapped writes at a later stage and forget
+        // about this corner case).
+        assert_eq!(
+            io::ErrorKind::InvalidInput,
+            test.console().raw_write(&bytes, PixelsXY { x: 0, y: 0 }).unwrap_err().kind()
+        );
+
+        test.verify("sdl-empty");
     }
 }
