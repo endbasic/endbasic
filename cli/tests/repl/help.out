@@ -514,7 +514,7 @@ Output from HELP LOAD:
 
 Output from HELP LOCATE:
 
-    LOCATE row%, column%
+    LOCATE column%, row%
 
     Moves the cursor to the given position.
 

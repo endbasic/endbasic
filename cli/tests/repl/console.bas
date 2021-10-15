@@ -32,7 +32,7 @@ WHILE row < 10
     column = 0
     WHILE column < 20
         COLOR fg, 4
-        LOCATE row + 5, column + 10
+        LOCATE column + 10, row + 5
         PRINT "#"
         column = column + 1
         fg = (fg + 1) MOD 15
@@ -40,4 +40,4 @@ WHILE row < 10
     row = row + 1
 WEND
 
-LOCATE 100, 0
+LOCATE 0, 100

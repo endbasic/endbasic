@@ -27,6 +27,11 @@ for the time being.**
 *   Added the `DEG` and `RAD` trigonometric commands and the `ATN`, `COS`, `PI`,
     `SIN` and `TAN` functions.
 
+*   Fixed `LOCATE` so that the first argument is the column number and the
+    second argument is the row number.  It should always have been this way,
+    but this is now necessary to match the ordering of the coordinates in all
+    graphics commands and avoid tons of confusion.
+
 *   Extended the `CLEAR` and `NEW` commands so that they reset various
     properties of the machine, not just variables.  This includes the state of
     the console, whose color and video syncing bit are reset; and the GPIO pins,
