@@ -187,12 +187,12 @@ PRINT "For example, we can print the foundational colors by selecting them with"
 PRINT "the \"COLOR\" command and positioning the cursor with \"LOCATE\":"
 PRINT
 FOR c% = 0 TO 7
-    LOCATE 11 + c%, 4
+    LOCATE 4, 11 + c%
     COLOR c%
     PRINT "This is color"; c%
 NEXT
 FOR c% = 8 TO 15
-    LOCATE 11 + c% - 8, 23
+    LOCATE 23, 11 + c% - 8
     COLOR c%
     PRINT "This is color"; c%
 NEXT

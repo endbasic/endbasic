@@ -310,7 +310,7 @@ impl LocateCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOCATE", VarType::Void)
-                .with_syntax("row%, column%")
+                .with_syntax("column%, row%")
                 .with_category(CATEGORY)
                 .with_description("Moves the cursor to the given position.")
                 .build(),
@@ -329,24 +329,13 @@ impl Command for LocateCommand {
         if args.len() != 2 {
             return Err(CallError::ArgumentError("LOCATE takes two arguments".to_owned()));
         }
-        let (row_arg, column_arg) = (&args[0], &args[1]);
-        if row_arg.1 != ArgSep::Long {
+        let (column_arg, row_arg) = (&args[0], &args[1]);
+        if column_arg.1 != ArgSep::Long {
             return Err(CallError::ArgumentError(
                 "LOCATE expects arguments separated by a comma".to_owned(),
             ));
         }
-        debug_assert!(column_arg.1 == ArgSep::End);
-
-        let row = match &row_arg.0 {
-            Some(arg) => match arg.eval(machine.get_mut_symbols()).await? {
-                Value::Integer(i) => match u16::try_from(i) {
-                    Ok(v) => v,
-                    Err(_) => return Err(CallError::ArgumentError("Row out of range".to_owned())),
-                },
-                _ => return Err(CallError::ArgumentError("Row must be an integer".to_owned())),
-            },
-            None => return Err(CallError::ArgumentError("Row cannot be empty".to_owned())),
-        };
+        debug_assert!(row_arg.1 == ArgSep::End);
 
         let column = match &column_arg.0 {
             Some(arg) => match arg.eval(machine.get_mut_symbols()).await? {
@@ -359,6 +348,17 @@ impl Command for LocateCommand {
                 _ => return Err(CallError::ArgumentError("Column must be an integer".to_owned())),
             },
             None => return Err(CallError::ArgumentError("Column cannot be empty".to_owned())),
+        };
+
+        let row = match &row_arg.0 {
+            Some(arg) => match arg.eval(machine.get_mut_symbols()).await? {
+                Value::Integer(i) => match u16::try_from(i) {
+                    Ok(v) => v,
+                    Err(_) => return Err(CallError::ArgumentError("Row out of range".to_owned())),
+                },
+                _ => return Err(CallError::ArgumentError("Row must be an integer".to_owned())),
+            },
+            None => return Err(CallError::ArgumentError("Row cannot be empty".to_owned())),
         };
 
         self.console.borrow_mut().locate(CharsXY::new(column, row))?;
@@ -602,7 +602,7 @@ mod tests {
 
         Tester::default()
             .run("LOCATE 63000, 64000")
-            .expect_output([CapturedOut::Locate(CharsXY::new(64000, 63000))])
+            .expect_output([CapturedOut::Locate(CharsXY::new(63000, 64000))])
             .check();
     }
 
@@ -613,15 +613,15 @@ mod tests {
         check_stmt_err("LOCATE takes two arguments", "LOCATE 1, 2, 3");
         check_stmt_err("LOCATE expects arguments separated by a comma", "LOCATE 1; 2");
 
-        check_stmt_err("Row out of range", "LOCATE -1, 2");
-        check_stmt_err("Row out of range", "LOCATE 70000, 2");
-        check_stmt_err("Row must be an integer", "LOCATE TRUE, 2");
-        check_stmt_err("Row cannot be empty", "LOCATE , 2");
+        check_stmt_err("Column out of range", "LOCATE -1, 2");
+        check_stmt_err("Column out of range", "LOCATE 70000, 2");
+        check_stmt_err("Column must be an integer", "LOCATE TRUE, 2");
+        check_stmt_err("Column cannot be empty", "LOCATE , 2");
 
-        check_stmt_err("Column out of range", "LOCATE 1, -2");
-        check_stmt_err("Column out of range", "LOCATE 1, 70000");
-        check_stmt_err("Column must be an integer", "LOCATE 1, TRUE");
-        check_stmt_err("Column cannot be empty", "LOCATE 1,");
+        check_stmt_err("Row out of range", "LOCATE 1, -2");
+        check_stmt_err("Row out of range", "LOCATE 1, 70000");
+        check_stmt_err("Row must be an integer", "LOCATE 1, TRUE");
+        check_stmt_err("Row cannot be empty", "LOCATE 1,");
     }
 
     #[test]
