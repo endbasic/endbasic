@@ -20,6 +20,7 @@ use crate::program::Program;
 use async_trait::async_trait;
 use std::cmp;
 use std::io;
+use std::ops;
 
 /// The color of the main editor window.
 const TEXT_COLOR: (Option<u8>, Option<u8>) = (Some(15), None);
@@ -39,6 +40,24 @@ fn copy_indent(line: &str) -> String {
     indent
 }
 
+/// Represents a position within a file.
+#[derive(Clone, Copy, Default)]
+struct FilePos {
+    /// The column number, starting from zero.
+    line: usize,
+
+    /// The row number, starting from zero.
+    col: usize,
+}
+
+impl ops::Sub for FilePos {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self::Output {
+        FilePos { line: self.line - other.line, col: self.col - other.col }
+    }
+}
+
 /// An interactive console-based text editor.
 ///
 /// The text editor owns the textual contents it is editing.
@@ -47,10 +66,10 @@ pub struct Editor {
     content: Vec<String>,
 
     /// Position of the top-left character of the file visible in the console.
-    viewport_pos: CharsXY,
+    viewport_pos: FilePos,
 
     /// Insertion position within the file.
-    file_pos: CharsXY,
+    file_pos: FilePos,
 
     /// Last edited column, used when moving vertically to preserve the insertion point even when
     /// traversing shorter lines.
@@ -62,8 +81,8 @@ impl Default for Editor {
     fn default() -> Self {
         Self {
             content: vec![],
-            viewport_pos: CharsXY::default(),
-            file_pos: CharsXY::default(),
+            viewport_pos: FilePos::default(),
+            file_pos: FilePos::default(),
             insert_col: 0,
         }
     }
@@ -80,7 +99,7 @@ impl Editor {
         let keys = " ESC Finish editing ";
         // Even though we track file positions as 0-indexed, display them as 1-indexed for a better
         // user experience given that this is what all other editor seem to do.
-        let pos = format!(" | Ln {}, Col {} ", self.file_pos.y + 1, self.file_pos.x + 1);
+        let pos = format!(" | Ln {}, Col {} ", self.file_pos.line + 1, self.file_pos.col + 1);
 
         let mut status = String::with_capacity(console_size.x);
         status.push_str(keys);
@@ -108,13 +127,13 @@ impl Editor {
         console.color(TEXT_COLOR.0, TEXT_COLOR.1)?;
         console.locate(CharsXY::default())?;
 
-        let mut row = self.viewport_pos.y;
+        let mut row = self.viewport_pos.line;
         let mut printed_rows = 0;
         while row < self.content.len() && printed_rows < console_size.y - 1 {
             let line = &self.content[row];
-            if line.len() >= self.viewport_pos.x {
-                let last = cmp::min(line.len(), self.viewport_pos.x + console_size.x);
-                let view = &line[self.viewport_pos.x..last];
+            if line.len() >= self.viewport_pos.col {
+                let last = cmp::min(line.len(), self.viewport_pos.col + console_size.x);
+                let view = &line[self.viewport_pos.col..last];
                 console.print(view)?;
             } else {
                 console.print("")?;
@@ -137,18 +156,18 @@ impl Editor {
         loop {
             // The key handling below only deals with moving the insertion position within the file
             // but does not bother to update the viewport. Adjust it now, if necessary.
-            if self.file_pos.y < self.viewport_pos.y {
-                self.viewport_pos.y -= 1;
+            if self.file_pos.line < self.viewport_pos.line {
+                self.viewport_pos.line -= 1;
                 need_refresh = true;
-            } else if self.file_pos.y > self.viewport_pos.y + console_size.y - 2 {
-                self.viewport_pos.y += 1;
+            } else if self.file_pos.line > self.viewport_pos.line + console_size.y - 2 {
+                self.viewport_pos.line += 1;
                 need_refresh = true;
             }
-            if self.file_pos.x < self.viewport_pos.x {
-                self.viewport_pos.x = self.file_pos.x;
+            if self.file_pos.col < self.viewport_pos.col {
+                self.viewport_pos.col = self.file_pos.col;
                 need_refresh = true;
-            } else if self.file_pos.x >= self.viewport_pos.x + console_size.x {
-                self.viewport_pos.x = self.file_pos.x - console_size.x + 1;
+            } else if self.file_pos.col >= self.viewport_pos.col + console_size.x {
+                self.viewport_pos.col = self.file_pos.col - console_size.x + 1;
                 need_refresh = true;
             }
 
@@ -161,96 +180,96 @@ impl Editor {
                 console.color(TEXT_COLOR.0, TEXT_COLOR.1)?;
             }
             let cursor_pos = self.file_pos - self.viewport_pos;
-            console.locate(cursor_pos)?;
+            console.locate(CharsXY::new(cursor_pos.col, cursor_pos.line))?;
             console.show_cursor()?;
 
             match console.read_key().await? {
                 Key::Escape | Key::Eof | Key::Interrupt => break,
 
                 Key::ArrowUp => {
-                    if self.file_pos.y > 0 {
-                        self.file_pos.y -= 1;
+                    if self.file_pos.line > 0 {
+                        self.file_pos.line -= 1;
                     }
 
-                    let line = &self.content[self.file_pos.y];
-                    self.file_pos.x = cmp::min(self.insert_col, line.len());
+                    let line = &self.content[self.file_pos.line];
+                    self.file_pos.col = cmp::min(self.insert_col, line.len());
                 }
 
                 Key::ArrowDown => {
-                    if self.file_pos.y < self.content.len() - 1 {
-                        self.file_pos.y += 1;
+                    if self.file_pos.line < self.content.len() - 1 {
+                        self.file_pos.line += 1;
                     }
 
-                    let line = &self.content[self.file_pos.y];
-                    self.file_pos.x = cmp::min(self.insert_col, line.len());
+                    let line = &self.content[self.file_pos.line];
+                    self.file_pos.col = cmp::min(self.insert_col, line.len());
                 }
 
                 Key::ArrowLeft => {
-                    if self.file_pos.x > 0 {
-                        self.file_pos.x -= 1;
-                        self.insert_col = self.file_pos.x;
+                    if self.file_pos.col > 0 {
+                        self.file_pos.col -= 1;
+                        self.insert_col = self.file_pos.col;
                     }
                 }
 
                 Key::ArrowRight => {
-                    if self.file_pos.x < self.content[self.file_pos.y].len() {
-                        self.file_pos.x += 1;
-                        self.insert_col = self.file_pos.x;
+                    if self.file_pos.col < self.content[self.file_pos.line].len() {
+                        self.file_pos.col += 1;
+                        self.insert_col = self.file_pos.col;
                     }
                 }
 
                 Key::Backspace => {
-                    if self.file_pos.x > 0 {
-                        let line = &mut self.content[self.file_pos.y];
-                        if self.file_pos.x == line.len() {
+                    if self.file_pos.col > 0 {
+                        let line = &mut self.content[self.file_pos.line];
+                        if self.file_pos.col == line.len() {
                             console.clear(ClearType::PreviousChar)?;
                         } else {
                             // TODO(jmmv): Refresh only the affected line.
                             need_refresh = true;
                         }
-                        line.remove(self.file_pos.x - 1);
-                        self.file_pos.x -= 1;
-                    } else if self.file_pos.y > 0 {
-                        let line = self.content.remove(self.file_pos.y);
-                        let prev = &mut self.content[self.file_pos.y - 1];
-                        self.file_pos.x = prev.len();
+                        line.remove(self.file_pos.col - 1);
+                        self.file_pos.col -= 1;
+                    } else if self.file_pos.line > 0 {
+                        let line = self.content.remove(self.file_pos.line);
+                        let prev = &mut self.content[self.file_pos.line - 1];
+                        self.file_pos.col = prev.len();
                         prev.push_str(&line);
-                        self.file_pos.y -= 1;
+                        self.file_pos.line -= 1;
                         need_refresh = true;
                     }
-                    self.insert_col = self.file_pos.x;
+                    self.insert_col = self.file_pos.col;
                 }
 
                 Key::Char(ch) => {
                     let mut buf = [0; 4];
 
-                    let line = &mut self.content[self.file_pos.y];
-                    if self.file_pos.x < line.len() {
+                    let line = &mut self.content[self.file_pos.line];
+                    if self.file_pos.col < line.len() {
                         // TODO(jmmv): Refresh only the affected line.
                         need_refresh = true;
                     }
-                    line.insert(self.file_pos.x, ch);
-                    self.file_pos.x += 1;
-                    self.insert_col = self.file_pos.x;
+                    line.insert(self.file_pos.col, ch);
+                    self.file_pos.col += 1;
+                    self.insert_col = self.file_pos.col;
 
-                    if cursor_pos.x < console_size.x - 1 && !need_refresh {
+                    if cursor_pos.col < console_size.x - 1 && !need_refresh {
                         console.write(ch.encode_utf8(&mut buf).as_bytes())?;
                     }
                 }
 
                 Key::NewLine | Key::CarriageReturn => {
-                    let indent = copy_indent(&self.content[self.file_pos.y]);
+                    let indent = copy_indent(&self.content[self.file_pos.line]);
                     let indent_len = indent.len();
-                    if self.file_pos.y < self.content.len() - 1 {
-                        let new = self.content[self.file_pos.y].split_off(self.file_pos.x);
-                        self.content.insert(self.file_pos.y + 1, indent + &new);
+                    if self.file_pos.line < self.content.len() - 1 {
+                        let new = self.content[self.file_pos.line].split_off(self.file_pos.col);
+                        self.content.insert(self.file_pos.line + 1, indent + &new);
                         need_refresh = true;
                     } else {
-                        self.content.insert(self.file_pos.y + 1, indent);
+                        self.content.insert(self.file_pos.line + 1, indent);
                     }
-                    self.file_pos.x = indent_len;
-                    self.file_pos.y += 1;
-                    self.insert_col = self.file_pos.x;
+                    self.file_pos.col = indent_len;
+                    self.file_pos.line += 1;
+                    self.insert_col = self.file_pos.col;
                 }
 
                 // TODO(jmmv): Should do something smarter with unknown keys.
@@ -273,8 +292,8 @@ impl Program for Editor {
 
     fn load(&mut self, text: &str) {
         self.content = text.lines().map(|l| l.to_owned()).collect();
-        self.viewport_pos = CharsXY::default();
-        self.file_pos = CharsXY::default();
+        self.viewport_pos = FilePos::default();
+        self.file_pos = FilePos::default();
         self.insert_col = 0;
     }
 
@@ -289,9 +308,19 @@ mod tests {
     use crate::testutils::*;
     use futures_lite::future::block_on;
 
-    /// Syntactic sugar to easily instantiate a `CharsXY` at `row` plus `column`.
-    fn rowcol(row: usize, column: usize) -> CharsXY {
-        CharsXY::new(column, row)
+    /// Syntactic sugar to easily instantiate a `CharsXY` at `(x,y)`.
+    ///
+    /// Note that the input arguments here are swapped.  This is partly because of historical
+    /// reasons, but also because virtually all editors (including this one) display file positions
+    /// with the line first followed by the column.  It's easier to reason about the tests below
+    /// when the order of the arguments to `linecol` matches `yx`.
+    fn yx(y: usize, x: usize) -> CharsXY {
+        CharsXY::new(x, y)
+    }
+
+    /// Syntactic sugar to easily instantiate a `FilePos` at `(line, col)`.
+    fn linecol(line: usize, col: usize) -> FilePos {
+        FilePos { line, col }
     }
 
     /// Builder pattern to construct the expected sequence of side-effects on the console.
@@ -315,11 +344,11 @@ mod tests {
         /// Note that, although `file_pos` is 0-indexed (to make it easier to reason about where
         /// file changes actually happen in the internal buffers), we display the position as
         /// 1-indexed here as the code under test does.
-        fn refresh_status(mut self, file_pos: CharsXY) -> Self {
-            let row = file_pos.y + 1;
-            let column = file_pos.x + 1;
+        fn refresh_status(mut self, file_pos: FilePos) -> Self {
+            let row = file_pos.line + 1;
+            let column = file_pos.col + 1;
 
-            self.output.push(CapturedOut::Locate(rowcol(self.console_size.y - 1, 0)));
+            self.output.push(CapturedOut::Locate(yx(self.console_size.y - 1, 0)));
             self.output.push(CapturedOut::Color(STATUS_COLOR.0, STATUS_COLOR.1));
             let mut status = String::from(" ESC Finish editing");
             if row < 10 && column < 10 {
@@ -336,7 +365,7 @@ mod tests {
 
         /// Records the console changes needed to incrementally update the editor, without going
         /// through a full refresh, assuming a `file_pos` position.
-        fn quick_refresh(mut self, file_pos: CharsXY, cursor: CharsXY) -> Self {
+        fn quick_refresh(mut self, file_pos: FilePos, cursor: CharsXY) -> Self {
             self.output.push(CapturedOut::HideCursor);
             self = self.refresh_status(file_pos);
             self.output.push(CapturedOut::Color(TEXT_COLOR.0, TEXT_COLOR.1));
@@ -348,13 +377,13 @@ mod tests {
         /// Records the console changes needed to refresh the whole console view.  The status line
         /// is updated to reflect `file_pos`; the editor is pre-populated with the lines specified
         /// in `previous`; and the `cursor` is placed at the given location.
-        fn refresh(mut self, file_pos: CharsXY, previous: &[&str], cursor: CharsXY) -> Self {
+        fn refresh(mut self, file_pos: FilePos, previous: &[&str], cursor: CharsXY) -> Self {
             self.output.push(CapturedOut::HideCursor);
             self.output.push(CapturedOut::Color(TEXT_COLOR.0, TEXT_COLOR.1));
             self.output.push(CapturedOut::Clear(ClearType::All));
             self = self.refresh_status(file_pos);
             self.output.push(CapturedOut::Color(TEXT_COLOR.0, TEXT_COLOR.1));
-            self.output.push(CapturedOut::Locate(rowcol(0, 0)));
+            self.output.push(CapturedOut::Locate(yx(0, 0)));
             for line in previous {
                 self.output.push(CapturedOut::Print(line.to_string()));
             }
@@ -415,9 +444,9 @@ mod tests {
     #[test]
     fn test_editing_with_previous_content_starts_on_top_left() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(10, 40));
-        let mut ob = OutputBuilder::new(rowcol(10, 40));
-        ob = ob.refresh(rowcol(0, 0), &["previous content"], rowcol(0, 0));
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["previous content"], yx(0, 0));
 
         run_editor("previous content", "previous content\n", cb, ob);
     }
@@ -425,27 +454,27 @@ mod tests {
     #[test]
     fn test_insert_in_empty_file() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(10, 40));
-        let mut ob = OutputBuilder::new(rowcol(10, 40));
-        ob = ob.refresh(rowcol(0, 0), &[""], rowcol(0, 0));
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
         cb.add_input_chars("abc");
         ob = ob.add(CapturedOut::Write(b"a".to_vec()));
-        ob = ob.quick_refresh(rowcol(0, 1), rowcol(0, 1));
+        ob = ob.quick_refresh(linecol(0, 1), yx(0, 1));
         ob = ob.add(CapturedOut::Write(b"b".to_vec()));
-        ob = ob.quick_refresh(rowcol(0, 2), rowcol(0, 2));
+        ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
         ob = ob.add(CapturedOut::Write(b"c".to_vec()));
-        ob = ob.quick_refresh(rowcol(0, 3), rowcol(0, 3));
+        ob = ob.quick_refresh(linecol(0, 3), yx(0, 3));
 
         cb.add_input_keys(&[Key::NewLine]);
-        ob = ob.quick_refresh(rowcol(1, 0), rowcol(1, 0));
+        ob = ob.quick_refresh(linecol(1, 0), yx(1, 0));
 
         cb.add_input_keys(&[Key::CarriageReturn]);
-        ob = ob.quick_refresh(rowcol(2, 0), rowcol(2, 0));
+        ob = ob.quick_refresh(linecol(2, 0), yx(2, 0));
 
         cb.add_input_chars("2");
         ob = ob.add(CapturedOut::Write(b"2".to_vec()));
-        ob = ob.quick_refresh(rowcol(2, 1), rowcol(2, 1));
+        ob = ob.quick_refresh(linecol(2, 1), yx(2, 1));
 
         run_editor("", "abc\n\n2\n", cb, ob);
     }
@@ -453,21 +482,21 @@ mod tests {
     #[test]
     fn test_insert_before_previous_content() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(10, 40));
-        let mut ob = OutputBuilder::new(rowcol(10, 40));
-        ob = ob.refresh(rowcol(0, 0), &["previous content"], rowcol(0, 0));
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["previous content"], yx(0, 0));
 
         cb.add_input_chars("a");
-        ob = ob.refresh(rowcol(0, 1), &["aprevious content"], rowcol(0, 1));
+        ob = ob.refresh(linecol(0, 1), &["aprevious content"], yx(0, 1));
 
         cb.add_input_chars("b");
-        ob = ob.refresh(rowcol(0, 2), &["abprevious content"], rowcol(0, 2));
+        ob = ob.refresh(linecol(0, 2), &["abprevious content"], yx(0, 2));
 
         cb.add_input_chars("c");
-        ob = ob.refresh(rowcol(0, 3), &["abcprevious content"], rowcol(0, 3));
+        ob = ob.refresh(linecol(0, 3), &["abcprevious content"], yx(0, 3));
 
         cb.add_input_chars(" ");
-        ob = ob.refresh(rowcol(0, 4), &["abc previous content"], rowcol(0, 4));
+        ob = ob.refresh(linecol(0, 4), &["abc previous content"], yx(0, 4));
 
         run_editor("previous content", "abc previous content\n", cb, ob);
     }
@@ -475,23 +504,23 @@ mod tests {
     #[test]
     fn test_insert_before_last_character() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(10, 40));
-        let mut ob = OutputBuilder::new(rowcol(10, 40));
-        ob = ob.refresh(rowcol(0, 0), &[""], rowcol(0, 0));
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
         cb.add_input_chars("abc");
         ob = ob.add(CapturedOut::Write(b"a".to_vec()));
-        ob = ob.quick_refresh(rowcol(0, 1), rowcol(0, 1));
+        ob = ob.quick_refresh(linecol(0, 1), yx(0, 1));
         ob = ob.add(CapturedOut::Write(b"b".to_vec()));
-        ob = ob.quick_refresh(rowcol(0, 2), rowcol(0, 2));
+        ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
         ob = ob.add(CapturedOut::Write(b"c".to_vec()));
-        ob = ob.quick_refresh(rowcol(0, 3), rowcol(0, 3));
+        ob = ob.quick_refresh(linecol(0, 3), yx(0, 3));
 
         cb.add_input_keys(&[Key::ArrowLeft]);
-        ob = ob.quick_refresh(rowcol(0, 2), rowcol(0, 2));
+        ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
 
         cb.add_input_chars("d");
-        ob = ob.refresh(rowcol(0, 3), &["abdc"], rowcol(0, 3));
+        ob = ob.refresh(linecol(0, 3), &["abdc"], yx(0, 3));
 
         run_editor("", "abdc\n", cb, ob);
     }
@@ -499,13 +528,13 @@ mod tests {
     #[test]
     fn test_move_in_empty_file() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(10, 40));
-        let mut ob = OutputBuilder::new(rowcol(10, 40));
-        ob = ob.refresh(rowcol(0, 0), &[""], rowcol(0, 0));
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
         for k in &[Key::ArrowUp, Key::ArrowDown, Key::ArrowLeft, Key::ArrowRight] {
             cb.add_input_keys(&[k.clone()]);
-            ob = ob.quick_refresh(rowcol(0, 0), rowcol(0, 0));
+            ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
         }
 
         run_editor("", "\n", cb, ob);
@@ -514,37 +543,37 @@ mod tests {
     #[test]
     fn test_move_preserves_insertion_column() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(10, 40));
-        let mut ob = OutputBuilder::new(rowcol(10, 40));
-        ob = ob.refresh(rowcol(0, 0), &["longer", "a", "longer", "b"], rowcol(0, 0));
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["longer", "a", "longer", "b"], yx(0, 0));
 
         cb.add_input_keys(&[Key::ArrowRight]);
-        ob = ob.quick_refresh(rowcol(0, 1), rowcol(0, 1));
+        ob = ob.quick_refresh(linecol(0, 1), yx(0, 1));
 
         cb.add_input_keys(&[Key::ArrowRight]);
-        ob = ob.quick_refresh(rowcol(0, 2), rowcol(0, 2));
+        ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
 
         cb.add_input_keys(&[Key::ArrowRight]);
-        ob = ob.quick_refresh(rowcol(0, 3), rowcol(0, 3));
+        ob = ob.quick_refresh(linecol(0, 3), yx(0, 3));
 
         cb.add_input_keys(&[Key::ArrowRight]);
-        ob = ob.quick_refresh(rowcol(0, 4), rowcol(0, 4));
+        ob = ob.quick_refresh(linecol(0, 4), yx(0, 4));
 
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(1, 1), rowcol(1, 1));
+        ob = ob.quick_refresh(linecol(1, 1), yx(1, 1));
 
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(2, 4), rowcol(2, 4));
+        ob = ob.quick_refresh(linecol(2, 4), yx(2, 4));
 
         cb.add_input_keys(&[Key::Char('X')]);
-        ob = ob.refresh(rowcol(2, 5), &["longer", "a", "longXer", "b"], rowcol(2, 5));
+        ob = ob.refresh(linecol(2, 5), &["longer", "a", "longXer", "b"], yx(2, 5));
 
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(3, 1), rowcol(3, 1));
+        ob = ob.quick_refresh(linecol(3, 1), yx(3, 1));
 
         cb.add_input_keys(&[Key::Char('Z')]);
         ob = ob.add(CapturedOut::Write(b"Z".to_vec()));
-        ob = ob.quick_refresh(rowcol(3, 2), rowcol(3, 2));
+        ob = ob.quick_refresh(linecol(3, 2), yx(3, 2));
 
         run_editor("longer\na\nlonger\nb\n", "longer\na\nlongXer\nbZ\n", cb, ob);
     }
@@ -552,10 +581,10 @@ mod tests {
     #[test]
     fn test_move_down_preserves_insertion_column_with_horizontal_scrolling() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(10, 40));
-        let mut ob = OutputBuilder::new(rowcol(10, 40));
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(
-            rowcol(0, 0),
+            linecol(0, 0),
             &[
                 "this is a line of text with more than 40",
                 "short",
@@ -563,19 +592,19 @@ mod tests {
                 "",
                 "another line of text with more than 40 c",
             ],
-            rowcol(0, 0),
+            yx(0, 0),
         );
 
         // Move the cursor to the right boundary.
         for col in 0..39 {
             cb.add_input_keys(&[Key::ArrowRight]);
-            ob = ob.quick_refresh(rowcol(0, col + 1), rowcol(0, col + 1));
+            ob = ob.quick_refresh(linecol(0, col + 1), yx(0, col + 1));
         }
 
         // Push the insertion point over the right boundary to cause scrolling.
         cb.add_input_keys(&[Key::ArrowRight]);
         ob = ob.refresh(
-            rowcol(0, 40),
+            linecol(0, 40),
             &[
                 "his is a line of text with more than 40 ",
                 "hort",
@@ -583,11 +612,11 @@ mod tests {
                 "",
                 "nother line of text with more than 40 ch",
             ],
-            rowcol(0, 39),
+            yx(0, 39),
         );
         cb.add_input_keys(&[Key::ArrowRight]);
         ob = ob.refresh(
-            rowcol(0, 41),
+            linecol(0, 41),
             &[
                 "is is a line of text with more than 40 c",
                 "ort",
@@ -595,18 +624,18 @@ mod tests {
                 "",
                 "other line of text with more than 40 cha",
             ],
-            rowcol(0, 39),
+            yx(0, 39),
         );
 
         // Move down to a shorter line whose end character is still visible. No scrolling.
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(1, 5), rowcol(1, 3));
+        ob = ob.quick_refresh(linecol(1, 5), yx(1, 3));
 
         // Move down to a shorter line that's not visible but for which insertion can still happen
         // without scrolling.
         cb.add_input_keys(&[Key::ArrowDown]);
         ob = ob.refresh(
-            rowcol(2, 1),
+            linecol(2, 1),
             &[
                 "his is a line of text with more than 40 ",
                 "hort",
@@ -614,13 +643,13 @@ mod tests {
                 "",
                 "nother line of text with more than 40 ch",
             ],
-            rowcol(2, 0),
+            yx(2, 0),
         );
 
         // Move down to an empty line that requires horizontal scrolling for proper insertion.
         cb.add_input_keys(&[Key::ArrowDown]);
         ob = ob.refresh(
-            rowcol(3, 0),
+            linecol(3, 0),
             &[
                 "this is a line of text with more than 40",
                 "short",
@@ -628,14 +657,14 @@ mod tests {
                 "",
                 "another line of text with more than 40 c",
             ],
-            rowcol(3, 0),
+            yx(3, 0),
         );
 
         // Move down to the last line, which is long again and thus needs scrolling to the right to
         // make the insertion point visible.
         cb.add_input_keys(&[Key::ArrowDown]);
         ob = ob.refresh(
-            rowcol(4, 41),
+            linecol(4, 41),
             &[
                 "is is a line of text with more than 40 c",
                 "ort",
@@ -643,7 +672,7 @@ mod tests {
                 "",
                 "other line of text with more than 40 cha",
             ],
-            rowcol(4, 39),
+            yx(4, 39),
         );
 
         run_editor(
@@ -656,10 +685,10 @@ mod tests {
     #[test]
     fn test_move_up_preserves_insertion_column_with_horizontal_scrolling() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(10, 40));
-        let mut ob = OutputBuilder::new(rowcol(10, 40));
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(
-            rowcol(0, 0),
+            linecol(0, 0),
             &[
                 "this is a line of text with more than 40",
                 "",
@@ -667,25 +696,25 @@ mod tests {
                 "short",
                 "another line of text with more than 40 c",
             ],
-            rowcol(0, 0),
+            yx(0, 0),
         );
 
         // Move to the last line.
         for i in 0..4 {
             cb.add_input_keys(&[Key::ArrowDown]);
-            ob = ob.quick_refresh(rowcol(i + 1, 0), rowcol(i + 1, 0));
+            ob = ob.quick_refresh(linecol(i + 1, 0), yx(i + 1, 0));
         }
 
         // Move the cursor to the right boundary.
         for col in 0..39 {
             cb.add_input_keys(&[Key::ArrowRight]);
-            ob = ob.quick_refresh(rowcol(4, col + 1), rowcol(4, col + 1));
+            ob = ob.quick_refresh(linecol(4, col + 1), yx(4, col + 1));
         }
 
         // Push the insertion point over the right boundary to cause scrolling.
         cb.add_input_keys(&[Key::ArrowRight]);
         ob = ob.refresh(
-            rowcol(4, 40),
+            linecol(4, 40),
             &[
                 "his is a line of text with more than 40 ",
                 "",
@@ -693,11 +722,11 @@ mod tests {
                 "hort",
                 "nother line of text with more than 40 ch",
             ],
-            rowcol(4, 39),
+            yx(4, 39),
         );
         cb.add_input_keys(&[Key::ArrowRight]);
         ob = ob.refresh(
-            rowcol(4, 41),
+            linecol(4, 41),
             &[
                 "is is a line of text with more than 40 c",
                 "",
@@ -705,18 +734,18 @@ mod tests {
                 "ort",
                 "other line of text with more than 40 cha",
             ],
-            rowcol(4, 39),
+            yx(4, 39),
         );
 
         // Move up to a shorter line whose end character is still visible. No scrolling.
         cb.add_input_keys(&[Key::ArrowUp]);
-        ob = ob.quick_refresh(rowcol(3, 5), rowcol(3, 3));
+        ob = ob.quick_refresh(linecol(3, 5), yx(3, 3));
 
         // Move up to a shorter line that's not visible but for which insertion can still happen
         // without scrolling.
         cb.add_input_keys(&[Key::ArrowUp]);
         ob = ob.refresh(
-            rowcol(2, 1),
+            linecol(2, 1),
             &[
                 "his is a line of text with more than 40 ",
                 "",
@@ -724,13 +753,13 @@ mod tests {
                 "hort",
                 "nother line of text with more than 40 ch",
             ],
-            rowcol(2, 0),
+            yx(2, 0),
         );
 
         // Move up to an empty line that requires horizontal scrolling for proper insertion.
         cb.add_input_keys(&[Key::ArrowUp]);
         ob = ob.refresh(
-            rowcol(1, 0),
+            linecol(1, 0),
             &[
                 "this is a line of text with more than 40",
                 "",
@@ -738,14 +767,14 @@ mod tests {
                 "short",
                 "another line of text with more than 40 c",
             ],
-            rowcol(1, 0),
+            yx(1, 0),
         );
 
         // Move up to the first line, which is long again and thus needs scrolling to the right to
         // make the insertion point visible.
         cb.add_input_keys(&[Key::ArrowUp]);
         ob = ob.refresh(
-            rowcol(0, 41),
+            linecol(0, 41),
             &[
                 "is is a line of text with more than 40 c",
                 "",
@@ -753,7 +782,7 @@ mod tests {
                 "ort",
                 "other line of text with more than 40 cha",
             ],
-            rowcol(0, 39),
+            yx(0, 39),
         );
 
         run_editor(
@@ -766,39 +795,39 @@ mod tests {
     #[test]
     fn test_horizontal_scrolling() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(10, 40));
-        let mut ob = OutputBuilder::new(rowcol(10, 40));
-        ob = ob.refresh(rowcol(0, 0), &["ab", "", "xyz"], rowcol(0, 0));
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["ab", "", "xyz"], yx(0, 0));
 
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(1, 0), rowcol(1, 0));
+        ob = ob.quick_refresh(linecol(1, 0), yx(1, 0));
 
         // Insert characters until the screen's right boundary.
         for (col, ch) in b"123456789012345678901234567890123456789".iter().enumerate() {
             cb.add_input_keys(&[Key::Char(*ch as char)]);
             ob = ob.add(CapturedOut::Write([*ch].to_vec()));
-            ob = ob.quick_refresh(rowcol(1, col + 1), rowcol(1, col + 1));
+            ob = ob.quick_refresh(linecol(1, col + 1), yx(1, col + 1));
         }
 
         // Push the insertion line over the right boundary and test that surrounding lines scroll as
         // well.
         cb.add_input_keys(&[Key::Char('A')]);
         ob = ob.refresh(
-            rowcol(1, 40),
+            linecol(1, 40),
             &["b", "23456789012345678901234567890123456789A", "yz"],
-            rowcol(1, 39),
+            yx(1, 39),
         );
         cb.add_input_keys(&[Key::Char('B')]);
         ob = ob.refresh(
-            rowcol(1, 41),
+            linecol(1, 41),
             &["", "3456789012345678901234567890123456789AB", "z"],
-            rowcol(1, 39),
+            yx(1, 39),
         );
         cb.add_input_keys(&[Key::Char('C')]);
         ob = ob.refresh(
-            rowcol(1, 42),
+            linecol(1, 42),
             &["", "456789012345678901234567890123456789ABC", ""],
-            rowcol(1, 39),
+            yx(1, 39),
         );
 
         // Move back a few characters, without pushing over the left boundary, and then insert two
@@ -807,63 +836,63 @@ mod tests {
         // right side.
         for (file_col, cursor_col) in &[(41, 38), (40, 37), (39, 36)] {
             cb.add_input_keys(&[Key::ArrowLeft]);
-            ob = ob.quick_refresh(rowcol(1, *file_col), rowcol(1, *cursor_col));
+            ob = ob.quick_refresh(linecol(1, *file_col), yx(1, *cursor_col));
         }
         cb.add_input_keys(&[Key::Char('D')]);
         ob = ob.refresh(
-            rowcol(1, 40),
+            linecol(1, 40),
             &["", "456789012345678901234567890123456789DABC", ""],
-            rowcol(1, 37),
+            yx(1, 37),
         );
         cb.add_input_keys(&[Key::Char('E')]);
         ob = ob.refresh(
-            rowcol(1, 41),
+            linecol(1, 41),
             &["", "456789012345678901234567890123456789DEAB", ""],
-            rowcol(1, 38),
+            yx(1, 38),
         );
 
         // Delete a few characters to restore the overflow part of the insertion line.
         cb.add_input_keys(&[Key::Backspace]);
         ob = ob.refresh(
-            rowcol(1, 40),
+            linecol(1, 40),
             &["", "456789012345678901234567890123456789DABC", ""],
-            rowcol(1, 37),
+            yx(1, 37),
         );
         cb.add_input_keys(&[Key::Backspace]);
         ob = ob.refresh(
-            rowcol(1, 39),
+            linecol(1, 39),
             &["", "456789012345678901234567890123456789ABC", ""],
-            rowcol(1, 36),
+            yx(1, 36),
         );
         cb.add_input_keys(&[Key::Backspace]);
         ob = ob.refresh(
-            rowcol(1, 38),
+            linecol(1, 38),
             &["", "45678901234567890123456789012345678ABC", ""],
-            rowcol(1, 35),
+            yx(1, 35),
         );
 
         // Move back to the beginning of the line to see surrounding lines reappear.
         for col in 0..35 {
             cb.add_input_keys(&[Key::ArrowLeft]);
-            ob = ob.quick_refresh(rowcol(1, 37 - col), rowcol(1, 34 - col));
+            ob = ob.quick_refresh(linecol(1, 37 - col), yx(1, 34 - col));
         }
         cb.add_input_keys(&[Key::ArrowLeft]);
         ob = ob.refresh(
-            rowcol(1, 2),
+            linecol(1, 2),
             &["", "345678901234567890123456789012345678ABC", "z"],
-            rowcol(1, 0),
+            yx(1, 0),
         );
         cb.add_input_keys(&[Key::ArrowLeft]);
         ob = ob.refresh(
-            rowcol(1, 1),
+            linecol(1, 1),
             &["b", "2345678901234567890123456789012345678ABC", "yz"],
-            rowcol(1, 0),
+            yx(1, 0),
         );
         cb.add_input_keys(&[Key::ArrowLeft]);
         ob = ob.refresh(
-            rowcol(1, 0),
+            linecol(1, 0),
             &["ab", "12345678901234567890123456789012345678AB", "xyz"],
-            rowcol(1, 0),
+            yx(1, 0),
         );
 
         run_editor("ab\n\nxyz\n", "ab\n12345678901234567890123456789012345678ABC\nxyz\n", cb, ob);
@@ -872,45 +901,45 @@ mod tests {
     #[test]
     fn test_vertical_scrolling() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(5, 40));
-        let mut ob = OutputBuilder::new(rowcol(5, 40));
-        ob = ob.refresh(rowcol(0, 0), &["abc", "", "d", "e"], rowcol(0, 0));
+        cb.set_size(yx(5, 40));
+        let mut ob = OutputBuilder::new(yx(5, 40));
+        ob = ob.refresh(linecol(0, 0), &["abc", "", "d", "e"], yx(0, 0));
 
         // Move to the last line.
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(1, 0), rowcol(1, 0));
+        ob = ob.quick_refresh(linecol(1, 0), yx(1, 0));
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(2, 0), rowcol(2, 0));
+        ob = ob.quick_refresh(linecol(2, 0), yx(2, 0));
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(3, 0), rowcol(3, 0));
+        ob = ob.quick_refresh(linecol(3, 0), yx(3, 0));
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.refresh(rowcol(4, 0), &["", "d", "e", ""], rowcol(3, 0));
+        ob = ob.refresh(linecol(4, 0), &["", "d", "e", ""], yx(3, 0));
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.refresh(rowcol(5, 0), &["d", "e", "", "fg"], rowcol(3, 0));
+        ob = ob.refresh(linecol(5, 0), &["d", "e", "", "fg"], yx(3, 0));
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.refresh(rowcol(6, 0), &["e", "", "fg", "hij"], rowcol(3, 0));
+        ob = ob.refresh(linecol(6, 0), &["e", "", "fg", "hij"], yx(3, 0));
 
         // Attempting to push through the end of the file does nothing.
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(6, 0), rowcol(3, 0));
+        ob = ob.quick_refresh(linecol(6, 0), yx(3, 0));
 
         // Go back up to the first line.
         cb.add_input_keys(&[Key::ArrowUp]);
-        ob = ob.quick_refresh(rowcol(5, 0), rowcol(2, 0));
+        ob = ob.quick_refresh(linecol(5, 0), yx(2, 0));
         cb.add_input_keys(&[Key::ArrowUp]);
-        ob = ob.quick_refresh(rowcol(4, 0), rowcol(1, 0));
+        ob = ob.quick_refresh(linecol(4, 0), yx(1, 0));
         cb.add_input_keys(&[Key::ArrowUp]);
-        ob = ob.quick_refresh(rowcol(3, 0), rowcol(0, 0));
+        ob = ob.quick_refresh(linecol(3, 0), yx(0, 0));
         cb.add_input_keys(&[Key::ArrowUp]);
-        ob = ob.refresh(rowcol(2, 0), &["d", "e", "", "fg"], rowcol(0, 0));
+        ob = ob.refresh(linecol(2, 0), &["d", "e", "", "fg"], yx(0, 0));
         cb.add_input_keys(&[Key::ArrowUp]);
-        ob = ob.refresh(rowcol(1, 0), &["", "d", "e", ""], rowcol(0, 0));
+        ob = ob.refresh(linecol(1, 0), &["", "d", "e", ""], yx(0, 0));
         cb.add_input_keys(&[Key::ArrowUp]);
-        ob = ob.refresh(rowcol(0, 0), &["abc", "", "d", "e"], rowcol(0, 0));
+        ob = ob.refresh(linecol(0, 0), &["abc", "", "d", "e"], yx(0, 0));
 
         // Attempting to push through the beginning of the file does nothing.
         cb.add_input_keys(&[Key::ArrowUp]);
-        ob = ob.quick_refresh(rowcol(0, 0), rowcol(0, 0));
+        ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
 
         run_editor("abc\n\nd\ne\n\nfg\nhij\n", "abc\n\nd\ne\n\nfg\nhij\n", cb, ob);
     }
@@ -918,23 +947,23 @@ mod tests {
     #[test]
     fn test_vertical_scrolling_when_splitting_last_visible_line() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(4, 40));
-        let mut ob = OutputBuilder::new(rowcol(4, 40));
-        ob = ob.refresh(rowcol(0, 0), &["first", "second", "thirdfourth"], rowcol(0, 0));
+        cb.set_size(yx(4, 40));
+        let mut ob = OutputBuilder::new(yx(4, 40));
+        ob = ob.refresh(linecol(0, 0), &["first", "second", "thirdfourth"], yx(0, 0));
 
         // Move to the desired split point.
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(1, 0), rowcol(1, 0));
+        ob = ob.quick_refresh(linecol(1, 0), yx(1, 0));
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(2, 0), rowcol(2, 0));
+        ob = ob.quick_refresh(linecol(2, 0), yx(2, 0));
         for i in 0.."third".len() {
             cb.add_input_keys(&[Key::ArrowRight]);
-            ob = ob.quick_refresh(rowcol(2, i + 1), rowcol(2, i + 1));
+            ob = ob.quick_refresh(linecol(2, i + 1), yx(2, i + 1));
         }
 
         // Split the last visible line.
         cb.add_input_keys(&[Key::NewLine]);
-        ob = ob.refresh(rowcol(3, 0), &["second", "third", "fourth"], rowcol(2, 0));
+        ob = ob.refresh(linecol(3, 0), &["second", "third", "fourth"], yx(2, 0));
 
         run_editor(
             "first\nsecond\nthirdfourth\nfifth\n",
@@ -947,36 +976,36 @@ mod tests {
     #[test]
     fn test_horizontal_and_vertical_scrolling_when_splitting_last_visible_line() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(4, 40));
-        let mut ob = OutputBuilder::new(rowcol(4, 40));
+        cb.set_size(yx(4, 40));
+        let mut ob = OutputBuilder::new(yx(4, 40));
         ob = ob.refresh(
-            rowcol(0, 0),
+            linecol(0, 0),
             &["first", "second", "this is a line of text with more than 40"],
-            rowcol(0, 0),
+            yx(0, 0),
         );
 
         // Move to the desired split point.
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(1, 0), rowcol(1, 0));
+        ob = ob.quick_refresh(linecol(1, 0), yx(1, 0));
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(2, 0), rowcol(2, 0));
+        ob = ob.quick_refresh(linecol(2, 0), yx(2, 0));
         for i in 0..39 {
             cb.add_input_keys(&[Key::ArrowRight]);
-            ob = ob.quick_refresh(rowcol(2, i + 1), rowcol(2, i + 1));
+            ob = ob.quick_refresh(linecol(2, i + 1), yx(2, i + 1));
         }
         cb.add_input_keys(&[Key::ArrowRight]);
         ob = ob.refresh(
-            rowcol(2, 40),
+            linecol(2, 40),
             &["irst", "econd", "his is a line of text with more than 40 "],
-            rowcol(2, 39),
+            yx(2, 39),
         );
 
         // Split the last visible line.
         cb.add_input_keys(&[Key::NewLine]);
         ob = ob.refresh(
-            rowcol(3, 0),
+            linecol(3, 0),
             &["second", "this is a line of text with more than 40", " characters"],
-            rowcol(2, 0),
+            yx(2, 0),
         );
 
         run_editor(
@@ -990,29 +1019,29 @@ mod tests {
     #[test]
     fn test_vertical_scrolling_when_joining_first_visible_line() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(4, 40));
-        let mut ob = OutputBuilder::new(rowcol(4, 40));
-        ob = ob.refresh(rowcol(0, 0), &["first", "second", "third"], rowcol(0, 0));
+        cb.set_size(yx(4, 40));
+        let mut ob = OutputBuilder::new(yx(4, 40));
+        ob = ob.refresh(linecol(0, 0), &["first", "second", "third"], yx(0, 0));
 
         // Move down until a couple of lines scroll up.
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(1, 0), rowcol(1, 0));
+        ob = ob.quick_refresh(linecol(1, 0), yx(1, 0));
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(2, 0), rowcol(2, 0));
+        ob = ob.quick_refresh(linecol(2, 0), yx(2, 0));
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.refresh(rowcol(3, 0), &["second", "third", "fourth"], rowcol(2, 0));
+        ob = ob.refresh(linecol(3, 0), &["second", "third", "fourth"], yx(2, 0));
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.refresh(rowcol(4, 0), &["third", "fourth", "fifth"], rowcol(2, 0));
+        ob = ob.refresh(linecol(4, 0), &["third", "fourth", "fifth"], yx(2, 0));
 
         // Move back up to the first visible line, without scrolling.
         cb.add_input_keys(&[Key::ArrowUp]);
-        ob = ob.quick_refresh(rowcol(3, 0), rowcol(1, 0));
+        ob = ob.quick_refresh(linecol(3, 0), yx(1, 0));
         cb.add_input_keys(&[Key::ArrowUp]);
-        ob = ob.quick_refresh(rowcol(2, 0), rowcol(0, 0));
+        ob = ob.quick_refresh(linecol(2, 0), yx(0, 0));
 
         // Join first visible line with previous, which should scroll contents up.
         cb.add_input_keys(&[Key::Backspace]);
-        ob = ob.refresh(rowcol(1, 6), &["secondthird", "fourth", "fifth"], rowcol(0, 6));
+        ob = ob.refresh(linecol(1, 6), &["secondthird", "fourth", "fifth"], yx(0, 6));
 
         run_editor(
             "first\nsecond\nthird\nfourth\nfifth\n",
@@ -1025,40 +1054,40 @@ mod tests {
     #[test]
     fn test_horizontal_and_vertical_scrolling_when_joining_first_visible_line() {
         let mut cb = MockConsole::default();
-        cb.set_size(rowcol(4, 40));
-        let mut ob = OutputBuilder::new(rowcol(4, 40));
+        cb.set_size(yx(4, 40));
+        let mut ob = OutputBuilder::new(yx(4, 40));
         ob = ob.refresh(
-            rowcol(0, 0),
+            linecol(0, 0),
             &["first", "this is a line of text with more than 40", "third"],
-            rowcol(0, 0),
+            yx(0, 0),
         );
 
         // Move down until a couple of lines scroll up.
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(1, 0), rowcol(1, 0));
+        ob = ob.quick_refresh(linecol(1, 0), yx(1, 0));
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.quick_refresh(rowcol(2, 0), rowcol(2, 0));
+        ob = ob.quick_refresh(linecol(2, 0), yx(2, 0));
         cb.add_input_keys(&[Key::ArrowDown]);
         ob = ob.refresh(
-            rowcol(3, 0),
+            linecol(3, 0),
             &["this is a line of text with more than 40", "third", "fourth"],
-            rowcol(2, 0),
+            yx(2, 0),
         );
         cb.add_input_keys(&[Key::ArrowDown]);
-        ob = ob.refresh(rowcol(4, 0), &["third", "fourth", "quite a long line"], rowcol(2, 0));
+        ob = ob.refresh(linecol(4, 0), &["third", "fourth", "quite a long line"], yx(2, 0));
 
         // Move back up to the first visible line, without scrolling.
         cb.add_input_keys(&[Key::ArrowUp]);
-        ob = ob.quick_refresh(rowcol(3, 0), rowcol(1, 0));
+        ob = ob.quick_refresh(linecol(3, 0), yx(1, 0));
         cb.add_input_keys(&[Key::ArrowUp]);
-        ob = ob.quick_refresh(rowcol(2, 0), rowcol(0, 0));
+        ob = ob.quick_refresh(linecol(2, 0), yx(0, 0));
 
         // Join first visible line with previous, which should scroll contents up and right.
         cb.add_input_keys(&[Key::Backspace]);
         ob = ob.refresh(
-            rowcol(1, 51),
+            linecol(1, 51),
             &["ne of text with more than 40 characterst", "", " line"],
-            rowcol(0, 39),
+            yx(0, 39),
         );
 
         run_editor(

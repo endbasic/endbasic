@@ -112,14 +112,6 @@ impl CharsXY {
     }
 }
 
-impl std::ops::Sub for CharsXY {
-    type Output = Self;
-
-    fn sub(self, other: Self) -> Self::Output {
-        CharsXY { x: self.x - other.x, y: self.y - other.y }
-    }
-}
-
 /// Represents a coordinate for pixel-based console operations.
 ///
 /// Coordinates can be off-screen, which means they can be negative and/or can exceed the
