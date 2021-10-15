@@ -99,15 +99,15 @@ pub enum ClearType {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CharsXY {
     /// The column number, starting from zero.
-    pub x: usize,
+    pub x: u16,
 
     /// The row number, starting from zero.
-    pub y: usize,
+    pub y: u16,
 }
 
 impl CharsXY {
     /// Constructs a new coordinate at the given `(x, y)` position.
-    pub fn new(x: usize, y: usize) -> Self {
+    pub fn new(x: u16, y: u16) -> Self {
         Self { x, y }
     }
 }

@@ -106,7 +106,7 @@ impl Default for MockConsole {
         Self {
             golden_in: VecDeque::new(),
             captured_out: vec![],
-            size: CharsXY::new(std::usize::MAX, std::usize::MAX),
+            size: CharsXY::new(u16::MAX, u16::MAX),
             interactive: false,
         }
     }

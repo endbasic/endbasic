@@ -19,8 +19,8 @@ use crate::console::{CharsXY, ClearType, Console, Key};
 use crate::program::Program;
 use async_trait::async_trait;
 use std::cmp;
+use std::convert::TryFrom;
 use std::io;
-use std::ops;
 
 /// The color of the main editor window.
 const TEXT_COLOR: (Option<u8>, Option<u8>) = (Some(15), None);
@@ -48,14 +48,6 @@ struct FilePos {
 
     /// The row number, starting from zero.
     col: usize,
-}
-
-impl ops::Sub for FilePos {
-    type Output = Self;
-
-    fn sub(self, other: Self) -> Self::Output {
-        FilePos { line: self.line - other.line, col: self.col - other.col }
-    }
 }
 
 /// An interactive console-based text editor.
@@ -101,13 +93,14 @@ impl Editor {
         // user experience given that this is what all other editor seem to do.
         let pos = format!(" | Ln {}, Col {} ", self.file_pos.line + 1, self.file_pos.col + 1);
 
-        let mut status = String::with_capacity(console_size.x);
+        let width = usize::from(console_size.x);
+        let mut status = String::with_capacity(width);
         status.push_str(keys);
-        while status.len() < console_size.x - pos.len() {
+        while status.len() < width - pos.len() {
             status.push(' ');
         }
         status.push_str(&pos);
-        status.truncate(console_size.x);
+        status.truncate(width);
 
         console.locate(CharsXY::new(0, console_size.y - 1))?;
         console.color(STATUS_COLOR.0, STATUS_COLOR.1)?;
@@ -132,7 +125,8 @@ impl Editor {
         while row < self.content.len() && printed_rows < console_size.y - 1 {
             let line = &self.content[row];
             if line.len() >= self.viewport_pos.col {
-                let last = cmp::min(line.len(), self.viewport_pos.col + console_size.x);
+                let last =
+                    cmp::min(line.len(), self.viewport_pos.col + usize::from(console_size.x));
                 let view = &line[self.viewport_pos.col..last];
                 console.print(view)?;
             } else {
@@ -156,18 +150,20 @@ impl Editor {
         loop {
             // The key handling below only deals with moving the insertion position within the file
             // but does not bother to update the viewport. Adjust it now, if necessary.
+            let width = usize::from(console_size.x);
+            let height = usize::from(console_size.y);
             if self.file_pos.line < self.viewport_pos.line {
                 self.viewport_pos.line -= 1;
                 need_refresh = true;
-            } else if self.file_pos.line > self.viewport_pos.line + console_size.y - 2 {
+            } else if self.file_pos.line > self.viewport_pos.line + height - 2 {
                 self.viewport_pos.line += 1;
                 need_refresh = true;
             }
             if self.file_pos.col < self.viewport_pos.col {
                 self.viewport_pos.col = self.file_pos.col;
                 need_refresh = true;
-            } else if self.file_pos.col >= self.viewport_pos.col + console_size.x {
-                self.viewport_pos.col = self.file_pos.col - console_size.x + 1;
+            } else if self.file_pos.col >= self.viewport_pos.col + width {
+                self.viewport_pos.col = self.file_pos.col - width + 1;
                 need_refresh = true;
             }
 
@@ -179,8 +175,14 @@ impl Editor {
                 self.refresh_status(console, console_size)?;
                 console.color(TEXT_COLOR.0, TEXT_COLOR.1)?;
             }
-            let cursor_pos = self.file_pos - self.viewport_pos;
-            console.locate(CharsXY::new(cursor_pos.col, cursor_pos.line))?;
+            let cursor_pos = {
+                let x = u16::try_from(self.file_pos.col - self.viewport_pos.col)
+                    .expect("Computed x must have fit on screen");
+                let y = u16::try_from(self.file_pos.line - self.viewport_pos.line)
+                    .expect("Computed y must have fit on screen");
+                CharsXY::new(x, y)
+            };
+            console.locate(cursor_pos)?;
             console.show_cursor()?;
 
             match console.read_key().await? {
@@ -252,7 +254,7 @@ impl Editor {
                     self.file_pos.col += 1;
                     self.insert_col = self.file_pos.col;
 
-                    if cursor_pos.col < console_size.x - 1 && !need_refresh {
+                    if cursor_pos.x < console_size.x - 1 && !need_refresh {
                         console.write(ch.encode_utf8(&mut buf).as_bytes())?;
                     }
                 }
@@ -314,7 +316,7 @@ mod tests {
     /// reasons, but also because virtually all editors (including this one) display file positions
     /// with the line first followed by the column.  It's easier to reason about the tests below
     /// when the order of the arguments to `linecol` matches `yx`.
-    fn yx(y: usize, x: usize) -> CharsXY {
+    fn yx(y: u16, x: u16) -> CharsXY {
         CharsXY::new(x, y)
     }
 
@@ -596,9 +598,9 @@ mod tests {
         );
 
         // Move the cursor to the right boundary.
-        for col in 0..39 {
+        for col in 0u16..39u16 {
             cb.add_input_keys(&[Key::ArrowRight]);
-            ob = ob.quick_refresh(linecol(0, col + 1), yx(0, col + 1));
+            ob = ob.quick_refresh(linecol(0, usize::from(col) + 1), yx(0, col + 1));
         }
 
         // Push the insertion point over the right boundary to cause scrolling.
@@ -700,15 +702,15 @@ mod tests {
         );
 
         // Move to the last line.
-        for i in 0..4 {
+        for i in 0u16..4u16 {
             cb.add_input_keys(&[Key::ArrowDown]);
-            ob = ob.quick_refresh(linecol(i + 1, 0), yx(i + 1, 0));
+            ob = ob.quick_refresh(linecol(usize::from(i + 1), 0), yx(i + 1, 0));
         }
 
         // Move the cursor to the right boundary.
-        for col in 0..39 {
+        for col in 0u16..39u16 {
             cb.add_input_keys(&[Key::ArrowRight]);
-            ob = ob.quick_refresh(linecol(4, col + 1), yx(4, col + 1));
+            ob = ob.quick_refresh(linecol(4, usize::from(col + 1)), yx(4, col + 1));
         }
 
         // Push the insertion point over the right boundary to cause scrolling.
@@ -806,7 +808,7 @@ mod tests {
         for (col, ch) in b"123456789012345678901234567890123456789".iter().enumerate() {
             cb.add_input_keys(&[Key::Char(*ch as char)]);
             ob = ob.add(CapturedOut::Write([*ch].to_vec()));
-            ob = ob.quick_refresh(linecol(1, col + 1), yx(1, col + 1));
+            ob = ob.quick_refresh(linecol(1, col + 1), yx(1, u16::try_from(col + 1).unwrap()));
         }
 
         // Push the insertion line over the right boundary and test that surrounding lines scroll as
@@ -872,9 +874,9 @@ mod tests {
         );
 
         // Move back to the beginning of the line to see surrounding lines reappear.
-        for col in 0..35 {
+        for col in 0u16..35u16 {
             cb.add_input_keys(&[Key::ArrowLeft]);
-            ob = ob.quick_refresh(linecol(1, 37 - col), yx(1, 34 - col));
+            ob = ob.quick_refresh(linecol(1, usize::from(37 - col)), yx(1, 34 - col));
         }
         cb.add_input_keys(&[Key::ArrowLeft]);
         ob = ob.refresh(
@@ -958,7 +960,7 @@ mod tests {
         ob = ob.quick_refresh(linecol(2, 0), yx(2, 0));
         for i in 0.."third".len() {
             cb.add_input_keys(&[Key::ArrowRight]);
-            ob = ob.quick_refresh(linecol(2, i + 1), yx(2, i + 1));
+            ob = ob.quick_refresh(linecol(2, i + 1), yx(2, u16::try_from(i + 1).unwrap()));
         }
 
         // Split the last visible line.
@@ -989,9 +991,9 @@ mod tests {
         ob = ob.quick_refresh(linecol(1, 0), yx(1, 0));
         cb.add_input_keys(&[Key::ArrowDown]);
         ob = ob.quick_refresh(linecol(2, 0), yx(2, 0));
-        for i in 0..39 {
+        for i in 0u16..39u16 {
             cb.add_input_keys(&[Key::ArrowRight]);
-            ob = ob.quick_refresh(linecol(2, i + 1), yx(2, i + 1));
+            ob = ob.quick_refresh(linecol(2, usize::from(i + 1)), yx(2, i + 1));
         }
         cb.add_input_keys(&[Key::ArrowRight]);
         ob = ob.refresh(

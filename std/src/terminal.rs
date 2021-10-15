@@ -35,13 +35,11 @@ fn crossterm_error_to_io_error(e: crossterm::ErrorKind) -> io::Error {
     }
 }
 
-/// Gets the value of the environment variable `name` and interprets it as a `usize`.  Returns
+/// Gets the value of the environment variable `name` and interprets it as a `u16`.  Returns
 /// `None` if the variable is not set or if its contents are invalid.
-fn get_env_var_as_usize(name: &str) -> Option<usize> {
+fn get_env_var_as_u16(name: &str) -> Option<u16> {
     match env::var_os(name) {
-        Some(value) => {
-            value.as_os_str().to_string_lossy().parse::<usize>().map(Some).unwrap_or(None)
-        }
+        Some(value) => value.as_os_str().to_string_lossy().parse::<u16>().map(Some).unwrap_or(None),
         None => None,
     }
 }
@@ -269,17 +267,7 @@ impl Console for TerminalConsole {
     }
 
     fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
-        if pos.y > std::u16::MAX as usize {
-            return Err(io::Error::new(io::ErrorKind::Other, "Row out of range"));
-        }
-        let row = pos.y as u16;
-
-        if pos.x > std::u16::MAX as usize {
-            return Err(io::Error::new(io::ErrorKind::Other, "Column out of range"));
-        }
-        let column = pos.x as u16;
-
-        execute!(io::stdout(), cursor::MoveTo(column, row)).map_err(crossterm_error_to_io_error)
+        execute!(io::stdout(), cursor::MoveTo(pos.x, pos.y)).map_err(crossterm_error_to_io_error)
     }
 
     fn move_within_line(&mut self, off: i16) -> io::Result<()> {
@@ -352,17 +340,14 @@ impl Console for TerminalConsole {
         // Must be careful to not query the terminal size if both LINES and COLUMNS are set, because
         // the query fails when we don't have a PTY and we still need to run under these conditions
         // for testing purposes.
-        let lines = get_env_var_as_usize("LINES");
-        let columns = get_env_var_as_usize("COLUMNS");
+        let lines = get_env_var_as_u16("LINES");
+        let columns = get_env_var_as_u16("COLUMNS");
         let size = match (lines, columns) {
             (Some(l), Some(c)) => CharsXY::new(c, l),
             (l, c) => {
                 let (actual_columns, actual_lines) =
                     terminal::size().map_err(crossterm_error_to_io_error)?;
-                CharsXY::new(
-                    c.unwrap_or(actual_columns as usize),
-                    l.unwrap_or(actual_lines as usize),
-                )
+                CharsXY::new(c.unwrap_or(actual_columns), l.unwrap_or(actual_lines))
             }
         };
         Ok(size)
