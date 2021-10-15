@@ -25,6 +25,7 @@ use endbasic_core::syms::{
     FunctionResult, Symbols,
 };
 use std::cell::RefCell;
+use std::convert::TryFrom;
 use std::io;
 use std::rc::Rc;
 
@@ -338,12 +339,10 @@ impl Command for LocateCommand {
 
         let row = match &row_arg.0 {
             Some(arg) => match arg.eval(machine.get_mut_symbols()).await? {
-                Value::Integer(i) => {
-                    if i < 0 {
-                        return Err(CallError::ArgumentError("Row cannot be negative".to_owned()));
-                    }
-                    i as usize
-                }
+                Value::Integer(i) => match u16::try_from(i) {
+                    Ok(v) => v,
+                    Err(_) => return Err(CallError::ArgumentError("Row out of range".to_owned())),
+                },
                 _ => return Err(CallError::ArgumentError("Row must be an integer".to_owned())),
             },
             None => return Err(CallError::ArgumentError("Row cannot be empty".to_owned())),
@@ -351,14 +350,12 @@ impl Command for LocateCommand {
 
         let column = match &column_arg.0 {
             Some(arg) => match arg.eval(machine.get_mut_symbols()).await? {
-                Value::Integer(i) => {
-                    if i < 0 {
-                        return Err(CallError::ArgumentError(
-                            "Column cannot be negative".to_owned(),
-                        ));
+                Value::Integer(i) => match u16::try_from(i) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        return Err(CallError::ArgumentError("Column out of range".to_owned()))
                     }
-                    i as usize
-                }
+                },
                 _ => return Err(CallError::ArgumentError("Column must be an integer".to_owned())),
             },
             None => return Err(CallError::ArgumentError("Column cannot be empty".to_owned())),
@@ -604,8 +601,8 @@ mod tests {
             .check();
 
         Tester::default()
-            .run("LOCATE 1000, 2000")
-            .expect_output([CapturedOut::Locate(CharsXY::new(2000, 1000))])
+            .run("LOCATE 63000, 64000")
+            .expect_output([CapturedOut::Locate(CharsXY::new(64000, 63000))])
             .check();
     }
 
@@ -616,11 +613,13 @@ mod tests {
         check_stmt_err("LOCATE takes two arguments", "LOCATE 1, 2, 3");
         check_stmt_err("LOCATE expects arguments separated by a comma", "LOCATE 1; 2");
 
-        check_stmt_err("Row cannot be negative", "LOCATE -1, 2");
+        check_stmt_err("Row out of range", "LOCATE -1, 2");
+        check_stmt_err("Row out of range", "LOCATE 70000, 2");
         check_stmt_err("Row must be an integer", "LOCATE TRUE, 2");
         check_stmt_err("Row cannot be empty", "LOCATE , 2");
 
-        check_stmt_err("Column cannot be negative", "LOCATE 1, -2");
+        check_stmt_err("Column out of range", "LOCATE 1, -2");
+        check_stmt_err("Column out of range", "LOCATE 1, 70000");
         check_stmt_err("Column must be an integer", "LOCATE 1, TRUE");
         check_stmt_err("Column cannot be empty", "LOCATE 1,");
     }

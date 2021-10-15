@@ -35,6 +35,7 @@ use endbasic_core::syms::{self, CommandResult};
 use endbasic_std::console::{CharsXY, ClearType, Console, Key};
 use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::convert::TryFrom;
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
@@ -206,7 +207,10 @@ impl Console for XtermJsConsole {
     }
 
     fn size(&self) -> io::Result<CharsXY> {
-        Ok(CharsXY::new(self.terminal.get_cols() as usize, self.terminal.get_rows() as usize))
+        Ok(CharsXY::new(
+            u16::try_from(self.terminal.get_cols()).unwrap(),
+            u16::try_from(self.terminal.get_rows()).unwrap(),
+        ))
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {

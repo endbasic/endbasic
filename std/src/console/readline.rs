@@ -45,7 +45,7 @@ async fn read_line_interactive(
         // Assumes that the prompt was printed at column 0.  If that was not the case, line length
         // calculation does not work.
         let console_size = console.size()?;
-        console_size.x - prompt.len()
+        usize::from(console_size.x) - prompt.len()
     };
 
     // Insertion position *within* the line, without accounting for the prompt.
