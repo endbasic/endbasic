@@ -107,30 +107,60 @@ fn window_build_error_to_io_error(e: WindowBuildError) -> io::Error {
     io::Error::new(kind, e)
 }
 
-/// Converts a `u32` into an `i16`, capping out of bounds values.
-fn clamp_u32_as_i16(value: u32) -> i16 {
-    if value > (i16::MAX as u32) {
-        i16::MAX
-    } else {
-        value as i16
+/// Conversion between types with silent value clamping.
+trait ClampedInto<T> {
+    /// Converts self into `T` capping values at `T`'s maximum or minimum boundaries.
+    fn clamped_into(self) -> T;
+}
+
+impl ClampedInto<u16> for u32 {
+    fn clamped_into(self) -> u16 {
+        if self > u32::from(u16::MAX) {
+            u16::MAX
+        } else {
+            self as u16
+        }
     }
 }
 
-/// Converts a `u32` into an `u16`, capping out of bounds values.
-fn clamp_u32_as_u16(value: u32) -> u16 {
-    if value > u32::from(u16::MAX) {
-        u16::MAX
-    } else {
-        value as u16
+/// Multiplication of values into a narrower type with silent value clamping.
+trait ClampedMul<T, O> {
+    /// Multiplies self by `rhs` and clamps the result to fit in `O`.
+    fn clamped_mul(self, rhs: T) -> O;
+}
+
+impl ClampedMul<u16, i16> for u16 {
+    fn clamped_mul(self, rhs: u16) -> i16 {
+        let product = u32::from(self) * u32::from(rhs);
+        if product > i16::MAX as u32 {
+            i16::MAX
+        } else {
+            product as i16
+        }
     }
 }
 
-/// Converts a `u32` into an `i32`, capping out of bounds values.
-fn clamp_u32_as_i32(value: u32) -> i32 {
-    if value > (i32::MAX as u32) {
-        i32::MAX
-    } else {
-        value as i32
+impl ClampedMul<u16, i32> for u16 {
+    fn clamped_mul(self, rhs: u16) -> i32 {
+        match i32::from(self).checked_mul(i32::from(rhs)) {
+            Some(v) => v,
+            None => i32::MAX,
+        }
+    }
+}
+
+impl ClampedMul<u16, u32> for u16 {
+    fn clamped_mul(self, rhs: u16) -> u32 {
+        u32::from(self).checked_mul(u32::from(rhs)).expect("Result must have fit")
+    }
+}
+
+impl ClampedMul<usize, usize> for usize {
+    fn clamped_mul(self, rhs: usize) -> usize {
+        match self.checked_mul(rhs) {
+            Some(v) => v,
+            None => usize::MAX,
+        }
     }
 }
 
@@ -144,14 +174,9 @@ struct SizeInPixels {
     height: u16,
 }
 
-impl std::ops::Mul<SizeInPixels> for CharsXY {
-    type Output = PixelsXY;
-
-    fn mul(self, rhs: SizeInPixels) -> Self::Output {
-        PixelsXY {
-            x: clamp_u32_as_i16(u32::from(self.x) * u32::from(rhs.width)),
-            y: clamp_u32_as_i16(u32::from(self.y) * u32::from(rhs.height)),
-        }
+impl ClampedMul<SizeInPixels, PixelsXY> for CharsXY {
+    fn clamped_mul(self, rhs: SizeInPixels) -> PixelsXY {
+        PixelsXY { x: self.x.clamped_mul(rhs.width), y: self.y.clamped_mul(rhs.height) }
     }
 }
 
@@ -257,7 +282,14 @@ impl<'a> MonospacedFont<'a> {
     fn chars_in_area(&self, area: SizeInPixels) -> CharsXY {
         debug_assert!(area.width > 0);
         debug_assert!(area.height > 0);
-        CharsXY::new(area.width / self.glyph_size.width, area.height / self.glyph_size.height)
+        CharsXY::new(
+            area.width
+                .checked_div(self.glyph_size.width)
+                .expect("Glyph size tested for non-zero during init"),
+            area.height
+                .checked_div(self.glyph_size.height)
+                .expect("Glyph size tested for non-zero during init"),
+        )
     }
 }
 
@@ -443,7 +475,7 @@ impl SdlConsole {
 
         let size_pixels = {
             let (width, height) = window.drawable_size();
-            SizeInPixels { width: clamp_u32_as_u16(width), height: clamp_u32_as_u16(height) }
+            SizeInPixels { width: width.clamped_into(), height: height.clamped_into() }
         };
         let size_chars = font.chars_in_area(size_pixels);
 
@@ -514,7 +546,10 @@ impl SdlConsole {
             return Ok(());
         }
 
-        let rect = rect_origin_size(self.cursor_pos * self.font.glyph_size, self.font.glyph_size);
+        let rect = rect_origin_size(
+            self.cursor_pos.clamped_mul(self.font.glyph_size),
+            self.font.glyph_size,
+        );
 
         assert!(self.cursor_backup.is_empty());
         self.cursor_backup =
@@ -534,7 +569,10 @@ impl SdlConsole {
             return Ok(());
         }
 
-        let rect = rect_origin_size(self.cursor_pos * self.font.glyph_size, self.font.glyph_size);
+        let rect = rect_origin_size(
+            self.cursor_pos.clamped_mul(self.font.glyph_size),
+            self.font.glyph_size,
+        );
 
         let mut texture = self
             .texture_creator
@@ -544,8 +582,9 @@ impl SdlConsole {
             .update(
                 None,
                 &self.cursor_backup,
-                usize::try_from(rect.width()).expect("Width must fit in usize")
-                    * self.pixel_format.byte_size_per_pixel(),
+                usize::try_from(rect.width())
+                    .expect("Width must fit in usize")
+                    .clamped_mul(self.pixel_format.byte_size_per_pixel()),
             )
             .map_err(update_texture_error_to_io_error)?;
         self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)?;
@@ -603,11 +642,9 @@ impl SdlConsole {
     fn raw_write(&mut self, bytes: &[u8], start: PixelsXY) -> io::Result<()> {
         debug_assert!(!bytes.is_empty(), "SDL does not like empty strings");
 
-        let len = {
-            if bytes.len() > (u16::MAX as usize) {
-                return Err(io::Error::new(io::ErrorKind::InvalidInput, "String too long"));
-            }
-            bytes.len() as u16
+        let len = match u16::try_from(bytes.len()) {
+            Ok(v) => v,
+            Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "String too long")),
         };
 
         let surface = self
@@ -624,7 +661,7 @@ impl SdlConsole {
         let rect = Rect::new(
             i32::from(start.x),
             i32::from(start.y),
-            u32::from(len) * u32::from(self.font.glyph_size.width),
+            len.clamped_mul(self.font.glyph_size.width),
             u32::from(self.font.glyph_size.height),
         );
         self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)?;
@@ -642,8 +679,9 @@ impl SdlConsole {
         loop {
             let fit_chars = self.size_chars.x - self.cursor_pos.x;
             let partial = &bytes[0..cmp::min(bytes.len(), usize::from(fit_chars))];
-            self.raw_write(partial, self.cursor_pos * self.font.glyph_size)?;
-            self.cursor_pos.x += partial.len() as u16;
+            self.raw_write(partial, self.cursor_pos.clamped_mul(self.font.glyph_size))?;
+            self.cursor_pos.x += u16::try_from(partial.len())
+                .expect("Partial length was computed to fit on the screen");
 
             bytes = &bytes[partial.len()..];
             if bytes.is_empty() {
@@ -677,9 +715,7 @@ impl Console for SdlConsole {
                 self.canvas
                     .fill_rect(Rect::new(
                         0,
-                        clamp_u32_as_i32(
-                            u32::from(self.cursor_pos.y) * u32::from(self.font.glyph_size.height),
-                        ),
+                        self.cursor_pos.y.clamped_mul(self.font.glyph_size.height),
                         u32::from(self.size_pixels.width),
                         u32::from(self.font.glyph_size.height),
                     ))
@@ -691,7 +727,7 @@ impl Console for SdlConsole {
                 if self.cursor_pos.x > 0 {
                     self.canvas
                         .fill_rect(rect_origin_size(
-                            self.cursor_pos * self.font.glyph_size,
+                            self.cursor_pos.clamped_mul(self.font.glyph_size),
                             self.font.glyph_size,
                         ))
                         .map_err(string_error_to_io_error)?;
@@ -700,7 +736,7 @@ impl Console for SdlConsole {
             }
             ClearType::UntilNewLine => {
                 self.clear_cursor()?;
-                let pos = self.cursor_pos * self.font.glyph_size;
+                let pos = self.cursor_pos.clamped_mul(self.font.glyph_size);
                 debug_assert!(pos.x >= 0, "Inputs to pos are unsigned");
                 debug_assert!(pos.y >= 0, "Inputs to pos are unsigned");
                 let height = self.font.glyph_size.height;
@@ -791,7 +827,8 @@ impl Console for SdlConsole {
                 .update(
                     None,
                     &pixels,
-                    usize::from(self.size_pixels.width) * self.pixel_format.byte_size_per_pixel(),
+                    usize::from(self.size_pixels.width)
+                        .clamped_mul(self.pixel_format.byte_size_per_pixel()),
                 )
                 .map_err(update_texture_error_to_io_error)?;
 
@@ -1083,27 +1120,39 @@ mod tests {
     use std::time::Duration;
 
     #[test]
-    fn test_clamp_u32_as_i16() {
-        assert_eq!(0, clamp_u32_as_i16(0));
-        assert_eq!(10, clamp_u32_as_i16(10));
-        assert_eq!(i16::MAX, clamp_u32_as_i16(u32::try_from(i16::MAX).unwrap()));
-        assert_eq!(i16::MAX, clamp_u32_as_i16(u32::MAX));
+    fn test_clamp_into_u32_u16() {
+        assert_eq!(0u16, 0u32.clamped_into());
+        assert_eq!(10u16, 10u32.clamped_into());
+        assert_eq!(u16::MAX, u32::from(u16::MAX).clamped_into());
+        assert_eq!(u16::MAX, u32::MAX.clamped_into());
     }
 
     #[test]
-    fn test_clamp_u32_as_u16() {
-        assert_eq!(0, clamp_u32_as_u16(0));
-        assert_eq!(10, clamp_u32_as_u16(10));
-        assert_eq!(u16::MAX, clamp_u32_as_u16(u32::from(u16::MAX)));
-        assert_eq!(u16::MAX, clamp_u32_as_u16(u32::MAX));
+    fn test_clamped_mul_u16_u16_i16() {
+        assert_eq!(0i16, ClampedMul::<u16, i16>::clamped_mul(0u16, 0u16));
+        assert_eq!(55i16, ClampedMul::<u16, i16>::clamped_mul(11u16, 5u16));
+        assert_eq!(i16::MAX, ClampedMul::<u16, i16>::clamped_mul(u16::MAX, u16::MAX));
     }
 
     #[test]
-    fn test_clamp_u32_as_i32() {
-        assert_eq!(0, clamp_u32_as_i32(0));
-        assert_eq!(10, clamp_u32_as_i32(10));
-        assert_eq!(i32::MAX, clamp_u32_as_i32(u32::try_from(i16::MAX).unwrap()));
-        assert_eq!(i32::MAX, clamp_u32_as_i32(u32::MAX));
+    fn test_clamped_mul_u16_u16_i32() {
+        assert_eq!(0i32, ClampedMul::<u16, i32>::clamped_mul(0u16, 0u16));
+        assert_eq!(55i32, ClampedMul::<u16, i32>::clamped_mul(11u16, 5u16));
+        assert_eq!(i32::MAX, ClampedMul::<u16, i32>::clamped_mul(u16::MAX, u16::MAX));
+    }
+
+    #[test]
+    fn test_clamped_mul_u16_u16_u32() {
+        assert_eq!(0u32, ClampedMul::<u16, u32>::clamped_mul(0u16, 0u16));
+        assert_eq!(55u32, ClampedMul::<u16, u32>::clamped_mul(11u16, 5u16));
+        assert_eq!(4294836225u32, ClampedMul::<u16, u32>::clamped_mul(u16::MAX, u16::MAX));
+    }
+
+    #[test]
+    fn test_clamped_mul_usize_usize_usize() {
+        assert_eq!(0, ClampedMul::<usize, usize>::clamped_mul(0, 0));
+        assert_eq!(55, ClampedMul::<usize, usize>::clamped_mul(11, 5));
+        assert_eq!(usize::MAX, ClampedMul::<usize, usize>::clamped_mul(usize::MAX, usize::MAX));
     }
 
     #[test]
