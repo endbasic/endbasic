@@ -274,7 +274,8 @@ interpreter.  However, this is a *very* inefficient way of drawing.
 When video syncing is disabled, all console updates are buffered until video syncing is enabled \
 again.  This is perfect to draw complex graphics efficiently.  If this is what you want to do, \
 you should disable syncing first, render a frame, call GFX_SYNC to flush the frame, repeat until \
-you are done, and then enable video syncing again.
+you are done, and then enable video syncing again.  Note that the textual cursor is not visible \
+when video syncing is disabled.
 WARNING: Be aware that if you disable video syncing in the interactive interpreter, you will not \
 be able to see what you are typing any longer until you reenable video syncing.",
                 )
@@ -292,22 +293,27 @@ impl Command for GfxSyncCommand {
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
         match args {
-            [] => self.console.borrow_mut().sync_now()?,
-            [(Some(b), ArgSep::End)] => match b.eval(machine.get_mut_symbols()).await? {
-                Value::Boolean(b) => self.console.borrow_mut().set_sync(b)?,
-                _ => {
-                    return Err(CallError::ArgumentError(
-                        "Argument to GFX_SYNC must be a boolean".to_owned(),
-                    ))
-                }
-            },
-            _ => {
-                return Err(CallError::ArgumentError(
-                    "GFX_SYNC takes zero or one argument".to_owned(),
-                ))
+            [] => {
+                self.console.borrow_mut().sync_now()?;
+                Ok(())
             }
+            [(Some(b), ArgSep::End)] => match b.eval(machine.get_mut_symbols()).await? {
+                Value::Boolean(b) => {
+                    let mut console = self.console.borrow_mut();
+                    if b {
+                        console.show_cursor()?;
+                    } else {
+                        console.hide_cursor()?;
+                    }
+                    console.set_sync(b)?;
+                    Ok(())
+                }
+                _ => Err(CallError::ArgumentError(
+                    "Argument to GFX_SYNC must be a boolean".to_owned(),
+                )),
+            },
+            _ => Err(CallError::ArgumentError("GFX_SYNC takes zero or one argument".to_owned())),
         }
-        Ok(())
     }
 }
 
@@ -458,10 +464,13 @@ mod tests {
     #[test]
     fn test_gfx_sync_ok() {
         Tester::default().run("GFX_SYNC").expect_output([CapturedOut::SyncNow]).check();
-        Tester::default().run("GFX_SYNC TRUE").expect_output([CapturedOut::SetSync(true)]).check();
+        Tester::default()
+            .run("GFX_SYNC TRUE")
+            .expect_output([CapturedOut::ShowCursor, CapturedOut::SetSync(true)])
+            .check();
         Tester::default()
             .run("GFX_SYNC FALSE")
-            .expect_output([CapturedOut::SetSync(false)])
+            .expect_output([CapturedOut::HideCursor, CapturedOut::SetSync(false)])
             .check();
     }
 
