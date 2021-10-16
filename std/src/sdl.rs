@@ -542,7 +542,7 @@ impl SdlConsole {
     ///
     /// Does not present the canvas.
     fn draw_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible {
+        if !self.cursor_visible || !self.sync_enabled {
             return Ok(());
         }
 
@@ -565,7 +565,7 @@ impl SdlConsole {
     ///
     /// Does not present the canvas.
     fn clear_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible || self.cursor_backup.is_empty() {
+        if !self.cursor_visible || !self.sync_enabled || self.cursor_backup.is_empty() {
             return Ok(());
         }
 
@@ -1521,6 +1521,8 @@ mod tests {
         test.console().print("After disabling sync").unwrap();
         test.console().sync_now().unwrap();
         test.console().print("With sync disabled").unwrap();
+        // Cursor should not be visible at this point because we have not reenabled video
+        // syncing.
 
         test.verify("sdl-sync");
     }
