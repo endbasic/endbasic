@@ -65,10 +65,6 @@ pub struct TerminalConsole {
     /// Whether we are in the alternate console or not.
     alt_active: bool,
 
-    /// Whether a background color is active.  If so, we need to flush the contents of every line
-    /// we print so that the color applies to the whole line.
-    need_line_flush: bool,
-
     /// Whether video syncing is enabled or not.
     sync_enabled: bool,
 }
@@ -95,7 +91,6 @@ impl TerminalConsole {
             bg_color: None,
             cursor_visible: true,
             alt_active: false,
-            need_line_flush: false,
             sync_enabled: true,
         })
     }
@@ -232,7 +227,6 @@ impl Console for TerminalConsole {
             stdout.queue(style::SetBackgroundColor(ct_bg)).map_err(crossterm_error_to_io_error)?;
             self.bg_color = bg;
         }
-        self.need_line_flush = bg.is_some();
         self.maybe_flush(stdout)
     }
 
@@ -285,10 +279,6 @@ impl Console for TerminalConsole {
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
         stdout.write_all(text.as_bytes())?;
-        if self.need_line_flush {
-            execute!(stdout, terminal::Clear(terminal::ClearType::UntilNewLine))
-                .map_err(crossterm_error_to_io_error)?;
-        }
         if self.is_tty {
             stdout.write_all(b"\r\n")?;
         } else {
