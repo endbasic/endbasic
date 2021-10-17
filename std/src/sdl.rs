@@ -306,15 +306,23 @@ fn parse_event(event: Event) -> io::Result<Option<Key>> {
         }
 
         Event::KeyDown { keycode: Some(keycode), keymod, .. } => match keycode {
+            Keycode::A if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
+                Ok(Some(Key::Home))
+            }
             Keycode::C if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
                 Ok(Some(Key::Interrupt))
             }
             Keycode::D if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
                 Ok(Some(Key::Eof))
             }
+            Keycode::E if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
+                Ok(Some(Key::End))
+            }
 
             Keycode::Backspace => Ok(Some(Key::Backspace)),
+            Keycode::End => Ok(Some(Key::End)),
             Keycode::Escape => Ok(Some(Key::Escape)),
+            Keycode::Home => Ok(Some(Key::Home)),
             Keycode::Return => Ok(Some(Key::NewLine)),
 
             Keycode::Down => Ok(Some(Key::ArrowDown)),

@@ -168,7 +168,8 @@ If a key press is available to be read, returns its name.  Otherwise, returns th
 The returned key matches its name, number, or symbol and maintains case.  In other words, \
 pressing the X key will return 'x' or 'X' depending on the SHIFT modifier.
 The following special keys are recognized: arrow keys (UP, DOWN, LEFT, RIGHT), backspace (BS), \
-enter (ENTER), escape (ESC), CTRL+D (EOF), and CTRL+C (INT).
+end or CTRL+E (END), enter (ENTER), CTRL+D (EOF), escape (ESC), home or CTRL+A (HOME) and \
+CTRL+C (INT).
 This function never blocks.  To wait for a key press, you need to explicitly poll the keyboard.  \
 For example, to wait until the escape key is pressed, you could do:
 k$ = \"\": WHILE k$ = <> \"ESC\": k = INKEY$(): SLEEP 0.01: WEND
@@ -202,8 +203,10 @@ impl Function for InKeyFunction {
             Some(Key::Backspace) => Value::Text("BS".to_owned()),
             Some(Key::CarriageReturn) => Value::Text("ENTER".to_owned()),
             Some(Key::Char(x)) => Value::Text(format!("{}", x)),
-            Some(Key::Escape) => Value::Text("ESC".to_owned()),
+            Some(Key::End) => Value::Text("END".to_owned()),
             Some(Key::Eof) => Value::Text("EOF".to_owned()),
+            Some(Key::Escape) => Value::Text("ESC".to_owned()),
+            Some(Key::Home) => Value::Text("HOME".to_owned()),
             Some(Key::Interrupt) => Value::Text("INT".to_owned()),
             Some(Key::NewLine) => Value::Text("ENTER".to_owned()),
             Some(Key::Unknown(_)) => Value::Text("".to_owned()),

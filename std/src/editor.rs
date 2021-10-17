@@ -259,6 +259,27 @@ impl Editor {
                     }
                 }
 
+                Key::End => {
+                    self.file_pos.col = self.content[self.file_pos.line].len();
+                    self.insert_col = self.file_pos.col;
+                }
+
+                Key::Home => {
+                    let mut indent_pos = 0;
+                    for ch in self.content[self.file_pos.line].chars() {
+                        if !ch.is_whitespace() {
+                            break;
+                        }
+                        indent_pos += 1;
+                    }
+                    if self.file_pos.col == indent_pos {
+                        self.file_pos.col = 0;
+                    } else {
+                        self.file_pos.col = indent_pos;
+                    }
+                    self.insert_col = self.file_pos.col;
+                }
+
                 Key::NewLine | Key::CarriageReturn => {
                     let indent = copy_indent(&self.content[self.file_pos.line]);
                     let indent_len = indent.len();
@@ -540,6 +561,82 @@ mod tests {
         }
 
         run_editor("", "\n", cb, ob);
+    }
+
+    #[test]
+    fn test_move_end() {
+        let mut cb = MockConsole::default();
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["text"], yx(0, 0));
+
+        cb.add_input_keys(&[Key::End]);
+        ob = ob.quick_refresh(linecol(0, 4), yx(0, 4));
+
+        cb.add_input_chars(".");
+        ob = ob.add(CapturedOut::Write(b".".to_vec()));
+        ob = ob.quick_refresh(linecol(0, 5), yx(0, 5));
+
+        run_editor("text", "text.\n", cb, ob);
+    }
+
+    #[test]
+    fn test_move_home_no_indent() {
+        let mut cb = MockConsole::default();
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["text"], yx(0, 0));
+
+        cb.add_input_keys(&[Key::ArrowRight]);
+        ob = ob.quick_refresh(linecol(0, 1), yx(0, 1));
+
+        cb.add_input_keys(&[Key::ArrowRight]);
+        ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
+
+        cb.add_input_keys(&[Key::Home]);
+        ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
+
+        cb.add_input_chars(".");
+        ob = ob.refresh(linecol(0, 1), &[".text"], yx(0, 1));
+
+        cb.add_input_keys(&[Key::Home]);
+        ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
+
+        cb.add_input_chars(",");
+        ob = ob.refresh(linecol(0, 1), &[",.text"], yx(0, 1));
+
+        run_editor("text", ",.text\n", cb, ob);
+    }
+
+    #[test]
+    fn test_move_home_with_indent() {
+        let mut cb = MockConsole::default();
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["  text"], yx(0, 0));
+
+        cb.add_input_keys(&[Key::Home]);
+        ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
+
+        cb.add_input_keys(&[Key::Home]);
+        ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
+
+        cb.add_input_keys(&[Key::ArrowRight]);
+        ob = ob.quick_refresh(linecol(0, 1), yx(0, 1));
+
+        cb.add_input_keys(&[Key::Home]);
+        ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
+
+        cb.add_input_keys(&[Key::ArrowRight]);
+        ob = ob.quick_refresh(linecol(0, 3), yx(0, 3));
+
+        cb.add_input_keys(&[Key::Home]);
+        ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
+
+        cb.add_input_chars(".");
+        ob = ob.refresh(linecol(0, 3), &["  .text"], yx(0, 3));
+
+        run_editor("  text", "  .text\n", cb, ob);
     }
 
     #[test]

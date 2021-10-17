@@ -144,16 +144,24 @@ impl TerminalConsole {
             event::Event::Key(ev) => {
                 let key = match ev.code {
                     event::KeyCode::Backspace => Key::Backspace,
+                    event::KeyCode::End => Key::End,
                     event::KeyCode::Esc => Key::Escape,
+                    event::KeyCode::Home => Key::Home,
                     event::KeyCode::Up => Key::ArrowUp,
                     event::KeyCode::Down => Key::ArrowDown,
                     event::KeyCode::Left => Key::ArrowLeft,
                     event::KeyCode::Right => Key::ArrowRight,
+                    event::KeyCode::Char('a') if ev.modifiers == event::KeyModifiers::CONTROL => {
+                        Key::Home
+                    }
                     event::KeyCode::Char('c') if ev.modifiers == event::KeyModifiers::CONTROL => {
                         Key::Interrupt
                     }
                     event::KeyCode::Char('d') if ev.modifiers == event::KeyModifiers::CONTROL => {
                         Key::Eof
+                    }
+                    event::KeyCode::Char('e') if ev.modifiers == event::KeyModifiers::CONTROL => {
+                        Key::End
                     }
                     event::KeyCode::Char('j') if ev.modifiers == event::KeyModifiers::CONTROL => {
                         Key::NewLine
