@@ -47,6 +47,9 @@ for the time being.**
     previous state of the machine was just too confusing and error-prone due
     to side-effects causing execution failures.
 
+*   Added support for the Home and End keys in the text editor and in text
+    input operations.
+
 ## Changes in version 0.7.0
 
 **Released on 2021-07-03.**

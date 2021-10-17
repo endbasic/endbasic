@@ -182,10 +182,25 @@ async fn read_line_interactive(
                 pos += 1;
             }
 
+            Key::End => {
+                let offset = line.len() - pos;
+                if offset > 0 {
+                    console.move_within_line(offset as i16)?;
+                    pos += offset;
+                }
+            }
+
             Key::Eof => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
 
             Key::Escape => {
                 // Intentionally ignored.
+            }
+
+            Key::Home => {
+                if pos > 0 {
+                    console.move_within_line(-(pos as i16))?;
+                    pos = 0;
+                }
             }
 
             Key::Interrupt => return Err(io::Error::new(io::ErrorKind::Interrupted, "Ctrl+C")),
@@ -232,6 +247,7 @@ async fn read_line_raw(console: &mut dyn Console) -> io::Result<String> {
                 }
             }
             Key::Char(ch) => line.push(ch),
+            Key::End | Key::Home => (),
             Key::Escape => (),
             Key::Eof => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
             Key::Interrupt => return Err(io::Error::new(io::ErrorKind::Interrupted, "Ctrl+C")),
@@ -575,6 +591,59 @@ mod tests {
             .add_output_bytes(b"3")
             // -
             .set_line("123")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_test_home_end() {
+        ReadLineInteractiveTest::default()
+            .set_previous("sample text")
+            .add_output(CapturedOut::Write(b"sample text".to_vec()))
+            // -
+            .add_key(Key::End)
+            // -
+            .add_key(Key::Home)
+            .add_output(CapturedOut::MoveWithinLine(-11))
+            // -
+            .add_key(Key::Home)
+            // -
+            .add_key(Key::Char('>'))
+            .add_output(CapturedOut::HideCursor)
+            .add_output_bytes(b">")
+            .add_output(CapturedOut::Write(b"sample text".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-11))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .add_key(Key::End)
+            .add_output(CapturedOut::MoveWithinLine(11))
+            // -
+            .add_key(Key::Char('<'))
+            .add_output_bytes(b"<")
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::Backspace)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write(b"text<".to_vec()))
+            .add_output_bytes(b" ")
+            .add_output(CapturedOut::MoveWithinLine(-6))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line(">sampletext<")
             .accept();
     }
 

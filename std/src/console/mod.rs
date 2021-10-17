@@ -60,6 +60,9 @@ pub enum Key {
     /// A printable character.
     Char(char),
 
+    /// The end key or `Ctrl-E`.
+    End,
+
     /// Indicates a request for termination (e.g. `Ctrl-D`).
     Eof,
 
@@ -71,6 +74,9 @@ pub enum Key {
     // Control(char) value so that we can represent other control sequences and allow the logic in
     // here to determine what to do with each.
     Interrupt,
+
+    /// The home key or `Ctrl-A`.
+    Home,
 
     /// Accepts the current line.
     NewLine,
