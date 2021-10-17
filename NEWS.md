@@ -32,6 +32,12 @@ for the time being.**
     but this is now necessary to match the ordering of the coordinates in all
     graphics commands and avoid tons of confusion.
 
+*   Modified console facilities (including `PRINT` and `INPUT`) so that they do
+    not clear lines up to the right margin.  I had originally added this as a
+    feature so that changing the background color in the REPL caused all
+    subsequent lines to be formatted consistently, but this prevented composing
+    overlapping text, which is a necessity.
+
 *   Extended the `CLEAR` and `NEW` commands so that they reset various
     properties of the machine, not just variables.  This includes the state of
     the console, whose color and video syncing bit are reset; and the GPIO pins,

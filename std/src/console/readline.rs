@@ -15,11 +15,29 @@
 
 //! Interactive line reader.
 
-use crate::console::{ClearType, Console, Key};
+use crate::console::{Console, Key};
 use std::io;
 
 /// Character to print when typing a secure string.
 const SECURE_CHAR: u8 = b'*';
+
+/// Refreshes the current input line to display `line` assuming that the cursor is currently
+/// offset by `pos` characters from the beginning of the input.
+fn update_line(console: &mut dyn Console, pos: usize, line: &str) -> io::Result<()> {
+    console.hide_cursor()?;
+    if pos > 0 {
+        console.move_within_line(-(pos as i16))?;
+    }
+    if !line.is_empty() {
+        console.write(line.as_bytes())?;
+    }
+    if line.len() < pos {
+        let diff = pos - line.len();
+        console.write(&vec![b' '; diff])?;
+        console.move_within_line(-(diff as i16))?;
+    }
+    console.show_cursor()
+}
 
 /// Reads a line of text interactively from the console, using the given `prompt` and pre-filling
 /// the input with `previous`.  If `history` is not `None`, then this appends the newly entered line
@@ -32,7 +50,6 @@ async fn read_line_interactive(
     echo: bool,
 ) -> io::Result<String> {
     let mut line = String::from(previous);
-    console.clear(ClearType::UntilNewLine)?;
     if !prompt.is_empty() || !line.is_empty() {
         if echo {
             console.write(format!("{}{}", prompt, line).as_bytes())?;
@@ -72,15 +89,7 @@ async fn read_line_interactive(
                     history_pos -= 1;
                     line = history[history_pos].clone();
 
-                    console.hide_cursor()?;
-                    if pos > 0 {
-                        console.move_within_line(-(pos as i16))?;
-                        console.clear(ClearType::UntilNewLine)?;
-                    }
-                    if !line.is_empty() {
-                        console.write(line.as_bytes())?;
-                    }
-                    console.show_cursor()?;
+                    update_line(console, pos, &line)?;
 
                     pos = line.len();
                 }
@@ -96,15 +105,7 @@ async fn read_line_interactive(
                     history_pos += 1;
                     line = history[history_pos].clone();
 
-                    console.hide_cursor()?;
-                    if pos > 0 {
-                        console.move_within_line(-(pos as i16))?;
-                        console.clear(ClearType::UntilNewLine)?;
-                    }
-                    if !line.is_empty() {
-                        console.write(line.as_bytes())?;
-                    }
-                    console.show_cursor()?;
+                    update_line(console, pos, &line)?;
 
                     pos = line.len();
                 }
@@ -304,7 +305,7 @@ mod tests {
                 history: None,
                 echo: true,
                 exp_line: "",
-                exp_output: vec![CapturedOut::Clear(ClearType::UntilNewLine)],
+                exp_output: vec![],
                 exp_history: None,
             }
         }
@@ -679,15 +680,15 @@ mod tests {
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-5))
-            .add_output(CapturedOut::Clear(ClearType::UntilNewLine))
             .add_output(CapturedOut::Write(b"second".to_vec()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-6))
-            .add_output(CapturedOut::Clear(ClearType::UntilNewLine))
             .add_output(CapturedOut::Write(b"first".to_vec()))
+            .add_output(CapturedOut::Write(b" ".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-1))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
@@ -695,21 +696,22 @@ mod tests {
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-5))
-            .add_output(CapturedOut::Clear(ClearType::UntilNewLine))
             .add_output(CapturedOut::Write(b"second".to_vec()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-6))
-            .add_output(CapturedOut::Clear(ClearType::UntilNewLine))
             .add_output(CapturedOut::Write(b"third".to_vec()))
+            .add_output(CapturedOut::Write(b" ".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-1))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-5))
-            .add_output(CapturedOut::Clear(ClearType::UntilNewLine))
+            .add_output(CapturedOut::Write(b"     ".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-5))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
@@ -741,7 +743,6 @@ mod tests {
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-5))
-            .add_output(CapturedOut::Clear(ClearType::UntilNewLine))
             .add_output(CapturedOut::Write(b"second".to_vec()))
             .add_output(CapturedOut::ShowCursor)
             //
@@ -825,7 +826,6 @@ mod tests {
         assert_eq!("15", &line);
         assert_eq!(
             &[
-                CapturedOut::Clear(ClearType::UntilNewLine),
                 CapturedOut::Write(vec![b'>', b' ']),
                 CapturedOut::Write(vec![b'*']),
                 CapturedOut::Write(vec![b'*']),

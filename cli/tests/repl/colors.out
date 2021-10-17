@@ -4,10 +4,16 @@
     Type HELP for interactive usage information.
     For a guided tour, type: LOAD "DEMOS:/TOUR.BAS": RUN
 
-[38;5;5m[48;5;4mHello[K
-[38;5;4m[48;5;3mHello[K
-[38;5;3m[48;5;2mHello[K
-[38;5;2m[48;5;1mHello[K
-[38;5;1m[48;5;0mHello[K
-[39m[49m[38;5;4m[48;5;2mMessage[K
-[39m[49mEnd of input by CTRL-D
+[2J[1;1H[38;5;5m[48;5;4mHello
+[38;5;4m[48;5;3mHello
+[38;5;3m[48;5;2mHello
+[38;5;2m[48;5;1mHello
+[38;5;1m[48;5;0mHello
+[39m[49m[38;5;4m[48;5;2mMessage
+[39m[48;5;4m[11;1H            
+[12;1H            
+[13;1H            
+[14;1H            
+[15;1H            
+[48;5;5m[13;5H####
+[21;1H[49mEnd of input by CTRL-D

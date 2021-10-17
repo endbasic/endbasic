@@ -185,7 +185,7 @@ impl Console for XtermJsConsole {
         debug_assert!(!endbasic_std::console::has_control_chars_str(text));
 
         self.terminal.write(text);
-        self.terminal.write("\u{001b}[K\r\n");
+        self.terminal.write("\r\n");
         Ok(())
     }
 

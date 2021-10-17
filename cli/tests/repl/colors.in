@@ -13,8 +13,11 @@
 ' License for the specific language governing permissions and limitations
 ' under the License.
 
-' Tests that the background color is used to clear all new lines until the right
-' margin of the screen.
+' Tests that the background color is used only as the underlying color of new
+' text, not the whole line.  Previous versions of EndBASIC used to clear lines
+' until the end on every PRINT, but that behavior prevented ASCII drawing.
+
+CLS
 
 A = 5: WHILE A > 0: COLOR A, A - 1: PRINT "Hello": A = A - 1: WEND
 COLOR
@@ -24,4 +27,12 @@ INPUT "Number? "; num
 123
 
 PRINT "Message"
+
+COLOR , 4
+FOR I = 10 TO 14: LOCATE 0, I: PRINT "            ": NEXT
+COLOR , 5
+LOCATE 4, 12
+PRINT "####"
+
+LOCATE 0, 20
 COLOR
