@@ -309,6 +309,9 @@ fn parse_event(event: Event) -> io::Result<Option<Key>> {
             Keycode::A if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
                 Ok(Some(Key::Home))
             }
+            Keycode::B if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
+                Ok(Some(Key::ArrowLeft))
+            }
             Keycode::C if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
                 Ok(Some(Key::Interrupt))
             }
@@ -317,6 +320,21 @@ fn parse_event(event: Event) -> io::Result<Option<Key>> {
             }
             Keycode::E if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
                 Ok(Some(Key::End))
+            }
+            Keycode::F if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
+                Ok(Some(Key::ArrowRight))
+            }
+            Keycode::J if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
+                Ok(Some(Key::NewLine))
+            }
+            Keycode::M if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
+                Ok(Some(Key::NewLine))
+            }
+            Keycode::N if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
+                Ok(Some(Key::ArrowDown))
+            }
+            Keycode::P if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
+                Ok(Some(Key::ArrowUp))
             }
 
             Keycode::Backspace => Ok(Some(Key::Backspace)),

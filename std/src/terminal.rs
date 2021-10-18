@@ -155,6 +155,9 @@ impl TerminalConsole {
                     event::KeyCode::Char('a') if ev.modifiers == event::KeyModifiers::CONTROL => {
                         Key::Home
                     }
+                    event::KeyCode::Char('b') if ev.modifiers == event::KeyModifiers::CONTROL => {
+                        Key::ArrowLeft
+                    }
                     event::KeyCode::Char('c') if ev.modifiers == event::KeyModifiers::CONTROL => {
                         Key::Interrupt
                     }
@@ -164,11 +167,20 @@ impl TerminalConsole {
                     event::KeyCode::Char('e') if ev.modifiers == event::KeyModifiers::CONTROL => {
                         Key::End
                     }
+                    event::KeyCode::Char('f') if ev.modifiers == event::KeyModifiers::CONTROL => {
+                        Key::ArrowRight
+                    }
                     event::KeyCode::Char('j') if ev.modifiers == event::KeyModifiers::CONTROL => {
                         Key::NewLine
                     }
                     event::KeyCode::Char('m') if ev.modifiers == event::KeyModifiers::CONTROL => {
                         Key::NewLine
+                    }
+                    event::KeyCode::Char('n') if ev.modifiers == event::KeyModifiers::CONTROL => {
+                        Key::ArrowDown
+                    }
+                    event::KeyCode::Char('p') if ev.modifiers == event::KeyModifiers::CONTROL => {
+                        Key::ArrowUp
                     }
                     event::KeyCode::Char(ch) => Key::Char(ch),
                     event::KeyCode::Enter => Key::NewLine,
