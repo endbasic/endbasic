@@ -53,6 +53,9 @@ for the time being.**
 *   Improved indentation support in the editor by making the Backspace and
     Tab keys aware of indentation.
 
+*   Modified the storage commands to keep track of the currently-loaded program
+    path so that the editor can display it.
+
 ## Changes in version 0.7.0
 
 **Released on 2021-07-03.**

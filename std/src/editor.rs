@@ -71,6 +71,9 @@ struct FilePos {
 ///
 /// The text editor owns the textual contents it is editing.
 pub struct Editor {
+    /// Path of the loaded program.  `None` if the program has never been saved yet.
+    name: Option<String>,
+
     /// Owned contents of the file being edited.
     content: Vec<String>,
 
@@ -89,6 +92,7 @@ impl Default for Editor {
     /// Creates a new editor without any stored contents.
     fn default() -> Self {
         Self {
+            name: None,
             content: vec![],
             viewport_pos: FilePos::default(),
             file_pos: FilePos::default(),
@@ -108,15 +112,20 @@ impl Editor {
         let keys = " ESC Finish editing ";
         // Even though we track file positions as 0-indexed, display them as 1-indexed for a better
         // user experience given that this is what all other editor seem to do.
-        let pos = format!(" | Ln {}, Col {} ", self.file_pos.line + 1, self.file_pos.col + 1);
+        let details = format!(
+            " | {} | Ln {}, Col {} ",
+            self.name.as_deref().unwrap_or("<NO NAME>"),
+            self.file_pos.line + 1,
+            self.file_pos.col + 1
+        );
 
         let width = usize::from(console_size.x);
         let mut status = String::with_capacity(width);
         status.push_str(keys);
-        while status.len() < width - pos.len() {
+        while status.len() < width - details.len() {
             status.push(' ');
         }
-        status.push_str(&pos);
+        status.push_str(&details);
         status.truncate(width);
 
         console.locate(CharsXY::new(0, console_size.y - 1))?;
@@ -368,11 +377,20 @@ impl Program for Editor {
         result
     }
 
-    fn load(&mut self, text: &str) {
+    fn load(&mut self, name: Option<&str>, text: &str) {
+        self.name = name.map(str::to_owned);
         self.content = text.lines().map(|l| l.to_owned()).collect();
         self.viewport_pos = FilePos::default();
         self.file_pos = FilePos::default();
         self.insert_col = 0;
+    }
+
+    fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    fn set_name(&mut self, name: &str) {
+        self.name = Some(name.to_owned());
     }
 
     fn text(&self) -> String {
@@ -385,6 +403,10 @@ mod tests {
     use super::*;
     use crate::testutils::*;
     use futures_lite::future::block_on;
+
+    /// Name of the program to inject into the editor for testing.  The name is very short because
+    /// all tests operate on a pretty narrow window and the status bar would be mangled otherwise.
+    const TEST_FILENAME: &str = "X";
 
     /// Syntactic sugar to easily instantiate a `CharsXY` at `(x,y)`.
     ///
@@ -430,13 +452,13 @@ mod tests {
             self.output.push(CapturedOut::Color(STATUS_COLOR.0, STATUS_COLOR.1));
             let mut status = String::from(" ESC Finish editing");
             if row < 10 && column < 10 {
-                status += "       ";
+                status += "   ";
             } else if row > 10 && column > 10 {
-                status += "     ";
+                status += " ";
             } else {
-                status += "      ";
+                status += "  ";
             }
-            status += &format!("| Ln {}, Col {} ", row, column);
+            status += &format!("| {} | Ln {}, Col {} ", TEST_FILENAME, row, column);
             self.output.push(CapturedOut::Write(status.as_bytes().to_owned()));
             self
         }
@@ -490,7 +512,7 @@ mod tests {
     /// is automatically appended to `cb` here.
     fn run_editor(previous: &str, exp_text: &str, mut console: MockConsole, ob: OutputBuilder) {
         let mut editor = Editor::default();
-        editor.load(previous);
+        editor.load(Some(TEST_FILENAME), previous);
 
         console.add_input_keys(&[Key::Escape]);
         block_on(editor.edit(&mut console)).unwrap();
@@ -503,10 +525,10 @@ mod tests {
         let mut editor = Editor::default();
         assert!(editor.text().is_empty());
 
-        editor.load("some text\n    and more\n");
+        editor.load(Some(TEST_FILENAME), "some text\n    and more\n");
         assert_eq!("some text\n    and more\n", editor.text());
 
-        editor.load("different\n");
+        editor.load(Some(TEST_FILENAME), "different\n");
         assert_eq!("different\n", editor.text());
     }
 
@@ -515,7 +537,7 @@ mod tests {
         let mut editor = Editor::default();
         assert!(editor.text().is_empty());
 
-        editor.load("missing\nnewline at eof");
+        editor.load(Some(TEST_FILENAME), "missing\nnewline at eof");
         assert_eq!("missing\nnewline at eof\n", editor.text());
     }
 

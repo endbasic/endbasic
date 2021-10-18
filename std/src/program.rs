@@ -48,8 +48,15 @@ pub trait Program {
     /// Edits the program interactively via the given `console`.
     async fn edit(&mut self, console: &mut dyn Console) -> io::Result<()>;
 
-    /// Reloads the contents of the stored program with the given `text`.
-    fn load(&mut self, text: &str);
+    /// Reloads the contents of the stored program with the given `text` and tracks them as coming
+    /// from the file given in `name`.
+    fn load(&mut self, name: Option<&str>, text: &str);
+
+    /// Path of the loaded program.  Should be `None` if the program has never been saved yet.
+    fn name(&self) -> Option<&str>;
+
+    /// Resets the name of the program.  Used when saving it.
+    fn set_name(&mut self, name: &str);
 
     /// Gets the contents of the stored program as a single string.
     fn text(&self) -> String;
@@ -265,7 +272,8 @@ impl Command for LoadCommand {
             Value::Text(t) => {
                 let name = add_extension(t)?;
                 let content = self.storage.borrow().get(&name).await?;
-                self.program.borrow_mut().load(&content);
+                let full_name = self.storage.borrow().make_canonical(&name)?;
+                self.program.borrow_mut().load(Some(&full_name), &content);
                 machine.clear();
             }
             _ => {
@@ -316,7 +324,7 @@ impl Command for NewCommand {
         if !args.is_empty() {
             return Err(CallError::ArgumentError("NEW takes no arguments".to_owned()));
         }
-        self.program.borrow_mut().load("");
+        self.program.borrow_mut().load(None, "");
         machine.clear();
         Ok(())
     }
@@ -419,8 +427,10 @@ impl Command for SaveCommand {
         match arg0.eval(machine.get_mut_symbols()).await? {
             Value::Text(t) => {
                 let name = add_extension(t)?;
+                let full_name = self.storage.borrow().make_canonical(&name)?;
                 let content = self.program.borrow().text();
                 self.storage.borrow_mut().put(&name, &content).await?;
+                self.program.borrow_mut().set_name(&full_name);
             }
             _ => {
                 return Err(CallError::ArgumentError(
@@ -458,11 +468,11 @@ mod tests {
     fn test_del_ok() {
         for p in &["foo", "foo.bas"] {
             Tester::default()
-                .set_program("Leave me alone")
+                .set_program(Some("foo.bas"), "Leave me alone")
                 .write_file("bar.bas", "")
                 .write_file("foo.bas", "line 1\n  line 2\n")
                 .run(format!(r#"DEL "{}""#, p))
-                .expect_program("Leave me alone")
+                .expect_program(Some("foo.bas"), "Leave me alone")
                 .expect_file("MEMORY:/bar.bas", "")
                 .check();
         }
@@ -485,10 +495,10 @@ mod tests {
     #[test]
     fn test_edit_ok() {
         Tester::default()
-            .set_program("previous\n")
+            .set_program(Some("foo.bas"), "previous\n")
             .add_input_chars("new line\n")
             .run("EDIT")
-            .expect_program("previous\nnew line\n")
+            .expect_program(Some("foo.bas"), "previous\nnew line\n")
             .check();
     }
 
@@ -502,20 +512,20 @@ mod tests {
         Tester::default().run("LIST").check();
 
         Tester::default()
-            .set_program("one\n\nthree\n")
+            .set_program(None, "one\n\nthree\n")
             .run("LIST")
             .expect_prints(["1 | one", "2 | ", "3 | three"])
-            .expect_program("one\n\nthree\n")
+            .expect_program(None as Option<&str>, "one\n\nthree\n")
             .check();
 
         Tester::default()
-            .set_program("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n")
+            .set_program(None, "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n")
             .run("LIST")
             .expect_prints([
                 " 1 | a", " 2 | b", " 3 | c", " 4 | d", " 5 | e", " 6 | f", " 7 | g", " 8 | h",
                 " 9 | i", "10 | j",
             ])
-            .expect_program("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n")
+            .expect_program(None as Option<&str>, "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n")
             .check();
     }
 
@@ -527,15 +537,21 @@ mod tests {
     #[test]
     fn test_load_ok() {
         let content = "line 1\n\n  line 2\n";
-        for p in &["foo", "foo.bas", "BAR", "BAR.BAS", "Baz"] {
+        for (explicit, canonical) in &[
+            ("foo", "MEMORY:foo.bas"),
+            ("foo.bas", "MEMORY:foo.bas"),
+            ("BAR", "MEMORY:BAR.BAS"),
+            ("BAR.BAS", "MEMORY:BAR.BAS"),
+            ("Baz", "MEMORY:Baz.bas"),
+        ] {
             Tester::default()
                 .write_file("foo.bas", content)
                 .write_file("foo.bak", "")
                 .write_file("BAR.BAS", content)
                 .write_file("Baz.bas", content)
-                .run(format!(r#"LOAD "{}""#, p))
+                .run(format!(r#"LOAD "{}""#, explicit))
                 .expect_clear()
-                .expect_program("line 1\n\n  line 2\n")
+                .expect_program(Some(*canonical), "line 1\n\n  line 2\n")
                 .expect_file("MEMORY:/foo.bas", content)
                 .expect_file("MEMORY:/foo.bak", "")
                 .expect_file("MEMORY:/BAR.BAS", content)
@@ -587,7 +603,11 @@ mod tests {
 
     #[test]
     fn test_new_clears_program_and_variables() {
-        Tester::default().set_program("some stuff").run("a = 3: NEW").expect_clear().check();
+        Tester::default()
+            .set_program(Some("previous.bas"), "some stuff")
+            .run("a = 3: NEW")
+            .expect_clear()
+            .check();
     }
 
     #[test]
@@ -603,17 +623,17 @@ mod tests {
     #[test]
     fn test_run_clears_before_execution_only() {
         let program = "DIM a(1) AS INTEGER: a(0) = 123";
-        let mut t = Tester::default().set_program(program);
+        let mut t = Tester::default().set_program(Some("untouched.bas"), program);
         t.run("DIM a(1) AS STRING: RUN")
             .expect_array_simple("a", VarType::Integer, vec![123.into()])
             .expect_clear()
-            .expect_program(program)
+            .expect_program(Some("untouched.bas"), program)
             .check();
         t.run("RUN")
             .expect_array_simple("a", VarType::Integer, vec![123.into()])
             .expect_clear()
             .expect_clear()
-            .expect_program(program)
+            .expect_program(Some("untouched.bas"), program)
             .check();
     }
 
@@ -621,11 +641,11 @@ mod tests {
     fn test_run_something_that_exits() {
         let program = "PRINT 5: EXIT 1: PRINT 4";
         Tester::default()
-            .set_program(program)
+            .set_program(Some("untouched.bas"), program)
             .run(r#"RUN: PRINT "after""#)
             .expect_clear()
             .expect_prints(["5", "Program exited with code 1", "after"])
-            .expect_program(program)
+            .expect_program(Some("untouched.bas"), program)
             .check();
     }
 
@@ -637,17 +657,17 @@ mod tests {
     #[test]
     fn test_save_ok() {
         let content = "\n some line   \n ";
-        for (explicit, actual) in &[
-            ("first", "MEMORY:/first.bas"),
-            ("second.bas", "MEMORY:/second.bas"),
-            ("THIRD", "MEMORY:/THIRD.BAS"),
-            ("FOURTH.BAS", "MEMORY:/FOURTH.BAS"),
-            ("Fifth", "MEMORY:/Fifth.bas"),
+        for (explicit, actual, canonical) in &[
+            ("first", "MEMORY:/first.bas", "MEMORY:first.bas"),
+            ("second.bas", "MEMORY:/second.bas", "MEMORY:second.bas"),
+            ("THIRD", "MEMORY:/THIRD.BAS", "MEMORY:THIRD.BAS"),
+            ("FOURTH.BAS", "MEMORY:/FOURTH.BAS", "MEMORY:FOURTH.BAS"),
+            ("Fifth", "MEMORY:/Fifth.bas", "MEMORY:Fifth.bas"),
         ] {
             Tester::default()
-                .set_program(content)
+                .set_program(Some("before.bas"), content)
                 .run(format!(r#"SAVE "{}""#, explicit))
-                .expect_program(content)
+                .expect_program(Some(*canonical), content)
                 .expect_file(*actual, content)
                 .check();
         }

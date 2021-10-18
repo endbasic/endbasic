@@ -270,6 +270,7 @@ impl Console for MockConsole {
 /// edits are requested.
 #[derive(Default)]
 pub struct RecordedProgram {
+    name: Option<String>,
     content: String,
 }
 
@@ -282,8 +283,17 @@ impl Program for RecordedProgram {
         Ok(())
     }
 
-    fn load(&mut self, text: &str) {
+    fn load(&mut self, name: Option<&str>, text: &str) {
+        self.name = name.map(str::to_owned);
         self.content = text.to_owned();
+    }
+
+    fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    fn set_name(&mut self, name: &str) {
+        self.name = Some(name.to_owned());
     }
 
     fn text(&self) -> String {
@@ -597,14 +607,14 @@ impl Tester {
         self.service.clone()
     }
 
-    /// Sets the initial contents of the recorded program to `text`.  Can only be called once and
-    /// `text` must not be empty.
-    pub fn set_program(self, text: &str) -> Self {
+    /// Sets the initial name of the recorded program to `name` (if any) and its contents to `text`.
+    /// Can only be called once and `text` must not be empty.
+    pub fn set_program(self, name: Option<&str>, text: &str) -> Self {
         assert!(!text.is_empty());
         {
             let mut program = self.program.borrow_mut();
             assert!(program.text().is_empty());
-            program.load(text);
+            program.load(name, text);
         }
         self
     }
@@ -631,7 +641,8 @@ pub struct Checker<'a> {
     exp_result: Result<StopReason, String>,
     exp_output: Vec<CapturedOut>,
     exp_drives: HashMap<String, String>,
-    exp_program: String,
+    exp_program_name: Option<String>,
+    exp_program_text: String,
     exp_arrays: HashMap<String, Array>,
     exp_vars: HashMap<String, Value>,
 }
@@ -648,7 +659,8 @@ impl<'a> Checker<'a> {
             exp_result: Ok(StopReason::Eof),
             exp_output: vec![],
             exp_drives: HashMap::default(),
-            exp_program: String::new(),
+            exp_program_name: None,
+            exp_program_text: String::new(),
             exp_arrays: HashMap::default(),
             exp_vars: HashMap::default(),
         }
@@ -751,13 +763,18 @@ impl<'a> Checker<'a> {
         self
     }
 
-    /// Sets the expected contents of the stored program to `text`.  Can only be called once and
-    /// `text` must not be empty.
-    pub fn expect_program<S: Into<String>>(mut self, text: S) -> Self {
-        assert!(self.exp_program.is_empty());
+    /// Sets the expected name of the stored program to `name` and its contents to `text`.  Can only
+    /// be called once and `text` must not be empty.
+    pub fn expect_program<S1: Into<String>, S2: Into<String>>(
+        mut self,
+        name: Option<S1>,
+        text: S2,
+    ) -> Self {
+        assert!(self.exp_program_text.is_empty());
         let text = text.into();
         assert!(!text.is_empty());
-        self.exp_program = text;
+        self.exp_program_name = name.map(|x| x.into());
+        self.exp_program_text = text;
         self
     }
 
@@ -818,7 +835,8 @@ impl<'a> Checker<'a> {
         assert_eq!(self.exp_vars, vars);
         assert_eq!(self.exp_arrays, arrays);
         assert_eq!(self.exp_output, self.tester.console.borrow().captured_out());
-        assert_eq!(self.exp_program, self.tester.program.borrow().text());
+        assert_eq!(self.exp_program_name.as_deref(), self.tester.program.borrow().name());
+        assert_eq!(self.exp_program_text, self.tester.program.borrow().text());
         assert_eq!(self.exp_drives, drive_contents);
 
         self.tester.console.borrow_mut().verify_all_used();
