@@ -27,8 +27,10 @@ PRINT "Good bye."
 PRINT "After edit"
 RUN
 
+SAVE "test.bas"
 EDIT
 PRINT "Resumed editing at the end of the file"
+PRINT "And now the editor displays the last-saved file name"
 
 RUN
 
