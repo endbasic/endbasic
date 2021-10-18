@@ -96,11 +96,15 @@ fn on_key_event_into_key(event: OnKeyEvent) -> Key {
         39 => Key::ArrowRight,
         40 => Key::ArrowDown,
         b'A' if dom_event.ctrl_key() => Key::Home,
+        b'B' if dom_event.ctrl_key() => Key::ArrowLeft,
         b'C' if dom_event.ctrl_key() => Key::Interrupt,
         b'D' if dom_event.ctrl_key() => Key::Eof,
         b'E' if dom_event.ctrl_key() => Key::End,
+        b'F' if dom_event.ctrl_key() => Key::ArrowRight,
         b'J' if dom_event.ctrl_key() => Key::NewLine,
         b'M' if dom_event.ctrl_key() => Key::NewLine,
+        b'N' if dom_event.ctrl_key() => Key::ArrowDown,
+        b'P' if dom_event.ctrl_key() => Key::ArrowUp,
         _ => {
             let printable = !dom_event.alt_key() && !dom_event.ctrl_key() && !dom_event.meta_key();
             let chars = event.key().chars().collect::<Vec<char>>();
