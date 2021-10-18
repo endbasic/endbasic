@@ -28,6 +28,9 @@ const TEXT_COLOR: (Option<u8>, Option<u8>) = (Some(15), None);
 /// The color of the editor status bar.
 const STATUS_COLOR: (Option<u8>, Option<u8>) = (Some(15), Some(4));
 
+/// Default indentation with.
+const INDENT_WIDTH: usize = 4;
+
 /// Returns the indentation of a given string as a new string.
 fn copy_indent(line: &str) -> String {
     let mut indent = String::new();
@@ -38,6 +41,20 @@ fn copy_indent(line: &str) -> String {
         indent.push(ch);
     }
     indent
+}
+
+/// Finds the first position within the line that is not an indentation character, or returns
+/// the line length if no such character is found.
+fn find_indent_end(line: &str) -> usize {
+    let mut pos = 0;
+    for ch in line.chars() {
+        if ch != ' ' {
+            break;
+        }
+        pos += 1;
+    }
+    debug_assert!(pos <= line.len());
+    pos
 }
 
 /// Represents a position within a file.
@@ -223,14 +240,38 @@ impl Editor {
                 Key::Backspace => {
                     if self.file_pos.col > 0 {
                         let line = &mut self.content[self.file_pos.line];
+
+                        let indent_pos = find_indent_end(line);
+                        let is_indent = indent_pos >= self.file_pos.col;
+                        let nremove = if is_indent {
+                            let new_pos = if self.file_pos.col >= INDENT_WIDTH {
+                                (self.file_pos.col - 1) / INDENT_WIDTH * INDENT_WIDTH
+                            } else {
+                                0
+                            };
+                            self.file_pos.col - new_pos
+                        } else {
+                            1
+                        };
+
                         if self.file_pos.col == line.len() {
-                            console.clear(ClearType::PreviousChar)?;
+                            if nremove > 0 {
+                                console.hide_cursor()?;
+                            }
+                            for _ in 0..nremove {
+                                console.clear(ClearType::PreviousChar)?;
+                            }
+                            if nremove > 0 {
+                                console.show_cursor()?;
+                            }
                         } else {
                             // TODO(jmmv): Refresh only the affected line.
                             need_refresh = true;
                         }
-                        line.remove(self.file_pos.col - 1);
-                        self.file_pos.col -= 1;
+                        for _ in 0..nremove {
+                            line.remove(self.file_pos.col - 1);
+                            self.file_pos.col -= 1;
+                        }
                     } else if self.file_pos.line > 0 {
                         let line = self.content.remove(self.file_pos.line);
                         let prev = &mut self.content[self.file_pos.line - 1];
@@ -265,13 +306,7 @@ impl Editor {
                 }
 
                 Key::Home => {
-                    let mut indent_pos = 0;
-                    for ch in self.content[self.file_pos.line].chars() {
-                        if !ch.is_whitespace() {
-                            break;
-                        }
-                        indent_pos += 1;
-                    }
+                    let indent_pos = find_indent_end(&self.content[self.file_pos.line]);
                     if self.file_pos.col == indent_pos {
                         self.file_pos.col = 0;
                     } else {
@@ -293,6 +328,26 @@ impl Editor {
                     self.file_pos.col = indent_len;
                     self.file_pos.line += 1;
                     self.insert_col = self.file_pos.col;
+                }
+
+                Key::Tab => {
+                    let line = &mut self.content[self.file_pos.line];
+                    if self.file_pos.col < line.len() {
+                        // TODO(jmmv): Refresh only the affected line.
+                        need_refresh = true;
+                    }
+
+                    let new_pos = (self.file_pos.col + INDENT_WIDTH) / INDENT_WIDTH * INDENT_WIDTH;
+                    let mut new_text = String::with_capacity(new_pos - self.file_pos.col);
+                    for _ in 0..new_text.capacity() {
+                        new_text.push(' ');
+                    }
+                    line.insert_str(self.file_pos.col, &new_text);
+                    self.file_pos.col = new_pos;
+                    self.insert_col = self.file_pos.col;
+                    if !need_refresh {
+                        console.write(new_text.as_bytes())?;
+                    }
                 }
 
                 // TODO(jmmv): Should do something smarter with unknown keys.
@@ -637,6 +692,112 @@ mod tests {
         ob = ob.refresh(linecol(0, 3), &["  .text"], yx(0, 3));
 
         run_editor("  text", "  .text\n", cb, ob);
+    }
+
+    #[test]
+    fn test_tab_append() {
+        let mut cb = MockConsole::default();
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
+
+        cb.add_input_keys(&[Key::Tab]);
+        ob = ob.add(CapturedOut::Write(b"    ".to_vec()));
+        ob = ob.quick_refresh(linecol(0, 4), yx(0, 4));
+
+        cb.add_input_chars("x");
+        ob = ob.add(CapturedOut::Write(b"x".to_vec()));
+        ob = ob.quick_refresh(linecol(0, 5), yx(0, 5));
+
+        cb.add_input_keys(&[Key::Tab]);
+        ob = ob.add(CapturedOut::Write(b"   ".to_vec()));
+        ob = ob.quick_refresh(linecol(0, 8), yx(0, 8));
+
+        run_editor("", "    x   \n", cb, ob);
+    }
+
+    #[test]
+    fn test_tab_existing_content() {
+        let mut cb = MockConsole::default();
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["."], yx(0, 0));
+
+        cb.add_input_keys(&[Key::Tab]);
+        ob = ob.refresh(linecol(0, 4), &["    ."], yx(0, 4));
+
+        cb.add_input_keys(&[Key::Tab]);
+        ob = ob.refresh(linecol(0, 8), &["        ."], yx(0, 8));
+
+        run_editor(".", "        .\n", cb, ob);
+    }
+
+    #[test]
+    fn test_tab_remove_empty_line() {
+        let mut cb = MockConsole::default();
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["          "], yx(0, 0));
+
+        cb.add_input_keys(&[Key::End]);
+        ob = ob.quick_refresh(linecol(0, 10), yx(0, 10));
+
+        cb.add_input_keys(&[Key::Backspace]);
+        ob = ob.add(CapturedOut::HideCursor);
+        ob = ob.add(CapturedOut::Clear(ClearType::PreviousChar));
+        ob = ob.add(CapturedOut::Clear(ClearType::PreviousChar));
+        ob = ob.add(CapturedOut::ShowCursor);
+        ob = ob.quick_refresh(linecol(0, 8), yx(0, 8));
+
+        cb.add_input_keys(&[Key::Backspace]);
+        ob = ob.add(CapturedOut::HideCursor);
+        ob = ob.add(CapturedOut::Clear(ClearType::PreviousChar));
+        ob = ob.add(CapturedOut::Clear(ClearType::PreviousChar));
+        ob = ob.add(CapturedOut::Clear(ClearType::PreviousChar));
+        ob = ob.add(CapturedOut::Clear(ClearType::PreviousChar));
+        ob = ob.add(CapturedOut::ShowCursor);
+        ob = ob.quick_refresh(linecol(0, 4), yx(0, 4));
+
+        cb.add_input_keys(&[Key::Backspace]);
+        ob = ob.add(CapturedOut::HideCursor);
+        ob = ob.add(CapturedOut::Clear(ClearType::PreviousChar));
+        ob = ob.add(CapturedOut::Clear(ClearType::PreviousChar));
+        ob = ob.add(CapturedOut::Clear(ClearType::PreviousChar));
+        ob = ob.add(CapturedOut::Clear(ClearType::PreviousChar));
+        ob = ob.add(CapturedOut::ShowCursor);
+        ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
+
+        cb.add_input_keys(&[Key::Backspace]);
+        ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
+
+        run_editor("          ", "\n", cb, ob);
+    }
+
+    #[test]
+    fn test_tab_remove_before_some_text() {
+        let mut cb = MockConsole::default();
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["          aligned"], yx(0, 0));
+
+        for i in 0..10 {
+            cb.add_input_keys(&[Key::ArrowRight]);
+            ob = ob.quick_refresh(linecol(0, i + 1), yx(0, u16::try_from(i + 1).unwrap()));
+        }
+
+        cb.add_input_keys(&[Key::Backspace]);
+        ob = ob.refresh(linecol(0, 8), &["        aligned"], yx(0, 8));
+
+        cb.add_input_keys(&[Key::Backspace]);
+        ob = ob.refresh(linecol(0, 4), &["    aligned"], yx(0, 4));
+
+        cb.add_input_keys(&[Key::Backspace]);
+        ob = ob.refresh(linecol(0, 0), &["aligned"], yx(0, 0));
+
+        cb.add_input_keys(&[Key::Backspace]);
+        ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
+
+        run_editor("          aligned", "aligned\n", cb, ob);
     }
 
     #[test]

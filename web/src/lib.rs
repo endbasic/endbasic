@@ -85,6 +85,7 @@ fn on_key_event_into_key(event: OnKeyEvent) -> Key {
     let dom_event = event.dom_event();
     match dom_event.key_code() as u8 {
         8 => Key::Backspace,
+        9 => Key::Tab,
         10 => Key::NewLine,
         13 => Key::CarriageReturn,
         27 => Key::Escape,

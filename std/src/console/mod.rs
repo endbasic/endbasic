@@ -81,6 +81,9 @@ pub enum Key {
     /// Accepts the current line.
     NewLine,
 
+    /// The Tab key.
+    Tab,
+
     /// An unknown character or sequence. The text describes what went wrong.
     Unknown(String),
 }

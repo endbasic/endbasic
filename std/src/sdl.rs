@@ -324,6 +324,7 @@ fn parse_event(event: Event) -> io::Result<Option<Key>> {
             Keycode::Escape => Ok(Some(Key::Escape)),
             Keycode::Home => Ok(Some(Key::Home)),
             Keycode::Return => Ok(Some(Key::NewLine)),
+            Keycode::Tab => Ok(Some(Key::Tab)),
 
             Keycode::Down => Ok(Some(Key::ArrowDown)),
             Keycode::Left => Ok(Some(Key::ArrowLeft)),

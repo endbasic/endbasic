@@ -147,6 +147,7 @@ impl TerminalConsole {
                     event::KeyCode::End => Key::End,
                     event::KeyCode::Esc => Key::Escape,
                     event::KeyCode::Home => Key::Home,
+                    event::KeyCode::Tab => Key::Tab,
                     event::KeyCode::Up => Key::ArrowUp,
                     event::KeyCode::Down => Key::ArrowDown,
                     event::KeyCode::Left => Key::ArrowLeft,
