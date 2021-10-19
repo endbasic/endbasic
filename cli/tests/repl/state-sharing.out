@@ -14,5 +14,6 @@ a(0) before CLEAR is 123
 ERROR: Unknown function or array a
 a(0) is 123
 a(0) before NEW is 123
+Current program has unsaved changes and has never been saved!
 ERROR: Unknown function or array a
 End of input by CTRL-D

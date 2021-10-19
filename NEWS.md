@@ -54,7 +54,8 @@ for the time being.**
     Tab keys aware of indentation.
 
 *   Modified the storage commands to keep track of the currently-loaded program
-    path so that the editor can display it.
+    path so that the editor can display it, so that `LOAD` and `NEW` can warn
+    about unsaved changes, and so that `SAVE` can reuse the current filename.
 
 ## Changes in version 0.7.0
 

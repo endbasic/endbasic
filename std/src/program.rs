@@ -15,7 +15,7 @@
 
 //! Stored program manipulation.
 
-use crate::console::Console;
+use crate::console::{read_line, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
@@ -38,7 +38,8 @@ The common flow to interact with a stored program is to load a program from disk
 command, modify its contents via the EDIT command, execute the program via the RUN command, and \
 finally save the new or modified program via the SAVE command.
 Be aware that the stored program's content is lost whenever you load a program, exit the \
-interpreter, or use the NEW command, so don't forget to save it.
+interpreter, or use the NEW command.  These operations will ask you to save the program if you \
+have forgotten to do so, but it's better to get in the habit of saving often.
 See the \"File system\" help topic for information on where the programs can be saved and loaded \
 from.";
 
@@ -88,6 +89,26 @@ fn add_extension<S: Into<PathBuf>>(path: S) -> io::Result<String> {
         path.set_extension(ext);
     }
     Ok(path.to_str().expect("Path came from a String").to_owned())
+}
+
+/// If the `program` is dirty, asks if it's OK to continue on `console` and discard its changes.
+async fn continue_if_modified(
+    program: &dyn Program,
+    console: &mut dyn Console,
+) -> io::Result<bool> {
+    if !program.is_dirty() {
+        return Ok(true);
+    }
+
+    match program.name() {
+        Some(name) => console.print(&format!("Current program {} has unsaved changes!", name))?,
+        None => console.print("Current program has unsaved changes and has never been saved!")?,
+    }
+    let answer = read_line(console, "Discard and continue (y/N)? ", "", None).await?;
+    match Value::parse_as(VarType::Boolean, answer) {
+        Ok(Value::Boolean(b)) => Ok(b),
+        _ => Ok(false),
+    }
 }
 
 /// The `DEL` command.
@@ -238,13 +259,19 @@ impl Command for ListCommand {
 /// The `LOAD` command.
 pub struct LoadCommand {
     metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
     program: Rc<RefCell<dyn Program>>,
 }
 
 impl LoadCommand {
-    /// Creates a new `LOAD` command that loads a program from `storage` into `program`.
-    pub fn new(storage: Rc<RefCell<Storage>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+    /// Creates a new `LOAD` command that loads a program from `storage` into `program` and that
+    /// uses `console` to communicate unsaved changes.
+    pub fn new(
+        console: Rc<RefCell<dyn Console>>,
+        storage: Rc<RefCell<Storage>>,
+        program: Rc<RefCell<dyn Program>>,
+    ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOAD", VarType::Void)
                 .with_syntax("filename")
@@ -252,9 +279,12 @@ impl LoadCommand {
                 .with_description(
                     "Loads the given program.
 The filename must be a string and must be a basename (no directory components).  The .BAS \
-extension is optional, but if present, it must be .BAS.",
+extension is optional, but if present, it must be .BAS.
+Any previously stored program is discarded from memory, but LOAD will pause to ask before \
+discarding any unsaved modifications.",
                 )
                 .build(),
+            console,
             storage,
             program,
         })
@@ -272,19 +302,24 @@ impl Command for LoadCommand {
             return Err(CallError::ArgumentError("LOAD requires a filename".to_owned()));
         }
         let arg0 = args[0].0.as_ref().expect("Single argument must be present");
-        match arg0.eval(machine.get_mut_symbols()).await? {
-            Value::Text(t) => {
-                let name = add_extension(t)?;
-                let content = self.storage.borrow().get(&name).await?;
-                let full_name = self.storage.borrow().make_canonical(&name)?;
-                self.program.borrow_mut().load(Some(&full_name), &content);
-                machine.clear();
-            }
+        let name = match arg0.eval(machine.get_mut_symbols()).await? {
+            Value::Text(t) => add_extension(t)?,
             _ => {
                 return Err(CallError::ArgumentError(
                     "LOAD requires a string as the filename".to_owned(),
                 ))
             }
+        };
+
+        if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut()).await? {
+            let content = self.storage.borrow().get(&name).await?;
+            let full_name = self.storage.borrow().make_canonical(&name)?;
+            self.program.borrow_mut().load(Some(&full_name), &content);
+            machine.clear();
+        } else {
+            self.console
+                .borrow_mut()
+                .print("LOAD aborted; use SAVE to save your current changes.")?;
         }
         Ok(())
     }
@@ -293,12 +328,14 @@ impl Command for LoadCommand {
 /// The `NEW` command.
 pub struct NewCommand {
     metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
     program: Rc<RefCell<dyn Program>>,
 }
 
 impl NewCommand {
-    /// Creates a new `NEW` command that clears the contents of `program`.
-    pub fn new(program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+    /// Creates a new `NEW` command that clears the contents of `program` and that uses `console`
+    /// to communicate unsaved changes.
+    pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("NEW", VarType::Void)
                 .with_syntax("")
@@ -308,11 +345,12 @@ impl NewCommand {
 This command resets the machine to a pristine state by clearing all user-defined variables \
 and restoring the state of shared resources.  These resources include: the console, whose color \
 and video syncing bit are reset; and the GPIO pins, which are set to their default state.
-The stored program is also discarded from memory, so don't forget to SAVE it first!  To reset \
-resources but avoid clearing the stored program, use CLEAR instead.
-",
+The stored program is also discarded from memory, but NEW will pause to ask before discarding \
+any unsaved modifications.  To reset resources but avoid clearing the stored program, use CLEAR \
+instead.",
                 )
                 .build(),
+            console,
             program,
         })
     }
@@ -328,8 +366,15 @@ impl Command for NewCommand {
         if !args.is_empty() {
             return Err(CallError::ArgumentError("NEW takes no arguments".to_owned()));
         }
-        self.program.borrow_mut().load(None, "");
-        machine.clear();
+
+        if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut()).await? {
+            self.program.borrow_mut().load(None, "");
+            machine.clear();
+        } else {
+            self.console
+                .borrow_mut()
+                .print("NEW aborted; use SAVE to save your current changes.")?;
+        }
         Ok(())
     }
 }
@@ -394,23 +439,31 @@ impl Command for RunCommand {
 /// The `SAVE` command.
 pub struct SaveCommand {
     metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
     program: Rc<RefCell<dyn Program>>,
 }
 
 impl SaveCommand {
     /// Creates a new `SAVE` command that saves the contents of the `program` into `storage`.
-    pub fn new(storage: Rc<RefCell<Storage>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+    pub fn new(
+        console: Rc<RefCell<dyn Console>>,
+        storage: Rc<RefCell<Storage>>,
+        program: Rc<RefCell<dyn Program>>,
+    ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SAVE", VarType::Void)
-                .with_syntax("filename")
+                .with_syntax("[filename]")
                 .with_category(CATEGORY)
                 .with_description(
                     "Saves the current program in memory to the given filename.
 The filename must be a string and must be a basename (no directory components).  The .BAS \
-extension is optional, but if present, it must be .BAS.",
+extension is optional, but if present, it must be .BAS.
+If no filename is given, SAVE will try to use the filename of the loaded program (if any) and \
+will fail if no name has been given yet.",
                 )
                 .build(),
+            console,
             storage,
             program,
         })
@@ -424,24 +477,33 @@ impl Command for SaveCommand {
     }
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if args.len() != 1 {
-            return Err(CallError::ArgumentError("SAVE requires a filename".to_owned()));
-        }
-        let arg0 = args[0].0.as_ref().expect("Single argument must be present");
-        match arg0.eval(machine.get_mut_symbols()).await? {
-            Value::Text(t) => {
-                let name = add_extension(t)?;
-                let full_name = self.storage.borrow().make_canonical(&name)?;
-                let content = self.program.borrow().text();
-                self.storage.borrow_mut().put(&name, &content).await?;
-                self.program.borrow_mut().set_name(&full_name);
-            }
-            _ => {
-                return Err(CallError::ArgumentError(
-                    "SAVE requires a string as the filename".to_owned(),
-                ))
-            }
-        }
+        let name = match args {
+            [] => match self.program.borrow().name() {
+                Some(name) => name.to_owned(),
+                None => {
+                    return Err(CallError::ArgumentError(
+                        "Unnamed program; please provide a filename".to_owned(),
+                    ))
+                }
+            },
+            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols()).await? {
+                Value::Text(t) => add_extension(t)?,
+                _ => {
+                    return Err(CallError::ArgumentError(
+                        "SAVE requires a string as the filename".to_owned(),
+                    ))
+                }
+            },
+            _ => return Err(CallError::ArgumentError("SAVE requires a filename".to_owned())),
+        };
+
+        let full_name = self.storage.borrow().make_canonical(&name)?;
+        let content = self.program.borrow().text();
+        self.storage.borrow_mut().put(&name, &content).await?;
+        self.program.borrow_mut().set_name(&full_name);
+
+        self.console.borrow_mut().print(&format!("Saved as {}", full_name))?;
+
         Ok(())
     }
 }
@@ -457,16 +519,21 @@ pub fn add_all(
     machine.add_command(DelCommand::new(storage.clone()));
     machine.add_command(EditCommand::new(console.clone(), program.clone()));
     machine.add_command(ListCommand::new(console.clone(), program.clone()));
-    machine.add_command(LoadCommand::new(storage.clone(), program.clone()));
-    machine.add_command(NewCommand::new(program.clone()));
-    machine.add_command(RunCommand::new(console, program.clone()));
-    machine.add_command(SaveCommand::new(storage, program));
+    machine.add_command(LoadCommand::new(console.clone(), storage.clone(), program.clone()));
+    machine.add_command(NewCommand::new(console.clone(), program.clone()));
+    machine.add_command(RunCommand::new(console.clone(), program.clone()));
+    machine.add_command(SaveCommand::new(console, storage, program));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testutils::*;
+
+    const NO_ANSWERS: &[&str] =
+        &["n\n", "N\n", "no\n", "NO\n", "false\n", "FALSE\n", "xyz\n", "\n", "1\n"];
+
+    const YES_ANSWERS: &[&str] = &["y\n", "yes\n", "Y\n", "YES\n", "true\n", "TRUE\n"];
 
     #[test]
     fn test_del_ok() {
@@ -485,6 +552,8 @@ mod tests {
     #[test]
     fn test_del_errors() {
         check_load_save_common_errors("DEL");
+
+        Tester::default().run("DEL").expect_err("DEL requires a filename").check();
 
         check_stmt_err("Entry not found", r#"DEL "missing-file""#);
 
@@ -564,10 +633,81 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_load_dirty_no_name_abort() {
+        for answer in NO_ANSWERS {
+            Tester::default()
+                .add_input_chars("modified unnamed file\n")
+                .add_input_chars(answer)
+                .write_file("other.bas", "other file\n")
+                .run("EDIT: LOAD \"other.bas\"")
+                .expect_prints([
+                    "Current program has unsaved changes and has never been saved!",
+                    "LOAD aborted; use SAVE to save your current changes.",
+                ])
+                .expect_program(None as Option<&str>, "modified unnamed file\n")
+                .expect_file("MEMORY:/other.bas", "other file\n")
+                .check();
+        }
+    }
+
+    #[test]
+    fn test_load_dirty_no_name_continue() {
+        for answer in YES_ANSWERS {
+            Tester::default()
+                .add_input_chars("modified unnamed file\n")
+                .add_input_chars(answer)
+                .write_file("other.bas", "other file\n")
+                .run("EDIT: LOAD \"other.bas\"")
+                .expect_prints(["Current program has unsaved changes and has never been saved!"])
+                .expect_clear()
+                .expect_program(Some("MEMORY:other.bas"), "other file\n")
+                .expect_file("MEMORY:/other.bas", "other file\n")
+                .check();
+        }
+    }
+
+    #[test]
+    fn test_load_dirty_with_name_abort() {
+        for answer in NO_ANSWERS {
+            Tester::default()
+                .add_input_chars("modified named file\n")
+                .add_input_chars(answer)
+                .write_file("other.bas", "other file\n")
+                .set_program(Some("MEMORY:/named.bas"), "previous contents\n")
+                .run("EDIT: LOAD \"other.bas\"")
+                .expect_prints([
+                    "Current program MEMORY:/named.bas has unsaved changes!",
+                    "LOAD aborted; use SAVE to save your current changes.",
+                ])
+                .expect_program(
+                    Some("MEMORY:/named.bas"),
+                    "previous contents\nmodified named file\n",
+                )
+                .expect_file("MEMORY:/other.bas", "other file\n")
+                .check();
+        }
+    }
+
+    #[test]
+    fn test_load_dirty_with_name_continue() {
+        for answer in YES_ANSWERS {
+            Tester::default()
+                .add_input_chars("modified unnamed file\n")
+                .add_input_chars(answer)
+                .write_file("other.bas", "other file\n")
+                .set_program(Some("MEMORY:/named.bas"), "previous contents\n")
+                .run("EDIT: LOAD \"other.bas\"")
+                .expect_prints(["Current program MEMORY:/named.bas has unsaved changes!"])
+                .expect_clear()
+                .expect_program(Some("MEMORY:other.bas"), "other file\n")
+                .expect_file("MEMORY:/other.bas", "other file\n")
+                .check();
+        }
+    }
+
     /// Checks errors that should be handled the same way by `LOAD` and `SAVE`.
     fn check_load_save_common_errors(cmd: &str) {
-        Tester::default().run(cmd).expect_err(format!("{} requires a filename", cmd)).check();
-
         Tester::default()
             .run(format!("{} 3", cmd))
             .expect_err(format!("{} requires a string as the filename", cmd))
@@ -589,6 +729,8 @@ mod tests {
     #[test]
     fn test_load_errors() {
         check_load_save_common_errors("LOAD");
+
+        Tester::default().run("LOAD").expect_err("LOAD requires a filename").check();
 
         check_stmt_err("Entry not found", r#"LOAD "missing-file""#);
 
@@ -612,6 +754,69 @@ mod tests {
             .run("a = 3: NEW")
             .expect_clear()
             .check();
+    }
+
+    #[test]
+    fn test_new_dirty_no_name_abort() {
+        for answer in NO_ANSWERS {
+            Tester::default()
+                .add_input_chars("modified unnamed file\n")
+                .add_input_chars(answer)
+                .run("EDIT: NEW")
+                .expect_prints([
+                    "Current program has unsaved changes and has never been saved!",
+                    "NEW aborted; use SAVE to save your current changes.",
+                ])
+                .expect_program(None as Option<&str>, "modified unnamed file\n")
+                .check();
+        }
+    }
+
+    #[test]
+    fn test_new_dirty_no_name_continue() {
+        for answer in YES_ANSWERS {
+            Tester::default()
+                .add_input_chars("modified unnamed file\n")
+                .add_input_chars(answer)
+                .run("EDIT: NEW")
+                .expect_prints(["Current program has unsaved changes and has never been saved!"])
+                .expect_clear()
+                .check();
+        }
+    }
+
+    #[test]
+    fn test_new_dirty_with_name_abort() {
+        for answer in NO_ANSWERS {
+            Tester::default()
+                .add_input_chars("modified named file\n")
+                .add_input_chars(answer)
+                .set_program(Some("MEMORY:/named.bas"), "previous contents\n")
+                .run("EDIT: NEW")
+                .expect_prints([
+                    "Current program MEMORY:/named.bas has unsaved changes!",
+                    "NEW aborted; use SAVE to save your current changes.",
+                ])
+                .expect_program(
+                    Some("MEMORY:/named.bas"),
+                    "previous contents\nmodified named file\n",
+                )
+                .check();
+        }
+    }
+
+    #[test]
+    fn test_new_dirty_with_name_continue() {
+        for answer in YES_ANSWERS {
+            Tester::default()
+                .add_input_chars("modified named file\n")
+                .add_input_chars(answer)
+                .set_program(Some("MEMORY:/named.bas"), "previous contents\n")
+                .run("EDIT: NEW")
+                .expect_prints(["Current program MEMORY:/named.bas has unsaved changes!"])
+                .expect_clear()
+                .check();
+        }
     }
 
     #[test]
@@ -659,7 +864,7 @@ mod tests {
     }
 
     #[test]
-    fn test_save_ok() {
+    fn test_save_ok_explicit_name() {
         let content = "\n some line   \n ";
         for (explicit, actual, canonical) in &[
             ("first", "MEMORY:/first.bas", "MEMORY:first.bas"),
@@ -672,9 +877,31 @@ mod tests {
                 .set_program(Some("before.bas"), content)
                 .run(format!(r#"SAVE "{}""#, explicit))
                 .expect_program(Some(*canonical), content)
+                .expect_prints([format!("Saved as {}", canonical)])
                 .expect_file(*actual, content)
                 .check();
         }
+    }
+
+    #[test]
+    fn test_save_reuse_name() {
+        Tester::default()
+            .set_program(Some("loaded.bas"), "content\n")
+            .run("SAVE")
+            .expect_program(Some("MEMORY:loaded.bas"), "content\n")
+            .expect_prints(["Saved as MEMORY:loaded.bas"])
+            .expect_file("MEMORY:/loaded.bas", "content\n")
+            .check();
+    }
+
+    #[test]
+    fn test_save_unnamed_error() {
+        Tester::default()
+            .add_input_chars("modified file\n")
+            .run("EDIT: SAVE")
+            .expect_program(None as Option<&str>, "modified file\n")
+            .expect_err("Unnamed program; please provide a filename")
+            .check();
     }
 
     #[test]
