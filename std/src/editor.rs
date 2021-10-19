@@ -31,6 +31,9 @@ const STATUS_COLOR: (Option<u8>, Option<u8>) = (Some(15), Some(4));
 /// Default indentation with.
 const INDENT_WIDTH: usize = 4;
 
+/// Keybindings cheat sheet.
+const KEYS_SUMMARY: &str = " ESC Exit ";
+
 /// Returns the indentation of a given string as a new string.
 fn copy_indent(line: &str) -> String {
     let mut indent = String::new();
@@ -109,7 +112,6 @@ impl Editor {
     /// after calling this function, and the caller should also hide the cursor before calling this
     /// function.
     fn refresh_status(&self, console: &mut dyn Console, console_size: CharsXY) -> io::Result<()> {
-        let keys = " ESC Finish editing ";
         // Even though we track file positions as 0-indexed, display them as 1-indexed for a better
         // user experience given that this is what all other editor seem to do.
         let details = format!(
@@ -121,7 +123,7 @@ impl Editor {
 
         let width = usize::from(console_size.x);
         let mut status = String::with_capacity(width);
-        status.push_str(keys);
+        status.push_str(KEYS_SUMMARY);
         while status.len() < width - details.len() {
             status.push(' ');
         }
@@ -450,15 +452,12 @@ mod tests {
 
             self.output.push(CapturedOut::Locate(yx(self.console_size.y - 1, 0)));
             self.output.push(CapturedOut::Color(STATUS_COLOR.0, STATUS_COLOR.1));
-            let mut status = String::from(" ESC Finish editing");
-            if row < 10 && column < 10 {
-                status += "   ";
-            } else if row > 10 && column > 10 {
-                status += " ";
-            } else {
-                status += "  ";
+            let details = &format!("| {} | Ln {}, Col {} ", TEST_FILENAME, row, column);
+            let mut status = String::from(KEYS_SUMMARY);
+            while status.len() + details.len() < usize::from(self.console_size.x) {
+                status.push(' ');
             }
-            status += &format!("| {} | Ln {}, Col {} ", TEST_FILENAME, row, column);
+            status += details;
             self.output.push(CapturedOut::Write(status.as_bytes().to_owned()));
             self
         }
