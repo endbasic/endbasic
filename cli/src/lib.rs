@@ -24,6 +24,7 @@
 
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_std::console::{self, Console};
+use endbasic_std::program::{continue_if_modified, Program};
 #[cfg(feature = "sdl")]
 use endbasic_std::sdl::SdlConsole;
 use endbasic_std::storage::Storage;
@@ -83,6 +84,7 @@ pub async fn try_load_autoexec(
 pub async fn run_repl_loop(
     machine: &mut Machine,
     console: Rc<RefCell<dyn Console>>,
+    program: Rc<RefCell<dyn Program>>,
 ) -> io::Result<i32> {
     let mut stop_reason = StopReason::Eof;
     let mut history = vec![];
@@ -113,10 +115,17 @@ pub async fn run_repl_loop(
                     let mut console = console.borrow_mut();
                     console.print("End of input by CTRL-D")?;
                     stop_reason = StopReason::Exited(0);
-                    break;
                 } else {
                     stop_reason = StopReason::Exited(1);
                 }
+            }
+        }
+
+        #[allow(clippy::collapsible_if)]
+        if stop_reason != StopReason::Eof {
+            if !continue_if_modified(&*program.borrow(), &mut *console.borrow_mut()).await? {
+                console.borrow_mut().print("Exit aborted; resuming REPL loop.")?;
+                stop_reason = StopReason::Eof;
             }
         }
     }

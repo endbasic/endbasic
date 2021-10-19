@@ -316,6 +316,8 @@ impl WebTerminal {
             .with_sleep_fn(Box::from(js_sleep))
             .make_interactive();
 
+        let program = builder.get_program();
+
         let storage = builder.get_storage();
         setup_storage(&mut storage.borrow_mut());
 
@@ -323,7 +325,8 @@ impl WebTerminal {
         endbasic::print_welcome(console.clone()).unwrap();
         endbasic::try_load_autoexec(&mut machine, console.clone(), storage).await.unwrap();
         loop {
-            let result = endbasic::run_repl_loop(&mut machine, console.clone()).await;
+            let result =
+                endbasic::run_repl_loop(&mut machine, console.clone(), program.clone()).await;
             let mut console = console.borrow_mut();
             match result {
                 Ok(exit_code) => {

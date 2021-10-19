@@ -160,7 +160,15 @@ impl InteractiveMachineBuilder {
         InteractiveMachineBuilder { builder, program: None, storage, service: None }
     }
 
-    /// Lazily initializes the `storage` field with a default value and returns it.
+    /// Lazily initializes the `program` field with a default value and returns it.
+    pub fn get_program(&mut self) -> Rc<RefCell<dyn program::Program>> {
+        if self.program.is_none() {
+            self.program = Some(Rc::from(RefCell::from(editor::Editor::default())));
+        }
+        self.program.clone().unwrap()
+    }
+
+    /// Returns the storage subsystem that will be used for the machine.
     pub fn get_storage(&mut self) -> Rc<RefCell<storage::Storage>> {
         self.storage.clone()
     }
@@ -180,13 +188,9 @@ impl InteractiveMachineBuilder {
     /// Builds the interpreter.
     pub fn build(mut self) -> Result<Machine> {
         let console = self.builder.get_console()?;
+        let program = self.get_program();
         let storage = self.get_storage();
         let mut machine = self.builder.build()?;
-
-        let program = match self.program {
-            Some(program) => program,
-            None => Rc::from(RefCell::from(editor::Editor::default())),
-        };
 
         let service = match self.service {
             Some(service) => service,

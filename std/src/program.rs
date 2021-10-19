@@ -92,7 +92,7 @@ fn add_extension<S: Into<PathBuf>>(path: S) -> io::Result<String> {
 }
 
 /// If the `program` is dirty, asks if it's OK to continue on `console` and discard its changes.
-async fn continue_if_modified(
+pub async fn continue_if_modified(
     program: &dyn Program,
     console: &mut dyn Console,
 ) -> io::Result<bool> {
