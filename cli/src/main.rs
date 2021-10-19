@@ -162,13 +162,15 @@ async fn run_repl_loop(
     let mut builder =
         endbasic_std::MachineBuilder::default().with_console(console.clone()).make_interactive();
 
+    let program = builder.get_program();
+
     let storage = builder.get_storage();
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
 
     let mut machine = builder.build()?;
     endbasic::print_welcome(console.clone())?;
     endbasic::try_load_autoexec(&mut machine, console.clone(), storage).await?;
-    Ok(endbasic::run_repl_loop(&mut machine, console).await?)
+    Ok(endbasic::run_repl_loop(&mut machine, console, program).await?)
 }
 
 /// Executes the `path` program in a fresh machine.

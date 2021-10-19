@@ -553,6 +553,30 @@ fn test_repl_exit_nonzero() {
 }
 
 #[test]
+fn test_repl_exit_saved() {
+    check(
+        bin_path("endbasic"),
+        &["--local-drive=memory://"],
+        0,
+        Behavior::File(src_path("cli/tests/repl/exit-saved.in")),
+        Behavior::File(src_path("cli/tests/repl/exit-saved.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_repl_exit_unsaved() {
+    check(
+        bin_path("endbasic"),
+        &["--local-drive=memory://"],
+        0,
+        Behavior::File(src_path("cli/tests/repl/exit-unsaved.in")),
+        Behavior::File(src_path("cli/tests/repl/exit-unsaved.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_repl_exit_zero() {
     check(
         bin_path("endbasic"),

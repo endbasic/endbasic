@@ -1,5 +1,5 @@
 ' EndBASIC
-' Copyright 2020 Julio Merino
+' Copyright 2021 Julio Merino
 '
 ' Licensed under the Apache License, Version 2.0 (the "License"); you may not
 ' use this file except in compliance with the License.  You may obtain a copy
@@ -13,37 +13,24 @@
 ' License for the specific language governing permissions and limitations
 ' under the License.
 
-' Interactive session editing a program.
+' Tests that the REPL warns before exiting on unsaved changes.
 '
 ' WARNING: This file contains literal control codes to interact with the
 ' full-screen editor.  See the README.md file for details on how to generate
 ' its corresponding .out file.
 
-PRINT "Before edit"
-EDIT
-PRINT "Hello!"
-PRINT "Good bye."
+EDIT ' Insert stored program until an escape character.
+PRINT "Still here!"
 
-PRINT "After edit"
+
+EXIT ' Asks for confirmation before exiting.
+no
 RUN
 
-SAVE "test.bas"
-EDIT
-PRINT "Resumed editing at the end of the file"
-PRINT "And now the editor displays the last-saved file name"
-
+EXIT 123 ' Asks for confirmation before exiting.
+no
 RUN
 
-NEW
+EXIT ' Asks for confirmation before exiting.
 yes
-EDIT
-PRINT "This is a new program with an invalid command"
-INVALID LINE
 PRINT "Should not be reached"
-
-RUN
-
-PRINT "Done."
-
-NEW ' Flush changes to ensure we can exit without confirmation.
-yes
