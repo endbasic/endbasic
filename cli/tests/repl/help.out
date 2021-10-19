@@ -258,8 +258,9 @@ Output from HELP STORED:
     new or modified program via the SAVE command.
 
     Be aware that the stored program's content is lost whenever you load a
-    program, exit the interpreter, or use the NEW command, so don't forget
-    to save it.
+    program, exit the interpreter, or use the NEW command.  These
+    operations will ask you to save the program if you have forgotten to do
+    so, but it's better to get in the habit of saving often.
 
     See the "File system" help topic for information on where the programs
     can be saved and loaded from.
@@ -514,6 +515,9 @@ Output from HELP LOAD:
     components).  The .BAS extension is optional, but if present, it must
     be .BAS.
 
+    Any previously stored program is discarded from memory, but LOAD will
+    pause to ask before discarding any unsaved modifications.
+
 Output from HELP LOCATE:
 
     LOCATE column%, row%
@@ -557,9 +561,9 @@ Output from HELP NEW:
     These resources include: the console, whose color and video syncing bit
     are reset; and the GPIO pins, which are set to their default state.
 
-    The stored program is also discarded from memory, so don't forget to
-    SAVE it first! To reset resources but avoid clearing the stored
-    program, use CLEAR instead.
+    The stored program is also discarded from memory, but NEW will pause to
+    ask before discarding any unsaved modifications.  To reset resources
+    but avoid clearing the stored program, use CLEAR instead.
 
 Output from HELP PWD:
 
@@ -614,13 +618,16 @@ Output from HELP RUN:
 
 Output from HELP SAVE:
 
-    SAVE filename
+    SAVE [filename]
 
     Saves the current program in memory to the given filename.
 
     The filename must be a string and must be a basename (no directory
     components).  The .BAS extension is optional, but if present, it must
     be .BAS.
+
+    If no filename is given, SAVE will try to use the filename of the
+    loaded program (if any) and will fail if no name has been given yet.
 
 Output from HELP SHARE:
 

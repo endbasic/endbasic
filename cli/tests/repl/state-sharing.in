@@ -43,5 +43,6 @@ RUN ' Still runs the program.
 
 PRINT "a(0) before NEW is"; a(0)
 NEW ' Reset everything.
+yes
 PRINT "a(0) after NEW is"; a(0)
 RUN ' Doesn't do anything.

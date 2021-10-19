@@ -21,7 +21,6 @@ trap "rm -f \"${tmpdir}\"/*; rmdir \"${tmpdir}\"" EXIT
 run() {
     local local_drive="${1}"; shift
 
-    rm -f "${tmpdir}"/*
     LINES=24 COLUMNS=80 cargo run -- --local-drive="${local_drive}" \
         --interactive "${@}"
 }
@@ -34,10 +33,26 @@ for outfile in "${@}"; do
     basfile="${outfile%.*}.bas"
     infile="${outfile%.*}.in"
 
-    local_drive="file://${tmpdir}"
+    rm -f "${tmpdir}"/*
+
+    local_drive=
     case "${outfile}" in
-        *dir.out) local_drive="memory://" ;;
-        *storage.out) local_drive="file://${tmpdir}" ;;
+        *dir.out)
+            local_drive="memory://"
+            ;;
+
+        *load-save.out)
+            cp "$(dirname "${basfile}")/hello.bas" "${tmpdir}"
+            local_drive="file://${tmpdir}"
+            ;;
+
+        *storage.out)
+            local_drive="file://${tmpdir}"
+            ;;
+
+        *)
+            local_drive="file://${tmpdir}"
+            ;;
     esac
 
     if [ -f "${basfile}" -a -f "${infile}" ]; then
