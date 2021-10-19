@@ -125,12 +125,13 @@ impl DelCommand {
     pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DEL", VarType::Void)
-                .with_syntax("filename")
+                .with_syntax("filename$")
                 .with_category(CATEGORY)
                 .with_description(
                     "Deletes the given program.
-The filename must be a string and must be a basename (no directory components).  The .BAS \
-extension is optional, but if present, it must be .BAS.",
+The filename must be a string and must be a valid EndBASIC path.  The .BAS extension is optional \
+but, if present, it must be .BAS.
+See the \"File system\" help topic for information on the path syntax.",
                 )
                 .build(),
             storage,
@@ -274,14 +275,15 @@ impl LoadCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOAD", VarType::Void)
-                .with_syntax("filename")
+                .with_syntax("filename$")
                 .with_category(CATEGORY)
                 .with_description(
                     "Loads the given program.
-The filename must be a string and must be a basename (no directory components).  The .BAS \
-extension is optional, but if present, it must be .BAS.
+The filename must be a string and must be a valid EndBASIC path.  The .BAS extension is optional \
+but, if present, it must be .BAS.
 Any previously stored program is discarded from memory, but LOAD will pause to ask before \
-discarding any unsaved modifications.",
+discarding any unsaved modifications.
+See the \"File system\" help topic for information on the path syntax.",
                 )
                 .build(),
             console,
@@ -453,14 +455,15 @@ impl SaveCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SAVE", VarType::Void)
-                .with_syntax("[filename]")
+                .with_syntax("[filename$]")
                 .with_category(CATEGORY)
                 .with_description(
                     "Saves the current program in memory to the given filename.
-The filename must be a string and must be a basename (no directory components).  The .BAS \
-extension is optional, but if present, it must be .BAS.
+The filename must be a string and must be a valid EndBASIC path.  The .BAS extension is optional \
+but, if present, it must be .BAS.
 If no filename is given, SAVE will try to use the filename of the loaded program (if any) and \
-will fail if no name has been given yet.",
+will fail if no name has been given yet.
+See the \"File system\" help topic for information on the path syntax.",
                 )
                 .build(),
             console,

@@ -132,7 +132,7 @@ Output from HELP "FILE SYSTEM":
     (not a space).  If you have used commands like CD, DIR, or MOUNT in
     other contexts, this is likely to confuse you.
 
-    See the "Strored program" help topic for information on how to load,
+    See the "Stored program" help topic for information on how to load,
     modify, and save programs.
 
     >> CD         Changes the current path.
@@ -338,13 +338,14 @@ Output from HELP DEG:
 
 Output from HELP DEL:
 
-    DEL filename
+    DEL filename$
 
     Deletes the given program.
 
-    The filename must be a string and must be a basename (no directory
-    components).  The .BAS extension is optional, but if present, it must
-    be .BAS.
+    The filename must be a string and must be a valid EndBASIC path.  The
+    .BAS extension is optional but, if present, it must be .BAS.
+
+    See the "File system" help topic for information on the path syntax.
 
 Output from HELP DIR:
 
@@ -507,16 +508,17 @@ Output from HELP LIST:
 
 Output from HELP LOAD:
 
-    LOAD filename
+    LOAD filename$
 
     Loads the given program.
 
-    The filename must be a string and must be a basename (no directory
-    components).  The .BAS extension is optional, but if present, it must
-    be .BAS.
+    The filename must be a string and must be a valid EndBASIC path.  The
+    .BAS extension is optional but, if present, it must be .BAS.
 
     Any previously stored program is discarded from memory, but LOAD will
     pause to ask before discarding any unsaved modifications.
+
+    See the "File system" help topic for information on the path syntax.
 
 Output from HELP LOCATE:
 
@@ -618,16 +620,17 @@ Output from HELP RUN:
 
 Output from HELP SAVE:
 
-    SAVE [filename]
+    SAVE [filename$]
 
     Saves the current program in memory to the given filename.
 
-    The filename must be a string and must be a basename (no directory
-    components).  The .BAS extension is optional, but if present, it must
-    be .BAS.
+    The filename must be a string and must be a valid EndBASIC path.  The
+    .BAS extension is optional but, if present, it must be .BAS.
 
     If no filename is given, SAVE will try to use the filename of the
     loaded program (if any) and will fail if no name has been given yet.
+
+    See the "File system" help topic for information on the path syntax.
 
 Output from HELP SHARE:
 

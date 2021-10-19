@@ -47,7 +47,7 @@ Be aware that the commands below must be invoked using proper EndBASIC syntax.  
 this means that path arguments must be double-quoted and multiple arguments have to be separated \
 by a comma (not a space).  If you have used commands like CD, DIR, or MOUNT in other contexts, \
 this is likely to confuse you.
-See the \"Strored program\" help topic for information on how to load, modify, and save programs.";
+See the \"Stored program\" help topic for information on how to load, modify, and save programs.";
 
 /// Shows the contents of the given storage location.
 async fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> io::Result<()> {
