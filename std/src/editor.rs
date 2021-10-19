@@ -80,6 +80,9 @@ pub struct Editor {
     /// Owned contents of the file being edited.
     content: Vec<String>,
 
+    /// Whether the `content` was modified since it was last retrieved.
+    dirty: bool,
+
     /// Position of the top-left character of the file visible in the console.
     viewport_pos: FilePos,
 
@@ -97,6 +100,7 @@ impl Default for Editor {
         Self {
             name: None,
             content: vec![],
+            dirty: false,
             viewport_pos: FilePos::default(),
             file_pos: FilePos::default(),
             insert_col: 0,
@@ -114,9 +118,11 @@ impl Editor {
     fn refresh_status(&self, console: &mut dyn Console, console_size: CharsXY) -> io::Result<()> {
         // Even though we track file positions as 0-indexed, display them as 1-indexed for a better
         // user experience given that this is what all other editor seem to do.
+        let dirty_marker = if self.dirty { "*" } else { "" };
         let details = format!(
-            " | {} | Ln {}, Col {} ",
+            " | {}{} | Ln {}, Col {} ",
             self.name.as_deref().unwrap_or("<NO NAME>"),
+            dirty_marker,
             self.file_pos.line + 1,
             self.file_pos.col + 1
         );
@@ -283,6 +289,9 @@ impl Editor {
                             line.remove(self.file_pos.col - 1);
                             self.file_pos.col -= 1;
                         }
+                        if nremove > 0 {
+                            self.dirty = true;
+                        }
                     } else if self.file_pos.line > 0 {
                         let line = self.content.remove(self.file_pos.line);
                         let prev = &mut self.content[self.file_pos.line - 1];
@@ -290,6 +299,7 @@ impl Editor {
                         prev.push_str(&line);
                         self.file_pos.line -= 1;
                         need_refresh = true;
+                        self.dirty = true;
                     }
                     self.insert_col = self.file_pos.col;
                 }
@@ -309,6 +319,8 @@ impl Editor {
                     if cursor_pos.x < console_size.x - 1 && !need_refresh {
                         console.write(ch.encode_utf8(&mut buf).as_bytes())?;
                     }
+
+                    self.dirty = true;
                 }
 
                 Key::End => {
@@ -339,6 +351,7 @@ impl Editor {
                     self.file_pos.col = indent_len;
                     self.file_pos.line += 1;
                     self.insert_col = self.file_pos.col;
+                    self.dirty = true;
                 }
 
                 Key::Tab => {
@@ -359,6 +372,7 @@ impl Editor {
                     if !need_refresh {
                         console.write(new_text.as_bytes())?;
                     }
+                    self.dirty = true;
                 }
 
                 // TODO(jmmv): Should do something smarter with unknown keys.
@@ -372,6 +386,10 @@ impl Editor {
 
 #[async_trait(?Send)]
 impl Program for Editor {
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
     async fn edit(&mut self, console: &mut dyn Console) -> io::Result<()> {
         console.enter_alt()?;
         let result = self.edit_interactively(console).await;
@@ -382,6 +400,7 @@ impl Program for Editor {
     fn load(&mut self, name: Option<&str>, text: &str) {
         self.name = name.map(str::to_owned);
         self.content = text.lines().map(|l| l.to_owned()).collect();
+        self.dirty = false;
         self.viewport_pos = FilePos::default();
         self.file_pos = FilePos::default();
         self.insert_col = 0;
@@ -393,6 +412,7 @@ impl Program for Editor {
 
     fn set_name(&mut self, name: &str) {
         self.name = Some(name.to_owned());
+        self.dirty = false;
     }
 
     fn text(&self) -> String {
@@ -430,6 +450,7 @@ mod tests {
     struct OutputBuilder {
         console_size: CharsXY,
         output: Vec<CapturedOut>,
+        dirty: bool,
     }
 
     impl OutputBuilder {
@@ -437,7 +458,7 @@ mod tests {
         /// `console_size` holds the size of the mock console, which is used to determine where to
         /// print the status bar.
         fn new(console_size: CharsXY) -> Self {
-            Self { console_size, output: vec![CapturedOut::EnterAlt] }
+            Self { console_size, output: vec![CapturedOut::EnterAlt], dirty: false }
         }
 
         /// Records the console changes needed to update the status line to reflect a new `file_pos`
@@ -452,7 +473,9 @@ mod tests {
 
             self.output.push(CapturedOut::Locate(yx(self.console_size.y - 1, 0)));
             self.output.push(CapturedOut::Color(STATUS_COLOR.0, STATUS_COLOR.1));
-            let details = &format!("| {} | Ln {}, Col {} ", TEST_FILENAME, row, column);
+            let dirty_marker = if self.dirty { "*" } else { "" };
+            let details =
+                &format!("| {}{} | Ln {}, Col {} ", TEST_FILENAME, dirty_marker, row, column);
             let mut status = String::from(KEYS_SUMMARY);
             while status.len() + details.len() < usize::from(self.console_size.x) {
                 status.push(' ');
@@ -491,11 +514,19 @@ mod tests {
             self
         }
 
+        /// Registers a new expected side-effect `co` on the console.
         fn add(mut self, co: CapturedOut) -> Self {
             self.output.push(co);
             self
         }
 
+        /// Registers that the file has been modified.
+        fn set_dirty(mut self) -> Self {
+            self.dirty = true;
+            self
+        }
+
+        /// Finalizes the list of expected side-effects on the console.
         fn build(self) -> Vec<CapturedOut> {
             let mut output = self.output;
             output.push(CapturedOut::LeaveAlt);
@@ -516,6 +547,7 @@ mod tests {
         console.add_input_keys(&[Key::Escape]);
         block_on(editor.edit(&mut console)).unwrap();
         assert_eq!(exp_text, editor.text());
+        assert_eq!(ob.dirty, editor.is_dirty());
         assert_eq!(ob.build(), console.captured_out());
     }
 
@@ -523,12 +555,31 @@ mod tests {
     fn test_program_behavior() {
         let mut editor = Editor::default();
         assert!(editor.text().is_empty());
+        assert!(!editor.is_dirty());
+
+        let mut console = MockConsole::default();
+        console.set_size(yx(10, 40));
+        block_on(editor.edit(&mut console)).unwrap();
+        assert!(!editor.is_dirty());
+
+        console.add_input_keys(&[Key::Char('x')]);
+        block_on(editor.edit(&mut console)).unwrap();
+        assert!(editor.is_dirty());
 
         editor.load(Some(TEST_FILENAME), "some text\n    and more\n");
         assert_eq!("some text\n    and more\n", editor.text());
+        assert!(!editor.is_dirty());
 
         editor.load(Some(TEST_FILENAME), "different\n");
         assert_eq!("different\n", editor.text());
+        assert!(!editor.is_dirty());
+
+        console.add_input_keys(&[Key::Char('x')]);
+        block_on(editor.edit(&mut console)).unwrap();
+        assert!(editor.is_dirty());
+
+        editor.set_name("SAVED");
+        assert!(!editor.is_dirty());
     }
 
     #[test]
@@ -558,6 +609,7 @@ mod tests {
         ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
         cb.add_input_chars("abc");
+        ob = ob.set_dirty();
         ob = ob.add(CapturedOut::Write(b"a".to_vec()));
         ob = ob.quick_refresh(linecol(0, 1), yx(0, 1));
         ob = ob.add(CapturedOut::Write(b"b".to_vec()));
@@ -586,6 +638,7 @@ mod tests {
         ob = ob.refresh(linecol(0, 0), &["previous content"], yx(0, 0));
 
         cb.add_input_chars("a");
+        ob = ob.set_dirty();
         ob = ob.refresh(linecol(0, 1), &["aprevious content"], yx(0, 1));
 
         cb.add_input_chars("b");
@@ -608,6 +661,7 @@ mod tests {
         ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
         cb.add_input_chars("abc");
+        ob = ob.set_dirty();
         ob = ob.add(CapturedOut::Write(b"a".to_vec()));
         ob = ob.quick_refresh(linecol(0, 1), yx(0, 1));
         ob = ob.add(CapturedOut::Write(b"b".to_vec()));
@@ -650,6 +704,7 @@ mod tests {
         ob = ob.quick_refresh(linecol(0, 4), yx(0, 4));
 
         cb.add_input_chars(".");
+        ob = ob.set_dirty();
         ob = ob.add(CapturedOut::Write(b".".to_vec()));
         ob = ob.quick_refresh(linecol(0, 5), yx(0, 5));
 
@@ -673,6 +728,7 @@ mod tests {
         ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
 
         cb.add_input_chars(".");
+        ob = ob.set_dirty();
         ob = ob.refresh(linecol(0, 1), &[".text"], yx(0, 1));
 
         cb.add_input_keys(&[Key::Home]);
@@ -710,6 +766,7 @@ mod tests {
         ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
 
         cb.add_input_chars(".");
+        ob = ob.set_dirty();
         ob = ob.refresh(linecol(0, 3), &["  .text"], yx(0, 3));
 
         run_editor("  text", "  .text\n", cb, ob);
@@ -723,6 +780,7 @@ mod tests {
         ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
         cb.add_input_keys(&[Key::Tab]);
+        ob = ob.set_dirty();
         ob = ob.add(CapturedOut::Write(b"    ".to_vec()));
         ob = ob.quick_refresh(linecol(0, 4), yx(0, 4));
 
@@ -745,6 +803,7 @@ mod tests {
         ob = ob.refresh(linecol(0, 0), &["."], yx(0, 0));
 
         cb.add_input_keys(&[Key::Tab]);
+        ob = ob.set_dirty();
         ob = ob.refresh(linecol(0, 4), &["    ."], yx(0, 4));
 
         cb.add_input_keys(&[Key::Tab]);
@@ -764,6 +823,7 @@ mod tests {
         ob = ob.quick_refresh(linecol(0, 10), yx(0, 10));
 
         cb.add_input_keys(&[Key::Backspace]);
+        ob = ob.set_dirty();
         ob = ob.add(CapturedOut::HideCursor);
         ob = ob.add(CapturedOut::Clear(ClearType::PreviousChar));
         ob = ob.add(CapturedOut::Clear(ClearType::PreviousChar));
@@ -807,6 +867,7 @@ mod tests {
         }
 
         cb.add_input_keys(&[Key::Backspace]);
+        ob = ob.set_dirty();
         ob = ob.refresh(linecol(0, 8), &["        aligned"], yx(0, 8));
 
         cb.add_input_keys(&[Key::Backspace]);
@@ -847,6 +908,7 @@ mod tests {
         ob = ob.quick_refresh(linecol(2, 4), yx(2, 4));
 
         cb.add_input_keys(&[Key::Char('X')]);
+        ob = ob.set_dirty();
         ob = ob.refresh(linecol(2, 5), &["longer", "a", "longXer", "b"], yx(2, 5));
 
         cb.add_input_keys(&[Key::ArrowDown]);
@@ -1086,6 +1148,7 @@ mod tests {
         // Insert characters until the screen's right boundary.
         for (col, ch) in b"123456789012345678901234567890123456789".iter().enumerate() {
             cb.add_input_keys(&[Key::Char(*ch as char)]);
+            ob = ob.set_dirty();
             ob = ob.add(CapturedOut::Write([*ch].to_vec()));
             ob = ob.quick_refresh(linecol(1, col + 1), yx(1, u16::try_from(col + 1).unwrap()));
         }
@@ -1244,6 +1307,7 @@ mod tests {
 
         // Split the last visible line.
         cb.add_input_keys(&[Key::NewLine]);
+        ob = ob.set_dirty();
         ob = ob.refresh(linecol(3, 0), &["second", "third", "fourth"], yx(2, 0));
 
         run_editor(
@@ -1283,6 +1347,7 @@ mod tests {
 
         // Split the last visible line.
         cb.add_input_keys(&[Key::NewLine]);
+        ob = ob.set_dirty();
         ob = ob.refresh(
             linecol(3, 0),
             &["second", "this is a line of text with more than 40", " characters"],
@@ -1322,6 +1387,7 @@ mod tests {
 
         // Join first visible line with previous, which should scroll contents up.
         cb.add_input_keys(&[Key::Backspace]);
+        ob = ob.set_dirty();
         ob = ob.refresh(linecol(1, 6), &["secondthird", "fourth", "fifth"], yx(0, 6));
 
         run_editor(
@@ -1365,6 +1431,7 @@ mod tests {
 
         // Join first visible line with previous, which should scroll contents up and right.
         cb.add_input_keys(&[Key::Backspace]);
+        ob = ob.set_dirty();
         ob = ob.refresh(
             linecol(1, 51),
             &["ne of text with more than 40 characterst", "", " line"],

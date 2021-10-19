@@ -45,6 +45,10 @@ from.";
 /// Representation of the single program that we can keep in memory.
 #[async_trait(?Send)]
 pub trait Program {
+    /// Returns true if the program was modified since it was last saved (as indicated by a call to
+    /// `set_name`).
+    fn is_dirty(&self) -> bool;
+
     /// Edits the program interactively via the given `console`.
     async fn edit(&mut self, console: &mut dyn Console) -> io::Result<()>;
 

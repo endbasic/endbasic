@@ -272,20 +272,27 @@ impl Console for MockConsole {
 pub struct RecordedProgram {
     name: Option<String>,
     content: String,
+    dirty: bool,
 }
 
 #[async_trait(?Send)]
 impl Program for RecordedProgram {
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
     async fn edit(&mut self, console: &mut dyn Console) -> io::Result<()> {
         let append = console::read_line(console, "", "", None).await?;
         self.content.push_str(&append);
         self.content.push('\n');
+        self.dirty = true;
         Ok(())
     }
 
     fn load(&mut self, name: Option<&str>, text: &str) {
         self.name = name.map(str::to_owned);
         self.content = text.to_owned();
+        self.dirty = false;
     }
 
     fn name(&self) -> Option<&str> {
@@ -294,6 +301,7 @@ impl Program for RecordedProgram {
 
     fn set_name(&mut self, name: &str) {
         self.name = Some(name.to_owned());
+        self.dirty = false;
     }
 
     fn text(&self) -> String {
