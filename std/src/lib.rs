@@ -36,8 +36,6 @@ pub mod gpio;
 pub mod help;
 pub mod numerics;
 pub mod program;
-#[cfg(feature = "sdl")]
-pub mod sdl;
 pub mod service;
 pub mod storage;
 pub mod strings;

@@ -25,10 +25,6 @@ use std::str;
 
 mod cmds;
 pub(crate) use cmds::add_all;
-#[cfg(feature = "sdl")]
-mod colors;
-#[cfg(feature = "sdl")]
-pub(crate) use colors::ansi_color_to_rgb;
 mod format;
 pub(crate) use format::refill_and_print;
 mod readline;
@@ -36,8 +32,7 @@ pub use readline::read_line;
 pub(crate) use readline::read_line_secure;
 
 /// Decoded key presses as returned by the console.
-#[derive(Clone, Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Key {
     /// The cursor down key.
     ArrowDown,

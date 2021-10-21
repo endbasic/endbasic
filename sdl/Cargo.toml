@@ -1,0 +1,29 @@
+[package]
+name = "endbasic-sdl"
+version = "0.7.0" # ENDBASIC-VERSION
+license = "Apache-2.0"
+authors = ["Julio Merino <jmmv@endbasic.dev>"]
+categories = ["development-tools", "parser-implementations"]
+keywords = ["basic", "interpreter", "learning", "programming"]
+description = "The EndBASIC programming language - SDL graphical console"
+homepage = "https://www.endbasic.dev/"
+repository = "https://github.com/endbasic/endbasic"
+readme = "README.md"
+edition = "2018"
+
+[dependencies]
+async-trait = "0.1"
+once_cell = "1.8"
+
+[dependencies.endbasic-std]
+version = "0.7.0" # ENDBASIC-VERSION
+path = "../std"
+
+[dependencies.sdl2]
+version = "0.34"
+default-features = false
+features = ["ttf"]
+
+[dev-dependencies]
+flate2 = "1.0"
+futures-lite = "1.1"

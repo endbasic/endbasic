@@ -30,5 +30,6 @@
 
     *   `( cd core && cargo publish )`
     *   `( cd std && cargo publish )`
+    *   `( cd sdl && cargo publish )`
     *   `( cd rpi && cargo publish )`
     *   `( cd cli && cargo publish )`

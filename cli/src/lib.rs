@@ -23,10 +23,10 @@
 #![warn(unsafe_code)]
 
 use endbasic_core::exec::{Machine, StopReason};
+#[cfg(feature = "sdl")]
+use endbasic_sdl::SdlConsole;
 use endbasic_std::console::{self, Console};
 use endbasic_std::program::{continue_if_modified, Program};
-#[cfg(feature = "sdl")]
-use endbasic_std::sdl::SdlConsole;
 use endbasic_std::storage::Storage;
 use std::cell::RefCell;
 use std::io;
