@@ -13,11 +13,20 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-//! Console representation and manipulation.
+//! Crossterm-based console for terminal interaction.
 
-use crate::console::{get_env_var_as_u16, read_key_from_stdin, CharsXY, ClearType, Console, Key};
+// Keep these in sync with other top-level files.
+#![allow(clippy::await_holding_refcell_ref)]
+#![allow(clippy::collapsible_else_if)]
+#![warn(anonymous_parameters, bad_style, missing_docs)]
+#![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
+#![warn(unsafe_code)]
+
 use async_trait::async_trait;
 use crossterm::{cursor, event, execute, style, terminal, tty::IsTty, QueueableCommand};
+use endbasic_std::console::{
+    get_env_var_as_u16, read_key_from_stdin, CharsXY, ClearType, Console, Key,
+};
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::io::{self, StdoutLock, Write};
@@ -246,7 +255,7 @@ impl Console for TerminalConsole {
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!crate::console::has_control_chars_str(text));
+        debug_assert!(!endbasic_std::console::has_control_chars_str(text));
 
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
@@ -316,7 +325,7 @@ impl Console for TerminalConsole {
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        debug_assert!(!crate::console::has_control_chars_u8(bytes));
+        debug_assert!(!endbasic_std::console::has_control_chars_u8(bytes));
 
         let stdout = io::stdout();
         let mut stdout = stdout.lock();

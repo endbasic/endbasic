@@ -11,14 +11,10 @@ repository = "https://github.com/endbasic/endbasic"
 readme = "README.md"
 edition = "2018"
 
-[features]
-default = ["crossterm"]
-
 [dependencies]
 async-trait = "0.1"
 base64 = "0.13"
 bytes = "1.0"
-crossterm = { version = "0.18", optional = true }
 futures-lite = "1.1"
 radix_trie = "0.2.1"
 serde = { version = "1.0", features = ["derive"] }

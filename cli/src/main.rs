@@ -25,7 +25,6 @@
 use anyhow::{anyhow, Result};
 use endbasic_std::console::Console;
 use endbasic_std::storage::Storage;
-use endbasic_std::terminal::TerminalConsole;
 use getopts::Options;
 use std::cell::RefCell;
 use std::env;
@@ -93,7 +92,7 @@ fn version() {
 }
 
 /// Creates a new EndBASIC machine builder based on the features enabled in this crate.
-fn new_machine_builder() -> endbasic_std::MachineBuilder {
+fn new_machine_builder(console_spec: Option<&str>) -> io::Result<endbasic_std::MachineBuilder> {
     /// Obtains the default set of pins for a Raspberry Pi.
     #[cfg(feature = "rpi")]
     fn add_gpio_pins(builder: endbasic_std::MachineBuilder) -> endbasic_std::MachineBuilder {
@@ -107,8 +106,9 @@ fn new_machine_builder() -> endbasic_std::MachineBuilder {
     }
 
     let mut builder = endbasic_std::MachineBuilder::default();
+    builder = builder.with_console(setup_console(console_spec)?);
     builder = add_gpio_pins(builder);
-    builder
+    Ok(builder)
 }
 
 /// Returns `flag` if present, or else returns the URI of the default `LOCAL` drive.
@@ -136,7 +136,19 @@ fn get_local_drive_spec(flag: Option<String>) -> Result<String> {
 }
 
 /// Sets up the console.
-fn setup_console(console_spec: Option<String>) -> io::Result<Rc<RefCell<dyn Console>>> {
+fn setup_console(console_spec: Option<&str>) -> io::Result<Rc<RefCell<dyn Console>>> {
+    /// Creates the textual console when crossterm support is built in.
+    #[cfg(feature = "crossterm")]
+    fn setup_text_console() -> io::Result<Rc<RefCell<dyn Console>>> {
+        Ok(Rc::from(RefCell::from(endbasic_terminal::TerminalConsole::from_stdio()?)))
+    }
+
+    /// Creates the textual console with very basic features when crossterm support is not built in.
+    #[cfg(not(feature = "crossterm"))]
+    fn setup_text_console() -> io::Result<Rc<RefCell<dyn Console>>> {
+        Ok(Rc::from(RefCell::from(endbasic_std::console::TrivialConsole::default())))
+    }
+
     /// Creates the graphical console when SDL support is built in.
     #[cfg(feature = "sdl")]
     pub fn setup_graphics_console(spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
@@ -151,7 +163,7 @@ fn setup_console(console_spec: Option<String>) -> io::Result<Rc<RefCell<dyn Cons
     }
 
     let console: Rc<RefCell<dyn Console>> = match console_spec.as_deref() {
-        None | Some("text") => Rc::from(RefCell::from(TerminalConsole::from_stdio()?)),
+        None | Some("text") => setup_text_console()?,
 
         Some("graphics") => setup_graphics_console("")?,
         Some(text) if text.starts_with("graphics:") => {
@@ -188,10 +200,12 @@ pub fn setup_storage(storage: &mut Storage, local_drive_spec: &str) -> io::Resul
 ///
 /// `local_drive` is the optional local drive to mount and use as the default location.
 async fn run_repl_loop(
-    console: Rc<RefCell<dyn Console>>,
+    console_spec: Option<&str>,
     local_drive_spec: &str,
 ) -> endbasic_core::exec::Result<i32> {
-    let mut builder = new_machine_builder().with_console(console.clone()).make_interactive();
+    let mut builder = new_machine_builder(console_spec)?;
+    let console = builder.get_console();
+    let mut builder = builder.make_interactive();
 
     let program = builder.get_program();
 
@@ -205,8 +219,11 @@ async fn run_repl_loop(
 }
 
 /// Executes the `path` program in a fresh machine.
-async fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
-    let mut machine = new_machine_builder().build()?;
+async fn run_script<P: AsRef<Path>>(
+    path: P,
+    console_spec: Option<&str>,
+) -> endbasic_core::exec::Result<i32> {
+    let mut machine = new_machine_builder(console_spec)?.build()?;
     let mut input = File::open(path)?;
     Ok(machine.exec(&mut input).await?.as_exit_code())
 }
@@ -216,9 +233,10 @@ async fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32>
 /// `local_drive` is the optional local drive to mount and use as the default location.
 async fn run_interactive<P: AsRef<Path>>(
     path: P,
+    console_spec: Option<&str>,
     local_drive_spec: &str,
 ) -> endbasic_core::exec::Result<i32> {
-    let mut builder = new_machine_builder().make_interactive();
+    let mut builder = new_machine_builder(console_spec)?.make_interactive();
 
     let storage = builder.get_storage();
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
@@ -250,18 +268,19 @@ async fn safe_main(name: &str, args: env::Args) -> Result<i32> {
         return Ok(0);
     }
 
+    let console_spec = matches.opt_str("console");
+
     match matches.free.as_slice() {
         [] => {
-            let console = setup_console(matches.opt_str("console"))?;
             let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
-            Ok(run_repl_loop(console, &local_drive).await?)
+            Ok(run_repl_loop(console_spec.as_deref(), &local_drive).await?)
         }
         [file] => {
             if matches.opt_present("interactive") {
                 let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
-                Ok(run_interactive(file, &local_drive).await?)
+                Ok(run_interactive(file, console_spec.as_deref(), &local_drive).await?)
             } else {
-                Ok(run_script(file).await?)
+                Ok(run_script(file, console_spec.as_deref()).await?)
             }
         }
         [_, ..] => Err(UsageError::new("Too many arguments").into()),

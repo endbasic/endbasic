@@ -12,8 +12,8 @@ readme = "README.md"
 edition = "2018"
 
 [features]
-default = ["bin"]
-bin = ["endbasic-std/crossterm", "tokio"]
+default = ["crossterm", "tokio"]
+crossterm = ["endbasic-terminal"]
 sdl = ["endbasic-sdl"]
 rpi = ["endbasic-rpi"]
 
@@ -43,7 +43,11 @@ optional = true
 [dependencies.endbasic-std]
 version = "0.7.0" # ENDBASIC-VERSION
 path = "../std"
-default-features = false
+
+[dependencies.endbasic-terminal]
+version = "0.7.0" # ENDBASIC-VERSION
+path = "../terminal"
+optional = true
 
 [dev-dependencies]
 futures-lite = "1.1"

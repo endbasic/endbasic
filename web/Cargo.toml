@@ -43,7 +43,6 @@ path = "../core"
 [dependencies.endbasic-std]
 version = "0.7.0" # ENDBASIC-VERSION
 path = "../std"
-default-features = false
 
 [dependencies.web-sys]
 version = "0.3"

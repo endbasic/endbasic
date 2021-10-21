@@ -282,7 +282,7 @@ pub fn has_control_chars_u8(s: &[u8]) -> bool {
 
 /// Gets the value of the environment variable `name` and interprets it as a `u16`.  Returns
 /// `None` if the variable is not set or if its contents are invalid.
-pub(crate) fn get_env_var_as_u16(name: &str) -> Option<u16> {
+pub fn get_env_var_as_u16(name: &str) -> Option<u16> {
     match env::var_os(name) {
         Some(value) => value.as_os_str().to_string_lossy().parse::<u16>().map(Some).unwrap_or(None),
         None => None,
@@ -314,7 +314,7 @@ fn line_to_keys(s: String) -> VecDeque<Key> {
 /// Reads a single key from stdin when not attached to a TTY.  Because characters are not
 /// visible to us until a newline is received, this reads complete lines and buffers them in
 /// memory inside the given `buffer`.
-pub(crate) fn read_key_from_stdin(buffer: &mut VecDeque<Key>) -> io::Result<Key> {
+pub fn read_key_from_stdin(buffer: &mut VecDeque<Key>) -> io::Result<Key> {
     if buffer.is_empty() {
         let mut line = String::new();
         if io::stdin().read_line(&mut line)? == 0 {

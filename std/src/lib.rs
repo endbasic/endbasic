@@ -39,21 +39,7 @@ pub mod program;
 pub mod service;
 pub mod storage;
 pub mod strings;
-#[cfg(feature = "crossterm")]
-pub mod terminal;
 pub mod testutils;
-
-/// Creates a handle to the default console when crossterm support is built in.
-#[cfg(feature = "crossterm")]
-fn get_default_console() -> Result<Rc<RefCell<dyn console::Console>>> {
-    Ok(Rc::from(RefCell::from(terminal::TerminalConsole::from_stdio()?)))
-}
-
-/// Placeholder to return no default console when we don't have one.
-#[cfg(not(feature = "crossterm"))]
-fn get_default_console() -> Result<Rc<RefCell<dyn console::Console>>> {
-    Ok(Rc::from(RefCell::from(console::TrivialConsole::default())))
-}
 
 /// Builder pattern to construct an EndBASIC interpreter.
 ///
@@ -85,11 +71,11 @@ impl MachineBuilder {
     }
 
     /// Lazily initializes the `console` field with a default value and returns it.
-    fn get_console(&mut self) -> Result<Rc<RefCell<dyn console::Console>>> {
+    pub fn get_console(&mut self) -> Rc<RefCell<dyn console::Console>> {
         if self.console.is_none() {
-            self.console = Some(get_default_console()?);
+            self.console = Some(Rc::from(RefCell::from(console::TrivialConsole::default())));
         }
-        Ok(self.console.clone().unwrap())
+        self.console.clone().unwrap()
     }
 
     /// Lazily initializes the `gpio_pins` field with a default value and returns it.
@@ -104,8 +90,8 @@ impl MachineBuilder {
     pub fn build(mut self) -> Result<Machine> {
         let mut machine = Machine::default();
         arrays::add_all(&mut machine);
-        console::add_all(&mut machine, self.get_console()?);
-        gfx::add_all(&mut machine, self.get_console()?);
+        console::add_all(&mut machine, self.get_console());
+        gfx::add_all(&mut machine, self.get_console());
         gpio::add_all(&mut machine, self.get_gpio_pins());
         exec::add_all(&mut machine, self.sleep_fn);
         numerics::add_all(&mut machine);
@@ -166,7 +152,7 @@ impl InteractiveMachineBuilder {
 
     /// Builds the interpreter.
     pub fn build(mut self) -> Result<Machine> {
-        let console = self.builder.get_console()?;
+        let console = self.builder.get_console();
         let program = self.get_program();
         let storage = self.get_storage();
         let mut machine = self.builder.build()?;
