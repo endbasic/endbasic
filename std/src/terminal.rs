@@ -15,12 +15,11 @@
 
 //! Console representation and manipulation.
 
-use crate::console::{CharsXY, ClearType, Console, Key};
+use crate::console::{get_env_var_as_u16, read_key_from_stdin, CharsXY, ClearType, Console, Key};
 use async_trait::async_trait;
 use crossterm::{cursor, event, execute, style, terminal, tty::IsTty, QueueableCommand};
 use std::cmp::Ordering;
 use std::collections::VecDeque;
-use std::env;
 use std::io::{self, StdoutLock, Write};
 use std::time::Duration;
 
@@ -32,15 +31,6 @@ fn crossterm_error_to_io_error(e: crossterm::ErrorKind) -> io::Error {
             io::Error::new(io::ErrorKind::InvalidData, format!("{}", e))
         }
         _ => io::Error::new(io::ErrorKind::Other, format!("{}", e)),
-    }
-}
-
-/// Gets the value of the environment variable `name` and interprets it as a `u16`.  Returns
-/// `None` if the variable is not set or if its contents are invalid.
-fn get_env_var_as_u16(name: &str) -> Option<u16> {
-    match env::var_os(name) {
-        Some(value) => value.as_os_str().to_string_lossy().parse::<u16>().map(Some).unwrap_or(None),
-        None => None,
     }
 }
 
@@ -93,45 +83,6 @@ impl TerminalConsole {
             alt_active: false,
             sync_enabled: true,
         })
-    }
-
-    /// Converts a line of text read from stdin into a sequence of key presses.
-    fn line_to_keys(s: String) -> VecDeque<Key> {
-        let mut keys = VecDeque::default();
-        for ch in s.chars() {
-            if ch == '\x1b' {
-                keys.push_back(Key::Escape);
-            } else if ch == '\n' {
-                keys.push_back(Key::NewLine);
-            } else if ch == '\r' {
-                // Ignore.  When we run under Windows and use golden test input files, we end up
-                // seeing two separate characters to terminate a newline (CRLF) and these confuse
-                // our tests.  I am not sure why this doesn't seem to be a problem for interactive
-                // usage though, but it might just be that crossterm hides this from us.
-            } else if !ch.is_control() {
-                keys.push_back(Key::Char(ch));
-            } else {
-                keys.push_back(Key::Unknown(format!("{}", ch)));
-            }
-        }
-        keys
-    }
-
-    /// Reads a single key from stdin when not attached to a TTY.  Because characters are not
-    /// visible to us until a newline is received, this reads complete lines and buffers them in
-    /// memory.
-    fn read_key_from_stdin(&mut self) -> io::Result<Key> {
-        if self.buffer.is_empty() {
-            let mut line = String::new();
-            if io::stdin().read_line(&mut line)? == 0 {
-                return Ok(Key::Eof);
-            }
-            self.buffer = TerminalConsole::line_to_keys(line);
-        }
-        match self.buffer.pop_front() {
-            Some(key) => Ok(key),
-            None => Ok(Key::Eof),
-        }
     }
 
     /// Reads a single key from the connected TTY.  This assumes the TTY is in raw mode.
@@ -335,7 +286,7 @@ impl Console for TerminalConsole {
                 // Non-key event; try again.
             }
         } else {
-            self.read_key_from_stdin()
+            read_key_from_stdin(&mut self.buffer)
         }
     }
 
