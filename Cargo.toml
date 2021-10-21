@@ -5,6 +5,11 @@ members = [
     "std",
     "web",
 ]
+default-members = [
+    "cli",
+    "core",
+    "std",
+]
 
 [profile.dev]
 split-debuginfo = "unpacked"
