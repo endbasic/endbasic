@@ -30,11 +30,6 @@ use std::result::Result;
 mod fakes;
 pub(crate) use fakes::{MockPins, NoopPins};
 
-#[cfg(feature = "rpi")]
-mod rpi;
-#[cfg(feature = "rpi")]
-pub(crate) use rpi::RppalPins;
-
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "Hardware interface
 EndBASIC provides features to manipulate external hardware.  These features are currently limited \
@@ -43,7 +38,7 @@ built with the --features=rpi option.  Support for other busses and platforms ma
 
 /// Pin identifier.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct Pin(u8);
+pub struct Pin(pub u8);
 
 impl Pin {
     /// Creates a new pin number from an EndBASIC integer value.

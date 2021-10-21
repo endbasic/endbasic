@@ -57,18 +57,6 @@ fn try_get_default_console() -> Result<Option<Rc<RefCell<dyn console::Console>>>
     Ok(None)
 }
 
-/// Obtains the default set of pins for a Raspberry Pi.
-#[cfg(feature = "rpi")]
-fn default_gpio_pins() -> Rc<RefCell<dyn gpio::Pins>> {
-    Rc::from(RefCell::from(gpio::RppalPins::default()))
-}
-
-/// Obtains the default set of pins for a platform without GPIO support.
-#[cfg(not(feature = "rpi"))]
-fn default_gpio_pins() -> Rc<RefCell<dyn gpio::Pins>> {
-    Rc::from(RefCell::from(gpio::NoopPins::default()))
-}
-
 /// Builder pattern to construct an EndBASIC interpreter.
 ///
 /// Unless otherwise specified, the interpreter is connected to a terminal-based console.
@@ -113,12 +101,9 @@ impl MachineBuilder {
     /// Lazily initializes the `gpio_pins` field with a default value and returns it.
     fn get_gpio_pins(&mut self) -> Rc<RefCell<dyn gpio::Pins>> {
         if self.gpio_pins.is_none() {
-            self.gpio_pins = Some(default_gpio_pins());
+            self.gpio_pins = Some(Rc::from(RefCell::from(gpio::NoopPins::default())))
         }
-        self.gpio_pins
-            .as_ref()
-            .expect("Default GPIO pins not available and with_gpio_pins() was not called")
-            .clone()
+        self.gpio_pins.as_ref().expect("Must have been initialized above").clone()
     }
 
     /// Builds the interpreter.

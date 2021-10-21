@@ -15,7 +15,7 @@ edition = "2018"
 default = ["bin"]
 bin = ["endbasic-std/crossterm", "tokio"]
 sdl = ["endbasic-std/sdl", "tempfile"]
-rpi = ["endbasic-std/rpi"]
+rpi = ["endbasic-rpi"]
 
 [dependencies]
 anyhow = "1.0"
@@ -30,6 +30,11 @@ tokio = { version = "1", features =  ["full"], optional = true }
 [dependencies.endbasic-core]
 version = "0.7.0" # ENDBASIC-VERSION
 path = "../core"
+
+[dependencies.endbasic-rpi]
+version = "0.7.0" # ENDBASIC-VERSION
+path = "../rpi"
+optional = true
 
 [dependencies.endbasic-std]
 version = "0.7.0" # ENDBASIC-VERSION

@@ -92,6 +92,25 @@ fn version() {
     println!("License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>");
 }
 
+/// Creates a new EndBASIC machine builder based on the features enabled in this crate.
+fn new_machine_builder() -> endbasic_std::MachineBuilder {
+    /// Obtains the default set of pins for a Raspberry Pi.
+    #[cfg(feature = "rpi")]
+    fn add_gpio_pins(builder: endbasic_std::MachineBuilder) -> endbasic_std::MachineBuilder {
+        builder.with_gpio_pins(Rc::from(RefCell::from(endbasic_rpi::RppalPins::default())))
+    }
+
+    /// Obtains the default set of pins for a platform without GPIO support.
+    #[cfg(not(feature = "rpi"))]
+    fn add_gpio_pins(builder: endbasic_std::MachineBuilder) -> endbasic_std::MachineBuilder {
+        builder
+    }
+
+    let mut builder = endbasic_std::MachineBuilder::default();
+    builder = add_gpio_pins(builder);
+    builder
+}
+
 /// Returns `flag` if present, or else returns the URI of the default `LOCAL` drive.
 fn get_local_drive_spec(flag: Option<String>) -> Result<String> {
     let dir = flag.or_else(|| {
@@ -159,8 +178,7 @@ async fn run_repl_loop(
     console: Rc<RefCell<dyn Console>>,
     local_drive_spec: &str,
 ) -> endbasic_core::exec::Result<i32> {
-    let mut builder =
-        endbasic_std::MachineBuilder::default().with_console(console.clone()).make_interactive();
+    let mut builder = new_machine_builder().with_console(console.clone()).make_interactive();
 
     let program = builder.get_program();
 
@@ -175,7 +193,7 @@ async fn run_repl_loop(
 
 /// Executes the `path` program in a fresh machine.
 async fn run_script<P: AsRef<Path>>(path: P) -> endbasic_core::exec::Result<i32> {
-    let mut machine = endbasic_std::MachineBuilder::default().build()?;
+    let mut machine = new_machine_builder().build()?;
     let mut input = File::open(path)?;
     Ok(machine.exec(&mut input).await?.as_exit_code())
 }
@@ -187,7 +205,7 @@ async fn run_interactive<P: AsRef<Path>>(
     path: P,
     local_drive_spec: &str,
 ) -> endbasic_core::exec::Result<i32> {
-    let mut builder = endbasic_std::MachineBuilder::default().make_interactive();
+    let mut builder = new_machine_builder().make_interactive();
 
     let storage = builder.get_storage();
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;

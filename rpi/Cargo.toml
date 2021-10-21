@@ -1,0 +1,19 @@
+[package]
+name = "endbasic-rpi"
+version = "0.7.0" # ENDBASIC-VERSION
+license = "Apache-2.0"
+authors = ["Julio Merino <jmmv@endbasic.dev>"]
+categories = ["development-tools", "parser-implementations"]
+keywords = ["basic", "interpreter", "learning", "programming"]
+description = "The EndBASIC programming language - Raspberry Pi support"
+homepage = "https://www.endbasic.dev/"
+repository = "https://github.com/endbasic/endbasic"
+readme = "README.md"
+edition = "2018"
+
+[dependencies]
+rppal = "0.11.3"
+
+[dependencies.endbasic-std]
+version = "0.7.0" # ENDBASIC-VERSION
+path = "../std"

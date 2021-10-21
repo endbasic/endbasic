@@ -58,6 +58,9 @@ for the time being.**
     can warn about unsaved changes, and so that `SAVE` can reuse the current
     filename.
 
+*   Refactored the std crate to minimize optional features in library crates
+    by moving the Raspberry Pi support into a new `endbasic-rpi` crate.
+
 ## Changes in version 0.7.0
 
 **Released on 2021-07-03.**
