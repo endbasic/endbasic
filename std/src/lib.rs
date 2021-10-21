@@ -45,14 +45,14 @@ pub mod testutils;
 
 /// Creates a handle to the default console when crossterm support is built in.
 #[cfg(feature = "crossterm")]
-fn try_get_default_console() -> Result<Option<Rc<RefCell<dyn console::Console>>>> {
-    Ok(Some(Rc::from(RefCell::from(terminal::TerminalConsole::from_stdio()?))))
+fn get_default_console() -> Result<Rc<RefCell<dyn console::Console>>> {
+    Ok(Rc::from(RefCell::from(terminal::TerminalConsole::from_stdio()?)))
 }
 
 /// Placeholder to return no default console when we don't have one.
 #[cfg(not(feature = "crossterm"))]
-fn try_get_default_console() -> Result<Option<Rc<RefCell<dyn console::Console>>>> {
-    Ok(None)
+fn get_default_console() -> Result<Rc<RefCell<dyn console::Console>>> {
+    Ok(Rc::from(RefCell::from(console::TrivialConsole::default())))
 }
 
 /// Builder pattern to construct an EndBASIC interpreter.
@@ -87,13 +87,9 @@ impl MachineBuilder {
     /// Lazily initializes the `console` field with a default value and returns it.
     fn get_console(&mut self) -> Result<Rc<RefCell<dyn console::Console>>> {
         if self.console.is_none() {
-            self.console = try_get_default_console()?;
+            self.console = Some(get_default_console()?);
         }
-        Ok(self
-            .console
-            .as_ref()
-            .expect("Default console not available and with_console() was not called")
-            .clone())
+        Ok(self.console.clone().unwrap())
     }
 
     /// Lazily initializes the `gpio_pins` field with a default value and returns it.

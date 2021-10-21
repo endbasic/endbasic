@@ -19,6 +19,8 @@ use async_trait::async_trait;
 use endbasic_core::exec::Clearable;
 use endbasic_core::syms::Symbols;
 use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::env;
 use std::io;
 use std::rc::Rc;
 use std::str;
@@ -30,6 +32,8 @@ pub(crate) use format::refill_and_print;
 mod readline;
 pub use readline::read_line;
 pub(crate) use readline::read_line_secure;
+mod trivial;
+pub use trivial::TrivialConsole;
 
 /// Decoded key presses as returned by the console.
 #[derive(Clone, Debug, PartialEq)]
@@ -274,6 +278,54 @@ pub fn has_control_chars_u8(s: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// Gets the value of the environment variable `name` and interprets it as a `u16`.  Returns
+/// `None` if the variable is not set or if its contents are invalid.
+pub(crate) fn get_env_var_as_u16(name: &str) -> Option<u16> {
+    match env::var_os(name) {
+        Some(value) => value.as_os_str().to_string_lossy().parse::<u16>().map(Some).unwrap_or(None),
+        None => None,
+    }
+}
+
+/// Converts a line of text into a collection of keys.
+fn line_to_keys(s: String) -> VecDeque<Key> {
+    let mut keys = VecDeque::default();
+    for ch in s.chars() {
+        if ch == '\x1b' {
+            keys.push_back(Key::Escape);
+        } else if ch == '\n' {
+            keys.push_back(Key::NewLine);
+        } else if ch == '\r' {
+            // Ignore.  When we run under Windows and use golden test input files, we end up
+            // seeing two separate characters to terminate a newline (CRLF) and these confuse
+            // our tests.  I am not sure why this doesn't seem to be a problem for interactive
+            // usage though, but it might just be that crossterm hides this from us.
+        } else if !ch.is_control() {
+            keys.push_back(Key::Char(ch));
+        } else {
+            keys.push_back(Key::Unknown(format!("{}", ch)));
+        }
+    }
+    keys
+}
+
+/// Reads a single key from stdin when not attached to a TTY.  Because characters are not
+/// visible to us until a newline is received, this reads complete lines and buffers them in
+/// memory inside the given `buffer`.
+pub(crate) fn read_key_from_stdin(buffer: &mut VecDeque<Key>) -> io::Result<Key> {
+    if buffer.is_empty() {
+        let mut line = String::new();
+        if io::stdin().read_line(&mut line)? == 0 {
+            return Ok(Key::Eof);
+        }
+        *buffer = line_to_keys(line);
+    }
+    match buffer.pop_front() {
+        Some(key) => Ok(key),
+        None => Ok(Key::Eof),
+    }
 }
 
 #[cfg(test)]
