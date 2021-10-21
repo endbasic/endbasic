@@ -13,10 +13,11 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-//! SDL2-based graphics terminal emulator.
+//! Implementation of the EndBASIC console using SDL.
 
-use crate::console::{ansi_color_to_rgb, CharsXY, ClearType, Console, Key, PixelsXY};
+use crate::colors::ansi_color_to_rgb;
 use async_trait::async_trait;
+use endbasic_std::console::{CharsXY, ClearType, Console, Key, PixelsXY};
 use once_cell::sync::Lazy;
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
@@ -180,10 +181,9 @@ impl ClampedMul<SizeInPixels, PixelsXY> for CharsXY {
     }
 }
 
-impl From<PixelsXY> for Point {
-    fn from(p: PixelsXY) -> Point {
-        Point::new(i32::from(p.x), i32::from(p.y))
-    }
+/// Constructs an SDL `Point` from a `PixelsXY`.
+fn point_xy(xy: PixelsXY) -> Point {
+    Point::new(i32::from(xy.x), i32::from(xy.y))
 }
 
 /// Constructs an SDL `Rect` from a `PixelsXY` `origin` and a `PixelsSize` `size`.
@@ -892,7 +892,7 @@ impl Console for SdlConsole {
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!crate::console::has_control_chars_str(text));
+        debug_assert!(!endbasic_std::console::has_control_chars_str(text));
 
         self.clear_cursor()?;
         if !text.is_empty() {
@@ -944,7 +944,7 @@ impl Console for SdlConsole {
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        debug_assert!(!crate::console::has_control_chars_u8(bytes));
+        debug_assert!(!endbasic_std::console::has_control_chars_u8(bytes));
 
         if bytes.is_empty() {
             return Ok(());
@@ -958,13 +958,13 @@ impl Console for SdlConsole {
 
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         self.canvas.set_draw_color(self.fg_color);
-        self.canvas.draw_line(x1y1, x2y2).map_err(string_error_to_io_error)?;
+        self.canvas.draw_line(point_xy(x1y1), point_xy(x2y2)).map_err(string_error_to_io_error)?;
         self.present_canvas()
     }
 
     fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
         self.canvas.set_draw_color(self.fg_color);
-        self.canvas.draw_point(xy).map_err(string_error_to_io_error)?;
+        self.canvas.draw_point(point_xy(xy)).map_err(string_error_to_io_error)?;
         self.present_canvas()
     }
 
@@ -1076,12 +1076,12 @@ mod testutils {
         /// Verifies that the current state of the console matches a golden imagine.  `bmp_basename`
         /// indicates the name of the BMP image to use, without an extension.
         pub(crate) fn verify(self, bmp_basename: &'static str) {
-            let golden_bmp_gz = src_path("std/src").join(format!("{}.bmp.gz", bmp_basename));
+            let golden_bmp_gz = src_path("sdl/src").join(format!("{}.bmp.gz", bmp_basename));
 
             let surface = self.console.window.surface(&self.console.event_pump).unwrap();
 
             if REGEN_BMPS {
-                let golden_bmp = src_path("std/src").join(format!("{}.bmp", bmp_basename));
+                let golden_bmp = src_path("sdl/src").join(format!("{}.bmp", bmp_basename));
                 surface.save_bmp(&golden_bmp).unwrap();
                 let mut input = BufReader::new(File::open(golden_bmp).unwrap());
                 let output = File::create(golden_bmp_gz).unwrap();
@@ -1233,14 +1233,14 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_empty() {
+    fn test_sdl_console_empty() {
         let test = SdlTest::new();
         test.verify("sdl-empty");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_colors() {
+    fn test_sdl_console_colors() {
         let mut test = SdlTest::new();
 
         test.console().print("Default colors").unwrap();
@@ -1260,7 +1260,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_scroll_and_wrap() {
+    fn test_sdl_console_scroll_and_wrap() {
         let mut test = SdlTest::new();
 
         let mut long_line = String::new();
@@ -1283,7 +1283,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_clear() {
+    fn test_sdl_console_clear() {
         let mut test = SdlTest::new();
 
         test.console().print("Before clearing the console").unwrap();
@@ -1309,7 +1309,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_move_cursor() {
+    fn test_sdl_console_move_cursor() {
         let mut test = SdlTest::new();
 
         test.console().write(b"Move cursor over parts of this text").unwrap();
@@ -1325,7 +1325,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_hide_cursor() {
+    fn test_sdl_console_hide_cursor() {
         let mut test = SdlTest::new();
 
         test.console().hide_cursor().unwrap();
@@ -1337,7 +1337,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_enter_alt() {
+    fn test_sdl_console_enter_alt() {
         let mut test = SdlTest::new();
 
         test.console().print("Before entering the alternate console").unwrap();
@@ -1349,7 +1349,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_leave_alt() {
+    fn test_sdl_console_leave_alt() {
         let mut test = SdlTest::new();
 
         test.console().print("Before entering the alternate console").unwrap();
@@ -1374,7 +1374,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_poll_key() {
+    fn test_sdl_console_poll_key() {
         let mut test = SdlTest::new();
 
         let ev = test.console()._context.event().unwrap();
@@ -1444,7 +1444,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_read_key() {
+    fn test_sdl_console_read_key() {
         let mut test = SdlTest::new();
 
         let ev = test.console()._context.event().unwrap();
@@ -1478,7 +1478,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_draw() {
+    fn test_sdl_console_draw() {
         let mut test = SdlTest::new();
         let console = test.console();
 
@@ -1529,7 +1529,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_show_cursor() {
+    fn test_sdl_console_show_cursor() {
         let mut test = SdlTest::new();
 
         test.console().show_cursor().unwrap();
@@ -1540,7 +1540,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_sync() {
+    fn test_sdl_console_sync() {
         let mut test = SdlTest::new();
 
         test.console().print("Before disabling sync").unwrap();
@@ -1556,7 +1556,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
-    fn test_write_too_long() {
+    fn test_sdl_console_write_too_long() {
         let mut test = SdlTest::new();
 
         let len = usize::from(u16::MAX) + 1;

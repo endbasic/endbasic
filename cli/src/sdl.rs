@@ -15,7 +15,7 @@
 
 //! Configuration support for the graphical console.
 
-use endbasic_std::sdl::Resolution;
+use endbasic_sdl::Resolution;
 use std::fs::File;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};

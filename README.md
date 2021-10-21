@@ -55,6 +55,7 @@ The following documents provide more information:
 *   For standard library contents, see [`std/README.md`](std/README.md).
 *   For usage details of the command-line interpreter, see
     [`cli/README.md`](cli/README.md).
+*   For SDL support, see [`sdl/README.md`](sdl/README.md).
 *   For Raspberry Pi specific features, see [`rpi/README.md`](rpi/README.md).
 *   For the web interface, see [`web/README.md`](web/README.md).
 *   For changes across versions, see [`NEWS.md`](NEWS.md).
