@@ -59,8 +59,9 @@ for the time being.**
     filename.
 
 *   Refactored the std crate to minimize optional features in library crates
-    by moving the SDL console into a new `endbasic-sdl` crate and the
-    Raspberry Pi support into a new `endbasic-rpi` crate.
+    by moving the textual console into a new `endbasic-terminal` crate, the SDL
+    console into a new `endbasic-sdl` crate and the Raspberry Pi support into
+    a new `endbasic-rpi` crate.
 
 ## Changes in version 0.7.0
 

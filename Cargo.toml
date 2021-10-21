@@ -5,6 +5,7 @@ members = [
     "rpi",
     "sdl",
     "std",
+    "terminal",
     "web",
 ]
 default-members = [
