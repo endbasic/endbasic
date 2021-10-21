@@ -23,8 +23,6 @@
 #![warn(unsafe_code)]
 
 use endbasic_core::exec::{Machine, StopReason};
-#[cfg(feature = "sdl")]
-use endbasic_sdl::SdlConsole;
 use endbasic_std::console::{self, Console};
 use endbasic_std::program::{continue_if_modified, Program};
 use endbasic_std::storage::Storage;
@@ -33,8 +31,6 @@ use std::io;
 use std::rc::Rc;
 
 pub mod demos;
-#[cfg(feature = "sdl")]
-mod sdl;
 
 /// Prints the EndBASIC welcome message to the given console.
 pub fn print_welcome(console: Rc<RefCell<dyn Console>>) -> io::Result<()> {
@@ -130,29 +126,6 @@ pub async fn run_repl_loop(
         }
     }
     Ok(stop_reason.as_exit_code())
-}
-
-/// Creates the graphical console when SDL support is built in.
-#[cfg(feature = "sdl")]
-pub fn setup_graphics_console(spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
-    let spec = sdl::parse_graphics_spec(spec)?;
-    let console = match spec.1 {
-        None => {
-            let default_font = sdl::TempFont::default_font()?;
-            SdlConsole::new(spec.0, &default_font.path(), spec.2)?
-            // The console has been created at this point, so it should be safe to drop
-            // default_font and clean up the on-disk file backing it up.
-        }
-        Some(font_path) => SdlConsole::new(spec.0, font_path, spec.2)?,
-    };
-    Ok(Rc::from(RefCell::from(console)))
-}
-
-/// Errors out during the creation of the graphical console when SDL support is not compiled in.
-#[cfg(not(feature = "sdl"))]
-pub fn setup_graphics_console(_spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
-    // TODO(jmmv): Make this io::ErrorKind::Unsupported when our MSRV allows it.
-    Err(io::Error::new(io::ErrorKind::InvalidInput, "SDL support not compiled in"))
 }
 
 #[cfg(test)]
