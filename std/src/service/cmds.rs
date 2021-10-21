@@ -424,7 +424,7 @@ mod tests {
         assert!(!storage.borrow().mounted().contains_key("CLOUD"));
 
         t.get_console().borrow_mut().set_interactive(true);
-        let mut exp_output = vec![CapturedOut::Write(b"Password: ".to_vec())];
+        let mut exp_output = vec![CapturedOut::Write(b"Password: ".to_vec()), CapturedOut::SyncNow];
         for _ in 0..MockService::PASSWORD.len() {
             exp_output.push(CapturedOut::Write(vec![b'*']));
         }

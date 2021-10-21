@@ -56,6 +56,7 @@ async fn read_line_interactive(
         } else {
             console.write(format!("{}{}", prompt, "*".repeat(line.len())).as_bytes())?;
         }
+        console.sync_now()?;
     }
 
     let width = {
@@ -443,6 +444,7 @@ mod tests {
         ReadLineInteractiveTest::default()
             .set_prompt("Ready> ")
             .add_output(CapturedOut::Write(b"Ready> ".to_vec()))
+            .add_output(CapturedOut::SyncNow)
             // -
             .add_key_chars("hello")
             .add_output_bytes(b"hello")
@@ -453,6 +455,7 @@ mod tests {
         ReadLineInteractiveTest::default()
             .set_prompt("Cannot delete")
             .add_output(CapturedOut::Write(b"Cannot delete".to_vec()))
+            .add_output(CapturedOut::SyncNow)
             // -
             .add_key(Key::Backspace)
             .accept();
@@ -470,6 +473,7 @@ mod tests {
         ReadLineInteractiveTest::default()
             .set_previous("123")
             .add_output(CapturedOut::Write(b"123".to_vec()))
+            .add_output(CapturedOut::SyncNow)
             // -
             .add_key_chars("hello")
             .add_output_bytes(b"hello")
@@ -571,6 +575,7 @@ mod tests {
         ReadLineInteractiveTest::default()
             .set_previous("12")
             .add_output(CapturedOut::Write(b"12".to_vec()))
+            .add_output(CapturedOut::SyncNow)
             // -
             .add_key(Key::ArrowLeft)
             .add_output(CapturedOut::MoveWithinLine(-1))
@@ -604,6 +609,7 @@ mod tests {
         ReadLineInteractiveTest::default()
             .set_previous("sample text")
             .add_output(CapturedOut::Write(b"sample text".to_vec()))
+            .add_output(CapturedOut::SyncNow)
             // -
             .add_key(Key::End)
             // -
@@ -680,6 +686,7 @@ mod tests {
             .set_prompt("12345")
             .set_previous("67890")
             .add_output(CapturedOut::Write(b"1234567890".to_vec()))
+            .add_output(CapturedOut::SyncNow)
             // -
             .add_key_chars("1234567890")
             .add_output_bytes(b"1234")
@@ -740,6 +747,7 @@ mod tests {
         ReadLineInteractiveTest::default()
             .set_prompt("? ")
             .add_output(CapturedOut::Write(b"? ".to_vec()))
+            .add_output(CapturedOut::SyncNow)
             //
             .set_history(
                 vec!["first".to_owned(), "second".to_owned(), "third".to_owned()],
@@ -798,6 +806,7 @@ mod tests {
         ReadLineInteractiveTest::default()
             .set_prompt("? ")
             .add_output(CapturedOut::Write(b"? ".to_vec()))
+            .add_output(CapturedOut::SyncNow)
             //
             .set_history(
                 vec!["first".to_owned(), "second".to_owned(), "third".to_owned()],
@@ -863,6 +872,7 @@ mod tests {
             .set_prompt("> ")
             .set_previous("pass1234")
             .add_output(CapturedOut::Write(b"> ********".to_vec()))
+            .add_output(CapturedOut::SyncNow)
             // -
             .add_key_chars("56")
             .add_output_bytes(b"**")
@@ -902,6 +912,7 @@ mod tests {
         assert_eq!(
             &[
                 CapturedOut::Write(vec![b'>', b' ']),
+                CapturedOut::SyncNow,
                 CapturedOut::Write(vec![b'*']),
                 CapturedOut::Write(vec![b'*']),
                 CapturedOut::Print("".to_owned()),
