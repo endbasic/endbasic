@@ -15,7 +15,7 @@
 
 //! Configuration support for the graphical console.
 
-use endbasic_sdl::Resolution;
+use crate::console::Resolution;
 use std::fs::File;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -75,7 +75,7 @@ fn parse_resolution(mut resolution: &str) -> io::Result<Resolution> {
 }
 
 /// Parses a graphical console specification.
-pub fn parse_graphics_spec(params: &str) -> io::Result<(Resolution, Option<&Path>, u16)> {
+pub(crate) fn parse_graphics_spec(params: &str) -> io::Result<(Resolution, Option<&Path>, u16)> {
     let invalid_spec =
         Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid graphics console spec"));
 
@@ -103,13 +103,13 @@ pub fn parse_graphics_spec(params: &str) -> io::Result<(Resolution, Option<&Path
 }
 
 /// Context to maintain a font on disk temporarily.
-pub struct TempFont {
+pub(crate) struct TempFont {
     dir: TempDir,
 }
 
 impl TempFont {
     /// Gets an instance of the default font.
-    pub fn default_font() -> io::Result<Self> {
+    pub(crate) fn default_font() -> io::Result<Self> {
         let dir = tempfile::tempdir()?;
         let mut file = File::create(dir.path().join("font.ttf"))?;
         file.write_all(DEFAULT_FONT_BYTES)?;
@@ -117,7 +117,7 @@ impl TempFont {
     }
 
     /// Gets the path to the temporary font.
-    pub fn path(&self) -> PathBuf {
+    pub(crate) fn path(&self) -> PathBuf {
         self.dir.path().join("font.ttf")
     }
 }
@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn test_parse_resolution_full_screen_desktop() {
-        assert_eq!(Resolution::full_screen_desktop(), parse_resolution("fs").unwrap());
+        assert_eq!(Resolution::FullScreenDesktop, parse_resolution("fs").unwrap());
     }
 
     #[test]

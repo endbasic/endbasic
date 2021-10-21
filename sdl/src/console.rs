@@ -365,7 +365,7 @@ fn parse_event(event: Event) -> io::Result<Option<Key>> {
 
 /// Configures the resolution of the graphical console.
 #[derive(Debug, PartialEq)]
-pub enum Resolution {
+pub(crate) enum Resolution {
     /// Tells the console to start in full screen mode at the current desktop resolution.
     FullScreenDesktop,
 
@@ -377,11 +377,6 @@ pub enum Resolution {
 }
 
 impl Resolution {
-    /// Creates a new instance of this enum of type `FullScreenDesktop`.
-    pub fn full_screen_desktop() -> Self {
-        Self::FullScreenDesktop
-    }
-
     /// Ensures that the given resolution is valid to some extent.
     fn validate_width_and_height(width: u32, height: u32) -> io::Result<()> {
         if width == 0 {
@@ -394,20 +389,20 @@ impl Resolution {
     }
 
     /// Creates a new instance of this enum of type `FullScreen` after validating the parameters.
-    pub fn full_screen(width: u32, height: u32) -> io::Result<Self> {
+    pub(crate) fn full_screen(width: u32, height: u32) -> io::Result<Self> {
         Resolution::validate_width_and_height(width, height)?;
         Ok(Self::FullScreen((width, height)))
     }
 
     /// Creates a new instance of this enum of type `Windowed` after validating the parameters.
-    pub fn windowed(width: u32, height: u32) -> io::Result<Self> {
+    pub(crate) fn windowed(width: u32, height: u32) -> io::Result<Self> {
         Resolution::validate_width_and_height(width, height)?;
         Ok(Self::Windowed((width, height)))
     }
 }
 
 /// Implementation of the EndBASIC console on top of an SDL2 window.
-pub struct SdlConsole {
+pub(crate) struct SdlConsole {
     /// SDL2 library context.  Must remain alive for the lifetime of the console: if it is dropped
     /// early, all further SDL operations fail.
     _context: Sdl,
@@ -469,7 +464,11 @@ impl SdlConsole {
     ///
     /// There can only be one active `SdlConsole` at any given time given that this initializes and
     /// owns the SDL context.
-    pub fn new(resolution: Resolution, font_path: &Path, font_size: u16) -> io::Result<Self> {
+    pub(crate) fn new(
+        resolution: Resolution,
+        font_path: &Path,
+        font_size: u16,
+    ) -> io::Result<Self> {
         let font = MonospacedFont::load(font_path, font_size)?;
 
         let context = sdl2::init().map_err(string_error_to_io_error)?;
@@ -1061,7 +1060,7 @@ mod testutils {
             let lock = TEST_LOCK.lock().unwrap();
             let console = SdlConsole::new(
                 Resolution::windowed(800, 600).unwrap(),
-                &src_path("cli/src/IBMPlexMono-Regular-6.0.0.ttf"),
+                &src_path("sdl/src/IBMPlexMono-Regular-6.0.0.ttf"),
                 16,
             )
             .unwrap();

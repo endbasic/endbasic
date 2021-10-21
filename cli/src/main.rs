@@ -137,12 +137,25 @@ fn get_local_drive_spec(flag: Option<String>) -> Result<String> {
 
 /// Sets up the console.
 fn setup_console(console_spec: Option<String>) -> io::Result<Rc<RefCell<dyn Console>>> {
+    /// Creates the graphical console when SDL support is built in.
+    #[cfg(feature = "sdl")]
+    pub fn setup_graphics_console(spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
+        endbasic_sdl::setup(spec)
+    }
+
+    /// Errors out during the creation of the graphical console when SDL support is not compiled in.
+    #[cfg(not(feature = "sdl"))]
+    pub fn setup_graphics_console(_spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
+        // TODO(jmmv): Make this io::ErrorKind::Unsupported when our MSRV allows it.
+        Err(io::Error::new(io::ErrorKind::InvalidInput, "SDL support not compiled in"))
+    }
+
     let console: Rc<RefCell<dyn Console>> = match console_spec.as_deref() {
         None | Some("text") => Rc::from(RefCell::from(TerminalConsole::from_stdio()?)),
 
-        Some("graphics") => endbasic::setup_graphics_console("")?,
+        Some("graphics") => setup_graphics_console("")?,
         Some(text) if text.starts_with("graphics:") => {
-            endbasic::setup_graphics_console(&text["graphics:".len()..])?
+            setup_graphics_console(&text["graphics:".len()..])?
         }
 
         Some(text) => {
