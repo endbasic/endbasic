@@ -15,15 +15,14 @@
 
 //! GPIO implementation for the Raspberry Pi.
 
-use crate::gpio::{Pin, PinMode, Pins};
+use endbasic_std::gpio::{Pin, PinMode, Pins};
+use rppal::gpio;
 use std::collections::HashMap;
 use std::io;
 
-use rppal::gpio;
-
 /// Implementation of the EndBASIC GPIO operations for a Raspberry Pi using the rppal library.
 #[derive(Default)]
-pub(crate) struct RppalPins {
+pub struct RppalPins {
     chip: Option<gpio::Gpio>,
     inputs: HashMap<Pin, gpio::InputPin>,
     outputs: HashMap<Pin, gpio::OutputPin>,

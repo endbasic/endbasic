@@ -34,5 +34,6 @@ if grep 'Changes in' NEWS.md | head -n 1 | fgrep 'X.Y.Z'; then
     echo "Skipping endbasic publish test in development version"
 else
     ( cd std && cargo publish --dry-run )
+    ( cd rpi && cargo publish --dry-run )
     ( cd cli && cargo publish --dry-run )
 fi
