@@ -67,6 +67,41 @@ pub trait Program {
     fn text(&self) -> String;
 }
 
+/// Trivial implementation of a recorded program that doesn't support editing.
+#[derive(Default)]
+pub(crate) struct ImmutableProgram {
+    name: Option<String>,
+    text: String,
+}
+
+#[async_trait(?Send)]
+impl Program for ImmutableProgram {
+    fn is_dirty(&self) -> bool {
+        false
+    }
+
+    async fn edit(&mut self, _console: &mut dyn Console) -> io::Result<()> {
+        Err(io::Error::new(io::ErrorKind::Other, "Editing not supported"))
+    }
+
+    fn load(&mut self, name: Option<&str>, text: &str) {
+        self.name = name.map(str::to_owned);
+        self.text = text.to_owned();
+    }
+
+    fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    fn set_name(&mut self, name: &str) {
+        self.name = Some(name.to_owned());
+    }
+
+    fn text(&self) -> String {
+        self.text.clone()
+    }
+}
+
 /// Adds an extension to `path` if one is not present.
 fn add_extension<S: Into<PathBuf>>(path: S) -> io::Result<String> {
     let mut path = path.into();

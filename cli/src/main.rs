@@ -111,6 +111,16 @@ fn new_machine_builder(console_spec: Option<&str>) -> io::Result<endbasic_std::M
     Ok(builder)
 }
 
+/// Turns a regular machine builder into an interactive builder ensuring common features for all
+/// callers.
+fn make_interactive(
+    builder: endbasic_std::MachineBuilder,
+) -> endbasic_std::InteractiveMachineBuilder {
+    builder
+        .make_interactive()
+        .with_program(Rc::from(RefCell::from(endbasic_repl::editor::Editor::default())))
+}
+
 /// Returns `flag` if present, or else returns the URI of the default `LOCAL` drive.
 fn get_local_drive_spec(flag: Option<String>) -> Result<String> {
     let dir = flag.or_else(|| {
@@ -205,7 +215,7 @@ async fn run_repl_loop(
 ) -> endbasic_core::exec::Result<i32> {
     let mut builder = new_machine_builder(console_spec)?;
     let console = builder.get_console();
-    let mut builder = builder.make_interactive();
+    let mut builder = make_interactive(builder);
 
     let program = builder.get_program();
 
@@ -236,7 +246,7 @@ async fn run_interactive<P: AsRef<Path>>(
     console_spec: Option<&str>,
     local_drive_spec: &str,
 ) -> endbasic_core::exec::Result<i32> {
-    let mut builder = new_machine_builder(console_spec)?.make_interactive();
+    let mut builder = make_interactive(new_machine_builder(console_spec)?);
 
     let storage = builder.get_storage();
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
