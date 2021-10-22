@@ -63,6 +63,11 @@ for the time being.**
     console into a new `endbasic-sdl` crate and the Raspberry Pi support into
     a new `endbasic-rpi` crate.
 
+*   Added a new `endbasic-repl` crate to assimilate all of the features and
+    code that are specific to the REPL.  This finally breaks the dependency
+    of the `endbasic-web` crate on the `endbasic` CLI crate, which required
+    optional features to work.
+
 ## Changes in version 0.7.0
 
 **Released on 2021-07-03.**

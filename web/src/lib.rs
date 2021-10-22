@@ -269,7 +269,7 @@ impl OnScreenKeyboard {
 
 /// Sets up the common storage drives.
 fn setup_storage(storage: &mut endbasic_std::storage::Storage) {
-    storage.register_scheme("demos", Box::from(endbasic::demos::DemoDriveFactory::default()));
+    storage.register_scheme("demos", Box::from(endbasic_repl::demos::DemoDriveFactory::default()));
     storage.mount("demos", "demos://").expect("Demos drive shouldn't fail to mount");
     storage.register_scheme("local", Box::from(store::WebDriveFactory::default()));
     storage.mount("local", "local://").expect("Web drive shouldn't fail to mount");
@@ -322,11 +322,11 @@ impl WebTerminal {
         setup_storage(&mut storage.borrow_mut());
 
         let mut machine = builder.build().unwrap();
-        endbasic::print_welcome(console.clone()).unwrap();
-        endbasic::try_load_autoexec(&mut machine, console.clone(), storage).await.unwrap();
+        endbasic_repl::print_welcome(console.clone()).unwrap();
+        endbasic_repl::try_load_autoexec(&mut machine, console.clone(), storage).await.unwrap();
         loop {
             let result =
-                endbasic::run_repl_loop(&mut machine, console.clone(), program.clone()).await;
+                endbasic_repl::run_repl_loop(&mut machine, console.clone(), program.clone()).await;
             let mut console = console.borrow_mut();
             match result {
                 Ok(exit_code) => {

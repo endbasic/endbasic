@@ -2,6 +2,7 @@
 members = [
     "cli",
     "core",
+    "repl",
     "rpi",
     "sdl",
     "std",
@@ -11,6 +12,7 @@ members = [
 default-members = [
     "cli",
     "core",
+    "repl",
     "std",
 ]
 
