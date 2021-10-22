@@ -185,7 +185,7 @@ fn setup_console(console_spec: Option<&str>) -> io::Result<Rc<RefCell<dyn Consol
 /// This instantiates non-optional drives, such as `MEMORY:` and `DEMOS:`, maps `LOCAL` the
 /// location given in `local_drive_spec`.
 pub fn setup_storage(storage: &mut Storage, local_drive_spec: &str) -> io::Result<()> {
-    storage.register_scheme("demos", Box::from(endbasic::demos::DemoDriveFactory::default()));
+    storage.register_scheme("demos", Box::from(endbasic_repl::demos::DemoDriveFactory::default()));
     storage.mount("demos", "demos://").expect("Demos drive shouldn't fail to mount");
     storage.register_scheme(
         "file",
@@ -213,9 +213,9 @@ async fn run_repl_loop(
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
 
     let mut machine = builder.build()?;
-    endbasic::print_welcome(console.clone())?;
-    endbasic::try_load_autoexec(&mut machine, console.clone(), storage).await?;
-    Ok(endbasic::run_repl_loop(&mut machine, console, program).await?)
+    endbasic_repl::print_welcome(console.clone())?;
+    endbasic_repl::try_load_autoexec(&mut machine, console.clone(), storage).await?;
+    Ok(endbasic_repl::run_repl_loop(&mut machine, console, program).await?)
 }
 
 /// Executes the `path` program in a fresh machine.

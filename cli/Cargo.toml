@@ -12,23 +12,24 @@ readme = "README.md"
 edition = "2018"
 
 [features]
-default = ["crossterm", "tokio"]
+default = ["crossterm"]
 crossterm = ["endbasic-terminal"]
 sdl = ["endbasic-sdl"]
 rpi = ["endbasic-rpi"]
 
 [dependencies]
 anyhow = "1.0"
-async-trait = "0.1"
 dirs = "2.0"
 getopts = "0.2"
 thiserror = "1.0"
-time = { version = "0.2", features = ["std"] }
-tokio = { version = "1", features =  ["full"], optional = true }
 
 [dependencies.endbasic-core]
 version = "0.7.0" # ENDBASIC-VERSION
 path = "../core"
+
+[dependencies.endbasic-repl]
+version = "0.7.0" # ENDBASIC-VERSION
+path = "../repl"
 
 [dependencies.endbasic-rpi]
 version = "0.7.0" # ENDBASIC-VERSION
@@ -49,7 +50,10 @@ version = "0.7.0" # ENDBASIC-VERSION
 path = "../terminal"
 optional = true
 
+[dependencies.tokio]
+version = "1"
+features = ["full"]
+
 [dev-dependencies]
-futures-lite = "1.1"
 regex = "1"
 tempfile = "3"
