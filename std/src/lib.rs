@@ -29,7 +29,6 @@ use std::rc::Rc;
 // TODO(jmmv): Should narrow the exposed interface by 1.0.0.
 pub mod arrays;
 pub mod console;
-mod editor;
 pub mod exec;
 pub mod gfx;
 pub mod gpio;
@@ -128,7 +127,7 @@ impl InteractiveMachineBuilder {
     /// Lazily initializes the `program` field with a default value and returns it.
     pub fn get_program(&mut self) -> Rc<RefCell<dyn program::Program>> {
         if self.program.is_none() {
-            self.program = Some(Rc::from(RefCell::from(editor::Editor::default())));
+            self.program = Some(Rc::from(RefCell::from(program::ImmutableProgram::default())));
         }
         self.program.clone().unwrap()
     }

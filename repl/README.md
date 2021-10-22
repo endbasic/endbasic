@@ -33,3 +33,4 @@ by all frontends to EndBASIC.  This includes features like:
 *   `AUTOEXEC.BAS` support.
 *   Built-in demo programs.
 *   Common console initialization.
+*   Interactive full-screen editor.

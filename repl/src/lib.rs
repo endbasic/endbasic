@@ -31,6 +31,7 @@ use std::io;
 use std::rc::Rc;
 
 pub mod demos;
+pub mod editor;
 
 /// Prints the EndBASIC welcome message to the given console.
 pub fn print_welcome(console: Rc<RefCell<dyn Console>>) -> io::Result<()> {

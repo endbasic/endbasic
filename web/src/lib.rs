@@ -314,7 +314,8 @@ impl WebTerminal {
         let mut builder = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
             .with_sleep_fn(Box::from(js_sleep))
-            .make_interactive();
+            .make_interactive()
+            .with_program(Rc::from(RefCell::from(endbasic_repl::editor::Editor::default())));
 
         let program = builder.get_program();
 

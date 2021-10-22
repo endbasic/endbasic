@@ -16,8 +16,8 @@
 //! Interactive console-based text editor.
 
 use crate::console::{CharsXY, ClearType, Console, Key};
-use crate::program::Program;
 use async_trait::async_trait;
+use endbasic_std::program::Program;
 use std::cmp;
 use std::convert::TryFrom;
 use std::io;
@@ -423,7 +423,7 @@ impl Program for Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testutils::*;
+    use endbasic_std::testutils::*;
     use futures_lite::future::block_on;
 
     /// Name of the program to inject into the editor for testing.  The name is very short because
