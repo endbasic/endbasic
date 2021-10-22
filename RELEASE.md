@@ -1,7 +1,11 @@
 # Instructions to prepare a new release
 
-1.  Create a local branch called `release` or similar.
+1.  Create a local branch called `release`.
 
+    *   **The name must be `release` to trigger required pre-release checks.**
+        These checks ensure that `cargo publish` (detailed below) will succeed,
+        as it is an irreversible operation, and that `cargo install` will work
+        for various feature combinations.
     *   **Make sure the branch is synced to `origin/master`!**
     *   `git fetch`
     *   `git checkout -b release origin/master`.
