@@ -33,17 +33,18 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 #[cfg(test)]
 use wasm_bindgen_test::wasm_bindgen_test_configure;
-use xterm_js_rs::{OnKeyEvent, Terminal};
+use web_sys::HtmlCanvasElement;
+use web_sys::KeyboardEvent;
 
 #[cfg(test)]
 wasm_bindgen_test_configure!(run_in_browser);
 
+mod canvas;
+use canvas::CanvasConsole;
 mod input;
 use input::{OnScreenKeyboard, WebInput};
 mod store;
 use store::WebDriveFactory;
-mod xterm;
-use xterm::XtermJsConsole;
 
 /// Sleeps for the given period of time.
 fn js_sleep(d: Duration) -> Pin<Box<dyn Future<Output = CommandResult>>> {
@@ -92,8 +93,8 @@ fn setup_storage(storage: &mut endbasic_std::storage::Storage) {
 /// Connects the EndBASIC interpreter to a web page.
 #[wasm_bindgen]
 pub struct WebTerminal {
-    console: Rc<RefCell<dyn Console>>,
-    _on_key_callback: Closure<dyn FnMut(OnKeyEvent)>,
+    console: Rc<RefCell<CanvasConsole>>,
+    _on_key_callback: Closure<dyn FnMut(KeyboardEvent)>,
     on_screen_keyboard: OnScreenKeyboard,
 }
 
@@ -101,15 +102,18 @@ pub struct WebTerminal {
 impl WebTerminal {
     /// Creates a new instance of the `WebTerminal`.
     #[wasm_bindgen(constructor)]
-    pub fn new(terminal: Terminal) -> Self {
+    pub fn new(terminal: HtmlCanvasElement) -> Self {
         let input = WebInput::default();
 
         let on_key_callback = input.terminal_on_key();
-        terminal.on_key(on_key_callback.as_ref().unchecked_ref());
+        let window = web_sys::window().unwrap();
+        window
+            .add_event_listener_with_callback("keydown", on_key_callback.as_ref().unchecked_ref())
+            .unwrap();
 
         let on_screen_keyboard = input.on_screen_keyboard();
 
-        let console = Rc::from(RefCell::from(XtermJsConsole::new(terminal, input)));
+        let console = Rc::from(RefCell::from(CanvasConsole::new(terminal, input).unwrap()));
 
         Self { console, _on_key_callback: on_key_callback, on_screen_keyboard }
     }
@@ -117,6 +121,14 @@ impl WebTerminal {
     /// Generates a new `OnScreenKeyboard` that can inject keypresses into this terminal.
     pub fn on_screen_keyboard(&self) -> OnScreenKeyboard {
         self.on_screen_keyboard.clone()
+    }
+
+    /// Returns a textual description of the size of the console.
+    pub fn size_description(&self) -> String {
+        let console = self.console.borrow();
+        let pixels = console.size_pixels();
+        let chars = console.size().unwrap();
+        format!("{}x{} pixels, {}x{} chars", pixels.width, pixels.height, chars.x, chars.y)
     }
 
     /// Starts the EndBASIC interpreter loop on the specified `terminal`.

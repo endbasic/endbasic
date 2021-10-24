@@ -66,6 +66,7 @@
         "crossterm",
         "endbasic",
         "eval",
+        "framebuffer",
         "jmmv",
         "monospaced",
         "MSRV",

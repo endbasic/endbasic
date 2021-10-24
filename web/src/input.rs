@@ -19,11 +19,10 @@ use async_channel::{self, Receiver, Sender, TryRecvError};
 use endbasic_std::console::Key;
 use std::io;
 use wasm_bindgen::prelude::*;
-use xterm_js_rs::OnKeyEvent;
+use web_sys::KeyboardEvent;
 
-/// Converts an xterm.js key event into our own `Key` representation.
-fn on_key_event_into_key(event: OnKeyEvent) -> Key {
-    let dom_event = event.dom_event();
+/// Converts an HTML keyboard event into our own `Key` representation.
+fn on_key_event_into_key(dom_event: KeyboardEvent) -> Key {
     match dom_event.key_code() as u8 {
         8 => Key::Backspace,
         9 => Key::Tab,
@@ -48,7 +47,7 @@ fn on_key_event_into_key(event: OnKeyEvent) -> Key {
         b'P' if dom_event.ctrl_key() => Key::ArrowUp,
         _ => {
             let printable = !dom_event.alt_key() && !dom_event.ctrl_key() && !dom_event.meta_key();
-            let chars = event.key().chars().collect::<Vec<char>>();
+            let chars = dom_event.key().chars().collect::<Vec<char>>();
             if printable && chars.len() == 1 {
                 Key::Char(chars[0])
             } else {
@@ -110,13 +109,13 @@ impl Default for WebInput {
 
 impl WebInput {
     /// Generates a closure that xterm.js can use to handle key events.
-    pub(crate) fn terminal_on_key(&self) -> Closure<dyn FnMut(OnKeyEvent)> {
+    pub(crate) fn terminal_on_key(&self) -> Closure<dyn FnMut(KeyboardEvent)> {
         let on_key_tx = self.on_key_tx.clone();
         Closure::wrap(Box::new(move |e| {
             on_key_tx
                 .try_send(on_key_event_into_key(e))
                 .expect("Send to unbounded channel must succeed")
-        }) as Box<dyn FnMut(OnKeyEvent)>)
+        }) as Box<dyn FnMut(KeyboardEvent)>)
     }
 
     /// Generates a new `OnScreenKeyboard` that can inject key events.

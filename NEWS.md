@@ -68,6 +68,10 @@ for the time being.**
     of the `endbasic-web` crate on the `endbasic` CLI crate, which required
     optional features to work.
 
+*   Rewrote the web frontend to support graphics rendering.  This implies that
+    we do not use `xterm.js` any more and instead we use a custom-built
+    console implementation.
+
 ## Changes in version 0.7.0
 
 **Released on 2021-07-03.**

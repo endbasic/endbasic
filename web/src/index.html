@@ -3,7 +3,6 @@
     <head>
         <meta charset="utf-8">
         <title>EndBASIC</title>
-        <link rel="stylesheet" href="xterm.css" />
         <link rel="stylesheet" href="style.css" />
 
         <!-- Global site tag (gtag.js) - Google Analytics -->
@@ -17,9 +16,9 @@
     </head>
 
     <body>
-        <div id="terminal">
-            <noscript>Javascript is required for this site.</noscript>
-        </div>
+        <canvas id="terminal" width="800" height="600">
+            EndBASIC terminal window.
+        </canvas>
         <div id="controls">
             <button id="button-esc" type="button">Esc</button>
             <button id="button-up" type="button">&uarr;</button>
@@ -31,6 +30,8 @@
         <footer>
             <a href="https://www.endbasic.dev/">EndBASIC</a>&nbsp;
             (<span id="build-id"></span>)
+            &nbsp;&middot;&nbsp;
+            <span id="terminal-size"></span>
             &nbsp;&middot;&nbsp;
             <a href="https://www.endbasic.dev/service.html">Create account</a>
             &nbsp;&middot;&nbsp;

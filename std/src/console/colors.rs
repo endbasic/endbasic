@@ -15,8 +15,9 @@
 
 //! Color palette for terminals with precise color support.
 
+/// Represents an RGB color in `[0,255]` quantities.
 #[allow(clippy::upper_case_acronyms)]
-type RGB = (u8, u8, u8);
+pub type RGB = (u8, u8, u8);
 
 static COLORS: &[RGB] = &[
     (0, 0, 0),       // Black.

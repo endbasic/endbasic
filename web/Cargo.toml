@@ -29,7 +29,6 @@ serde_json = "1.0"
 time = { version = "0.2", features = ["serde", "std"] }
 wasm-bindgen = "^0.2.78"
 wasm-bindgen-futures = "0.4"
-xterm-js-rs = "0.1.1"
 
 [dependencies.endbasic-core]
 version = "0.7.0" # ENDBASIC-VERSION
@@ -46,7 +45,13 @@ path = "../std"
 [dependencies.web-sys]
 version = "0.3"
 features = [
+    "CanvasRenderingContext2d",
+    "EventTarget",
+    "HtmlCanvasElement",
+    "ImageData",
+    "KeyboardEvent",
     "Storage",
+    "TextMetrics",
     "Window",
 ]
 
