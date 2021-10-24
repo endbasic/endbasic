@@ -42,14 +42,7 @@ html, body {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
-    height: calc(100% - 30pt /* footer */ - 20pt /* margins */);
-
-    margin: 10pt;
-}
-
-#terminal .xterm-viewport {
-    visibility: hidden;
+    margin: 0;
 }
 
 #controls {

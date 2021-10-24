@@ -35,11 +35,7 @@ module.exports = {
     plugins: [
         new CopyWebpackPlugin({
             patterns: [
-                path.resolve(__dirname, "static"),
-                {
-                    from: path.resolve(__dirname, "node_modules/xterm/css/xterm.css"),
-                    to: "xterm.css",
-                },
+                path.resolve(__dirname, "static")
             ],
         }),
 

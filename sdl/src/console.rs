@@ -730,9 +730,9 @@ impl Console for SdlConsole {
                 self.cursor_pos.y = 0;
                 self.cursor_pos.x = 0;
 
-                // We intentionally do not draw the cursor here and wait until the first time we write text
-                // to the console.  This allows the user to clear the screen and render graphics if they
-                // want to without interference.
+                // We intentionally do not draw the cursor here and wait until the first time we
+                // write text to the console.  This allows the user to clear the screen and render
+                // graphics if they want to without interference.
                 self.cursor_backup.clear();
             }
             ClearType::CurrentLine => {

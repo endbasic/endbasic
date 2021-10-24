@@ -15,8 +15,6 @@
 
 import * as endbasic_web from "endbasic_web";
 import $ from "jquery";
-import * as xterm from "xterm";
-import * as xterm_fit_addon from "xterm-addon-fit";
 
 var buildId = endbasic_web.get_build_id();
 $('#build-id').text(buildId);
@@ -25,15 +23,24 @@ var template = "Build ID: " + buildId;
 $('#report-issue').attr(
     "href", "https://github.com/endbasic/endbasic/issues/new?body=" + template);
 
-var term = new xterm.Terminal();
-term.setOption("fontFamily", '"IBM Plex Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace');
-term.setOption("fontSize", 18);
-const fitAddon = new xterm_fit_addon.FitAddon();
-term.loadAddon(fitAddon);
-term.open(document.getElementById('terminal'));
-fitAddon.fit();
+let terminal = document.getElementById('terminal');
 
-var wt = new endbasic_web.WebTerminal(term);
+function fitTerminal() {
+    let footer = document.getElementsByTagName('footer');
+    terminal.style.margin = "15px";
+    terminal.width = document.documentElement.clientWidth - 30;
+    terminal.height = document.documentElement.clientHeight - footer[0].clientHeight - 30;
+}
+fitTerminal();
+
+// TODO(jmmv): We should hook fitTerminal() into resize, but EndBASIC cannot react to console
+// size changes.  Instead, invalidate the size as a warning...
+window.onresize = function() {
+    let label = document.getElementById('terminal-size');
+    label.innerText = "SIZE CHANGED; MUST RELOAD PAGE";
+};
+
+var wt = new endbasic_web.WebTerminal(terminal);
 
 var UA = navigator.userAgent;
 var isMobile = (
@@ -66,5 +73,8 @@ if (isMobile) {
     $('#controls').css('visibility', 'visible');
 }
 
-term.focus();
+var sizeInChars = wt.size_description();
+$('#terminal-size').text(sizeInChars);
+
+terminal.focus();
 wt.run_repl_loop();
