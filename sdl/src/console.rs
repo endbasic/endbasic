@@ -15,9 +15,8 @@
 
 //! Implementation of the EndBASIC console using SDL.
 
-use crate::colors::ansi_color_to_rgb;
 use async_trait::async_trait;
-use endbasic_std::console::{CharsXY, ClearType, Console, Key, PixelsXY};
+use endbasic_std::console::{ansi_color_to_rgb, CharsXY, ClearType, Console, Key, PixelsXY};
 use once_cell::sync::Lazy;
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};

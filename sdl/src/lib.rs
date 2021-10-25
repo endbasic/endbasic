@@ -27,7 +27,6 @@ use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
 
-mod colors;
 mod console;
 mod spec;
 
