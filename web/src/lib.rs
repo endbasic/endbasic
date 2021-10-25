@@ -230,6 +230,14 @@ impl Console for XtermJsConsole {
         self.terminal.write(&String::from_utf8_lossy(bytes));
         Ok(())
     }
+
+    fn sync_now(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn set_sync(&mut self, _enabled: bool) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 /// Interface to implement an on-screen keyboard to provide keys that may not be available on
