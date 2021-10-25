@@ -278,6 +278,6 @@ static COLORS: &[RGB] = &[
 ];
 
 /// Converts an ANSI color number to an RGB color.
-pub(crate) fn ansi_color_to_rgb(color: u8) -> RGB {
+pub fn ansi_color_to_rgb(color: u8) -> RGB {
     COLORS[(color as usize) % COLORS.len()]
 }
