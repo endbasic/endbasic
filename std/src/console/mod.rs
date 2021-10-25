@@ -221,9 +221,7 @@ pub trait Console {
     /// Causes any buffered output to be synced.
     ///
     /// This is a no-op when video syncing is enabled because output is never buffered in that case.
-    fn sync_now(&mut self) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
-    }
+    fn sync_now(&mut self) -> io::Result<()>;
 
     /// Enables or disables video syncing.
     ///
@@ -233,9 +231,7 @@ pub trait Console {
     /// is too slow).
     ///
     /// Flushes any pending updates when enabled.
-    fn set_sync(&mut self, _enabled: bool) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
-    }
+    fn set_sync(&mut self, _enabled: bool) -> io::Result<()>;
 }
 
 /// Resets the state of a console in a best-effort manner.
