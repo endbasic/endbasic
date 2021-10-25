@@ -121,6 +121,13 @@ fn on_key_event_into_key(event: OnKeyEvent) -> Key {
 struct XtermJsConsole {
     terminal: Terminal,
     on_key_rx: async_channel::Receiver<Key>,
+    alt_active: bool,
+}
+
+impl XtermJsConsole {
+    fn new(terminal: Terminal, on_key_rx: async_channel::Receiver<Key>) -> Self {
+        Self { terminal, on_key_rx, alt_active: false }
+    }
 }
 
 #[async_trait(?Send)]
@@ -158,7 +165,10 @@ impl Console for XtermJsConsole {
     }
 
     fn enter_alt(&mut self) -> io::Result<()> {
-        self.terminal.write("\u{001b}[?1049h");
+        if !self.alt_active {
+            self.terminal.write("\u{001b}[?1049h");
+            self.alt_active = true;
+        }
         Ok(())
     }
 
@@ -172,7 +182,10 @@ impl Console for XtermJsConsole {
     }
 
     fn leave_alt(&mut self) -> io::Result<()> {
-        self.terminal.write("\u{001b}[?1049l");
+        if self.alt_active {
+            self.terminal.write("\u{001b}[?1049l");
+            self.alt_active = false;
+        }
         Ok(())
     }
 
@@ -318,7 +331,7 @@ impl WebTerminal {
         };
         terminal.on_key(on_key_callback.as_ref().unchecked_ref());
 
-        let console = Rc::from(RefCell::from(XtermJsConsole { terminal, on_key_rx }));
+        let console = Rc::from(RefCell::from(XtermJsConsole::new(terminal, on_key_rx)));
         let mut builder = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
             .with_sleep_fn(Box::from(js_sleep))
