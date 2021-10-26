@@ -113,11 +113,3 @@ jobs:
             # And because we do this primarily for Raspbian, make sure the
             # relevant features build there too.
             - run: cd cli && cargo build --features=rpi,sdl --verbose
-
-    cargo-package:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v2
-            - run: sudo apt update
-            - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
-            - run: ./.github/workflows/package.sh
