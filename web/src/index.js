@@ -33,7 +33,7 @@ term.loadAddon(fitAddon);
 term.open(document.getElementById('terminal'));
 fitAddon.fit();
 
-var wt = new endbasic_web.WebTerminal();
+var wt = new endbasic_web.WebTerminal(term);
 
 var UA = navigator.userAgent;
 var isMobile = (
@@ -67,4 +67,4 @@ if (isMobile) {
 }
 
 term.focus();
-wt.run_repl_loop(term);
+wt.run_repl_loop();

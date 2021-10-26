@@ -61,6 +61,7 @@ fn on_key_event_into_key(event: OnKeyEvent) -> Key {
 /// Interface to implement an on-screen keyboard to provide keys that may not be available on
 /// mobile keyboards.
 #[wasm_bindgen]
+#[derive(Clone)]
 pub struct OnScreenKeyboard {
     on_key_tx: Sender<Key>,
 }

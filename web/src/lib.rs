@@ -33,7 +33,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 #[cfg(test)]
 use wasm_bindgen_test::wasm_bindgen_test_configure;
-use xterm_js_rs::Terminal;
+use xterm_js_rs::{OnKeyEvent, Terminal};
 
 #[cfg(test)]
 wasm_bindgen_test_configure!(run_in_browser);
@@ -92,31 +92,37 @@ fn setup_storage(storage: &mut endbasic_std::storage::Storage) {
 /// Connects the EndBASIC interpreter to a web page.
 #[wasm_bindgen]
 pub struct WebTerminal {
-    input: WebInput,
+    console: Rc<RefCell<dyn Console>>,
+    _on_key_callback: Closure<dyn FnMut(OnKeyEvent)>,
+    on_screen_keyboard: OnScreenKeyboard,
 }
 
 #[wasm_bindgen]
 impl WebTerminal {
     /// Creates a new instance of the `WebTerminal`.
     #[wasm_bindgen(constructor)]
-    #[allow(clippy::new_without_default)] // Cannot implement Default in wasm-bindgen.
-    pub fn new() -> Self {
-        Self { input: WebInput::default() }
+    pub fn new(terminal: Terminal) -> Self {
+        let input = WebInput::default();
+
+        let on_key_callback = input.terminal_on_key();
+        terminal.on_key(on_key_callback.as_ref().unchecked_ref());
+
+        let on_screen_keyboard = input.on_screen_keyboard();
+
+        let console = Rc::from(RefCell::from(XtermJsConsole::new(terminal, input)));
+
+        Self { console, _on_key_callback: on_key_callback, on_screen_keyboard }
     }
 
     /// Generates a new `OnScreenKeyboard` that can inject keypresses into this terminal.
     pub fn on_screen_keyboard(&self) -> OnScreenKeyboard {
-        self.input.on_screen_keyboard()
+        self.on_screen_keyboard.clone()
     }
 
     /// Starts the EndBASIC interpreter loop on the specified `terminal`.
-    pub async fn run_repl_loop(self, terminal: Terminal) {
-        let on_key_callback = self.input.terminal_on_key();
-        terminal.on_key(on_key_callback.as_ref().unchecked_ref());
-
-        let console = Rc::from(RefCell::from(XtermJsConsole::new(terminal, self.input)));
+    pub async fn run_repl_loop(self) {
         let mut builder = endbasic_std::MachineBuilder::default()
-            .with_console(console.clone())
+            .with_console(self.console.clone())
             .with_sleep_fn(Box::from(js_sleep))
             .make_interactive()
             .with_program(Rc::from(RefCell::from(endbasic_repl::editor::Editor::default())));
@@ -127,12 +133,15 @@ impl WebTerminal {
         setup_storage(&mut storage.borrow_mut());
 
         let mut machine = builder.build().unwrap();
-        endbasic_repl::print_welcome(console.clone()).unwrap();
-        endbasic_repl::try_load_autoexec(&mut machine, console.clone(), storage).await.unwrap();
+        endbasic_repl::print_welcome(self.console.clone()).unwrap();
+        endbasic_repl::try_load_autoexec(&mut machine, self.console.clone(), storage)
+            .await
+            .unwrap();
         loop {
             let result =
-                endbasic_repl::run_repl_loop(&mut machine, console.clone(), program.clone()).await;
-            let mut console = console.borrow_mut();
+                endbasic_repl::run_repl_loop(&mut machine, self.console.clone(), program.clone())
+                    .await;
+            let mut console = self.console.borrow_mut();
             match result {
                 Ok(exit_code) => {
                     console.print(&format!("Interpreter exited with code {}", exit_code))
