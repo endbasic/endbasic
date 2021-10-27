@@ -93,6 +93,11 @@ html, body {
     grid-row-start: 3;
 }
 
+#mobile-input {
+    opacity: 0;
+    filter: alpha(opacity=0);
+}
+
 footer {
     position: fixed;
     left: 0;

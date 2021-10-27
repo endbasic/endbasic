@@ -16,6 +16,13 @@
 import * as endbasic_web from "endbasic_web";
 import $ from "jquery";
 
+var UA = navigator.userAgent;
+var isMobile = (
+    /\b(BlackBerry|webOS|iPhone|IEMobile)\b/i.test(UA) ||
+    /\b(Android|Windows Phone|iPad|iPod)\b/i.test(UA) ||
+    (/\b(Macintosh)\b/i.test(UA) && 'ontouchend' in document)  // For iPad Pro.
+);
+
 var buildId = endbasic_web.get_build_id();
 $('#build-id').text(buildId);
 
@@ -35,46 +42,60 @@ fitTerminal();
 
 // TODO(jmmv): We should hook fitTerminal() into resize, but EndBASIC cannot react to console
 // size changes.  Instead, invalidate the size as a warning...
-window.onresize = function() {
-    let label = document.getElementById('terminal-size');
-    label.innerText = "SIZE CHANGED; MUST RELOAD PAGE";
-};
+// We only do this on the desktop because mobile browsers will change the size every time they
+// show the on-screen keyboard and that's not what we really want here.
+if (!isMobile) {
+    window.onresize = function() {
+        let label = document.getElementById('terminal-size');
+        label.innerText = "SIZE CHANGED; MUST RELOAD PAGE";
+    };
+}
 
 var wt = new endbasic_web.WebTerminal(terminal);
 
-var UA = navigator.userAgent;
-var isMobile = (
-    /\b(BlackBerry|webOS|iPhone|IEMobile)\b/i.test(UA) ||
-    /\b(Android|Windows Phone|iPad|iPod)\b/i.test(UA)
-);
+var osk = wt.on_screen_keyboard();
+var mobileInput = document.getElementById('mobile-input');
 if (isMobile) {
-    var osk = wt.on_screen_keyboard();
     $('#button-esc').on('click', function() {
         osk.press_escape();
-        term.focus();
+        mobileInput.focus();
     });
     $('#button-up').on('click', function() {
         osk.press_arrow_up();
-        term.focus();
+        mobileInput.focus();
     });
     $('#button-down').on('click', function() {
         osk.press_arrow_down();
-        term.focus();
+        mobileInput.focus();
     });
     $('#button-left').on('click', function() {
         osk.press_arrow_left();
-        term.focus();
+        mobileInput.focus();
     });
     $('#button-right').on('click', function() {
         osk.press_arrow_right();
-        term.focus();
+        mobileInput.focus();
     });
 
     $('#controls').css('visibility', 'visible');
+
+    mobileInput.onkeydown = function(key) {
+        osk.inject_keyboard_event(key);
+        mobileInput.value = "";
+    };
+    terminal.onclick = function() {
+        mobileInput.focus();
+    }
+    mobileInput.focus();
+} else {
+    mobileInput.hidden = true;
+    window.onkeydown = function(key) {
+        osk.inject_keyboard_event(key);
+    }
+    terminal.focus();
 }
 
 var sizeInChars = wt.size_description();
 $('#terminal-size').text(sizeInChars);
 
-terminal.focus();
 wt.run_repl_loop();
