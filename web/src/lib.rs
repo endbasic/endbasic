@@ -92,7 +92,7 @@ fn setup_storage(storage: &mut endbasic_std::storage::Storage) {
 /// Connects the EndBASIC interpreter to a web page.
 #[wasm_bindgen]
 pub struct WebTerminal {
-    console: Rc<RefCell<CanvasConsole>>,
+    console: CanvasConsole,
     on_screen_keyboard: OnScreenKeyboard,
 }
 
@@ -103,7 +103,7 @@ impl WebTerminal {
     pub fn new(terminal: HtmlCanvasElement) -> Self {
         let input = WebInput::default();
         let on_screen_keyboard = input.on_screen_keyboard();
-        let console = Rc::from(RefCell::from(CanvasConsole::new(terminal, input).unwrap()));
+        let console = CanvasConsole::new(terminal, input).unwrap();
         Self { console, on_screen_keyboard }
     }
 
@@ -114,16 +114,16 @@ impl WebTerminal {
 
     /// Returns a textual description of the size of the console.
     pub fn size_description(&self) -> String {
-        let console = self.console.borrow();
-        let pixels = console.size_pixels();
-        let chars = console.size().unwrap();
+        let pixels = self.console.size_pixels();
+        let chars = self.console.size().unwrap();
         format!("{}x{} pixels, {}x{} chars", pixels.width, pixels.height, chars.x, chars.y)
     }
 
     /// Starts the EndBASIC interpreter loop on the specified `terminal`.
     pub async fn run_repl_loop(self) {
+        let console = Rc::from(RefCell::from(self.console));
         let mut builder = endbasic_std::MachineBuilder::default()
-            .with_console(self.console.clone())
+            .with_console(console.clone())
             .with_sleep_fn(Box::from(js_sleep))
             .make_interactive()
             .with_program(Rc::from(RefCell::from(endbasic_repl::editor::Editor::default())));
@@ -134,15 +134,12 @@ impl WebTerminal {
         setup_storage(&mut storage.borrow_mut());
 
         let mut machine = builder.build().unwrap();
-        endbasic_repl::print_welcome(self.console.clone()).unwrap();
-        endbasic_repl::try_load_autoexec(&mut machine, self.console.clone(), storage)
-            .await
-            .unwrap();
+        endbasic_repl::print_welcome(console.clone()).unwrap();
+        endbasic_repl::try_load_autoexec(&mut machine, console.clone(), storage).await.unwrap();
         loop {
             let result =
-                endbasic_repl::run_repl_loop(&mut machine, self.console.clone(), program.clone())
-                    .await;
-            let mut console = self.console.borrow_mut();
+                endbasic_repl::run_repl_loop(&mut machine, console.clone(), program.clone()).await;
+            let mut console = console.borrow_mut();
             match result {
                 Ok(exit_code) => {
                     console.print(&format!("Interpreter exited with code {}", exit_code))
