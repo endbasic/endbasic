@@ -34,7 +34,6 @@ use wasm_bindgen::JsCast;
 #[cfg(test)]
 use wasm_bindgen_test::wasm_bindgen_test_configure;
 use web_sys::HtmlCanvasElement;
-use web_sys::KeyboardEvent;
 
 #[cfg(test)]
 wasm_bindgen_test_configure!(run_in_browser);
@@ -94,7 +93,6 @@ fn setup_storage(storage: &mut endbasic_std::storage::Storage) {
 #[wasm_bindgen]
 pub struct WebTerminal {
     console: Rc<RefCell<CanvasConsole>>,
-    _on_key_callback: Closure<dyn FnMut(KeyboardEvent)>,
     on_screen_keyboard: OnScreenKeyboard,
 }
 
@@ -104,18 +102,9 @@ impl WebTerminal {
     #[wasm_bindgen(constructor)]
     pub fn new(terminal: HtmlCanvasElement) -> Self {
         let input = WebInput::default();
-
-        let on_key_callback = input.terminal_on_key();
-        let window = web_sys::window().unwrap();
-        window
-            .add_event_listener_with_callback("keydown", on_key_callback.as_ref().unchecked_ref())
-            .unwrap();
-
         let on_screen_keyboard = input.on_screen_keyboard();
-
         let console = Rc::from(RefCell::from(CanvasConsole::new(terminal, input).unwrap()));
-
-        Self { console, _on_key_callback: on_key_callback, on_screen_keyboard }
+        Self { console, on_screen_keyboard }
     }
 
     /// Generates a new `OnScreenKeyboard` that can inject keypresses into this terminal.

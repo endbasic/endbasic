@@ -67,6 +67,13 @@ pub struct OnScreenKeyboard {
 
 #[wasm_bindgen]
 impl OnScreenKeyboard {
+    /// Pushes a new captured `dom_event` keyboard event into the input.
+    pub fn inject_keyboard_event(&self, dom_event: KeyboardEvent) {
+        self.on_key_tx
+            .try_send(on_key_event_into_key(dom_event))
+            .expect("Send to unbounded channel must succeed")
+    }
+
     /// Generates a fake Escape key press.
     pub fn press_escape(&self) {
         self.on_key_tx.try_send(Key::Escape).expect("Send to unbounded channel must succeed")
@@ -108,16 +115,6 @@ impl Default for WebInput {
 }
 
 impl WebInput {
-    /// Generates a closure that xterm.js can use to handle key events.
-    pub(crate) fn terminal_on_key(&self) -> Closure<dyn FnMut(KeyboardEvent)> {
-        let on_key_tx = self.on_key_tx.clone();
-        Closure::wrap(Box::new(move |e| {
-            on_key_tx
-                .try_send(on_key_event_into_key(e))
-                .expect("Send to unbounded channel must succeed")
-        }) as Box<dyn FnMut(KeyboardEvent)>)
-    }
-
     /// Generates a new `OnScreenKeyboard` that can inject key events.
     pub(crate) fn on_screen_keyboard(&self) -> OnScreenKeyboard {
         OnScreenKeyboard { on_key_tx: self.on_key_tx.clone() }
