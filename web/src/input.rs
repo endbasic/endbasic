@@ -15,6 +15,7 @@
 
 //! Keyboard input tools for the web UI.
 
+use crate::log_and_panic;
 use async_channel::{self, Receiver, Sender, TryRecvError};
 use endbasic_std::console::Key;
 use std::io;
@@ -67,36 +68,41 @@ pub struct OnScreenKeyboard {
 
 #[wasm_bindgen]
 impl OnScreenKeyboard {
+    /// Wrapper around `self.on_key_tx.try_send` that always expects to succeed.
+    fn safe_try_send(&self, key: Key) {
+        if let Err(e) = self.on_key_tx.try_send(key) {
+            log_and_panic!("Send to unbounded channel must succeed: {}", e);
+        }
+    }
+
     /// Pushes a new captured `dom_event` keyboard event into the input.
     pub fn inject_keyboard_event(&self, dom_event: KeyboardEvent) {
-        self.on_key_tx
-            .try_send(on_key_event_into_key(dom_event))
-            .expect("Send to unbounded channel must succeed")
+        self.safe_try_send(on_key_event_into_key(dom_event))
     }
 
     /// Generates a fake Escape key press.
     pub fn press_escape(&self) {
-        self.on_key_tx.try_send(Key::Escape).expect("Send to unbounded channel must succeed")
+        self.safe_try_send(Key::Escape)
     }
 
     /// Generates a fake arrow up key press.
     pub fn press_arrow_up(&self) {
-        self.on_key_tx.try_send(Key::ArrowUp).expect("Send to unbounded channel must succeed")
+        self.safe_try_send(Key::ArrowUp)
     }
 
     /// Generates a fake arrow down key press.
     pub fn press_arrow_down(&self) {
-        self.on_key_tx.try_send(Key::ArrowDown).expect("Send to unbounded channel must succeed")
+        self.safe_try_send(Key::ArrowDown)
     }
 
     /// Generates a fake arrow left key press.
     pub fn press_arrow_left(&self) {
-        self.on_key_tx.try_send(Key::ArrowLeft).expect("Send to unbounded channel must succeed")
+        self.safe_try_send(Key::ArrowLeft)
     }
 
     /// Generates a fake arrow up key press.
     pub fn press_arrow_right(&self) {
-        self.on_key_tx.try_send(Key::ArrowRight).expect("Send to unbounded channel must succeed")
+        self.safe_try_send(Key::ArrowRight)
     }
 }
 
@@ -125,7 +131,7 @@ impl WebInput {
         match self.on_key_rx.try_recv() {
             Ok(k) => Ok(Some(k)),
             Err(TryRecvError::Empty) => Ok(None),
-            Err(TryRecvError::Closed) => panic!("Channel unexpectedly closed"),
+            Err(TryRecvError::Closed) => log_and_panic!("Channel unexpectedly closed"),
         }
     }
 

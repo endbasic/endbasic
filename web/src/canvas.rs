@@ -21,6 +21,7 @@
 //! as we cannot easily test this implementation.
 
 use crate::input::WebInput;
+use crate::log_and_panic;
 use async_trait::async_trait;
 use endbasic_std::console::{ansi_color_to_rgb, CharsXY, ClearType, Console, Key, PixelsXY, RGB};
 use js_sys::Map;
@@ -179,13 +180,19 @@ impl CanvasConsole {
             let width = match u16::try_from(canvas.width()) {
                 Ok(v) => v,
                 Err(_) => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "Canvas is too wide"))
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("Canvas is too wide at {} pixels", canvas.width()),
+                    ))
                 }
             };
             let height = match u16::try_from(canvas.height()) {
                 Ok(v) => v,
                 Err(_) => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "Canvas is too tall"))
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("Canvas is too tall at {} pixels", canvas.height()),
+                    ))
                 }
             };
             SizeInPixels { width, height }
@@ -210,13 +217,19 @@ impl CanvasConsole {
             let width = match size_pixels.width.checked_div(glyph_size.width) {
                 Some(v) => v,
                 None => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid glyph width"))
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("Invalid glyph width {}", glyph_size.width),
+                    ))
                 }
             };
             let height = match size_pixels.height.checked_div(glyph_size.height) {
                 Some(v) => v,
                 None => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid glyph height"))
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("Invalid glyph height {}", glyph_size.height),
+                    ))
                 }
             };
             CharsXY::new(width, height)
@@ -372,7 +385,10 @@ impl CanvasConsole {
         // We must render one character at a time because the glyph width of the original font is
         // not guaranteed to be an integer pixel size.
         let mut x = start.x;
-        let advance = i16::try_from(self.glyph_size.width).expect("Glyph size is too big");
+        let advance = match i16::try_from(self.glyph_size.width) {
+            Ok(width) => width,
+            Err(e) => log_and_panic!("Glyph size is too big: {}", e),
+        };
         for b in bytes {
             let bs = &[*b];
             let sb = match std::str::from_utf8(bs) {
@@ -403,8 +419,10 @@ impl CanvasConsole {
             let fit_chars = self.size_chars.x - self.cursor_pos.x;
             let partial = &bytes[0..cmp::min(bytes.len(), usize::from(fit_chars))];
             self.raw_write(partial, self.cursor_pos.clamped_mul(self.glyph_size))?;
-            self.cursor_pos.x += u16::try_from(partial.len())
-                .expect("Partial length was computed to fit on the screen");
+            self.cursor_pos.x += match u16::try_from(partial.len()) {
+                Ok(len) => len,
+                Err(e) => log_and_panic!("Partial length was computed to fit on the screen: {}", e),
+            };
 
             bytes = &bytes[partial.len()..];
             if bytes.is_empty() {

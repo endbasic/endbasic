@@ -26,6 +26,7 @@ use endbasic_core::syms::{self, CommandResult};
 use endbasic_std::console::Console;
 use std::cell::RefCell;
 use std::future::Future;
+use std::io;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
@@ -44,6 +45,24 @@ mod input;
 use input::{OnScreenKeyboard, WebInput};
 mod store;
 use store::WebDriveFactory;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    #[allow(unsafe_code)]
+    pub(crate) fn log(s: &str);
+}
+
+/// Syntactic sugar to print an error to the console and panic.  Using `unwrap` and the like alone
+/// results in an unhelpful `unreachable executed` stack trace.
+macro_rules! log_and_panic {
+    ($($arg:tt)*) => ({
+        #[allow(unused_qualifications)]
+        crate::log(&format!($($arg)*));
+        unreachable!();
+    })
+}
+pub(crate) use log_and_panic;
 
 /// Sleeps for the given period of time.
 fn js_sleep(d: Duration) -> Pin<Box<dyn Future<Output = CommandResult>>> {
@@ -64,18 +83,23 @@ fn js_sleep(d: Duration) -> Pin<Box<dyn Future<Output = CommandResult>>> {
             as Box<dyn FnMut()>)
     };
 
-    let window = web_sys::window().unwrap();
-    window
-        .set_timeout_with_callback_and_timeout_and_arguments(
-            callback.as_ref().unchecked_ref(),
-            ms,
-            &js_sys::Array::new(),
-        )
-        .unwrap();
+    let window = match web_sys::window() {
+        Some(window) => window,
+        None => log_and_panic!("Failed to get window"),
+    };
+    if let Err(e) = window.set_timeout_with_callback_and_timeout_and_arguments(
+        callback.as_ref().unchecked_ref(),
+        ms,
+        &js_sys::Array::new(),
+    ) {
+        log_and_panic!("Failed to set timeout on window: {:?}", e);
+    }
 
     Box::pin(async move {
         let _ = callback; // Must grab ownership so that the closure remains alive until it is used.
-        timeout_rx.recv().await.unwrap();
+        if let Err(e) = timeout_rx.recv().await {
+            log_and_panic!("Failed to wait for timeout: {}", e);
+        }
         Ok(())
     })
 }
@@ -103,7 +127,11 @@ impl WebTerminal {
     pub fn new(terminal: HtmlCanvasElement) -> Self {
         let input = WebInput::default();
         let on_screen_keyboard = input.on_screen_keyboard();
-        let console = CanvasConsole::new(terminal, input).unwrap();
+        let console = match CanvasConsole::new(terminal, input) {
+            Ok(console) => console,
+            Err(e) => log_and_panic!("Console initialization failed: {}", e),
+        };
+
         Self { console, on_screen_keyboard }
     }
 
@@ -115,12 +143,15 @@ impl WebTerminal {
     /// Returns a textual description of the size of the console.
     pub fn size_description(&self) -> String {
         let pixels = self.console.size_pixels();
-        let chars = self.console.size().unwrap();
+        let chars = match self.console.size() {
+            Ok(size) => size,
+            Err(e) => panic!("Failed to get console size in chars: {}", e),
+        };
         format!("{}x{} pixels, {}x{} chars", pixels.width, pixels.height, chars.x, chars.y)
     }
 
-    /// Starts the EndBASIC interpreter loop on the specified `terminal`.
-    pub async fn run_repl_loop(self) {
+    /// Safe version of `run_repl_loop` that is able to return errors.
+    async fn safe_run_repl_loop(self) -> io::Result<()> {
         let console = Rc::from(RefCell::from(self.console));
         let mut builder = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
@@ -133,9 +164,17 @@ impl WebTerminal {
         let storage = builder.get_storage();
         setup_storage(&mut storage.borrow_mut());
 
-        let mut machine = builder.build().unwrap();
-        endbasic_repl::print_welcome(console.clone()).unwrap();
-        endbasic_repl::try_load_autoexec(&mut machine, console.clone(), storage).await.unwrap();
+        let mut machine = match builder.build() {
+            Ok(machine) => machine,
+            Err(e) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Machine initialization failed: {}", e),
+                ))
+            }
+        };
+        endbasic_repl::print_welcome(console.clone())?;
+        endbasic_repl::try_load_autoexec(&mut machine, console.clone(), storage).await?;
         loop {
             let result =
                 endbasic_repl::run_repl_loop(&mut machine, console.clone(), program.clone()).await;
@@ -147,10 +186,15 @@ impl WebTerminal {
                 Err(e) => console.print(&format!("FATAL ERROR: {}", e)),
             }
             .expect("Cannot handle terminal printing errors");
-            console
-                .print("Resuming execution because the web interpreter cannot be exited")
-                .unwrap();
-            console.print("").unwrap();
+            console.print("Resuming execution because the web interpreter cannot be exited")?;
+            console.print("")?;
+        }
+    }
+
+    /// Starts the EndBASIC interpreter loop on the specified `terminal`.
+    pub async fn run_repl_loop(self) {
+        if let Err(e) = self.safe_run_repl_loop().await {
+            log_and_panic!("REPL failed: {}", e);
         }
     }
 }
