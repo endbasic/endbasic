@@ -19,6 +19,16 @@ module.exports = {
             { test: /\.css$/, use: "css-loader" },
         ],
     },
+    devServer: {
+        client: {
+            overlay: {
+                errors: true,
+                warnings: false,
+            }
+        },
+        host: "0.0.0.0",
+        port: 8080,
+    },
     resolve: {
         alias: {
             "endbasic_web": path.resolve(__dirname, "pkg/index.js")
