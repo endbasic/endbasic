@@ -44,8 +44,11 @@ const DEFAULT_BG_COLOR: RGB = (0, 0, 0);
 
 /// Default fonts to use.  The first font in the list should match whichever font is loaded in
 /// `style.css`.  The rest are only provided as fallbacks.
-const DEFAULT_FONT: &str = "16px \"IBM Plex Mono\", SFMono-Regular, Menlo, Monaco, Consolas, \
+const DEFAULT_FONT_FACE: &str = "\"IBM Plex Mono\", SFMono-Regular, Menlo, Monaco, Consolas, \
 \"Liberation Mono\", \"Courier New\", monospace";
+
+/// Size of the default font to use in pixels.
+const DEFAULT_FONT_SIZE: u16 = 16;
 
 /// Converts a `JsValue` error to an `io::Error`.
 pub(crate) fn js_value_to_io_error(e: JsValue) -> io::Error {
@@ -142,10 +145,6 @@ pub(crate) struct CanvasConsole {
     /// Size of each character.
     glyph_size: SizeInPixels,
 
-    /// Vertical pixels to offset the rendering of each individual character so that it appears
-    /// correctly centered within its bounding box.
-    glyph_y_offset: i16,
-
     /// Size of the console in characters.  This is derived from `size_pixels` and `glyph_size`.
     size_chars: CharsXY,
 
@@ -199,19 +198,15 @@ impl CanvasConsole {
         };
 
         let context = html_canvas_to_2d_context(canvas)?;
-        context.set_font(DEFAULT_FONT);
-        context.set_text_baseline("top");
+        context.set_font(&format!("{}px {}", DEFAULT_FONT_SIZE, DEFAULT_FONT_FACE));
+        context.set_text_baseline("middle");
 
-        let text_metrics = context.measure_text("X").map_err(js_value_to_io_error)?;
         let glyph_size = {
+            let text_metrics = context.measure_text("X").map_err(js_value_to_io_error)?;
             let width = text_metrics.width().ceil() as u16;
-            let height = (text_metrics.font_bounding_box_ascent()
-                + text_metrics.font_bounding_box_descent()) as u16;
-
+            let height = DEFAULT_FONT_SIZE + 2; // Pad lines a little bit.
             SizeInPixels { width, height }
         };
-        let glyph_y_offset = (text_metrics.font_bounding_box_descent()
-            - text_metrics.actual_bounding_box_descent()) as i16;
 
         let size_chars = {
             let width = match size_pixels.width.checked_div(glyph_size.width) {
@@ -240,7 +235,6 @@ impl CanvasConsole {
             input,
             size_pixels,
             glyph_size,
-            glyph_y_offset,
             size_chars,
             cursor_pos: CharsXY::new(0, 0),
             cursor_visible: true,
@@ -389,6 +383,10 @@ impl CanvasConsole {
             Ok(width) => width,
             Err(e) => log_and_panic!("Glyph size is too big: {}", e),
         };
+        let y_offset = match i16::try_from(self.glyph_size.height) {
+            Ok(height) => height / 2,
+            Err(e) => log_and_panic!("Glyph height is too big: {}", e),
+        };
         for b in bytes {
             let bs = &[*b];
             let sb = match std::str::from_utf8(bs) {
@@ -401,7 +399,7 @@ impl CanvasConsole {
                 }
             };
             self.context
-                .fill_text(sb, f64::from(x), f64::from(start.y + self.glyph_y_offset))
+                .fill_text(sb, f64::from(x), f64::from(start.y + y_offset))
                 .map_err(js_value_to_io_error)?;
 
             x += advance;
