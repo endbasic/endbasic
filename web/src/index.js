@@ -22,6 +22,7 @@ var isMobile = (
     /\b(Android|Windows Phone|iPad|iPod)\b/i.test(UA) ||
     (/\b(Macintosh)\b/i.test(UA) && 'ontouchend' in document)  // For iPad Pro.
 );
+var isAndroid = /\bAndroid\b/i.test(UA);
 
 var buildId = endbasic_web.get_build_id();
 $('#build-id').text(buildId);
@@ -79,10 +80,44 @@ if (isMobile) {
 
     $('#controls').css('visibility', 'visible');
 
-    mobileInput.onkeydown = function(key) {
-        osk.inject_keyboard_event(key);
-        mobileInput.value = "";
-    };
+    if (isAndroid) {
+        // Handling the keyboard on Android is messy.  If we have a real keyboard, we get keydown
+        // events as we expect.  But if we have a soft keyboard, the keydown events are always
+        // "empty".  Fortunately, we can use the input event to get data from the soft keyboard.
+        // Unfortunately, we can have both real and soft keyboards on the same device, which means
+        // we have to deal with possibly-duplicate events.  And to make things worse, even if we
+        // just have a soft keyboard, some events (like Enter) come in only as keydown while others
+        // (like letter presses) come in as both keydown and input.
+        //
+        // To cope with these cases, we install handlers for both keydown and input, but we only
+        // recognize one of them within a short time period to avoid duplicate input.  This is quite
+        // a hack that I'm sure has deficiencies, so restrict its use to Android.
+        //
+        // https://stackoverflow.com/questions/30743490/capture-keys-typed-on-android-virtual-keyboard-using-javascript
+
+        var ignoreLastInput = false;
+        mobileInput.oninput = function(key) {
+            mobileInput.value = "";
+            if (!ignoreLastInput && key.data != '') {
+                osk.inject_input_event(key);
+                ignoreLastInput = true;
+                setTimeout(function() { ignoreLastInput = false; }, 5);
+            }
+        };
+        mobileInput.onkeydown = function(key) {
+            mobileInput.value = "";
+            if (!ignoreLastInput && key.keyCode != 229) {
+                osk.inject_keyboard_event(key);
+                ignoreLastInput = true;
+                setTimeout(function() { ignoreLastInput = false; }, 5);
+            }
+        };
+    } else {
+        mobileInput.onkeydown = function(key) {
+            mobileInput.value = "";
+            osk.inject_keyboard_event(key);
+        };
+    }
     terminal.onclick = function() {
         mobileInput.focus();
     }

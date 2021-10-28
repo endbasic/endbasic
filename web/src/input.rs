@@ -20,7 +20,20 @@ use async_channel::{self, Receiver, Sender, TryRecvError};
 use endbasic_std::console::Key;
 use std::io;
 use wasm_bindgen::prelude::*;
-use web_sys::KeyboardEvent;
+use web_sys::{InputEvent, KeyboardEvent};
+
+/// Converts an HTML input event into our own `Key` representation.
+fn on_input_event_into_key(dom_event: InputEvent) -> Key {
+    let chars = match dom_event.data() {
+        Some(data) => data.chars().collect::<Vec<char>>(),
+        None => vec![],
+    };
+    if chars.len() == 1 {
+        Key::Char(chars[0])
+    } else {
+        Key::Unknown(format!("<data={:?}>", chars))
+    }
+}
 
 /// Converts an HTML keyboard event into our own `Key` representation.
 fn on_key_event_into_key(dom_event: KeyboardEvent) -> Key {
@@ -73,6 +86,11 @@ impl OnScreenKeyboard {
         if let Err(e) = self.on_key_tx.try_send(key) {
             log_and_panic!("Send to unbounded channel must succeed: {}", e);
         }
+    }
+
+    /// Pushes a new captured `dom_event` input event into the input.
+    pub fn inject_input_event(&self, dom_event: InputEvent) {
+        self.safe_try_send(on_input_event_into_key(dom_event))
     }
 
     /// Pushes a new captured `dom_event` keyboard event into the input.

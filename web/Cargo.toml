@@ -49,6 +49,7 @@ features = [
     "EventTarget",
     "HtmlCanvasElement",
     "ImageData",
+    "InputEvent",
     "KeyboardEvent",
     "Storage",
     "TextMetrics",

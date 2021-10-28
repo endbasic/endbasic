@@ -72,6 +72,8 @@ for the time being.**
     we do not use `xterm.js` any more and instead we use a custom-built
     console implementation.
 
+*   Issue #1: Keyboard input on Android should now work.
+
 ## Changes in version 0.7.0
 
 **Released on 2021-07-03.**
