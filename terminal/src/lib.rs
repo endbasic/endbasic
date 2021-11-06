@@ -112,6 +112,8 @@ impl TerminalConsole {
                     event::KeyCode::Down => Key::ArrowDown,
                     event::KeyCode::Left => Key::ArrowLeft,
                     event::KeyCode::Right => Key::ArrowRight,
+                    event::KeyCode::PageDown => Key::PageDown,
+                    event::KeyCode::PageUp => Key::PageUp,
                     event::KeyCode::Char('a') if ev.modifiers == event::KeyModifiers::CONTROL => {
                         Key::Home
                     }

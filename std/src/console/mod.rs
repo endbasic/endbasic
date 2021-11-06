@@ -82,6 +82,12 @@ pub enum Key {
     /// Accepts the current line.
     NewLine,
 
+    /// The Page Down key.
+    PageDown,
+
+    /// The Page Up key.
+    PageUp,
+
     /// The Tab key.
     Tab,
 
