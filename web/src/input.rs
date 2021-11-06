@@ -43,6 +43,8 @@ fn on_key_event_into_key(dom_event: KeyboardEvent) -> Key {
         10 => Key::NewLine,
         13 => Key::CarriageReturn,
         27 => Key::Escape,
+        33 => Key::PageUp,
+        34 => Key::PageDown,
         35 => Key::End,
         36 => Key::Home,
         37 => Key::ArrowLeft,

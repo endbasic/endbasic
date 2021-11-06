@@ -720,7 +720,8 @@ Output from HELP INKEY:
 
     The following special keys are recognized: arrow keys (UP, DOWN, LEFT,
     RIGHT), backspace (BS), end or CTRL+E (END), enter (ENTER), CTRL+D
-    (EOF), escape (ESC), home or CTRL+A (HOME), CTRL+C (INT) and tab (TAB).
+    (EOF), escape (ESC), home or CTRL+A (HOME), CTRL+C (INT), page up
+    (PGUP), page down (PGDOWN), and tab (TAB).
 
     This function never blocks.  To wait for a key press, you need to
     explicitly poll the keyboard.  For example, to wait until the escape

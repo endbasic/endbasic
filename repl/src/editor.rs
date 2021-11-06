@@ -172,6 +172,32 @@ impl Editor {
         Ok(())
     }
 
+    /// Moves the cursor down by the given number of lines in `nlines` or to the last line if there
+    /// are insufficient lines to perform the move.
+    fn move_down(&mut self, nlines: usize) {
+        if self.file_pos.line + nlines < self.content.len() {
+            self.file_pos.line += nlines;
+        } else {
+            self.file_pos.line = self.content.len() - 1;
+        }
+
+        let line = &self.content[self.file_pos.line];
+        self.file_pos.col = cmp::min(self.insert_col, line.len());
+    }
+
+    /// Moves the cursor up by the given number of lines in `nlines` or to the first line if there
+    /// are insufficient lines to perform the move.
+    fn move_up(&mut self, nlines: usize) {
+        if self.file_pos.line > nlines {
+            self.file_pos.line -= nlines;
+        } else {
+            self.file_pos.line = 0;
+        }
+
+        let line = &self.content[self.file_pos.line];
+        self.file_pos.col = cmp::min(self.insert_col, line.len());
+    }
+
     /// Internal implementation of the interactive editor, which interacts with the `console`.
     async fn edit_interactively(&mut self, console: &mut dyn Console) -> io::Result<()> {
         let console_size = console.size()?;
@@ -187,10 +213,14 @@ impl Editor {
             let width = usize::from(console_size.x);
             let height = usize::from(console_size.y);
             if self.file_pos.line < self.viewport_pos.line {
-                self.viewport_pos.line -= 1;
+                self.viewport_pos.line = self.file_pos.line;
                 need_refresh = true;
             } else if self.file_pos.line > self.viewport_pos.line + height - 2 {
-                self.viewport_pos.line += 1;
+                if self.file_pos.line > height - 2 {
+                    self.viewport_pos.line = self.file_pos.line - (height - 2);
+                } else {
+                    self.viewport_pos.line = 0;
+                }
                 need_refresh = true;
             }
             if self.file_pos.col < self.viewport_pos.col {
@@ -222,23 +252,9 @@ impl Editor {
             match console.read_key().await? {
                 Key::Escape | Key::Eof | Key::Interrupt => break,
 
-                Key::ArrowUp => {
-                    if self.file_pos.line > 0 {
-                        self.file_pos.line -= 1;
-                    }
+                Key::ArrowUp => self.move_up(1),
 
-                    let line = &self.content[self.file_pos.line];
-                    self.file_pos.col = cmp::min(self.insert_col, line.len());
-                }
-
-                Key::ArrowDown => {
-                    if self.file_pos.line < self.content.len() - 1 {
-                        self.file_pos.line += 1;
-                    }
-
-                    let line = &self.content[self.file_pos.line];
-                    self.file_pos.col = cmp::min(self.insert_col, line.len());
-                }
+                Key::ArrowDown => self.move_down(1),
 
                 Key::ArrowLeft => {
                     if self.file_pos.col > 0 {
@@ -353,6 +369,10 @@ impl Editor {
                     self.insert_col = self.file_pos.col;
                     self.dirty = true;
                 }
+
+                Key::PageDown => self.move_down(usize::from(console_size.y - 2)),
+
+                Key::PageUp => self.move_up(usize::from(console_size.y - 2)),
 
                 Key::Tab => {
                     let line = &mut self.content[self.file_pos.line];
@@ -685,7 +705,14 @@ mod tests {
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
-        for k in &[Key::ArrowUp, Key::ArrowDown, Key::ArrowLeft, Key::ArrowRight] {
+        for k in &[
+            Key::ArrowUp,
+            Key::ArrowDown,
+            Key::ArrowLeft,
+            Key::ArrowRight,
+            Key::PageUp,
+            Key::PageDown,
+        ] {
             cb.add_input_keys(&[k.clone()]);
             ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
         }
@@ -770,6 +797,53 @@ mod tests {
         ob = ob.refresh(linecol(0, 3), &["  .text"], yx(0, 3));
 
         run_editor("  text", "  .text\n", cb, ob);
+    }
+
+    #[test]
+    fn test_move_page_down_up() {
+        let mut cb = MockConsole::default();
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["1", "2", "3", "4", "5", "6", "7", "8", "9"], yx(0, 0));
+
+        cb.add_input_keys(&[Key::PageDown]);
+        ob = ob.quick_refresh(linecol(8, 0), yx(8, 0));
+
+        cb.add_input_keys(&[Key::PageDown]);
+        ob = ob.refresh(
+            linecol(16, 0),
+            &["9", "10", "11", "12", "13", "14", "15", "16", "17"],
+            yx(8, 0),
+        );
+
+        cb.add_input_keys(&[Key::PageDown]);
+        ob = ob.refresh(
+            linecol(19, 0),
+            &["12", "13", "14", "15", "16", "17", "18", "19", "20"],
+            yx(8, 0),
+        );
+
+        cb.add_input_keys(&[Key::PageDown]);
+        ob = ob.quick_refresh(linecol(19, 0), yx(8, 0));
+
+        cb.add_input_keys(&[Key::PageUp]);
+        ob = ob.quick_refresh(linecol(11, 0), yx(0, 0));
+
+        cb.add_input_keys(&[Key::PageUp]);
+        ob = ob.refresh(linecol(3, 0), &["4", "5", "6", "7", "8", "9", "10", "11", "12"], yx(0, 0));
+
+        cb.add_input_keys(&[Key::PageUp]);
+        ob = ob.refresh(linecol(0, 0), &["1", "2", "3", "4", "5", "6", "7", "8", "9"], yx(0, 0));
+
+        cb.add_input_keys(&[Key::PageUp]);
+        ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
+
+        run_editor(
+            "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n",
+            "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n",
+            cb,
+            ob,
+        );
     }
 
     #[test]

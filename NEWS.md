@@ -50,6 +50,8 @@ for the time being.**
 *   Added support for the Home and End keys in the text editor and in text
     input operations.
 
+*   Added support for the Page Up and Page Down keys in the text editor.
+
 *   Improved indentation support in the editor by making the Backspace and
     Tab keys aware of indentation.
 

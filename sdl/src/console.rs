@@ -348,6 +348,9 @@ fn parse_event(event: Event) -> io::Result<Option<Key>> {
             Keycode::Right => Ok(Some(Key::ArrowRight)),
             Keycode::Up => Ok(Some(Key::ArrowUp)),
 
+            Keycode::PageDown => Ok(Some(Key::PageDown)),
+            Keycode::PageUp => Ok(Some(Key::PageUp)),
+
             _ => Ok(None),
         },
 

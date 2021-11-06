@@ -211,6 +211,10 @@ async fn read_line_interactive(
                 break;
             }
 
+            Key::PageDown | Key::PageUp => {
+                // Intentionally ignored.
+            }
+
             Key::Tab => {
                 // TODO(jmmv): Would be nice to have some form of auto-completion.
             }
@@ -257,6 +261,7 @@ async fn read_line_raw(console: &mut dyn Console) -> io::Result<String> {
             Key::Eof => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
             Key::Interrupt => return Err(io::Error::new(io::ErrorKind::Interrupted, "Ctrl+C")),
             Key::NewLine => break,
+            Key::PageDown | Key::PageUp => (),
             Key::Tab => (),
             Key::Unknown(bad_input) => line += &bad_input,
         }
@@ -856,6 +861,8 @@ mod tests {
             .add_output_bytes(b"not ")
             // -
             .add_key(Key::Escape)
+            .add_key(Key::PageDown)
+            .add_key(Key::PageUp)
             .add_key(Key::Tab)
             // -
             .add_key_chars("affected")
