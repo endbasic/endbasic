@@ -10,71 +10,99 @@ to talk to the cloud service.  If you use the web interface, this should not be
 a problem, but if you use local builds, please try to stay on the latest release
 for the time being.**
 
-## Changes in version X.Y.Z
+## Changes in version 0.8.0
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2021-11-11.**
+
+The main purpose of this release is to bring you the new hybrid graphics/text
+console in the form of a feature preview.  This feature brings EndBASIC closer
+to its original secret goal, which is to become a platform with which to write
+simple retro-looking games.
+
+Please be aware that the new console is still quite rudimentary.  There are
+many missing drawing primitives, and performance isn't great yet.  Fixing these
+might require changes in the APIs so any code you write might need to be updated
+in the future.  But, remember that the same is true for all of EndBASIC right
+now given its 0.x state.
+
+This release lines up with the Handmade Seattle 2021 conference, during which it
+was first announced.
+
+Graphics support and related console changes:
 
 *   Added a graphical console based on SDL2 behind a new optional `sdl`
-    feature.
+    feature.  This is to support graphics on all desktop platforms and has been
+    confirmed to work on FreeBSD, Linux, macOS, and Windows.
 
 *   Added the `GFX_LINE`, `GFX_PIXEL`, `GFX_RECT`, `GFX_RECTF`, and `GFX_SYNC`
     graphics commands.
 
-*   Added the `INKEY` function.
-
-*   Added the `MIND`, `MINI`, `MAXD`, and `MAXI` functions.
-
-*   Added the `DEG` and `RAD` trigonometric commands and the `ATN`, `COS`, `PI`,
-    `SIN` and `TAN` functions.
+*   Added the `INKEY` function.  This is especially useful to implement event
+    loops in graphical applications.
 
 *   Fixed `LOCATE` so that the first argument is the column number and the
-    second argument is the row number.  It should always have been this way,
-    but this is now necessary to match the ordering of the coordinates in all
-    graphics commands and avoid tons of confusion.
+    second argument is the row number.  It should always have been this way
+    (in fact, this is the syntax exposed by Locomotive BASIC), but this is now
+    necessary to match the ordering of the coordinates in all graphics commands
+    and avoid confusion.
 
 *   Modified console facilities (including `PRINT` and `INPUT`) so that they do
     not clear lines up to the right margin.  I had originally added this as a
     feature so that changing the background color in the REPL caused all
     subsequent lines to be formatted consistently, but this prevented composing
-    overlapping text, which is a necessity.
+    overlapping text (with or without graphics), which is a necessary thing to
+    do when rendering UIs.
+
+*   Rewrote the web frontend from scratch to support graphics rendering.  This
+    implies that we do not use `xterm.js` any more and instead use a
+    custom-built console implementation.  Beware of new bugs.
+
+*   Issue #67: Keyboard input on Android should now work when using a soft
+    keyboard.  This isn't perfect due to limitations in the Android web APIs
+    but should do the trick for simple uses.
+
+General command changes:
 
 *   Extended the `CLEAR` and `NEW` commands so that they reset various
     properties of the machine, not just variables.  This includes the state of
-    the console, whose color and video syncing bit are reset; and the GPIO pins,
-    which are set to their default state.
+    the console, whose color and video syncing bit are reset, and the GPIO
+    pins, which are set to their default state.
 
 *   Modified the `RUN` command to issue a `CLEAR` upfront.  Maintaining the
     previous state of the machine was just too confusing and error-prone due
     to side-effects causing execution failures.
 
-*   Added support for the Home and End keys in the text editor and in text
-    input operations.
+*   Added the `MIND`, `MINI`, `MAXD`, and `MAXI` functions.
 
-*   Added support for the Page Up and Page Down keys in the text editor.
+*   Added the `DEG` and `RAD` trigonometric commands and the `ATN`, `COS`,
+    `PI`, `SIN`, and `TAN` functions.  These are often needed to render
+    graphics.
 
-*   Improved indentation support in the editor by making the Backspace and
-    Tab keys aware of indentation.
+Interactivity improvements:
+
+*   Added support for the Home, End, Page Up, and Page Down keys in the text
+    editor.
+
+*   Made the Backspace and Tab keys aware of indentation in the editor.
+
+*   Added support for the Home and End keys in text input fields.
 
 *   Modified the storage commands to keep track of the currently-loaded program
     path so that the editor can display it, so that `LOAD`, `EXIT`, and `NEW`
     can warn about unsaved changes, and so that `SAVE` can reuse the current
     filename.
 
-*   Refactored the std crate to minimize optional features in library crates
-    by moving the textual console into a new `endbasic-terminal` crate, the SDL
-    console into a new `endbasic-sdl` crate and the Raspberry Pi support into
-    a new `endbasic-rpi` crate.
+Internal changes:
+
+*   Refactored the `endbasic-std` crate to minimize optional features in
+    library crates by moving the textual console into a new `endbasic-terminal`
+    crate, the SDL console into a new `endbasic-sdl` crate, and the Raspberry
+    Pi support into a new `endbasic-rpi` crate.
 
 *   Added a new `endbasic-repl` crate to assimilate all of the features and
     code that are specific to the REPL.  This finally breaks the dependency
     of the `endbasic-web` crate on the `endbasic` CLI crate, which required
     optional features to work.
-
-*   Rewrote the web frontend to support graphics rendering.  This implies that
-    we do not use `xterm.js` any more and instead we use a custom-built
-    console implementation.
-
-*   Issue #67: Keyboard input on Android should now work.
 
 ## Changes in version 0.7.0
 

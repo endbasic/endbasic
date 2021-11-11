@@ -1,6 +1,6 @@
 [package]
 name = "endbasic-std"
-version = "0.7.0" # ENDBASIC-VERSION
+version = "0.8.0" # ENDBASIC-VERSION
 license = "Apache-2.0"
 authors = ["Julio Merino <jmmv@endbasic.dev>"]
 categories = ["development-tools", "parser-implementations"]
@@ -22,7 +22,7 @@ serde_json = "1.0"
 time = { version = "0.2", features = ["std"] }
 
 [dependencies.endbasic-core]
-version = "0.7.0" # ENDBASIC-VERSION
+version = "0.8.0" # ENDBASIC-VERSION
 path = "../core"
 
 # We don't directly use getrandom but rand does, and we have to customize how

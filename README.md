@@ -14,7 +14,7 @@ higher-level programming constructs and strong typing.
 EndBASIC offers a simplified and restricted environment to learn the foundations
 of programming and focuses on features that can quickly reward the programmer.
 These features include things like a built-in text editor, commands to
-manipulate the screen, and commands to interact with the hardware of a Raspberry
+render graphics, and commands to interact with the hardware of a Raspberry
 Pi.  Implementing this kind of features has priority over others such as
 performance or a much richer language.
 
@@ -23,29 +23,90 @@ operating systems and platforms, including macOS, Windows, and Linux.
 
 EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 
-**The latest version of EndBASIC is 0.7.0 and was released on 2021-07-03.**
+**The latest version of EndBASIC is 0.8.0 and was released on 2021-11-11.**
 
 ## Quick start on the web
 
-Open EndBASIC in your browser by visiting <https://repl.endbasic.dev/> or go
-the project's website at <https://www.endbasic.dev/>.
+Open EndBASIC in your browser by visiting:
 
-This should work on all major desktop browsers and on iOS.  Unfortunately, there
-are known issues on Android at the moment.
+> <https://repl.endbasic.dev/>
+
+Or go the project's website at:
+
+> <https://www.endbasic.dev/>
+
+The web interpreter should work on all major desktop browsers as well as mobile
+devices (with some small known issues on Android).
 
 The web interpreter runs fully locally: any programs you write are persisted in
-your browser's local storage and not uploaded to the cloud.
+your browser's local storage by default.  That said, you can choose to sign up
+for the cloud service and upload your programs to share them with the world.
 
 ## Quick start on your machine
 
 Visit the
-[release page](https://github.com/endbasic/endbasic/releases/tag/endbasic-0.7.0)
+[release page](https://github.com/endbasic/endbasic/releases/tag/endbasic-0.8.0)
 to download prebuilt binaries.  Once downloaded, unpack the archive and run the
 `endbasic` binary to get started.
 
+Be aware that [the binaries are *not signed* right
+now](https://github.com/endbasic/endbasic/issues/137) so it can be difficult to
+get these to run on Windows and macOS.
+
+The binary releases are built with the recommended settings: they all include
+graphics support, and the builds for the Raspberry Pi include support for its
+hardware.  To use the graphics console, you will need to launch the binary
+using one of these forms:
+
+```shell
+endbasic --console=graphics            # Default console size, windowed.
+endbasic --console=graphics:800x600    # Custom resolution.
+endbasic --console=graphics:800x600fs  # Custom resolution, full screen.
+endbasic --console=graphics:fs         # Desktop resolution, full screen.
+```
+
+## Building from source
+
 Of course, you can also build and install EndBASIC from source by running the
-following command (assuming you have a Rust toolchain installed): `cargo install
-endbasic`.
+following command (assuming you have a Rust toolchain installed):
+
+```shell
+cargo install endbasic
+```
+
+The above will fetch EndBASIC from <https://crates.io/>, build it with default
+settings, and then install the resulting binary under `~/.cargo/bin/`.
+
+If you want to enable graphics support (recommended), you will first have to
+install the `SDL2` and `SDL2_ttf` libraries.  Follow these steps depending on
+the platform you are on:
+
+```shell
+# On Debian-based systems:
+sudo apt install libsdl2-dev libsdl2-ttf-dev
+cargo install --features=sdl endbasic
+
+# On FreeBSD systems:
+sudo pkg install sdl2 sdl2_ttf
+cargo install --features=sdl endbasic
+
+# On macOS systems with Homebrew:
+brew install sdl2 sdl2_ttf
+cargo install --features=sdl endbasic
+
+# On Windows systems, this is tricky.  The easiest way is to clone this
+# repository and then do the following from PowerShell:
+.\.github\workflows\setup-sdl.ps1
+cargo build --release --features=sdl endbasic
+```
+
+If you want to enable support for the Raspberry Pi hardware (along with the
+recommended graphics features), do this on the Raspberry Pi itself:
+
+```shell
+sudo apt install libsdl2-dev libsdl2-ttf-dev
+cargo install --features=rpi,sdl endbasic
+```
 
 ## More information
 
