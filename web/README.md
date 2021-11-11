@@ -14,7 +14,7 @@ higher-level programming constructs and strong typing.
 EndBASIC offers a simplified and restricted environment to learn the foundations
 of programming and focuses on features that can quickly reward the programmer.
 These features include things like a built-in text editor, commands to
-manipulate the screen, and commands to interact with the hardware of a Raspberry
+render graphics, and commands to interact with the hardware of a Raspberry
 Pi.  Implementing this kind of features has priority over others such as
 performance or a much richer language.
 

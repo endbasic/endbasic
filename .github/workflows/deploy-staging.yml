@@ -19,6 +19,7 @@ on:
     push:
         branches:
             - master
+            - release
     schedule:
         - cron: '0 0 * * *' # Daily.
 
