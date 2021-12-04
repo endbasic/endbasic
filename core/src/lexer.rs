@@ -20,6 +20,20 @@ use crate::reader::CharReader;
 use std::io;
 use std::iter::Peekable;
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct TokenSpan {
+    token: Token,
+    line: usize,
+    character: usize,
+    length: usize,
+}
+
+impl TokenSpan {
+    pub fn new(token: Token, line: usize, character: usize, length: usize) -> Self {
+        Self { token, line, character, length }
+    }
+}
+
 /// Collection of valid tokens.
 ///
 /// Of special interest are the `Eof` and `Bad` tokens, both of which denote exceptional
@@ -124,43 +138,71 @@ impl CharOps for char {
 pub struct Lexer<'a> {
     /// Peekable iterator over the characters to scan.
     input: Peekable<CharReader<'a>>,
+    current_line: usize,
+    current_char: usize,
 }
 
 impl<'a> Lexer<'a> {
     /// Creates a new lexer from the given readable.
     pub fn from(input: &'a mut dyn io::Read) -> Self {
-        Self { input: CharReader::from(input).peekable() }
+        Self { input: CharReader::from(input).peekable(), current_line: 0, current_char: 0 }
+    }
+
+    /// Moves the iterator forward. Also properly manages the values of current_line and
+    /// current_char.
+    fn next(&mut self) -> Option<Result<char, io::Error>> {
+        let character = self.input.next();
+        if let Some(Ok('\n')) = character {
+            self.current_line += 1;
+            self.current_char = 0;
+        } else if let Some(Ok(_)) = character {
+            self.current_char += 1;
+        }
+
+        character
+    }
+
+    /// Creates a TokenSpan that starts at the current character and goes forward len characters
+    fn token_span(&self, token: Token, len: usize) -> TokenSpan {
+        TokenSpan::new(token, self.current_line, self.current_char, len)
+    }
+
+    /// Creates a TokenSpan that ends at the current character, starting len characters back
+    fn token_span_backward(&self, token: Token, len: usize) -> TokenSpan {
+        // TODO(protowalker): implement line memory so that token spans can go over multiple lines
+        // For now, using a saturating_sub
+        TokenSpan::new(token, self.current_line, self.current_char.saturating_sub(len - 1), len)
     }
 
     /// Handles a `input.read()` call that returned an unexpected character.
     ///
     /// This returns a `Token::Bad` with the provided `msg` and skips characters in the input
     /// stream until a field separator is found.
-    fn handle_bad_read<S: Into<String>>(&mut self, msg: S) -> io::Result<Token> {
+    fn handle_bad_read<S: Into<String>>(&mut self, msg: S) -> io::Result<TokenSpan> {
         loop {
             match self.input.peek() {
                 Some(Ok(ch)) if ch.is_separator() => break,
                 Some(Ok(_)) => {
-                    self.input.next().unwrap()?;
+                    self.next().unwrap()?;
                 }
-                Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
+                Some(Err(_)) => return Err(self.next().unwrap().unwrap_err()),
                 None => break,
             }
         }
-        Ok(Token::Bad(msg.into()))
+        Ok(self.token_span(Token::Bad(msg.into()), 1))
     }
 
     /// Handles a `input.peek()` call that returned an unexpected character.
     ///
     /// This returns a `Token::Bad` with the provided `msg`, consumes the peeked character, and
     /// then skips characters in the input stream until a field separator is found.
-    fn handle_bad_peek<S: Into<String>>(&mut self, msg: S) -> io::Result<Token> {
-        self.input.next();
+    fn handle_bad_peek<S: Into<String>>(&mut self, msg: S) -> io::Result<TokenSpan> {
+        self.next();
         self.handle_bad_read(msg)
     }
 
     /// Consumes the number at the current position, whose first digit is `first`.
-    fn consume_number(&mut self, first: char) -> io::Result<Token> {
+    fn consume_number(&mut self, first: char) -> io::Result<TokenSpan> {
         let mut s = String::new();
         let mut found_dot = false;
         s.push(first);
@@ -170,16 +212,16 @@ impl<'a> Lexer<'a> {
                     if found_dot {
                         return self.handle_bad_peek("Too many dots in numeric literal");
                     }
-                    s.push(self.input.next().unwrap()?);
+                    s.push(self.next().unwrap()?);
                     found_dot = true;
                 }
-                Some(Ok(ch)) if ch.is_digit(10) => s.push(self.input.next().unwrap()?),
+                Some(Ok(ch)) if ch.is_digit(10) => s.push(self.next().unwrap()?),
                 Some(Ok(ch)) if ch.is_separator() => break,
                 Some(Ok(ch)) => {
                     let msg = format!("Unexpected character in numeric literal: {}", ch);
                     return self.handle_bad_peek(msg);
                 }
-                Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
+                Some(Err(_)) => return Err(self.next().unwrap().unwrap_err()),
                 None => break,
             }
         }
@@ -191,38 +233,38 @@ impl<'a> Lexer<'a> {
                 return self.handle_bad_read("Unknown character: .");
             }
             match s.parse::<f64>() {
-                Ok(d) => Ok(Token::Double(d)),
+                Ok(d) => Ok(self.token_span(Token::Double(d), s.len())),
                 Err(e) => self.handle_bad_read(format!("Bad double {}: {}", s, e)),
             }
         } else {
             match s.parse::<i32>() {
-                Ok(i) => Ok(Token::Integer(i)),
+                Ok(i) => Ok(self.token_span(Token::Integer(i), s.len())),
                 Err(e) => self.handle_bad_read(format!("Bad integer {}: {}", s, e)),
             }
         }
     }
 
     /// Consumes the operator at the current position, whose first character is `first`.
-    fn consume_operator(&mut self, first: char) -> io::Result<Token> {
+    fn consume_operator(&mut self, first: char) -> io::Result<TokenSpan> {
         match (first, self.input.peek()) {
-            (_, Some(Err(_))) => Err(self.input.next().unwrap().unwrap_err()),
+            (_, Some(Err(_))) => Err(self.next().unwrap().unwrap_err()),
 
             ('<', Some(Ok('>'))) => {
-                self.input.next().unwrap()?;
-                Ok(Token::NotEqual)
+                self.next().unwrap()?;
+                Ok(self.token_span_backward(Token::NotEqual, 2))
             }
 
             ('<', Some(Ok('='))) => {
-                self.input.next().unwrap()?;
-                Ok(Token::LessEqual)
+                self.next().unwrap()?;
+                Ok(self.token_span_backward(Token::LessEqual, 2))
             }
-            ('<', _) => Ok(Token::Less),
+            ('<', _) => Ok(self.token_span(Token::Less, 1)),
 
             ('>', Some(Ok('='))) => {
-                self.input.next().unwrap()?;
-                Ok(Token::GreaterEqual)
+                self.next().unwrap()?;
+                Ok(self.token_span_backward(Token::GreaterEqual, 2))
             }
-            ('>', _) => Ok(Token::Greater),
+            ('>', _) => Ok(self.token_span(Token::Greater, 1)),
 
             (_, _) => panic!("Should not have been called"),
         }
@@ -231,110 +273,114 @@ impl<'a> Lexer<'a> {
     /// Consumes the symbol or keyword at the current position, whose first letter is `first`.
     ///
     /// The symbol may be a bare name, but it may also contain an optional type annotation.
-    fn consume_symbol(&mut self, first: char) -> io::Result<Token> {
+    fn consume_symbol(&mut self, first: char) -> io::Result<TokenSpan> {
         let mut s = String::new();
         s.push(first);
         let mut vtype = VarType::Auto;
         loop {
             match self.input.peek() {
-                Some(Ok(ch)) if ch.is_word() => s.push(self.input.next().unwrap()?),
+                Some(Ok(ch)) if ch.is_word() => s.push(self.next().unwrap()?),
                 Some(Ok(ch)) if ch.is_separator() => break,
                 Some(Ok('?')) => {
                     vtype = VarType::Boolean;
-                    self.input.next().unwrap()?;
+                    self.next().unwrap()?;
                     break;
                 }
                 Some(Ok('#')) => {
                     vtype = VarType::Double;
-                    self.input.next().unwrap()?;
+                    self.next().unwrap()?;
                     break;
                 }
                 Some(Ok('%')) => {
                     vtype = VarType::Integer;
-                    self.input.next().unwrap()?;
+                    self.next().unwrap()?;
                     break;
                 }
                 Some(Ok('$')) => {
                     vtype = VarType::Text;
-                    self.input.next().unwrap()?;
+                    self.next().unwrap()?;
                     break;
                 }
                 Some(Ok(ch)) => {
                     let msg = format!("Unexpected character in symbol: {}", ch);
                     return self.handle_bad_peek(msg);
                 }
-                Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
+                Some(Err(_)) => return Err(self.next().unwrap().unwrap_err()),
                 None => break,
             }
         }
-        match s.to_uppercase().as_str() {
-            "AND" => Ok(Token::And),
-            "AS" => Ok(Token::As),
-            "BOOLEAN" => Ok(Token::BooleanName),
-            "DIM" => Ok(Token::Dim),
-            "DOUBLE" => Ok(Token::DoubleName),
-            "ELSE" => Ok(Token::Else),
-            "ELSEIF" => Ok(Token::Elseif),
-            "END" => Ok(Token::End),
-            "FALSE" => Ok(Token::Boolean(false)),
-            "FOR" => Ok(Token::For),
-            "IF" => Ok(Token::If),
-            "INTEGER" => Ok(Token::IntegerName),
-            "MOD" => Ok(Token::Modulo),
-            "NEXT" => Ok(Token::Next),
-            "NOT" => Ok(Token::Not),
-            "OR" => Ok(Token::Or),
-            "REM" => self.consume_rest_of_line(),
-            "STEP" => Ok(Token::Step),
-            "STRING" => Ok(Token::TextName),
-            "THEN" => Ok(Token::Then),
-            "TO" => Ok(Token::To),
-            "TRUE" => Ok(Token::Boolean(true)),
-            "WEND" => Ok(Token::Wend),
-            "WHILE" => Ok(Token::While),
-            "XOR" => Ok(Token::Xor),
-            _ => Ok(Token::Symbol(VarRef::new(s, vtype))),
-        }
+
+        let token_len = s.len();
+        let tok = match s.to_uppercase().as_str() {
+            "AND" => Token::And,
+            "AS" => Token::As,
+            "BOOLEAN" => Token::BooleanName,
+            "DIM" => Token::Dim,
+            "DOUBLE" => Token::DoubleName,
+            "ELSE" => Token::Else,
+            "ELSEIF" => Token::Elseif,
+            "END" => Token::End,
+            "FALSE" => Token::Boolean(false),
+            "FOR" => Token::For,
+            "IF" => Token::If,
+            "INTEGER" => Token::IntegerName,
+            "MOD" => Token::Modulo,
+            "NEXT" => Token::Next,
+            "NOT" => Token::Not,
+            "OR" => Token::Or,
+            "REM" => return self.consume_rest_of_line(),
+            "STEP" => Token::Step,
+            "STRING" => Token::TextName,
+            "THEN" => Token::Then,
+            "TO" => Token::To,
+            "TRUE" => Token::Boolean(true),
+            "WEND" => Token::Wend,
+            "WHILE" => Token::While,
+            "XOR" => Token::Xor,
+            _ => Token::Symbol(VarRef::new(s, vtype)),
+        };
+        Ok(self.token_span_backward(tok, token_len))
     }
 
     /// Consumes the string at the current position, which was has to end with `delim`.
     ///
     /// This handles quoted characters within the string.
-    fn consume_text(&mut self, delim: char) -> io::Result<Token> {
+    fn consume_text(&mut self, delim: char) -> io::Result<TokenSpan> {
         let mut s = String::new();
         let mut escaping = false;
         loop {
             match self.input.peek() {
                 Some(Ok(ch)) => {
                     if escaping {
-                        s.push(self.input.next().unwrap()?);
+                        s.push(self.next().unwrap()?);
                         escaping = false;
                     } else if *ch == '\\' {
-                        self.input.next().unwrap()?;
+                        self.next().unwrap()?;
                         escaping = true;
                     } else if *ch == delim {
-                        self.input.next().unwrap()?;
+                        self.next().unwrap()?;
                         break;
                     } else {
-                        s.push(self.input.next().unwrap()?);
+                        s.push(self.next().unwrap()?);
                     }
                 }
-                Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
+                Some(Err(_)) => return Err(self.next().unwrap().unwrap_err()),
                 None => {
                     return self.handle_bad_peek(format!("Incomplete string due to EOF: {}", s))
                 }
             }
         }
-        Ok(Token::Text(s))
+        let token_len = s.len();
+        Ok(self.token_span_backward(Token::Text(s), token_len))
     }
 
     /// Consumes the remainder of the line and returns the token that was encountered at the end
     /// (which may be EOF or end of line).
-    fn consume_rest_of_line(&mut self) -> io::Result<Token> {
+    fn consume_rest_of_line(&mut self) -> io::Result<TokenSpan> {
         loop {
-            match self.input.next() {
-                None => return Ok(Token::Eof),
-                Some(Ok('\n')) => return Ok(Token::Eol),
+            match self.next() {
+                None => return Ok(self.token_span(Token::Eof, 1)),
+                Some(Ok('\n')) => return Ok(self.token_span(Token::Eol, 1)),
                 Some(Err(e)) => return Err(e),
                 Some(Ok(_)) => (),
             }
@@ -345,7 +391,7 @@ impl<'a> Lexer<'a> {
     /// character.
     fn advance_and_read_next(&mut self) -> io::Result<Option<char>> {
         loop {
-            match self.input.next() {
+            match self.next() {
                 Some(Ok(ch)) if ch.is_space() => (),
                 Some(Ok(ch)) => return Ok(Some(ch)),
                 Some(Err(e)) => return Err(e),
@@ -358,30 +404,30 @@ impl<'a> Lexer<'a> {
     ///
     /// Note that this returns errors only on fatal I/O conditions.  EOF and malformed tokens are
     /// both returned as the special token types `Token::Eof` and `Token::Bad` respectively.
-    pub fn read(&mut self) -> io::Result<Token> {
+    pub fn read(&mut self) -> io::Result<TokenSpan> {
         let ch = self.advance_and_read_next()?;
         if ch.is_none() {
-            return Ok(Token::Eof);
+            return Ok(self.token_span(Token::Eof, 1));
         }
         let ch = ch.unwrap();
         match ch {
-            '\n' | ':' => Ok(Token::Eol),
+            '\n' | ':' => Ok(self.token_span(Token::Eol, 1)),
             '\'' => self.consume_rest_of_line(),
 
             '"' => self.consume_text('"'),
 
-            ';' => Ok(Token::Semicolon),
-            ',' => Ok(Token::Comma),
+            ';' => Ok(self.token_span(Token::Semicolon, 1)),
+            ',' => Ok(self.token_span(Token::Comma, 1)),
 
-            '(' => Ok(Token::LeftParen),
-            ')' => Ok(Token::RightParen),
+            '(' => Ok(self.token_span(Token::LeftParen, 1)),
+            ')' => Ok(self.token_span(Token::RightParen, 1)),
 
-            '+' => Ok(Token::Plus),
-            '-' => Ok(Token::Minus),
-            '*' => Ok(Token::Multiply),
-            '/' => Ok(Token::Divide),
+            '+' => Ok(self.token_span(Token::Plus, 1)),
+            '-' => Ok(self.token_span(Token::Minus, 1)),
+            '*' => Ok(self.token_span(Token::Multiply, 1)),
+            '/' => Ok(self.token_span(Token::Divide, 1)),
 
-            '=' => Ok(Token::Equal),
+            '=' => Ok(self.token_span(Token::Equal, 1)),
             '<' | '>' => self.consume_operator(ch),
 
             ch if ch.is_digit(10) => self.consume_number(ch),
@@ -439,7 +485,7 @@ impl<'a> PeekableLexer<'a> {
     pub fn read(&mut self) -> io::Result<Token> {
         match self.peeked.take() {
             Some(t) => Ok(t),
-            None => self.lexer.read(),
+            None => self.lexer.read().map(|t| t.token),
         }
     }
 }
@@ -455,9 +501,10 @@ mod tests {
         let mut input = input.as_bytes();
         let mut lexer = Lexer::from(&mut input);
 
+        //TODO(protowalker): Add spans to tests
         let mut tokens = vec![];
         loop {
-            let token = lexer.read().expect("Lexing failed");
+            let token = lexer.read().expect("Lexing failed").token;
             if token == Token::Eof {
                 break;
             }
@@ -471,8 +518,9 @@ mod tests {
     fn test_empty() {
         let mut input = b"".as_ref();
         let mut lexer = Lexer::from(&mut input);
-        assert_eq!(Token::Eof, lexer.read().unwrap());
-        assert_eq!(Token::Eof, lexer.read().unwrap());
+        //TODO(protowalker): Add spans to tests
+        assert_eq!(Token::Eof, lexer.read().unwrap().token);
+        assert_eq!(Token::Eof, lexer.read().unwrap().token);
     }
 
     #[test]
@@ -816,10 +864,12 @@ mod tests {
     fn test_unrecoverable_io_error() {
         let mut reader = FaultyReader::new("3 + 5\n");
         let mut lexer = Lexer::from(&mut reader);
-        assert_eq!(Token::Integer(3), lexer.read().unwrap());
-        assert_eq!(Token::Plus, lexer.read().unwrap());
-        assert_eq!(Token::Integer(5), lexer.read().unwrap());
-        assert_eq!(Token::Eol, lexer.read().unwrap());
+
+        //TODO(protowalker): Add spans to tests
+        assert_eq!(Token::Integer(3), lexer.read().unwrap().token);
+        assert_eq!(Token::Plus, lexer.read().unwrap().token);
+        assert_eq!(Token::Integer(5), lexer.read().unwrap().token);
+        assert_eq!(Token::Eol, lexer.read().unwrap().token);
         let e = lexer.read().unwrap_err();
         assert_eq!(io::ErrorKind::InvalidData, e.kind());
         let e = lexer.read().unwrap_err();
