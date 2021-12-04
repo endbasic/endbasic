@@ -1,54 +1,45 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>EndBASIC</title>
-    <link rel="stylesheet" href="style.css" />
+    <head>
+        <meta charset="utf-8">
+        <title>EndBASIC</title>
+        <link rel="stylesheet" href="style.css" />
 
-    <!-- Global site tag (gtag.js) - Google Analytics -->
-    <script
-      async
-      src="https://www.googletagmanager.com/gtag/js?id=G-TMFTHF01XS"
-    ></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag() {
-        dataLayer.push(arguments);
-      }
-      gtag("js", new Date());
-      gtag("config", "G-TMFTHF01XS");
-    </script>
-  </head>
+        <!-- Global site tag (gtag.js) - Google Analytics -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-TMFTHF01XS"></script>
+        <script>
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-TMFTHF01XS');
+        </script>
+    </head>
 
-  <body>
-    <canvas id="terminal" width="800" height="600">
-      EndBASIC terminal window.
-    </canvas>
+    <body>
+        <canvas id="terminal" width="800" height="600">
+            EndBASIC terminal window.
+        </canvas>
 
-    <input id="mobile-input" type="text" autocomplete="off" />
+        <input id="mobile-input" type="text" autocomplete="off" />
 
-    <div id="controls">
-      <button id="button-esc" type="button">Esc</button>
-      <button id="button-up" type="button">&uarr;</button>
-      <button id="button-down" type="button">&darr;</button>
-      <button id="button-left" type="button">&larr;</button>
-      <button id="button-right" type="button">&rarr;</button>
-    </div>
+        <div id="controls">
+            <button id="button-esc" type="button">Esc</button>
+            <button id="button-up" type="button">&uarr;</button>
+            <button id="button-down" type="button">&darr;</button>
+            <button id="button-left" type="button">&larr;</button>
+            <button id="button-right" type="button">&rarr;</button>
+        </div>
 
-    <footer>
-      <a href="https://www.endbasic.dev/">EndBASIC</a>&nbsp; (<span
-        id="build-id"
-        >Loading; please wait...</span
-      >) &nbsp;&middot;&nbsp;
-      <span id="terminal-size">0x0 pixels, 0x0 chars</span>
-      &nbsp;&middot;&nbsp;
-      <a href="https://www.endbasic.dev/service.html">Create account</a>
-      &nbsp;&middot;&nbsp;
-      <a
-        id="report-issue"
-        href="https://github.com/endbasic/endbasic/issues/new"
-        >Report an issue</a
-      >
-    </footer>
-  </body>
+        <footer>
+            <a href="https://www.endbasic.dev/">EndBASIC</a>&nbsp;
+            (<span id="build-id">Loading; please wait...</span>)
+            &nbsp;&middot;&nbsp;
+            <span id="terminal-size">0x0 pixels, 0x0 chars</span>
+            &nbsp;&middot;&nbsp;
+            <a href="https://www.endbasic.dev/service.html">Create account</a>
+            &nbsp;&middot;&nbsp;
+            <a id="report-issue" href="https://github.com/endbasic/endbasic/issues/new">Report
+            an issue</a>
+        </footer>
+    </body>
 </html>
