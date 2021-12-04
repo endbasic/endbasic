@@ -124,6 +124,12 @@ if (isMobile) {
     mobileInput.focus();
 } else {
     mobileInput.hidden = true;
+  $(document).keydown((evt) => {
+    osk.inject_keyboard_event(evt.originalEvent);
+    // Returning false here cancels all other keyboard events for the page, preventing tab from losing focus.
+    // TODO(protowalker): Come up with a solution that captures the input better for embedded scenarios (i.e. iframes)
+    return false;
+  });
     window.onkeydown = function(key) {
         osk.inject_keyboard_event(key);
     }
