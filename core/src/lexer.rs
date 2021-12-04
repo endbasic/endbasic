@@ -22,10 +22,10 @@ use std::iter::Peekable;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TokenSpan {
-    token: Token,
-    line: usize,
-    character: usize,
-    length: usize,
+    pub token: Token,
+    pub line: usize,
+    pub character: usize,
+    pub length: usize,
 }
 
 impl TokenSpan {
@@ -453,7 +453,7 @@ pub struct PeekableLexer<'a> {
 
     /// If not none, contains the character read by `peek`, which will be consumed by the next call
     /// to `read` or `consume_peeked`.
-    peeked: Option<Token>,
+    peeked: Option<TokenSpan>,
 }
 
 impl<'a> PeekableLexer<'a> {
@@ -461,7 +461,7 @@ impl<'a> PeekableLexer<'a> {
     ///
     /// Because `peek` reports read errors, this assumes that the caller already handled those
     /// errors and is thus not going to call this when an error is present.
-    pub fn consume_peeked(&mut self) -> Token {
+    pub fn consume_peeked(&mut self) -> TokenSpan {
         assert!(self.peeked.is_some());
         self.peeked.take().unwrap()
     }
@@ -470,7 +470,7 @@ impl<'a> PeekableLexer<'a> {
     ///
     /// It is OK to call this function several times on the same token before extracting it from
     /// the lexer.
-    pub fn peek(&mut self) -> io::Result<&Token> {
+    pub fn peek(&mut self) -> io::Result<&TokenSpan> {
         if self.peeked.is_none() {
             let n = self.read()?;
             self.peeked.replace(n);
@@ -482,10 +482,10 @@ impl<'a> PeekableLexer<'a> {
     ///
     /// If the next token is invalid and results in a read error, the stream will remain valid and
     /// further tokens can be obtained with subsequent calls.
-    pub fn read(&mut self) -> io::Result<Token> {
+    pub fn read(&mut self) -> io::Result<TokenSpan> {
         match self.peeked.take() {
             Some(t) => Ok(t),
-            None => self.lexer.read().map(|t| t.token),
+            None => self.lexer.read(),
         }
     }
 }
@@ -753,14 +753,15 @@ mod tests {
     fn test_peekable_lexer() {
         let mut input = b"a b 123".as_ref();
         let mut lexer = Lexer::from(&mut input).peekable();
-        assert_eq!(&new_auto_symbol("a"), lexer.peek().unwrap());
-        assert_eq!(&new_auto_symbol("a"), lexer.peek().unwrap());
-        assert_eq!(new_auto_symbol("a"), lexer.read().unwrap());
-        assert_eq!(new_auto_symbol("b"), lexer.read().unwrap());
-        assert_eq!(&Token::Integer(123), lexer.peek().unwrap());
-        assert_eq!(Token::Integer(123), lexer.read().unwrap());
-        assert_eq!(&Token::Eof, lexer.peek().unwrap());
-        assert_eq!(Token::Eof, lexer.read().unwrap());
+        //TODO(protowalker): Add spans to tests
+        assert_eq!(new_auto_symbol("a"), lexer.peek().unwrap().token);
+        assert_eq!(new_auto_symbol("a"), lexer.peek().unwrap().token);
+        assert_eq!(new_auto_symbol("a"), lexer.read().unwrap().token);
+        assert_eq!(new_auto_symbol("b"), lexer.read().unwrap().token);
+        assert_eq!(Token::Integer(123), lexer.peek().unwrap().token);
+        assert_eq!(Token::Integer(123), lexer.read().unwrap().token);
+        assert_eq!(Token::Eof, lexer.peek().unwrap().token);
+        assert_eq!(Token::Eof, lexer.read().unwrap().token);
     }
 
     #[test]
