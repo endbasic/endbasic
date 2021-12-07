@@ -3,6 +3,7 @@
         "bungcip.better-toml",
         "davidanson.vscode-markdownlint",
         "matklad.rust-analyzer",
+        "stkb.rewrap",
         "streetsidesoftware.code-spell-checker"
     ]
 }
