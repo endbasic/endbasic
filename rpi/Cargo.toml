@@ -1,6 +1,6 @@
 [package]
 name = "endbasic-rpi"
-version = "0.8.0" # ENDBASIC-VERSION
+version = "0.8.99" # ENDBASIC-VERSION
 license = "Apache-2.0"
 authors = ["Julio Merino <jmmv@endbasic.dev>"]
 categories = ["development-tools", "parser-implementations"]
@@ -15,5 +15,5 @@ edition = "2018"
 rppal = "0.11.3"
 
 [dependencies.endbasic-std]
-version = "0.8.0" # ENDBASIC-VERSION
+version = "0.8.99" # ENDBASIC-VERSION
 path = "../std"
