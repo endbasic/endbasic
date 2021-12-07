@@ -52,12 +52,23 @@ main() {
     local version="${1}"; shift
     local date="$(date +%Y-%m-%d)"
 
-    replace README.md -E "/latest version/s/[0-9]+\\.[0-9]+\\.[0-9]+/${version}/g"
-    replace README.md -E "/releases\/tag/s/[0-9]+\\.[0-9]+\\.[0-9]+/${version}/g"
-    replace README.md -E "/released on/s/[0-9]{4}-[0-9]{2}-[0-9]{2}/${date}/g"
+    local devel=
+    case "${version}" in
+        *.99) devel=true ;;
+        *) devel=false ;;
+    esac
 
-    replace NEWS.md -E "/Changes in.*X\\.Y\\.Z/s/[X0-9]+\\.[Y0-9]+\\.[Z0-9]+/${version}/g"
-    replace NEWS.md -E "/STILL UNDER DEVELOPMENT/s/^.*$/**Released on ${date}.**/g"
+    if [ "${devel}" = false ]; then
+        replace README.md -E "/latest version/s/[0-9]+\\.[0-9]+\\.[0-9]+/${version}/g"
+        replace README.md -E "/releases\/tag/s/[0-9]+\\.[0-9]+\\.[0-9]+/${version}/g"
+        replace README.md -E "/released on/s/[0-9]{4}-[0-9]{2}-[0-9]{2}/${date}/g"
+
+        replace NEWS.md -E "/Changes in.*X\\.Y\\.Z/s/[X0-9]+\\.[Y0-9]+\\.[Z0-9]+/${version}/g"
+        replace NEWS.md -E "/STILL UNDER DEVELOPMENT/s/^.*$/**Released on ${date}.**/g"
+
+        replace .github/workflows/deploy-release.yml \
+            -E "s/endbasic-[0-9]+\\.[0-9]+\\.[0-9]+/endbasic-${version}/g"
+    fi
 
     for f in */Cargo.toml; do
         replace "${f}" -E "/ENDBASIC-VERSION/s/[0-9]+\\.[0-9]+\\.[0-9]+/${version}/g"
@@ -65,9 +76,6 @@ main() {
 
     replace web/package.json -E "/\"version\"/s/[0-9]+\\.[0-9]+\\.[0-9]+/${version}/g"
     fix_package_lock web/package-lock.json "${version}"
-
-    replace .github/workflows/deploy-release.yml \
-        -E "s/endbasic-[0-9]+\\.[0-9]+\\.[0-9]+/endbasic-${version}/g"
 }
 
 main "${@}"
