@@ -172,7 +172,7 @@ fn setup_console(console_spec: Option<&str>) -> io::Result<Rc<RefCell<dyn Consol
         Err(io::Error::new(io::ErrorKind::InvalidInput, "SDL support not compiled in"))
     }
 
-    let console: Rc<RefCell<dyn Console>> = match console_spec.as_deref() {
+    let console: Rc<RefCell<dyn Console>> = match console_spec {
         None | Some("text") => setup_text_console()?,
 
         Some("graphics") => setup_graphics_console("")?,
