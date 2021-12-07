@@ -413,11 +413,11 @@ mod tests {
             console.add_input_keys(&self.keys);
             console.set_size(CharsXY::new(15, 5));
             let line = match self.history.as_mut() {
-                Some(mut history) => block_on(read_line_interactive(
+                Some(history) => block_on(read_line_interactive(
                     &mut console,
                     self.prompt,
                     self.previous,
-                    Some(&mut history),
+                    Some(history),
                     self.echo,
                 ))
                 .unwrap(),
