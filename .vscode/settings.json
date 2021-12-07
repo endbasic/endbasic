@@ -24,7 +24,8 @@
     "[markdown]": {
         "editor.rulers": [80],
         "editor.quickSuggestions": false,
-        "editor.wordWrapColumn": 80
+        "editor.wordWrapColumn": 80,
+        "rewrap.doubleSentenceSpacing": true
     },
 
     "markdownlint.config": {
