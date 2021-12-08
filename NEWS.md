@@ -14,6 +14,12 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
+*   Issue #136: Fixed handling of key presses on the web interface so that they
+    don't interfere with browser shortcuts.  This prevents Tab from stealing
+    focus from the terminal, the arrow keys from doing strange things when
+    "caret browsing" is enabled, and the slash key in Firefox from triggering a
+    search on the page.
+
 *   Issue #148: Fixed interactive line edits so that moving up and down through
     history doesn't leave old characters behind when the cursor is in the middle
     of a line (not at the end).
