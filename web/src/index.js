@@ -96,37 +96,41 @@ if (isMobile) {
         // https://stackoverflow.com/questions/30743490/capture-keys-typed-on-android-virtual-keyboard-using-javascript
 
         var ignoreLastInput = false;
-        mobileInput.oninput = function(key) {
+        mobileInput.addEventListener("input", function(key) {
             mobileInput.value = "";
             if (!ignoreLastInput && key.data != '') {
                 osk.inject_input_event(key);
                 ignoreLastInput = true;
                 setTimeout(function() { ignoreLastInput = false; }, 5);
+                key.preventDefault();
             }
-        };
-        mobileInput.onkeydown = function(key) {
+        });
+        mobileInput.addEventListener("keydown", function(key) {
             mobileInput.value = "";
             if (!ignoreLastInput && key.keyCode != 229) {
                 osk.inject_keyboard_event(key);
                 ignoreLastInput = true;
                 setTimeout(function() { ignoreLastInput = false; }, 5);
+                key.preventDefault();
             }
-        };
+        });
     } else {
-        mobileInput.onkeydown = function(key) {
+        mobileInput.addEventListener("keydown", function(key) {
             mobileInput.value = "";
             osk.inject_keyboard_event(key);
-        };
+            key.preventDefault();
+        });
     }
-    terminal.onclick = function() {
+    terminal.addEventListener("click", function() {
         mobileInput.focus();
-    }
+    });
     mobileInput.focus();
 } else {
     mobileInput.hidden = true;
-    window.onkeydown = function(key) {
+    window.addEventListener("keydown", function(key) {
         osk.inject_keyboard_event(key);
-    }
+        key.preventDefault();
+    });
     terminal.focus();
 }
 
