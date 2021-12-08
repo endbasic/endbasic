@@ -22,8 +22,14 @@ use std::io;
 const SECURE_CHAR: u8 = b'*';
 
 /// Refreshes the current input line to display `line` assuming that the cursor is currently
-/// offset by `pos` characters from the beginning of the input.
-fn update_line(console: &mut dyn Console, pos: usize, line: &str) -> io::Result<()> {
+/// offset by `pos` characters from the beginning of the input and that the previous line was
+/// `clear_len` characters long.
+fn update_line(
+    console: &mut dyn Console,
+    pos: usize,
+    clear_len: usize,
+    line: &str,
+) -> io::Result<()> {
     console.hide_cursor()?;
     if pos > 0 {
         console.move_within_line(-(pos as i16))?;
@@ -31,8 +37,8 @@ fn update_line(console: &mut dyn Console, pos: usize, line: &str) -> io::Result<
     if !line.is_empty() {
         console.write(line.as_bytes())?;
     }
-    if line.len() < pos {
-        let diff = pos - line.len();
+    if line.len() < clear_len {
+        let diff = clear_len - line.len();
         console.write(&vec![b' '; diff])?;
         console.move_within_line(-(diff as i16))?;
     }
@@ -86,11 +92,13 @@ async fn read_line_interactive(
                         continue;
                     }
 
+                    let clear_len = line.len();
+
                     history[history_pos] = line;
                     history_pos -= 1;
                     line = history[history_pos].clone();
 
-                    update_line(console, pos, &line)?;
+                    update_line(console, pos, clear_len, &line)?;
 
                     pos = line.len();
                 }
@@ -102,11 +110,13 @@ async fn read_line_interactive(
                         continue;
                     }
 
+                    let clear_len = line.len();
+
                     history[history_pos] = line;
                     history_pos += 1;
                     line = history[history_pos].clone();
 
-                    update_line(console, pos, &line)?;
+                    update_line(console, pos, clear_len, &line)?;
 
                     pos = line.len();
                 }
@@ -748,57 +758,138 @@ mod tests {
     }
 
     #[test]
-    fn test_read_line_interactive_history_navigate_up_down() {
+    fn test_read_line_interactive_history_navigate_up_down_end_of_line() {
         ReadLineInteractiveTest::default()
             .set_prompt("? ")
             .add_output(CapturedOut::Write(b"? ".to_vec()))
             .add_output(CapturedOut::SyncNow)
             //
             .set_history(
-                vec!["first".to_owned(), "second".to_owned(), "third".to_owned()],
-                vec!["first".to_owned(), "second".to_owned(), "third".to_owned()],
+                vec!["first".to_owned(), "long second line".to_owned(), "last".to_owned()],
+                vec!["first".to_owned(), "long second line".to_owned(), "last".to_owned()],
             )
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::Write(b"third".to_vec()))
+            .add_output(CapturedOut::Write(b"last".to_vec()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-5))
-            .add_output(CapturedOut::Write(b"second".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-(b"last".len() as i16)))
+            .add_output(CapturedOut::Write(b"long second line".to_vec()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-6))
+            .add_output(CapturedOut::MoveWithinLine(-(b"long second line".len() as i16)))
             .add_output(CapturedOut::Write(b"first".to_vec()))
-            .add_output(CapturedOut::Write(b" ".to_vec()))
-            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write(b"           ".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-(b"           ".len() as i16)))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
             //
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-5))
-            .add_output(CapturedOut::Write(b"second".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-(b"first".len() as i16)))
+            .add_output(CapturedOut::Write(b"long second line".to_vec()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-6))
-            .add_output(CapturedOut::Write(b"third".to_vec()))
-            .add_output(CapturedOut::Write(b" ".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-(b"long second line".len() as i16)))
+            .add_output(CapturedOut::Write(b"last".to_vec()))
+            .add_output(CapturedOut::Write(b"            ".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-(b"            ".len() as i16)))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowDown)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-(b"last".len() as i16)))
+            .add_output(CapturedOut::Write(b"    ".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-(b"    ".len() as i16)))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowDown)
+            //
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_history_navigate_up_down_middle_of_line() {
+        ReadLineInteractiveTest::default()
+            .set_prompt("? ")
+            .add_output(CapturedOut::Write(b"? ".to_vec()))
+            .add_output(CapturedOut::SyncNow)
+            //
+            .set_history(
+                vec!["a".to_owned(), "long-line".to_owned(), "zzzz".to_owned()],
+                vec!["a".to_owned(), "long-line".to_owned(), "zzzz".to_owned()],
+            )
+            //
+            .add_key(Key::ArrowUp)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::Write(b"zzzz".to_vec()))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowUp)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-(b"zzzz".len() as i16)))
+            .add_output(CapturedOut::Write(b"long-line".to_vec()))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowLeft)
             .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            //
+            .add_key(Key::ArrowUp)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-(b"long-line".len() as i16) + 4))
+            .add_output(CapturedOut::Write(b"a".to_vec()))
+            .add_output(CapturedOut::Write(b"        ".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-(b"        ".len() as i16)))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowUp)
+            //
+            .add_key(Key::ArrowDown)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-(b"a".len() as i16)))
+            .add_output(CapturedOut::Write(b"long-line".to_vec()))
+            .add_output(CapturedOut::ShowCursor)
+            //
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            //
+            .add_key(Key::ArrowDown)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-(b"long-line".len() as i16) + 6))
+            .add_output(CapturedOut::Write(b"zzzz".to_vec()))
+            .add_output(CapturedOut::Write(b"     ".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-(b"     ".len() as i16)))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-5))
-            .add_output(CapturedOut::Write(b"     ".to_vec()))
-            .add_output(CapturedOut::MoveWithinLine(-5))
+            .add_output(CapturedOut::MoveWithinLine(-(b"zzzz".len() as i16)))
+            .add_output(CapturedOut::Write(b"    ".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-(b"    ".len() as i16)))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
