@@ -14,7 +14,9 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
-*   No changes recorded.
+*   Issue #148: Fixed interactive line edits so that moving up and down through
+    history doesn't leave old characters behind when the cursor is in the middle
+    of a line (not at the end).
 
 ## Changes in version 0.8.0
 
