@@ -1020,6 +1020,7 @@ mod tests {
 
         run_editor("abc\nabc\n", "abcx\nabc\n", cb, ob);
     }
+
     #[test]
     fn test_move_right_at_end_of_line() {
         let mut cb = MockConsole::default();
@@ -1038,6 +1039,7 @@ mod tests {
 
         run_editor("abc\nabc\n", "abc\nxabc\n", cb, ob);
     }
+
     #[test]
     fn test_move_down_preserves_insertion_column_with_horizontal_scrolling() {
         let mut cb = MockConsole::default();
