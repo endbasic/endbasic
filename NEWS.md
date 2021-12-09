@@ -13,6 +13,11 @@ for the time being.**
 ## Changes in version X.Y.Z
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+*   Issue #120: Added support for having the cursor wrap around to the next line 
+    when pressing left or right at a line start or end boundary, respectively. 
+    In simpler words, pressing left at the start of a line takes you to the end 
+    of the next line, and pressing right at the end of a line takes you to the 
+    beginning of the next line. (@Protowalker)
 
 *   Issue #136: Fixed handling of key presses on the web interface so that they
     don't interfere with browser shortcuts.  This prevents Tab from stealing
