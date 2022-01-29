@@ -24,6 +24,10 @@ for the time being.**
     history doesn't leave old characters behind when the cursor is in the middle
     of a line (not at the end).
 
+*   Replaced the use of Google Analytics in the web interface with EndTRACKER,
+    my own experiment at site statistics.  If you are curious, this service's
+    code is a direct fork of EndBASIC's cloud service--hence the name.
+
 ## Changes in version 0.8.0
 
 **Released on 2021-11-11.**
