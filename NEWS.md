@@ -10,9 +10,9 @@ to talk to the cloud service.  If you use the web interface, this should not be
 a problem, but if you use local builds, please try to stay on the latest release
 for the time being.**
 
-## Changes in version X.Y.Z
+## Changes in version 0.8.1
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2022-01-29.**
 
 *   Issue #136: Fixed handling of key presses on the web interface so that they
     don't interfere with browser shortcuts.  This prevents Tab from stealing
