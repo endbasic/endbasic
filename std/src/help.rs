@@ -67,7 +67,7 @@ fn header() -> Vec<String> {
     vec![
         "".to_owned(),
         format!("    EndBASIC {}", env!("CARGO_PKG_VERSION")),
-        "    Copyright 2020-2021 Julio Merino".to_owned(),
+        "    Copyright 2020-2022 Julio Merino".to_owned(),
         "".to_owned(),
         format!("    Project page at <{}>", env!("CARGO_PKG_HOMEPAGE")),
         "    License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>".to_owned(),
