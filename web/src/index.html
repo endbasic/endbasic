@@ -4,15 +4,6 @@
         <meta charset="utf-8">
         <title>EndBASIC</title>
         <link rel="stylesheet" href="style.css" />
-
-        <!-- Global site tag (gtag.js) - Google Analytics -->
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-TMFTHF01XS"></script>
-        <script>
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-TMFTHF01XS');
-        </script>
     </head>
 
     <body>
@@ -41,5 +32,10 @@
             <a id="report-issue" href="https://github.com/endbasic/endbasic/issues/new">Report
             an issue</a>
         </footer>
+
+        <script type="module">
+            import { RequestsClient } from "https://www.endbasic.dev/js/main-exported.js";
+            new RequestsClient("6a633c2c-7fda-11ec-86e4-1cfd087199c2").saveRequest();
+        </script>
     </body>
 </html>
