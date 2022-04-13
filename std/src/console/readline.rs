@@ -37,8 +37,9 @@ fn update_line(
     if !line.is_empty() {
         console.write(line.as_bytes())?;
     }
-    if line.len() < clear_len {
-        let diff = clear_len - line.len();
+    let line_len = line.char_indices().count();
+    if line_len < clear_len {
+        let diff = clear_len - line_len;
         console.write(&vec![b' '; diff])?;
         console.move_within_line(-(diff as i16))?;
     }
@@ -73,7 +74,8 @@ async fn read_line_interactive(
     };
 
     // Insertion position *within* the line, without accounting for the prompt.
-    let mut pos = line.len();
+    // TODO(zenria): Handle UTF-8 graphemes.
+    let mut pos = line.char_indices().count();
 
     let mut history_pos = match history.as_mut() {
         Some(history) => {
@@ -91,7 +93,7 @@ async fn read_line_interactive(
                         continue;
                     }
 
-                    let clear_len = line.len();
+                    let clear_len = line.char_indices().count();
 
                     history[history_pos] = line;
                     history_pos -= 1;
@@ -99,7 +101,7 @@ async fn read_line_interactive(
 
                     update_line(console, pos, clear_len, &line)?;
 
-                    pos = line.len();
+                    pos = line.char_indices().count();
                 }
             }
 
@@ -109,7 +111,7 @@ async fn read_line_interactive(
                         continue;
                     }
 
-                    let clear_len = line.len();
+                    let clear_len = line.char_indices().count();
 
                     history[history_pos] = line;
                     history_pos += 1;
@@ -117,7 +119,7 @@ async fn read_line_interactive(
 
                     update_line(console, pos, clear_len, &line)?;
 
-                    pos = line.len();
+                    pos = line.char_indices().count();
                 }
             }
 
@@ -129,7 +131,7 @@ async fn read_line_interactive(
             }
 
             Key::ArrowRight => {
-                if pos < line.len() {
+                if pos < line.char_indices().count() {
                     console.move_within_line(1)?;
                     pos += 1;
                 }
@@ -137,17 +139,20 @@ async fn read_line_interactive(
 
             Key::Backspace => {
                 if pos > 0 {
+                    let char_indices = line.char_indices().collect::<Vec<_>>();
                     console.hide_cursor()?;
                     console.move_within_line(-1)?;
                     if echo {
-                        console.write(line[pos..].as_bytes())?;
+                        if pos < char_indices.len() {
+                            console.write(line[(char_indices[pos].0)..].as_bytes())?;
+                        }
                     } else {
-                        console.write(&vec![SECURE_CHAR; line.len() - pos])?;
+                        console.write(&vec![SECURE_CHAR; char_indices.len() - pos])?;
                     }
                     console.write(&[b' '])?;
-                    console.move_within_line(-((line.len() - pos) as i16 + 1))?;
+                    console.move_within_line(-((char_indices.len() - pos) as i16 + 1))?;
                     console.show_cursor()?;
-                    line.remove(pos - 1);
+                    line.remove(char_indices[pos - 1].0);
                     pos -= 1;
                 }
             }
@@ -164,36 +169,40 @@ async fn read_line_interactive(
             }
 
             Key::Char(ch) => {
-                debug_assert!(line.len() < width);
-                if line.len() == width - 1 {
+                let char_indices = line.char_indices().collect::<Vec<_>>();
+                debug_assert!(char_indices.len() < width);
+                if char_indices.len() == width - 1 {
                     // TODO(jmmv): Implement support for lines that exceed the width of the input
                     // field (the width of the screen).
                     continue;
                 }
 
-                if pos < line.len() {
+                if pos < char_indices.len() {
                     console.hide_cursor()?;
                     if echo {
-                        console.write(&[ch as u8])?;
-                        console.write(line[pos..].as_bytes())?;
+                        let mut buf = [0u8; 4];
+                        console.write(ch.encode_utf8(&mut buf).as_bytes())?;
+                        console.write(line[(char_indices[pos].0)..].as_bytes())?;
                     } else {
-                        console.write(&vec![SECURE_CHAR; line.len() - pos + 1])?;
+                        console.write(&vec![SECURE_CHAR; char_indices.len() - pos + 1])?;
                     }
-                    console.move_within_line(-((line.len() - pos) as i16))?;
+                    console.move_within_line(-((char_indices.len() - pos) as i16))?;
                     console.show_cursor()?;
+                    line.insert(char_indices[pos].0, ch);
                 } else {
                     if echo {
-                        console.write(&[ch as u8])?;
+                        let mut buf = [0u8; 4];
+                        console.write(ch.encode_utf8(&mut buf).as_bytes())?;
                     } else {
                         console.write(&[SECURE_CHAR])?;
                     }
+                    line.insert(line.len(), ch);
                 }
-                line.insert(pos, ch);
                 pos += 1;
             }
 
             Key::End => {
-                let offset = line.len() - pos;
+                let offset = line.char_indices().count() - pos;
                 if offset > 0 {
                     console.move_within_line(offset as i16)?;
                     pos += offset;
@@ -526,6 +535,81 @@ mod tests {
             .add_output(CapturedOut::ShowCursor)
             // -
             .set_line("some te .xt")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_utf8_basic() {
+        ReadLineInteractiveTest::default()
+            .add_key_chars("é")
+            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            // -
+            .set_line("é")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_utf8_remove_2byte_char() {
+        ReadLineInteractiveTest::default()
+            .add_key_chars("é")
+            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            // -
+            .add_key(Key::Backspace)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output_bytes(b" ")
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_utf8_add_and_remove_last() {
+        ReadLineInteractiveTest::default()
+            .add_key_chars("àé")
+            .add_output(CapturedOut::Write("à".as_bytes().to_vec()))
+            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            // -
+            .add_key(Key::Backspace)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output_bytes(b" ")
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("à")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_utf8_navigate_2byte_chars() {
+        ReadLineInteractiveTest::default()
+            .add_key_chars("àé")
+            .add_output(CapturedOut::Write("à".as_bytes().to_vec()))
+            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            // -
+            .add_key(Key::ArrowRight)
+            .add_output(CapturedOut::MoveWithinLine(1))
+            // -
+            .add_key(Key::Backspace)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            .add_output_bytes(b" ")
+            .add_output(CapturedOut::MoveWithinLine(-2))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("é")
             .accept();
     }
 
