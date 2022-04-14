@@ -545,6 +545,63 @@ mod tests {
     }
 
     #[test]
+    fn test_read_line_interactive_utf8() {
+        // most basic
+        ReadLineInteractiveTest::default()
+            .add_key_chars("é")
+            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            .set_line("é")
+            .accept();
+        // remove single 2-bytes char
+        ReadLineInteractiveTest::default()
+            .add_key_chars("é")
+            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            .add_key(Key::Backspace)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output_bytes(b" ")
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::ShowCursor)
+            .set_line("")
+            .accept();
+        // 2 2-bytes char, remove the last
+        ReadLineInteractiveTest::default()
+            .add_key_chars("àé")
+            .add_output(CapturedOut::Write("à".as_bytes().to_vec()))
+            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            .add_key(Key::Backspace)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output_bytes(b" ")
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::ShowCursor)
+            .set_line("à")
+            .accept();
+
+        // "à" "é" left left left right backspace (correct 2-bytes chars jumps and string manipulation)
+        ReadLineInteractiveTest::default()
+            .add_key_chars("àé")
+            .add_output(CapturedOut::Write("à".as_bytes().to_vec()))
+            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft) // this one does nothing we are already at the bebinning
+            .add_key(Key::ArrowRight)
+            .add_output(CapturedOut::MoveWithinLine(1))
+            .add_key(Key::Backspace)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            .add_output_bytes(b" ")
+            .add_output(CapturedOut::MoveWithinLine(-2))
+            .add_output(CapturedOut::ShowCursor)
+            .set_line("é")
+            .accept();
+    }
+
+    #[test]
     fn test_read_line_interactive_trailing_backspace() {
         ReadLineInteractiveTest::default()
             .add_key_chars("bar")
