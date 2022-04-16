@@ -56,7 +56,7 @@ fn find_indent_end(line: &str) -> usize {
         }
         pos += 1;
     }
-    debug_assert!(pos <= line.len());
+    debug_assert!(pos <= line.chars().count());
     pos
 }
 
@@ -158,10 +158,15 @@ impl Editor {
         let mut printed_rows = 0;
         while row < self.content.len() && printed_rows < console_size.y - 1 {
             let line = &self.content[row];
-            if line.len() >= self.viewport_pos.col {
-                let last =
-                    cmp::min(line.len(), self.viewport_pos.col + usize::from(console_size.x));
-                let view = &line[self.viewport_pos.col..last];
+            let char_indices = line.char_indices().collect::<Vec<_>>();
+            let line_len = char_indices.len();
+            if line_len > self.viewport_pos.col {
+                let last = if line_len <= self.viewport_pos.col + usize::from(console_size.x) {
+                    line.len()
+                } else {
+                    char_indices[self.viewport_pos.col + usize::from(console_size.x)].0
+                };
+                let view = &line[(char_indices[self.viewport_pos.col].0)..last];
                 console.print(view)?;
             } else {
                 console.print("")?;
@@ -182,7 +187,7 @@ impl Editor {
         }
 
         let line = &self.content[self.file_pos.line];
-        self.file_pos.col = cmp::min(self.insert_col, line.len());
+        self.file_pos.col = cmp::min(self.insert_col, line.chars().count());
     }
 
     /// Moves the cursor up by the given number of lines in `nlines` or to the first line if there
@@ -195,7 +200,7 @@ impl Editor {
         }
 
         let line = &self.content[self.file_pos.line];
-        self.file_pos.col = cmp::min(self.insert_col, line.len());
+        self.file_pos.col = cmp::min(self.insert_col, line.chars().count());
     }
 
     /// Internal implementation of the interactive editor, which interacts with the `console`.
@@ -324,11 +329,19 @@ impl Editor {
                     let mut buf = [0; 4];
 
                     let line = &mut self.content[self.file_pos.line];
-                    if self.file_pos.col < line.len() {
+                    let char_indices = line.char_indices().collect::<Vec<_>>();
+                    if self.file_pos.col < char_indices.len() {
                         // TODO(jmmv): Refresh only the affected line.
                         need_refresh = true;
                     }
-                    line.insert(self.file_pos.col, ch);
+                    let insert_pos = if self.file_pos.col < char_indices.len() {
+                        // insert at right position in the string
+                        char_indices[self.file_pos.col].0
+                    } else {
+                        // insert at end
+                        line.len()
+                    };
+                    line.insert(insert_pos, ch);
                     self.file_pos.col += 1;
                     self.insert_col = self.file_pos.col;
 
@@ -376,7 +389,8 @@ impl Editor {
 
                 Key::Tab => {
                     let line = &mut self.content[self.file_pos.line];
-                    if self.file_pos.col < line.len() {
+                    let char_indices = line.char_indices().collect::<Vec<_>>();
+                    if self.file_pos.col < char_indices.len() {
                         // TODO(jmmv): Refresh only the affected line.
                         need_refresh = true;
                     }
@@ -386,7 +400,14 @@ impl Editor {
                     for _ in 0..new_text.capacity() {
                         new_text.push(' ');
                     }
-                    line.insert_str(self.file_pos.col, &new_text);
+                    let insert_pos = if self.file_pos.col < char_indices.len() {
+                        // insert at right position in the string
+                        char_indices[self.file_pos.col].0
+                    } else {
+                        // insert at end
+                        line.len()
+                    };
+                    line.insert_str(insert_pos, &new_text);
                     self.file_pos.col = new_pos;
                     self.insert_col = self.file_pos.col;
                     if !need_refresh {
@@ -628,7 +649,7 @@ mod tests {
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
-        cb.add_input_chars("abc");
+        cb.add_input_chars("abcéà");
         ob = ob.set_dirty();
         ob = ob.add(CapturedOut::Write(b"a".to_vec()));
         ob = ob.quick_refresh(linecol(0, 1), yx(0, 1));
@@ -636,6 +657,10 @@ mod tests {
         ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
         ob = ob.add(CapturedOut::Write(b"c".to_vec()));
         ob = ob.quick_refresh(linecol(0, 3), yx(0, 3));
+        ob = ob.add(CapturedOut::Write("é".as_bytes().to_vec()));
+        ob = ob.quick_refresh(linecol(0, 4), yx(0, 4));
+        ob = ob.add(CapturedOut::Write("à".as_bytes().to_vec()));
+        ob = ob.quick_refresh(linecol(0, 5), yx(0, 5));
 
         cb.add_input_keys(&[Key::NewLine]);
         ob = ob.quick_refresh(linecol(1, 0), yx(1, 0));
@@ -647,7 +672,7 @@ mod tests {
         ob = ob.add(CapturedOut::Write(b"2".to_vec()));
         ob = ob.quick_refresh(linecol(2, 1), yx(2, 1));
 
-        run_editor("", "abc\n\n2\n", cb, ob);
+        run_editor("", "abcéà\n\n2\n", cb, ob);
     }
 
     #[test]
