@@ -49,7 +49,8 @@ for the time being.**
     `endbasic-std` crate leaner dependencies-wise and facilitates configuring
     the client.
 
-*   Issue #161: Fixed line input in the REPL to properly accept UTF-8.
+*   Issue #161: Fixed input methods (line input in the REPL and the full-screen
+    text editor) to properly accept UTF-8.
 
 *   Issue #163: Fixed backspace handling in the the web and SDL consoles so
     that the previous character is not left behind the cursor.  The problem was
