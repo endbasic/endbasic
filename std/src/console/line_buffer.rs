@@ -1,32 +1,38 @@
-//! Handle string manipulation like inserting a char at a specified char position.
-//!
-//! This exists because Rust String is indexed by bytes and manipulating string bytes is
-//! complicated!
-//!
-//! The current implementation of the line buffer is using String::chars && String::char_indices.
-//!
-//! TODO: use graphemes instead.
+//! String buffer used to manipulate String at the UTF-8 code point level
+//! instead of Rust String byte level manipulation
 
 use std::{fmt::Display, str::Chars};
 
 #[derive(Default, Debug)]
+/// Handle string manipulation like inserting a char at a specified char position.
+///
+/// This exists because Rust String is indexed by bytes and manipulating string bytes is
+/// complicated.
+///
+/// The current implementation of the line buffer is using String::chars .
+///
+/// TODO: use graphemes instead.
 pub struct LineBuffer {
     line: String,
 }
 
 impl LineBuffer {
+    /// Create an empty LineBuffer
     pub fn new() -> Self {
         Default::default()
     }
 
+    /// Create an empty LineBuffer with the allocated capacity
     pub fn with_capacity(capacity: usize) -> Self {
         Self { line: String::with_capacity(capacity) }
     }
 
+    /// Return the logical LineBuffer length (in UTF-8 code point count and not in bytes)
     pub fn len(&self) -> usize {
         self.line.chars().count()
     }
 
+    /// Iterator over buffer chars.
     pub fn chars(&self) -> Chars {
         self.line.chars()
     }
@@ -45,23 +51,34 @@ impl LineBuffer {
         self.chars().take(end_pos).collect()
     }
 
+    /// Extract a range of chars from this buffer.
     pub fn range(&self, start_pos: usize, end_pos: usize) -> String {
         let count = if start_pos > end_pos { 0 } else { end_pos - start_pos };
         self.chars().skip(start_pos).take(count).collect()
     }
 
+    /// Is this buffer empty?
     pub fn is_empty(&self) -> bool {
         self.line.is_empty()
     }
 
+    /// Get a view on the underlying bytes hold by this buffer.
+    ///
+    /// Warning: direct bytes manipulation may lead to undefined behavior
     pub fn as_bytes(&self) -> &[u8] {
         self.line.as_bytes()
     }
 
+    /// Remove a char from this buffer.
+    ///
+    /// If the given position if greater than the length of the buffer, this function will do nothing.
     pub fn remove(&mut self, pos: usize) {
         self.line = self.line.chars().take(pos).chain(self.line.chars().skip(pos + 1)).collect();
     }
 
+    /// Insert a char at the given position.
+    ///
+    /// If the position is greater than the buffer length, the char will be appended at the end ot it
     pub fn insert(&mut self, pos: usize, ch: char) {
         self.line = self
             .line
@@ -72,10 +89,15 @@ impl LineBuffer {
             .collect();
     }
 
+    /// Return the underlying String
     pub fn into_inner(self) -> String {
         self.line
     }
 
+    /// Insert the given string into the buffer at the given position.
+    ///
+    /// If the position is greater than the length of the buffer, the string will be appened at the end
+    /// of it.
     pub fn insert_str(&mut self, pos: usize, s: &str) {
         self.line = self
             .line
@@ -86,10 +108,14 @@ impl LineBuffer {
             .collect();
     }
 
+    /// Append the given string to the buffer.
     pub fn push_str(&mut self, s: &LineBuffer) {
         self.line.push_str(&s.line);
     }
 
+    /// Split the buffer in two parts at the given position.
+    ///
+    /// Return the remaining part of the buffer (same behavior as String::split_off)
     pub fn split_off(&mut self, at: usize) -> LineBuffer {
         let ret = LineBuffer::from(self.line.chars().skip(at).collect::<String>());
         self.line = self.line.chars().take(at).collect();
@@ -207,5 +233,13 @@ mod tests {
         assert!(LineBuffer::new().is_empty());
         assert!(LineBuffer::from("").is_empty());
         assert!(!LineBuffer::from("This is not empty").is_empty());
+    }
+
+    #[test]
+    fn test_split_off() {
+        let mut buffer = LineBuffer::from("Hello, World");
+        let world = buffer.split_off(7);
+        assert_eq!(buffer.into_inner(), "Hello, ");
+        assert_eq!(world.into_inner(), "World");
     }
 }
