@@ -23,7 +23,9 @@
 use crate::input::WebInput;
 use crate::log_and_panic;
 use async_trait::async_trait;
-use endbasic_std::console::{ansi_color_to_rgb, CharsXY, ClearType, Console, Key, PixelsXY, RGB};
+use endbasic_std::console::{
+    ansi_color_to_rgb, CharsXY, ClearType, Console, Key, LineBuffer, PixelsXY, RGB,
+};
 use js_sys::Map;
 use std::cmp;
 use std::convert::TryFrom;

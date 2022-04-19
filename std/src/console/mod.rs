@@ -35,6 +35,8 @@ mod readline;
 pub use readline::{read_line, read_line_secure};
 mod trivial;
 pub use trivial::TrivialConsole;
+mod linebuffer;
+pub use linebuffer::LineBuffer;
 
 /// Decoded key presses as returned by the console.
 #[derive(Clone, Debug, PartialEq)]
