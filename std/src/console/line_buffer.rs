@@ -75,6 +75,26 @@ impl LineBuffer {
     pub fn into_inner(self) -> String {
         self.line
     }
+
+    pub fn insert_str(&mut self, pos: usize, s: &str) {
+        self.line = self
+            .line
+            .chars()
+            .take(pos)
+            .chain(s.chars())
+            .chain(self.line.chars().skip(pos))
+            .collect();
+    }
+
+    pub fn push_str(&mut self, s: &LineBuffer) {
+        self.line.push_str(&s.line);
+    }
+
+    pub fn split_off(&mut self, at: usize) -> LineBuffer {
+        let ret = LineBuffer::from(self.line.chars().skip(at).collect::<String>());
+        self.line = self.line.chars().take(at).collect();
+        ret
+    }
 }
 
 impl From<&str> for LineBuffer {
@@ -88,9 +108,104 @@ impl From<&String> for LineBuffer {
         Self::from(s.as_str())
     }
 }
+impl From<String> for LineBuffer {
+    fn from(line: String) -> Self {
+        Self { line }
+    }
+}
 
 impl Display for LineBuffer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.line.fmt(f)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LineBuffer;
+
+    #[test]
+    fn test_end() {
+        let empty = LineBuffer::from("");
+        assert_eq!(empty.end(0), "");
+        assert_eq!(empty.end(1), ""); // it won't panic even is the given position does not make any sense.
+        let hw = LineBuffer::from("Hello, World");
+
+        assert_eq!(hw.end(0), "Hello, World");
+        assert_eq!(hw.end(7), "World");
+        assert_eq!(hw.end(100), "");
+    }
+
+    #[test]
+    fn test_start() {
+        let empty = LineBuffer::from("");
+        assert_eq!(empty.start(0), "");
+        assert_eq!(empty.start(1), ""); // it won't panic even is the given position does not make any sense.
+        let hw = LineBuffer::from("Hello, World");
+
+        assert_eq!(hw.start(0), "");
+        assert_eq!(hw.start(7), "Hello, ");
+        assert_eq!(hw.start(100), "Hello, World");
+    }
+
+    #[test]
+    fn test_insert() {
+        let mut buffer = LineBuffer::from("");
+        buffer.insert(0, 'c'); // c
+        buffer.insert(0, 'é'); // éc
+
+        // insertion must happen after the 2-bytes utf-8 code point and not the byte 1:
+        buffer.insert(1, 'à'); // éàc
+        buffer.insert(100, 'd'); // éàcd dumb position will not make insert panic.
+
+        assert_eq!(buffer.into_inner(), "éàcd");
+    }
+
+    #[test]
+    fn test_remove() {
+        let mut empty = LineBuffer::from("");
+        empty.remove(0);
+        empty.remove(5);
+        assert_eq!(empty.into_inner(), "");
+
+        let mut hello = LineBuffer::from("Hello");
+        hello.remove(100); // do nothing
+        hello.remove(1); // remove the 'e'
+        assert_eq!(hello.into_inner(), "Hllo");
+    }
+
+    #[test]
+    fn test_insert_str() {
+        let mut buffer = LineBuffer::from("");
+        buffer.insert_str(0, "Hello");
+        assert_eq!(buffer.end(0), "Hello");
+        buffer.insert_str(100, "World"); // pos>len will insert at the end.
+        assert_eq!(buffer.end(0), "HelloWorld");
+        buffer.insert_str(5, ", ");
+        assert_eq!(buffer.end(0), "Hello, World");
+    }
+
+    #[test]
+    fn test_range() {
+        let mut buffer = LineBuffer::new();
+
+        assert_eq!(buffer.range(0, 0), "");
+        assert_eq!(buffer.range(0, 10), "");
+        assert_eq!(buffer.range(0, 10), "");
+        assert_eq!(buffer.range(10, 0), ""); // do not panic on stupid indexes
+
+        buffer.insert_str(0, "Hello, World");
+        assert_eq!(buffer.range(0, 5), "Hello");
+        assert_eq!(buffer.range(7, 10), "Wor");
+        assert_eq!(buffer.range(7, 100), "World");
+        assert_eq!(buffer.range(10, 0), ""); // do not panic on stupid indexes
+    }
+
+    #[test]
+    fn test_is_empty() {
+        assert!(LineBuffer::new().is_empty());
+        assert!(LineBuffer::new().is_empty());
+        assert!(LineBuffer::from("").is_empty());
+        assert!(!LineBuffer::from("This is not empty").is_empty());
     }
 }

@@ -17,6 +17,7 @@
 
 use crate::console::{CharsXY, ClearType, Console, Key};
 use async_trait::async_trait;
+use endbasic_std::console::line_buffer::LineBuffer;
 use endbasic_std::program::Program;
 use std::cmp;
 use std::convert::TryFrom;
@@ -35,7 +36,7 @@ const INDENT_WIDTH: usize = 4;
 const KEYS_SUMMARY: &str = " ESC Exit ";
 
 /// Returns the indentation of a given string as a new string.
-fn copy_indent(line: &str) -> String {
+fn copy_indent(line: &LineBuffer) -> String {
     let mut indent = String::new();
     for ch in line.chars() {
         if !ch.is_whitespace() {
@@ -48,7 +49,7 @@ fn copy_indent(line: &str) -> String {
 
 /// Finds the first position within the line that is not an indentation character, or returns
 /// the line length if no such character is found.
-fn find_indent_end(line: &str) -> usize {
+fn find_indent_end(line: &LineBuffer) -> usize {
     let mut pos = 0;
     for ch in line.chars() {
         if ch != ' ' {
@@ -78,7 +79,7 @@ pub struct Editor {
     name: Option<String>,
 
     /// Owned contents of the file being edited.
-    content: Vec<String>,
+    content: Vec<LineBuffer>,
 
     /// Whether the `content` was modified since it was last retrieved.
     dirty: bool,
@@ -158,16 +159,12 @@ impl Editor {
         let mut printed_rows = 0;
         while row < self.content.len() && printed_rows < console_size.y - 1 {
             let line = &self.content[row];
-            let char_indices = line.char_indices().collect::<Vec<_>>();
-            let line_len = char_indices.len();
+            let line_len = line.len();
             if line_len > self.viewport_pos.col {
-                let last = if line_len <= self.viewport_pos.col + usize::from(console_size.x) {
-                    line.len()
-                } else {
-                    char_indices[self.viewport_pos.col + usize::from(console_size.x)].0
-                };
-                let view = &line[(char_indices[self.viewport_pos.col].0)..last];
-                console.print(view)?;
+                console.print(&line.range(
+                    self.viewport_pos.col,
+                    self.viewport_pos.col + usize::from(console_size.x),
+                ))?;
             } else {
                 console.print("")?;
             }
@@ -208,7 +205,7 @@ impl Editor {
         let console_size = console.size()?;
 
         if self.content.is_empty() {
-            self.content.push(String::new());
+            self.content.push(LineBuffer::new());
         }
 
         let mut need_refresh = true;
@@ -228,6 +225,7 @@ impl Editor {
                 }
                 need_refresh = true;
             }
+
             if self.file_pos.col < self.viewport_pos.col {
                 self.viewport_pos.col = self.file_pos.col;
                 need_refresh = true;
@@ -329,19 +327,12 @@ impl Editor {
                     let mut buf = [0; 4];
 
                     let line = &mut self.content[self.file_pos.line];
-                    let char_indices = line.char_indices().collect::<Vec<_>>();
-                    if self.file_pos.col < char_indices.len() {
+                    if self.file_pos.col < line.len() {
                         // TODO(jmmv): Refresh only the affected line.
                         need_refresh = true;
                     }
-                    let insert_pos = if self.file_pos.col < char_indices.len() {
-                        // insert at right position in the string
-                        char_indices[self.file_pos.col].0
-                    } else {
-                        // insert at end
-                        line.len()
-                    };
-                    line.insert(insert_pos, ch);
+
+                    line.insert(self.file_pos.col, ch);
                     self.file_pos.col += 1;
                     self.insert_col = self.file_pos.col;
 
@@ -372,10 +363,13 @@ impl Editor {
                     let indent_len = indent.len();
                     if self.file_pos.line < self.content.len() - 1 {
                         let new = self.content[self.file_pos.line].split_off(self.file_pos.col);
-                        self.content.insert(self.file_pos.line + 1, indent + &new);
+                        self.content.insert(
+                            self.file_pos.line + 1,
+                            LineBuffer::from(indent + &new.into_inner()),
+                        );
                         need_refresh = true;
                     } else {
-                        self.content.insert(self.file_pos.line + 1, indent);
+                        self.content.insert(self.file_pos.line + 1, indent.into());
                     }
                     self.file_pos.col = indent_len;
                     self.file_pos.line += 1;
@@ -389,8 +383,7 @@ impl Editor {
 
                 Key::Tab => {
                     let line = &mut self.content[self.file_pos.line];
-                    let char_indices = line.char_indices().collect::<Vec<_>>();
-                    if self.file_pos.col < char_indices.len() {
+                    if self.file_pos.col < line.len() {
                         // TODO(jmmv): Refresh only the affected line.
                         need_refresh = true;
                     }
@@ -400,14 +393,7 @@ impl Editor {
                     for _ in 0..new_text.capacity() {
                         new_text.push(' ');
                     }
-                    let insert_pos = if self.file_pos.col < char_indices.len() {
-                        // insert at right position in the string
-                        char_indices[self.file_pos.col].0
-                    } else {
-                        // insert at end
-                        line.len()
-                    };
-                    line.insert_str(insert_pos, &new_text);
+                    line.insert_str(self.file_pos.col, &new_text);
                     self.file_pos.col = new_pos;
                     self.insert_col = self.file_pos.col;
                     if !need_refresh {
@@ -440,7 +426,7 @@ impl Program for Editor {
 
     fn load(&mut self, name: Option<&str>, text: &str) {
         self.name = name.map(str::to_owned);
-        self.content = text.lines().map(|l| l.to_owned()).collect();
+        self.content = text.lines().map(|l| LineBuffer::from(l)).collect();
         self.dirty = false;
         self.viewport_pos = FilePos::default();
         self.file_pos = FilePos::default();
@@ -457,7 +443,9 @@ impl Program for Editor {
     }
 
     fn text(&self) -> String {
-        self.content.iter().fold(String::new(), |contents, line| contents + line + "\n")
+        self.content
+            .iter()
+            .fold(String::new(), |contents, line| contents + &line.to_string() + "\n")
     }
 }
 
