@@ -21,7 +21,7 @@ use std::io;
 use super::line_buffer::LineBuffer;
 
 /// Character to print when typing a secure string.
-const SECURE_CHAR: u8 = b'*';
+const SECURE_CHAR: char = '*';
 
 /// Refreshes the current input line to display `line` assuming that the cursor is currently
 /// offset by `pos` characters from the beginning of the input and that the previous line was
@@ -37,12 +37,12 @@ fn update_line(
         console.move_within_line(-(pos as i16))?;
     }
     if !line.is_empty() {
-        console.write(line.as_bytes())?;
+        console.write(&line.to_string())?;
     }
     let line_len = line.len();
     if line_len < clear_len {
         let diff = clear_len - line_len;
-        console.write(&vec![b' '; diff])?;
+        console.write(&std::iter::repeat(" ").take(diff).collect::<String>())?;
         console.move_within_line(-(diff as i16))?;
     }
     console.show_cursor()
@@ -61,9 +61,9 @@ async fn read_line_interactive(
     let mut line = LineBuffer::from(previous);
     if !prompt.is_empty() || !line.is_empty() {
         if echo {
-            console.write(format!("{}{}", prompt, line).as_bytes())?;
+            console.write(&format!("{}{}", prompt, line))?;
         } else {
-            console.write(format!("{}{}", prompt, "*".repeat(line.len())).as_bytes())?;
+            console.write(&format!("{}{}", prompt, "*".repeat(line.len())))?;
         }
         console.sync_now()?;
     }
@@ -145,11 +145,15 @@ async fn read_line_interactive(
                     console.hide_cursor()?;
                     console.move_within_line(-1)?;
                     if echo {
-                        console.write(line.end(pos).as_bytes())?;
+                        console.write(&line.end(pos))?;
                     } else {
-                        console.write(&vec![SECURE_CHAR; line.len() - pos])?;
+                        console.write(
+                            &std::iter::repeat(SECURE_CHAR)
+                                .take(line.len() - pos)
+                                .collect::<String>(),
+                        )?;
                     }
-                    console.write(&[b' '])?;
+                    console.write(" ")?;
                     console.move_within_line(-((line.len() - pos) as i16 + 1))?;
                     console.show_cursor()?;
                     line.remove(pos - 1);
@@ -181,20 +185,25 @@ async fn read_line_interactive(
                     console.hide_cursor()?;
                     if echo {
                         let mut buf = [0u8; 4];
-                        console.write(ch.encode_utf8(&mut buf).as_bytes())?;
-                        console.write(line.end(pos).as_bytes())?;
+                        console.write(ch.encode_utf8(&mut buf))?;
+                        console.write(&line.end(pos))?;
                     } else {
-                        console.write(&vec![SECURE_CHAR; line_len - pos + 1])?;
+                        console.write(
+                            &std::iter::repeat(SECURE_CHAR)
+                                .take(line_len - pos + 1)
+                                .collect::<String>(),
+                        )?;
                     }
                     console.move_within_line(-((line_len - pos) as i16))?;
                     console.show_cursor()?;
                     line.insert(pos, ch);
                 } else {
+                    let mut buf = [0u8; 4];
+
                     if echo {
-                        let mut buf = [0u8; 4];
-                        console.write(ch.encode_utf8(&mut buf).as_bytes())?;
+                        console.write(ch.encode_utf8(&mut buf))?;
                     } else {
-                        console.write(&[SECURE_CHAR])?;
+                        console.write(SECURE_CHAR.encode_utf8(&mut buf))?;
                     }
                     line.insert(line_len, ch);
                 }
@@ -378,12 +387,13 @@ mod tests {
         }
 
         /// Adds a bunch of `bytes` as separate console writes to the expected output.
-        fn add_output_bytes(mut self, bytes: &'static [u8]) -> Self {
+        fn add_output_bytes(mut self, bytes: &'static str) -> Self {
             if bytes.is_empty() {
-                self.exp_output.push(CapturedOut::Write(vec![]))
+                self.exp_output.push(CapturedOut::Write("".to_string()))
             } else {
-                for b in bytes.iter() {
-                    self.exp_output.push(CapturedOut::Write(vec![*b]))
+                for b in bytes.chars() {
+                    let mut buf = [0u8; 4];
+                    self.exp_output.push(CapturedOut::Write(b.encode_utf8(&mut buf).to_string()));
                 }
             }
             self
@@ -466,18 +476,18 @@ mod tests {
     fn test_read_line_with_prompt() {
         ReadLineInteractiveTest::default()
             .set_prompt("Ready> ")
-            .add_output(CapturedOut::Write(b"Ready> ".to_vec()))
+            .add_output(CapturedOut::Write("Ready> ".to_string()))
             .add_output(CapturedOut::SyncNow)
             // -
             .add_key_chars("hello")
-            .add_output_bytes(b"hello")
+            .add_output_bytes("hello")
             // -
             .set_line("hello")
             .accept();
 
         ReadLineInteractiveTest::default()
             .set_prompt("Cannot delete")
-            .add_output(CapturedOut::Write(b"Cannot delete".to_vec()))
+            .add_output(CapturedOut::Write("Cannot delete".to_string()))
             .add_output(CapturedOut::SyncNow)
             // -
             .add_key(Key::Backspace)
@@ -488,18 +498,18 @@ mod tests {
     fn test_read_line_interactive_trailing_input() {
         ReadLineInteractiveTest::default()
             .add_key_chars("hello")
-            .add_output_bytes(b"hello")
+            .add_output_bytes("hello")
             // -
             .set_line("hello")
             .accept();
 
         ReadLineInteractiveTest::default()
             .set_previous("123")
-            .add_output(CapturedOut::Write(b"123".to_vec()))
+            .add_output(CapturedOut::Write("123".to_string()))
             .add_output(CapturedOut::SyncNow)
             // -
             .add_key_chars("hello")
-            .add_output_bytes(b"hello")
+            .add_output_bytes("hello")
             // -
             .set_line("123hello")
             .accept();
@@ -509,7 +519,7 @@ mod tests {
     fn test_read_line_interactive_middle_input() {
         ReadLineInteractiveTest::default()
             .add_key_chars("some text")
-            .add_output_bytes(b"some text")
+            .add_output_bytes("some text")
             // -
             .add_key(Key::ArrowLeft)
             .add_output(CapturedOut::MoveWithinLine(-1))
@@ -525,15 +535,15 @@ mod tests {
             // -
             .add_key_chars(" ")
             .add_output(CapturedOut::HideCursor)
-            .add_output_bytes(b" ")
-            .add_output(CapturedOut::Write(b"xt".to_vec()))
+            .add_output_bytes(" ")
+            .add_output(CapturedOut::Write("xt".to_string()))
             .add_output(CapturedOut::MoveWithinLine(-2))
             .add_output(CapturedOut::ShowCursor)
             // -
             .add_key_chars(".")
             .add_output(CapturedOut::HideCursor)
-            .add_output_bytes(b".")
-            .add_output(CapturedOut::Write(b"xt".to_vec()))
+            .add_output_bytes(".")
+            .add_output(CapturedOut::Write("xt".to_string()))
             .add_output(CapturedOut::MoveWithinLine(-2))
             .add_output(CapturedOut::ShowCursor)
             // -
@@ -546,18 +556,18 @@ mod tests {
         // most basic
         ReadLineInteractiveTest::default()
             .add_key_chars("é")
-            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            .add_output(CapturedOut::Write("é".to_string()))
             .set_line("é")
             .accept();
         // remove single 2-bytes char
         ReadLineInteractiveTest::default()
             .add_key_chars("é")
-            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            .add_output(CapturedOut::Write("é".to_string()))
             .add_key(Key::Backspace)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-1))
-            .add_output_bytes(b"")
-            .add_output_bytes(b" ")
+            .add_output_bytes("")
+            .add_output_bytes(" ")
             .add_output(CapturedOut::MoveWithinLine(-1))
             .add_output(CapturedOut::ShowCursor)
             .set_line("")
@@ -565,13 +575,13 @@ mod tests {
         // 2 2-bytes char, remove the last
         ReadLineInteractiveTest::default()
             .add_key_chars("àé")
-            .add_output(CapturedOut::Write("à".as_bytes().to_vec()))
-            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            .add_output(CapturedOut::Write("à".to_string()))
+            .add_output(CapturedOut::Write("é".to_string()))
             .add_key(Key::Backspace)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-1))
-            .add_output_bytes(b"")
-            .add_output_bytes(b" ")
+            .add_output_bytes("")
+            .add_output_bytes(" ")
             .add_output(CapturedOut::MoveWithinLine(-1))
             .add_output(CapturedOut::ShowCursor)
             .set_line("à")
@@ -580,8 +590,8 @@ mod tests {
         // "à" "é" left left left right backspace (correct 2-bytes chars jumps and string manipulation)
         ReadLineInteractiveTest::default()
             .add_key_chars("àé")
-            .add_output(CapturedOut::Write("à".as_bytes().to_vec()))
-            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
+            .add_output(CapturedOut::Write("à".to_string()))
+            .add_output(CapturedOut::Write("é".to_string()))
             .add_key(Key::ArrowLeft)
             .add_output(CapturedOut::MoveWithinLine(-1))
             .add_key(Key::ArrowLeft)
@@ -592,8 +602,8 @@ mod tests {
             .add_key(Key::Backspace)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-1))
-            .add_output(CapturedOut::Write("é".as_bytes().to_vec()))
-            .add_output_bytes(b" ")
+            .add_output(CapturedOut::Write("é".to_string()))
+            .add_output_bytes(" ")
             .add_output(CapturedOut::MoveWithinLine(-2))
             .add_output(CapturedOut::ShowCursor)
             .set_line("é")
@@ -604,18 +614,18 @@ mod tests {
     fn test_read_line_interactive_trailing_backspace() {
         ReadLineInteractiveTest::default()
             .add_key_chars("bar")
-            .add_output_bytes(b"bar")
+            .add_output_bytes("bar")
             // -
             .add_key(Key::Backspace)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-1))
-            .add_output_bytes(b"")
-            .add_output_bytes(b" ")
+            .add_output_bytes("")
+            .add_output_bytes(" ")
             .add_output(CapturedOut::MoveWithinLine(-1))
             .add_output(CapturedOut::ShowCursor)
             // -
             .add_key_chars("zar")
-            .add_output_bytes(b"zar")
+            .add_output_bytes("zar")
             // -
             .set_line("bazar")
             .accept();
@@ -625,7 +635,7 @@ mod tests {
     fn test_read_line_interactive_middle_backspace() {
         ReadLineInteractiveTest::default()
             .add_key_chars("has a tYpo")
-            .add_output_bytes(b"has a tYpo")
+            .add_output_bytes("has a tYpo")
             // -
             .add_key(Key::ArrowLeft)
             .add_output(CapturedOut::MoveWithinLine(-1))
@@ -636,15 +646,15 @@ mod tests {
             .add_key(Key::Backspace)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-1))
-            .add_output(CapturedOut::Write(b"po".to_vec()))
-            .add_output_bytes(b" ")
+            .add_output(CapturedOut::Write("po".to_string()))
+            .add_output_bytes(" ")
             .add_output(CapturedOut::MoveWithinLine(-3))
             .add_output(CapturedOut::ShowCursor)
             // -
             .add_key_chars("y")
             .add_output(CapturedOut::HideCursor)
-            .add_output_bytes(b"y")
-            .add_output(CapturedOut::Write(b"po".to_vec()))
+            .add_output_bytes("y")
+            .add_output(CapturedOut::Write("po".to_string()))
             .add_output(CapturedOut::MoveWithinLine(-2))
             .add_output(CapturedOut::ShowCursor)
             // -
@@ -656,7 +666,7 @@ mod tests {
     fn test_read_line_interactive_test_move_bounds() {
         ReadLineInteractiveTest::default()
             .set_previous("12")
-            .add_output(CapturedOut::Write(b"12".to_vec()))
+            .add_output(CapturedOut::Write("12".to_string()))
             .add_output(CapturedOut::SyncNow)
             // -
             .add_key(Key::ArrowLeft)
@@ -680,7 +690,7 @@ mod tests {
             .add_key(Key::ArrowRight)
             // -
             .add_key_chars("3")
-            .add_output_bytes(b"3")
+            .add_output_bytes("3")
             // -
             .set_line("123")
             .accept();
@@ -690,7 +700,7 @@ mod tests {
     fn test_read_line_interactive_test_home_end() {
         ReadLineInteractiveTest::default()
             .set_previous("sample text")
-            .add_output(CapturedOut::Write(b"sample text".to_vec()))
+            .add_output(CapturedOut::Write("sample text".to_string()))
             .add_output(CapturedOut::SyncNow)
             // -
             .add_key(Key::End)
@@ -702,8 +712,8 @@ mod tests {
             // -
             .add_key(Key::Char('>'))
             .add_output(CapturedOut::HideCursor)
-            .add_output_bytes(b">")
-            .add_output(CapturedOut::Write(b"sample text".to_vec()))
+            .add_output_bytes(">")
+            .add_output(CapturedOut::Write("sample text".to_string()))
             .add_output(CapturedOut::MoveWithinLine(-11))
             .add_output(CapturedOut::ShowCursor)
             // -
@@ -711,7 +721,7 @@ mod tests {
             .add_output(CapturedOut::MoveWithinLine(11))
             // -
             .add_key(Key::Char('<'))
-            .add_output_bytes(b"<")
+            .add_output_bytes("<")
             // -
             .add_key(Key::ArrowLeft)
             .add_output(CapturedOut::MoveWithinLine(-1))
@@ -731,8 +741,8 @@ mod tests {
             .add_key(Key::Backspace)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-1))
-            .add_output(CapturedOut::Write(b"text<".to_vec()))
-            .add_output_bytes(b" ")
+            .add_output(CapturedOut::Write("text<".to_string()))
+            .add_output_bytes(" ")
             .add_output(CapturedOut::MoveWithinLine(-6))
             .add_output(CapturedOut::ShowCursor)
             // -
@@ -744,14 +754,14 @@ mod tests {
     fn test_read_line_interactive_horizontal_scrolling_not_implemented() {
         ReadLineInteractiveTest::default()
             .add_key_chars("1234567890123456789")
-            .add_output_bytes(b"12345678901234")
+            .add_output_bytes("12345678901234")
             // -
             .set_line("12345678901234")
             .accept();
 
         ReadLineInteractiveTest::default()
             .add_key_chars("1234567890123456789")
-            .add_output_bytes(b"12345678901234")
+            .add_output_bytes("12345678901234")
             // -
             .add_key(Key::ArrowLeft)
             .add_output(CapturedOut::MoveWithinLine(-1))
@@ -767,11 +777,11 @@ mod tests {
         ReadLineInteractiveTest::default()
             .set_prompt("12345")
             .set_previous("67890")
-            .add_output(CapturedOut::Write(b"1234567890".to_vec()))
+            .add_output(CapturedOut::Write("1234567890".to_string()))
             .add_output(CapturedOut::SyncNow)
             // -
             .add_key_chars("1234567890")
-            .add_output_bytes(b"1234")
+            .add_output_bytes("1234")
             // -
             .set_line("678901234")
             .accept();
@@ -789,17 +799,17 @@ mod tests {
             .set_history(vec![], vec!["foobarbaz".to_owned()])
             //
             .add_key_chars("foo")
-            .add_output_bytes(b"foo")
+            .add_output_bytes("foo")
             //
             .add_key(Key::ArrowUp)
             //
             .add_key_chars("bar")
-            .add_output_bytes(b"bar")
+            .add_output_bytes("bar")
             //
             .add_key(Key::ArrowDown)
             //
             .add_key_chars("baz")
-            .add_output_bytes(b"baz")
+            .add_output_bytes("baz")
             //
             .set_line("foobarbaz")
             .accept();
@@ -811,13 +821,13 @@ mod tests {
             .set_history(vec!["first".to_owned()], vec!["first".to_owned()])
             // -
             .add_key_chars("x")
-            .add_output(CapturedOut::Write(b"x".to_vec()))
+            .add_output(CapturedOut::Write("x".to_string()))
             // -
             .add_key(Key::Backspace)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-1))
-            .add_output_bytes(b"")
-            .add_output_bytes(b" ")
+            .add_output_bytes("")
+            .add_output_bytes(" ")
             .add_output(CapturedOut::MoveWithinLine(-1))
             .add_output(CapturedOut::ShowCursor)
             // -
@@ -828,7 +838,7 @@ mod tests {
     fn test_read_line_interactive_history_navigate_up_down_end_of_line() {
         ReadLineInteractiveTest::default()
             .set_prompt("? ")
-            .add_output(CapturedOut::Write(b"? ".to_vec()))
+            .add_output(CapturedOut::Write("? ".to_string()))
             .add_output(CapturedOut::SyncNow)
             //
             .set_history(
@@ -838,44 +848,44 @@ mod tests {
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::Write(b"last".to_vec()))
+            .add_output(CapturedOut::Write("last".to_string()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-(b"last".len() as i16)))
-            .add_output(CapturedOut::Write(b"long second line".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-("last".len() as i16)))
+            .add_output(CapturedOut::Write("long second line".to_string()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-(b"long second line".len() as i16)))
-            .add_output(CapturedOut::Write(b"first".to_vec()))
-            .add_output(CapturedOut::Write(b"           ".to_vec()))
-            .add_output(CapturedOut::MoveWithinLine(-(b"           ".len() as i16)))
+            .add_output(CapturedOut::MoveWithinLine(-("long second line".len() as i16)))
+            .add_output(CapturedOut::Write("first".to_string()))
+            .add_output(CapturedOut::Write("           ".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-("           ".len() as i16)))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
             //
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-(b"first".len() as i16)))
-            .add_output(CapturedOut::Write(b"long second line".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-("first".len() as i16)))
+            .add_output(CapturedOut::Write("long second line".to_string()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-(b"long second line".len() as i16)))
-            .add_output(CapturedOut::Write(b"last".to_vec()))
-            .add_output(CapturedOut::Write(b"            ".to_vec()))
-            .add_output(CapturedOut::MoveWithinLine(-(b"            ".len() as i16)))
+            .add_output(CapturedOut::MoveWithinLine(-("long second line".len() as i16)))
+            .add_output(CapturedOut::Write("last".to_string()))
+            .add_output(CapturedOut::Write("            ".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-("            ".len() as i16)))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-(b"last".len() as i16)))
-            .add_output(CapturedOut::Write(b"    ".to_vec()))
-            .add_output(CapturedOut::MoveWithinLine(-(b"    ".len() as i16)))
+            .add_output(CapturedOut::MoveWithinLine(-("last".len() as i16)))
+            .add_output(CapturedOut::Write("    ".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-("    ".len() as i16)))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
@@ -887,7 +897,7 @@ mod tests {
     fn test_read_line_interactive_history_navigate_up_down_middle_of_line() {
         ReadLineInteractiveTest::default()
             .set_prompt("? ")
-            .add_output(CapturedOut::Write(b"? ".to_vec()))
+            .add_output(CapturedOut::Write("? ".to_string()))
             .add_output(CapturedOut::SyncNow)
             //
             .set_history(
@@ -897,13 +907,13 @@ mod tests {
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::Write(b"zzzz".to_vec()))
+            .add_output(CapturedOut::Write("zzzz".to_string()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-(b"zzzz".len() as i16)))
-            .add_output(CapturedOut::Write(b"long-line".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-("zzzz".len() as i16)))
+            .add_output(CapturedOut::Write("long-line".to_string()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowLeft)
@@ -917,18 +927,18 @@ mod tests {
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-(b"long-line".len() as i16) + 4))
-            .add_output(CapturedOut::Write(b"a".to_vec()))
-            .add_output(CapturedOut::Write(b"        ".to_vec()))
-            .add_output(CapturedOut::MoveWithinLine(-(b"        ".len() as i16)))
+            .add_output(CapturedOut::MoveWithinLine(-("long-line".len() as i16) + 4))
+            .add_output(CapturedOut::Write("a".to_string()))
+            .add_output(CapturedOut::Write("        ".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-("        ".len() as i16)))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
             //
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-(b"a".len() as i16)))
-            .add_output(CapturedOut::Write(b"long-line".to_vec()))
+            .add_output(CapturedOut::MoveWithinLine(-("a".len() as i16)))
+            .add_output(CapturedOut::Write("long-line".to_string()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowLeft)
@@ -946,17 +956,17 @@ mod tests {
             //
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-(b"long-line".len() as i16) + 6))
-            .add_output(CapturedOut::Write(b"zzzz".to_vec()))
-            .add_output(CapturedOut::Write(b"     ".to_vec()))
-            .add_output(CapturedOut::MoveWithinLine(-(b"     ".len() as i16)))
+            .add_output(CapturedOut::MoveWithinLine(-("long-line".len() as i16) + 6))
+            .add_output(CapturedOut::Write("zzzz".to_string()))
+            .add_output(CapturedOut::Write("     ".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-("     ".len() as i16)))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-(b"zzzz".len() as i16)))
-            .add_output(CapturedOut::Write(b"    ".to_vec()))
-            .add_output(CapturedOut::MoveWithinLine(-(b"    ".len() as i16)))
+            .add_output(CapturedOut::MoveWithinLine(-("zzzz".len() as i16)))
+            .add_output(CapturedOut::Write("    ".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-("    ".len() as i16)))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
@@ -968,7 +978,7 @@ mod tests {
     fn test_read_line_interactive_history_navigate_and_edit() {
         ReadLineInteractiveTest::default()
             .set_prompt("? ")
-            .add_output(CapturedOut::Write(b"? ".to_vec()))
+            .add_output(CapturedOut::Write("? ".to_string()))
             .add_output(CapturedOut::SyncNow)
             //
             .set_history(
@@ -983,13 +993,13 @@ mod tests {
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::Write(b"third".to_vec()))
+            .add_output(CapturedOut::Write("third".to_string()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-5))
-            .add_output(CapturedOut::Write(b"second".to_vec()))
+            .add_output(CapturedOut::Write("second".to_string()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowLeft)
@@ -1003,8 +1013,8 @@ mod tests {
             // -
             .add_key_chars(" ")
             .add_output(CapturedOut::HideCursor)
-            .add_output_bytes(b" ")
-            .add_output(CapturedOut::Write(b"ond".to_vec()))
+            .add_output_bytes(" ")
+            .add_output(CapturedOut::Write("ond".to_string()))
             .add_output(CapturedOut::MoveWithinLine(-3))
             .add_output(CapturedOut::ShowCursor)
             // -
@@ -1016,7 +1026,7 @@ mod tests {
     fn test_read_line_ignored_keys() {
         ReadLineInteractiveTest::default()
             .add_key_chars("not ")
-            .add_output_bytes(b"not ")
+            .add_output_bytes("not ")
             // -
             .add_key(Key::Escape)
             .add_key(Key::PageDown)
@@ -1024,7 +1034,7 @@ mod tests {
             .add_key(Key::Tab)
             // -
             .add_key_chars("affected")
-            .add_output_bytes(b"affected")
+            .add_output_bytes("affected")
             // -
             .set_line("not affected")
             .accept();
@@ -1036,11 +1046,11 @@ mod tests {
             .set_echo(false)
             .set_prompt("> ")
             .set_previous("pass1234")
-            .add_output(CapturedOut::Write(b"> ********".to_vec()))
+            .add_output(CapturedOut::Write("> ********".to_string()))
             .add_output(CapturedOut::SyncNow)
             // -
             .add_key_chars("56")
-            .add_output_bytes(b"**")
+            .add_output_bytes("**")
             // -
             .add_key(Key::ArrowLeft)
             .add_output(CapturedOut::MoveWithinLine(-1))
@@ -1051,14 +1061,14 @@ mod tests {
             .add_key(Key::Backspace)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-1))
-            .add_output(CapturedOut::Write(b"**".to_vec()))
-            .add_output_bytes(b" ")
+            .add_output(CapturedOut::Write("**".to_string()))
+            .add_output_bytes(" ")
             .add_output(CapturedOut::MoveWithinLine(-3))
             .add_output(CapturedOut::ShowCursor)
             // -
             .add_output(CapturedOut::HideCursor)
             .add_key_chars("7")
-            .add_output(CapturedOut::Write(b"***".to_vec()))
+            .add_output(CapturedOut::Write("***".to_string()))
             .add_output(CapturedOut::MoveWithinLine(-2))
             .add_output(CapturedOut::ShowCursor)
             // -
@@ -1076,10 +1086,10 @@ mod tests {
         assert_eq!("15", &line);
         assert_eq!(
             &[
-                CapturedOut::Write(vec![b'>', b' ']),
+                CapturedOut::Write("> ".to_string()),
                 CapturedOut::SyncNow,
-                CapturedOut::Write(vec![b'*']),
-                CapturedOut::Write(vec![b'*']),
+                CapturedOut::Write("*".to_string()),
+                CapturedOut::Write("*".to_string()),
                 CapturedOut::Print("".to_owned()),
             ],
             console.captured_out()

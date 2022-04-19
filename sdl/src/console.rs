@@ -16,6 +16,7 @@
 //! Implementation of the EndBASIC console using SDL.
 
 use async_trait::async_trait;
+use endbasic_std::console::line_buffer::LineBuffer;
 use endbasic_std::console::{ansi_color_to_rgb, CharsXY, ClearType, Console, Key, PixelsXY};
 use once_cell::sync::Lazy;
 use sdl2::event::Event;
@@ -27,7 +28,6 @@ use sdl2::surface::{Surface, SurfaceContext};
 use sdl2::ttf::{Font, FontError, InitError, Sdl2TtfContext};
 use sdl2::video::{Window, WindowBuildError};
 use sdl2::{EventPump, Sdl};
-use std::cmp;
 use std::convert::TryFrom;
 use std::io;
 use std::path::Path;
@@ -667,10 +667,10 @@ impl SdlConsole {
     /// Renders the given `bytes` of text at the `start` position.
     ///
     /// Does not handle overflow nor scrolling, and also does not present the canvas.
-    fn raw_write(&mut self, bytes: &[u8], start: PixelsXY) -> io::Result<()> {
+    fn raw_write(&mut self, bytes: &str, start: PixelsXY) -> io::Result<()> {
         debug_assert!(!bytes.is_empty(), "SDL does not like empty strings");
 
-        let len = match u16::try_from(bytes.len()) {
+        let len = match u16::try_from(bytes.chars().count()) {
             Ok(v) => v,
             Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "String too long")),
         };
@@ -678,7 +678,7 @@ impl SdlConsole {
         let surface = self
             .font
             .font
-            .render_latin1(bytes)
+            .render(bytes)
             .shaded(self.fg_color, self.bg_color)
             .map_err(font_error_to_io_error)?;
         let texture = self
@@ -697,22 +697,29 @@ impl SdlConsole {
         Ok(())
     }
 
-    /// Renders the given `bytes` of text at the current cursor position, with wrapping and
+    /// Renders the given text at the current cursor position, with wrapping and
     /// scrolling if necessary.
     ///
     /// Does not present the canvas.
-    fn raw_write_wrapped(&mut self, mut bytes: &[u8]) -> io::Result<()> {
-        debug_assert!(!bytes.is_empty(), "SDL does not like empty strings");
+    fn raw_write_wrapped(&mut self, text: &str) -> io::Result<()> {
+        debug_assert!(!text.is_empty(), "SDL does not like empty strings");
+
+        let mut line_buffer = LineBuffer::from(text);
 
         loop {
             let fit_chars = self.size_chars.x - self.cursor_pos.x;
-            let partial = &bytes[0..cmp::min(bytes.len(), usize::from(fit_chars))];
-            self.raw_write(partial, self.cursor_pos.clamped_mul(self.font.glyph_size))?;
-            self.cursor_pos.x += u16::try_from(partial.len())
-                .expect("Partial length was computed to fit on the screen");
 
-            bytes = &bytes[partial.len()..];
-            if bytes.is_empty() {
+            let remaining = line_buffer.split_off(usize::from(fit_chars));
+            let len = line_buffer.len();
+            self.raw_write(
+                &line_buffer.into_inner(),
+                self.cursor_pos.clamped_mul(self.font.glyph_size),
+            )?;
+            self.cursor_pos.x +=
+                u16::try_from(len).expect("Partial length was computed to fit on the screen");
+
+            line_buffer = remaining;
+            if line_buffer.is_empty() {
                 break;
             } else {
                 self.open_line()?;
@@ -897,7 +904,7 @@ impl Console for SdlConsole {
 
         self.clear_cursor()?;
         if !text.is_empty() {
-            self.raw_write_wrapped(text.as_bytes())?;
+            self.raw_write_wrapped(text)?;
         }
         self.open_line()?;
         self.draw_cursor()?;
@@ -944,15 +951,15 @@ impl Console for SdlConsole {
         Ok(self.size_chars)
     }
 
-    fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        debug_assert!(!endbasic_std::console::has_control_chars_u8(bytes));
+    fn write(&mut self, text: &str) -> io::Result<()> {
+        debug_assert!(!endbasic_std::console::has_control_chars_u8(text.as_bytes()));
 
-        if bytes.is_empty() {
+        if text.is_empty() {
             return Ok(());
         }
 
         self.clear_cursor()?;
-        self.raw_write_wrapped(bytes)?;
+        self.raw_write_wrapped(text)?;
         self.draw_cursor()?;
         self.present_canvas()
     }
@@ -1292,18 +1299,18 @@ mod tests {
         test.console().clear(ClearType::All).unwrap();
         test.console().print("After clearing the console in blue").unwrap();
 
-        test.console().write(b"A line that will be erased").unwrap();
+        test.console().write("A line that will be erased").unwrap();
         test.console().clear(ClearType::CurrentLine).unwrap();
 
-        test.console().write(b"A line with corrections1.").unwrap();
+        test.console().write("A line with corrections1.").unwrap();
         test.console().clear(ClearType::PreviousChar).unwrap();
         test.console().clear(ClearType::PreviousChar).unwrap();
         test.console().print(&"!".to_owned()).unwrap();
 
-        test.console().write(b"Remove part of this").unwrap();
+        test.console().write("Remove part of this").unwrap();
         test.console().move_within_line(-8).unwrap();
         test.console().clear(ClearType::UntilNewLine).unwrap();
-        test.console().write(b" -- done").unwrap();
+        test.console().write(" -- done").unwrap();
 
         test.verify("sdl-clear");
     }
@@ -1313,7 +1320,7 @@ mod tests {
     fn test_sdl_console_move_cursor() {
         let mut test = SdlTest::new();
 
-        test.console().write(b"Move cursor over parts of this text").unwrap();
+        test.console().write("Move cursor over parts of this text").unwrap();
         for _ in 0..15 {
             test.console().move_within_line(-1).unwrap();
         }
@@ -1331,7 +1338,7 @@ mod tests {
 
         test.console().hide_cursor().unwrap();
         test.console().hide_cursor().unwrap();
-        test.console().write(b"Cursor hidden").unwrap();
+        test.console().write("Cursor hidden").unwrap();
 
         test.verify("sdl-hide-cursor");
     }
@@ -1523,7 +1530,7 @@ mod tests {
 
         console.color(None, None).unwrap();
         console.locate(CharsXY { x: 4, y: 22 }).unwrap();
-        console.write(b"Done!").unwrap();
+        console.write("Done!").unwrap();
 
         test.verify("sdl-draw");
     }
@@ -1561,13 +1568,16 @@ mod tests {
         let mut test = SdlTest::new();
 
         let len = usize::from(u16::MAX) + 1;
-        let bytes = vec![b'x'; len];
+        let very_long_string = std::iter::repeat('x').take(len).collect::<String>();
         // We have to reach into raw_write here because the public write() wraps text and would
         // never trigger this problem (until we expose unwrapped writes at a later stage and forget
         // about this corner case).
         assert_eq!(
             io::ErrorKind::InvalidInput,
-            test.console().raw_write(&bytes, PixelsXY { x: 0, y: 0 }).unwrap_err().kind()
+            test.console()
+                .raw_write(&very_long_string, PixelsXY { x: 0, y: 0 })
+                .unwrap_err()
+                .kind()
         );
 
         test.verify("sdl-empty");

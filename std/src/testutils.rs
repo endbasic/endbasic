@@ -65,7 +65,7 @@ pub enum CapturedOut {
     ShowCursor,
 
     /// Represents a call to `Console::write`.
-    Write(Vec<u8>),
+    Write(String),
 
     /// Represents a call to `Console::draw_line`.
     DrawLine(PixelsXY, PixelsXY),
@@ -228,10 +228,10 @@ impl Console for MockConsole {
         Ok(self.size)
     }
 
-    fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        debug_assert!(!console::has_control_chars_u8(bytes));
+    fn write(&mut self, text: &str) -> io::Result<()> {
+        debug_assert!(!console::has_control_chars_u8(text.as_bytes()));
 
-        self.captured_out.push(CapturedOut::Write(bytes.to_owned()));
+        self.captured_out.push(CapturedOut::Write(text.to_owned()));
         Ok(())
     }
 
