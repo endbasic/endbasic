@@ -26,7 +26,6 @@ use async_trait::async_trait;
 use endbasic_std::console::line_buffer::LineBuffer;
 use endbasic_std::console::{ansi_color_to_rgb, CharsXY, ClearType, Console, Key, PixelsXY, RGB};
 use js_sys::Map;
-use std::cmp;
 use std::convert::TryFrom;
 use std::io;
 use wasm_bindgen::prelude::*;
@@ -404,7 +403,7 @@ impl CanvasConsole {
 
     /// Renders the given text at the current cursor position, with wrapping and
     /// scrolling if necessary.
-    fn raw_write_wrapped(&mut self, mut text: &str) -> io::Result<()> {
+    fn raw_write_wrapped(&mut self, text: &str) -> io::Result<()> {
         debug_assert!(!text.is_empty(), "It doesn't make sense to render an empty string");
 
         let mut line_buffer = LineBuffer::from(text);
