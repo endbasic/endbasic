@@ -27,7 +27,6 @@ use endbasic_std::console::{
     ansi_color_to_rgb, CharsXY, ClearType, Console, Key, LineBuffer, PixelsXY, RGB,
 };
 use js_sys::Map;
-use std::cmp;
 use std::convert::TryFrom;
 use std::io;
 use wasm_bindgen::prelude::*;
@@ -358,13 +357,13 @@ impl CanvasConsole {
         Ok(())
     }
 
-    /// Renders the given `bytes` of text at the `start` position.
+    /// Renders the given text at the `start` position.
     ///
     /// Does not handle overflow nor scrolling.
-    fn raw_write(&mut self, bytes: &[u8], start: PixelsXY) -> io::Result<()> {
-        debug_assert!(!bytes.is_empty(), "It doesn't make sense to render an empty string");
+    fn raw_write(&mut self, text: &str, start: PixelsXY) -> io::Result<()> {
+        debug_assert!(!text.is_empty(), "It doesn't make sense to render an empty string");
 
-        let len = match u16::try_from(bytes.len()) {
+        let len = match u16::try_from(text.chars().count()) {
             Ok(v) => v,
             Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Text too long")),
         };
@@ -389,17 +388,10 @@ impl CanvasConsole {
             Ok(height) => height / 2,
             Err(e) => log_and_panic!("Glyph height is too big: {}", e),
         };
-        for b in bytes {
-            let bs = &[*b];
-            let sb = match std::str::from_utf8(bs) {
-                Ok(s) => s,
-                Err(_) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "Text contains invalid characters",
-                    ))
-                }
-            };
+        for ch in text.chars() {
+            let mut buf = [0u8; 4];
+            let sb = ch.encode_utf8(&mut buf);
+
             self.context
                 .fill_text(sb, f64::from(x), f64::from(start.y + y_offset))
                 .map_err(js_value_to_io_error)?;
@@ -410,22 +402,29 @@ impl CanvasConsole {
         Ok(())
     }
 
-    /// Renders the given `bytes` of text at the current cursor position, with wrapping and
+    /// Renders the given text at the current cursor position, with wrapping and
     /// scrolling if necessary.
-    fn raw_write_wrapped(&mut self, mut bytes: &[u8]) -> io::Result<()> {
-        debug_assert!(!bytes.is_empty(), "It doesn't make sense to render an empty string");
+    fn raw_write_wrapped(&mut self, text: &str) -> io::Result<()> {
+        debug_assert!(!text.is_empty(), "It doesn't make sense to render an empty string");
+
+        let mut line_buffer = LineBuffer::from(text);
 
         loop {
             let fit_chars = self.size_chars.x - self.cursor_pos.x;
-            let partial = &bytes[0..cmp::min(bytes.len(), usize::from(fit_chars))];
-            self.raw_write(partial, self.cursor_pos.clamped_mul(self.glyph_size))?;
-            self.cursor_pos.x += match u16::try_from(partial.len()) {
+
+            let remaining = line_buffer.split_off(usize::from(fit_chars));
+            let len = line_buffer.len();
+            self.raw_write(
+                &line_buffer.into_inner(),
+                self.cursor_pos.clamped_mul(self.glyph_size),
+            )?;
+            self.cursor_pos.x += match u16::try_from(len) {
                 Ok(len) => len,
                 Err(e) => log_and_panic!("Partial length was computed to fit on the screen: {}", e),
             };
 
-            bytes = &bytes[partial.len()..];
-            if bytes.is_empty() {
+            line_buffer = remaining;
+            if line_buffer.is_empty() {
                 break;
             } else {
                 self.open_line()?;
@@ -593,7 +592,7 @@ impl Console for CanvasConsole {
 
         self.clear_cursor()?;
         if !text.is_empty() {
-            self.raw_write_wrapped(text.as_bytes())?;
+            self.raw_write_wrapped(text)?;
         }
         self.open_line()?;
         self.draw_cursor()
@@ -622,15 +621,15 @@ impl Console for CanvasConsole {
         Ok(self.size_chars)
     }
 
-    fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        debug_assert!(!endbasic_std::console::has_control_chars_u8(bytes));
+    fn write(&mut self, text: &str) -> io::Result<()> {
+        debug_assert!(!endbasic_std::console::has_control_chars_u8(text.as_bytes()));
 
-        if bytes.is_empty() {
+        if text.is_empty() {
             return Ok(());
         }
 
         self.clear_cursor()?;
-        self.raw_write_wrapped(bytes)?;
+        self.raw_write_wrapped(text)?;
         self.draw_cursor()
     }
 

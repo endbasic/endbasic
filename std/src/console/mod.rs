@@ -202,10 +202,9 @@ pub trait Console {
     /// The returned position represents the first row and column that lay *outside* of the console.
     fn size(&self) -> io::Result<CharsXY>;
 
-    /// Writes the raw `bytes` into the console.
+    /// Writes the text into the console at the position of the cursor.
     ///
-    /// The input `bytes` are not supposed to contain any control characters, such as CR or LF.
-    fn write(&mut self, bytes: &[u8]) -> io::Result<()>;
+    fn write(&mut self, text: &str) -> io::Result<()>;
 
     /// Draws a line from `_x1y1` to `_x2y2` using the current drawing color.
     fn draw_line(&mut self, _x1y1: PixelsXY, _x2y2: PixelsXY) -> io::Result<()> {

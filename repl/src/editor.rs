@@ -139,7 +139,7 @@ impl Editor {
 
         console.locate(CharsXY::new(0, console_size.y - 1))?;
         console.color(STATUS_COLOR.0, STATUS_COLOR.1)?;
-        console.write(status.as_bytes())?;
+        console.write(&status)?;
         Ok(())
     }
 
@@ -337,7 +337,7 @@ impl Editor {
                     self.insert_col = self.file_pos.col;
 
                     if cursor_pos.x < console_size.x - 1 && !need_refresh {
-                        console.write(ch.encode_utf8(&mut buf).as_bytes())?;
+                        console.write(ch.encode_utf8(&mut buf))?;
                     }
 
                     self.dirty = true;
@@ -397,7 +397,7 @@ impl Editor {
                     self.file_pos.col = new_pos;
                     self.insert_col = self.file_pos.col;
                     if !need_refresh {
-                        console.write(new_text.as_bytes())?;
+                        console.write(&new_text)?;
                     }
                     self.dirty = true;
                 }
@@ -510,7 +510,7 @@ mod tests {
                 status.push(' ');
             }
             status += details;
-            self.output.push(CapturedOut::Write(status.as_bytes().to_owned()));
+            self.output.push(CapturedOut::Write(status));
             self
         }
 
@@ -639,15 +639,15 @@ mod tests {
 
         cb.add_input_chars("abcéà");
         ob = ob.set_dirty();
-        ob = ob.add(CapturedOut::Write(b"a".to_vec()));
+        ob = ob.add(CapturedOut::Write("a".to_string()));
         ob = ob.quick_refresh(linecol(0, 1), yx(0, 1));
-        ob = ob.add(CapturedOut::Write(b"b".to_vec()));
+        ob = ob.add(CapturedOut::Write("b".to_string()));
         ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
-        ob = ob.add(CapturedOut::Write(b"c".to_vec()));
+        ob = ob.add(CapturedOut::Write("c".to_string()));
         ob = ob.quick_refresh(linecol(0, 3), yx(0, 3));
-        ob = ob.add(CapturedOut::Write("é".as_bytes().to_vec()));
+        ob = ob.add(CapturedOut::Write("é".to_string()));
         ob = ob.quick_refresh(linecol(0, 4), yx(0, 4));
-        ob = ob.add(CapturedOut::Write("à".as_bytes().to_vec()));
+        ob = ob.add(CapturedOut::Write("à".to_string()));
         ob = ob.quick_refresh(linecol(0, 5), yx(0, 5));
 
         cb.add_input_keys(&[Key::NewLine]);
@@ -657,7 +657,7 @@ mod tests {
         ob = ob.quick_refresh(linecol(2, 0), yx(2, 0));
 
         cb.add_input_chars("2");
-        ob = ob.add(CapturedOut::Write(b"2".to_vec()));
+        ob = ob.add(CapturedOut::Write("2".to_string()));
         ob = ob.quick_refresh(linecol(2, 1), yx(2, 1));
 
         run_editor("", "abcéà\n\n2\n", cb, ob);
@@ -695,11 +695,11 @@ mod tests {
 
         cb.add_input_chars("abc");
         ob = ob.set_dirty();
-        ob = ob.add(CapturedOut::Write(b"a".to_vec()));
+        ob = ob.add(CapturedOut::Write("a".to_string()));
         ob = ob.quick_refresh(linecol(0, 1), yx(0, 1));
-        ob = ob.add(CapturedOut::Write(b"b".to_vec()));
+        ob = ob.add(CapturedOut::Write("b".to_string()));
         ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
-        ob = ob.add(CapturedOut::Write(b"c".to_vec()));
+        ob = ob.add(CapturedOut::Write("c".to_string()));
         ob = ob.quick_refresh(linecol(0, 3), yx(0, 3));
 
         cb.add_input_keys(&[Key::ArrowLeft]);
@@ -745,7 +745,7 @@ mod tests {
 
         cb.add_input_chars(".");
         ob = ob.set_dirty();
-        ob = ob.add(CapturedOut::Write(b".".to_vec()));
+        ob = ob.add(CapturedOut::Write(".".to_string()));
         ob = ob.quick_refresh(linecol(0, 5), yx(0, 5));
 
         run_editor("text", "text.\n", cb, ob);
@@ -868,15 +868,15 @@ mod tests {
 
         cb.add_input_keys(&[Key::Tab]);
         ob = ob.set_dirty();
-        ob = ob.add(CapturedOut::Write(b"    ".to_vec()));
+        ob = ob.add(CapturedOut::Write("    ".to_string()));
         ob = ob.quick_refresh(linecol(0, 4), yx(0, 4));
 
         cb.add_input_chars("x");
-        ob = ob.add(CapturedOut::Write(b"x".to_vec()));
+        ob = ob.add(CapturedOut::Write("x".to_string()));
         ob = ob.quick_refresh(linecol(0, 5), yx(0, 5));
 
         cb.add_input_keys(&[Key::Tab]);
-        ob = ob.add(CapturedOut::Write(b"   ".to_vec()));
+        ob = ob.add(CapturedOut::Write("   ".to_string()));
         ob = ob.quick_refresh(linecol(0, 8), yx(0, 8));
 
         run_editor("", "    x   \n", cb, ob);
@@ -1002,7 +1002,7 @@ mod tests {
         ob = ob.quick_refresh(linecol(3, 1), yx(3, 1));
 
         cb.add_input_keys(&[Key::Char('Z')]);
-        ob = ob.add(CapturedOut::Write(b"Z".to_vec()));
+        ob = ob.add(CapturedOut::Write("Z".to_string()));
         ob = ob.quick_refresh(linecol(3, 2), yx(3, 2));
 
         run_editor("longer\na\nlonger\nb\n", "longer\na\nlongXer\nbZ\n", cb, ob);
@@ -1233,10 +1233,11 @@ mod tests {
         ob = ob.quick_refresh(linecol(1, 0), yx(1, 0));
 
         // Insert characters until the screen's right boundary.
-        for (col, ch) in b"123456789012345678901234567890123456789".iter().enumerate() {
-            cb.add_input_keys(&[Key::Char(*ch as char)]);
+        for (col, ch) in "123456789012345678901234567890123456789".chars().enumerate() {
+            cb.add_input_keys(&[Key::Char(ch)]);
             ob = ob.set_dirty();
-            ob = ob.add(CapturedOut::Write([*ch].to_vec()));
+            let mut buf = [0u8; 4];
+            ob = ob.add(CapturedOut::Write(ch.encode_utf8(&mut buf).to_string()));
             ob = ob.quick_refresh(linecol(1, col + 1), yx(1, u16::try_from(col + 1).unwrap()));
         }
 
