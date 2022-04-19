@@ -109,12 +109,12 @@ impl Console for TrivialConsole {
         Ok(CharsXY::new(columns, lines))
     }
 
-    fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        debug_assert!(!crate::console::has_control_chars_u8(bytes));
+    fn write(&mut self, text: &str) -> io::Result<()> {
+        debug_assert!(!crate::console::has_control_chars_u8(text.as_bytes()));
 
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
-        stdout.write_all(bytes)?;
+        stdout.write_all(text.as_bytes())?;
         self.maybe_flush(stdout)
     }
 

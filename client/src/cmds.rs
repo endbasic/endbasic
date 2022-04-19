@@ -658,9 +658,10 @@ mod tests {
         assert!(!storage.borrow().mounted().contains_key("CLOUD"));
 
         t.get_console().borrow_mut().set_interactive(true);
-        let mut exp_output = vec![CapturedOut::Write(b"Password: ".to_vec()), CapturedOut::SyncNow];
+        let mut exp_output =
+            vec![CapturedOut::Write("Password: ".to_string()), CapturedOut::SyncNow];
         for _ in 0.."the-password".len() {
-            exp_output.push(CapturedOut::Write(vec![b'*']));
+            exp_output.push(CapturedOut::Write("*".to_string()));
         }
         exp_output.push(CapturedOut::Print("".to_owned()));
 

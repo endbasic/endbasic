@@ -62,7 +62,7 @@ pub enum CapturedOut {
     ShowCursor,
 
     /// Represents a call to `Console::write`.
-    Write(Vec<u8>),
+    Write(String),
 
     /// Represents a call to `Console::draw_line`.
     DrawLine(PixelsXY, PixelsXY),
@@ -233,10 +233,10 @@ impl Console for MockConsole {
         Ok(self.size)
     }
 
-    fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        debug_assert!(!console::has_control_chars_u8(bytes));
+    fn write(&mut self, text: &str) -> io::Result<()> {
+        debug_assert!(!console::has_control_chars_u8(text.as_bytes()));
 
-        self.captured_out.push(CapturedOut::Write(bytes.to_owned()));
+        self.captured_out.push(CapturedOut::Write(text.to_owned()));
         Ok(())
     }
 
@@ -277,7 +277,7 @@ pub fn flatten_output(captured_out: Vec<CapturedOut>) -> String {
     let mut flattened = String::new();
     for out in captured_out {
         match out {
-            CapturedOut::Write(bs) => flattened.push_str(str::from_utf8(&bs).unwrap()),
+            CapturedOut::Write(bs) => flattened.push_str(&bs),
             CapturedOut::Print(s) => flattened.push_str(&s),
             _ => (),
         }
