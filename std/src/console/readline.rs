@@ -15,7 +15,7 @@
 
 //! Interactive line reader.
 
-use crate::console::{Console, Key};
+use crate::console::{Console, Key, LineBuffer};
 use std::io;
 
 /// Character to print when typing a secure string.
@@ -28,7 +28,7 @@ fn update_line(
     console: &mut dyn Console,
     pos: usize,
     clear_len: usize,
-    line: &str,
+    line: &LineBuffer,
 ) -> io::Result<()> {
     console.hide_cursor()?;
     if pos > 0 {
@@ -37,7 +37,7 @@ fn update_line(
     if !line.is_empty() {
         console.write(line.as_bytes())?;
     }
-    let line_len = line.char_indices().count();
+    let line_len = line.len();
     if line_len < clear_len {
         let diff = clear_len - line_len;
         console.write(&vec![b' '; diff])?;
@@ -56,7 +56,7 @@ async fn read_line_interactive(
     mut history: Option<&mut Vec<String>>,
     echo: bool,
 ) -> io::Result<String> {
-    let mut line = String::from(previous);
+    let mut line = LineBuffer::from(previous);
     if !prompt.is_empty() || !line.is_empty() {
         if echo {
             console.write(format!("{}{}", prompt, line).as_bytes())?;
@@ -75,11 +75,11 @@ async fn read_line_interactive(
 
     // Insertion position *within* the line, without accounting for the prompt.
     // TODO(zenria): Handle UTF-8 graphemes.
-    let mut pos = line.char_indices().count();
+    let mut pos = line.len();
 
     let mut history_pos = match history.as_mut() {
         Some(history) => {
-            history.push(line.clone());
+            history.push(line.to_string());
             history.len() - 1
         }
         None => 0,
@@ -93,15 +93,15 @@ async fn read_line_interactive(
                         continue;
                     }
 
-                    let clear_len = line.char_indices().count();
+                    let clear_len = line.len();
 
-                    history[history_pos] = line;
+                    history[history_pos] = line.into_inner();
                     history_pos -= 1;
-                    line = history[history_pos].clone();
+                    line = LineBuffer::from(&history[history_pos]);
 
                     update_line(console, pos, clear_len, &line)?;
 
-                    pos = line.char_indices().count();
+                    pos = line.len();
                 }
             }
 
@@ -111,15 +111,15 @@ async fn read_line_interactive(
                         continue;
                     }
 
-                    let clear_len = line.char_indices().count();
+                    let clear_len = line.len();
 
-                    history[history_pos] = line;
+                    history[history_pos] = line.to_string();
                     history_pos += 1;
-                    line = history[history_pos].clone();
+                    line = LineBuffer::from(&history[history_pos]);
 
                     update_line(console, pos, clear_len, &line)?;
 
-                    pos = line.char_indices().count();
+                    pos = line.len();
                 }
             }
 
@@ -131,7 +131,7 @@ async fn read_line_interactive(
             }
 
             Key::ArrowRight => {
-                if pos < line.char_indices().count() {
+                if pos < line.len() {
                     console.move_within_line(1)?;
                     pos += 1;
                 }
@@ -139,20 +139,17 @@ async fn read_line_interactive(
 
             Key::Backspace => {
                 if pos > 0 {
-                    let char_indices = line.char_indices().collect::<Vec<_>>();
                     console.hide_cursor()?;
                     console.move_within_line(-1)?;
                     if echo {
-                        if pos < char_indices.len() {
-                            console.write(line[(char_indices[pos].0)..].as_bytes())?;
-                        }
+                        console.write(line.end(pos).as_bytes())?;
                     } else {
-                        console.write(&vec![SECURE_CHAR; char_indices.len() - pos])?;
+                        console.write(&vec![SECURE_CHAR; line.len() - pos])?;
                     }
                     console.write(&[b' '])?;
-                    console.move_within_line(-((char_indices.len() - pos) as i16 + 1))?;
+                    console.move_within_line(-((line.len() - pos) as i16 + 1))?;
                     console.show_cursor()?;
-                    line.remove(char_indices[pos - 1].0);
+                    line.remove(pos - 1);
                     pos -= 1;
                 }
             }
@@ -169,26 +166,26 @@ async fn read_line_interactive(
             }
 
             Key::Char(ch) => {
-                let char_indices = line.char_indices().collect::<Vec<_>>();
-                debug_assert!(char_indices.len() < width);
-                if char_indices.len() == width - 1 {
+                let line_len = line.len();
+                debug_assert!(line_len < width);
+                if line_len == width - 1 {
                     // TODO(jmmv): Implement support for lines that exceed the width of the input
                     // field (the width of the screen).
                     continue;
                 }
 
-                if pos < char_indices.len() {
+                if pos < line_len {
                     console.hide_cursor()?;
                     if echo {
                         let mut buf = [0u8; 4];
                         console.write(ch.encode_utf8(&mut buf).as_bytes())?;
-                        console.write(line[(char_indices[pos].0)..].as_bytes())?;
+                        console.write(line.end(pos).as_bytes())?;
                     } else {
-                        console.write(&vec![SECURE_CHAR; char_indices.len() - pos + 1])?;
+                        console.write(&vec![SECURE_CHAR; line_len - pos + 1])?;
                     }
-                    console.move_within_line(-((char_indices.len() - pos) as i16))?;
+                    console.move_within_line(-((line_len - pos) as i16))?;
                     console.show_cursor()?;
-                    line.insert(char_indices[pos].0, ch);
+                    line.insert(pos, ch);
                 } else {
                     if echo {
                         let mut buf = [0u8; 4];
@@ -196,13 +193,13 @@ async fn read_line_interactive(
                     } else {
                         console.write(&[SECURE_CHAR])?;
                     }
-                    line.insert(line.len(), ch);
+                    line.insert(line_len, ch);
                 }
                 pos += 1;
             }
 
             Key::End => {
-                let offset = line.char_indices().count() - pos;
+                let offset = line.len() - pos;
                 if offset > 0 {
                     console.move_within_line(offset as i16)?;
                     pos += offset;
@@ -247,10 +244,10 @@ async fn read_line_interactive(
             history.pop();
         } else {
             let last = history.len() - 1;
-            history[last] = line.clone();
+            history[last] = line.to_string();
         }
     }
-    Ok(line)
+    Ok(line.into_inner())
 }
 
 /// Reads a line of text interactively from the console, which is not expected to be a TTY.
@@ -557,6 +554,7 @@ mod tests {
             .add_key(Key::Backspace)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output_bytes(b"")
             .add_output_bytes(b" ")
             .add_output(CapturedOut::MoveWithinLine(-1))
             .add_output(CapturedOut::ShowCursor)
@@ -575,6 +573,7 @@ mod tests {
             .add_key(Key::Backspace)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output_bytes(b"")
             .add_output_bytes(b" ")
             .add_output(CapturedOut::MoveWithinLine(-1))
             .add_output(CapturedOut::ShowCursor)
