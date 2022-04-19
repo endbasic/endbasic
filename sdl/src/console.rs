@@ -664,13 +664,13 @@ impl SdlConsole {
         Ok(())
     }
 
-    /// Renders the given `bytes` of text at the `start` position.
+    /// Renders the given text at the `start` position.
     ///
     /// Does not handle overflow nor scrolling, and also does not present the canvas.
-    fn raw_write(&mut self, bytes: &str, start: PixelsXY) -> io::Result<()> {
-        debug_assert!(!bytes.is_empty(), "SDL does not like empty strings");
+    fn raw_write(&mut self, text: &str, start: PixelsXY) -> io::Result<()> {
+        debug_assert!(!text.is_empty(), "SDL does not like empty strings");
 
-        let len = match u16::try_from(bytes.chars().count()) {
+        let len = match u16::try_from(text.chars().count()) {
             Ok(v) => v,
             Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "String too long")),
         };
@@ -678,7 +678,7 @@ impl SdlConsole {
         let surface = self
             .font
             .font
-            .render(bytes)
+            .render(text)
             .shaded(self.fg_color, self.bg_color)
             .map_err(font_error_to_io_error)?;
         let texture = self
