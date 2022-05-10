@@ -174,7 +174,7 @@ mod tests {
     #[tokio::test]
     async fn test_clouddrive_delete() {
         let service = Rc::from(RefCell::from(MockService::default()));
-        let access_token = service.borrow_mut().do_authenticate().await;
+        let access_token = service.borrow_mut().do_login().await;
         let mut drive = CloudDrive::new(service.clone(), access_token, "the-user");
 
         service.borrow_mut().add_mock_delete_file("the-user", "the-filename", Ok(()));
@@ -186,7 +186,7 @@ mod tests {
     #[tokio::test]
     async fn test_clouddrive_enumerate() {
         let service = Rc::from(RefCell::from(MockService::default()));
-        let access_token = service.borrow_mut().do_authenticate().await;
+        let access_token = service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), access_token, "the-user");
 
         service.borrow_mut().add_mock_get_files(
@@ -219,7 +219,7 @@ mod tests {
     #[tokio::test]
     async fn test_clouddrive_get() {
         let service = Rc::from(RefCell::from(MockService::default()));
-        let access_token = service.borrow_mut().do_authenticate().await;
+        let access_token = service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), access_token, "the-user");
 
         let request = GetFileRequest::default().with_get_content();
@@ -235,7 +235,7 @@ mod tests {
     #[tokio::test]
     async fn test_clouddrive_get_no_content() {
         let service = Rc::from(RefCell::from(MockService::default()));
-        let access_token = service.borrow_mut().do_authenticate().await;
+        let access_token = service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), access_token, "the-user");
 
         let request = GetFileRequest::default().with_get_content();
@@ -251,7 +251,7 @@ mod tests {
     #[tokio::test]
     async fn test_clouddrive_get_invalid_utf8() {
         let service = Rc::from(RefCell::from(MockService::default()));
-        let access_token = service.borrow_mut().do_authenticate().await;
+        let access_token = service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), access_token, "the-user");
 
         let request = GetFileRequest::default().with_get_content();
@@ -270,7 +270,7 @@ mod tests {
     #[tokio::test]
     async fn test_clouddrive_get_acls() {
         let service = Rc::from(RefCell::from(MockService::default()));
-        let access_token = service.borrow_mut().do_authenticate().await;
+        let access_token = service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), access_token, "the-user");
 
         let request = GetFileRequest::default().with_get_readers();
@@ -288,7 +288,7 @@ mod tests {
     #[tokio::test]
     async fn test_clouddrive_get_acls_no_readers() {
         let service = Rc::from(RefCell::from(MockService::default()));
-        let access_token = service.borrow_mut().do_authenticate().await;
+        let access_token = service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), access_token, "the-user");
 
         let request = GetFileRequest::default().with_get_readers();
@@ -304,7 +304,7 @@ mod tests {
     #[tokio::test]
     async fn test_clouddrive_put_new() {
         let service = Rc::from(RefCell::from(MockService::default()));
-        let access_token = service.borrow_mut().do_authenticate().await;
+        let access_token = service.borrow_mut().do_login().await;
         let mut drive = CloudDrive::new(service.clone(), access_token, "the-user");
 
         let request = PatchFileRequest::default().with_content("some content");
@@ -317,7 +317,7 @@ mod tests {
     #[tokio::test]
     async fn test_clouddrive_put_existing() {
         let service = Rc::from(RefCell::from(MockService::default()));
-        let access_token = service.borrow_mut().do_authenticate().await;
+        let access_token = service.borrow_mut().do_login().await;
         let mut drive = CloudDrive::new(service.clone(), access_token, "the-user");
 
         let request = PatchFileRequest::default().with_content("some content");
@@ -334,7 +334,7 @@ mod tests {
     #[tokio::test]
     async fn test_clouddrive_put_acls() {
         let service = Rc::from(RefCell::from(MockService::default()));
-        let access_token = service.borrow_mut().do_authenticate().await;
+        let access_token = service.borrow_mut().do_login().await;
         let mut drive = CloudDrive::new(service.clone(), access_token, "the-user");
 
         let request = PatchFileRequest::default()
@@ -364,11 +364,12 @@ mod tests {
     fn test_login_and_mount_other_user() {
         let mut t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_login(
-            LoginRequest { data: HashMap::default() },
-            Ok(Ok(LoginResponse { username: MockService::USERNAME.to_owned(), motd: vec![] })),
+            "mock-username",
+            "mock-password",
+            Ok(LoginResponse { access_token: AccessToken::new("random token"), motd: vec![] }),
         );
         t.get_service().borrow_mut().add_mock_get_files(
-            MockService::USERNAME,
+            "mock-username",
             Ok(GetFilesResponse {
                 files: vec![DirectoryEntry {
                     filename: "one".to_owned(),
@@ -393,8 +394,7 @@ mod tests {
         );
         t.run(format!(
             r#"LOGIN "{}", "{}": MOUNT "x", "cloud://user2": DIR "cloud:/": DIR "x:/""#,
-            MockService::USERNAME,
-            MockService::PASSWORD
+            "mock-username", "mock-password",
         ))
         .expect_prints([
             "",

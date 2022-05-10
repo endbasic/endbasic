@@ -22,10 +22,9 @@ use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
 };
-use endbasic_std::console::{read_line, read_line_secure, refill_and_print, Console};
+use endbasic_std::console::{read_line_secure, refill_and_print, Console};
 use endbasic_std::storage::{FileAcls, Storage};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::str;
 
@@ -77,103 +76,27 @@ account is ready.",
         })
     }
 
-    /// Handles user interaction to collect login data that the server needs to complete the login
-    /// process.
-    ///
-    /// `username` contains the name of the user we are trying to log in; `first` indicates if this
-    /// is the first time we called this function for a login operation; and `response` is the error
-    /// response that we got from the server.
-    ///
-    /// The returned hash map's keys match the entries in `response.missing_data`.
-    async fn gather_missing_data(
-        &self,
-        username: &str,
-        first: bool,
-        mut response: ErrorResponse,
-    ) -> Result<HashMap<String, String>, CallError> {
-        if response.missing_data.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Server denied login but did not tell us why",
-            )
-            .into());
-        }
-
-        let mut data = HashMap::new();
-
-        // Automate the handling of the missing "Username" field.  The server should handle this on
-        // its own by getting the username from the registration process but unfortunately it cannot
-        // yet.
-        for i in 0..response.missing_data.len() {
-            if response.missing_data[i] == "Username" {
-                data.insert(response.missing_data.remove(i), username.to_owned());
-                break;
-            }
-        }
-
-        if !response.missing_data.is_empty() {
-            let console = &mut *self.console.borrow_mut();
-            console.print("")?;
-            if first {
-                console.print("It looks like this is the first time you log in.")?;
-                console
-                    .print("We need some extra information to finish setting up your account.")?;
-            } else {
-                console.print(&format!("Server error: {}", response.message))?;
-            }
-            console.print("")?;
-
-            for field in response.missing_data.into_iter() {
-                let value = read_line(console, &format!("{}? ", field), "", None).await?;
-                data.insert(field, value);
-            }
-        }
-
-        Ok(data)
-    }
-
     /// Performs the login workflow against the server.
     async fn do_login(&self, username: &str, password: &str) -> CommandResult {
-        let access_token = self.service.borrow_mut().authenticate(username, password).await?;
+        let response = self.service.borrow_mut().login(username, password).await?;
 
-        let mut first = true;
-        let mut data = HashMap::new();
-        loop {
-            let request = LoginRequest { data };
-            let result = self.service.borrow_mut().login(&access_token, &request).await;
-            match result {
-                Ok(Ok(response)) => {
-                    let console = &mut *self.console.borrow_mut();
-                    if !response.motd.is_empty() {
-                        console.print("")?;
-                        console.print("----- BEGIN SERVER MOTD -----")?;
-                        for line in response.motd {
-                            refill_and_print(console, &line, "")?;
-                        }
-                        console.print("-----  END SERVER MOTD  -----")?;
-                        console.print("")?;
-                    }
-                    if username != response.username {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "Server returned an invalid username; this was not expected",
-                        )
-                        .into());
-                    }
-                    break;
+        {
+            let console = &mut *self.console.borrow_mut();
+            if !response.motd.is_empty() {
+                console.print("")?;
+                console.print("----- BEGIN SERVER MOTD -----")?;
+                for line in response.motd {
+                    refill_and_print(console, &line, "")?;
                 }
-                Ok(Err(response)) => {
-                    data = self.gather_missing_data(username, first, response).await?;
-                    first = false;
-                }
-                Err(e) => return Err(e.into()),
-            };
+                console.print("-----  END SERVER MOTD  -----")?;
+                console.print("")?;
+            }
         }
 
         let mut storage = self.storage.borrow_mut();
         storage.register_scheme(
             "cloud",
-            Box::from(CloudDriveFactory::new(self.service.clone(), access_token)),
+            Box::from(CloudDriveFactory::new(self.service.clone(), response.access_token)),
         );
         storage.mount("CLOUD", &format!("cloud://{}", username))?;
 
@@ -406,11 +329,12 @@ mod tests {
     fn test_login_ok_with_password() {
         let mut t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_login(
-            LoginRequest { data: HashMap::default() },
-            Ok(Ok(LoginResponse { username: MockService::USERNAME.to_owned(), motd: vec![] })),
+            "the-username",
+            "the-password",
+            Ok(LoginResponse { access_token: AccessToken::new("random token"), motd: vec![] }),
         );
         assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
-        t.run(format!(r#"LOGIN "{}", "{}""#, MockService::USERNAME, MockService::PASSWORD)).check();
+        t.run(format!(r#"LOGIN "{}", "{}""#, "the-username", "the-password")).check();
         assert!(t.get_storage().borrow().mounted().contains_key("CLOUD"));
     }
 
@@ -418,22 +342,23 @@ mod tests {
     fn test_login_ok_ask_password() {
         let t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_login(
-            LoginRequest { data: HashMap::default() },
-            Ok(Ok(LoginResponse { username: MockService::USERNAME.to_owned(), motd: vec![] })),
+            "the-username",
+            "the-password",
+            Ok(LoginResponse { access_token: AccessToken::new("random token"), motd: vec![] }),
         );
         let storage = t.get_storage();
         assert!(!storage.borrow().mounted().contains_key("CLOUD"));
 
         t.get_console().borrow_mut().set_interactive(true);
         let mut exp_output = vec![CapturedOut::Write(b"Password: ".to_vec()), CapturedOut::SyncNow];
-        for _ in 0..MockService::PASSWORD.len() {
+        for _ in 0.."the-password".len() {
             exp_output.push(CapturedOut::Write(vec![b'*']));
         }
         exp_output.push(CapturedOut::Print("".to_owned()));
 
-        t.add_input_chars(MockService::PASSWORD)
+        t.add_input_chars("the-password")
             .add_input_chars("\n")
-            .run(format!(r#"LOGIN "{}""#, MockService::USERNAME))
+            .run(format!(r#"LOGIN "{}""#, "the-username"))
             .expect_output(exp_output)
             .check();
 
@@ -444,13 +369,14 @@ mod tests {
     fn test_login_show_motd() {
         let mut t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_login(
-            LoginRequest { data: HashMap::default() },
-            Ok(Ok(LoginResponse {
-                username: MockService::USERNAME.to_owned(),
+            "the-username",
+            "the-password",
+            Ok(LoginResponse {
+                access_token: AccessToken::new("random token"),
                 motd: vec!["first line".to_owned(), "second line".to_owned()],
-            })),
+            }),
         );
-        t.run(format!(r#"LOGIN "{}", "{}""#, MockService::USERNAME, MockService::PASSWORD))
+        t.run(format!(r#"LOGIN "{}", "{}""#, "the-username", "the-password"))
             .expect_prints([
                 "",
                 "----- BEGIN SERVER MOTD -----",
@@ -463,99 +389,22 @@ mod tests {
     }
 
     #[test]
-    fn test_login_incomplete_account_fill_details() {
-        let t = ClientTester::default();
-
-        let data = HashMap::default();
-        t.get_service().borrow_mut().add_mock_login(
-            LoginRequest { data },
-            Ok(Err(ErrorResponse {
-                message: "".to_owned(),
-                missing_data: vec!["field1".to_owned(), "Username".to_owned(), "field2".to_owned()],
-            })),
-        );
-
-        let mut data = HashMap::default();
-        data.insert("field1".to_owned(), "field1 response".to_owned());
-        data.insert("Username".to_owned(), MockService::USERNAME.to_owned());
-        data.insert("field2".to_owned(), "field2 response".to_owned());
-        t.get_service().borrow_mut().add_mock_login(
-            LoginRequest { data },
-            Ok(Err(ErrorResponse {
-                message: "please retry".to_owned(),
-                missing_data: vec!["field1".to_owned(), "field3".to_owned()],
-            })),
-        );
-
-        let mut data = HashMap::default();
-        data.insert("field1".to_owned(), "field1 second response".to_owned());
-        data.insert("field3".to_owned(), "field3 response".to_owned());
-        t.get_service().borrow_mut().add_mock_login(
-            LoginRequest { data },
-            Ok(Ok(LoginResponse { username: MockService::USERNAME.to_owned(), motd: vec![] })),
-        );
-
-        let storage = t.get_storage();
-        assert!(!storage.borrow().mounted().contains_key("CLOUD"));
-        t.add_input_chars("field1 response\n")
-            .add_input_chars("field2 response\n")
-            .add_input_chars("field1 second response\n")
-            .add_input_chars("field3 response\n")
-            .run(format!(r#"LOGIN "{}", "{}""#, MockService::USERNAME, MockService::PASSWORD))
-            .expect_prints([
-                "",
-                "It looks like this is the first time you log in.",
-                "We need some extra information to finish setting up your account.",
-                "",
-                "",
-                "Server error: please retry",
-                "",
-            ])
-            .check();
-        assert!(storage.borrow().mounted().contains_key("CLOUD"));
-    }
-
-    #[test]
-    fn test_login_invalid_username_reply() {
-        let mut t = ClientTester::default();
-
-        t.get_service().borrow_mut().add_mock_login(
-            LoginRequest { data: HashMap::default() },
-            Ok(Ok(LoginResponse { username: "other-name".to_owned(), motd: vec![] })),
-        );
-
-        let storage = t.get_storage();
-        assert!(!storage.borrow().mounted().contains_key("CLOUD"));
-        t.run(format!(r#"LOGIN "{}", "{}""#, MockService::USERNAME, MockService::PASSWORD))
-            .expect_err("Server returned an invalid username; this was not expected")
-            .check();
-        assert!(!storage.borrow().mounted().contains_key("CLOUD"));
-    }
-
-    #[test]
-    fn test_login_incomplete_account_invalid_reply() {
-        let mut t = ClientTester::default();
-
-        t.get_service().borrow_mut().add_mock_login(
-            LoginRequest { data: HashMap::default() },
-            Ok(Err(ErrorResponse { message: "".to_owned(), missing_data: vec![] })),
-        );
-
-        let storage = t.get_storage();
-        assert!(!storage.borrow().mounted().contains_key("CLOUD"));
-        t.run(format!(r#"LOGIN "{}", "{}""#, MockService::USERNAME, MockService::PASSWORD))
-            .expect_err("Server denied login but did not tell us why")
-            .check();
-        assert!(!storage.borrow().mounted().contains_key("CLOUD"));
-    }
-
-    #[test]
     fn test_login_bad_credentials() {
         let mut t = ClientTester::default();
-        t.run(format!(r#"LOGIN "{}", "{}""#, "bad-user", MockService::PASSWORD))
+        t.get_service().borrow_mut().add_mock_login(
+            "bad-user",
+            "the-password",
+            Err(io::Error::new(io::ErrorKind::PermissionDenied, "Unknown user")),
+        );
+        t.run(format!(r#"LOGIN "{}", "{}""#, "bad-user", "the-password"))
             .expect_err("Unknown user")
             .check();
-        t.run(format!(r#"LOGIN "{}", "{}""#, MockService::USERNAME, "bad-password"))
+        t.get_service().borrow_mut().add_mock_login(
+            "the-username",
+            "bad-password",
+            Err(io::Error::new(io::ErrorKind::PermissionDenied, "Invalid password")),
+        );
+        t.run(format!(r#"LOGIN "{}", "{}""#, "the-username", "bad-password"))
             .expect_err("Invalid password")
             .check();
         assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
@@ -565,17 +414,14 @@ mod tests {
     fn test_login_twice_not_supported() {
         let mut t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_login(
-            LoginRequest { data: HashMap::default() },
-            Ok(Ok(LoginResponse { username: MockService::USERNAME.to_owned(), motd: vec![] })),
+            "the-username",
+            "the-password",
+            Ok(LoginResponse { access_token: AccessToken::new("random token"), motd: vec![] }),
         );
         assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
-        t.run(format!(
-            r#"LOGIN "{}", "{}": LOGIN "a", "b""#,
-            MockService::USERNAME,
-            MockService::PASSWORD
-        ))
-        .expect_err("Support for calling LOGIN twice in the same session is not implemented")
-        .check();
+        t.run(format!(r#"LOGIN "{}", "{}": LOGIN "a", "b""#, "the-username", "the-password"))
+            .expect_err("Support for calling LOGIN twice in the same session is not implemented")
+            .check();
         assert!(t.get_storage().borrow().mounted().contains_key("CLOUD"));
     }
 

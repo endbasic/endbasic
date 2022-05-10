@@ -25,7 +25,6 @@
 use async_trait::async_trait;
 use endbasic_std::storage::DiskSpace;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::io;
 
 mod cloud;
@@ -62,11 +61,13 @@ impl From<SerdeDiskSpace> for DiskSpace {
 
 /// An opaque access token obtained during authentication and used for all subsequent requests
 /// against the server.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct AccessToken(String);
 
 impl AccessToken {
     /// Creates a new access token based on the raw `token` string.
+    #[cfg(test)]
     pub(crate) fn new<S: Into<String>>(token: S) -> Self {
         Self(token.into())
     }
@@ -82,24 +83,13 @@ impl AccessToken {
 #[cfg_attr(test, derive(Debug, Serialize))]
 pub struct ErrorResponse {
     pub(crate) message: String,
-
-    #[serde(default)]
-    pub(crate) missing_data: Vec<String>,
-}
-
-/// Representation of a login request.
-#[derive(Debug, Serialize, PartialEq)]
-#[cfg_attr(test, derive(Deserialize))]
-pub struct LoginRequest {
-    #[serde(default = "HashMap::default")]
-    data: HashMap<String, String>,
 }
 
 /// Representation of a login response.
 #[derive(Deserialize)]
 #[cfg_attr(test, derive(Debug, Serialize))]
 pub struct LoginResponse {
-    username: String,
+    pub(crate) access_token: AccessToken,
     motd: Vec<String>,
 }
 
@@ -202,23 +192,12 @@ impl PatchFileRequest {
     }
 }
 
-/// Response to a login request, which varies in type depending on whether the login completed
-/// successfully or failed due to insufficient information.
-pub type LoginResult = Result<LoginResponse, ErrorResponse>;
-
 /// Abstract interface to interact with an EndBASIC service server.
 #[async_trait(?Send)]
 pub trait Service {
     /// Sends an authentication request to the service with `username` and `password` to obtain an
     /// access token for the session.
-    async fn authenticate(&mut self, username: &str, password: &str) -> io::Result<AccessToken>;
-
-    /// Sends a login `request` to the server with a previously-acquired `access_token`.
-    async fn login(
-        &mut self,
-        access_token: &AccessToken,
-        request: &LoginRequest,
-    ) -> io::Result<LoginResult>;
+    async fn login(&mut self, username: &str, password: &str) -> io::Result<LoginResponse>;
 
     /// Sends a request to the server to obtain the list of files owned by `username` with a
     /// previously-acquired `access_token`.

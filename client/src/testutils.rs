@@ -16,8 +16,8 @@
 //! Test utilities for the cloud service.
 
 use crate::{
-    add_all, AccessToken, GetFileRequest, GetFileResponse, GetFilesResponse, LoginRequest,
-    LoginResult, PatchFileRequest, Service,
+    add_all, AccessToken, GetFileRequest, GetFileResponse, GetFilesResponse, LoginResponse,
+    PatchFileRequest, Service,
 };
 use async_trait::async_trait;
 use endbasic_std::storage::Storage;
@@ -33,7 +33,7 @@ use std::rc::Rc;
 pub struct MockService {
     access_token: Option<AccessToken>,
 
-    mock_login: VecDeque<(LoginRequest, io::Result<LoginResult>)>,
+    mock_login: VecDeque<((String, String), io::Result<LoginResponse>)>,
     mock_get_files: VecDeque<(String, io::Result<GetFilesResponse>)>,
     mock_get_file: VecDeque<((String, String, GetFileRequest), io::Result<GetFileResponse>)>,
     mock_patch_file: VecDeque<((String, String, PatchFileRequest), io::Result<()>)>,
@@ -41,27 +41,24 @@ pub struct MockService {
 }
 
 impl MockService {
-    /// The valid username that the mock service recognizes.
-    pub(crate) const USERNAME: &'static str = "mock-username";
-
-    /// The valid password that the mock service recognizes.
-    pub(crate) const PASSWORD: &'static str = "mock-password";
-
     /// Performs an explicit authentication for those tests that don't go through the `LOGIN`
     /// command logic.
     #[cfg(test)]
-    pub(crate) async fn do_authenticate(&mut self) -> AccessToken {
-        self.authenticate(MockService::USERNAME, MockService::PASSWORD).await.unwrap()
+    pub(crate) async fn do_login(&mut self) -> AccessToken {
+        self.access_token = Some(AccessToken::new("the token"));
+        self.access_token.as_ref().unwrap().clone()
     }
 
-    /// Records the behavior of an upcoming login operation with a request that looks like
-    /// `exp_request` and that returns `result`.
+    /// Records the behavior of an upcoming login operation with `username` and `password`
+    /// credentials and that returns `result`.
     #[cfg(test)]
     pub(crate) fn add_mock_login(
         &mut self,
-        exp_request: LoginRequest,
-        result: io::Result<LoginResult>,
+        username: &str,
+        password: &str,
+        result: io::Result<LoginResponse>,
     ) {
+        let exp_request = (username.to_owned(), password.to_owned());
         self.mock_login.push_back((exp_request, result));
     }
 
@@ -130,30 +127,16 @@ impl MockService {
 
 #[async_trait(?Send)]
 impl Service for MockService {
-    async fn authenticate(&mut self, username: &str, password: &str) -> io::Result<AccessToken> {
-        assert!(self.access_token.is_none(), "authenticate called more than once");
-
-        if username != MockService::USERNAME {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "Unknown user"));
-        }
-        if password != MockService::PASSWORD {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "Invalid password"));
-        }
-
-        let access_token = format!("{}", rand::random::<u64>());
-        self.access_token = Some(AccessToken::new(access_token.clone()));
-        Ok(AccessToken::new(access_token))
-    }
-
-    async fn login(
-        &mut self,
-        access_token: &AccessToken,
-        request: &LoginRequest,
-    ) -> io::Result<LoginResult> {
-        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
-
+    async fn login(&mut self, username: &str, password: &str) -> io::Result<LoginResponse> {
+        assert!(self.access_token.is_none(), "login succeeded more than once");
         let mock = self.mock_login.pop_front().expect("No mock requests available");
-        assert_eq!(&mock.0, request);
+        assert_eq!(&mock.0 .0, username);
+        assert_eq!(&mock.0 .1, password);
+
+        if let Ok(response) = &mock.1 {
+            self.access_token = Some(response.access_token.clone());
+        }
+
         mock.1
     }
 
