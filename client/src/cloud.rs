@@ -22,17 +22,9 @@ use endbasic_std::console::remove_control_chars;
 use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest::StatusCode;
-use std::collections::HashMap;
 use std::io;
 use std::str;
 use url::Url;
-
-/// ID of the client used to authenticate against the Azure AAD B2C endpoint.
-const CLIENT_ID: &str = "ca6a2161-3197-4b5b-8857-30d66fd798b3";
-
-/// Address of the ROPC token flow in Azure AAD B2C.
-const ROPC_TOKEN_ADDRESS: &str =
-    "https://endbasic.b2clogin.com/endbasic.onmicrosoft.com/b2c_1_ROPC/oauth2/v2.0/token";
 
 /// Converts a `reqwest::Response` to an `io::Error`.  The response should have a non-OK status.
 async fn http_response_to_io_error(response: Response) -> io::Error {
@@ -43,6 +35,7 @@ async fn http_response_to_io_error(response: Response) -> io::Error {
 
         // Match against the codes we know the server explicitly hands us.
         StatusCode::BAD_REQUEST => io::ErrorKind::InvalidInput,
+        StatusCode::FORBIDDEN => io::ErrorKind::PermissionDenied,
         StatusCode::INSUFFICIENT_STORAGE => io::ErrorKind::Other,
         StatusCode::INTERNAL_SERVER_ERROR => io::ErrorKind::Other,
         StatusCode::NOT_FOUND => io::ErrorKind::NotFound,
@@ -138,44 +131,16 @@ impl CloudService {
 
 #[async_trait(?Send)]
 impl Service for CloudService {
-    async fn authenticate(&mut self, username: &str, password: &str) -> io::Result<AccessToken> {
-        let scope = format!("openid {}", CLIENT_ID);
-        let params = [
-            ("username", username),
-            ("password", password),
-            ("grant_type", "password"),
-            ("scope", &scope),
-            ("client_id", CLIENT_ID),
-            ("response_type", "token"),
-        ];
+    async fn login(&mut self, username: &str, password: &str) -> io::Result<LoginResponse> {
+        // TODO(https://github.com/seanmonstar/reqwest/pull/1096): Replace with a basic_auth()
+        // call on the RequestBuilder once it is supported in WASM.
+        let basic_auth = format!("Basic {}", base64::encode(format!("{}:{}", username, password)));
 
-        let response = self
-            .client
-            .post(ROPC_TOKEN_ADDRESS)
-            .form(&params)
-            .send()
-            .await
-            .map_err(reqwest_error_to_io_error)?;
-        let json = response.text().await.map_err(reqwest_error_to_io_error)?;
-
-        let fields: HashMap<String, String> = serde_json::from_str(&json)?;
-        match fields.get("access_token") {
-            Some(token) => Ok(AccessToken::new(token)),
-            None => Err(io::Error::new(io::ErrorKind::PermissionDenied, "Authentication failed")),
-        }
-    }
-
-    async fn login(
-        &mut self,
-        access_token: &AccessToken,
-        request: &LoginRequest,
-    ) -> io::Result<LoginResult> {
         let response = self
             .client
             .post(self.make_url("api/login"))
             .headers(self.default_headers())
-            .body(serde_json::to_vec(&request)?)
-            .bearer_auth(access_token.as_str())
+            .header("Authorization", basic_auth)
             .send()
             .await
             .map_err(reqwest_error_to_io_error)?;
@@ -183,12 +148,7 @@ impl Service for CloudService {
             reqwest::StatusCode::OK => {
                 let bytes = response.bytes().await.map_err(reqwest_error_to_io_error)?;
                 let response: LoginResponse = serde_json::from_reader(bytes.reader())?;
-                Ok(Ok(response))
-            }
-            reqwest::StatusCode::NOT_FOUND => {
-                let bytes = response.bytes().await.map_err(reqwest_error_to_io_error)?;
-                let response: ErrorResponse = serde_json::from_reader(bytes.reader())?;
-                Ok(Err(response))
+                Ok(response)
             }
             _ => Err(http_response_to_io_error(response).await),
         }
@@ -327,22 +287,13 @@ mod testutils {
         /// Authenticates against the server using the username and password passed in via
         /// environment variables.  We need to support multiple test accounts at the same time, so
         /// this performs authentication for the test account `i`.
-        pub(crate) async fn do_authenticate(&mut self, i: u8) -> AccessToken {
+        pub(crate) async fn do_login(&mut self, i: u8) -> (String, AccessToken) {
             let username = env::var(format!("TEST_ACCOUNT_{}_USERNAME", i))
                 .expect("Expected env config not found");
             let password = env::var(format!("TEST_ACCOUNT_{}_PASSWORD", i))
                 .expect("Expected env config not found");
-            let access_token = self.service.authenticate(&username, &password).await.unwrap();
-            self.access_token = Some(access_token.clone());
-            access_token
-        }
-
-        /// Logs into the server and returns the username returned by it.
-        pub(crate) async fn do_login(&mut self, access_token: &AccessToken) -> String {
-            let request = LoginRequest { data: HashMap::default() };
-            let response = self.service.login(access_token, &request).await.unwrap().unwrap();
-            self.username = Some(response.username.clone());
-            response.username
+            let response = self.service.login(&username, &password).await.unwrap();
+            (username, response.access_token)
         }
 
         /// Generates a random filename and its content for testing, and makes sure the file gets
@@ -399,36 +350,26 @@ mod tests {
     use super::*;
     use std::env;
 
+    #[test]
+    #[ignore = "Requires environment configuration and is expensive"]
+    fn test_login_ok() {
+        #[tokio::main]
+        async fn run(context: &mut TestContext) {
+            let (_username, access_token) = context.do_login(1).await;
+            assert!(!access_token.as_str().is_empty());
+        }
+        run(&mut TestContext::new_from_env());
+    }
+
     #[tokio::test]
     #[ignore = "Requires environment configuration and is expensive"]
-    async fn test_authenticate_bad_password() {
+    async fn test_login_bad_password() {
         let username = env::var("TEST_ACCOUNT_1_USERNAME").expect("Expected env config not found");
         let password = "this is an invalid password for the test account";
 
         let mut service = new_service_from_env();
-        let err = service.authenticate(&username, password).await.unwrap_err();
+        let err = service.login(&username, &password).await.unwrap_err();
         assert_eq!(io::ErrorKind::PermissionDenied, err.kind());
-    }
-
-    #[test]
-    #[ignore = "Requires environment configuration and is expensive"]
-    fn test_login() {
-        #[tokio::main]
-        async fn run(context: &mut TestContext) {
-            let access_token = context.do_authenticate(1).await;
-            let mut service = context.service();
-
-            let request = LoginRequest { data: HashMap::default() };
-            match service.login(&access_token, &request).await.unwrap() {
-                Ok(response) => {
-                    assert!(!response.motd.is_empty());
-                }
-                Err(response) => {
-                    assert!(response.missing_data.is_empty());
-                }
-            }
-        }
-        run(&mut TestContext::new_from_env());
     }
 
     #[test]
@@ -436,8 +377,7 @@ mod tests {
     fn test_get_files() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
-            let access_token = context.do_authenticate(1).await;
-            let username = context.do_login(&access_token).await;
+            let (username, access_token) = context.do_login(1).await;
             let mut service = context.service();
 
             let mut needed_bytes = 0;
@@ -485,8 +425,7 @@ mod tests {
     }
 
     async fn do_get_and_patch_file_test(context: &mut TestContext, filename: &str, content: &[u8]) {
-        let access_token = context.do_authenticate(1).await;
-        let username = context.do_login(&access_token).await;
+        let (username, access_token) = context.do_login(1).await;
         let mut service = context.service();
 
         let request = PatchFileRequest::default().with_content(content);
@@ -525,8 +464,7 @@ mod tests {
     fn test_get_file_not_found() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
-            let access_token = context.do_authenticate(1).await;
-            let username = context.do_login(&access_token).await;
+            let (username, access_token) = context.do_login(1).await;
             let mut service = context.service();
             let (filename, _content) = context.random_file();
 
@@ -545,15 +483,13 @@ mod tests {
         async fn run(context: &mut TestContext) {
             let mut service = context.service();
 
-            let access_token1 = context.do_authenticate(1).await;
-            let username1 = context.do_login(&access_token1).await;
+            let (username1, access_token1) = context.do_login(1).await;
             let (filename, content) = context.random_file();
 
             let request = PatchFileRequest::default().with_content(content.clone());
             service.patch_file(&access_token1, &username1, &filename, &request).await.unwrap();
 
-            let access_token2 = context.do_authenticate(2).await;
-            let username2 = context.do_login(&access_token2).await;
+            let (username2, access_token2) = context.do_login(2).await;
 
             // Read username1's file as username2 before it is shared.
             let request = GetFileRequest::default().with_get_content();
@@ -581,8 +517,7 @@ mod tests {
     fn test_delete_file_ok() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
-            let access_token = context.do_authenticate(1).await;
-            let username = context.do_login(&access_token).await;
+            let (username, access_token) = context.do_login(1).await;
             let mut service = context.service();
             let (filename, content) = context.random_file();
 
@@ -605,8 +540,7 @@ mod tests {
     fn test_delete_file_not_found() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
-            let access_token = context.do_authenticate(1).await;
-            let username = context.do_login(&access_token).await;
+            let (username, access_token) = context.do_login(1).await;
             let mut service = context.service();
             let (filename, _content) = context.random_file();
 

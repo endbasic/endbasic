@@ -14,6 +14,10 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
+*   Updated `LOGIN` to deal with the new version of the EndBASIC cloud service
+    that does not use Azure AD for authentication.  This new command is faster
+    and simpler.
+
 *   Parameterized the cloud service to talk to.  In the CLI, the new
     `--service-url` allows overriding the default, and in the web, the staging
     site now points to the staging service.
