@@ -1,6 +1,6 @@
 [package]
 name = "endbasic-terminal"
-version = "0.8.1" # ENDBASIC-VERSION
+version = "0.8.99" # ENDBASIC-VERSION
 license = "Apache-2.0"
 authors = ["Julio Merino <jmmv@endbasic.dev>"]
 categories = ["development-tools", "parser-implementations"]
@@ -16,5 +16,5 @@ async-trait = "0.1"
 crossterm = "0.18"
 
 [dependencies.endbasic-std]
-version = "0.8.1" # ENDBASIC-VERSION
+version = "0.8.99" # ENDBASIC-VERSION
 path = "../std"
