@@ -266,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sleep_ok() {
+    fn test_sleep_ok_int() {
         let sleep_fake = |d: Duration| -> BoxedLocal<CommandResult> {
             async move { Err(CallError::InternalError(format!("Got {} ms", d.as_millis()))) }
                 .boxed_local()
@@ -274,7 +274,24 @@ mod tests {
 
         let mut t = Tester::empty().add_command(SleepCommand::new(Box::from(sleep_fake)));
         t.run("SLEEP 123").expect_err("Got 123000 ms").check();
-        t.run("SLEEP 123.1").expect_err("Got 123100 ms").check();
+    }
+
+    #[test]
+    fn test_sleep_ok_float() {
+        let sleep_fake = |d: Duration| -> BoxedLocal<CommandResult> {
+            async move {
+                let ms = d.as_millis();
+                if ms > 123095 && ms < 123105 {
+                    Err(CallError::InternalError("Good".to_owned()))
+                } else {
+                    Err(CallError::InternalError(format!("Bad {}", ms)))
+                }
+            }
+            .boxed_local()
+        };
+
+        let mut t = Tester::empty().add_command(SleepCommand::new(Box::from(sleep_fake)));
+        t.run("SLEEP 123.1").expect_err("Good").check();
     }
 
     #[test]
