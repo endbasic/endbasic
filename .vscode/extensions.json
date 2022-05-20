@@ -2,7 +2,7 @@
     "recommendations": [
         "bungcip.better-toml",
         "davidanson.vscode-markdownlint",
-        "matklad.rust-analyzer",
+        "rust-lang.rust-analyzer",
         "stkb.rewrap",
         "streetsidesoftware.code-spell-checker"
     ]
