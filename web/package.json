@@ -4,15 +4,16 @@
     "description": "The EndBASIC programming language - web interface",
     "private": true,
     "scripts": {
-        "_build": "rimraf dist pkg && webpack",
+        "_build": "webpack",
         "build:prod": "NODE_ENV=prod npm run _build",
         "build:staging": "NODE_ENV=staging npm run _build",
         "build:local": "NODE_ENV=local npm run _build",
-        "_start": "rimraf dist pkg && webpack serve --mode=development",
+        "_start": "webpack serve --mode=development",
         "start:prod": "NODE_ENV=prod npm run _start",
         "start:staging": "NODE_ENV=staging npm run _start",
         "start:local": "NODE_ENV=local npm run _start",
-        "test": "cargo test && wasm-pack test --headless --chrome"
+        "test": "cargo test && wasm-pack test --headless --chrome",
+        "clean": "rimraf dist pkg"
     },
     "repository": {
         "type": "git",
