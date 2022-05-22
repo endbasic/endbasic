@@ -52,7 +52,7 @@ if (!isMobile) {
     };
 }
 
-var wt = new endbasic_web.WebTerminal(terminal);
+var wt = new endbasic_web.WebTerminal(terminal, __SERVICE_URL__);
 
 var osk = wt.on_screen_keyboard();
 var mobileInput = document.getElementById('mobile-input');

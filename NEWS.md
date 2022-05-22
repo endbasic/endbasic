@@ -14,6 +14,10 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
+*   Parameterized the cloud service to talk to.  In the CLI, the new
+    `--service-url` allows overriding the default, and in the web, the staging
+    site now points to the staging service.
+
 *   Added a new `endbasic-client` crate to assimilate all of the funcionality
     and commands required to talk to the cloud service.  This helps to keep the
     `endbasic-std` crate leaner dependencies-wise and facilitates configuring

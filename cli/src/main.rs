@@ -123,15 +123,18 @@ fn make_interactive(
 
 /// Completes the build of an interactive machine by taking a partial builder and running post-build
 /// steps on it.
+///
+/// `service_url` is the base URL of the cloud service.
 fn finish_interactive_build(
     mut builder: endbasic_std::InteractiveMachineBuilder,
+    service_url: &str,
 ) -> endbasic_core::exec::Result<endbasic_core::exec::Machine> {
     let console = builder.get_console();
     let storage = builder.get_storage();
 
     let mut machine = builder.build()?;
 
-    let service = Rc::from(RefCell::from(endbasic_client::CloudService::default()));
+    let service = Rc::from(RefCell::from(endbasic_client::CloudService::new(service_url)?));
     endbasic_client::add_all(&mut machine, service, console, storage);
 
     Ok(machine)
@@ -225,9 +228,11 @@ pub fn setup_storage(storage: &mut Storage, local_drive_spec: &str) -> io::Resul
 /// Enters the interactive interpreter.
 ///
 /// `local_drive` is the optional local drive to mount and use as the default location.
+/// `service_url` is the base URL of the cloud service.
 async fn run_repl_loop(
     console_spec: Option<&str>,
     local_drive_spec: &str,
+    service_url: &str,
 ) -> endbasic_core::exec::Result<i32> {
     let mut builder = make_interactive(new_machine_builder(console_spec)?);
 
@@ -237,7 +242,7 @@ async fn run_repl_loop(
     let storage = builder.get_storage();
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
 
-    let mut machine = finish_interactive_build(builder)?;
+    let mut machine = finish_interactive_build(builder, service_url)?;
     endbasic_repl::print_welcome(console.clone())?;
     endbasic_repl::try_load_autoexec(&mut machine, console.clone(), storage).await?;
     Ok(endbasic_repl::run_repl_loop(&mut machine, console, program).await?)
@@ -256,17 +261,19 @@ async fn run_script<P: AsRef<Path>>(
 /// Executes the `path` program in a fresh machine allowing any interactive-only calls.
 ///
 /// `local_drive` is the optional local drive to mount and use as the default location.
+/// `service_url` is the base URL of the cloud service.
 async fn run_interactive<P: AsRef<Path>>(
     path: P,
     console_spec: Option<&str>,
     local_drive_spec: &str,
+    service_url: &str,
 ) -> endbasic_core::exec::Result<i32> {
     let mut builder = make_interactive(new_machine_builder(console_spec)?);
 
     let storage = builder.get_storage();
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
 
-    let mut machine = finish_interactive_build(builder)?;
+    let mut machine = finish_interactive_build(builder, service_url)?;
     let mut input = File::open(path)?;
     Ok(machine.exec(&mut input).await?.as_exit_code())
 }
@@ -280,6 +287,7 @@ async fn safe_main(name: &str, args: env::Args) -> Result<i32> {
     opts.optflag("h", "help", "show command-line usage information and exit");
     opts.optflag("i", "interactive", "force interactive mode when running a script");
     opts.optopt("", "local-drive", "location of the drive to mount as LOCAL", "URI");
+    opts.optopt("", "service-url", "base URL of the cloud service", "URL");
     opts.optflag("", "version", "show version information and exit");
     let matches = opts.parse(args)?;
 
@@ -295,15 +303,20 @@ async fn safe_main(name: &str, args: env::Args) -> Result<i32> {
 
     let console_spec = matches.opt_str("console");
 
+    let service_url = matches
+        .opt_str("service-url")
+        .unwrap_or_else(|| endbasic_client::PROD_API_ADDRESS.to_owned());
+
     match matches.free.as_slice() {
         [] => {
             let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
-            Ok(run_repl_loop(console_spec.as_deref(), &local_drive).await?)
+            Ok(run_repl_loop(console_spec.as_deref(), &local_drive, &service_url).await?)
         }
         [file] => {
             if matches.opt_present("interactive") {
                 let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
-                Ok(run_interactive(file, console_spec.as_deref(), &local_drive).await?)
+                Ok(run_interactive(file, console_spec.as_deref(), &local_drive, &service_url)
+                    .await?)
             } else {
                 Ok(run_script(file, console_spec.as_deref()).await?)
             }

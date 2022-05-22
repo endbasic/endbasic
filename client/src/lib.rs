@@ -37,6 +37,9 @@ pub(crate) use drive::CloudDriveFactory;
 #[cfg(test)]
 pub(crate) mod testutils;
 
+/// Base address of the production REST API.
+pub const PROD_API_ADDRESS: &str = "https://service.endbasic.dev/";
+
 /// Wrapper over `DiskSpace` to implement (de)serialization.
 #[derive(Debug, Deserialize)]
 #[cfg_attr(test, derive(PartialEq, Serialize))]
