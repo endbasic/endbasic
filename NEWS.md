@@ -14,7 +14,10 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
-*   No changes recorded.
+*   Added a new `endbasic-client` crate to assimilate all of the funcionality
+    and commands required to talk to the cloud service.  This helps to keep the
+    `endbasic-std` crate leaner dependencies-wise and facilitates configuring
+    the client.
 
 ## Changes in version 0.8.1
 

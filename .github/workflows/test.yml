@@ -58,6 +58,7 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - run: brew install sdl2 sdl2_ttf
+            - run: cargo test --package=endbasic-client -- --include-ignored
             - run: cargo test --package=endbasic-core -- --include-ignored
             - run: cargo test --package=endbasic-std -- --include-ignored
             - run: cargo test --package=endbasic-repl -- --include-ignored
@@ -79,6 +80,7 @@ jobs:
             - uses: actions/checkout@v2
             - run: choco install unzip
             - run: ./.github/workflows/setup-sdl.ps1
+            - run: cargo test --package=endbasic-client -- --include-ignored
             - run: cargo test --package=endbasic-core -- --include-ignored
             - run: cargo test --package=endbasic-std -- --include-ignored
             - run: cargo test --package=endbasic-repl -- --include-ignored

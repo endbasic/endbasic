@@ -297,10 +297,7 @@ pub async fn read_line(
 ///
 /// The console must be interactive for this to work, as otherwise we do not have a mechanism to
 /// suppress echo.
-pub(crate) async fn read_line_secure(
-    console: &mut dyn Console,
-    prompt: &str,
-) -> io::Result<String> {
+pub async fn read_line_secure(console: &mut dyn Console, prompt: &str) -> io::Result<String> {
     if !console.is_interactive() {
         return Err(io::Error::new(
             io::ErrorKind::Other,

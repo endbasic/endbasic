@@ -35,7 +35,6 @@ pub mod gpio;
 pub mod help;
 pub mod numerics;
 pub mod program;
-pub mod service;
 pub mod storage;
 pub mod strings;
 pub mod testutils;
@@ -114,14 +113,18 @@ pub struct InteractiveMachineBuilder {
     builder: MachineBuilder,
     program: Option<Rc<RefCell<dyn program::Program>>>,
     storage: Rc<RefCell<storage::Storage>>,
-    service: Option<Rc<RefCell<dyn service::Service>>>,
 }
 
 impl InteractiveMachineBuilder {
     /// Constructs an interactive machine builder from a non-interactive builder.
     fn from(builder: MachineBuilder) -> Self {
         let storage = Rc::from(RefCell::from(storage::Storage::default()));
-        InteractiveMachineBuilder { builder, program: None, storage, service: None }
+        InteractiveMachineBuilder { builder, program: None, storage }
+    }
+
+    /// Returns the console that will be used for the machine.
+    pub fn get_console(&mut self) -> Rc<RefCell<dyn console::Console>> {
+        self.builder.get_console()
     }
 
     /// Lazily initializes the `program` field with a default value and returns it.
@@ -143,12 +146,6 @@ impl InteractiveMachineBuilder {
         self
     }
 
-    /// Overrides the default service client with the given one.
-    pub fn with_service(mut self, service: Rc<RefCell<dyn service::Service>>) -> Self {
-        self.service = Some(service);
-        self
-    }
-
     /// Builds the interpreter.
     pub fn build(mut self) -> Result<Machine> {
         let console = self.builder.get_console();
@@ -156,14 +153,8 @@ impl InteractiveMachineBuilder {
         let storage = self.get_storage();
         let mut machine = self.builder.build()?;
 
-        let service = match self.service {
-            Some(service) => service,
-            None => Rc::from(RefCell::from(service::CloudService::default())),
-        };
-
         help::add_all(&mut machine, console.clone());
         program::add_all(&mut machine, program, console.clone(), storage.clone());
-        service::add_all(&mut machine, service, console.clone(), storage.clone());
         storage::add_all(&mut machine, console, storage);
 
         Ok(machine)

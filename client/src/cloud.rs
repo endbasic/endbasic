@@ -15,7 +15,7 @@
 
 //! Cloud-based implementation of the EndBASIC service client.
 
-use crate::service::*;
+use crate::*;
 use async_trait::async_trait;
 use bytes::Buf;
 use reqwest::header::HeaderMap;
@@ -71,9 +71,10 @@ fn reqwest_error_to_io_error(e: reqwest::Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, format!("{}", e))
 }
 
+/// An implementation of the EndBASIC service client that talks to a remote server.
 #[derive(Default)]
 #[cfg_attr(test, derive(Clone))]
-pub(crate) struct CloudService {
+pub struct CloudService {
     client: reqwest::Client,
 }
 
@@ -395,8 +396,8 @@ mod tests {
             for (filename, _content) in &filenames_and_contents {
                 assert!(!response.files.iter().any(|x| &x.filename == filename));
             }
-            let disk_quota = response.disk_quota.unwrap();
-            let disk_free = response.disk_free.unwrap();
+            let disk_quota: DiskSpace = response.disk_quota.unwrap().into();
+            let disk_free: DiskSpace = response.disk_free.unwrap().into();
             assert!(disk_quota.bytes() > 0);
             assert!(disk_quota.files() > 0);
             assert!(disk_free.bytes() >= needed_bytes, "Not enough space for test run");

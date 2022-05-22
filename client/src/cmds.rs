@@ -15,15 +15,15 @@
 
 //! Commands to interact with the cloud service.
 
-use crate::console::{read_line, read_line_secure, refill_and_print, Console};
-use crate::service::*;
-use crate::storage::{FileAcls, Storage};
+use crate::*;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
 };
+use endbasic_std::console::{read_line, read_line_secure, refill_and_print, Console};
+use endbasic_std::storage::{FileAcls, Storage};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -386,7 +386,7 @@ impl Command for ShareCommand {
 
 /// Adds all remote manipulation commands for `service` to the `machine`, using `console` to
 /// display information and `storage` to manipulate the remote drives.
-pub(crate) fn add_all(
+pub fn add_all(
     machine: &mut Machine,
     service: Rc<RefCell<dyn Service>>,
     console: Rc<RefCell<dyn Console>>,
@@ -400,10 +400,11 @@ pub(crate) fn add_all(
 mod tests {
     use super::*;
     use crate::testutils::*;
+    use endbasic_std::testutils::*;
 
     #[test]
     fn test_login_ok_with_password() {
-        let mut t = Tester::default();
+        let mut t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_login(
             LoginRequest { data: HashMap::default() },
             Ok(Ok(LoginResponse { username: MockService::USERNAME.to_owned(), motd: vec![] })),
@@ -415,7 +416,7 @@ mod tests {
 
     #[test]
     fn test_login_ok_ask_password() {
-        let t = Tester::default();
+        let t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_login(
             LoginRequest { data: HashMap::default() },
             Ok(Ok(LoginResponse { username: MockService::USERNAME.to_owned(), motd: vec![] })),
@@ -441,7 +442,7 @@ mod tests {
 
     #[test]
     fn test_login_show_motd() {
-        let mut t = Tester::default();
+        let mut t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_login(
             LoginRequest { data: HashMap::default() },
             Ok(Ok(LoginResponse {
@@ -463,7 +464,7 @@ mod tests {
 
     #[test]
     fn test_login_incomplete_account_fill_details() {
-        let t = Tester::default();
+        let t = ClientTester::default();
 
         let data = HashMap::default();
         t.get_service().borrow_mut().add_mock_login(
@@ -516,7 +517,7 @@ mod tests {
 
     #[test]
     fn test_login_invalid_username_reply() {
-        let mut t = Tester::default();
+        let mut t = ClientTester::default();
 
         t.get_service().borrow_mut().add_mock_login(
             LoginRequest { data: HashMap::default() },
@@ -533,7 +534,7 @@ mod tests {
 
     #[test]
     fn test_login_incomplete_account_invalid_reply() {
-        let mut t = Tester::default();
+        let mut t = ClientTester::default();
 
         t.get_service().borrow_mut().add_mock_login(
             LoginRequest { data: HashMap::default() },
@@ -550,7 +551,7 @@ mod tests {
 
     #[test]
     fn test_login_bad_credentials() {
-        let mut t = Tester::default();
+        let mut t = ClientTester::default();
         t.run(format!(r#"LOGIN "{}", "{}""#, "bad-user", MockService::PASSWORD))
             .expect_err("Unknown user")
             .check();
@@ -562,7 +563,7 @@ mod tests {
 
     #[test]
     fn test_login_twice_not_supported() {
-        let mut t = Tester::default();
+        let mut t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_login(
             LoginRequest { data: HashMap::default() },
             Ok(Ok(LoginResponse { username: MockService::USERNAME.to_owned(), motd: vec![] })),
@@ -580,11 +581,11 @@ mod tests {
 
     #[test]
     fn test_login_errors() {
-        check_stmt_err("LOGIN requires one or two arguments", r#"LOGIN"#);
-        check_stmt_err("LOGIN requires one or two arguments", r#"LOGIN "a", "b", "c""#);
-        check_stmt_err("LOGIN requires a string as the username", r#"LOGIN 3"#);
-        check_stmt_err("LOGIN requires a string as the username", r#"LOGIN 3, "a""#);
-        check_stmt_err("LOGIN requires a string as the password", r#"LOGIN "a", 3"#);
+        client_check_stmt_err("LOGIN requires one or two arguments", r#"LOGIN"#);
+        client_check_stmt_err("LOGIN requires one or two arguments", r#"LOGIN "a", "b", "c""#);
+        client_check_stmt_err("LOGIN requires a string as the username", r#"LOGIN 3"#);
+        client_check_stmt_err("LOGIN requires a string as the username", r#"LOGIN 3, "a""#);
+        client_check_stmt_err("LOGIN requires a string as the password", r#"LOGIN "a", 3"#);
     }
 
     #[test]
@@ -618,7 +619,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_share_print_no_acls() {
-        let mut t = Tester::default();
+        let mut t = ClientTester::default();
         t.get_storage().borrow_mut().put("MEMORY:/FOO", "").await.unwrap();
         t.run(r#"SHARE "MEMORY:/FOO""#)
             .expect_prints(["", "    No ACLs on MEMORY:/FOO", ""])
@@ -628,7 +629,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_share_print_some_acls() {
-        let mut t = Tester::default();
+        let mut t = ClientTester::default();
         {
             let storage = t.get_storage();
             let mut storage = storage.borrow_mut();
@@ -650,17 +651,20 @@ mod tests {
 
     #[test]
     fn test_share_errors() {
-        check_stmt_err("SHARE requires one or more arguments", r#"SHARE"#);
-        check_stmt_err("SHARE requires a string as the filename", r#"SHARE 1"#);
-        check_stmt_err("SHARE requires a string as the filename", r#"SHARE , "a""#);
-        check_stmt_err("SHARE requires arguments to be separated by commas", r#"SHARE "a"; "b""#);
-        check_stmt_err(
+        client_check_stmt_err("SHARE requires one or more arguments", r#"SHARE"#);
+        client_check_stmt_err("SHARE requires a string as the filename", r#"SHARE 1"#);
+        client_check_stmt_err("SHARE requires a string as the filename", r#"SHARE , "a""#);
+        client_check_stmt_err(
+            "SHARE requires arguments to be separated by commas",
+            r#"SHARE "a"; "b""#,
+        );
+        client_check_stmt_err(
             "SHARE requires arguments to be separated by commas",
             r#"SHARE "a", "b"; "c""#,
         );
-        check_stmt_err("SHARE arguments cannot be empty", r#"SHARE "a", , "b""#);
-        check_stmt_err("SHARE requires strings as ACL changes", r#"SHARE "a", 3, "b""#);
-        check_stmt_err(
+        client_check_stmt_err("SHARE arguments cannot be empty", r#"SHARE "a", , "b""#);
+        client_check_stmt_err("SHARE requires strings as ACL changes", r#"SHARE "a", 3, "b""#);
+        client_check_stmt_err(
             r#"Invalid ACL 'foobar': must be of the form "username+r" or "username-r""#,
             r#"SHARE "a", "foobar""#,
         );

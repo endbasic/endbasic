@@ -15,18 +15,47 @@
 
 //! EndBASIC service client.
 
-use crate::storage::DiskSpace;
+// Keep these in sync with other top-level files.
+#![allow(clippy::await_holding_refcell_ref)]
+#![allow(clippy::collapsible_else_if)]
+#![warn(anonymous_parameters, bad_style, missing_docs)]
+#![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
+#![warn(unsafe_code)]
+
 use async_trait::async_trait;
+use endbasic_std::storage::DiskSpace;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io;
 
 mod cloud;
-pub(crate) use cloud::CloudService;
+pub use cloud::CloudService;
+mod cmds;
+pub use cmds::add_all;
 mod drive;
 pub(crate) use drive::CloudDriveFactory;
-mod cmds;
-pub(crate) use cmds::add_all;
+#[cfg(test)]
+pub(crate) mod testutils;
+
+/// Wrapper over `DiskSpace` to implement (de)serialization.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(PartialEq, Serialize))]
+struct SerdeDiskSpace {
+    bytes: u64,
+    files: u64,
+}
+
+impl From<DiskSpace> for SerdeDiskSpace {
+    fn from(ds: DiskSpace) -> Self {
+        SerdeDiskSpace { bytes: ds.bytes, files: ds.files }
+    }
+}
+
+impl From<SerdeDiskSpace> for DiskSpace {
+    fn from(sds: SerdeDiskSpace) -> Self {
+        DiskSpace { bytes: sds.bytes, files: sds.files }
+    }
+}
 
 /// An opaque access token obtained during authentication and used for all subsequent requests
 /// against the server.
@@ -85,8 +114,8 @@ pub struct DirectoryEntry {
 #[cfg_attr(test, derive(Debug, Serialize))]
 pub struct GetFilesResponse {
     files: Vec<DirectoryEntry>,
-    disk_quota: Option<DiskSpace>,
-    disk_free: Option<DiskSpace>,
+    disk_quota: Option<SerdeDiskSpace>,
+    disk_free: Option<SerdeDiskSpace>,
 }
 
 /// Representation of a file query.

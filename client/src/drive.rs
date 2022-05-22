@@ -15,9 +15,9 @@
 
 //! Cloud-based implementation of an EndBASIC storage drive.
 
-use crate::service::*;
-use crate::storage::{Drive, DriveFactory, DriveFiles, FileAcls, Metadata};
+use crate::*;
 use async_trait::async_trait;
+use endbasic_std::storage::{Drive, DriveFactory, DriveFiles, FileAcls, Metadata};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::io;
@@ -58,7 +58,11 @@ impl Drive for CloudDrive {
             let date = time::OffsetDateTime::from_unix_timestamp(e.mtime as i64);
             entries.insert(e.filename, Metadata { date, length: e.length });
         }
-        Ok(DriveFiles::new(entries, response.disk_quota, response.disk_free))
+        Ok(DriveFiles::new(
+            entries,
+            response.disk_quota.map(|x| x.into()),
+            response.disk_free.map(|x| x.into()),
+        ))
     }
 
     async fn get(&self, filename: &str) -> io::Result<String> {
@@ -192,8 +196,8 @@ mod tests {
                     DirectoryEntry { filename: "one".to_owned(), mtime: 9000, length: 15 },
                     DirectoryEntry { filename: "two".to_owned(), mtime: 8000, length: 17 },
                 ],
-                disk_quota: Some(DiskSpace::new(10000, 100)),
-                disk_free: Some(DiskSpace::new(123, 45)),
+                disk_quota: Some(DiskSpace::new(10000, 100).into()),
+                disk_free: Some(DiskSpace::new(123, 45).into()),
             }),
         );
         let result = drive.enumerate().await.unwrap();
@@ -358,7 +362,7 @@ mod tests {
 
     #[test]
     fn test_login_and_mount_other_user() {
-        let mut t = Tester::default();
+        let mut t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_login(
             LoginRequest { data: HashMap::default() },
             Ok(Ok(LoginResponse { username: MockService::USERNAME.to_owned(), motd: vec![] })),
@@ -371,8 +375,8 @@ mod tests {
                     mtime: 1622556024,
                     length: 15,
                 }],
-                disk_quota: Some(DiskSpace::new(10000, 100)),
-                disk_free: Some(DiskSpace::new(123, 45)),
+                disk_quota: Some(DiskSpace::new(10000, 100).into()),
+                disk_free: Some(DiskSpace::new(123, 45).into()),
             }),
         );
         t.get_service().borrow_mut().add_mock_get_files(

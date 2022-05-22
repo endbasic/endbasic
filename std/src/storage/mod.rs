@@ -16,9 +16,6 @@
 //! Storage-related abstractions and commands.
 
 use async_trait::async_trait;
-use serde::Deserialize;
-#[cfg(test)]
-use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{self};
 use std::io;
@@ -62,17 +59,19 @@ impl FileAcls {
     }
 
     /// Modifies the readers list by appending `reader` to it.
-    pub(crate) fn add_reader<R: Into<String>>(&mut self, reader: R) {
+    pub fn add_reader<R: Into<String>>(&mut self, reader: R) {
         self.readers.push(reader.into());
     }
 }
 
 /// Representation of some amount of disk space.  Can be used to express both quotas and usage.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DiskSpace {
-    bytes: u64,
-    files: u64,
+    /// Number of bytes used or allowed.
+    pub bytes: u64,
+
+    /// Number of files used or allowed.
+    pub files: u64,
 }
 
 impl DiskSpace {
@@ -342,7 +341,7 @@ impl Storage {
     }
 
     /// Returns true if the `scheme` is already registered.
-    pub(crate) fn has_scheme(&self, scheme: &str) -> bool {
+    pub fn has_scheme(&self, scheme: &str) -> bool {
         self.factories.contains_key(scheme)
     }
 
