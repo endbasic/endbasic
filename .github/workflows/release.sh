@@ -65,7 +65,7 @@ main() {
             cp .cargo/config.rpi .cargo/config
             # TODO(jmmv): Should figure out how to cross-compile with the native TLS library
             # instead of doing this hack.
-            sed -i s,native-tls,rustls-tls,g std/Cargo.toml
+            sed -i s,native-tls,rustls-tls,g client/Cargo.toml
             # TODO(jmmv): Should enable --features=sdl but need to figure out how to cross-build
             # for it.
             ( cd cli && cargo build --release --verbose --features=rpi )

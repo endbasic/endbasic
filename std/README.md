@@ -37,7 +37,6 @@ EndBASIC's standard library is inspired by other BASIC interpreters but does
 not intend to be fully compatible with them.  The library currently contains:
 
 *   Arrays: `LBOUND`, `UBOUND`.
-*   Cloud service interaction: `LOGIN`, `SHARE`.
 *   Console manipulation: `CLS`, `COLOR`, `INKEY`, `INPUT`, `LOCATE`, `PRINT`.
 *   Date and time manipulation: `SLEEP`.
 *   Graphics: `GFX_LINE`, `GFX_RECT`, `GFX_RECTF`.

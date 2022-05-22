@@ -30,6 +30,10 @@ time = { version = "0.2", features = ["serde", "std"] }
 wasm-bindgen = "^0.2.78"
 wasm-bindgen-futures = "0.4"
 
+[dependencies.endbasic-client]
+version = "0.8.99" # ENDBASIC-VERSION
+path = "../client"
+
 [dependencies.endbasic-core]
 version = "0.8.99" # ENDBASIC-VERSION
 path = "../core"

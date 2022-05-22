@@ -121,6 +121,22 @@ fn make_interactive(
         .with_program(Rc::from(RefCell::from(endbasic_repl::editor::Editor::default())))
 }
 
+/// Completes the build of an interactive machine by taking a partial builder and running post-build
+/// steps on it.
+fn finish_interactive_build(
+    mut builder: endbasic_std::InteractiveMachineBuilder,
+) -> endbasic_core::exec::Result<endbasic_core::exec::Machine> {
+    let console = builder.get_console();
+    let storage = builder.get_storage();
+
+    let mut machine = builder.build()?;
+
+    let service = Rc::from(RefCell::from(endbasic_client::CloudService::default()));
+    endbasic_client::add_all(&mut machine, service, console, storage);
+
+    Ok(machine)
+}
+
 /// Returns `flag` if present, or else returns the URI of the default `LOCAL` drive.
 fn get_local_drive_spec(flag: Option<String>) -> Result<String> {
     let dir = flag.or_else(|| {
@@ -213,16 +229,15 @@ async fn run_repl_loop(
     console_spec: Option<&str>,
     local_drive_spec: &str,
 ) -> endbasic_core::exec::Result<i32> {
-    let mut builder = new_machine_builder(console_spec)?;
-    let console = builder.get_console();
-    let mut builder = make_interactive(builder);
+    let mut builder = make_interactive(new_machine_builder(console_spec)?);
 
+    let console = builder.get_console();
     let program = builder.get_program();
 
     let storage = builder.get_storage();
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
 
-    let mut machine = builder.build()?;
+    let mut machine = finish_interactive_build(builder)?;
     endbasic_repl::print_welcome(console.clone())?;
     endbasic_repl::try_load_autoexec(&mut machine, console.clone(), storage).await?;
     Ok(endbasic_repl::run_repl_loop(&mut machine, console, program).await?)
@@ -251,7 +266,7 @@ async fn run_interactive<P: AsRef<Path>>(
     let storage = builder.get_storage();
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
 
-    let mut machine = builder.build()?;
+    let mut machine = finish_interactive_build(builder)?;
     let mut input = File::open(path)?;
     Ok(machine.exec(&mut input).await?.as_exit_code())
 }

@@ -23,6 +23,10 @@ dirs = "2.0"
 getopts = "0.2"
 thiserror = "1.0"
 
+[dependencies.endbasic-client]
+version = "0.8.99" # ENDBASIC-VERSION
+path = "../client"
+
 [dependencies.endbasic-core]
 version = "0.8.99" # ENDBASIC-VERSION
 path = "../core"

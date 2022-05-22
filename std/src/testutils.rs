@@ -18,10 +18,6 @@
 use crate::console::{self, CharsXY, ClearType, Console, Key, PixelsXY};
 use crate::gpio;
 use crate::program::Program;
-use crate::service::{
-    AccessToken, GetFileRequest, GetFileResponse, GetFilesResponse, LoginRequest, LoginResult,
-    PatchFileRequest, Service,
-};
 use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
@@ -309,201 +305,12 @@ impl Program for RecordedProgram {
     }
 }
 
-/// Service client implementation that allows specifying expectations on requests and yields the
-/// responses previously recorded into it.
-#[derive(Default)]
-pub struct MockService {
-    access_token: Option<AccessToken>,
-
-    mock_login: VecDeque<(LoginRequest, io::Result<LoginResult>)>,
-    mock_get_files: VecDeque<(String, io::Result<GetFilesResponse>)>,
-    mock_get_file: VecDeque<((String, String, GetFileRequest), io::Result<GetFileResponse>)>,
-    mock_patch_file: VecDeque<((String, String, PatchFileRequest), io::Result<()>)>,
-    mock_delete_file: VecDeque<((String, String), io::Result<()>)>,
-}
-
-impl MockService {
-    /// The valid username that the mock service recognizes.
-    pub(crate) const USERNAME: &'static str = "mock-username";
-
-    /// The valid password that the mock service recognizes.
-    pub(crate) const PASSWORD: &'static str = "mock-password";
-
-    /// Performs an explicit authentication for those tests that don't go through the `LOGIN`
-    /// command logic.
-    #[cfg(test)]
-    pub(crate) async fn do_authenticate(&mut self) -> AccessToken {
-        self.authenticate(MockService::USERNAME, MockService::PASSWORD).await.unwrap()
-    }
-
-    /// Records the behavior of an upcoming login operation with a request that looks like
-    /// `exp_request` and that returns `result`.
-    #[cfg(test)]
-    pub(crate) fn add_mock_login(
-        &mut self,
-        exp_request: LoginRequest,
-        result: io::Result<LoginResult>,
-    ) {
-        self.mock_login.push_back((exp_request, result));
-    }
-
-    /// Records the behavior of an upcoming "get files" operation for `username` and that returns
-    /// `result`.
-    #[cfg(test)]
-    pub(crate) fn add_mock_get_files(
-        &mut self,
-        username: &str,
-        result: io::Result<GetFilesResponse>,
-    ) {
-        let exp_request = username.to_owned();
-        self.mock_get_files.push_back((exp_request, result));
-    }
-
-    /// Records the behavior of an upcoming "get file" operation for the `username`/`filename`
-    /// pair with a request that looks like `exp_request` and that returns `result`.
-    #[cfg(test)]
-    pub(crate) fn add_mock_get_file(
-        &mut self,
-        username: &str,
-        filename: &str,
-        exp_request: GetFileRequest,
-        result: io::Result<GetFileResponse>,
-    ) {
-        let exp_request = (username.to_owned(), filename.to_owned(), exp_request);
-        self.mock_get_file.push_back((exp_request, result));
-    }
-
-    /// Records the behavior of an upcoming "patch file" operation for the `username`/`filename`
-    /// pair with a request that looks like `exp_request` and that returns `result`.
-    #[cfg(test)]
-    pub(crate) fn add_mock_patch_file(
-        &mut self,
-        username: &str,
-        filename: &str,
-        exp_request: PatchFileRequest,
-        result: io::Result<()>,
-    ) {
-        let exp_request = (username.to_owned(), filename.to_owned(), exp_request);
-        self.mock_patch_file.push_back((exp_request, result));
-    }
-
-    /// Records the behavior of an upcoming "delete file" operation for the `username`/`filename`
-    /// pair and that returns `result`.
-    #[cfg(test)]
-    pub(crate) fn add_mock_delete_file(
-        &mut self,
-        username: &str,
-        filename: &str,
-        result: io::Result<()>,
-    ) {
-        let exp_request = (username.to_owned(), filename.to_owned());
-        self.mock_delete_file.push_back((exp_request, result));
-    }
-
-    /// Ensures that all requests and responses have been consumed.
-    pub(crate) fn verify_all_used(&mut self) {
-        assert!(self.mock_login.is_empty(), "Mock requests not fully consumed");
-        assert!(self.mock_get_files.is_empty(), "Mock requests not fully consumed");
-        assert!(self.mock_get_file.is_empty(), "Mock requests not fully consumed");
-        assert!(self.mock_patch_file.is_empty(), "Mock requests not fully consumed");
-        assert!(self.mock_delete_file.is_empty(), "Mock requests not fully consumed");
-    }
-}
-
-#[async_trait(?Send)]
-impl Service for MockService {
-    async fn authenticate(&mut self, username: &str, password: &str) -> io::Result<AccessToken> {
-        assert!(self.access_token.is_none(), "authenticate called more than once");
-
-        if username != MockService::USERNAME {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "Unknown user"));
-        }
-        if password != MockService::PASSWORD {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "Invalid password"));
-        }
-
-        let access_token = format!("{}", rand::random::<u64>());
-        self.access_token = Some(AccessToken::new(access_token.clone()));
-        Ok(AccessToken::new(access_token))
-    }
-
-    async fn login(
-        &mut self,
-        access_token: &AccessToken,
-        request: &LoginRequest,
-    ) -> io::Result<LoginResult> {
-        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
-
-        let mock = self.mock_login.pop_front().expect("No mock requests available");
-        assert_eq!(&mock.0, request);
-        mock.1
-    }
-
-    async fn get_files(
-        &mut self,
-        access_token: &AccessToken,
-        username: &str,
-    ) -> io::Result<GetFilesResponse> {
-        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
-        let mock = self.mock_get_files.pop_front().expect("No mock requests available");
-        assert_eq!(&mock.0, username);
-        mock.1
-    }
-
-    async fn get_file(
-        &mut self,
-        access_token: &AccessToken,
-        username: &str,
-        filename: &str,
-        request: &GetFileRequest,
-    ) -> io::Result<GetFileResponse> {
-        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
-
-        let mock = self.mock_get_file.pop_front().expect("No mock requests available");
-        assert_eq!(&mock.0 .0, username);
-        assert_eq!(&mock.0 .1, filename);
-        assert_eq!(&mock.0 .2, request);
-        mock.1
-    }
-
-    async fn patch_file(
-        &mut self,
-        access_token: &AccessToken,
-        username: &str,
-        filename: &str,
-        request: &PatchFileRequest,
-    ) -> io::Result<()> {
-        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
-
-        let mock = self.mock_patch_file.pop_front().expect("No mock requests available");
-        assert_eq!(&mock.0 .0, username);
-        assert_eq!(&mock.0 .1, filename);
-        assert_eq!(&mock.0 .2, request);
-        mock.1
-    }
-
-    async fn delete_file(
-        &mut self,
-        access_token: &AccessToken,
-        username: &str,
-        filename: &str,
-    ) -> io::Result<()> {
-        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
-
-        let mock = self.mock_delete_file.pop_front().expect("No mock requests available");
-        assert_eq!(&mock.0 .0, username);
-        assert_eq!(&mock.0 .1, filename);
-        mock.1
-    }
-}
-
 /// Builder pattern to prepare an EndBASIC machine for testing purposes.
 #[must_use]
 pub struct Tester {
     console: Rc<RefCell<MockConsole>>,
     storage: Rc<RefCell<Storage>>,
     program: Rc<RefCell<RecordedProgram>>,
-    service: Rc<RefCell<MockService>>,
     machine: Machine,
 }
 
@@ -512,7 +319,6 @@ impl Default for Tester {
     fn default() -> Self {
         let console = Rc::from(RefCell::from(MockConsole::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
-        let service = Rc::from(RefCell::from(MockService::default()));
 
         // Default to the pins set that always returns errors.  We could have implemented a set of
         // fake pins here to track GPIO state changes in a nicer way, similar to how we track all
@@ -525,8 +331,7 @@ impl Default for Tester {
             .with_console(console.clone())
             .with_gpio_pins(gpio_pins)
             .make_interactive()
-            .with_program(program.clone())
-            .with_service(service.clone());
+            .with_program(program.clone());
 
         // Grab access to the machine's storage subsystem before we lose track of it, as we will
         // need this to check its state.
@@ -534,7 +339,7 @@ impl Default for Tester {
 
         let machine = builder.build().unwrap();
 
-        Self { console, storage, program, service, machine }
+        Self { console, storage, program, machine }
     }
 }
 
@@ -544,11 +349,10 @@ impl Tester {
         let console = Rc::from(RefCell::from(MockConsole::default()));
         let storage = Rc::from(RefCell::from(Storage::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
-        let service = Rc::from(RefCell::from(MockService::default()));
 
         let machine = Machine::default();
 
-        Self { console, storage, program, service, machine }
+        Self { console, storage, program, machine }
     }
 
     /// Registers the given builtin command into the machine, which must not yet be registered.
@@ -605,14 +409,6 @@ impl Tester {
     /// externally-instantiated commands into the testing features.
     pub fn get_storage(&self) -> Rc<RefCell<Storage>> {
         self.storage.clone()
-    }
-
-    /// Gets the mock service client from the tester.
-    ///
-    /// This method should generally not be used.  Its primary utility is to hook
-    /// externally-instantiated commands into the testing features.
-    pub fn get_service(&self) -> Rc<RefCell<MockService>> {
-        self.service.clone()
     }
 
     /// Sets the initial name of the recorded program to `name` (if any) and its contents to `text`.
@@ -848,7 +644,6 @@ impl<'a> Checker<'a> {
         assert_eq!(self.exp_drives, drive_contents);
 
         self.tester.console.borrow_mut().verify_all_used();
-        self.tester.service.borrow_mut().verify_all_used();
     }
 }
 

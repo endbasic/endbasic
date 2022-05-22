@@ -68,7 +68,7 @@ fn refill(paragraph: &str, width: usize) -> Vec<String> {
 /// with an optional `indent`.
 ///
 /// The width is automatically determined from the console's size.
-pub(crate) fn refill_and_print(
+pub fn refill_and_print(
     console: &mut dyn Console,
     paragraph: &str,
     indent: &str,

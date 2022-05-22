@@ -23,9 +23,10 @@ default:
 # TODO(jmmv): Replace this target, and likely this file as well, once support
 # for environment variables is in stable Cargo and we can have these stored
 # in .cargo/config.toml.  See https://github.com/rust-lang/cargo/pull/9175.
-.PHONY: test
-test:
-	@RUST_BACKTRACE=1 \
+.PHONY: test-client
+test-client:
+	@cd client && \
+	    RUST_BACKTRACE=1 \
 	    TEST_ACCOUNT_1_USERNAME="$(TEST_ACCOUNT_1_USERNAME)" \
 	    TEST_ACCOUNT_1_PASSWORD="$(TEST_ACCOUNT_1_PASSWORD)" \
 	    TEST_ACCOUNT_2_USERNAME="$(TEST_ACCOUNT_2_USERNAME)" \

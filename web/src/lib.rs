@@ -173,6 +173,10 @@ impl WebTerminal {
                 ))
             }
         };
+
+        let service = Rc::from(RefCell::from(endbasic_client::CloudService::default()));
+        endbasic_client::add_all(&mut machine, service, console.clone(), storage.clone());
+
         endbasic_repl::print_welcome(console.clone())?;
         endbasic_repl::try_load_autoexec(&mut machine, console.clone(), storage).await?;
         loop {

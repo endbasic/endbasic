@@ -55,7 +55,7 @@ EOF
 
 # Package one crate at a time and add it to the local registry so that subsequent crates
 # can pick them up.
-for dir in core std repl terminal sdl rpi cli; do
+for dir in core std repl client terminal sdl rpi cli; do
     cd "${dir}"
     cargo index add --index "${registry}/index" --index-url https://example.com
     cd -
