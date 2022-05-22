@@ -75,14 +75,13 @@ async fn read_line_interactive(
     // Insertion position *within* the line, without accounting for the prompt.
     let mut pos = line.len();
 
-    let mut history_pos;
-    match history.as_mut() {
+    let mut history_pos = match history.as_mut() {
         Some(history) => {
             history.push(line.clone());
-            history_pos = history.len() - 1;
+            history.len() - 1
         }
-        None => history_pos = 0,
-    }
+        None => 0,
+    };
 
     loop {
         match console.read_key().await? {
