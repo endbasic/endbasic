@@ -16,6 +16,8 @@
 
 set -eux
 
+local node_env="${1}"; shift
+
 curl -o- \
     https://raw.githubusercontent.com/nvm-sh/nvm/v0.35.3/install.sh | bash
 
@@ -35,7 +37,7 @@ set -ux
 
 cd web
 npm ci --verbose
-npm run-script build --verbose
+npm run-script "build:${node_env}" --verbose
 npm run-script test --verbose
 touch dist/.nojekyll
 cd -

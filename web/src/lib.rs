@@ -118,13 +118,14 @@ fn setup_storage(storage: &mut endbasic_std::storage::Storage) {
 pub struct WebTerminal {
     console: CanvasConsole,
     on_screen_keyboard: OnScreenKeyboard,
+    service_url: String,
 }
 
 #[wasm_bindgen]
 impl WebTerminal {
     /// Creates a new instance of the `WebTerminal`.
     #[wasm_bindgen(constructor)]
-    pub fn new(terminal: HtmlCanvasElement) -> Self {
+    pub fn new(terminal: HtmlCanvasElement, service_url: String) -> Self {
         let input = WebInput::default();
         let on_screen_keyboard = input.on_screen_keyboard();
         let console = match CanvasConsole::new(terminal, input) {
@@ -132,7 +133,7 @@ impl WebTerminal {
             Err(e) => log_and_panic!("Console initialization failed: {}", e),
         };
 
-        Self { console, on_screen_keyboard }
+        Self { console, on_screen_keyboard, service_url }
     }
 
     /// Generates a new `OnScreenKeyboard` that can inject keypresses into this terminal.
@@ -174,7 +175,8 @@ impl WebTerminal {
             }
         };
 
-        let service = Rc::from(RefCell::from(endbasic_client::CloudService::default()));
+        let service =
+            Rc::from(RefCell::from(endbasic_client::CloudService::new(&self.service_url)?));
         endbasic_client::add_all(&mut machine, service, console.clone(), storage.clone());
 
         endbasic_repl::print_welcome(console.clone())?;

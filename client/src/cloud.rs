@@ -24,9 +24,7 @@ use reqwest::StatusCode;
 use std::collections::HashMap;
 use std::io;
 use std::str;
-
-/// Base address of the REST API.
-const API_ADDRESS: &str = "https://service.endbasic.dev";
+use url::Url;
 
 /// ID of the client used to authenticate against the Azure AAD B2C endpoint.
 const CLIENT_ID: &str = "ca6a2161-3197-4b5b-8857-30d66fd798b3";
@@ -72,13 +70,44 @@ fn reqwest_error_to_io_error(e: reqwest::Error) -> io::Error {
 }
 
 /// An implementation of the EndBASIC service client that talks to a remote server.
-#[derive(Default)]
 #[cfg_attr(test, derive(Clone))]
 pub struct CloudService {
+    api_address: Url,
     client: reqwest::Client,
 }
 
 impl CloudService {
+    /// Creates a new client for the cloud service that talks to `api_address`.
+    pub fn new(api_address: &str) -> io::Result<Self> {
+        let url = match Url::parse(api_address) {
+            Ok(url) => url,
+            Err(e) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Invalid base API address: {}", e),
+                ))
+            }
+        };
+
+        if !(url.path().is_empty() || url.path() == "/") {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Invalid base API address: cannot contain a path".to_owned(),
+            ));
+        }
+
+        Ok(Self { api_address: url, client: reqwest::Client::default() })
+    }
+
+    /// Generates a service URL with the given `path`.
+    fn make_url(&self, path: &str) -> Url {
+        assert!(path.starts_with("api/"));
+        let mut url = self.api_address.clone();
+        assert!(url.path().is_empty() || url.path() == "/");
+        url.set_path(path);
+        url
+    }
+
     /// Returns the default headers to add to every request.
     fn default_headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
@@ -128,7 +157,7 @@ impl Service for CloudService {
     ) -> io::Result<LoginResult> {
         let response = self
             .client
-            .post(&format!("{}/api/login", API_ADDRESS))
+            .post(self.make_url("api/login"))
             .headers(self.default_headers())
             .body(serde_json::to_vec(&request)?)
             .bearer_auth(access_token.as_str())
@@ -157,7 +186,7 @@ impl Service for CloudService {
     ) -> io::Result<GetFilesResponse> {
         let response = self
             .client
-            .get(&format!("{}/api/users/{}/files", API_ADDRESS, username))
+            .get(self.make_url(&format!("api/users/{}/files", username)))
             .headers(self.default_headers())
             .bearer_auth(access_token.as_str())
             .send()
@@ -182,7 +211,7 @@ impl Service for CloudService {
     ) -> io::Result<GetFileResponse> {
         let response = self
             .client
-            .get(&format!("{}/api/users/{}/files/{}", API_ADDRESS, username, filename))
+            .get(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
             .headers(self.default_headers())
             .query(&request)
             .bearer_auth(access_token.as_str())
@@ -208,7 +237,7 @@ impl Service for CloudService {
     ) -> io::Result<()> {
         let response = self
             .client
-            .patch(&format!("{}/api/users/{}/files/{}", API_ADDRESS, username, filename))
+            .patch(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
             .headers(self.default_headers())
             .body(serde_json::to_vec(&request)?)
             .bearer_auth(access_token.as_str())
@@ -229,7 +258,7 @@ impl Service for CloudService {
     ) -> io::Result<()> {
         let response = self
             .client
-            .delete(&format!("{}/api/users/{}/files/{}", API_ADDRESS, username, filename))
+            .delete(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
             .headers(self.default_headers())
             .header("Content-Length", 0)
             .bearer_auth(access_token.as_str())
@@ -248,8 +277,13 @@ mod testutils {
     use super::*;
     use std::env;
 
+    /// Creates a new service that talks to the configured API service for testing.
+    pub(crate) fn new_service_from_env() -> CloudService {
+        let service_api = env::var("SERVICE_URL").expect("Expected env config not found");
+        CloudService::new(&service_api).unwrap()
+    }
+
     /// Holds state for a test and allows for automatic cleanup of shared resources.
-    #[derive(Default)]
     pub(crate) struct TestContext {
         service: CloudService,
 
@@ -260,6 +294,16 @@ mod testutils {
     }
 
     impl TestContext {
+        /// Creates a new test context that talks to the configured API service.
+        pub(crate) fn new_from_env() -> Self {
+            TestContext {
+                service: new_service_from_env(),
+                access_token: None,
+                username: None,
+                files_to_delete: vec![],
+            }
+        }
+
         /// Returns the service client in this context.
         pub(crate) fn service(&self) -> CloudService {
             self.service.clone()
@@ -346,7 +390,7 @@ mod tests {
         let username = env::var("TEST_ACCOUNT_1_USERNAME").expect("Expected env config not found");
         let password = "this is an invalid password for the test account";
 
-        let mut service = CloudService::default();
+        let mut service = new_service_from_env();
         let err = service.authenticate(&username, password).await.unwrap_err();
         assert_eq!(io::ErrorKind::PermissionDenied, err.kind());
     }
@@ -369,7 +413,7 @@ mod tests {
                 }
             }
         }
-        run(&mut TestContext::default());
+        run(&mut TestContext::new_from_env());
     }
 
     #[test]
@@ -422,7 +466,7 @@ mod tests {
                 assert!(response.files.iter().any(|x| &x.filename == filename));
             }
         }
-        run(&mut TestContext::default());
+        run(&mut TestContext::new_from_env());
     }
 
     async fn do_get_and_patch_file_test(context: &mut TestContext, filename: &str, content: &[u8]) {
@@ -447,7 +491,7 @@ mod tests {
             let (filename, content) = context.random_file();
             do_get_and_patch_file_test(context, &filename, content.as_bytes()).await;
         }
-        run(&mut TestContext::default());
+        run(&mut TestContext::new_from_env());
     }
 
     #[test]
@@ -458,7 +502,7 @@ mod tests {
             let (filename, _content) = context.random_file();
             do_get_and_patch_file_test(context, &filename, &[]).await;
         }
-        run(&mut TestContext::default());
+        run(&mut TestContext::new_from_env());
     }
 
     #[test]
@@ -476,7 +520,7 @@ mod tests {
                 service.get_file(&access_token, &username, &filename, &request).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
         }
-        run(&mut TestContext::default());
+        run(&mut TestContext::new_from_env());
     }
 
     #[test]
@@ -514,7 +558,7 @@ mod tests {
                 service.get_file(&access_token2, &username1, &filename, &request).await.unwrap();
             assert_eq!(content.as_bytes(), response.decoded_content().unwrap().unwrap());
         }
-        run(&mut TestContext::default());
+        run(&mut TestContext::new_from_env());
     }
 
     #[test]
@@ -537,7 +581,7 @@ mod tests {
                 service.get_file(&access_token, &username, &filename, &request).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
         }
-        run(&mut TestContext::default());
+        run(&mut TestContext::new_from_env());
     }
 
     #[test]
@@ -553,6 +597,6 @@ mod tests {
             let err = service.delete_file(&access_token, &username, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
         }
-        run(&mut TestContext::default());
+        run(&mut TestContext::new_from_env());
     }
 }

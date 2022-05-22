@@ -37,6 +37,7 @@ jobs:
     linux-test:
         runs-on: ubuntu-latest
         env:
+            SERVICE_URL: "https://service.endbasic.dev/"
             TEST_ACCOUNT_1_USERNAME: ${{ secrets.TEST_ACCOUNT_1_USERNAME }}
             TEST_ACCOUNT_1_PASSWORD: ${{ secrets.TEST_ACCOUNT_1_PASSWORD }}
             TEST_ACCOUNT_2_USERNAME: ${{ secrets.TEST_ACCOUNT_2_USERNAME }}
@@ -51,6 +52,7 @@ jobs:
     macos-test:
         runs-on: macos-latest
         env:
+            SERVICE_URL: "https://service.endbasic.dev/"
             TEST_ACCOUNT_1_USERNAME: ${{ secrets.TEST_ACCOUNT_1_USERNAME }}
             TEST_ACCOUNT_1_PASSWORD: ${{ secrets.TEST_ACCOUNT_1_PASSWORD }}
             TEST_ACCOUNT_2_USERNAME: ${{ secrets.TEST_ACCOUNT_2_USERNAME }}
@@ -72,6 +74,7 @@ jobs:
     windows-test:
         runs-on: windows-latest
         env:
+            SERVICE_URL: "https://service.endbasic.dev/"
             TEST_ACCOUNT_1_USERNAME: ${{ secrets.TEST_ACCOUNT_1_USERNAME }}
             TEST_ACCOUNT_1_PASSWORD: ${{ secrets.TEST_ACCOUNT_1_PASSWORD }}
             TEST_ACCOUNT_2_USERNAME: ${{ secrets.TEST_ACCOUNT_2_USERNAME }}
