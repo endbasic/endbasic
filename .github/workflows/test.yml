@@ -107,8 +107,9 @@ jobs:
               with:
                   profile: minimal
                   # Target a minimum version that ships with common systems
-                  # out there.  In particular, Raspbian as of 2021-06-06.
-                  toolchain: 1.48
+                  # out there.  In particular, Raspbian testing as of
+                  # 2022-05-23.
+                  toolchain: 1.58
                   default: true
             - uses: actions/checkout@v2
             - run: sudo apt update
