@@ -748,10 +748,10 @@ mod tests {
         assert!(syms.get(&VarRef::new("SOMEVAR", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("__SYSTEM_VAR", VarType::Auto)).unwrap().is_some());
         syms.clear();
-        assert!(!syms.get(&VarRef::new("SOMEARRAY", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SOMEARRAY", VarType::Auto)).unwrap().is_none());
         assert!(syms.get(&VarRef::new("EXIT", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SUM", VarType::Auto)).unwrap().is_some());
-        assert!(!syms.get(&VarRef::new("SOMEVAR", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SOMEVAR", VarType::Auto)).unwrap().is_none());
         assert!(syms.get(&VarRef::new("__SYSTEM_VAR", VarType::Auto)).unwrap().is_some());
     }
 
