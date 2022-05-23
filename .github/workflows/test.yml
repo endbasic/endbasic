@@ -98,7 +98,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v2
-            - run: cd std && cargo build --no-default-features --verbose
+            - run: cd std && cargo build --no-default-features
 
     rust-compat:
         runs-on: ubuntu-latest
@@ -114,7 +114,7 @@ jobs:
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             # On old toolchains, we only care about being able to build.
-            - run: cd cli && cargo build --verbose
+            - run: cd cli && cargo build
             # And because we do this primarily for Raspbian, make sure the
             # relevant features build there too.
-            - run: cd cli && cargo build --features=rpi,sdl --verbose
+            - run: cd cli && cargo build --features=rpi,sdl

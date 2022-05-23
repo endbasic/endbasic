@@ -68,7 +68,7 @@ main() {
             sed -i s,native-tls,rustls-tls,g client/Cargo.toml
             # TODO(jmmv): Should enable --features=sdl but need to figure out how to cross-build
             # for it.
-            ( cd cli && cargo build --release --verbose --features=rpi )
+            ( cd cli && cargo build --release --features=rpi )
             rm -f .cargo/config
 
             cp ./target/armv7-unknown-linux-gnueabihf/release/endbasic "${distname}"
@@ -77,7 +77,7 @@ main() {
             ;;
 
         macos*)
-            ( cd cli && cargo build --release --verbose --features=sdl )
+            ( cd cli && cargo build --release --features=sdl )
 
             cp ./target/release/endbasic "${distname}/endbasic.bin"
             cp .github/workflows/macos-launcher.sh "${distname}/endbasic"
@@ -98,7 +98,7 @@ main() {
             ;;
 
         windows*)
-            ( cd cli && LIB="$(pwd)/libs" cargo build --release --verbose --features=sdl )
+            ( cd cli && LIB="$(pwd)/libs" cargo build --release --features=sdl )
 
             cp ./target/release/endbasic.exe "${distname}"
             cp dlls/* "${distname}"
@@ -108,7 +108,7 @@ main() {
             ;;
 
         *)
-            ( cd cli && cargo build --release --verbose --features=sdl )
+            ( cd cli && cargo build --release --features=sdl )
 
             cp ./target/release/endbasic "${distname}"
 
