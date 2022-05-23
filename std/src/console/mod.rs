@@ -283,6 +283,19 @@ pub fn has_control_chars_u8(s: &[u8]) -> bool {
     false
 }
 
+/// Removes control characters from a string to make it suitable for printing.
+pub fn remove_control_chars(s: &str) -> String {
+    let mut o = String::with_capacity(s.len());
+    for ch in s.chars() {
+        if ch.is_control() {
+            o.push_str("<<CONTROL>>");
+        } else {
+            o.push(ch);
+        }
+    }
+    o
+}
+
 /// Gets the value of the environment variable `name` and interprets it as a `u16`.  Returns
 /// `None` if the variable is not set or if its contents are invalid.
 pub fn get_env_var_as_u16(name: &str) -> Option<u16> {
@@ -333,10 +346,10 @@ pub fn read_key_from_stdin(buffer: &mut VecDeque<Key>) -> io::Result<Key> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn test_has_control_chars_str() {
-        use crate::console::has_control_chars_str;
-
         assert!(!has_control_chars_str(""));
         assert!(!has_control_chars_str("foo bar^baz"));
 
@@ -347,13 +360,21 @@ mod tests {
 
     #[test]
     fn test_has_control_chars_u8() {
-        use crate::console::has_control_chars_u8;
-
         assert!(!has_control_chars_u8(b""));
         assert!(!has_control_chars_u8(b"foo bar^baz"));
 
         assert!(has_control_chars_u8(b"foo\nbar"));
         assert!(has_control_chars_u8(b"foo\rbar"));
         assert!(has_control_chars_u8(b"foo\x08bar"));
+    }
+
+    #[test]
+    fn test_remove_control_chars() {
+        assert_eq!("", remove_control_chars(""));
+        assert_eq!("foo bar", remove_control_chars("foo bar"));
+        assert_eq!(
+            "foo<<CONTROL>><<CONTROL>>bar<<CONTROL>>baz<<CONTROL>>",
+            remove_control_chars("foo\r\nbar\rbaz\n")
+        );
     }
 }
