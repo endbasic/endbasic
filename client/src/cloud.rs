@@ -18,6 +18,7 @@
 use crate::*;
 use async_trait::async_trait;
 use bytes::Buf;
+use endbasic_std::console::remove_control_chars;
 use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest::StatusCode;
@@ -53,13 +54,27 @@ async fn http_response_to_io_error(response: Response) -> io::Error {
     };
 
     match response.text().await {
-        Ok(text) => io::Error::new(
-            kind,
-            format!("HTTP request returned status {} with text '{}'", status, text),
-        ),
+        Ok(text) => match serde_json::from_str::<ErrorResponse>(&text) {
+            Ok(response) => io::Error::new(
+                kind,
+                format!("{} (server code: {})", remove_control_chars(&response.message), status),
+            ),
+            _ => io::Error::new(
+                kind,
+                format!(
+                    "HTTP request returned status {} with text '{}'",
+                    status,
+                    remove_control_chars(&text)
+                ),
+            ),
+        },
         Err(e) => io::Error::new(
             kind,
-            format!("HTTP request returned status {} and failed to get text due to {}", status, e),
+            format!(
+                "HTTP request returned status {} and failed to get text due to {}",
+                status,
+                remove_control_chars(&e.to_string())
+            ),
         ),
     }
 }
@@ -580,6 +595,7 @@ mod tests {
             let err =
                 service.get_file(&access_token, &username, &filename, &request).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
+            assert!(format!("{}", err).contains("(server code: 404"));
         }
         run(&mut TestContext::new_from_env());
     }
@@ -596,6 +612,7 @@ mod tests {
 
             let err = service.delete_file(&access_token, &username, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
+            assert!(format!("{}", err).contains("(server code: 404"));
         }
         run(&mut TestContext::new_from_env());
     }
