@@ -86,7 +86,7 @@ account is ready.",
                 console.print("")?;
                 console.print("----- BEGIN SERVER MOTD -----")?;
                 for line in response.motd {
-                    refill_and_print(console, &line, "")?;
+                    refill_and_print(console, [line], "")?;
                 }
                 console.print("-----  END SERVER MOTD  -----")?;
                 console.print("")?;
