@@ -22,7 +22,7 @@ use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
 };
-use endbasic_std::console::{read_line_secure, refill_and_print, Console};
+use endbasic_std::console::{read_line, read_line_secure, refill_and_print, Console};
 use endbasic_std::storage::{FileAcls, Storage};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -31,16 +31,17 @@ use std::str;
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "Cloud access
 The EndBASIC service, should you choose to create an account in, is a cloud service that provides \
-online file sharing across users of EndBASIC.  The commands below allow you interact with this \
-service once you have created an account.
-To create an account, visit https://www.endbasic.dev/service.html and come back here once the \
-account is ready.
+online file sharing across users of EndBASIC.  The commands below allow you to create an account \
+and interact with this service.
 During account creation time, you are assigned a unique, persistent drive in which you can store \
 files privately.  You can later choose to share individual files with the public or with specific \
 individuals, at which point those people will be able to see them by mounting your drive.
 Once logged in, the cloud:// file system scheme becomes available.  You can use it to mount other \
 people's drives by specifying their username as the path.  For example, a command like the \
-following would mount user-123's shared files as a new drive X: MOUNT \"X\", \"cloud://user-123\"";
+following would mount user-123's shared files as a new drive X:
+MOUNT \"X\", \"cloud://user-123\"
+If you have any questions or experience any problems while interacting with the cloud service, \
+please contact support@endbasic.dev.";
 
 /// The `LOGIN` command.
 pub struct LoginCommand {
@@ -307,6 +308,177 @@ impl Command for ShareCommand {
     }
 }
 
+/// Checks if a password is sufficiently complex and returns an error when it isn't.
+fn validate_password_complexity(password: &str) -> Result<(), &'static str> {
+    if password.len() < 8 {
+        return Err("Must be at least 8 characters long");
+    }
+
+    let mut alphabetic = false;
+    let mut numeric = false;
+    for ch in password.chars() {
+        if ch.is_alphabetic() {
+            alphabetic = true;
+        } else if ch.is_numeric() {
+            numeric = true;
+        }
+    }
+
+    if !alphabetic || !numeric {
+        return Err("Must contain letters and numbers");
+    }
+
+    Ok(())
+}
+
+/// The `SIGNUP` command.
+pub struct SignupCommand {
+    metadata: CallableMetadata,
+    service: Rc<RefCell<dyn Service>>,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl SignupCommand {
+    /// Creates a new `SIGNUP` command.
+    pub fn new(service: Rc<RefCell<dyn Service>>, console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("SIGNUP", VarType::Void)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Creates a new user account interactively.
+This command will ask you for your personal information to create an account in the EndBASIC \
+cloud service.  You will be asked for confirmation before proceeding.",
+                )
+                .build(),
+            service,
+            console,
+        })
+    }
+
+    /// Tries to read a boolean value until it is valid.  Returns `default` if the user hits enter.
+    async fn read_bool(console: &mut dyn Console, prompt: &str, default: bool) -> io::Result<bool> {
+        loop {
+            match read_line(console, prompt, "", None).await? {
+                s if s.is_empty() => return Ok(default),
+                s => match Value::parse_as(VarType::Boolean, s.trim_end()) {
+                    Ok(Value::Boolean(b)) => return Ok(b),
+                    Ok(_) => unreachable!(),
+                    Err(_) => {
+                        console.print("Invalid input; try again.")?;
+                        continue;
+                    }
+                },
+            }
+        }
+    }
+
+    /// Tries to get a password from the user until it is valid.
+    async fn read_password(console: &mut dyn Console) -> io::Result<String> {
+        loop {
+            let password = read_line_secure(console, "Password: ").await?;
+            match validate_password_complexity(&password) {
+                Ok(()) => (),
+                Err(e) => {
+                    console.print(&format!("Invalid password: {}; try again.", e))?;
+                    continue;
+                }
+            }
+
+            let second_password = read_line_secure(console, "Retype password: ").await?;
+            if second_password != password {
+                console.print("Passwords do not match; try again.")?;
+                continue;
+            }
+
+            return Ok(password);
+        }
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for SignupCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(
+        &self,
+        _args: &[(Option<Expr>, ArgSep)],
+        _machine: &mut Machine,
+    ) -> CommandResult {
+        let console = &mut *self.console.borrow_mut();
+        console.print("")?;
+        refill_and_print(
+            console,
+            ["Let's gather some information to create your cloud account.",
+"You can abort this process at any time by hitting Ctrl+C and you will be given a chance to \
+review your inputs before creating the account."],
+            "    ",
+        )?;
+        console.print("")?;
+
+        let username = read_line(console, "Username: ", "", None).await?;
+        let password = Self::read_password(console).await?;
+
+        console.print("")?;
+        refill_and_print(
+            console,
+            [
+                "We also need your email address to activate your account.",
+                "Your email address will be kept on file in case we have to notify you of \
+important service issues and will never be made public.  You will be asked if you want to receive \
+promotional email messages (like new release announcements) or not, and your selection here will \
+have no adverse impact in the service you receive.",
+            ],
+            "    ",
+        )?;
+        console.print("")?;
+
+        let email = read_line(console, "Email address: ", "", None).await?;
+        let promotional_email =
+            Self::read_bool(console, "Receive promotional email (y/N)? ", false).await?;
+
+        console.print("")?;
+        refill_and_print(
+            console,
+            ["We are ready to go. Please review your answers before proceeding."],
+            "    ",
+        )?;
+        console.print("")?;
+
+        console.print(&format!("Username: {}", username))?;
+        console.print(&format!("Email address: {}", email))?;
+        console.print(&format!(
+            "Promotional email: {}",
+            if promotional_email { "yes" } else { "no" }
+        ))?;
+        let proceed = Self::read_bool(console, "Continue (y/N)? ", false).await?;
+        if !proceed {
+            // TODO(jmmv): This should return an error of some form once we have error handling in
+            // the language.
+            return Ok(());
+        }
+
+        let request = SignupRequest { username, password, email, promotional_email };
+        self.service.borrow_mut().signup(&request).await?;
+
+        console.print("")?;
+        refill_and_print(
+            console,
+            ["Your account has been created and is pending activation.",
+"Check your email now and look for a message from the EndBASIC Service.  Follow the instructions \
+in it to activate your account.  Make sure to check your spam folder.",
+"Once your account is activated, come back here and use LOGIN to get started!",
+"If you encounter any problems, please contact support@endbasic.dev."],
+            "    ",
+        )?;
+        console.print("")?;
+
+        Ok(())
+    }
+}
+
 /// Adds all remote manipulation commands for `service` to the `machine`, using `console` to
 /// display information and `storage` to manipulate the remote drives.
 pub fn add_all(
@@ -315,8 +487,9 @@ pub fn add_all(
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 ) {
-    machine.add_command(LoginCommand::new(service, console.clone(), storage.clone()));
-    machine.add_command(ShareCommand::new(console, storage));
+    machine.add_command(LoginCommand::new(service.clone(), console.clone(), storage.clone()));
+    machine.add_command(ShareCommand::new(console.clone(), storage));
+    machine.add_command(SignupCommand::new(service, console));
 }
 
 #[cfg(test)]
@@ -514,5 +687,184 @@ mod tests {
             r#"Invalid ACL 'foobar': must be of the form "username+r" or "username-r""#,
             r#"SHARE "a", "foobar""#,
         );
+    }
+
+    #[test]
+    fn test_validate_password_complexity_ok() {
+        validate_password_complexity("theP4ssword").unwrap();
+    }
+
+    #[test]
+    fn test_validate_password_complexity_error() {
+        validate_password_complexity("a").unwrap_err().contains("8 characters");
+        validate_password_complexity("abcdefg").unwrap_err().contains("8 characters");
+        validate_password_complexity("long enough").unwrap_err().contains("letters and numbers");
+        validate_password_complexity("1234567890").unwrap_err().contains("letters and numbers");
+    }
+
+    /// Flattens the captured output into a single string resembling what would be shown in the
+    /// console for ease of testing.
+    fn flatten_output(captured_out: Vec<CapturedOut>) -> String {
+        let mut flattened = String::new();
+        for out in captured_out {
+            match out {
+                CapturedOut::Write(bs) => flattened.push_str(str::from_utf8(&bs).unwrap()),
+                CapturedOut::Print(s) => flattened.push_str(&s),
+                _ => (),
+            }
+        }
+        flattened
+    }
+
+    #[test]
+    fn test_signup_ok() {
+        let t = ClientTester::default();
+        t.get_service().borrow_mut().add_mock_signup(
+            SignupRequest {
+                username: "the-username".to_owned(),
+                password: "theP4ssword".to_owned(),
+                email: "some@example.com".to_owned(),
+                promotional_email: false,
+            },
+            Ok(()),
+        );
+        t.get_console().borrow_mut().set_interactive(true);
+
+        let mut t = t
+            .add_input_chars("the-username\n")
+            .add_input_chars("theP4ssword\n")
+            .add_input_chars("theP4ssword\n")
+            .add_input_chars("some@example.com\n")
+            .add_input_chars("\n") // Default promotional email answer.
+            .add_input_chars("y\n"); // Confirmation.
+        let mut c = t.run("SIGNUP".to_owned());
+        let output = flatten_output(c.take_captured_out());
+        c.check();
+
+        assert!(output.contains("Username: the-username"));
+        assert!(output.contains("Email address: some@example.com"));
+        assert!(output.contains("Promotional email: no"));
+    }
+
+    #[test]
+    fn test_signup_ok_with_promotional_email() {
+        let t = ClientTester::default();
+        t.get_service().borrow_mut().add_mock_signup(
+            SignupRequest {
+                username: "foobar".to_owned(),
+                password: "AnotherPassword5".to_owned(),
+                email: "other@example.com".to_owned(),
+                promotional_email: true,
+            },
+            Ok(()),
+        );
+        t.get_console().borrow_mut().set_interactive(true);
+
+        let mut t = t
+            .add_input_chars("foobar\n")
+            .add_input_chars("AnotherPassword5\n")
+            .add_input_chars("AnotherPassword5\n")
+            .add_input_chars("other@example.com\n")
+            .add_input_chars("yes\n") // Promotional email answer.
+            .add_input_chars("y\n"); // Confirmation.
+        let mut c = t.run("SIGNUP".to_owned());
+        let output = flatten_output(c.take_captured_out());
+        c.check();
+
+        assert!(output.contains("Username: foobar"));
+        assert!(output.contains("Email address: other@example.com"));
+        assert!(output.contains("Promotional email: yes"));
+    }
+
+    #[test]
+    fn test_signup_ok_retry_inputs() {
+        let t = ClientTester::default();
+        t.get_service().borrow_mut().add_mock_signup(
+            SignupRequest {
+                username: "the-username".to_owned(),
+                password: "AnotherPassword7".to_owned(),
+                email: "some@example.com".to_owned(),
+                promotional_email: false,
+            },
+            Ok(()),
+        );
+        t.get_console().borrow_mut().set_interactive(true);
+
+        let mut t = t
+            .add_input_chars("the-username\n")
+            .add_input_chars("too simple\n") // Password complexity failure.
+            .add_input_chars("123456\n") // Password complexity failure.
+            .add_input_chars("AnotherPassword7\n")
+            .add_input_chars("does not match\n") // Second password doesn't match.
+            .add_input_chars("too simple\n") // Password complexity failure.
+            .add_input_chars("123456\n") // Password complexity failure.
+            .add_input_chars("AnotherPassword7\n")
+            .add_input_chars("AnotherPassword7\n")
+            .add_input_chars("some@example.com\n")
+            .add_input_chars("123\n") // Promotional email answer failure.
+            .add_input_chars("n\n") // Promotional email answer.
+            .add_input_chars("foo\n") // Confirmation failure.
+            .add_input_chars("y\n"); // Confirmation.
+        let mut c = t.run("SIGNUP".to_owned());
+        let output = flatten_output(c.take_captured_out());
+        c.check();
+
+        assert!(output.contains("Invalid input"));
+        assert!(output.contains("Invalid password: Must contain"));
+        assert!(output.contains("Passwords do not match"));
+        assert!(output.contains("Username: the-username"));
+        assert!(output.contains("Email address: some@example.com"));
+        assert!(output.contains("Promotional email: no"));
+    }
+
+    #[test]
+    fn test_signup_abort() {
+        let t = ClientTester::default();
+        t.get_console().borrow_mut().set_interactive(true);
+
+        let mut t = t
+            .add_input_chars("the-username\n")
+            .add_input_chars("theP4ssword\n")
+            .add_input_chars("theP4ssword\n")
+            .add_input_chars("some@example.com\n")
+            .add_input_chars("\n") // Default promotional email answer.
+            .add_input_chars("\n"); // Default confirmation.
+        let mut c = t.run("SIGNUP".to_owned());
+        let output = flatten_output(c.take_captured_out());
+        c.check();
+
+        assert!(output.contains("Username: the-username"));
+        assert!(output.contains("Email address: some@example.com"));
+        assert!(output.contains("Promotional email: no"));
+    }
+
+    #[test]
+    fn test_signup_error() {
+        let t = ClientTester::default();
+        t.get_service().borrow_mut().add_mock_signup(
+            SignupRequest {
+                username: "the-username".to_owned(),
+                password: "theP4ssword".to_owned(),
+                email: "some@example.com".to_owned(),
+                promotional_email: false,
+            },
+            Err(io::Error::new(io::ErrorKind::AlreadyExists, "Some error")),
+        );
+        t.get_console().borrow_mut().set_interactive(true);
+
+        let mut t = t
+            .add_input_chars("the-username\n")
+            .add_input_chars("theP4ssword\n")
+            .add_input_chars("theP4ssword\n")
+            .add_input_chars("some@example.com\n")
+            .add_input_chars("\n") // Default promotional email answer.
+            .add_input_chars("true\n"); // Confirmation.
+        let mut c = t.run("SIGNUP".to_owned());
+        let output = flatten_output(c.take_captured_out());
+        c.expect_err("Some error").check();
+
+        assert!(output.contains("Username: the-username"));
+        assert!(output.contains("Email address: some@example.com"));
+        assert!(output.contains("Promotional email: no"));
     }
 }

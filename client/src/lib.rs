@@ -192,9 +192,22 @@ impl PatchFileRequest {
     }
 }
 
+/// Representation of a signup request.
+#[derive(Debug, Default, PartialEq, Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
+pub struct SignupRequest {
+    username: String,
+    password: String,
+    email: String,
+    promotional_email: bool,
+}
+
 /// Abstract interface to interact with an EndBASIC service server.
 #[async_trait(?Send)]
 pub trait Service {
+    /// Interactively creates an account based on the details provided in `request`.
+    async fn signup(&mut self, request: &SignupRequest) -> io::Result<()>;
+
     /// Sends an authentication request to the service with `username` and `password` to obtain an
     /// access token for the session.
     async fn login(&mut self, username: &str, password: &str) -> io::Result<LoginResponse>;

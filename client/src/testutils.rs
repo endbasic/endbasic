@@ -17,7 +17,7 @@
 
 use crate::{
     add_all, AccessToken, GetFileRequest, GetFileResponse, GetFilesResponse, LoginResponse,
-    PatchFileRequest, Service,
+    PatchFileRequest, Service, SignupRequest,
 };
 use async_trait::async_trait;
 use endbasic_std::storage::Storage;
@@ -33,6 +33,7 @@ use std::rc::Rc;
 pub struct MockService {
     access_token: Option<AccessToken>,
 
+    mock_signup: VecDeque<(SignupRequest, io::Result<()>)>,
     mock_login: VecDeque<((String, String), io::Result<LoginResponse>)>,
     mock_get_files: VecDeque<(String, io::Result<GetFilesResponse>)>,
     mock_get_file: VecDeque<((String, String, GetFileRequest), io::Result<GetFileResponse>)>,
@@ -47,6 +48,13 @@ impl MockService {
     pub(crate) async fn do_login(&mut self) -> AccessToken {
         self.access_token = Some(AccessToken::new("the token"));
         self.access_token.as_ref().unwrap().clone()
+    }
+
+    /// Records the behavior of an upcoming signup operation with `request` and that returns
+    /// `result`.
+    #[cfg(test)]
+    pub(crate) fn add_mock_signup(&mut self, request: SignupRequest, result: io::Result<()>) {
+        self.mock_signup.push_back((request, result));
     }
 
     /// Records the behavior of an upcoming login operation with `username` and `password`
@@ -117,6 +125,7 @@ impl MockService {
 
     /// Ensures that all requests and responses have been consumed.
     pub(crate) fn verify_all_used(&mut self) {
+        assert!(self.mock_signup.is_empty(), "Mock requests not fully consumed");
         assert!(self.mock_login.is_empty(), "Mock requests not fully consumed");
         assert!(self.mock_get_files.is_empty(), "Mock requests not fully consumed");
         assert!(self.mock_get_file.is_empty(), "Mock requests not fully consumed");
@@ -127,6 +136,12 @@ impl MockService {
 
 #[async_trait(?Send)]
 impl Service for MockService {
+    async fn signup(&mut self, request: &SignupRequest) -> io::Result<()> {
+        let mock = self.mock_signup.pop_front().expect("No mock requests available");
+        assert_eq!(&mock.0, request);
+        mock.1
+    }
+
     async fn login(&mut self, username: &str, password: &str) -> io::Result<LoginResponse> {
         assert!(self.access_token.is_none(), "login succeeded more than once");
         let mock = self.mock_login.pop_front().expect("No mock requests available");
@@ -273,6 +288,12 @@ impl<'a> ClientChecker<'a> {
     /// See the wrapped `Checker::expect_prints` function for details.
     pub fn expect_prints<S: Into<String>, V: Into<Vec<S>>>(self, out: V) -> Self {
         Self { checker: self.checker.expect_prints(out), service: self.service }
+    }
+
+    /// See the wrapped `Checker::take_captured_out` function for details.
+    #[must_use]
+    pub fn take_captured_out(&mut self) -> Vec<CapturedOut> {
+        self.checker.take_captured_out()
     }
 
     /// Validates all expectations.

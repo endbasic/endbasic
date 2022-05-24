@@ -131,6 +131,21 @@ impl CloudService {
 
 #[async_trait(?Send)]
 impl Service for CloudService {
+    async fn signup(&mut self, request: &SignupRequest) -> io::Result<()> {
+        let response = self
+            .client
+            .post(self.make_url("api/signup"))
+            .headers(self.default_headers())
+            .body(serde_json::to_vec(&request)?)
+            .send()
+            .await
+            .map_err(reqwest_error_to_io_error)?;
+        match response.status() {
+            reqwest::StatusCode::OK => Ok(()),
+            _ => Err(http_response_to_io_error(response).await),
+        }
+    }
+
     async fn login(&mut self, username: &str, password: &str) -> io::Result<LoginResponse> {
         // TODO(https://github.com/seanmonstar/reqwest/pull/1096): Replace with a basic_auth()
         // call on the RequestBuilder once it is supported in WASM.

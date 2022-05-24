@@ -18,6 +18,10 @@ for the time being.**
     that does not use Azure AD for authentication.  This new command is faster
     and simpler.
 
+*   Added the `SIGNUP` command to create cloud accounts right from the REPL.
+    Having this command in the interpreter had always been the goal, but it
+    was not possible to implement it due to Azure AD authentication flows.
+
 *   Parameterized the cloud service to talk to.  In the CLI, the new
     `--service-url` allows overriding the default, and in the web, the staging
     site now points to the staging service.
