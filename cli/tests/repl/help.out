@@ -44,11 +44,8 @@ Output from HELP CLOUD:
 
     The EndBASIC service, should you choose to create an account in, is a
     cloud service that provides online file sharing across users of
-    EndBASIC.  The commands below allow you interact with this service once
-    you have created an account.
-
-    To create an account, visit https://www.endbasic.dev/service.html and
-    come back here once the account is ready.
+    EndBASIC.  The commands below allow you to create an account and
+    interact with this service.
 
     During account creation time, you are assigned a unique, persistent
     drive in which you can store files privately.  You can later choose to
@@ -59,10 +56,16 @@ Output from HELP CLOUD:
     Once logged in, the cloud:// file system scheme becomes available.  You
     can use it to mount other people's drives by specifying their username
     as the path.  For example, a command like the following would mount
-    user-123's shared files as a new drive X: MOUNT "X", "cloud://user-123"
+    user-123's shared files as a new drive X:
 
-    >> LOGIN    Logs into the user's account.
-    >> SHARE    Displays or modifies the ACLs of a file.
+    MOUNT "X", "cloud://user-123"
+
+    If you have any questions or experience any problems while interacting
+    with the cloud service, please contact support@endbasic.dev.
+
+    >> LOGIN     Logs into the user's account.
+    >> SHARE     Displays or modifies the ACLs of a file.
+    >> SIGNUP    Creates a new user account interactively.
 
     Type HELP followed by the name of a symbol for details.
 
@@ -651,6 +654,16 @@ Output from HELP SHARE:
 
     Note that this command only works for cloud-based drives as it is
     designed to share files among users of the EndBASIC service.
+
+Output from HELP SIGNUP:
+
+    SIGNUP
+
+    Creates a new user account interactively.
+
+    This command will ask you for your personal information to create an
+    account in the EndBASIC cloud service.  You will be asked for
+    confirmation before proceeding.
 
 Output from HELP SLEEP:
 

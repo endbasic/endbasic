@@ -133,6 +133,14 @@ impl MockConsole {
         self.captured_out.as_slice()
     }
 
+    /// Takes the captured output for separate analysis.
+    #[must_use]
+    pub fn take_captured_out(&mut self) -> Vec<CapturedOut> {
+        let mut copy = Vec::with_capacity(self.captured_out.len());
+        copy.append(&mut self.captured_out);
+        copy
+    }
+
     /// Sets the size of the mock console.
     pub fn set_size(&mut self, size: CharsXY) {
         self.size = size;
@@ -588,6 +596,16 @@ impl<'a> Checker<'a> {
         assert!(!self.exp_vars.contains_key(&name));
         self.exp_vars.insert(name, value.into());
         self
+    }
+
+    /// Takes the captured output for separate analysis.
+    #[must_use]
+    pub fn take_captured_out(&mut self) -> Vec<CapturedOut> {
+        assert!(
+            self.exp_output.is_empty(),
+            "Cannot take output if we are already expecting prints because the test would fail"
+        );
+        self.tester.console.borrow_mut().take_captured_out()
     }
 
     /// Validates all expectations.
