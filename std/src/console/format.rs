@@ -64,24 +64,32 @@ fn refill(paragraph: &str, width: usize) -> Vec<String> {
     lines
 }
 
-/// Same as `refill` but prints the lines to the console instead of returning them and prefixes them
-/// with an optional `indent`.
+/// Same as `refill` but prints the lines of each paragraph to the console instead of returning
+/// them and prefixes them with an optional `indent`.
 ///
 /// The width is automatically determined from the console's size.
-pub fn refill_and_print(
+pub fn refill_and_print<S: AsRef<str>, P: IntoIterator<Item = S>>(
     console: &mut dyn Console,
-    paragraph: &str,
+    paragraphs: P,
     indent: &str,
 ) -> io::Result<()> {
-    // TODO(jmmv): This queries the size on every print, which is not very efficient.  Should reuse
-    // this across calls, maybe by having a wrapper over Console and using it throughout.
-    let size = console.size()?;
-    let lines = refill(paragraph, usize::from(size.x) - 4 - indent.len());
-    for line in lines {
-        if line.is_empty() {
+    let mut first = true;
+    for paragraph in paragraphs {
+        if !first {
             console.print("")?;
-        } else {
-            console.print(&format!("{}{}", indent, line))?;
+        }
+        first = false;
+
+        // TODO(jmmv): This queries the size on every print, which is not very efficient.  Should
+        // reuse this across calls, maybe by having a wrapper over Console and using it throughout.
+        let size = console.size()?;
+        let lines = refill(paragraph.as_ref(), usize::from(size.x) - 4 - indent.len());
+        for line in lines {
+            if line.is_empty() {
+                console.print("")?;
+            } else {
+                console.print(&format!("{}{}", indent, line))?;
+            }
         }
     }
     Ok(())
@@ -90,6 +98,7 @@ pub fn refill_and_print(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testutils::{CapturedOut, MockConsole};
 
     #[test]
     fn test_refill_empty() {
@@ -117,5 +126,38 @@ mod tests {
         assert_eq!(&["foo. bar. baz."], refill("foo. bar.    baz.", 100).as_slice());
         assert_eq!(&["foo.  Bar. baz."], refill("foo. Bar.    baz.", 100).as_slice());
         assert_eq!(&["[some .. range]"], refill("[some .. range]", 100).as_slice());
+    }
+
+    #[test]
+    fn test_refill_and_print_empty() {
+        let mut console = MockConsole::default();
+        let paragraphs: &[&str] = &[];
+        refill_and_print(&mut console, paragraphs, "    ").unwrap();
+        assert!(console.captured_out().is_empty());
+    }
+
+    #[test]
+    fn test_refill_and_print_one() {
+        let mut console = MockConsole::default();
+        let paragraphs = &["First    paragraph"];
+        refill_and_print(&mut console, paragraphs, "    ").unwrap();
+        assert_eq!(&[CapturedOut::Print("    First paragraph".to_owned())], console.captured_out());
+    }
+
+    #[test]
+    fn test_refill_and_print_multiple() {
+        let mut console = MockConsole::default();
+        let paragraphs = &["First    paragraph", "  Second", "Third. The. end."];
+        refill_and_print(&mut console, paragraphs, "    ").unwrap();
+        assert_eq!(
+            &[
+                CapturedOut::Print("    First paragraph".to_owned()),
+                CapturedOut::Print("".to_owned()),
+                CapturedOut::Print("    Second".to_owned()),
+                CapturedOut::Print("".to_owned()),
+                CapturedOut::Print("    Third.  The. end.".to_owned()),
+            ],
+            console.captured_out()
+        );
     }
 }
