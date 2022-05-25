@@ -67,8 +67,7 @@ impl LoginCommand {
 On a successful login, this mounts your personal drive under the CLOUD:/ location, which you can \
 access with any other file-related commands.  Using the cloud:// file system scheme, you can mount \
 other people's drives with the MOUNT command.
-To create an account, visit https://www.endbasic.dev/service.html and come back here once the \
-account is ready.",
+To create an account, use the SIGNUP command.",
                 )
                 .build(),
             service,

@@ -540,8 +540,7 @@ Output from HELP LOGIN:
     commands.  Using the cloud:// file system scheme, you can mount other
     people's drives with the MOUNT command.
 
-    To create an account, visit https://www.endbasic.dev/service.html and
-    come back here once the account is ready.
+    To create an account, use the SIGNUP command.
 
 Output from HELP MOUNT:
 
