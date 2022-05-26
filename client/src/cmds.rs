@@ -30,16 +30,16 @@ use std::str;
 
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "Cloud access
-The EndBASIC service, should you choose to create an account in, is a cloud service that provides \
-online file sharing across users of EndBASIC.  The commands below allow you to create an account \
-and interact with this service.
-During account creation time, you are assigned a unique, persistent drive in which you can store \
-files privately.  You can later choose to share individual files with the public or with specific \
-individuals, at which point those people will be able to see them by mounting your drive.
-Once logged in, the cloud:// file system scheme becomes available.  You can use it to mount other \
-people's drives by specifying their username as the path.  For example, a command like the \
-following would mount user-123's shared files as a new drive X:
-MOUNT \"X\", \"cloud://user-123\"
+The EndBASIC service is a cloud service that provides online file sharing across users of \
+EndBASIC and the public.
+Files that have been shared publicly can be accessed without an account via the cloud:// file \
+system scheme.  All you have to do is mount a user's cloud drive and then access the files as you \
+would with your own.  For example:
+MOUNT \"X\", \"cloud://user-123\": DIR \"X:\"
+To upload files and share them, you need to create an account.  During account creation time, you \
+are assigned a unique, persistent drive in which you can store files privately.  You can later \
+choose to share individual files with the public or with specific individuals, at which point \
+those people will be able to see them by mounting your drive.
 If you have any questions or experience any problems while interacting with the cloud service, \
 please contact support@endbasic.dev.";
 
@@ -49,6 +49,7 @@ pub struct LoginCommand {
     service: Rc<RefCell<dyn Service>>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
+    logged_in: Rc<RefCell<bool>>,
 }
 
 impl LoginCommand {
@@ -73,6 +74,7 @@ To create an account, use the SIGNUP command.",
             service,
             console,
             storage,
+            logged_in: Rc::from(RefCell::from(false)),
         })
     }
 
@@ -94,10 +96,6 @@ To create an account, use the SIGNUP command.",
         }
 
         let mut storage = self.storage.borrow_mut();
-        storage.register_scheme(
-            "cloud",
-            Box::from(CloudDriveFactory::new(self.service.clone(), response.access_token)),
-        );
         storage.mount("CLOUD", &format!("cloud://{}", username))?;
 
         Ok(())
@@ -111,10 +109,10 @@ impl Command for LoginCommand {
     }
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if self.storage.borrow().has_scheme("cloud") {
-            // TODO(jmmv): To support authenticating more than once in one session, we have to
-            // either refresh the access tokens of any mounted drive or unmount them all.  Plus we
-            // have to avoid re-registering or re-creating the "cloud" scheme.
+        if *self.logged_in.borrow() {
+            // TODO(jmmv): Now that the access tokens are part of the service, we can easily allow
+            // logging in more than once within a session.  Consider adding a LOGOUT command first
+            // to make it easier to handle the CLOUD: drive on a second login.
             return Err(CallError::InternalError(
                 "Support for calling LOGIN twice in the same session is not implemented".to_owned(),
             ));
@@ -161,7 +159,11 @@ impl Command for LoginCommand {
             }
         };
 
-        self.do_login(&username, &password).await
+        let result = self.do_login(&username, &password).await;
+        if result.is_ok() {
+            *(self.logged_in.borrow_mut()) = true;
+        }
+        result
     }
 }
 
@@ -486,6 +488,10 @@ pub fn add_all(
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 ) {
+    storage
+        .borrow_mut()
+        .register_scheme("cloud", Box::from(CloudDriveFactory::new(service.clone())));
+
     machine.add_command(LoginCommand::new(service.clone(), console.clone(), storage.clone()));
     machine.add_command(ShareCommand::new(console.clone(), storage));
     machine.add_command(SignupCommand::new(service, console));
@@ -498,6 +504,12 @@ mod tests {
     use endbasic_std::testutils::*;
 
     #[test]
+    fn test_cloud_scheme_always_available() {
+        let t = ClientTester::default();
+        assert!(t.get_storage().borrow().has_scheme("cloud"));
+    }
+
+    #[test]
     fn test_login_ok_with_password() {
         let mut t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_login(
@@ -506,7 +518,9 @@ mod tests {
             Ok(LoginResponse { access_token: AccessToken::new("random token"), motd: vec![] }),
         );
         assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
-        t.run(format!(r#"LOGIN "{}", "{}""#, "the-username", "the-password")).check();
+        t.run(format!(r#"LOGIN "{}", "{}""#, "the-username", "the-password"))
+            .expect_access_token("random token")
+            .check();
         assert!(t.get_storage().borrow().mounted().contains_key("CLOUD"));
     }
 
@@ -531,6 +545,7 @@ mod tests {
         t.add_input_chars("the-password")
             .add_input_chars("\n")
             .run(format!(r#"LOGIN "{}""#, "the-username"))
+            .expect_access_token("random token")
             .expect_output(exp_output)
             .check();
 
@@ -557,6 +572,7 @@ mod tests {
                 "-----  END SERVER MOTD  -----",
                 "",
             ])
+            .expect_access_token("random token")
             .check();
     }
 
@@ -592,6 +608,7 @@ mod tests {
         );
         assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
         t.run(format!(r#"LOGIN "{}", "{}": LOGIN "a", "b""#, "the-username", "the-password"))
+            .expect_access_token("random token")
             .expect_err("Support for calling LOGIN twice in the same session is not implemented")
             .check();
         assert!(t.get_storage().borrow().mounted().contains_key("CLOUD"));

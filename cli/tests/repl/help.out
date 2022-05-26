@@ -42,23 +42,21 @@ Output from HELP CLOUD:
 
     Cloud access
 
-    The EndBASIC service, should you choose to create an account in, is a
-    cloud service that provides online file sharing across users of
-    EndBASIC.  The commands below allow you to create an account and
-    interact with this service.
+    The EndBASIC service is a cloud service that provides online file
+    sharing across users of EndBASIC and the public.
 
-    During account creation time, you are assigned a unique, persistent
-    drive in which you can store files privately.  You can later choose to
-    share individual files with the public or with specific individuals, at
-    which point those people will be able to see them by mounting your
-    drive.
+    Files that have been shared publicly can be accessed without an account
+    via the cloud:// file system scheme.  All you have to do is mount a
+    user's cloud drive and then access the files as you would with your
+    own.  For example:
 
-    Once logged in, the cloud:// file system scheme becomes available.  You
-    can use it to mount other people's drives by specifying their username
-    as the path.  For example, a command like the following would mount
-    user-123's shared files as a new drive X:
+    MOUNT "X", "cloud://user-123": DIR "X:"
 
-    MOUNT "X", "cloud://user-123"
+    To upload files and share them, you need to create an account.  During
+    account creation time, you are assigned a unique, persistent drive in
+    which you can store files privately.  You can later choose to share
+    individual files with the public or with specific individuals, at which
+    point those people will be able to see them by mounting your drive.
 
     If you have any questions or experience any problems while interacting
     with the cloud service, please contact support@endbasic.dev.

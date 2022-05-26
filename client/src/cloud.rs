@@ -22,7 +22,9 @@ use endbasic_std::console::remove_control_chars;
 use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest::StatusCode;
+use std::cell::RefCell;
 use std::io;
+use std::rc::Rc;
 use std::str;
 use url::Url;
 
@@ -82,6 +84,7 @@ fn reqwest_error_to_io_error(e: reqwest::Error) -> io::Error {
 pub struct CloudService {
     api_address: Url,
     client: reqwest::Client,
+    access_token: Rc<RefCell<Option<AccessToken>>>,
 }
 
 impl CloudService {
@@ -104,7 +107,9 @@ impl CloudService {
             ));
         }
 
-        Ok(Self { api_address: url, client: reqwest::Client::default() })
+        let access_token = Rc::from(RefCell::from(None));
+
+        Ok(Self { api_address: url, client: reqwest::Client::default(), access_token })
     }
 
     /// Generates a service URL with the given `path`.
@@ -126,6 +131,18 @@ impl CloudService {
                 .expect("Package version should have been serializable"),
         );
         headers
+    }
+
+    /// Checks if the given access token is present and returns it, or else returns a permission
+    /// denied error.
+    fn require_access_token(token: Option<&AccessToken>) -> io::Result<&AccessToken> {
+        match token.as_ref() {
+            Some(token) => Ok(token),
+            None => Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Not logged in yet; cannot attempt write".to_owned(),
+            )),
+        }
     }
 }
 
@@ -163,25 +180,22 @@ impl Service for CloudService {
             reqwest::StatusCode::OK => {
                 let bytes = response.bytes().await.map_err(reqwest_error_to_io_error)?;
                 let response: LoginResponse = serde_json::from_reader(bytes.reader())?;
+                *(self.access_token.borrow_mut()) = Some(response.access_token.clone());
                 Ok(response)
             }
             _ => Err(http_response_to_io_error(response).await),
         }
     }
 
-    async fn get_files(
-        &mut self,
-        access_token: &AccessToken,
-        username: &str,
-    ) -> io::Result<GetFilesResponse> {
-        let response = self
+    async fn get_files(&mut self, username: &str) -> io::Result<GetFilesResponse> {
+        let mut builder = self
             .client
             .get(self.make_url(&format!("api/users/{}/files", username)))
-            .headers(self.default_headers())
-            .bearer_auth(access_token.as_str())
-            .send()
-            .await
-            .map_err(reqwest_error_to_io_error)?;
+            .headers(self.default_headers());
+        if let Some(access_token) = self.access_token.borrow().as_ref() {
+            builder = builder.bearer_auth(access_token.as_str());
+        }
+        let response = builder.send().await.map_err(reqwest_error_to_io_error)?;
         match response.status() {
             reqwest::StatusCode::OK => {
                 let bytes = response.bytes().await.map_err(reqwest_error_to_io_error)?;
@@ -194,20 +208,19 @@ impl Service for CloudService {
 
     async fn get_file(
         &mut self,
-        access_token: &AccessToken,
         username: &str,
         filename: &str,
         request: &GetFileRequest,
     ) -> io::Result<GetFileResponse> {
-        let response = self
+        let mut builder = self
             .client
             .get(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
             .headers(self.default_headers())
-            .query(&request)
-            .bearer_auth(access_token.as_str())
-            .send()
-            .await
-            .map_err(reqwest_error_to_io_error)?;
+            .query(&request);
+        if let Some(access_token) = self.access_token.borrow().as_ref() {
+            builder = builder.bearer_auth(access_token.as_str());
+        }
+        let response = builder.send().await.map_err(reqwest_error_to_io_error)?;
         match response.status() {
             reqwest::StatusCode::OK => {
                 let bytes = response.bytes().await.map_err(reqwest_error_to_io_error)?;
@@ -220,17 +233,18 @@ impl Service for CloudService {
 
     async fn patch_file(
         &mut self,
-        access_token: &AccessToken,
         username: &str,
         filename: &str,
         request: &PatchFileRequest,
     ) -> io::Result<()> {
+        let access_token = self.access_token.borrow();
+
         let response = self
             .client
             .patch(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
             .headers(self.default_headers())
             .body(serde_json::to_vec(&request)?)
-            .bearer_auth(access_token.as_str())
+            .bearer_auth(Self::require_access_token(access_token.as_ref())?.as_str())
             .send()
             .await
             .map_err(reqwest_error_to_io_error)?;
@@ -240,18 +254,15 @@ impl Service for CloudService {
         }
     }
 
-    async fn delete_file(
-        &mut self,
-        access_token: &AccessToken,
-        username: &str,
-        filename: &str,
-    ) -> io::Result<()> {
+    async fn delete_file(&mut self, username: &str, filename: &str) -> io::Result<()> {
+        let access_token = self.access_token.borrow();
+
         let response = self
             .client
             .delete(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
             .headers(self.default_headers())
             .header("Content-Length", 0)
-            .bearer_auth(access_token.as_str())
+            .bearer_auth(Self::require_access_token(access_token.as_ref())?.as_str())
             .send()
             .await
             .map_err(reqwest_error_to_io_error)?;
@@ -278,7 +289,6 @@ mod testutils {
         service: CloudService,
 
         // State required to automatically clean up files on `drop`.
-        access_token: Option<AccessToken>,
         username: Option<String>,
         files_to_delete: Vec<String>,
     }
@@ -286,12 +296,7 @@ mod testutils {
     impl TestContext {
         /// Creates a new test context that talks to the configured API service.
         pub(crate) fn new_from_env() -> Self {
-            TestContext {
-                service: new_service_from_env(),
-                access_token: None,
-                username: None,
-                files_to_delete: vec![],
-            }
+            TestContext { service: new_service_from_env(), username: None, files_to_delete: vec![] }
         }
 
         /// Returns the service client in this context.
@@ -299,16 +304,29 @@ mod testutils {
             self.service.clone()
         }
 
+        /// Returns the username of the selected test account.
+        pub(crate) fn get_username(&self, i: u8) -> String {
+            env::var(format!("TEST_ACCOUNT_{}_USERNAME", i)).expect("Expected env config not found")
+        }
+
         /// Authenticates against the server using the username and password passed in via
         /// environment variables.  We need to support multiple test accounts at the same time, so
         /// this performs authentication for the test account `i`.
-        pub(crate) async fn do_login(&mut self, i: u8) -> (String, AccessToken) {
-            let username = env::var(format!("TEST_ACCOUNT_{}_USERNAME", i))
-                .expect("Expected env config not found");
+        ///
+        /// Returns the username of the selected test account for convenience.
+        pub(crate) async fn do_login(&mut self, i: u8) -> String {
+            let username = self.get_username(i);
             let password = env::var(format!("TEST_ACCOUNT_{}_PASSWORD", i))
                 .expect("Expected env config not found");
-            let response = self.service.login(&username, &password).await.unwrap();
-            (username, response.access_token)
+            let _response = self.service.login(&username, &password).await.unwrap();
+            username
+        }
+
+        /// Clears the authentication token to represent a log out.
+        pub(crate) fn do_logout(&mut self) {
+            // TODO(jmmv): Would be nice to actually have a log out feature in the server and a
+            // command in the client.
+            *(self.service.access_token.borrow_mut()) = None;
         }
 
         /// Generates a random filename and its content for testing, and makes sure the file gets
@@ -326,12 +344,10 @@ mod testutils {
             #[tokio::main]
             #[allow(clippy::single_match)]
             async fn cleanup(context: &mut TestContext) {
-                match (context.access_token.as_ref(), context.username.as_ref()) {
-                    (Some(access_token), Some(username)) => {
+                match context.username.as_ref() {
+                    Some(username) => {
                         for filename in context.files_to_delete.iter() {
-                            if let Err(e) =
-                                context.service.delete_file(access_token, username, filename).await
-                            {
+                            if let Err(e) = context.service.delete_file(username, filename).await {
                                 eprintln!(
                                     "Failed to delete file {} during cleanup: {}",
                                     filename, e
@@ -370,8 +386,7 @@ mod tests {
     fn test_login_ok() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
-            let (_username, access_token) = context.do_login(1).await;
-            assert!(!access_token.as_str().is_empty());
+            let _username = context.do_login(1).await;
         }
         run(&mut TestContext::new_from_env());
     }
@@ -392,7 +407,7 @@ mod tests {
     fn test_get_files() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
-            let (username, access_token) = context.do_login(1).await;
+            let username = context.do_login(1).await;
             let mut service = context.service();
 
             let mut needed_bytes = 0;
@@ -406,7 +421,7 @@ mod tests {
                 filenames_and_contents.push((filename, content));
             }
 
-            let response = service.get_files(&access_token, &username).await.unwrap();
+            let response = service.get_files(&username).await.unwrap();
             for (filename, _content) in &filenames_and_contents {
                 assert!(!response.files.iter().any(|x| &x.filename == filename));
             }
@@ -419,19 +434,16 @@ mod tests {
 
             for (filename, _content) in &filenames_and_contents {
                 let request = GetFileRequest::default().with_get_content();
-                let err = service
-                    .get_file(&access_token, &username, filename, &request)
-                    .await
-                    .unwrap_err();
+                let err = service.get_file(&username, filename, &request).await.unwrap_err();
                 assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
             }
 
             for (filename, content) in &filenames_and_contents {
                 let request = PatchFileRequest::default().with_content(content.as_bytes());
-                service.patch_file(&access_token, &username, filename, &request).await.unwrap();
+                service.patch_file(&username, filename, &request).await.unwrap();
             }
 
-            let response = service.get_files(&access_token, &username).await.unwrap();
+            let response = service.get_files(&username).await.unwrap();
             for (filename, _content) in &filenames_and_contents {
                 assert!(response.files.iter().any(|x| &x.filename == filename));
             }
@@ -440,15 +452,14 @@ mod tests {
     }
 
     async fn do_get_and_patch_file_test(context: &mut TestContext, filename: &str, content: &[u8]) {
-        let (username, access_token) = context.do_login(1).await;
+        let username = context.do_login(1).await;
         let mut service = context.service();
 
         let request = PatchFileRequest::default().with_content(content);
-        service.patch_file(&access_token, &username, filename, &request).await.unwrap();
+        service.patch_file(&username, filename, &request).await.unwrap();
 
         let request = GetFileRequest::default().with_get_content();
-        let response =
-            service.get_file(&access_token, &username, filename, &request).await.unwrap();
+        let response = service.get_file(&username, filename, &request).await.unwrap();
         assert_eq!(content, response.decoded_content().unwrap().unwrap());
     }
 
@@ -479,13 +490,12 @@ mod tests {
     fn test_get_file_not_found() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
-            let (username, access_token) = context.do_login(1).await;
+            let username = context.do_login(1).await;
             let mut service = context.service();
             let (filename, _content) = context.random_file();
 
             let request = GetFileRequest::default().with_get_content();
-            let err =
-                service.get_file(&access_token, &username, &filename, &request).await.unwrap_err();
+            let err = service.get_file(&username, &filename, &request).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
         }
         run(&mut TestContext::new_from_env());
@@ -493,35 +503,92 @@ mod tests {
 
     #[test]
     #[ignore = "Requires environment configuration and is expensive"]
-    fn test_acls() {
+    fn test_patch_file_without_login() {
+        #[tokio::main]
+        async fn run(context: &mut TestContext) {
+            let mut service = context.service();
+            let username = context.get_username(1);
+
+            context.do_login(1).await;
+            let (filename, _content) = context.random_file();
+
+            context.do_logout();
+            let request = PatchFileRequest::default().with_content("foo");
+            let err = service.patch_file(&username, &filename, &request).await.unwrap_err();
+            assert_eq!(io::ErrorKind::PermissionDenied, err.kind(), "{}", err);
+            assert!(format!("{}", err).contains("Not logged in"));
+        }
+        run(&mut TestContext::new_from_env());
+    }
+
+    #[test]
+    #[ignore = "Requires environment configuration and is expensive"]
+    fn test_acls_private() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
             let mut service = context.service();
 
-            let (username1, access_token1) = context.do_login(1).await;
             let (filename, content) = context.random_file();
 
-            let request = PatchFileRequest::default().with_content(content.clone());
-            service.patch_file(&access_token1, &username1, &filename, &request).await.unwrap();
+            let username1 = context.get_username(1);
+            let username2 = context.get_username(2);
 
-            let (username2, access_token2) = context.do_login(2).await;
+            // Share username1's file with username2.
+            let request = PatchFileRequest::default().with_content(content.clone());
+            context.do_login(1).await;
+            service.patch_file(&username1, &filename, &request).await.unwrap();
 
             // Read username1's file as username2 before it is shared.
+            context.do_login(2).await;
             let request = GetFileRequest::default().with_get_content();
-            let err = service
-                .get_file(&access_token2, &username1, &filename, &request)
-                .await
-                .unwrap_err();
+            let err = service.get_file(&username1, &filename, &request).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
 
             // Share username1's file with username2.
+            context.do_login(1).await;
             let request = PatchFileRequest::default().with_add_readers([username2]);
-            service.patch_file(&access_token1, &username1, &filename, &request).await.unwrap();
+            service.patch_file(&username1, &filename, &request).await.unwrap();
 
             // Read username1's file as username2 again, now that it is shared.
+            context.do_login(2).await;
             let request = GetFileRequest::default().with_get_content();
-            let response =
-                service.get_file(&access_token2, &username1, &filename, &request).await.unwrap();
+            let response = service.get_file(&username1, &filename, &request).await.unwrap();
+            assert_eq!(content.as_bytes(), response.decoded_content().unwrap().unwrap());
+        }
+        run(&mut TestContext::new_from_env());
+    }
+
+    #[test]
+    #[ignore = "Requires environment configuration and is expensive"]
+    fn test_acls_public() {
+        #[tokio::main]
+        async fn run(context: &mut TestContext) {
+            let mut service = context.service();
+
+            let (filename, content) = context.random_file();
+
+            let username1 = context.get_username(1);
+
+            // Share username1's file with the public.
+            let request = PatchFileRequest::default().with_content(content.clone());
+            context.do_login(1).await;
+            service.patch_file(&username1, &filename, &request).await.unwrap();
+
+            // Read username1's file as a guest before it is shared.
+            context.do_logout();
+            let request = GetFileRequest::default().with_get_content();
+            let err = service.get_file(&username1, &filename, &request).await.unwrap_err();
+            assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
+
+            // Share username1's file with the public.
+            context.do_login(1).await;
+            let request = PatchFileRequest::default().with_add_readers(["public".to_owned()]);
+            service.patch_file(&username1, &filename, &request).await.unwrap();
+
+            // Read username1's file as a guest again, now that it is shared.
+            context.do_logout();
+            let request = GetFileRequest::default().with_get_content();
+            let response = service.get_file(&username1, &filename, &request).await.unwrap();
             assert_eq!(content.as_bytes(), response.decoded_content().unwrap().unwrap());
         }
         run(&mut TestContext::new_from_env());
@@ -532,18 +599,17 @@ mod tests {
     fn test_delete_file_ok() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
-            let (username, access_token) = context.do_login(1).await;
+            let username = context.do_login(1).await;
             let mut service = context.service();
             let (filename, content) = context.random_file();
 
             let request = PatchFileRequest::default().with_content(content);
-            service.patch_file(&access_token, &username, &filename, &request).await.unwrap();
+            service.patch_file(&username, &filename, &request).await.unwrap();
 
-            service.delete_file(&access_token, &username, &filename).await.unwrap();
+            service.delete_file(&username, &filename).await.unwrap();
 
             let request = GetFileRequest::default().with_get_content();
-            let err =
-                service.get_file(&access_token, &username, &filename, &request).await.unwrap_err();
+            let err = service.get_file(&username, &filename, &request).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
             assert!(format!("{}", err).contains("(server code: 404"));
         }
@@ -555,13 +621,32 @@ mod tests {
     fn test_delete_file_not_found() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
-            let (username, access_token) = context.do_login(1).await;
+            let username = context.do_login(1).await;
             let mut service = context.service();
             let (filename, _content) = context.random_file();
 
-            let err = service.delete_file(&access_token, &username, &filename).await.unwrap_err();
+            let err = service.delete_file(&username, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
             assert!(format!("{}", err).contains("(server code: 404"));
+        }
+        run(&mut TestContext::new_from_env());
+    }
+
+    #[test]
+    #[ignore = "Requires environment configuration and is expensive"]
+    fn test_delete_file_without_login() {
+        #[tokio::main]
+        async fn run(context: &mut TestContext) {
+            let mut service = context.service();
+            let username = context.get_username(1);
+
+            context.do_login(1).await;
+            let (filename, _content) = context.random_file();
+
+            context.do_logout();
+            let err = service.delete_file(&username, &filename).await.unwrap_err();
+            assert_eq!(io::ErrorKind::PermissionDenied, err.kind(), "{}", err);
+            assert!(format!("{}", err).contains("Not logged in"));
         }
         run(&mut TestContext::new_from_env());
     }
