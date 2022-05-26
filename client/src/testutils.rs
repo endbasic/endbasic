@@ -43,11 +43,14 @@ pub struct MockService {
 
 impl MockService {
     /// Performs an explicit authentication for those tests that don't go through the `LOGIN`
-    /// command logic.
+    /// command logic.  The access token that's generated is different every time this is called
+    /// within the same `MockService`.
     #[cfg(test)]
-    pub(crate) async fn do_login(&mut self) -> AccessToken {
-        self.access_token = Some(AccessToken::new("the token"));
-        self.access_token.as_ref().unwrap().clone()
+    pub(crate) async fn do_login(&mut self) {
+        self.access_token = match &self.access_token {
+            Some(previous) => Some(AccessToken::new(format!("{}$", previous.as_str()))),
+            None => Some(AccessToken::new("$")),
+        }
     }
 
     /// Records the behavior of an upcoming signup operation with `request` and that returns
@@ -143,7 +146,6 @@ impl Service for MockService {
     }
 
     async fn login(&mut self, username: &str, password: &str) -> io::Result<LoginResponse> {
-        assert!(self.access_token.is_none(), "login succeeded more than once");
         let mock = self.mock_login.pop_front().expect("No mock requests available");
         assert_eq!(&mock.0 .0, username);
         assert_eq!(&mock.0 .1, password);
@@ -155,12 +157,8 @@ impl Service for MockService {
         mock.1
     }
 
-    async fn get_files(
-        &mut self,
-        access_token: &AccessToken,
-        username: &str,
-    ) -> io::Result<GetFilesResponse> {
-        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
+    async fn get_files(&mut self, username: &str) -> io::Result<GetFilesResponse> {
+        self.access_token.as_ref().expect("login not called yet");
         let mock = self.mock_get_files.pop_front().expect("No mock requests available");
         assert_eq!(&mock.0, username);
         mock.1
@@ -168,12 +166,11 @@ impl Service for MockService {
 
     async fn get_file(
         &mut self,
-        access_token: &AccessToken,
         username: &str,
         filename: &str,
         request: &GetFileRequest,
     ) -> io::Result<GetFileResponse> {
-        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
+        self.access_token.as_ref().expect("login not called yet");
 
         let mock = self.mock_get_file.pop_front().expect("No mock requests available");
         assert_eq!(&mock.0 .0, username);
@@ -184,12 +181,11 @@ impl Service for MockService {
 
     async fn patch_file(
         &mut self,
-        access_token: &AccessToken,
         username: &str,
         filename: &str,
         request: &PatchFileRequest,
     ) -> io::Result<()> {
-        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
+        self.access_token.as_ref().expect("login not called yet");
 
         let mock = self.mock_patch_file.pop_front().expect("No mock requests available");
         assert_eq!(&mock.0 .0, username);
@@ -198,13 +194,8 @@ impl Service for MockService {
         mock.1
     }
 
-    async fn delete_file(
-        &mut self,
-        access_token: &AccessToken,
-        username: &str,
-        filename: &str,
-    ) -> io::Result<()> {
-        assert_eq!(self.access_token.as_ref().expect("authenticate not called yet"), access_token);
+    async fn delete_file(&mut self, username: &str, filename: &str) -> io::Result<()> {
+        self.access_token.as_ref().expect("login not called yet");
 
         let mock = self.mock_delete_file.pop_front().expect("No mock requests available");
         assert_eq!(&mock.0 .0, username);
@@ -258,7 +249,7 @@ impl ClientTester {
     /// See the wrapped `Tester::run` function for details.
     pub(crate) fn run<S: Into<String>>(&mut self, script: S) -> ClientChecker {
         let checker = self.tester.run(script);
-        ClientChecker { checker, service: self.service.clone() }
+        ClientChecker { checker, service: self.service.clone(), exp_access_token: None }
     }
 }
 
@@ -267,27 +258,53 @@ impl ClientTester {
 pub(crate) struct ClientChecker<'a> {
     checker: Checker<'a>,
     service: Rc<RefCell<MockService>>,
+    exp_access_token: Option<AccessToken>,
 }
 
 impl<'a> ClientChecker<'a> {
+    /// Expects the mock service to have logged in with the access `token`.
+    pub(crate) fn expect_access_token<S: Into<String>>(self, token: S) -> Self {
+        Self {
+            checker: self.checker,
+            service: self.service,
+            exp_access_token: Some(AccessToken::new(token.into())),
+        }
+    }
+
     /// See the wrapped `Checker::expect_err` function for details.
     pub fn expect_err<S: Into<String>>(self, message: S) -> Self {
-        Self { checker: self.checker.expect_err(message), service: self.service }
+        Self {
+            checker: self.checker.expect_err(message),
+            service: self.service,
+            exp_access_token: self.exp_access_token,
+        }
     }
 
     /// See the wrapped `Checker::expect_file` function for details.
     pub fn expect_file<N: Into<String>, C: Into<String>>(self, name: N, content: C) -> Self {
-        Self { checker: self.checker.expect_file(name, content), service: self.service }
+        Self {
+            checker: self.checker.expect_file(name, content),
+            service: self.service,
+            exp_access_token: self.exp_access_token,
+        }
     }
 
     /// See the wrapped `Checker::expect_output` function for details.
     pub fn expect_output<V: Into<Vec<CapturedOut>>>(self, out: V) -> Self {
-        Self { checker: self.checker.expect_output(out), service: self.service }
+        Self {
+            checker: self.checker.expect_output(out),
+            service: self.service,
+            exp_access_token: self.exp_access_token,
+        }
     }
 
     /// See the wrapped `Checker::expect_prints` function for details.
     pub fn expect_prints<S: Into<String>, V: Into<Vec<S>>>(self, out: V) -> Self {
-        Self { checker: self.checker.expect_prints(out), service: self.service }
+        Self {
+            checker: self.checker.expect_prints(out),
+            service: self.service,
+            exp_access_token: self.exp_access_token,
+        }
     }
 
     /// See the wrapped `Checker::take_captured_out` function for details.
@@ -299,7 +316,10 @@ impl<'a> ClientChecker<'a> {
     /// Validates all expectations.
     pub(crate) fn check(self) {
         self.checker.check();
-        self.service.borrow_mut().verify_all_used();
+
+        let mut service = self.service.borrow_mut();
+        assert_eq!(self.exp_access_token, service.access_token);
+        service.verify_all_used();
     }
 }
 

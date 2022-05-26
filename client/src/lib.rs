@@ -210,21 +210,18 @@ pub trait Service {
 
     /// Sends an authentication request to the service with `username` and `password` to obtain an
     /// access token for the session.
+    ///
+    /// If logging is successful, the access token is cached for future retrieval.
     async fn login(&mut self, username: &str, password: &str) -> io::Result<LoginResponse>;
 
     /// Sends a request to the server to obtain the list of files owned by `username` with a
     /// previously-acquired `access_token`.
-    async fn get_files(
-        &mut self,
-        access_token: &AccessToken,
-        username: &str,
-    ) -> io::Result<GetFilesResponse>;
+    async fn get_files(&mut self, username: &str) -> io::Result<GetFilesResponse>;
 
     /// Sends a request to the server to obtain the metadata and/or the contents of `filename` owned
     /// by `username` as specified in `request` with a previously-acquired `access_token`.
     async fn get_file(
         &mut self,
-        access_token: &AccessToken,
         username: &str,
         filename: &str,
         request: &GetFileRequest,
@@ -234,7 +231,6 @@ pub trait Service {
     /// by `username` as specified in `request` with a previously-acquired `access_token`.
     async fn patch_file(
         &mut self,
-        access_token: &AccessToken,
         username: &str,
         filename: &str,
         request: &PatchFileRequest,
@@ -242,10 +238,5 @@ pub trait Service {
 
     /// Sends a request to the server to delete `filename` owned by `username` with a
     /// previously-acquired `access_token`.
-    async fn delete_file(
-        &mut self,
-        access_token: &AccessToken,
-        username: &str,
-        filename: &str,
-    ) -> io::Result<()>;
+    async fn delete_file(&mut self, username: &str, filename: &str) -> io::Result<()>;
 }

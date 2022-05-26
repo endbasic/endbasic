@@ -22,6 +22,11 @@ for the time being.**
     Having this command in the interpreter had always been the goal, but it
     was not possible to implement it due to Azure AD authentication flows.
 
+*   Added support to access files without logging in first.  The `cloud://`
+    file system scheme can now be used before using `LOGIN`, and the `DIR` and
+    `LOAD` commands will work on the mounted drive as long as there are public
+    files within it.
+
 *   Parameterized the cloud service to talk to.  In the CLI, the new
     `--service-url` allows overriding the default, and in the web, the staging
     site now points to the staging service.
