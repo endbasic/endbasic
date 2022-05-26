@@ -79,12 +79,18 @@ fn reqwest_error_to_io_error(e: reqwest::Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, format!("{}", e))
 }
 
+/// Container for authentication data to track after login.
+struct AuthData {
+    username: String,
+    access_token: AccessToken,
+}
+
 /// An implementation of the EndBASIC service client that talks to a remote server.
 #[cfg_attr(test, derive(Clone))]
 pub struct CloudService {
     api_address: Url,
     client: reqwest::Client,
-    access_token: Rc<RefCell<Option<AccessToken>>>,
+    auth_data: Rc<RefCell<Option<AuthData>>>,
 }
 
 impl CloudService {
@@ -107,9 +113,9 @@ impl CloudService {
             ));
         }
 
-        let access_token = Rc::from(RefCell::from(None));
+        let auth_data = Rc::from(RefCell::from(None));
 
-        Ok(Self { api_address: url, client: reqwest::Client::default(), access_token })
+        Ok(Self { api_address: url, client: reqwest::Client::default(), auth_data })
     }
 
     /// Generates a service URL with the given `path`.
@@ -133,15 +139,14 @@ impl CloudService {
         headers
     }
 
-    /// Checks if the given access token is present and returns it, or else returns a permission
+    /// Checks if the given auth data object is present and returns it, or else returns a permission
     /// denied error.
-    fn require_access_token(token: Option<&AccessToken>) -> io::Result<&AccessToken> {
-        match token.as_ref() {
-            Some(token) => Ok(token),
-            None => Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "Not logged in yet; cannot attempt write".to_owned(),
-            )),
+    fn require_auth_data(data: Option<&AuthData>) -> io::Result<&AuthData> {
+        match data.as_ref() {
+            Some(data) => Ok(data),
+            None => {
+                Err(io::Error::new(io::ErrorKind::PermissionDenied, "Not logged in yet".to_owned()))
+            }
         }
     }
 }
@@ -180,11 +185,40 @@ impl Service for CloudService {
             reqwest::StatusCode::OK => {
                 let bytes = response.bytes().await.map_err(reqwest_error_to_io_error)?;
                 let response: LoginResponse = serde_json::from_reader(bytes.reader())?;
-                *(self.access_token.borrow_mut()) = Some(response.access_token.clone());
+                let auth_data = AuthData {
+                    username: username.to_owned(),
+                    access_token: response.access_token.clone(),
+                };
+                *(self.auth_data.borrow_mut()) = Some(auth_data);
                 Ok(response)
             }
             _ => Err(http_response_to_io_error(response).await),
         }
+    }
+
+    async fn logout(&mut self) -> io::Result<()> {
+        let mut auth_data = self.auth_data.borrow_mut();
+        let response = {
+            let auth_data = Self::require_auth_data(auth_data.as_ref())?;
+            self.client
+                .post(self.make_url(&format!("api/users/{}/logout", auth_data.username)))
+                .headers(self.default_headers())
+                .bearer_auth(auth_data.access_token.as_str())
+                .send()
+                .await
+                .map_err(reqwest_error_to_io_error)?
+        };
+        match response.status() {
+            reqwest::StatusCode::OK => {
+                *auth_data = None;
+                Ok(())
+            }
+            _ => Err(http_response_to_io_error(response).await),
+        }
+    }
+
+    fn is_logged_in(&self) -> bool {
+        self.auth_data.borrow().is_some()
     }
 
     async fn get_files(&mut self, username: &str) -> io::Result<GetFilesResponse> {
@@ -192,8 +226,8 @@ impl Service for CloudService {
             .client
             .get(self.make_url(&format!("api/users/{}/files", username)))
             .headers(self.default_headers());
-        if let Some(access_token) = self.access_token.borrow().as_ref() {
-            builder = builder.bearer_auth(access_token.as_str());
+        if let Some(auth_data) = self.auth_data.borrow().as_ref() {
+            builder = builder.bearer_auth(auth_data.access_token.as_str());
         }
         let response = builder.send().await.map_err(reqwest_error_to_io_error)?;
         match response.status() {
@@ -217,8 +251,8 @@ impl Service for CloudService {
             .get(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
             .headers(self.default_headers())
             .query(&request);
-        if let Some(access_token) = self.access_token.borrow().as_ref() {
-            builder = builder.bearer_auth(access_token.as_str());
+        if let Some(auth_data) = self.auth_data.borrow().as_ref() {
+            builder = builder.bearer_auth(auth_data.access_token.as_str());
         }
         let response = builder.send().await.map_err(reqwest_error_to_io_error)?;
         match response.status() {
@@ -237,14 +271,14 @@ impl Service for CloudService {
         filename: &str,
         request: &PatchFileRequest,
     ) -> io::Result<()> {
-        let access_token = self.access_token.borrow();
+        let auth_data = self.auth_data.borrow();
 
         let response = self
             .client
             .patch(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
             .headers(self.default_headers())
             .body(serde_json::to_vec(&request)?)
-            .bearer_auth(Self::require_access_token(access_token.as_ref())?.as_str())
+            .bearer_auth(Self::require_auth_data(auth_data.as_ref())?.access_token.as_str())
             .send()
             .await
             .map_err(reqwest_error_to_io_error)?;
@@ -255,14 +289,14 @@ impl Service for CloudService {
     }
 
     async fn delete_file(&mut self, username: &str, filename: &str) -> io::Result<()> {
-        let access_token = self.access_token.borrow();
+        let auth_data = self.auth_data.borrow();
 
         let response = self
             .client
             .delete(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
             .headers(self.default_headers())
             .header("Content-Length", 0)
-            .bearer_auth(Self::require_access_token(access_token.as_ref())?.as_str())
+            .bearer_auth(Self::require_auth_data(auth_data.as_ref())?.access_token.as_str())
             .send()
             .await
             .map_err(reqwest_error_to_io_error)?;
@@ -319,14 +353,14 @@ mod testutils {
             let password = env::var(format!("TEST_ACCOUNT_{}_PASSWORD", i))
                 .expect("Expected env config not found");
             let _response = self.service.login(&username, &password).await.unwrap();
+            self.username = Some(username.clone());
             username
         }
 
         /// Clears the authentication token to represent a log out.
-        pub(crate) fn do_logout(&mut self) {
-            // TODO(jmmv): Would be nice to actually have a log out feature in the server and a
-            // command in the client.
-            *(self.service.access_token.borrow_mut()) = None;
+        pub(crate) async fn do_logout(&mut self) {
+            self.service.logout().await.unwrap();
+            self.username = None;
         }
 
         /// Generates a random filename and its content for testing, and makes sure the file gets
@@ -353,6 +387,10 @@ mod testutils {
                                     filename, e
                                 );
                             }
+                        }
+
+                        if let Err(e) = context.service.logout().await {
+                            eprintln!("Failed to log out for {} during cleanup: {}", username, e);
                         }
                     }
                     _ => {
@@ -512,7 +550,7 @@ mod tests {
             context.do_login(1).await;
             let (filename, _content) = context.random_file();
 
-            context.do_logout();
+            context.do_logout().await;
             let request = PatchFileRequest::default().with_content("foo");
             let err = service.patch_file(&username, &filename, &request).await.unwrap_err();
             assert_eq!(io::ErrorKind::PermissionDenied, err.kind(), "{}", err);
@@ -575,7 +613,7 @@ mod tests {
             service.patch_file(&username1, &filename, &request).await.unwrap();
 
             // Read username1's file as a guest before it is shared.
-            context.do_logout();
+            context.do_logout().await;
             let request = GetFileRequest::default().with_get_content();
             let err = service.get_file(&username1, &filename, &request).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
@@ -586,7 +624,7 @@ mod tests {
             service.patch_file(&username1, &filename, &request).await.unwrap();
 
             // Read username1's file as a guest again, now that it is shared.
-            context.do_logout();
+            context.do_logout().await;
             let request = GetFileRequest::default().with_get_content();
             let response = service.get_file(&username1, &filename, &request).await.unwrap();
             assert_eq!(content.as_bytes(), response.decoded_content().unwrap().unwrap());
@@ -643,7 +681,7 @@ mod tests {
             context.do_login(1).await;
             let (filename, _content) = context.random_file();
 
-            context.do_logout();
+            context.do_logout().await;
             let err = service.delete_file(&username, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::PermissionDenied, err.kind(), "{}", err);
             assert!(format!("{}", err).contains("Not logged in"));

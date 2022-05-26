@@ -27,6 +27,9 @@ for the time being.**
     `LOAD` commands will work on the mounted drive as long as there are public
     files within it.
 
+*   Added the `LOGOUT` command.  As a side-effect of this, it is now possible
+    to use `LOGIN` multiple times within the same interpreter session.
+
 *   Parameterized the cloud service to talk to.  In the CLI, the new
     `--service-url` allows overriding the default, and in the web, the staging
     site now points to the staging service.
