@@ -214,6 +214,12 @@ pub trait Service {
     /// If logging is successful, the access token is cached for future retrieval.
     async fn login(&mut self, username: &str, password: &str) -> io::Result<LoginResponse>;
 
+    /// Logs out from the service and clears the access token from this object.
+    async fn logout(&mut self) -> io::Result<()>;
+
+    /// Checks if there is an active session against the service.
+    fn is_logged_in(&self) -> bool;
+
     /// Sends a request to the server to obtain the list of files owned by `username` with a
     /// previously-acquired `access_token`.
     async fn get_files(&mut self, username: &str) -> io::Result<GetFilesResponse>;

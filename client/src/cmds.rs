@@ -49,7 +49,6 @@ pub struct LoginCommand {
     service: Rc<RefCell<dyn Service>>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
-    logged_in: Rc<RefCell<bool>>,
 }
 
 impl LoginCommand {
@@ -74,7 +73,6 @@ To create an account, use the SIGNUP command.",
             service,
             console,
             storage,
-            logged_in: Rc::from(RefCell::from(false)),
         })
     }
 
@@ -109,13 +107,8 @@ impl Command for LoginCommand {
     }
 
     async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if *self.logged_in.borrow() {
-            // TODO(jmmv): Now that the access tokens are part of the service, we can easily allow
-            // logging in more than once within a session.  Consider adding a LOGOUT command first
-            // to make it easier to handle the CLOUD: drive on a second login.
-            return Err(CallError::InternalError(
-                "Support for calling LOGIN twice in the same session is not implemented".to_owned(),
-            ));
+        if self.service.borrow().is_logged_in() {
+            return Err(CallError::InternalError("Cannot LOGIN again before LOGOUT".to_owned()));
         }
 
         let (username, password) = match args {
@@ -159,11 +152,84 @@ impl Command for LoginCommand {
             }
         };
 
-        let result = self.do_login(&username, &password).await;
-        if result.is_ok() {
-            *(self.logged_in.borrow_mut()) = true;
+        self.do_login(&username, &password).await
+    }
+}
+
+/// The `LOGOUT` command.
+pub struct LogoutCommand {
+    metadata: CallableMetadata,
+    service: Rc<RefCell<dyn Service>>,
+    console: Rc<RefCell<dyn Console>>,
+    storage: Rc<RefCell<Storage>>,
+}
+
+impl LogoutCommand {
+    /// Creates a new `LOGOUT` command.
+    pub fn new(
+        service: Rc<RefCell<dyn Service>>,
+        console: Rc<RefCell<dyn Console>>,
+        storage: Rc<RefCell<Storage>>,
+    ) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("LOGOUT", VarType::Void)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Logs the user out of their account.
+Unmounts the CLOUD drive that was mounted by the LOGIN command.  As a consequence of this, running \
+LOGOUT from within the CLOUD drive will fail.",
+                )
+                .build(),
+            service,
+            console,
+            storage,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for LogoutCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
+            return Err(CallError::ArgumentError("LOGOUT takes no arguments".to_owned()));
         }
-        result
+
+        if !self.service.borrow().is_logged_in() {
+            // TODO(jmmv): Now that the access tokens are part of the service, we can easily allow
+            // logging in more than once within a session.  Consider adding a LOGOUT command first
+            // to make it easier to handle the CLOUD: drive on a second login.
+            return Err(CallError::InternalError("Must LOGIN first".to_owned()));
+        }
+
+        let unmounted = match self.storage.borrow_mut().unmount("CLOUD") {
+            Ok(()) => true,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => false,
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                return Err(CallError::InternalError(
+                    "Cannot log out while the CLOUD drive is active".to_owned(),
+                ))
+            }
+            Err(e) => return Err(CallError::InternalError(format!("Cannot log out: {}", e))),
+        };
+
+        self.service.borrow_mut().logout().await?;
+
+        {
+            let mut console = self.console.borrow_mut();
+            console.print("")?;
+            if unmounted {
+                console.print("    Unmounted CLOUD drive")?;
+            }
+            console.print("    Good bye!")?;
+            console.print("")?;
+        }
+
+        Ok(())
     }
 }
 
@@ -493,6 +559,7 @@ pub fn add_all(
         .register_scheme("cloud", Box::from(CloudDriveFactory::new(service.clone())));
 
     machine.add_command(LoginCommand::new(service.clone(), console.clone(), storage.clone()));
+    machine.add_command(LogoutCommand::new(service.clone(), console.clone(), storage.clone()));
     machine.add_command(ShareCommand::new(console.clone(), storage));
     machine.add_command(SignupCommand::new(service, console));
 }
@@ -599,7 +666,7 @@ mod tests {
     }
 
     #[test]
-    fn test_login_twice_not_supported() {
+    fn test_login_twice() {
         let mut t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_login(
             "the-username",
@@ -607,9 +674,9 @@ mod tests {
             Ok(LoginResponse { access_token: AccessToken::new("random token"), motd: vec![] }),
         );
         assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
-        t.run(format!(r#"LOGIN "{}", "{}": LOGIN "a", "b""#, "the-username", "the-password"))
+        t.run(r#"LOGIN "the-username", "the-password": LOGIN "a", "b""#)
             .expect_access_token("random token")
-            .expect_err("Support for calling LOGIN twice in the same session is not implemented")
+            .expect_err("Cannot LOGIN again before LOGOUT")
             .check();
         assert!(t.get_storage().borrow().mounted().contains_key("CLOUD"));
     }
@@ -621,6 +688,80 @@ mod tests {
         client_check_stmt_err("LOGIN requires a string as the username", r#"LOGIN 3"#);
         client_check_stmt_err("LOGIN requires a string as the username", r#"LOGIN 3, "a""#);
         client_check_stmt_err("LOGIN requires a string as the password", r#"LOGIN "a", 3"#);
+    }
+
+    #[tokio::test]
+    async fn test_logout_ok_cloud_not_mounted() {
+        let mut t = ClientTester::default();
+        t.get_service().borrow_mut().do_login().await;
+        t.run(r#"LOGOUT"#).expect_prints(["", "    Good bye!", ""]).check();
+        assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
+    }
+
+    #[tokio::test]
+    async fn test_logout_ok_unmount_cloud() {
+        let mut t = ClientTester::default();
+        t.get_service().borrow_mut().do_login().await;
+        t.get_storage().borrow_mut().mount("CLOUD", "memory://").unwrap();
+        t.run(r#"LOGOUT"#)
+            .expect_prints(["", "    Unmounted CLOUD drive", "    Good bye!", ""])
+            .check();
+        assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
+    }
+
+    #[tokio::test]
+    async fn test_logout_cloud_mounted_and_active() {
+        let mut t = ClientTester::default();
+        t.get_service().borrow_mut().do_login().await;
+        t.get_storage().borrow_mut().mount("CLOUD", "memory://").unwrap();
+        t.get_storage().borrow_mut().cd("CLOUD:/").unwrap();
+        t.run(r#"LOGOUT"#)
+            .expect_err("Cannot log out while the CLOUD drive is active")
+            .expect_access_token("$")
+            .check();
+        assert!(t.get_storage().borrow().mounted().contains_key("CLOUD"));
+    }
+
+    #[test]
+    fn test_logout_errors() {
+        client_check_stmt_err("LOGOUT takes no arguments", r#"LOGOUT "a""#);
+        client_check_stmt_err("Must LOGIN first", r#"LOGOUT"#);
+    }
+
+    #[test]
+    fn test_login_logout_flow_once() {
+        let mut t = ClientTester::default();
+        t.get_service().borrow_mut().add_mock_login(
+            "u1",
+            "p1",
+            Ok(LoginResponse { access_token: AccessToken::new("token 1"), motd: vec![] }),
+        );
+        assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
+        t.run(r#"LOGIN "u1", "p1": LOGOUT"#)
+            .expect_prints(["", "    Unmounted CLOUD drive", "    Good bye!", ""])
+            .check();
+        assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
+    }
+
+    #[test]
+    fn test_login_logout_flow_multiple() {
+        let mut t = ClientTester::default();
+        t.get_service().borrow_mut().add_mock_login(
+            "u1",
+            "p1",
+            Ok(LoginResponse { access_token: AccessToken::new("token 1"), motd: vec![] }),
+        );
+        t.get_service().borrow_mut().add_mock_login(
+            "u2",
+            "p2",
+            Ok(LoginResponse { access_token: AccessToken::new("token 2"), motd: vec![] }),
+        );
+        assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
+        t.run(r#"LOGIN "u1", "p1": LOGOUT: LOGIN "u2", "p2""#)
+            .expect_prints(["", "    Unmounted CLOUD drive", "    Good bye!", ""])
+            .expect_access_token("token 2")
+            .check();
+        assert!(t.get_storage().borrow().mounted().contains_key("CLOUD"));
     }
 
     #[test]
