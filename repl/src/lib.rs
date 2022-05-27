@@ -23,7 +23,7 @@
 #![warn(unsafe_code)]
 
 use endbasic_core::exec::{Machine, StopReason};
-use endbasic_std::console::{self, Console};
+use endbasic_std::console::{self, refill_and_print, Console};
 use endbasic_std::program::{continue_if_modified, Program};
 use endbasic_std::storage::Storage;
 use std::cell::RefCell;
@@ -72,6 +72,78 @@ pub async fn try_load_autoexec(
             Ok(())
         }
     }
+}
+
+/// Loads the program given in `username_path` pair (which is of the form `user/path`) from the
+/// cloud and executes it on the `machine`.
+pub async fn run_from_cloud(
+    machine: &mut Machine,
+    console: Rc<RefCell<dyn Console>>,
+    storage: Rc<RefCell<Storage>>,
+    program: Rc<RefCell<dyn Program>>,
+    username_path: &str,
+    will_run_repl: bool,
+) -> endbasic_core::exec::Result<i32> {
+    let (fs_uri, path) = match username_path.split_once('/') {
+        Some((username, path)) => (format!("cloud://{}", username), format!("AUTORUN:/{}", path)),
+        None => {
+            let mut console = console.borrow_mut();
+            console.print(&format!(
+                "Invalid program to run '{}'; must be of the form 'username/path'",
+                username_path
+            ))?;
+            return Ok(1);
+        }
+    };
+
+    console.borrow_mut().print(&format!("Mounting {} as AUTORUN...", fs_uri))?;
+    storage.borrow_mut().mount("AUTORUN", &fs_uri)?;
+    storage.borrow_mut().cd("AUTORUN:/")?;
+
+    console.borrow_mut().print(&format!("Loading {}...", path))?;
+    let content = storage.borrow().get(&path).await?;
+    program.borrow_mut().load(Some(&path), &content);
+
+    console.borrow_mut().print("Starting...")?;
+    console.borrow_mut().print("")?;
+
+    let result = machine.exec(&mut "RUN".as_bytes()).await;
+
+    let mut console = console.borrow_mut();
+
+    console.print("")?;
+    let code = match result {
+        Ok(StopReason::Eof) => {
+            console.print("**** Program exited due to EOF ****")?;
+            0
+        }
+        Ok(StopReason::Exited(code)) => {
+            console.print(&format!("**** Program exited with code {} ****", code))?;
+            code as i32
+        }
+        Err(e) => {
+            console.print(&format!("**** ERROR: {} ****", e))?;
+            1
+        }
+    };
+
+    if will_run_repl {
+        console.print("")?;
+        refill_and_print(
+            &mut *console,
+            [
+                "You are now being dropped into the EndBASIC interpreter.",
+                "The program you asked to run is still loaded in memory and you can interact with \
+it now.  Use LIST to view the source code, EDIT to launch an editor on the source code, and RUN to \
+execute the program again.",
+                "Type HELP for interactive usage information.",
+            ],
+            "   ",
+        )?;
+        console.print("")?;
+    }
+
+    Ok(code)
 }
 
 /// Enters the interactive interpreter.
@@ -132,7 +204,8 @@ pub async fn run_repl_loop(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use endbasic_std::testutils::Tester;
+    use endbasic_std::storage::{Drive, DriveFactory, InMemoryDrive};
+    use endbasic_std::testutils::*;
     use futures_lite::future::block_on;
 
     #[test]
@@ -192,5 +265,86 @@ mod tests {
         let (console, storage) = (tester.get_console(), tester.get_storage());
         block_on(try_load_autoexec(tester.get_machine(), console, storage)).unwrap();
         tester.run("").check();
+    }
+
+    /// Factory for drives that mimic the behavior of a cloud drive with fixed contents.
+    struct MockDriveFactory {
+        exp_username: &'static str,
+        exp_file: &'static str,
+    }
+
+    impl MockDriveFactory {
+        /// Verbatim contents of the single file included in the mock drives.
+        const SCRIPT: &'static str = r#"PRINT "Success""#;
+    }
+
+    impl DriveFactory for MockDriveFactory {
+        fn create(&self, target: &str) -> io::Result<Box<dyn Drive>> {
+            let mut drive = InMemoryDrive::default();
+            block_on(drive.put(self.exp_file, Self::SCRIPT)).unwrap();
+            assert_eq!(self.exp_username, target);
+            Ok(Box::from(drive))
+        }
+    }
+
+    #[test]
+    fn test_run_from_cloud_no_repl() {
+        let mut tester = Tester::default();
+        let (console, storage, program) =
+            (tester.get_console(), tester.get_storage(), tester.get_program());
+
+        storage.borrow_mut().register_scheme(
+            "cloud",
+            Box::from(MockDriveFactory { exp_username: "foo", exp_file: "bar.bas" }),
+        );
+
+        block_on(run_from_cloud(
+            tester.get_machine(),
+            console,
+            storage,
+            program,
+            "foo/bar.bas",
+            false,
+        ))
+        .unwrap();
+        tester
+            .run("")
+            .expect_prints([
+                "Mounting cloud://foo as AUTORUN...",
+                "Loading AUTORUN:/bar.bas...",
+                "Starting...",
+                "",
+            ])
+            .expect_clear()
+            .expect_prints(["Success", "", "**** Program exited due to EOF ****"])
+            .expect_program(Some("AUTORUN:/bar.bas"), MockDriveFactory::SCRIPT)
+            .check();
+    }
+
+    #[test]
+    fn test_run_from_cloud_repl() {
+        let mut tester = Tester::default();
+        let (console, storage, program) =
+            (tester.get_console(), tester.get_storage(), tester.get_program());
+
+        storage.borrow_mut().register_scheme(
+            "cloud",
+            Box::from(MockDriveFactory { exp_username: "abcd", exp_file: "the-path.bas" }),
+        );
+
+        block_on(run_from_cloud(
+            tester.get_machine(),
+            console,
+            storage,
+            program,
+            "abcd/the-path.bas",
+            true,
+        ))
+        .unwrap();
+        let mut checker = tester.run("");
+        let output = flatten_output(checker.take_captured_out());
+        checker.expect_program(Some("AUTORUN:/the-path.bas"), MockDriveFactory::SCRIPT).check();
+
+        assert!(output.contains("You are now being dropped into"));
     }
 }

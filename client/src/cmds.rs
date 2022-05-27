@@ -241,13 +241,18 @@ impl Command for LogoutCommand {
 /// case, it makes sense to keep it here.
 pub struct ShareCommand {
     metadata: CallableMetadata,
+    service: Rc<RefCell<dyn Service>>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 }
 
 impl ShareCommand {
     /// Creates a new `SHARE` command.
-    pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
+    pub fn new(
+        service: Rc<RefCell<dyn Service>>,
+        console: Rc<RefCell<dyn Console>>,
+        storage: Rc<RefCell<Storage>>,
+    ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SHARE", VarType::Void)
                 .with_syntax("filename$ [, acl1$, .., aclN$]")
@@ -259,11 +264,13 @@ Otherwise, when given a list of ACL changes, applies those changes to the file. 
 aclN$ arguments are strings of the form \"username+r\" or \"username-r\", where the former adds \
 \"username\" to the users allowed to read the file, and the latter removes \"username\" from the \
 list of users allowed to read the file.
-You can use the special \"public+r\" ACL to share a file with everyone.
+You can use the special \"public+r\" ACL to share a file with everyone.  These files can be \
+auto-run via the web interface using the special URL that the command prints on success.
 Note that this command only works for cloud-based drives as it is designed to share files \
 among users of the EndBASIC service.",
                 )
                 .build(),
+            service,
             console,
             storage,
         })
@@ -288,6 +295,16 @@ impl ShareCommand {
             }
         }
         Ok(())
+    }
+
+    /// Checks if a file is publicly readable by inspecting a set of ACLs.
+    fn has_public_acl(acls: &FileAcls) -> bool {
+        for reader in acls.readers() {
+            if reader.to_lowercase() == "public" {
+                return true;
+            }
+        }
+        false
     }
 
     /// Fetches and prints the ACLs for `filename`.
@@ -371,6 +388,34 @@ impl Command for ShareCommand {
             }
         }
         self.storage.borrow_mut().update_acls(&filename, &add, &remove).await?;
+
+        if Self::has_public_acl(&add) {
+            let filename = match filename.split_once('/') {
+                Some((_drive, path)) => path,
+                None => &filename,
+            };
+
+            let mut console = self.console.borrow_mut();
+            console.print("")?;
+            refill_and_print(
+                &mut *console,
+                [
+                    "You have made the file publicly readable.  As a result, other people can now \
+auto-run your public file by visiting:",
+                    &format!(
+                        "https://repl.endbasic.dev/?run={}/{}",
+                        self.service
+                            .borrow()
+                            .logged_in_username()
+                            .expect("SHARE can only succeed against logged in cloud drives"),
+                        filename
+                    ),
+                ],
+                "    ",
+            )?;
+            console.print("")?;
+        }
+
         Ok(())
     }
 }
@@ -560,7 +605,7 @@ pub fn add_all(
 
     machine.add_command(LoginCommand::new(service.clone(), console.clone(), storage.clone()));
     machine.add_command(LogoutCommand::new(service.clone(), console.clone(), storage.clone()));
-    machine.add_command(ShareCommand::new(console.clone(), storage));
+    machine.add_command(ShareCommand::new(service.clone(), console.clone(), storage));
     machine.add_command(SignupCommand::new(service, console));
 }
 
@@ -778,6 +823,16 @@ mod tests {
     }
 
     #[test]
+    fn test_share_has_public_acls() {
+        let mut acls = FileAcls::default();
+        assert!(!ShareCommand::has_public_acl(&acls));
+        acls.add_reader("foo");
+        assert!(!ShareCommand::has_public_acl(&acls));
+        acls.add_reader("PuBlIc");
+        assert!(ShareCommand::has_public_acl(&acls));
+    }
+
+    #[test]
     fn test_share_parse_acl_errors() {
         let mut add = FileAcls::default().with_readers(["before1".to_owned()]);
         let mut remove = FileAcls::default().with_readers(["before2".to_owned()]);
@@ -825,6 +880,19 @@ mod tests {
             .check();
     }
 
+    #[tokio::test]
+    async fn test_share_make_public() {
+        let mut t = ClientTester::default();
+        t.get_storage().borrow_mut().put("MEMORY:/FOO.BAS", "").await.unwrap();
+        t.get_service().borrow_mut().do_login().await;
+        let mut checker = t.run(r#"SHARE "MEMORY:/FOO.BAS", "Public+r""#);
+        let output = flatten_output(checker.take_captured_out());
+        checker.expect_file("MEMORY:/FOO.BAS", "").expect_access_token("$").check();
+        assert!(output.contains("https://repl.endbasic.dev/?run=logged-in-username/FOO.BAS"));
+    }
+
+    // TODO(jmmv): Add forgotten tests for SHARE modifying ACLs.
+
     #[test]
     fn test_share_errors() {
         client_check_stmt_err("SHARE requires one or more arguments", r#"SHARE"#);
@@ -857,20 +925,6 @@ mod tests {
         validate_password_complexity("abcdefg").unwrap_err().contains("8 characters");
         validate_password_complexity("long enough").unwrap_err().contains("letters and numbers");
         validate_password_complexity("1234567890").unwrap_err().contains("letters and numbers");
-    }
-
-    /// Flattens the captured output into a single string resembling what would be shown in the
-    /// console for ease of testing.
-    fn flatten_output(captured_out: Vec<CapturedOut>) -> String {
-        let mut flattened = String::new();
-        for out in captured_out {
-            match out {
-                CapturedOut::Write(bs) => flattened.push_str(str::from_utf8(&bs).unwrap()),
-                CapturedOut::Print(s) => flattened.push_str(&s),
-                _ => (),
-            }
-        }
-        flattened
     }
 
     #[test]

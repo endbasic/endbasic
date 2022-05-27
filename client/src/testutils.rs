@@ -167,6 +167,13 @@ impl Service for MockService {
         self.access_token.is_some()
     }
 
+    fn logged_in_username(&self) -> Option<String> {
+        match self.access_token {
+            Some(_) => Some("logged-in-username".to_owned()),
+            None => None,
+        }
+    }
+
     async fn get_files(&mut self, username: &str) -> io::Result<GetFilesResponse> {
         self.access_token.as_ref().expect("login not called yet");
         let mock = self.mock_get_files.pop_front().expect("No mock requests available");
