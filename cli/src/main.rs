@@ -262,20 +262,43 @@ async fn run_script<P: AsRef<Path>>(
 ///
 /// `local_drive` is the optional local drive to mount and use as the default location.
 /// `service_url` is the base URL of the cloud service.
-async fn run_interactive<P: AsRef<Path>>(
-    path: P,
+///
+/// If `path` starts with `cloud://`, this uses the same auto-run features that the web UI
+/// exposes.  The presence of this here is kind of a hack but avoids having too much logic
+/// just in the web and helps test this feature.
+async fn run_interactive(
+    path: &str,
     console_spec: Option<&str>,
     local_drive_spec: &str,
     service_url: &str,
 ) -> endbasic_core::exec::Result<i32> {
     let mut builder = make_interactive(new_machine_builder(console_spec)?);
 
+    let console = builder.get_console();
+    let program = builder.get_program();
+
     let storage = builder.get_storage();
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
 
     let mut machine = finish_interactive_build(builder, service_url)?;
-    let mut input = File::open(path)?;
-    Ok(machine.exec(&mut input).await?.as_exit_code())
+
+    match path.strip_prefix("cloud://") {
+        Some(username_path) => {
+            endbasic_repl::run_from_cloud(
+                &mut machine,
+                console.clone(),
+                storage.clone(),
+                program.clone(),
+                username_path,
+                false,
+            )
+            .await
+        }
+        None => {
+            let mut input = File::open(path)?;
+            Ok(machine.exec(&mut input).await?.as_exit_code())
+        }
+    }
 }
 
 /// Version of `main` that returns errors to the caller for reporting.

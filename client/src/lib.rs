@@ -220,6 +220,9 @@ pub trait Service {
     /// Checks if there is an active session against the service.
     fn is_logged_in(&self) -> bool;
 
+    /// Returns the logged in username if there is an active session.
+    fn logged_in_username(&self) -> Option<String>;
+
     /// Sends a request to the server to obtain the list of files owned by `username` with a
     /// previously-acquired `access_token`.
     async fn get_files(&mut self, username: &str) -> io::Result<GetFilesResponse>;

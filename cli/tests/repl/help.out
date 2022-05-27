@@ -659,6 +659,8 @@ Output from HELP SHARE:
     the list of users allowed to read the file.
 
     You can use the special "public+r" ACL to share a file with everyone.
+    These files can be auto-run via the web interface using the special URL
+    that the command prints on success.
 
     Note that this command only works for cloud-based drives as it is
     designed to share files among users of the EndBASIC service.

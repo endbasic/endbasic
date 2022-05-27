@@ -234,6 +234,21 @@ fn test_cli_interactive() {
     );
 }
 
+#[test]
+#[ignore = "Requires environment configuration and is expensive"]
+fn test_cli_run_from_cloud() {
+    let service_url = env::var("SERVICE_URL").expect("Expected env config not found");
+
+    check(
+        bin_path("endbasic"),
+        &["--service-url", &service_url, "--interactive", "cloud://endbasic/welcome.bas"],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/cli/run-from-cloud.out")),
+        Behavior::Null,
+    );
+}
+
 // TODO(jmmv): This test fails almost always on Linux CI builds with `Text file busy` when
 // attempting to run the copied binary.  I've also gotten it to occasionally fail on a local Linux
 // installation in the same way, but that's much harder to trigger.  Investigate what's going on.

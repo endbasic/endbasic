@@ -221,6 +221,10 @@ impl Service for CloudService {
         self.auth_data.borrow().is_some()
     }
 
+    fn logged_in_username(&self) -> Option<String> {
+        self.auth_data.borrow().as_ref().map(|x| x.username.to_owned())
+    }
+
     async fn get_files(&mut self, username: &str) -> io::Result<GetFilesResponse> {
         let mut builder = self
             .client

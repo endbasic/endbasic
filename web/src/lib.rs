@@ -152,7 +152,7 @@ impl WebTerminal {
     }
 
     /// Safe version of `run_repl_loop` that is able to return errors.
-    async fn safe_run_repl_loop(self) -> io::Result<()> {
+    async fn safe_run_repl_loop(self, auto_run: Option<String>) -> io::Result<()> {
         let console = Rc::from(RefCell::from(self.console));
         let mut builder = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
@@ -180,6 +180,25 @@ impl WebTerminal {
         endbasic_client::add_all(&mut machine, service, console.clone(), storage.clone());
 
         endbasic_repl::print_welcome(console.clone())?;
+
+        if let Some(auto_run) = auto_run {
+            match endbasic_repl::run_from_cloud(
+                &mut machine,
+                console.clone(),
+                storage.clone(),
+                program.clone(),
+                &auto_run,
+                true,
+            )
+            .await
+            {
+                Ok(_code) => (),
+                Err(e) => console
+                    .borrow_mut()
+                    .print(&format!("Failed to execute requested program: {}", e))?,
+            }
+        }
+
         endbasic_repl::try_load_autoexec(&mut machine, console.clone(), storage).await?;
         loop {
             let result =
@@ -198,8 +217,8 @@ impl WebTerminal {
     }
 
     /// Starts the EndBASIC interpreter loop on the specified `terminal`.
-    pub async fn run_repl_loop(self) {
-        if let Err(e) = self.safe_run_repl_loop().await {
+    pub async fn run_repl_loop(self, auto_run: Option<String>) {
+        if let Err(e) = self.safe_run_repl_loop(auto_run).await {
             log_and_panic!("REPL failed: {}", e);
         }
     }

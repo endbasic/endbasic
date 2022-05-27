@@ -33,3 +33,13 @@ test-client:
 	    TEST_ACCOUNT_2_USERNAME="$(TEST_ACCOUNT_2_USERNAME)" \
 	    TEST_ACCOUNT_2_PASSWORD="$(TEST_ACCOUNT_2_PASSWORD)" \
 	    cargo test $(TEST_ARGS) -- --include-ignored
+
+# TODO(jmmv): Replace this target, and likely this file as well, once support
+# for environment variables is in stable Cargo and we can have these stored
+# in .cargo/config.toml.  See https://github.com/rust-lang/cargo/pull/9175.
+.PHONY: test-cli
+test-cli:
+	@cd cli && \
+	    RUST_BACKTRACE=1 \
+	    SERVICE_URL="$(SERVICE_URL)" \
+	    cargo test $(TEST_ARGS) -- --include-ignored

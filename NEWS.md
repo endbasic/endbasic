@@ -30,6 +30,16 @@ for the time being.**
 *   Added the `LOGOUT` command.  As a side-effect of this, it is now possible
     to use `LOGIN` multiple times within the same interpreter session.
 
+*   Added support to auto-run programs from the cloud to the web UI: a URL of
+    the form `https://repl.endbasic.dev/?run=username/path` will load the
+    interpreter, fetch `path` owned by `username` and run it.
+
+*   Added support to auto-run programs from the cloud to the CLI, to mimic the
+    changes done to the web UI.  A path of the form `cloud://username/path`
+    given to the command line interpreter will fetch `path` owned by `username`
+    and run it.  Due to various limitations, this is only available when the
+    interpreter is launched with the `--interactive` flag.
+
 *   Parameterized the cloud service to talk to.  In the CLI, the new
     `--service-url` allows overriding the default, and in the web, the staging
     site now points to the staging service.

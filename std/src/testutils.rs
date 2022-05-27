@@ -29,6 +29,7 @@ use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::rc::Rc;
 use std::result::Result;
+use std::str;
 
 /// A captured command or messages sent to the mock console.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -268,6 +269,20 @@ impl Console for MockConsole {
         self.captured_out.push(CapturedOut::SetSync(enabled));
         Ok(())
     }
+}
+
+/// Flattens the captured output into a single string resembling what would be shown in the
+/// console for ease of testing.
+pub fn flatten_output(captured_out: Vec<CapturedOut>) -> String {
+    let mut flattened = String::new();
+    for out in captured_out {
+        match out {
+            CapturedOut::Write(bs) => flattened.push_str(str::from_utf8(&bs).unwrap()),
+            CapturedOut::Print(s) => flattened.push_str(&s),
+            _ => (),
+        }
+    }
+    flattened
 }
 
 /// A stored program that exposes golden contents and accepts new content from the console when
