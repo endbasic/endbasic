@@ -30,6 +30,7 @@ use std::io;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
+use url::Url;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 #[cfg(test)]
@@ -152,7 +153,18 @@ impl WebTerminal {
     }
 
     /// Safe version of `run_repl_loop` that is able to return errors.
-    async fn safe_run_repl_loop(self, auto_run: Option<String>) -> io::Result<()> {
+    async fn safe_run_repl_loop(self) -> io::Result<()> {
+        let location = match web_sys::window() {
+            Some(window) => match window.location().href() {
+                Ok(href) => match Url::parse(&href) {
+                    Ok(url) => url,
+                    Err(e) => log_and_panic!("Failed to parse window's location href: {:?}", e),
+                },
+                Err(e) => log_and_panic!("Failed to get window's location href: {:?}", e),
+            },
+            None => log_and_panic!("Failed to get window"),
+        };
+
         let console = Rc::from(RefCell::from(self.console));
         let mut builder = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
@@ -177,10 +189,23 @@ impl WebTerminal {
 
         let service =
             Rc::from(RefCell::from(endbasic_client::CloudService::new(&self.service_url)?));
-        endbasic_client::add_all(&mut machine, service, console.clone(), storage.clone());
+        endbasic_client::add_all(
+            &mut machine,
+            service,
+            console.clone(),
+            storage.clone(),
+            format!("{}/", location.origin().unicode_serialization()),
+        );
 
         endbasic_repl::print_welcome(console.clone())?;
 
+        let mut auto_run = None;
+        for (name, value) in location.query_pairs() {
+            if name == "run" {
+                auto_run = Some(value);
+                break;
+            }
+        }
         if let Some(auto_run) = auto_run {
             match endbasic_repl::run_from_cloud(
                 &mut machine,
@@ -216,9 +241,9 @@ impl WebTerminal {
         }
     }
 
-    /// Starts the EndBASIC interpreter loop on the specified `terminal`.
-    pub async fn run_repl_loop(self, auto_run: Option<String>) {
-        if let Err(e) = self.safe_run_repl_loop(auto_run).await {
+    /// Starts the EndBASIC interpreter loop.
+    pub async fn run_repl_loop(self) {
+        if let Err(e) = self.safe_run_repl_loop().await {
             log_and_panic!("REPL failed: {}", e);
         }
     }

@@ -244,14 +244,16 @@ pub struct ShareCommand {
     service: Rc<RefCell<dyn Service>>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
+    exec_base_url: String,
 }
 
 impl ShareCommand {
     /// Creates a new `SHARE` command.
-    pub fn new(
+    pub fn new<S: Into<String>>(
         service: Rc<RefCell<dyn Service>>,
         console: Rc<RefCell<dyn Console>>,
         storage: Rc<RefCell<Storage>>,
+        exec_base_url: S,
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SHARE", VarType::Void)
@@ -273,6 +275,7 @@ among users of the EndBASIC service.",
             service,
             console,
             storage,
+            exec_base_url: exec_base_url.into(),
         })
     }
 }
@@ -403,7 +406,8 @@ impl Command for ShareCommand {
                     "You have made the file publicly readable.  As a result, other people can now \
 auto-run your public file by visiting:",
                     &format!(
-                        "https://repl.endbasic.dev/?run={}/{}",
+                        "{}?run={}/{}",
+                        self.exec_base_url,
                         self.service
                             .borrow()
                             .logged_in_username()
@@ -593,11 +597,12 @@ in it to activate your account.  Make sure to check your spam folder.",
 
 /// Adds all remote manipulation commands for `service` to the `machine`, using `console` to
 /// display information and `storage` to manipulate the remote drives.
-pub fn add_all(
+pub fn add_all<S: Into<String>>(
     machine: &mut Machine,
     service: Rc<RefCell<dyn Service>>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
+    exec_base_url: S,
 ) {
     storage
         .borrow_mut()
@@ -605,7 +610,12 @@ pub fn add_all(
 
     machine.add_command(LoginCommand::new(service.clone(), console.clone(), storage.clone()));
     machine.add_command(LogoutCommand::new(service.clone(), console.clone(), storage.clone()));
-    machine.add_command(ShareCommand::new(service.clone(), console.clone(), storage));
+    machine.add_command(ShareCommand::new(
+        service.clone(),
+        console.clone(),
+        storage,
+        exec_base_url,
+    ));
     machine.add_command(SignupCommand::new(service, console));
 }
 
@@ -888,7 +898,7 @@ mod tests {
         let mut checker = t.run(r#"SHARE "MEMORY:/FOO.BAS", "Public+r""#);
         let output = flatten_output(checker.take_captured_out());
         checker.expect_file("MEMORY:/FOO.BAS", "").expect_access_token("$").check();
-        assert!(output.contains("https://repl.endbasic.dev/?run=logged-in-username/FOO.BAS"));
+        assert!(output.contains("https://repl.example.com/?run=logged-in-username/FOO.BAS"));
     }
 
     // TODO(jmmv): Add forgotten tests for SHARE modifying ACLs.

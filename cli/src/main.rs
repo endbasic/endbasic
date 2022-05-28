@@ -135,7 +135,7 @@ fn finish_interactive_build(
     let mut machine = builder.build()?;
 
     let service = Rc::from(RefCell::from(endbasic_client::CloudService::new(service_url)?));
-    endbasic_client::add_all(&mut machine, service, console, storage);
+    endbasic_client::add_all(&mut machine, service, console, storage, "https://repl.endbasic.dev/");
 
     Ok(machine)
 }

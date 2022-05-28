@@ -234,7 +234,13 @@ impl Default for ClientTester {
         let console = tester.get_console();
         let storage = tester.get_storage();
         let service = Rc::from(RefCell::from(MockService::default()));
-        add_all(tester.get_machine(), service.clone(), console, storage);
+        add_all(
+            tester.get_machine(),
+            service.clone(),
+            console,
+            storage,
+            "https://repl.example.com/",
+        );
         ClientTester { tester, service }
     }
 }
