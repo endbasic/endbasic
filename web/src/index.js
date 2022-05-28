@@ -137,6 +137,4 @@ if (isMobile) {
 var sizeInChars = wt.size_description();
 $('#terminal-size').text(sizeInChars);
 
-const params = new URLSearchParams(window.location.search.substring(1));
-const autoRun = params.get("run");
-wt.run_repl_loop(autoRun);
+wt.run_repl_loop();
