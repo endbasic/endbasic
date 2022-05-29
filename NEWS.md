@@ -49,6 +49,11 @@ for the time being.**
     `endbasic-std` crate leaner dependencies-wise and facilitates configuring
     the client.
 
+*   Issue #163: Fixed backspace handling in the the web and SDL consoles so
+    that the previous character is not left behind the cursor.  The problem was
+    visible in the web UI where the semi-transparent cursor would show the
+    previous letter.
+
 ## Changes in version 0.8.1
 
 **Released on 2022-01-29.**
