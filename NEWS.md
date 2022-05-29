@@ -30,9 +30,9 @@ for the time being.**
 *   Added the `LOGOUT` command.  As a side-effect of this, it is now possible
     to use `LOGIN` multiple times within the same interpreter session.
 
-*   Added support to auto-run programs from the cloud to the web UI: a URL of
-    the form `https://repl.endbasic.dev/?run=username/path` will load the
-    interpreter, fetch `path` owned by `username` and run it.
+*   Issue #131: Added support to auto-run programs from the cloud to the web UI:
+    a URL of the form `https://repl.endbasic.dev/?run=username/path` will load
+    the interpreter, fetch `path` owned by `username` and run it.
 
 *   Added support to auto-run programs from the cloud to the CLI, to mimic the
     changes done to the web UI.  A path of the form `cloud://username/path`
