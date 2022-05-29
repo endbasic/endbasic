@@ -52,9 +52,13 @@ jobs:
 
     macos-x86_64-sdl:
         runs-on: macos-latest
+        env:
+            RUSTC_WRAPPER: sccache
+            SCCACHE_AZURE_CONNECTION_STRING: ${{ secrets.SCCACHE_AZURE_CONNECTION_STRING }}
+            SCCACHE_AZURE_BLOB_CONTAINER: ${{ secrets.SCCACHE_AZURE_BLOB_CONTAINER }}
         steps:
             - uses: actions/checkout@v2
-            - run: brew install sdl2 sdl2_ttf
+            - run: brew install sccache sdl2 sdl2_ttf
             - run: ./.github/workflows/release.sh macos-x86_64-sdl
             - uses: actions/upload-artifact@v2
               with:
@@ -64,9 +68,13 @@ jobs:
 
     windows-x86_64-sdl:
         runs-on: windows-latest
+        env:
+            RUSTC_WRAPPER: sccache
+            SCCACHE_AZURE_CONNECTION_STRING: ${{ secrets.SCCACHE_AZURE_CONNECTION_STRING }}
+            SCCACHE_AZURE_BLOB_CONTAINER: ${{ secrets.SCCACHE_AZURE_BLOB_CONTAINER }}
         steps:
             - uses: actions/checkout@v2
-            - run: choco install unzip zip
+            - run: choco install sccache unzip zip
             - run: ./.github/workflows/setup-sdl.ps1
             - run: ./.github/workflows/release.sh windows-x86_64-sdl
               shell: bash
