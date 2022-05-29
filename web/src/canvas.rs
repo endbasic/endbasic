@@ -470,14 +470,17 @@ impl Console for CanvasConsole {
             }
             ClearType::PreviousChar => {
                 if self.cursor_pos.x > 0 {
-                    let origin = self.cursor_pos.clamped_mul(self.glyph_size);
+                    self.clear_cursor()?;
+                    let previous_pos = CharsXY::new(self.cursor_pos.x - 1, self.cursor_pos.y);
+                    let origin = previous_pos.clamped_mul(self.glyph_size);
                     self.context.fill_rect(
                         f64::from(origin.x),
                         f64::from(origin.y),
                         f64::from(self.glyph_size.width),
                         f64::from(self.glyph_size.height),
                     );
-                    self.cursor_pos.x -= 1;
+                    self.cursor_pos = previous_pos;
+                    self.draw_cursor()?;
                 }
             }
             ClearType::UntilNewLine => {

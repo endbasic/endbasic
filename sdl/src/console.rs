@@ -753,13 +753,16 @@ impl Console for SdlConsole {
             }
             ClearType::PreviousChar => {
                 if self.cursor_pos.x > 0 {
+                    self.clear_cursor()?;
+                    let previous_pos = CharsXY::new(self.cursor_pos.x - 1, self.cursor_pos.y);
                     self.canvas
                         .fill_rect(rect_origin_size(
-                            self.cursor_pos.clamped_mul(self.font.glyph_size),
+                            previous_pos.clamped_mul(self.font.glyph_size),
                             self.font.glyph_size,
                         ))
                         .map_err(string_error_to_io_error)?;
-                    self.cursor_pos.x -= 1;
+                    self.cursor_pos = previous_pos;
+                    self.draw_cursor()?;
                 }
             }
             ClearType::UntilNewLine => {
@@ -1304,6 +1307,13 @@ mod tests {
         test.console().move_within_line(-8).unwrap();
         test.console().clear(ClearType::UntilNewLine).unwrap();
         test.console().write(b" -- done").unwrap();
+
+        test.console().locate(CharsXY { x: 0, y: 5 }).unwrap();
+        test.console().hide_cursor().unwrap();
+        test.console().write(b"Trailing period should be gone.").unwrap();
+        test.console().clear(ClearType::PreviousChar).unwrap();
+        test.console().move_within_line(-2).unwrap();
+        test.console().show_cursor().unwrap();
 
         test.verify("sdl-clear");
     }
