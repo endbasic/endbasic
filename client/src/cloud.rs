@@ -529,6 +529,18 @@ mod tests {
 
     #[test]
     #[ignore = "Requires environment configuration and is expensive"]
+    fn test_get_and_patch_file_utf8() {
+        #[tokio::main]
+        async fn run(context: &mut TestContext) {
+            let (filename, _content) = context.random_file();
+            let content = "안녕하세요";
+            do_get_and_patch_file_test(context, &filename, content.as_bytes()).await;
+        }
+        run(&mut TestContext::new_from_env());
+    }
+
+    #[test]
+    #[ignore = "Requires environment configuration and is expensive"]
     fn test_get_file_not_found() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
