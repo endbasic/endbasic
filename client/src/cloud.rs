@@ -178,6 +178,7 @@ impl Service for CloudService {
             .post(self.make_url("api/login"))
             .headers(self.default_headers())
             .header("Authorization", basic_auth)
+            .header("Content-Length", 0)
             .send()
             .await
             .map_err(reqwest_error_to_io_error)?;
@@ -203,6 +204,7 @@ impl Service for CloudService {
             self.client
                 .post(self.make_url(&format!("api/users/{}/logout", auth_data.username)))
                 .headers(self.default_headers())
+                .header("Content-Length", 0)
                 .bearer_auth(auth_data.access_token.as_str())
                 .send()
                 .await
