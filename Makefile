@@ -43,3 +43,17 @@ test-cli:
 	    RUST_BACKTRACE=1 \
 	    SERVICE_URL="$(SERVICE_URL)" \
 	    cargo test $(TEST_ARGS) -- --include-ignored
+
+.PHONY: regen-sdl
+regen-sdl:
+	@cd sdl && \
+	    REGEN_BMPS=true \
+	    RUST_BACKTRACE=1 \
+	    cargo test $(TEST_ARGS) -- --include-ignored
+
+
+.PHONY: test-sdl
+test-sdl:
+	@cd sdl && \
+	    RUST_BACKTRACE=1 \
+	    cargo test $(TEST_ARGS) -- --include-ignored

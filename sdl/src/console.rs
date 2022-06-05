@@ -1024,10 +1024,6 @@ mod testutils {
     use std::path::PathBuf;
     use std::sync::{Mutex, MutexGuard};
 
-    /// Set this to true to regenerate the golden images instead of verifying them.  The
-    /// checked-in value should always be false (and if it is not, all tests fail).
-    const REGEN_BMPS: bool = false;
-
     /// Global lock to ensure we only instantiate a single `SdlConsole` at once.
     ///
     /// We could instead wrap a global `SdlConsole` with the mutex, but then the tests would
@@ -1092,7 +1088,7 @@ mod testutils {
 
             let surface = self.console.window.surface(&self.console.event_pump).unwrap();
 
-            if REGEN_BMPS {
+            if env::var("REGEN_BMPS").as_ref().map(String::as_str) == Ok("true") {
                 let golden_bmp = src_path("sdl/src").join(format!("{}.bmp", bmp_basename));
                 surface.save_bmp(&golden_bmp).unwrap();
                 let mut input = BufReader::new(File::open(golden_bmp).unwrap());
