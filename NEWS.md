@@ -10,9 +10,17 @@ to talk to the cloud service.  If you use the web interface, this should not be
 a problem, but if you use local builds, please try to stay on the latest release
 for the time being.**
 
-## Changes in version X.Y.Z
+## Changes in version 0.9.0
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2022-06-05.**
+
+The primary goal of this release is to support major changes in the EndBASIC
+cloud service, which has a completely new account signup and authentication
+flow that allow unauthenticated users to load publicly shared files.  These
+changes, combined with the in-interpreter account signup flow, fulfill the
+vision of the cloud service interactions.
+
+Cloud service changes:
 
 *   Updated `LOGIN` to deal with the new version of the EndBASIC cloud service
     that does not use Azure AD for authentication.  This new command is faster
@@ -44,10 +52,7 @@ for the time being.**
     `--service-url` allows overriding the default, and in the web, the staging
     site now points to the staging service.
 
-*   Added a new `endbasic-client` crate to assimilate all of the funcionality
-    and commands required to talk to the cloud service.  This helps to keep the
-    `endbasic-std` crate leaner dependencies-wise and facilitates configuring
-    the client.
+Usability fixes:
 
 *   Issue #161: Fixed input methods (line input in the REPL and the full-screen
     text editor) to properly accept UTF-8.
@@ -56,6 +61,13 @@ for the time being.**
     that the previous character is not left behind the cursor.  The problem was
     visible in the web UI where the semi-transparent cursor would show the
     previous letter.
+
+Internal changes:
+
+*   Added a new `endbasic-client` crate to assimilate all of the funcionality
+    and commands required to talk to the cloud service.  This helps to keep the
+    `endbasic-std` crate leaner dependencies-wise and facilitates configuring
+    the client.
 
 ## Changes in version 0.8.1
 
