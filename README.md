@@ -23,7 +23,7 @@ operating systems and platforms, including macOS, Windows, and Linux.
 
 EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 
-**The latest version of EndBASIC is 0.8.1 and was released on 2022-01-29.**
+**The latest version of EndBASIC is 0.9.0 and was released on 2022-06-05.**
 
 ## Quick start on the web
 
@@ -45,7 +45,7 @@ for the cloud service and upload your programs to share them with the world.
 ## Quick start on your machine
 
 Visit the
-[release page](https://github.com/endbasic/endbasic/releases/tag/endbasic-0.8.1)
+[release page](https://github.com/endbasic/endbasic/releases/tag/endbasic-0.9.0)
 to download prebuilt binaries.  Once downloaded, unpack the archive and run the
 `endbasic` binary to get started.
 
@@ -110,7 +110,13 @@ cargo install --features=rpi,sdl endbasic
 
 ## More information
 
-The following documents provide more information:
+Refer to the [**User's Manual**](https://www.endbasic.dev/docs.html) for
+information on how to get started with EndBASIC.
+
+Type `HELP` within the interpreter to access the **Reference Manual**.
+
+The following documents provide more information about the structure of
+this repository:
 
 *   For language features, see [`core/README.md`](core/README.md).
 *   For standard library contents, see [`std/README.md`](std/README.md).
