@@ -383,6 +383,13 @@ impl<'a> Lexer<'a> {
 
             '=' => Ok(Token::Equal),
             '<' | '>' => self.consume_operator(ch),
+            '#' if match self.input.peek() {
+                Some(Ok('!')) => true,
+                _ => false,
+            } =>
+            {
+                self.consume_rest_of_line()
+            }
 
             ch if ch.is_digit(10) => self.consume_number(ch),
             ch if ch.is_word() => self.consume_symbol(ch),
