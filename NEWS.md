@@ -10,6 +10,12 @@ to talk to the cloud service.  If you use the web interface, this should not be
 a problem, but if you use local builds, please try to stay on the latest release
 for the time being.**
 
+## Changes in version 0.9.99
+
+**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+
+*   No changes recorded.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
