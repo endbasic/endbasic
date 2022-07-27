@@ -156,7 +156,7 @@ impl SleepCommand {
                 .with_description(
                     "Suspends program execution.
 Pauses program execution for the given number of seconds, which can be specified either as an \
-integral or as a floating point number for finer precision.",
+integer or as a floating point number for finer precision.",
                 )
                 .build(),
             sleep_fn,
