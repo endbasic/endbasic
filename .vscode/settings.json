@@ -23,7 +23,11 @@
 
     "[markdown]": {
         "editor.rulers": [80],
-        "editor.quickSuggestions": false,
+        "editor.quickSuggestions": {
+            "comments": "off",
+            "strings": "off",
+            "other": "off"
+        },
         "editor.wordWrapColumn": 80,
         "rewrap.doubleSentenceSpacing": true
     },
@@ -53,7 +57,11 @@
 
     "[plaintext]": {
         "editor.rulers": [80],
-        "editor.quickSuggestions": false,
+        "editor.quickSuggestions": {
+            "comments": "off",
+            "strings": "off",
+            "other": "off"
+        },
         "editor.wordWrapColumn": 80
     },
 
