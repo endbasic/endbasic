@@ -86,7 +86,7 @@ main() {
             cp /usr/local/opt/sdl2/lib/libSDL2-*.dylib "${distname}"
             cp /usr/local/opt/sdl2/LICENSE.txt "${distname}/LICENSE.sdl2"
             cp /usr/local/opt/sdl2_ttf/lib/libSDL2_ttf-*.dylib "${distname}"
-            cp /usr/local/opt/sdl2_ttf/COPYING.txt "${distname}/LICENSE.sdl2_ttf"
+            cp /usr/local/opt/sdl2_ttf/LICENSE.txt "${distname}/LICENSE.sdl2_ttf"
             cp /usr/local/opt/freetype/lib/libfreetype.*.dylib "${distname}"
             cp /usr/local/opt/freetype/LICENSE.TXT "${distname}/LICENSE.freetype"
             cp /usr/local/opt/libpng/lib/libpng16.*.dylib "${distname}"
