@@ -173,7 +173,7 @@ impl<'a> Lexer<'a> {
                     s.push(self.input.next().unwrap()?);
                     found_dot = true;
                 }
-                Some(Ok(ch)) if ch.is_digit(10) => s.push(self.input.next().unwrap()?),
+                Some(Ok(ch)) if ch.is_ascii_digit() => s.push(self.input.next().unwrap()?),
                 Some(Ok(ch)) if ch.is_separator() => break,
                 Some(Ok(ch)) => {
                     let msg = format!("Unexpected character in numeric literal: {}", ch);
@@ -384,7 +384,7 @@ impl<'a> Lexer<'a> {
             '=' => Ok(Token::Equal),
             '<' | '>' => self.consume_operator(ch),
 
-            ch if ch.is_digit(10) => self.consume_number(ch),
+            ch if ch.is_ascii_digit() => self.consume_number(ch),
             ch if ch.is_word() => self.consume_symbol(ch),
             ch => self.handle_bad_read(format!("Unknown character: {}", ch)),
         }
