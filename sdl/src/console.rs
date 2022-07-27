@@ -30,6 +30,7 @@ use sdl2::ttf::{Font, FontError, InitError, Sdl2TtfContext};
 use sdl2::video::{Window, WindowBuildError};
 use sdl2::{EventPump, Sdl};
 use std::convert::TryFrom;
+use std::fmt::{self, Write};
 use std::io;
 use std::path::Path;
 
@@ -46,6 +47,11 @@ const DEFAULT_BG_COLOR: Color = Color::BLACK;
 /// the `Console` trait.  It might be possible to do this in a better way, but for now, keeping the
 /// context global works well and is simple enough.
 static TTF_CONTEXT: Lazy<Result<Sdl2TtfContext, InitError>> = Lazy::new(sdl2::ttf::init);
+
+/// Converts a `fmt::Error` to an `io::Error`.
+fn fmt_error_to_io_error(e: fmt::Error) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, e)
+}
 
 /// Converts a `FontError` to an `io::Error`.
 fn font_error_to_io_error(e: FontError) -> io::Error {
@@ -508,10 +514,12 @@ impl SdlConsole {
         };
         let size_chars = font.chars_in_area(size_pixels);
 
-        title += &format!(
+        write!(
+            &mut title,
             " - {}x{} pixels, {}x{} chars",
             size_pixels.width, size_pixels.height, size_chars.x, size_chars.y
-        );
+        )
+        .map_err(fmt_error_to_io_error)?;
         window.set_title(&title).expect("There should have been no NULLs in the formatted title");
 
         let pixel_format = window.window_pixel_format();
