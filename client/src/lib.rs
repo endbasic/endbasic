@@ -61,7 +61,7 @@ impl From<SerdeDiskSpace> for DiskSpace {
 
 /// An opaque access token obtained during authentication and used for all subsequent requests
 /// against the server.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
 pub struct AccessToken(String);
 
@@ -112,7 +112,7 @@ pub struct GetFilesResponse {
 }
 
 /// Representation of a file query.
-#[derive(Debug, Default, PartialEq, Serialize)]
+#[derive(Debug, Default, Eq, PartialEq, Serialize)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct GetFileRequest {
     get_content: bool,
@@ -160,7 +160,7 @@ impl GetFileResponse {
 }
 
 /// Representation of an atomic file update.
-#[derive(Debug, Default, PartialEq, Serialize)]
+#[derive(Debug, Default, Eq, PartialEq, Serialize)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct PatchFileRequest {
     /// Base64-encoded file content.
@@ -193,7 +193,7 @@ impl PatchFileRequest {
 }
 
 /// Representation of a signup request.
-#[derive(Debug, Default, PartialEq, Serialize)]
+#[derive(Debug, Default, Eq, PartialEq, Serialize)]
 #[cfg_attr(test, derive(Deserialize))]
 pub struct SignupRequest {
     username: String,

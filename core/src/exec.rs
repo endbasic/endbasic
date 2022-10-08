@@ -72,7 +72,7 @@ fn new_syntax_error<T, S: Into<String>>(message: S) -> Result<T> {
 }
 
 /// Describes how the machine stopped execution while it was running a script via `exec()`.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 #[must_use]
 pub enum StopReason {
     /// Execution terminates because the machine reached the end of the input.

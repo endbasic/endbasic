@@ -39,7 +39,7 @@ mod linebuffer;
 pub use linebuffer::LineBuffer;
 
 /// Decoded key presses as returned by the console.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Key {
     /// The cursor down key.
     ArrowDown,
