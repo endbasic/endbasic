@@ -67,7 +67,7 @@ impl Pin {
 }
 
 /// Pin configuration, which includes mode and bias.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PinMode {
     /// Pin that can be read from with no bias.
     In,

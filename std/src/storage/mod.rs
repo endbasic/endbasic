@@ -40,7 +40,7 @@ pub struct Metadata {
 }
 
 /// Describes the ACLs of a file.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct FileAcls {
     /// List of principals that are allowed to read the file.
     pub readers: Vec<String>,
@@ -65,7 +65,7 @@ impl FileAcls {
 }
 
 /// Representation of some amount of disk space.  Can be used to express both quotas and usage.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DiskSpace {
     /// Number of bytes used or allowed.
     pub bytes: u64,
