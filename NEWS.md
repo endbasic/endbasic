@@ -14,7 +14,11 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
-*   No changes recorded.
+*   Modified the interpreter to parse the full program before executing it,
+    which is a requirement for supporting `GOTO`s and features like `DATA`.
+    As a side-effect of this change, any syntax errors now cause the
+    interpreted program to not run at all, as opposed to before where the
+    program would make progress until it hit the error.
 
 ## Changes in version 0.9.0
 

@@ -419,7 +419,7 @@ fn test_lang_lexer_error() {
         &["--local-drive=memory://", &src_str("cli/tests/lang/lexer-error.bas")],
         1,
         Behavior::Null,
-        Behavior::File(src_path("cli/tests/lang/lexer-error.out")),
+        Behavior::Null,
         Behavior::File(src_path("cli/tests/lang/lexer-error.err")),
     );
 }
@@ -443,7 +443,7 @@ fn test_lang_parser_error() {
         &["--local-drive=memory://", &src_str("cli/tests/lang/parser-error.bas")],
         1,
         Behavior::Null,
-        Behavior::File(src_path("cli/tests/lang/parser-error.out")),
+        Behavior::Null,
         Behavior::File(src_path("cli/tests/lang/parser-error.err")),
     );
 }

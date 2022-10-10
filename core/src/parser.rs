@@ -170,7 +170,7 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     /// Creates a new parser from the given readable.
-    pub fn from(input: &'a mut dyn io::Read) -> Self {
+    fn from(input: &'a mut dyn io::Read) -> Self {
         Self { lexer: Lexer::from(input).peekable() }
     }
 
@@ -197,7 +197,7 @@ impl<'a> Parser<'a> {
                 self.lexer.consume_peeked();
                 continue;
             }
-            match self.parse()? {
+            match self.parse_one_safe()? {
                 Some(stmt) => stmts.push(stmt),
                 None => break,
             }
@@ -872,13 +872,23 @@ impl<'a> Parser<'a> {
     /// Extracts the next available statement from the input stream, or `None` if none is available.
     ///
     /// The stream is always left in a position where the next statement extraction can be tried.
-    pub fn parse(&mut self) -> Result<Option<Statement>> {
+    fn parse_one_safe(&mut self) -> Result<Option<Statement>> {
         let result = self.parse_one();
         if result.is_err() {
             self.reset()?;
         }
         result
     }
+}
+
+/// Extracts all statements from the input stream.
+pub fn parse(input: &mut dyn io::Read) -> Result<Vec<Statement>> {
+    let mut parser = Parser::from(input);
+    let mut statements = vec![];
+    while let Some(statement) = parser.parse_one_safe()? {
+        statements.push(statement);
+    }
+    Ok(statements)
 }
 
 #[cfg(test)]
@@ -890,17 +900,7 @@ mod tests {
     /// `exp_statements`.
     fn do_ok_test(input: &str, exp_statements: &[Statement]) {
         let mut input = input.as_bytes();
-        let mut parser = Parser::from(&mut input);
-
-        let mut statements = vec![];
-        loop {
-            let statement = parser.parse().expect("Parsing failed");
-            if statement.is_none() {
-                break;
-            }
-            statements.push(statement.unwrap());
-        }
-
+        let statements = parse(&mut input).expect("Parsing failed");
         assert_eq!(exp_statements, statements.as_slice());
     }
 
@@ -908,8 +908,11 @@ mod tests {
     fn do_error_test(input: &str, expected_err: &str) {
         let mut input = input.as_bytes();
         let mut parser = Parser::from(&mut input);
-        assert_eq!(expected_err, format!("{}", parser.parse().expect_err("Parsing did not fail")));
-        assert!(parser.parse().unwrap().is_none());
+        assert_eq!(
+            expected_err,
+            format!("{}", parser.parse_one_safe().expect_err("Parsing did not fail"))
+        );
+        assert!(parser.parse_one_safe().unwrap().is_none());
     }
 
     /// Runs the parser on the given `input` and expects the `err` error message.
@@ -919,8 +922,10 @@ mod tests {
     // parsed next.
     fn do_error_test_no_reset(input: &str, expected_err: &str) {
         let mut input = input.as_bytes();
-        let mut parser = Parser::from(&mut input);
-        assert_eq!(expected_err, format!("{}", parser.parse().expect_err("Parsing did not fail")));
+        assert_eq!(
+            expected_err,
+            format!("{}", parse(&mut input).expect_err("Parsing did not fail"))
+        );
     }
 
     #[test]
