@@ -17,7 +17,7 @@
 
 use crate::ast::{Expr, Statement, Value, VarRef, VarType};
 use crate::eval;
-use crate::parser::{self, Parser};
+use crate::parser;
 use crate::syms::{CallError, CallableMetadata, Command, Function, Symbol, Symbols};
 use async_recursion::async_recursion;
 use std::io;
@@ -353,12 +353,13 @@ impl Machine {
     /// different programs on the same machine, all sharing state.
     pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<StopReason> {
         debug_assert!(self.stop_reason.is_none());
-        let mut parser = Parser::from(input);
-        while self.stop_reason.is_none() {
-            match parser.parse()? {
-                Some(stmt) => self.exec_one(&stmt).await?,
-                None => break,
+        let stmts = parser::parse(input)?;
+
+        for stmt in stmts {
+            if self.stop_reason.is_some() {
+                break;
             }
+            self.exec_one(&stmt).await?;
         }
         Ok(self.stop_reason.take().unwrap_or(StopReason::Eof))
     }
@@ -873,16 +874,36 @@ mod tests {
     }
 
     #[test]
-    fn test_top_level_errors() {
-        do_simple_error_test("FOO BAR", "Unknown builtin FOO");
-        do_error_test("OUT \"a\"\nFOO BAR\nOUT \"b\"", &[], &["a"], "Unknown builtin FOO");
+    fn test_top_level_syntax_errors_prevent_execution() {
+        do_simple_error_test("+ b", "Unexpected token Plus in statement");
+        do_error_test(r#"OUT "a": + b: OUT "b""#, &[], &[], "Unexpected token Plus in statement");
+    }
 
+    #[test]
+    fn test_inner_level_syntax_errors_prevent_execution() {
         do_simple_error_test("+ b", "Unexpected token Plus in statement");
         do_error_test(
-            "OUT \"a\"\n+ b\nOUT \"b\"",
+            r#"OUT "a": IF TRUE THEN: + b: END IF: OUT "b""#,
+            &[],
+            &[],
+            "Unexpected token Plus in statement",
+        );
+    }
+
+    #[test]
+    fn test_top_level_semantic_errors_allow_execution() {
+        do_simple_error_test("FOO BAR", "Unknown builtin FOO");
+        do_error_test(r#"OUT "a": FOO BAR: OUT "b""#, &[], &["a"], "Unknown builtin FOO");
+    }
+
+    #[test]
+    fn test_inner_level_semantic_errors_allow_execution() {
+        do_simple_error_test(r#"IF TRUE THEN: FOO BAR: END IF"#, "Unknown builtin FOO");
+        do_error_test(
+            r#"OUT "a": IF TRUE THEN: FOO BAR: END IF: OUT "b""#,
             &[],
             &["a"],
-            "Unexpected token Plus in statement",
+            "Unknown builtin FOO",
         );
     }
 
