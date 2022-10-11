@@ -14,6 +14,11 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
+*   Added support for labels and `GOTO`.  At this point, label names must be
+    prefixed with an `@` sign to resolve parsing ambiguities with the `:` line
+    delimiter.  Furthermore, the targets of a `GOTO` must be at the same or an
+    upper level in the control flow of the code.
+
 *   Modified the interpreter to parse the full program before executing it,
     which is a requirement for supporting `GOTO`s and features like `DATA`.
     As a side-effect of this change, any syntax errors now cause the

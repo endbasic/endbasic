@@ -50,8 +50,8 @@ those are via HELP.
 There are no line numbers and no plans to add them... so, sorry, no GOTO!
 
 [38;5;11m[2J[1;1H
- EndBASIC tour: Control flow
-=============================
+ EndBASIC tour: Structured control flow
+========================================
 [39m
 Fully-specified if statements look like this:
 
@@ -74,6 +74,23 @@ For loops look like this:
     FOR a = 1 TO 10 STEP 2
         PRINT a
     NEXT
+
+[38;5;11m[2J[1;1H
+ EndBASIC tour: Unstructured control flow
+==========================================
+[39m
+Labels and jumps look like this:
+
+    i% = 1
+    @repeat
+    PRINT i%
+    IF i% = 10 THEN: GOTO @out: END IF
+    i% = i% + 1
+    GOTO @repeat
+    @out
+
+The GOTO targets must be at the same or an upper level of the control flow.
+Line numbers are not supported.
 
 [38;5;11m[2J[1;1H
  EndBASIC tour: File manipulation

@@ -316,6 +316,19 @@ pub enum Statement {
     /// integer literal at parse time and do not allow it to be an expression.
     For(VarRef, Expr, Expr, Expr, Vec<Statement>),
 
+    /// Represents a `GOTO` statement.
+    ///
+    /// The first parameter is the name of the label to jump to.
+    Goto(String),
+
+    /// Represents a label "statement".
+    ///
+    /// The first parameter is the name of the label being defined.
+    ///
+    /// In principle, labels should be just a property of a statement but, for simplicity in the
+    /// current model, it's easiest to represent them as their own statement.
+    Label(String),
+
     /// Represents a `WHILE` statement.
     ///
     /// The first parameter is the loop's condition.  The second parameter is the collection of

@@ -37,3 +37,14 @@ NEXT
 IF i = 4 AND j = 9 THEN
     PRINT "Also done!"
 END IF
+
+WHILE TRUE
+    i = 0
+    @start
+    PRINT i
+    IF i = 5 THEN: GOTO @done: END IF
+    i = i + 1
+    GOTO @start
+    @done: GOTO @out
+WEND
+@out: PRINT "Escaped infinite loop"
