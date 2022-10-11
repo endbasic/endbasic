@@ -568,8 +568,10 @@ impl<'a> Parser<'a> {
                 | Token::Elseif
                 | Token::End
                 | Token::For
+                | Token::Goto
                 | Token::If
                 | Token::IntegerName
+                | Token::Label(_)
                 | Token::Next
                 | Token::TextName
                 | Token::Wend
@@ -591,6 +593,15 @@ impl<'a> Parser<'a> {
         } else {
             Ok(None)
         }
+    }
+
+    /// Parses a `GOTO` statement.
+    fn parse_goto(&mut self) -> Result<Statement> {
+        let target = match self.lexer.read()? {
+            Token::Label(target) => target,
+            _ => return Err(Error::Bad("Expected label name after GOTO".to_owned())),
+        };
+        Ok(Statement::Goto(target))
     }
 
     /// Parses an `IF` statement.
@@ -821,6 +832,18 @@ impl<'a> Parser<'a> {
                     self.reset_for()?;
                 }
                 Ok(Some(result?))
+            }
+            Token::Goto => {
+                let result = self.parse_goto();
+                Ok(Some(result?))
+            }
+            Token::Label(name) => {
+                // Handling a label here means that it must be followed by a newline, which might
+                // seem "strange" considering that other languages allow specifying a label in the
+                // same line as other code.  This is intentional to keep the parser simpler.  And,
+                // in any case, because line separators can be a colon character, placing one after
+                // the label name to join it with a statement looks "natural".
+                Ok(Some(Statement::Label(name)))
             }
             Token::Symbol(vref) => {
                 let peeked = self.lexer.peek()?;
@@ -1738,6 +1761,32 @@ mod tests {
         do_error_test("FOR i = 3 TO 1 STEP -1", "Expecting newline after FOR");
 
         do_error_test("FOR i = 0 TO 10\nPRINT i\n", "FOR without NEXT");
+    }
+
+    #[test]
+    fn test_goto_ok() {
+        do_ok_test("GOTO @foo", &[Statement::Goto("foo".to_owned())]);
+    }
+
+    #[test]
+    fn test_goto_errors() {
+        do_error_test("GOTO\n", "Expected label name after GOTO");
+        do_error_test("GOTO 3\n", "Expected label name after GOTO");
+        do_error_test("GOTO foo\n", "Expected label name after GOTO");
+        do_error_test("GOTO \"foo\"\n", "Expected label name after GOTO");
+        do_error_test("GOTO @foo, @bar\n", "Expected newline");
+        do_error_test("GOTO @foo, 3\n", "Expected newline");
+    }
+
+    #[test]
+    fn test_label_ok() {
+        do_ok_test("@foo", &[Statement::Label("foo".to_owned())]);
+    }
+
+    #[test]
+    fn test_label_errors() {
+        do_error_test("@foo PRINT", "Expected newline");
+        do_error_test("@foo+", "Expected newline");
     }
 
     #[test]

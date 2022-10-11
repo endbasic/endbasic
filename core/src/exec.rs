@@ -20,6 +20,7 @@ use crate::eval;
 use crate::parser;
 use crate::syms::{CallError, CallableMetadata, Command, Function, Symbol, Symbols};
 use async_recursion::async_recursion;
+use std::collections::HashSet;
 use std::io;
 use std::rc::Rc;
 
@@ -105,6 +106,7 @@ pub struct Machine {
     symbols: Symbols,
     clearables: Vec<Box<dyn Clearable>>,
     stop_reason: Option<StopReason>,
+    pending_goto: Option<String>,
 }
 
 impl Machine {
@@ -282,6 +284,9 @@ impl Machine {
             }
 
             self.exec_multiple(body).await?;
+            if self.pending_goto.is_some() {
+                break;
+            }
 
             self.assign(iterator, next).await?;
         }
@@ -294,6 +299,9 @@ impl Machine {
             match condition.eval(&mut self.symbols).await? {
                 Value::Boolean(true) => {
                     self.exec_multiple(body).await?;
+                    if self.pending_goto.is_some() {
+                        break;
+                    }
                 }
                 Value::Boolean(false) => break,
                 _ => return new_syntax_error("WHILE requires a boolean condition"),
@@ -303,14 +311,40 @@ impl Machine {
     }
 
     /// Executes a collection of statements.
+    ///
+    /// All callers of this function should inspect `self.pending_goto` to see if it is set after
+    /// this completes.  If that's the case, the callers must unwind processing as soon as possible
+    /// so that the target of the `GOTO` can be found.
     #[async_recursion(?Send)]
     async fn exec_multiple(&mut self, stmts: &[Statement]) -> Result<()> {
-        for stmt in stmts {
+        let mut seen_labels = HashSet::<String>::default();
+        let mut i = 0;
+        while i < stmts.len() || self.pending_goto.is_some() {
             if self.stop_reason.is_some() {
                 return Ok(());
             }
 
-            match stmt {
+            if let Some(target) = self.pending_goto.as_ref() {
+                i = 0;
+                seen_labels.clear();
+                while i < stmts.len() {
+                    if let Statement::Label(label) = &stmts[i] {
+                        let ok = seen_labels.insert(label.clone());
+                        assert!(ok, "Duplicate label found but not caught during execution");
+                        if target == label {
+                            i += 1;
+                            self.pending_goto = None;
+                            break;
+                        }
+                    }
+                    i += 1;
+                }
+                if i == stmts.len() {
+                    return Ok(());
+                }
+            }
+
+            match &stmts[i] {
                 Statement::ArrayAssignment(vref, subscripts, value) => {
                     self.assign_array(vref, subscripts, value).await?
                 }
@@ -335,10 +369,23 @@ impl Machine {
                 Statement::For(iterator, start, end, next, body) => {
                     self.do_for(iterator, start, end, next, body).await?;
                 }
+                Statement::Goto(label) => {
+                    self.pending_goto = Some(label.clone());
+                }
+                Statement::Label(label) => {
+                    if !seen_labels.insert(label.clone()) {
+                        return new_syntax_error(format!(
+                            "Duplicate label {} at this level",
+                            label
+                        ));
+                    }
+                }
                 Statement::While(condition, body) => {
                     self.do_while(condition, body).await?;
                 }
             }
+
+            i += 1;
         }
         Ok(())
     }
@@ -351,6 +398,9 @@ impl Machine {
         debug_assert!(self.stop_reason.is_none());
         let stmts = parser::parse(input)?;
         self.exec_multiple(&stmts).await?;
+        if let Some(target) = self.pending_goto.take() {
+            return new_syntax_error(format!("Unknown label {}", target));
+        }
         Ok(self.stop_reason.take().unwrap_or(StopReason::Eof))
     }
 }
@@ -822,6 +872,102 @@ mod tests {
     fn test_function_call_errors() {
         do_simple_error_test("OUT OUT()", "OUT is not an array or a function");
         do_simple_error_test("OUT SUM?()", "Incompatible types in SUM? reference");
+    }
+
+    #[test]
+    fn test_goto_top_level_go_forward() {
+        do_ok_test("OUT 1: GOTO @skip: OUT 2: @skip: OUT 3", &[], &["1", "3"]);
+    }
+
+    #[test]
+    fn test_goto_top_level_go_backward() {
+        do_ok_test(
+            "OUT 1: GOTO @skip: @before: OUT 2: GOTO @end: @skip: OUT 3: GOTO @before: @end",
+            &[],
+            &["1", "3", "2"],
+        );
+    }
+
+    #[test]
+    fn test_goto_nested_can_go_up() {
+        do_ok_test(
+            "IF TRUE THEN: FOR i = 1 TO 10: OUT i: GOTO @out: NEXT: OUT 99: @out: OUT 100: END IF",
+            &[],
+            &["1", "100"],
+        );
+
+        do_ok_test(
+            "IF TRUE THEN: WHILE TRUE: OUT 1: GOTO @out: WEND: OUT 99: END IF: @out: OUT 100",
+            &[],
+            &["1", "100"],
+        );
+    }
+
+    #[test]
+    fn test_goto_nested_cannot_go_down() {
+        do_simple_error_test(
+            "IF TRUE THEN: GOTO @sibling: END IF: IF TRUE THEN: @sibling: OUT 1: END IF",
+            "Unknown label sibling",
+        );
+    }
+
+    #[test]
+    fn test_goto_as_last_statement() {
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        assert_eq!(
+            StopReason::Exited(5),
+            run(
+                "i = 0: @a: IF i = 5 THEN: EXIT i: END IF: i = i + 1: GOTO @a",
+                &[],
+                captured_out.clone()
+            )
+            .expect("Execution failed")
+        );
+        assert!(captured_out.borrow().is_empty());
+    }
+
+    #[test]
+    fn test_goto_errors() {
+        do_simple_error_test("GOTO @foo", "Unknown label foo");
+    }
+
+    #[test]
+    fn test_label_ok() {
+        do_ok_test("OUT 1: @foo: OUT 2", &[], &["1", "2"]);
+    }
+
+    #[test]
+    fn test_label_avoid_redefinition() {
+        do_ok_test(
+            "i = 0: @x: @y: i = i + 1: IF i = 2 THEN: GOTO @end: END IF: GOTO @x: @end",
+            &[],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_label_duplicate() {
+        do_ok_test("@foo: IF TRUE THEN: @foo: END IF", &[], &[]);
+        do_ok_test("IF TRUE THEN: @foo: END IF: IF TRUE THEN: @foo: END IF", &[], &[]);
+
+        do_simple_error_test("@foo: @bar: @foo", "Duplicate label foo at this level");
+        do_simple_error_test("@foo: @bar: @foo", "Duplicate label foo at this level");
+
+        do_simple_error_test(
+            r#"
+            i = 0
+            @a
+                @b
+                    @c
+                        i = i + 1
+                        IF i = 1 THEN: GOTO @b: END IF
+                        @a
+                        IF i = 2 THEN: GOTO @c: END IF
+                        IF i = 3 THEN: GOTO @out: END IF
+            @out
+            "#,
+            "Duplicate label a at this level",
+        );
     }
 
     #[test]

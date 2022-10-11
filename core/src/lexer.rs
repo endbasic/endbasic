@@ -38,6 +38,8 @@ pub enum Token {
     Text(String),
     Symbol(VarRef),
 
+    Label(String),
+
     Comma,
     Semicolon,
     LeftParen,
@@ -65,6 +67,7 @@ pub enum Token {
     Elseif,
     End,
     For,
+    Goto,
     If,
     Next,
     Step,
@@ -278,6 +281,7 @@ impl<'a> Lexer<'a> {
             "END" => Ok(Token::End),
             "FALSE" => Ok(Token::Boolean(false)),
             "FOR" => Ok(Token::For),
+            "GOTO" => Ok(Token::Goto),
             "IF" => Ok(Token::If),
             "INTEGER" => Ok(Token::IntegerName),
             "MOD" => Ok(Token::Modulo),
@@ -326,6 +330,27 @@ impl<'a> Lexer<'a> {
             }
         }
         Ok(Token::Text(s))
+    }
+
+    /// Consumes the label definition at the current position.
+    fn consume_label(&mut self) -> io::Result<Token> {
+        let mut s = String::new();
+        loop {
+            match self.input.peek() {
+                Some(Ok(ch)) if ch.is_word() => s.push(self.input.next().unwrap()?),
+                Some(Ok(ch)) if ch.is_separator() => break,
+                Some(Ok(ch)) => {
+                    let msg = format!("Unexpected character in label: {}", ch);
+                    return self.handle_bad_peek(msg);
+                }
+                Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
+                None => break,
+            }
+        }
+        if s.is_empty() {
+            return Ok(Token::Bad("Empty label name".to_owned()));
+        }
+        Ok(Token::Label(s))
     }
 
     /// Consumes the remainder of the line and returns the token that was encountered at the end
@@ -383,6 +408,8 @@ impl<'a> Lexer<'a> {
 
             '=' => Ok(Token::Equal),
             '<' | '>' => self.consume_operator(ch),
+
+            '@' => self.consume_label(),
 
             ch if ch.is_ascii_digit() => self.consume_number(ch),
             ch if ch.is_word() => self.consume_symbol(ch),
@@ -634,6 +661,26 @@ mod tests {
     }
 
     #[test]
+    fn test_goto() {
+        do_ok_test("GOTO", &[Token::Goto]);
+
+        do_ok_test("goto", &[Token::Goto]);
+    }
+
+    #[test]
+    fn test_label() {
+        do_ok_test(
+            "@Foo123 @a @Z @123",
+            &[
+                Token::Label("Foo123".to_owned()),
+                Token::Label("a".to_owned()),
+                Token::Label("Z".to_owned()),
+                Token::Label("123".to_owned()),
+            ],
+        );
+    }
+
+    #[test]
     fn test_while() {
         do_ok_test("WHILE WEND", &[Token::While, Token::Wend]);
 
@@ -780,6 +827,8 @@ mod tests {
                 Token::Divide,
             ],
         );
+
+        do_ok_test("@+", &[Token::Bad("Empty label name".to_owned()), Token::Plus]);
     }
 
     /// A reader that generates an error on the second read.

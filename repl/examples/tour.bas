@@ -81,8 +81,8 @@ INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
 CLS
 COLOR 11
 PRINT
-PRINT " EndBASIC tour: Control flow"
-PRINT "============================="
+PRINT " EndBASIC tour: Structured control flow"
+PRINT "========================================"
 COLOR
 PRINT
 PRINT "Fully-specified if statements look like this:"
@@ -106,6 +106,29 @@ PRINT
 PRINT "    FOR a = 1 TO 10 STEP 2"
 PRINT "        PRINT a"
 PRINT "    NEXT"
+PRINT
+COLOR 11
+INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
+
+CLS
+COLOR 11
+PRINT
+PRINT " EndBASIC tour: Unstructured control flow"
+PRINT "=========================================="
+COLOR
+PRINT
+PRINT "Labels and jumps look like this:"
+PRINT
+PRINT "    i% = 1"
+PRINT "    @repeat"
+PRINT "    PRINT i%"
+PRINT "    IF i% = 10 THEN: GOTO @out: END IF"
+PRINT "    i% = i% + 1"
+PRINT "    GOTO @repeat"
+PRINT "    @out"
+PRINT
+PRINT "The GOTO targets must be at the same or an upper level of the control flow."
+PRINT "Line numbers are not supported."
 PRINT
 COLOR 11
 INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$

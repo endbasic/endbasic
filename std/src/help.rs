@@ -50,6 +50,7 @@ const LANG_REFERENCE: &str = r"
         arrayref(s1[, ..., sN])          funcref(a1[, ..., aN])
 
     Flow control:
+        @label1: @label2: GOTO @label1
         IF expr THEN: ...: ELSEIF expr THEN: ...: ELSE: ...: END IF
         FOR varref = expr TO expr [STEP int]: ...: NEXT
         WHILE expr: ...: WEND
