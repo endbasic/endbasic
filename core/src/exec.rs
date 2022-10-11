@@ -244,9 +244,7 @@ impl Machine {
         for (expr, stmts) in branches {
             match expr.eval(&mut self.symbols).await? {
                 Value::Boolean(true) => {
-                    for s in stmts {
-                        self.exec_one(s).await?;
-                    }
+                    self.exec_multiple(stmts).await?;
                     break;
                 }
                 Value::Boolean(false) => (),
@@ -283,9 +281,7 @@ impl Machine {
                 _ => panic!("Built-in condition should have evaluated to a boolean"),
             }
 
-            for s in body {
-                self.exec_one(s).await?;
-            }
+            self.exec_multiple(body).await?;
 
             self.assign(iterator, next).await?;
         }
@@ -297,9 +293,7 @@ impl Machine {
         loop {
             match condition.eval(&mut self.symbols).await? {
                 Value::Boolean(true) => {
-                    for s in body {
-                        self.exec_one(s).await?;
-                    }
+                    self.exec_multiple(body).await?;
                 }
                 Value::Boolean(false) => break,
                 _ => return new_syntax_error("WHILE requires a boolean condition"),
@@ -308,40 +302,42 @@ impl Machine {
         Ok(())
     }
 
-    /// Executes a single statement.
+    /// Executes a collection of statements.
     #[async_recursion(?Send)]
-    async fn exec_one<'a>(&'a mut self, stmt: &'a Statement) -> Result<()> {
-        if self.stop_reason.is_some() {
-            return Ok(());
-        }
+    async fn exec_multiple(&mut self, stmts: &[Statement]) -> Result<()> {
+        for stmt in stmts {
+            if self.stop_reason.is_some() {
+                return Ok(());
+            }
 
-        match stmt {
-            Statement::ArrayAssignment(vref, subscripts, value) => {
-                self.assign_array(vref, subscripts, value).await?
-            }
-            Statement::Assignment(vref, expr) => self.assign(vref, expr).await?,
-            Statement::BuiltinCall(name, args) => {
-                let cmd = match self.symbols.get(&VarRef::new(name, VarType::Auto))? {
-                    Some(Symbol::Command(cmd)) => cmd.clone(),
-                    Some(_) => return new_syntax_error(format!("{} is not a command", name)),
-                    None => return new_syntax_error(format!("Unknown builtin {}", name)),
-                };
-                cmd.exec(args, self)
-                    .await
-                    .map_err(|e| Error::from_call_error(cmd.metadata(), e))?;
-            }
-            Statement::Dim(varname, vartype) => self.symbols.dim(varname, *vartype)?,
-            Statement::DimArray(varname, dimensions, subtype) => {
-                self.dim_array(varname, subtype, dimensions).await?
-            }
-            Statement::If(branches) => {
-                self.do_if(branches).await?;
-            }
-            Statement::For(iterator, start, end, next, body) => {
-                self.do_for(iterator, start, end, next, body).await?;
-            }
-            Statement::While(condition, body) => {
-                self.do_while(condition, body).await?;
+            match stmt {
+                Statement::ArrayAssignment(vref, subscripts, value) => {
+                    self.assign_array(vref, subscripts, value).await?
+                }
+                Statement::Assignment(vref, expr) => self.assign(vref, expr).await?,
+                Statement::BuiltinCall(name, args) => {
+                    let cmd = match self.symbols.get(&VarRef::new(name, VarType::Auto))? {
+                        Some(Symbol::Command(cmd)) => cmd.clone(),
+                        Some(_) => return new_syntax_error(format!("{} is not a command", name)),
+                        None => return new_syntax_error(format!("Unknown builtin {}", name)),
+                    };
+                    cmd.exec(args, self)
+                        .await
+                        .map_err(|e| Error::from_call_error(cmd.metadata(), e))?;
+                }
+                Statement::Dim(varname, vartype) => self.symbols.dim(varname, *vartype)?,
+                Statement::DimArray(varname, dimensions, subtype) => {
+                    self.dim_array(varname, subtype, dimensions).await?
+                }
+                Statement::If(branches) => {
+                    self.do_if(branches).await?;
+                }
+                Statement::For(iterator, start, end, next, body) => {
+                    self.do_for(iterator, start, end, next, body).await?;
+                }
+                Statement::While(condition, body) => {
+                    self.do_while(condition, body).await?;
+                }
             }
         }
         Ok(())
@@ -354,13 +350,7 @@ impl Machine {
     pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<StopReason> {
         debug_assert!(self.stop_reason.is_none());
         let stmts = parser::parse(input)?;
-
-        for stmt in stmts {
-            if self.stop_reason.is_some() {
-                break;
-            }
-            self.exec_one(&stmt).await?;
-        }
+        self.exec_multiple(&stmts).await?;
         Ok(self.stop_reason.take().unwrap_or(StopReason::Eof))
     }
 }
@@ -634,7 +624,7 @@ mod tests {
         assert_eq!(
             StopReason::Exited(42),
             run(
-                "FOR a = 0 TO 10\nOUT a\nIF a = 3 THEN\nEXIT 42\nEND IF\nNEXT",
+                "FOR a = 0 TO 10\nOUT a\nIF a = 3 THEN\nEXIT 42\nOUT \"no\"\nEND IF\nNEXT",
                 &[],
                 captured_out.clone()
             )
