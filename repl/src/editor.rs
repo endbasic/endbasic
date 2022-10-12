@@ -361,16 +361,17 @@ impl Editor {
                 Key::NewLine | Key::CarriageReturn => {
                     let indent = copy_indent(&self.content[self.file_pos.line]);
                     let indent_len = indent.len();
-                    if self.file_pos.line < self.content.len() - 1 {
-                        let new = self.content[self.file_pos.line].split_off(self.file_pos.col);
-                        self.content.insert(
-                            self.file_pos.line + 1,
-                            LineBuffer::from(indent + &new.into_inner()),
-                        );
-                        need_refresh = true;
-                    } else {
-                        self.content.insert(self.file_pos.line + 1, indent.into());
-                    }
+
+                    let appending = (self.file_pos.line + 1 == self.content.len())
+                        && (self.file_pos.col == self.content[self.file_pos.line].len());
+
+                    let new = self.content[self.file_pos.line].split_off(self.file_pos.col);
+                    self.content.insert(
+                        self.file_pos.line + 1,
+                        LineBuffer::from(indent + &new.into_inner()),
+                    );
+                    need_refresh = !appending;
+
                     self.file_pos.col = indent_len;
                     self.file_pos.line += 1;
                     self.insert_col = self.file_pos.col;
@@ -709,6 +710,74 @@ mod tests {
         ob = ob.refresh(linecol(0, 3), &["abdc"], yx(0, 3));
 
         run_editor("", "abdc\n", cb, ob);
+    }
+
+    #[test]
+    fn test_insert_newline_in_middle() {
+        let mut cb = MockConsole::default();
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
+
+        cb.add_input_chars("abc");
+        ob = ob.set_dirty();
+        ob = ob.add(CapturedOut::Write("a".to_string()));
+        ob = ob.quick_refresh(linecol(0, 1), yx(0, 1));
+        ob = ob.add(CapturedOut::Write("b".to_string()));
+        ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
+        ob = ob.add(CapturedOut::Write("c".to_string()));
+        ob = ob.quick_refresh(linecol(0, 3), yx(0, 3));
+
+        cb.add_input_keys(&[Key::ArrowLeft]);
+        ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
+
+        cb.add_input_keys(&[Key::NewLine]);
+        ob = ob.refresh(linecol(1, 0), &["ab", "c"], yx(1, 0));
+
+        cb.add_input_keys(&[Key::ArrowUp]);
+        ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
+        cb.add_input_keys(&[Key::ArrowRight]);
+        ob = ob.quick_refresh(linecol(0, 1), yx(0, 1));
+        cb.add_input_keys(&[Key::ArrowRight]);
+        ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
+
+        cb.add_input_keys(&[Key::NewLine]);
+        ob = ob.refresh(linecol(1, 0), &["ab", "", "c"], yx(1, 0));
+
+        run_editor("", "ab\n\nc\n", cb, ob);
+    }
+
+    #[test]
+    fn test_split_last_line() {
+        let mut cb = MockConsole::default();
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
+
+        cb.add_input_chars("  abcd");
+        ob = ob.set_dirty();
+        ob = ob.add(CapturedOut::Write(" ".to_string()));
+        ob = ob.quick_refresh(linecol(0, 1), yx(0, 1));
+        ob = ob.add(CapturedOut::Write(" ".to_string()));
+        ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
+        ob = ob.add(CapturedOut::Write("a".to_string()));
+        ob = ob.quick_refresh(linecol(0, 3), yx(0, 3));
+        ob = ob.add(CapturedOut::Write("b".to_string()));
+        ob = ob.quick_refresh(linecol(0, 4), yx(0, 4));
+        ob = ob.add(CapturedOut::Write("c".to_string()));
+        ob = ob.quick_refresh(linecol(0, 5), yx(0, 5));
+        ob = ob.add(CapturedOut::Write("d".to_string()));
+        ob = ob.quick_refresh(linecol(0, 6), yx(0, 6));
+
+        cb.add_input_keys(&[Key::ArrowLeft]);
+        ob = ob.quick_refresh(linecol(0, 5), yx(0, 5));
+        cb.add_input_keys(&[Key::ArrowLeft]);
+        ob = ob.quick_refresh(linecol(0, 4), yx(0, 4));
+
+        cb.add_input_keys(&[Key::NewLine]);
+        ob = ob.refresh(linecol(1, 2), &["  ab", "  cd"], yx(1, 2));
+
+        run_editor("", "  ab\n  cd\n", cb, ob);
     }
 
     #[test]

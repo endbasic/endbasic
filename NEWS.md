@@ -25,6 +25,8 @@ for the time being.**
     interpreted program to not run at all, as opposed to before where the
     program would make progress until it hit the error.
 
+*   Fixed erratic insertion of newlines in existing text in the editor.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
