@@ -178,7 +178,7 @@ impl<'a> Parser<'a> {
     /// stream and fails with error `err`.
     fn expect_and_consume(&mut self, t: Token, err: &'static str) -> Result<()> {
         let peeked = self.lexer.peek()?;
-        if *peeked != t {
+        if peeked.token != t {
             return Err(Error::Bad(err.to_owned()));
         }
         self.lexer.consume_peeked();
@@ -191,9 +191,9 @@ impl<'a> Parser<'a> {
         let mut stmts = vec![];
         loop {
             let peeked = self.lexer.peek()?;
-            if delims.contains(peeked) {
+            if delims.contains(&peeked.token) {
                 break;
-            } else if *peeked == Token::Eol {
+            } else if peeked.token == Token::Eol {
                 self.lexer.consume_peeked();
                 continue;
             }
@@ -213,7 +213,7 @@ impl<'a> Parser<'a> {
         };
 
         let next = self.lexer.peek()?;
-        match next {
+        match next.token {
             Token::Eof | Token::Eol => (),
             _ => return Err(Error::Bad("Unexpected token in assignment".to_owned())),
         }
@@ -229,7 +229,7 @@ impl<'a> Parser<'a> {
         };
 
         let next = self.lexer.peek()?;
-        match next {
+        match next.token {
             Token::Eof | Token::Eol => (),
             _ => return Err(Error::Bad("Unexpected token in array assignment".to_owned())),
         }
@@ -249,7 +249,7 @@ impl<'a> Parser<'a> {
             let expr = self.parse_expr(first.take())?;
 
             let peeked = self.lexer.peek()?;
-            match peeked {
+            match peeked.token {
                 Token::Eof | Token::Eol => {
                     if expr.is_some() || !args.is_empty() {
                         args.push((expr, ArgSep::End));
@@ -277,11 +277,11 @@ impl<'a> Parser<'a> {
     /// Starts processing either an array reference or a builtin call and disambiguates between the
     /// two.
     fn parse_array_or_builtin_call(&mut self, vref: VarRef) -> Result<Statement> {
-        match self.lexer.peek()? {
+        match self.lexer.peek()?.token {
             Token::LeftParen => {
                 self.lexer.consume_peeked();
                 let mut exprs = self.parse_comma_separated_exprs()?;
-                match self.lexer.peek()? {
+                match self.lexer.peek()?.token {
                     Token::Equal => {
                         self.lexer.consume_peeked();
                         self.parse_array_assignment(vref, exprs)
@@ -302,11 +302,11 @@ impl<'a> Parser<'a> {
     /// `AS` token.
     fn parse_dim_as(&mut self) -> Result<VarType> {
         let peeked = self.lexer.peek()?;
-        let vartype = match peeked {
+        let vartype = match peeked.token {
             Token::Eof | Token::Eol => VarType::Integer,
             Token::As => {
                 self.lexer.consume_peeked();
-                match self.lexer.read()? {
+                match self.lexer.read()?.token {
                     Token::BooleanName => VarType::Boolean,
                     Token::DoubleName => VarType::Double,
                     Token::IntegerName => VarType::Integer,
@@ -323,7 +323,7 @@ impl<'a> Parser<'a> {
         };
 
         let next = self.lexer.peek()?;
-        match next {
+        match next.token {
             Token::Eof | Token::Eol => (),
             _ => return Err(Error::Bad("Unexpected token in DIM statement".to_owned())),
         }
@@ -333,14 +333,14 @@ impl<'a> Parser<'a> {
 
     /// Parses a `DIM` statement.
     fn parse_dim(&mut self) -> Result<Statement> {
-        let vref = match self.lexer.read()? {
+        let vref = match self.lexer.read()?.token {
             Token::Symbol(vref) => vref,
             _ => return Err(Error::Bad("Expected variable name after DIM".to_owned())),
         };
         let name = vref.into_unannotated_string()?;
 
         let peeked = self.lexer.peek()?;
-        match peeked {
+        match peeked.token {
             Token::LeftParen => {
                 self.lexer.consume_peeked();
                 let subscripts = self.parse_comma_separated_exprs()?;
@@ -369,7 +369,7 @@ impl<'a> Parser<'a> {
 
         loop {
             let peeked = self.lexer.peek()?;
-            match peeked {
+            match peeked.token {
                 Token::RightParen => {
                     self.lexer.consume_peeked();
                     break;
@@ -424,7 +424,7 @@ impl<'a> Parser<'a> {
 
             // Stop processing if we encounter an expression separator, but don't consume it because
             // the caller needs to have access to it.
-            match self.lexer.peek()? {
+            match self.lexer.peek()?.token {
                 Token::Eof
                 | Token::Eol
                 | Token::Comma
@@ -446,7 +446,7 @@ impl<'a> Parser<'a> {
             };
 
             let token = self.lexer.consume_peeked();
-            match token {
+            match token.token {
                 Token::Boolean(b) => handle_operand(Expr::Boolean(b))?,
                 Token::Double(d) => handle_operand(Expr::Double(d))?,
                 Token::Integer(i) => handle_operand(Expr::Integer(i))?,
@@ -536,7 +536,7 @@ impl<'a> Parser<'a> {
                 | Token::And
                 | Token::Or
                 | Token::Xor => {
-                    let op = ExprOp::from(token);
+                    let op = ExprOp::from(token.token);
                     while let Some(op2) = ops.last() {
                         if *op2 == ExprOp::LeftParen || op2.priority() < op.priority() {
                             break;
@@ -597,7 +597,7 @@ impl<'a> Parser<'a> {
 
     /// Parses a `GOTO` statement.
     fn parse_goto(&mut self) -> Result<Statement> {
-        let target = match self.lexer.read()? {
+        let target = match self.lexer.read()?.token {
             Token::Label(target) => target,
             _ => return Err(Error::Bad("Expected label name after GOTO".to_owned())),
         };
@@ -617,7 +617,7 @@ impl<'a> Parser<'a> {
             vec![(expr, self.parse_until(&[Token::Elseif, Token::Else, Token::End])?)];
         loop {
             let peeked = self.lexer.peek()?;
-            match peeked {
+            match peeked.token {
                 Token::Elseif => {
                     self.lexer.consume_peeked();
                     let expr = match self.parse_expr(None)? {
@@ -636,12 +636,12 @@ impl<'a> Parser<'a> {
         }
 
         let peeked = self.lexer.peek()?;
-        if *peeked == Token::Else {
+        if peeked.token == Token::Else {
             self.lexer.consume_peeked();
             self.expect_and_consume(Token::Eol, "Expecting newline after ELSE")?;
             let stmts2 = self.parse_until(&[Token::Elseif, Token::Else, Token::End])?;
             let peeked = self.lexer.peek()?;
-            match *peeked {
+            match peeked.token {
                 Token::Elseif => return Err(Error::Bad("Unexpected ELSEIF after ELSE".to_owned())),
                 Token::Else => return Err(Error::Bad("Duplicate ELSE after ELSE".to_owned())),
                 _ => (),
@@ -658,7 +658,7 @@ impl<'a> Parser<'a> {
     /// Advances until the next statement after failing to parse an `IF` statement.
     fn reset_if(&mut self) -> Result<()> {
         loop {
-            match self.lexer.peek()? {
+            match self.lexer.peek()?.token {
                 Token::Eof => break,
                 Token::End => {
                     self.lexer.consume_peeked();
@@ -675,22 +675,20 @@ impl<'a> Parser<'a> {
 
     /// Extracts the optional `STEP` part of a `FOR` statement, with a default of 1.
     fn parse_step(&mut self) -> Result<i32> {
-        match self.lexer.peek()? {
+        match self.lexer.peek()?.token {
             Token::Step => self.lexer.consume_peeked(),
             _ => return Ok(1),
         };
 
-        match self.lexer.peek()? {
+        match self.lexer.peek()?.token {
             Token::Integer(i) => {
-                let i = *i;
                 self.lexer.consume_peeked();
                 Ok(i)
             }
             Token::Minus => {
                 self.lexer.consume_peeked();
-                match self.lexer.peek()? {
+                match self.lexer.peek()?.token {
                     Token::Integer(i) => {
-                        let i = *i;
                         self.lexer.consume_peeked();
                         Ok(-i)
                     }
@@ -703,7 +701,7 @@ impl<'a> Parser<'a> {
 
     /// Parses a `FOR` statement.
     fn parse_for(&mut self) -> Result<Statement> {
-        let iterator = match self.lexer.read()? {
+        let iterator = match self.lexer.read()?.token {
             Token::Symbol(iterator) => match iterator.ref_type() {
                 // TODO(jmmv): Should we support doubles in for loops?
                 VarType::Auto | VarType::Integer => iterator,
@@ -755,7 +753,7 @@ impl<'a> Parser<'a> {
     /// Advances until the next statement after failing to parse a `FOR` statement.
     fn reset_for(&mut self) -> Result<()> {
         loop {
-            match self.lexer.peek()? {
+            match self.lexer.peek()?.token {
                 Token::Eof => break,
                 Token::Next => {
                     self.lexer.consume_peeked();
@@ -786,7 +784,7 @@ impl<'a> Parser<'a> {
     /// Advances until the next statement after failing to parse a `WHILE` statement.
     fn reset_while(&mut self) -> Result<()> {
         loop {
-            match self.lexer.peek()? {
+            match self.lexer.peek()?.token {
                 Token::Eof => break,
                 Token::End => {
                     self.lexer.consume_peeked();
@@ -807,7 +805,7 @@ impl<'a> Parser<'a> {
     /// On failure, the caller must advance the stream to the next statement by calling `reset`.
     fn parse_one(&mut self) -> Result<Option<Statement>> {
         loop {
-            match self.lexer.peek()? {
+            match self.lexer.peek()?.token {
                 Token::Eol => {
                     self.lexer.consume_peeked();
                 }
@@ -815,7 +813,7 @@ impl<'a> Parser<'a> {
                 _ => break,
             }
         }
-        let res = match self.lexer.read()? {
+        let res = match self.lexer.read()?.token {
             Token::Eof => return Ok(None),
             Token::Eol => Ok(None),
             Token::Dim => Ok(Some(self.parse_dim()?)),
@@ -847,7 +845,7 @@ impl<'a> Parser<'a> {
             }
             Token::Symbol(vref) => {
                 let peeked = self.lexer.peek()?;
-                if *peeked == Token::Equal {
+                if peeked.token == Token::Equal {
                     self.lexer.consume_peeked();
                     Ok(Some(self.parse_assignment(vref)?))
                 } else {
@@ -864,7 +862,7 @@ impl<'a> Parser<'a> {
             t => return Err(Error::Bad(format!("Unexpected token {:?} in statement", t))),
         };
 
-        match self.lexer.peek()? {
+        match self.lexer.peek()?.token {
             Token::Eof => (),
             Token::Eol => {
                 self.lexer.consume_peeked();
@@ -878,7 +876,7 @@ impl<'a> Parser<'a> {
     /// Advances until the next statement after failing to parse a single statement.
     fn reset(&mut self) -> Result<()> {
         loop {
-            match self.lexer.peek()? {
+            match self.lexer.peek()?.token {
                 Token::Eof => break,
                 Token::Eol => {
                     self.lexer.consume_peeked();
