@@ -13,10 +13,37 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-//! Character-based reader for an input stream.
+//! Character-based reader for an input stream with position tracking.
 
+use std::cell::RefCell;
 use std::char;
 use std::io::{self, BufRead};
+use std::rc::Rc;
+
+/// Tab length used to compute the current position within a line when encountering a tab character.
+const TAB_LENGTH: usize = 8;
+
+/// Representation of a position within a stream.
+#[derive(Clone, Copy, Debug)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct LineCol {
+    /// Line number.
+    pub(crate) line: usize,
+
+    /// Column number.
+    pub(crate) col: usize,
+}
+
+#[derive(Debug)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct CharSpan {
+    /// Character in this span.
+    pub(crate) ch: char,
+
+    /// Position where this character starts.
+    #[allow(unused)] // TODO(jmmv): Use this in the parser.
+    pub(crate) pos: LineCol,
+}
 
 /// Possible types of buffered data in the reader.
 enum Pending {
@@ -43,16 +70,23 @@ pub struct CharReader<'a> {
 
     /// Current state of any buffered data.
     pending: Pending,
+
+    /// Line and column number of the next character to be read.
+    next_pos: Rc<RefCell<LineCol>>,
 }
 
 impl<'a> CharReader<'a> {
     /// Constructs a new character reader from an `io::Read`.
     pub fn from(reader: &'a mut dyn io::Read) -> Self {
-        Self { reader: io::BufReader::new(reader), pending: Pending::Unknown }
+        Self {
+            reader: io::BufReader::new(reader),
+            pending: Pending::Unknown,
+            next_pos: Rc::from(RefCell::from(LineCol { line: 1, col: 1 })),
+        }
     }
 
     /// Replenishes `pending` with the next line to process.
-    fn refill_and_next(&mut self) -> Option<io::Result<char>> {
+    fn refill_and_next(&mut self) -> Option<io::Result<CharSpan>> {
         self.pending = {
             let mut line = String::new();
             match self.reader.read_line(&mut line) {
@@ -63,10 +97,17 @@ impl<'a> CharReader<'a> {
         };
         self.next()
     }
+
+    /// Obtains a view of the next position observed by this reader, which is necessary to compute
+    /// the location of EOF when the iterator is fully consumed.
+    #[allow(unused)] // TODO(jmmv): Use this in the parser.
+    pub(crate) fn next_pos_watcher(&self) -> Rc<RefCell<LineCol>> {
+        self.next_pos.clone()
+    }
 }
 
 impl<'a> Iterator for CharReader<'a> {
-    type Item = io::Result<char>;
+    type Item = io::Result<CharSpan>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.pending {
@@ -78,7 +119,24 @@ impl<'a> Iterator for CharReader<'a> {
                 } else {
                     let ch = chars[*last];
                     *last += 1;
-                    Some(Ok(ch))
+
+                    let mut next_pos = self.next_pos.borrow_mut();
+                    let pos = *next_pos;
+                    match ch {
+                        '\n' => {
+                            next_pos.line += 1;
+                            next_pos.col = 1;
+                        }
+                        '\t' => {
+                            next_pos.col =
+                                (next_pos.col - 1 + TAB_LENGTH) / TAB_LENGTH * TAB_LENGTH + 1;
+                        }
+                        _ => {
+                            next_pos.col += 1;
+                        }
+                    }
+
+                    Some(Ok(CharSpan { ch, pos }))
                 }
             }
             Pending::Error(e) => match e.take() {
@@ -96,6 +154,11 @@ impl<'a> Iterator for CharReader<'a> {
 mod tests {
     use super::*;
 
+    /// Syntactic sugar to instantiate a `CharSpan` for testing.
+    fn cs(ch: char, line: usize, col: usize) -> CharSpan {
+        CharSpan { ch, pos: LineCol { line, col } }
+    }
+
     #[test]
     fn test_empty() {
         let mut input = b"".as_ref();
@@ -107,12 +170,12 @@ mod tests {
     fn test_multibyte_chars() {
         let mut input = "Hi 훌리오".as_bytes();
         let mut reader = CharReader::from(&mut input);
-        assert_eq!('H', reader.next().unwrap().unwrap());
-        assert_eq!('i', reader.next().unwrap().unwrap());
-        assert_eq!(' ', reader.next().unwrap().unwrap());
-        assert_eq!('훌', reader.next().unwrap().unwrap());
-        assert_eq!('리', reader.next().unwrap().unwrap());
-        assert_eq!('오', reader.next().unwrap().unwrap());
+        assert_eq!(cs('H', 1, 1), reader.next().unwrap().unwrap());
+        assert_eq!(cs('i', 1, 2), reader.next().unwrap().unwrap());
+        assert_eq!(cs(' ', 1, 3), reader.next().unwrap().unwrap());
+        assert_eq!(cs('훌', 1, 4), reader.next().unwrap().unwrap());
+        assert_eq!(cs('리', 1, 5), reader.next().unwrap().unwrap());
+        assert_eq!(cs('오', 1, 6), reader.next().unwrap().unwrap());
         assert!(reader.next().is_none());
     }
 
@@ -120,12 +183,54 @@ mod tests {
     fn test_consecutive_newlines() {
         let mut input = b"a\n\nbc\n".as_ref();
         let mut reader = CharReader::from(&mut input);
-        assert_eq!('a', reader.next().unwrap().unwrap());
-        assert_eq!('\n', reader.next().unwrap().unwrap());
-        assert_eq!('\n', reader.next().unwrap().unwrap());
-        assert_eq!('b', reader.next().unwrap().unwrap());
-        assert_eq!('c', reader.next().unwrap().unwrap());
-        assert_eq!('\n', reader.next().unwrap().unwrap());
+        assert_eq!(cs('a', 1, 1), reader.next().unwrap().unwrap());
+        assert_eq!(cs('\n', 1, 2), reader.next().unwrap().unwrap());
+        assert_eq!(cs('\n', 2, 1), reader.next().unwrap().unwrap());
+        assert_eq!(cs('b', 3, 1), reader.next().unwrap().unwrap());
+        assert_eq!(cs('c', 3, 2), reader.next().unwrap().unwrap());
+        assert_eq!(cs('\n', 3, 3), reader.next().unwrap().unwrap());
+        assert!(reader.next().is_none());
+    }
+
+    #[test]
+    fn test_tabs() {
+        let mut input = "1\t9\n1234567\t8\n12345678\t9".as_bytes();
+        let mut reader = CharReader::from(&mut input);
+        assert_eq!(cs('1', 1, 1), reader.next().unwrap().unwrap());
+        assert_eq!(cs('\t', 1, 2), reader.next().unwrap().unwrap());
+        assert_eq!(cs('9', 1, 9), reader.next().unwrap().unwrap());
+        assert_eq!(cs('\n', 1, 10), reader.next().unwrap().unwrap());
+        assert_eq!(cs('1', 2, 1), reader.next().unwrap().unwrap());
+        assert_eq!(cs('2', 2, 2), reader.next().unwrap().unwrap());
+        assert_eq!(cs('3', 2, 3), reader.next().unwrap().unwrap());
+        assert_eq!(cs('4', 2, 4), reader.next().unwrap().unwrap());
+        assert_eq!(cs('5', 2, 5), reader.next().unwrap().unwrap());
+        assert_eq!(cs('6', 2, 6), reader.next().unwrap().unwrap());
+        assert_eq!(cs('7', 2, 7), reader.next().unwrap().unwrap());
+        assert_eq!(cs('\t', 2, 8), reader.next().unwrap().unwrap());
+        assert_eq!(cs('8', 2, 9), reader.next().unwrap().unwrap());
+        assert_eq!(cs('\n', 2, 10), reader.next().unwrap().unwrap());
+        assert_eq!(cs('1', 3, 1), reader.next().unwrap().unwrap());
+        assert_eq!(cs('2', 3, 2), reader.next().unwrap().unwrap());
+        assert_eq!(cs('3', 3, 3), reader.next().unwrap().unwrap());
+        assert_eq!(cs('4', 3, 4), reader.next().unwrap().unwrap());
+        assert_eq!(cs('5', 3, 5), reader.next().unwrap().unwrap());
+        assert_eq!(cs('6', 3, 6), reader.next().unwrap().unwrap());
+        assert_eq!(cs('7', 3, 7), reader.next().unwrap().unwrap());
+        assert_eq!(cs('8', 3, 8), reader.next().unwrap().unwrap());
+        assert_eq!(cs('\t', 3, 9), reader.next().unwrap().unwrap());
+        assert_eq!(cs('9', 3, 17), reader.next().unwrap().unwrap());
+        assert!(reader.next().is_none());
+    }
+
+    #[test]
+    fn test_crlf() {
+        let mut input = b"a\r\nb".as_ref();
+        let mut reader = CharReader::from(&mut input);
+        assert_eq!(cs('a', 1, 1), reader.next().unwrap().unwrap());
+        assert_eq!(cs('\r', 1, 2), reader.next().unwrap().unwrap());
+        assert_eq!(cs('\n', 1, 3), reader.next().unwrap().unwrap());
+        assert_eq!(cs('b', 2, 1), reader.next().unwrap().unwrap());
         assert!(reader.next().is_none());
     }
 
@@ -133,9 +238,23 @@ mod tests {
     fn test_past_eof_returns_eof() {
         let mut input = b"a".as_ref();
         let mut reader = CharReader::from(&mut input);
-        assert_eq!('a', reader.next().unwrap().unwrap());
+        assert_eq!(cs('a', 1, 1), reader.next().unwrap().unwrap());
         assert!(reader.next().is_none());
         assert!(reader.next().is_none());
+    }
+
+    #[test]
+    fn test_next_pos_watcher() {
+        let mut input = "Hi".as_bytes();
+        let mut reader = CharReader::from(&mut input);
+        let next_pos_watcher = reader.next_pos_watcher();
+        assert_eq!(LineCol { line: 1, col: 1 }, *next_pos_watcher.borrow());
+        assert_eq!(cs('H', 1, 1), reader.next().unwrap().unwrap());
+        assert_eq!(LineCol { line: 1, col: 2 }, *next_pos_watcher.borrow());
+        assert_eq!(cs('i', 1, 2), reader.next().unwrap().unwrap());
+        assert_eq!(LineCol { line: 1, col: 3 }, *next_pos_watcher.borrow());
+        assert!(reader.next().is_none());
+        assert_eq!(LineCol { line: 1, col: 3 }, *next_pos_watcher.borrow());
     }
 
     /// A reader that generates an error only on the Nth read operation.
@@ -175,10 +294,10 @@ mod tests {
     fn test_errors_prevent_further_reads() {
         let mut reader = FaultyReader::new(2);
         let mut reader = CharReader::from(&mut reader);
-        assert_eq!('1', reader.next().unwrap().unwrap());
-        assert_eq!('\n', reader.next().unwrap().unwrap());
-        assert_eq!('1', reader.next().unwrap().unwrap());
-        assert_eq!('\n', reader.next().unwrap().unwrap());
+        assert_eq!(cs('1', 1, 1), reader.next().unwrap().unwrap());
+        assert_eq!(cs('\n', 1, 2), reader.next().unwrap().unwrap());
+        assert_eq!(cs('1', 2, 1), reader.next().unwrap().unwrap());
+        assert_eq!(cs('\n', 2, 2), reader.next().unwrap().unwrap());
         assert_eq!(io::ErrorKind::InvalidInput, reader.next().unwrap().unwrap_err().kind());
         assert_eq!(io::ErrorKind::Other, reader.next().unwrap().unwrap_err().kind());
         assert_eq!(io::ErrorKind::Other, reader.next().unwrap().unwrap_err().kind());
