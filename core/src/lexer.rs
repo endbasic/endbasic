@@ -16,9 +16,11 @@
 //! Tokenizer for the EndBASIC language.
 
 use crate::ast::{VarRef, VarType};
-use crate::reader::CharReader;
+use crate::reader::{CharReader, CharSpan, LineCol};
+use std::cell::RefCell;
 use std::io;
 use std::iter::Peekable;
+use std::rc::Rc;
 
 /// Collection of valid tokens.
 ///
@@ -123,56 +125,86 @@ impl CharOps for char {
     }
 }
 
+/// Container for a token and its context.
+///
+/// Note that the "context" is not truly available for some tokens such as `Token::Eof`, but we can
+/// synthesize one for simplicity.  Otherwise, we would need to extend the `Token` enum so that
+/// every possible token contains extra fields, and that would be too complex.
+#[cfg_attr(test, derive(PartialEq))]
+pub struct TokenSpan {
+    /// The token itself.
+    pub(crate) token: Token,
+
+    /// Start position of the token.
+    #[allow(unused)] // TODO(jmmv): Use this in the parser.
+    pos: LineCol,
+
+    /// Length of the token in characters.
+    #[allow(unused)] // TODO(jmmv): Use this in the parser.
+    length: usize,
+}
+
+impl TokenSpan {
+    /// Creates a new `TokenSpan` from its parts.
+    fn new(token: Token, pos: LineCol, length: usize) -> Self {
+        Self { token, pos, length }
+    }
+}
+
 /// Iterator over the tokens of the language.
 pub struct Lexer<'a> {
     /// Peekable iterator over the characters to scan.
     input: Peekable<CharReader<'a>>,
+
+    next_pos_watcher: Rc<RefCell<LineCol>>,
 }
 
 impl<'a> Lexer<'a> {
     /// Creates a new lexer from the given readable.
     pub fn from(input: &'a mut dyn io::Read) -> Self {
-        Self { input: CharReader::from(input).peekable() }
+        let reader = CharReader::from(input);
+        let next_pos_watcher = reader.next_pos_watcher();
+        let input = reader.peekable();
+        Self { input, next_pos_watcher }
     }
 
-    /// Handles a `input.read()` call that returned an unexpected character.
+    /// Handles an `input.next()` call that returned an unexpected character.
     ///
     /// This returns a `Token::Bad` with the provided `msg` and skips characters in the input
     /// stream until a field separator is found.
-    fn handle_bad_read<S: Into<String>>(&mut self, msg: S) -> io::Result<Token> {
+    fn handle_bad_read<S: Into<String>>(
+        &mut self,
+        msg: S,
+        first_pos: LineCol,
+    ) -> io::Result<TokenSpan> {
+        let mut len = 1;
         loop {
             match self.input.peek() {
                 Some(Ok(ch_span)) if ch_span.ch.is_separator() => break,
                 Some(Ok(_)) => {
                     self.input.next().unwrap()?;
+                    len += 1;
                 }
                 Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
                 None => break,
             }
         }
-        Ok(Token::Bad(msg.into()))
-    }
-
-    /// Handles a `input.peek()` call that returned an unexpected character.
-    ///
-    /// This returns a `Token::Bad` with the provided `msg`, consumes the peeked character, and
-    /// then skips characters in the input stream until a field separator is found.
-    fn handle_bad_peek<S: Into<String>>(&mut self, msg: S) -> io::Result<Token> {
-        self.input.next();
-        self.handle_bad_read(msg)
+        Ok(TokenSpan::new(Token::Bad(msg.into()), first_pos, len))
     }
 
     /// Consumes the number at the current position, whose first digit is `first`.
-    fn consume_number(&mut self, first: char) -> io::Result<Token> {
+    fn consume_number(&mut self, first: CharSpan) -> io::Result<TokenSpan> {
         let mut s = String::new();
         let mut found_dot = false;
-        s.push(first);
+        s.push(first.ch);
         loop {
             match self.input.peek() {
                 Some(Ok(ch_span)) => match ch_span.ch {
                     '.' => {
                         if found_dot {
-                            return self.handle_bad_peek("Too many dots in numeric literal");
+                            self.input.next().unwrap()?;
+                            return self
+                                .handle_bad_read("Too many dots in numeric literal", first.pos);
                         }
                         s.push(self.input.next().unwrap()?.ch);
                         found_dot = true;
@@ -180,8 +212,9 @@ impl<'a> Lexer<'a> {
                     ch if ch.is_ascii_digit() => s.push(self.input.next().unwrap()?.ch),
                     ch if ch.is_separator() => break,
                     ch => {
+                        self.input.next().unwrap()?;
                         let msg = format!("Unexpected character in numeric literal: {}", ch);
-                        return self.handle_bad_peek(msg);
+                        return self.handle_bad_read(msg, first.pos);
                     }
                 },
                 Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
@@ -193,41 +226,41 @@ impl<'a> Lexer<'a> {
                 // TODO(jmmv): Reconsider supporting double literals with a . that is not prefixed
                 // by a number or not followed by a number.  For now, mimic the error we get when
                 // we encounter a dot not prefixed by a number.
-                return self.handle_bad_read("Unknown character: .");
+                return self.handle_bad_read("Unknown character: .", first.pos);
             }
             match s.parse::<f64>() {
-                Ok(d) => Ok(Token::Double(d)),
-                Err(e) => self.handle_bad_read(format!("Bad double {}: {}", s, e)),
+                Ok(d) => Ok(TokenSpan::new(Token::Double(d), first.pos, s.len())),
+                Err(e) => self.handle_bad_read(format!("Bad double {}: {}", s, e), first.pos),
             }
         } else {
             match s.parse::<i32>() {
-                Ok(i) => Ok(Token::Integer(i)),
-                Err(e) => self.handle_bad_read(format!("Bad integer {}: {}", s, e)),
+                Ok(i) => Ok(TokenSpan::new(Token::Integer(i), first.pos, s.len())),
+                Err(e) => self.handle_bad_read(format!("Bad integer {}: {}", s, e), first.pos),
             }
         }
     }
 
     /// Consumes the operator at the current position, whose first character is `first`.
-    fn consume_operator(&mut self, first: char) -> io::Result<Token> {
-        match (first, self.input.peek()) {
+    fn consume_operator(&mut self, first: CharSpan) -> io::Result<TokenSpan> {
+        match (first.ch, self.input.peek()) {
             (_, Some(Err(_))) => Err(self.input.next().unwrap().unwrap_err()),
 
             ('<', Some(Ok(ch_span))) if ch_span.ch == '>' => {
                 self.input.next().unwrap()?;
-                Ok(Token::NotEqual)
+                Ok(TokenSpan::new(Token::NotEqual, first.pos, 2))
             }
 
             ('<', Some(Ok(ch_span))) if ch_span.ch == '=' => {
                 self.input.next().unwrap()?;
-                Ok(Token::LessEqual)
+                Ok(TokenSpan::new(Token::LessEqual, first.pos, 2))
             }
-            ('<', _) => Ok(Token::Less),
+            ('<', _) => Ok(TokenSpan::new(Token::Less, first.pos, 1)),
 
             ('>', Some(Ok(ch_span))) if ch_span.ch == '=' => {
                 self.input.next().unwrap()?;
-                Ok(Token::GreaterEqual)
+                Ok(TokenSpan::new(Token::GreaterEqual, first.pos, 2))
             }
-            ('>', _) => Ok(Token::Greater),
+            ('>', _) => Ok(TokenSpan::new(Token::Greater, first.pos, 1)),
 
             (_, _) => panic!("Should not have been called"),
         }
@@ -236,10 +269,11 @@ impl<'a> Lexer<'a> {
     /// Consumes the symbol or keyword at the current position, whose first letter is `first`.
     ///
     /// The symbol may be a bare name, but it may also contain an optional type annotation.
-    fn consume_symbol(&mut self, first: char) -> io::Result<Token> {
+    fn consume_symbol(&mut self, first: CharSpan) -> io::Result<TokenSpan> {
         let mut s = String::new();
-        s.push(first);
+        s.push(first.ch);
         let mut vtype = VarType::Auto;
+        let mut token_len = 0;
         loop {
             match self.input.peek() {
                 Some(Ok(ch_span)) => match ch_span.ch {
@@ -248,67 +282,77 @@ impl<'a> Lexer<'a> {
                     '?' => {
                         vtype = VarType::Boolean;
                         self.input.next().unwrap()?;
+                        token_len += 1;
                         break;
                     }
                     '#' => {
                         vtype = VarType::Double;
                         self.input.next().unwrap()?;
+                        token_len += 1;
                         break;
                     }
                     '%' => {
                         vtype = VarType::Integer;
                         self.input.next().unwrap()?;
+                        token_len += 1;
                         break;
                     }
                     '$' => {
                         vtype = VarType::Text;
                         self.input.next().unwrap()?;
+                        token_len += 1;
                         break;
                     }
                     ch => {
+                        self.input.next().unwrap()?;
                         let msg = format!("Unexpected character in symbol: {}", ch);
-                        return self.handle_bad_peek(msg);
+                        return self.handle_bad_read(msg, first.pos);
                     }
                 },
                 Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
                 None => break,
             }
         }
-        match s.to_uppercase().as_str() {
-            "AND" => Ok(Token::And),
-            "AS" => Ok(Token::As),
-            "BOOLEAN" => Ok(Token::BooleanName),
-            "DIM" => Ok(Token::Dim),
-            "DOUBLE" => Ok(Token::DoubleName),
-            "ELSE" => Ok(Token::Else),
-            "ELSEIF" => Ok(Token::Elseif),
-            "END" => Ok(Token::End),
-            "FALSE" => Ok(Token::Boolean(false)),
-            "FOR" => Ok(Token::For),
-            "GOTO" => Ok(Token::Goto),
-            "IF" => Ok(Token::If),
-            "INTEGER" => Ok(Token::IntegerName),
-            "MOD" => Ok(Token::Modulo),
-            "NEXT" => Ok(Token::Next),
-            "NOT" => Ok(Token::Not),
-            "OR" => Ok(Token::Or),
-            "REM" => self.consume_rest_of_line(),
-            "STEP" => Ok(Token::Step),
-            "STRING" => Ok(Token::TextName),
-            "THEN" => Ok(Token::Then),
-            "TO" => Ok(Token::To),
-            "TRUE" => Ok(Token::Boolean(true)),
-            "WEND" => Ok(Token::Wend),
-            "WHILE" => Ok(Token::While),
-            "XOR" => Ok(Token::Xor),
-            _ => Ok(Token::Symbol(VarRef::new(s, vtype))),
-        }
+        debug_assert!(token_len <= 1);
+
+        token_len += s.len();
+        let token = match s.to_uppercase().as_str() {
+            "AND" => Token::And,
+            "AS" => Token::As,
+            "BOOLEAN" => Token::BooleanName,
+            "DIM" => Token::Dim,
+            "DOUBLE" => Token::DoubleName,
+            "ELSE" => Token::Else,
+            "ELSEIF" => Token::Elseif,
+            "END" => Token::End,
+            "FALSE" => Token::Boolean(false),
+            "FOR" => Token::For,
+            "GOTO" => Token::Goto,
+            "IF" => Token::If,
+            "INTEGER" => Token::IntegerName,
+            "MOD" => Token::Modulo,
+            "NEXT" => Token::Next,
+            "NOT" => Token::Not,
+            "OR" => Token::Or,
+            "REM" => return self.consume_rest_of_line(),
+            "STEP" => Token::Step,
+            "STRING" => Token::TextName,
+            "THEN" => Token::Then,
+            "TO" => Token::To,
+            "TRUE" => Token::Boolean(true),
+            "WEND" => Token::Wend,
+            "WHILE" => Token::While,
+            "XOR" => Token::Xor,
+            _ => Token::Symbol(VarRef::new(s, vtype)),
+        };
+        Ok(TokenSpan::new(token, first.pos, token_len))
     }
 
-    /// Consumes the string at the current position, which was has to end with `delim`.
+    /// Consumes the string at the current position, which was has to end with the same opening
+    /// character as specified by `delim`.
     ///
     /// This handles quoted characters within the string.
-    fn consume_text(&mut self, delim: char) -> io::Result<Token> {
+    fn consume_text(&mut self, delim: CharSpan) -> io::Result<TokenSpan> {
         let mut s = String::new();
         let mut escaping = false;
         loop {
@@ -320,7 +364,7 @@ impl<'a> Lexer<'a> {
                     } else if ch_span.ch == '\\' {
                         self.input.next().unwrap()?;
                         escaping = true;
-                    } else if ch_span.ch == delim {
+                    } else if ch_span.ch == delim.ch {
                         self.input.next().unwrap()?;
                         break;
                     } else {
@@ -329,15 +373,19 @@ impl<'a> Lexer<'a> {
                 }
                 Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
                 None => {
-                    return self.handle_bad_peek(format!("Incomplete string due to EOF: {}", s))
+                    return self.handle_bad_read(
+                        format!("Incomplete string due to EOF: {}", s),
+                        delim.pos,
+                    );
                 }
             }
         }
-        Ok(Token::Text(s))
+        let token_len = s.len() + 2;
+        Ok(TokenSpan::new(Token::Text(s), delim.pos, token_len))
     }
 
     /// Consumes the label definition at the current position.
-    fn consume_label(&mut self) -> io::Result<Token> {
+    fn consume_label(&mut self, first: CharSpan) -> io::Result<TokenSpan> {
         let mut s = String::new();
         loop {
             match self.input.peek() {
@@ -345,8 +393,9 @@ impl<'a> Lexer<'a> {
                     ch if ch.is_word() => s.push(self.input.next().unwrap()?.ch),
                     ch if ch.is_separator() => break,
                     ch => {
+                        self.input.next().unwrap()?;
                         let msg = format!("Unexpected character in label: {}", ch);
-                        return self.handle_bad_peek(msg);
+                        return self.handle_bad_read(msg, first.pos);
                     }
                 },
                 Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
@@ -354,18 +403,24 @@ impl<'a> Lexer<'a> {
             }
         }
         if s.is_empty() {
-            return Ok(Token::Bad("Empty label name".to_owned()));
+            return Ok(TokenSpan::new(Token::Bad("Empty label name".to_owned()), first.pos, 1));
         }
-        Ok(Token::Label(s))
+        let token_len = s.len() + 1;
+        Ok(TokenSpan::new(Token::Label(s), first.pos, token_len))
     }
 
     /// Consumes the remainder of the line and returns the token that was encountered at the end
     /// (which may be EOF or end of line).
-    fn consume_rest_of_line(&mut self) -> io::Result<Token> {
+    fn consume_rest_of_line(&mut self) -> io::Result<TokenSpan> {
         loop {
             match self.input.next() {
-                None => return Ok(Token::Eof),
-                Some(Ok(ch_span)) if ch_span.ch == '\n' => return Ok(Token::Eol),
+                None => {
+                    let last_pos = *self.next_pos_watcher.borrow();
+                    return Ok(TokenSpan::new(Token::Eof, last_pos, 0));
+                }
+                Some(Ok(ch_span)) if ch_span.ch == '\n' => {
+                    return Ok(TokenSpan::new(Token::Eol, ch_span.pos, 1))
+                }
                 Some(Err(e)) => return Err(e),
                 Some(Ok(_)) => (),
             }
@@ -374,11 +429,11 @@ impl<'a> Lexer<'a> {
 
     /// Skips whitespace until it finds the beginning of the next token, and returns its first
     /// character.
-    fn advance_and_read_next(&mut self) -> io::Result<Option<char>> {
+    fn advance_and_read_next(&mut self) -> io::Result<Option<CharSpan>> {
         loop {
             match self.input.next() {
                 Some(Ok(ch_span)) if ch_span.ch.is_space() => (),
-                Some(Ok(ch_span)) => return Ok(Some(ch_span.ch)),
+                Some(Ok(ch_span)) => return Ok(Some(ch_span)),
                 Some(Err(e)) => return Err(e),
                 None => return Ok(None),
             }
@@ -389,37 +444,38 @@ impl<'a> Lexer<'a> {
     ///
     /// Note that this returns errors only on fatal I/O conditions.  EOF and malformed tokens are
     /// both returned as the special token types `Token::Eof` and `Token::Bad` respectively.
-    pub fn read(&mut self) -> io::Result<Token> {
-        let ch = self.advance_and_read_next()?;
-        if ch.is_none() {
-            return Ok(Token::Eof);
+    pub fn read(&mut self) -> io::Result<TokenSpan> {
+        let ch_span = self.advance_and_read_next()?;
+        if ch_span.is_none() {
+            let last_pos = *self.next_pos_watcher.borrow();
+            return Ok(TokenSpan::new(Token::Eof, last_pos, 0));
         }
-        let ch = ch.unwrap();
-        match ch {
-            '\n' | ':' => Ok(Token::Eol),
+        let ch_span = ch_span.unwrap();
+        match ch_span.ch {
+            '\n' | ':' => Ok(TokenSpan::new(Token::Eol, ch_span.pos, 1)),
             '\'' => self.consume_rest_of_line(),
 
-            '"' => self.consume_text('"'),
+            '"' => self.consume_text(ch_span),
 
-            ';' => Ok(Token::Semicolon),
-            ',' => Ok(Token::Comma),
+            ';' => Ok(TokenSpan::new(Token::Semicolon, ch_span.pos, 1)),
+            ',' => Ok(TokenSpan::new(Token::Comma, ch_span.pos, 1)),
 
-            '(' => Ok(Token::LeftParen),
-            ')' => Ok(Token::RightParen),
+            '(' => Ok(TokenSpan::new(Token::LeftParen, ch_span.pos, 1)),
+            ')' => Ok(TokenSpan::new(Token::RightParen, ch_span.pos, 1)),
 
-            '+' => Ok(Token::Plus),
-            '-' => Ok(Token::Minus),
-            '*' => Ok(Token::Multiply),
-            '/' => Ok(Token::Divide),
+            '+' => Ok(TokenSpan::new(Token::Plus, ch_span.pos, 1)),
+            '-' => Ok(TokenSpan::new(Token::Minus, ch_span.pos, 1)),
+            '*' => Ok(TokenSpan::new(Token::Multiply, ch_span.pos, 1)),
+            '/' => Ok(TokenSpan::new(Token::Divide, ch_span.pos, 1)),
 
-            '=' => Ok(Token::Equal),
-            '<' | '>' => self.consume_operator(ch),
+            '=' => Ok(TokenSpan::new(Token::Equal, ch_span.pos, 1)),
+            '<' | '>' => self.consume_operator(ch_span),
 
-            '@' => self.consume_label(),
+            '@' => self.consume_label(ch_span),
 
-            ch if ch.is_ascii_digit() => self.consume_number(ch),
-            ch if ch.is_word() => self.consume_symbol(ch),
-            ch => self.handle_bad_read(format!("Unknown character: {}", ch)),
+            ch if ch.is_ascii_digit() => self.consume_number(ch_span),
+            ch if ch.is_word() => self.consume_symbol(ch_span),
+            ch => self.handle_bad_read(format!("Unknown character: {}", ch), ch_span.pos),
         }
     }
 
@@ -440,7 +496,7 @@ pub struct PeekableLexer<'a> {
 
     /// If not none, contains the character read by `peek`, which will be consumed by the next call
     /// to `read` or `consume_peeked`.
-    peeked: Option<Token>,
+    peeked: Option<TokenSpan>,
 }
 
 impl<'a> PeekableLexer<'a> {
@@ -448,7 +504,7 @@ impl<'a> PeekableLexer<'a> {
     ///
     /// Because `peek` reports read errors, this assumes that the caller already handled those
     /// errors and is thus not going to call this when an error is present.
-    pub fn consume_peeked(&mut self) -> Token {
+    pub fn consume_peeked(&mut self) -> TokenSpan {
         assert!(self.peeked.is_some());
         self.peeked.take().unwrap()
     }
@@ -457,7 +513,7 @@ impl<'a> PeekableLexer<'a> {
     ///
     /// It is OK to call this function several times on the same token before extracting it from
     /// the lexer.
-    pub fn peek(&mut self) -> io::Result<&Token> {
+    pub fn peek(&mut self) -> io::Result<&TokenSpan> {
         if self.peeked.is_none() {
             let n = self.read()?;
             self.peeked.replace(n);
@@ -469,7 +525,7 @@ impl<'a> PeekableLexer<'a> {
     ///
     /// If the next token is invalid and results in a read error, the stream will remain valid and
     /// further tokens can be obtained with subsequent calls.
-    pub fn read(&mut self) -> io::Result<Token> {
+    pub fn read(&mut self) -> io::Result<TokenSpan> {
         match self.peeked.take() {
             Some(t) => Ok(t),
             None => self.lexer.read(),
@@ -480,51 +536,85 @@ impl<'a> PeekableLexer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fmt;
 
-    /// Runs the lexer on the given `input` and expects the returned tokens to match `exp_tokens`.
-    ///
-    /// `Token::Eof` should not be provided in `exp_tokens` as this explicitly waits for that.
-    fn do_ok_test(input: &str, exp_tokens: &[Token]) {
+    /// Syntactic sugar to instantiate a `TokenSpan` for testing.
+    fn ts(token: Token, line: usize, col: usize, length: usize) -> TokenSpan {
+        TokenSpan::new(token, LineCol { line, col }, length)
+    }
+
+    impl fmt::Debug for TokenSpan {
+        /// Mimic the way we write the tests with the `ts` helper in `TokenSpan` dumps.
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(
+                f,
+                "ts(Token::{:?}, {}, {}, {}]",
+                self.token, self.pos.line, self.pos.col, self.length
+            )
+        }
+    }
+
+    /// Runs the lexer on the given `input` and expects the returned tokens to match
+    /// `exp_token_spans`.
+    fn do_ok_test(input: &str, exp_token_spans: &[TokenSpan]) {
         let mut input = input.as_bytes();
         let mut lexer = Lexer::from(&mut input);
 
-        let mut tokens = vec![];
-        loop {
-            let token = lexer.read().expect("Lexing failed");
-            if token == Token::Eof {
-                break;
-            }
-            tokens.push(token);
+        let mut token_spans: Vec<TokenSpan> = vec![];
+        let mut eof = false;
+        while !eof {
+            let token_span = lexer.read().expect("Lexing failed");
+            eof = token_span.token == Token::Eof;
+            token_spans.push(token_span);
         }
 
-        assert_eq!(exp_tokens, tokens.as_slice());
+        assert_eq!(exp_token_spans, token_spans.as_slice());
     }
 
     #[test]
     fn test_empty() {
         let mut input = b"".as_ref();
         let mut lexer = Lexer::from(&mut input);
-        assert_eq!(Token::Eof, lexer.read().unwrap());
-        assert_eq!(Token::Eof, lexer.read().unwrap());
+        assert_eq!(Token::Eof, lexer.read().unwrap().token);
+        assert_eq!(Token::Eof, lexer.read().unwrap().token);
     }
 
     #[test]
     fn test_read_past_eof() {
-        do_ok_test("", &[]);
+        do_ok_test("", &[ts(Token::Eof, 1, 1, 0)]);
     }
 
     #[test]
     fn test_whitespace_only() {
-        do_ok_test("   \t  ", &[]);
+        do_ok_test("   \t  ", &[ts(Token::Eof, 1, 11, 0)]);
     }
 
     #[test]
     fn test_multiple_lines() {
-        do_ok_test("   \n \t   \n  ", &[Token::Eol, Token::Eol]);
-        do_ok_test("   : \t   :  ", &[Token::Eol, Token::Eol]);
+        do_ok_test(
+            "   \n \t   \n  ",
+            &[ts(Token::Eol, 1, 4, 1), ts(Token::Eol, 2, 12, 1), ts(Token::Eof, 3, 3, 0)],
+        );
+        do_ok_test(
+            "   : \t   :  ",
+            &[ts(Token::Eol, 1, 4, 1), ts(Token::Eol, 1, 12, 1), ts(Token::Eof, 1, 15, 0)],
+        );
     }
 
-    /// Syntactic sugar to instantiate a `VarRef` without an explicity type annotation.
+    #[test]
+    fn test_tabs() {
+        do_ok_test("\t33", &[ts(Token::Integer(33), 1, 9, 2), ts(Token::Eof, 1, 11, 0)]);
+        do_ok_test(
+            "1234567\t8",
+            &[
+                ts(Token::Integer(1234567), 1, 1, 7),
+                ts(Token::Integer(8), 1, 9, 1),
+                ts(Token::Eof, 1, 10, 0),
+            ],
+        );
+    }
+
+    /// Syntactic sugar to instantiate a `VarRef` without an explicit type annotation.
     fn new_auto_symbol(name: &str) -> Token {
         Token::Symbol(VarRef::new(name, VarType::Auto))
     }
@@ -534,20 +624,21 @@ mod tests {
         do_ok_test(
             "123 45 \n 6 3.012 abc a38z: a=3 with_underscores_1=_2",
             &[
-                Token::Integer(123),
-                Token::Integer(45),
-                Token::Eol,
-                Token::Integer(6),
-                Token::Double(3.012),
-                new_auto_symbol("abc"),
-                new_auto_symbol("a38z"),
-                Token::Eol,
-                new_auto_symbol("a"),
-                Token::Equal,
-                Token::Integer(3),
-                new_auto_symbol("with_underscores_1"),
-                Token::Equal,
-                new_auto_symbol("_2"),
+                ts(Token::Integer(123), 1, 1, 3),
+                ts(Token::Integer(45), 1, 5, 2),
+                ts(Token::Eol, 1, 8, 1),
+                ts(Token::Integer(6), 2, 2, 1),
+                ts(Token::Double(3.012), 2, 4, 5),
+                ts(new_auto_symbol("abc"), 2, 10, 3),
+                ts(new_auto_symbol("a38z"), 2, 14, 4),
+                ts(Token::Eol, 2, 18, 1),
+                ts(new_auto_symbol("a"), 2, 20, 1),
+                ts(Token::Equal, 2, 21, 1),
+                ts(Token::Integer(3), 2, 22, 1),
+                ts(new_auto_symbol("with_underscores_1"), 2, 24, 18),
+                ts(Token::Equal, 2, 42, 1),
+                ts(new_auto_symbol("_2"), 2, 43, 2),
+                ts(Token::Eof, 2, 45, 0),
             ],
         );
     }
@@ -557,16 +648,17 @@ mod tests {
         do_ok_test(
             "true TRUE yes YES y false FALSE no NO n",
             &[
-                Token::Boolean(true),
-                Token::Boolean(true),
-                new_auto_symbol("yes"),
-                new_auto_symbol("YES"),
-                new_auto_symbol("y"),
-                Token::Boolean(false),
-                Token::Boolean(false),
-                new_auto_symbol("no"),
-                new_auto_symbol("NO"),
-                new_auto_symbol("n"),
+                ts(Token::Boolean(true), 1, 1, 4),
+                ts(Token::Boolean(true), 1, 6, 4),
+                ts(new_auto_symbol("yes"), 1, 11, 3),
+                ts(new_auto_symbol("YES"), 1, 15, 3),
+                ts(new_auto_symbol("y"), 1, 19, 1),
+                ts(Token::Boolean(false), 1, 21, 5),
+                ts(Token::Boolean(false), 1, 27, 5),
+                ts(new_auto_symbol("no"), 1, 33, 2),
+                ts(new_auto_symbol("NO"), 1, 36, 2),
+                ts(new_auto_symbol("n"), 1, 39, 1),
+                ts(Token::Eof, 1, 40, 0),
             ],
         );
     }
@@ -576,12 +668,13 @@ mod tests {
         do_ok_test(
             "가 나=7 a다b \"라 마\"",
             &[
-                new_auto_symbol("가"),
-                new_auto_symbol("나"),
-                Token::Equal,
-                Token::Integer(7),
-                new_auto_symbol("a다b"),
-                Token::Text("라 마".to_owned()),
+                ts(new_auto_symbol("가"), 1, 1, 3),
+                ts(new_auto_symbol("나"), 1, 3, 3),
+                ts(Token::Equal, 1, 4, 1),
+                ts(Token::Integer(7), 1, 5, 1),
+                ts(new_auto_symbol("a다b"), 1, 7, 5),
+                ts(Token::Text("라 마".to_owned()), 1, 11, 9),
+                ts(Token::Eof, 1, 16, 0),
             ],
         );
     }
@@ -590,12 +683,22 @@ mod tests {
     fn test_remarks() {
         do_ok_test(
             "REM This is a comment\nNOT 'This is another comment\n",
-            &[Token::Eol, Token::Not, Token::Eol],
+            &[
+                ts(Token::Eol, 1, 22, 1),
+                ts(Token::Not, 2, 1, 3),
+                ts(Token::Eol, 2, 29, 1),
+                ts(Token::Eof, 3, 1, 0),
+            ],
         );
 
         do_ok_test(
             "REM This is a comment: and the colon doesn't yield Eol\nNOT 'Another: comment\n",
-            &[Token::Eol, Token::Not, Token::Eol],
+            &[
+                ts(Token::Eol, 1, 55, 1),
+                ts(Token::Not, 2, 1, 3),
+                ts(Token::Eol, 2, 22, 1),
+                ts(Token::Eof, 3, 1, 0),
+            ],
         );
     }
 
@@ -604,11 +707,12 @@ mod tests {
         do_ok_test(
             "a b? d# i% s$",
             &[
-                new_auto_symbol("a"),
-                Token::Symbol(VarRef::new("b", VarType::Boolean)),
-                Token::Symbol(VarRef::new("d", VarType::Double)),
-                Token::Symbol(VarRef::new("i", VarType::Integer)),
-                Token::Symbol(VarRef::new("s", VarType::Text)),
+                ts(new_auto_symbol("a"), 1, 1, 1),
+                ts(Token::Symbol(VarRef::new("b", VarType::Boolean)), 1, 3, 2),
+                ts(Token::Symbol(VarRef::new("d", VarType::Double)), 1, 6, 2),
+                ts(Token::Symbol(VarRef::new("i", VarType::Integer)), 1, 9, 2),
+                ts(Token::Symbol(VarRef::new("s", VarType::Text)), 1, 12, 2),
+                ts(Token::Eof, 1, 14, 0),
             ],
         );
     }
@@ -617,32 +721,66 @@ mod tests {
     fn test_strings() {
         do_ok_test(
             " \"this is a string\"  3",
-            &[Token::Text("this is a string".to_owned()), Token::Integer(3)],
+            &[
+                ts(Token::Text("this is a string".to_owned()), 1, 2, 18),
+                ts(Token::Integer(3), 1, 22, 1),
+                ts(Token::Eof, 1, 23, 0),
+            ],
         );
 
         do_ok_test(
             " \"this is a string with ; special : characters in it\"",
-            &[Token::Text("this is a string with ; special : characters in it".to_owned())],
+            &[
+                ts(
+                    Token::Text("this is a string with ; special : characters in it".to_owned()),
+                    1,
+                    2,
+                    52,
+                ),
+                ts(Token::Eof, 1, 54, 0),
+            ],
         );
 
         do_ok_test(
             "\"this \\\"is escaped\\\" \\\\ \\a\" 1",
-            &[Token::Text("this \"is escaped\" \\ a".to_owned()), Token::Integer(1)],
+            &[
+                ts(Token::Text("this \"is escaped\" \\ a".to_owned()), 1, 1, 23),
+                ts(Token::Integer(1), 1, 29, 1),
+                ts(Token::Eof, 1, 30, 0),
+            ],
         );
     }
 
     #[test]
     fn test_dim() {
-        do_ok_test("DIM AS", &[Token::Dim, Token::As]);
+        do_ok_test(
+            "DIM AS",
+            &[ts(Token::Dim, 1, 1, 3), ts(Token::As, 1, 5, 2), ts(Token::Eof, 1, 7, 0)],
+        );
         do_ok_test(
             "BOOLEAN DOUBLE INTEGER STRING",
-            &[Token::BooleanName, Token::DoubleName, Token::IntegerName, Token::TextName],
+            &[
+                ts(Token::BooleanName, 1, 1, 7),
+                ts(Token::DoubleName, 1, 9, 6),
+                ts(Token::IntegerName, 1, 16, 7),
+                ts(Token::TextName, 1, 24, 6),
+                ts(Token::Eof, 1, 30, 0),
+            ],
         );
 
-        do_ok_test("dim as", &[Token::Dim, Token::As]);
+        do_ok_test(
+            "dim as",
+            &[ts(Token::Dim, 1, 1, 3), ts(Token::As, 1, 5, 2), ts(Token::Eof, 1, 7, 0)],
+        );
         do_ok_test(
             "boolean double integer string",
-            &[Token::BooleanName, Token::DoubleName, Token::IntegerName, Token::TextName],
+            &[
+                ts(Token::BooleanName, 1, 1, 7),
+                ts(Token::DoubleName, 1, 9, 6),
+                ts(Token::IntegerName, 1, 16, 7),
+                ts(Token::TextName, 1, 24, 6),
+                ts(Token::Eof, 1, 30, 0),
+            ],
         );
     }
 
@@ -650,27 +788,61 @@ mod tests {
     fn test_if() {
         do_ok_test(
             "IF THEN ELSEIF ELSE END IF",
-            &[Token::If, Token::Then, Token::Elseif, Token::Else, Token::End, Token::If],
+            &[
+                ts(Token::If, 1, 1, 2),
+                ts(Token::Then, 1, 4, 4),
+                ts(Token::Elseif, 1, 9, 6),
+                ts(Token::Else, 1, 16, 4),
+                ts(Token::End, 1, 21, 3),
+                ts(Token::If, 1, 25, 2),
+                ts(Token::Eof, 1, 27, 0),
+            ],
         );
 
         do_ok_test(
             "if then elseif else end if",
-            &[Token::If, Token::Then, Token::Elseif, Token::Else, Token::End, Token::If],
+            &[
+                ts(Token::If, 1, 1, 2),
+                ts(Token::Then, 1, 4, 4),
+                ts(Token::Elseif, 1, 9, 6),
+                ts(Token::Else, 1, 16, 4),
+                ts(Token::End, 1, 21, 3),
+                ts(Token::If, 1, 25, 2),
+                ts(Token::Eof, 1, 27, 0),
+            ],
         );
     }
 
     #[test]
     fn test_for() {
-        do_ok_test("FOR TO STEP NEXT", &[Token::For, Token::To, Token::Step, Token::Next]);
+        do_ok_test(
+            "FOR TO STEP NEXT",
+            &[
+                ts(Token::For, 1, 1, 3),
+                ts(Token::To, 1, 5, 2),
+                ts(Token::Step, 1, 8, 4),
+                ts(Token::Next, 1, 13, 4),
+                ts(Token::Eof, 1, 17, 0),
+            ],
+        );
 
-        do_ok_test("for to step next", &[Token::For, Token::To, Token::Step, Token::Next]);
+        do_ok_test(
+            "for to step next",
+            &[
+                ts(Token::For, 1, 1, 3),
+                ts(Token::To, 1, 5, 2),
+                ts(Token::Step, 1, 8, 4),
+                ts(Token::Next, 1, 13, 4),
+                ts(Token::Eof, 1, 17, 0),
+            ],
+        );
     }
 
     #[test]
     fn test_goto() {
-        do_ok_test("GOTO", &[Token::Goto]);
+        do_ok_test("GOTO", &[ts(Token::Goto, 1, 1, 4), ts(Token::Eof, 1, 5, 0)]);
 
-        do_ok_test("goto", &[Token::Goto]);
+        do_ok_test("goto", &[ts(Token::Goto, 1, 1, 4), ts(Token::Eof, 1, 5, 0)]);
     }
 
     #[test]
@@ -678,24 +850,39 @@ mod tests {
         do_ok_test(
             "@Foo123 @a @Z @123",
             &[
-                Token::Label("Foo123".to_owned()),
-                Token::Label("a".to_owned()),
-                Token::Label("Z".to_owned()),
-                Token::Label("123".to_owned()),
+                ts(Token::Label("Foo123".to_owned()), 1, 1, 7),
+                ts(Token::Label("a".to_owned()), 1, 9, 2),
+                ts(Token::Label("Z".to_owned()), 1, 12, 2),
+                ts(Token::Label("123".to_owned()), 1, 15, 4),
+                ts(Token::Eof, 1, 19, 0),
             ],
         );
     }
 
     #[test]
     fn test_while() {
-        do_ok_test("WHILE WEND", &[Token::While, Token::Wend]);
+        do_ok_test(
+            "WHILE WEND",
+            &[ts(Token::While, 1, 1, 5), ts(Token::Wend, 1, 7, 4), ts(Token::Eof, 1, 11, 0)],
+        );
 
-        do_ok_test("while wend", &[Token::While, Token::Wend]);
+        do_ok_test(
+            "while wend",
+            &[ts(Token::While, 1, 1, 5), ts(Token::Wend, 1, 7, 4), ts(Token::Eof, 1, 11, 0)],
+        );
     }
 
     /// Syntactic sugar to instantiate a test that verifies the parsing of an operator.
     fn do_operator_test(op: &str, t: Token) {
-        do_ok_test(format!("a {} 2", op).as_ref(), &[new_auto_symbol("a"), t, Token::Integer(2)]);
+        do_ok_test(
+            format!("a {} 2", op).as_ref(),
+            &[
+                ts(new_auto_symbol("a"), 1, 1, 1),
+                ts(t, 1, 3, op.len()),
+                ts(Token::Integer(2), 1, 4 + op.len(), 1),
+                ts(Token::Eof, 1, 5 + op.len(), 0),
+            ],
+        );
     }
 
     #[test]
@@ -723,15 +910,16 @@ mod tests {
         do_ok_test(
             "z=2 654<>a32 3.1<0.1",
             &[
-                new_auto_symbol("z"),
-                Token::Equal,
-                Token::Integer(2),
-                Token::Integer(654),
-                Token::NotEqual,
-                new_auto_symbol("a32"),
-                Token::Double(3.1),
-                Token::Less,
-                Token::Double(0.1),
+                ts(new_auto_symbol("z"), 1, 1, 1),
+                ts(Token::Equal, 1, 2, 1),
+                ts(Token::Integer(2), 1, 3, 1),
+                ts(Token::Integer(654), 1, 5, 3),
+                ts(Token::NotEqual, 1, 8, 2),
+                ts(new_auto_symbol("a32"), 1, 10, 3),
+                ts(Token::Double(3.1), 1, 14, 3),
+                ts(Token::Less, 1, 17, 1),
+                ts(Token::Double(0.1), 1, 18, 3),
+                ts(Token::Eof, 1, 21, 0),
             ],
         );
     }
@@ -741,15 +929,16 @@ mod tests {
         do_ok_test(
             "(a) (\"foo\") (3)",
             &[
-                Token::LeftParen,
-                new_auto_symbol("a"),
-                Token::RightParen,
-                Token::LeftParen,
-                Token::Text("foo".to_owned()),
-                Token::RightParen,
-                Token::LeftParen,
-                Token::Integer(3),
-                Token::RightParen,
+                ts(Token::LeftParen, 1, 1, 1),
+                ts(new_auto_symbol("a"), 1, 2, 1),
+                ts(Token::RightParen, 1, 3, 1),
+                ts(Token::LeftParen, 1, 5, 1),
+                ts(Token::Text("foo".to_owned()), 1, 6, 5),
+                ts(Token::RightParen, 1, 11, 1),
+                ts(Token::LeftParen, 1, 13, 1),
+                ts(Token::Integer(3), 1, 14, 1),
+                ts(Token::RightParen, 1, 15, 1),
+                ts(Token::Eof, 1, 16, 0),
             ],
         );
     }
@@ -758,14 +947,14 @@ mod tests {
     fn test_peekable_lexer() {
         let mut input = b"a b 123".as_ref();
         let mut lexer = Lexer::from(&mut input).peekable();
-        assert_eq!(&new_auto_symbol("a"), lexer.peek().unwrap());
-        assert_eq!(&new_auto_symbol("a"), lexer.peek().unwrap());
-        assert_eq!(new_auto_symbol("a"), lexer.read().unwrap());
-        assert_eq!(new_auto_symbol("b"), lexer.read().unwrap());
-        assert_eq!(&Token::Integer(123), lexer.peek().unwrap());
-        assert_eq!(Token::Integer(123), lexer.read().unwrap());
-        assert_eq!(&Token::Eof, lexer.peek().unwrap());
-        assert_eq!(Token::Eof, lexer.read().unwrap());
+        assert_eq!(new_auto_symbol("a"), lexer.peek().unwrap().token);
+        assert_eq!(new_auto_symbol("a"), lexer.peek().unwrap().token);
+        assert_eq!(new_auto_symbol("a"), lexer.read().unwrap().token);
+        assert_eq!(new_auto_symbol("b"), lexer.read().unwrap().token);
+        assert_eq!(Token::Integer(123), lexer.peek().unwrap().token);
+        assert_eq!(Token::Integer(123), lexer.read().unwrap().token);
+        assert_eq!(Token::Eof, lexer.peek().unwrap().token);
+        assert_eq!(Token::Eof, lexer.read().unwrap().token);
     }
 
     #[test]
@@ -773,68 +962,103 @@ mod tests {
         do_ok_test(
             "0.1.28+5",
             &[
-                Token::Bad("Too many dots in numeric literal".to_owned()),
-                Token::Plus,
-                Token::Integer(5),
+                ts(Token::Bad("Too many dots in numeric literal".to_owned()), 1, 1, 3),
+                ts(Token::Plus, 1, 7, 1),
+                ts(Token::Integer(5), 1, 8, 1),
+                ts(Token::Eof, 1, 9, 0),
             ],
         );
 
-        do_ok_test("1 .3", &[Token::Integer(1), Token::Bad("Unknown character: .".to_owned())]);
+        do_ok_test(
+            "1 .3",
+            &[
+                ts(Token::Integer(1), 1, 1, 1),
+                ts(Token::Bad("Unknown character: .".to_owned()), 1, 3, 2),
+                ts(Token::Eof, 1, 5, 0),
+            ],
+        );
 
         do_ok_test(
             "1 3. 2",
-            &[Token::Integer(1), Token::Bad("Unknown character: .".to_owned()), Token::Integer(2)],
+            &[
+                ts(Token::Integer(1), 1, 1, 1),
+                ts(Token::Bad("Unknown character: .".to_owned()), 1, 3, 1),
+                ts(Token::Integer(2), 1, 6, 1),
+                ts(Token::Eof, 1, 7, 0),
+            ],
         );
 
         do_ok_test(
             "9999999999+5",
             &[
-                Token::Bad(
-                    "Bad integer 9999999999: number too large to fit in target type".to_owned(),
+                ts(
+                    Token::Bad(
+                        "Bad integer 9999999999: number too large to fit in target type".to_owned(),
+                    ),
+                    1,
+                    1,
+                    1,
                 ),
-                Token::Plus,
-                Token::Integer(5),
+                ts(Token::Plus, 1, 11, 1),
+                ts(Token::Integer(5), 1, 12, 1),
+                ts(Token::Eof, 1, 13, 0),
             ],
         );
 
         do_ok_test(
             "\n3!2 1",
             &[
-                Token::Eol,
-                Token::Bad("Unexpected character in numeric literal: !".to_owned()),
-                Token::Integer(1),
+                ts(Token::Eol, 1, 1, 1),
+                ts(Token::Bad("Unexpected character in numeric literal: !".to_owned()), 2, 1, 2),
+                ts(Token::Integer(1), 2, 5, 1),
+                ts(Token::Eof, 2, 6, 0),
             ],
         );
 
         do_ok_test(
             "a b|d 5",
             &[
-                new_auto_symbol("a"),
-                Token::Bad("Unexpected character in symbol: |".to_owned()),
-                Token::Integer(5),
+                ts(new_auto_symbol("a"), 1, 1, 1),
+                ts(Token::Bad("Unexpected character in symbol: |".to_owned()), 1, 3, 2),
+                ts(Token::Integer(5), 1, 7, 1),
+                ts(Token::Eof, 1, 8, 0),
             ],
         );
 
         do_ok_test(
             "( \"this is incomplete",
             &[
-                Token::LeftParen,
-                Token::Bad("Incomplete string due to EOF: this is incomplete".to_owned()),
+                ts(Token::LeftParen, 1, 1, 1),
+                ts(
+                    Token::Bad("Incomplete string due to EOF: this is incomplete".to_owned()),
+                    1,
+                    3,
+                    1,
+                ),
+                ts(Token::Eof, 1, 22, 0),
             ],
         );
 
         do_ok_test(
             "+ - ! * /",
             &[
-                Token::Plus,
-                Token::Minus,
-                Token::Bad("Unknown character: !".to_owned()),
-                Token::Multiply,
-                Token::Divide,
+                ts(Token::Plus, 1, 1, 1),
+                ts(Token::Minus, 1, 3, 1),
+                ts(Token::Bad("Unknown character: !".to_owned()), 1, 5, 1),
+                ts(Token::Multiply, 1, 7, 1),
+                ts(Token::Divide, 1, 9, 1),
+                ts(Token::Eof, 1, 10, 0),
             ],
         );
 
-        do_ok_test("@+", &[Token::Bad("Empty label name".to_owned()), Token::Plus]);
+        do_ok_test(
+            "@+",
+            &[
+                ts(Token::Bad("Empty label name".to_owned()), 1, 1, 1),
+                ts(Token::Plus, 1, 2, 1),
+                ts(Token::Eof, 1, 3, 0),
+            ],
+        );
     }
 
     /// A reader that generates an error on the second read.
@@ -871,10 +1095,11 @@ mod tests {
     fn test_unrecoverable_io_error() {
         let mut reader = FaultyReader::new("3 + 5\n");
         let mut lexer = Lexer::from(&mut reader);
-        assert_eq!(Token::Integer(3), lexer.read().unwrap());
-        assert_eq!(Token::Plus, lexer.read().unwrap());
-        assert_eq!(Token::Integer(5), lexer.read().unwrap());
-        assert_eq!(Token::Eol, lexer.read().unwrap());
+
+        assert_eq!(Token::Integer(3), lexer.read().unwrap().token);
+        assert_eq!(Token::Plus, lexer.read().unwrap().token);
+        assert_eq!(Token::Integer(5), lexer.read().unwrap().token);
+        assert_eq!(Token::Eol, lexer.read().unwrap().token);
         let e = lexer.read().unwrap_err();
         assert_eq!(io::ErrorKind::InvalidData, e.kind());
         let e = lexer.read().unwrap_err();

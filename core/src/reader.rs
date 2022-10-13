@@ -41,7 +41,6 @@ pub struct CharSpan {
     pub(crate) ch: char,
 
     /// Position where this character starts.
-    #[allow(unused)] // TODO(jmmv): Use this in the parser.
     pub(crate) pos: LineCol,
 }
 
@@ -100,7 +99,6 @@ impl<'a> CharReader<'a> {
 
     /// Obtains a view of the next position observed by this reader, which is necessary to compute
     /// the location of EOF when the iterator is fully consumed.
-    #[allow(unused)] // TODO(jmmv): Use this in the parser.
     pub(crate) fn next_pos_watcher(&self) -> Rc<RefCell<LineCol>> {
         self.next_pos.clone()
     }
