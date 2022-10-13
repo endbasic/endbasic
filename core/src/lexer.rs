@@ -142,7 +142,7 @@ impl<'a> Lexer<'a> {
     fn handle_bad_read<S: Into<String>>(&mut self, msg: S) -> io::Result<Token> {
         loop {
             match self.input.peek() {
-                Some(Ok(ch)) if ch.is_separator() => break,
+                Some(Ok(ch_span)) if ch_span.ch.is_separator() => break,
                 Some(Ok(_)) => {
                     self.input.next().unwrap()?;
                 }
@@ -169,19 +169,21 @@ impl<'a> Lexer<'a> {
         s.push(first);
         loop {
             match self.input.peek() {
-                Some(Ok('.')) => {
-                    if found_dot {
-                        return self.handle_bad_peek("Too many dots in numeric literal");
+                Some(Ok(ch_span)) => match ch_span.ch {
+                    '.' => {
+                        if found_dot {
+                            return self.handle_bad_peek("Too many dots in numeric literal");
+                        }
+                        s.push(self.input.next().unwrap()?.ch);
+                        found_dot = true;
                     }
-                    s.push(self.input.next().unwrap()?);
-                    found_dot = true;
-                }
-                Some(Ok(ch)) if ch.is_ascii_digit() => s.push(self.input.next().unwrap()?),
-                Some(Ok(ch)) if ch.is_separator() => break,
-                Some(Ok(ch)) => {
-                    let msg = format!("Unexpected character in numeric literal: {}", ch);
-                    return self.handle_bad_peek(msg);
-                }
+                    ch if ch.is_ascii_digit() => s.push(self.input.next().unwrap()?.ch),
+                    ch if ch.is_separator() => break,
+                    ch => {
+                        let msg = format!("Unexpected character in numeric literal: {}", ch);
+                        return self.handle_bad_peek(msg);
+                    }
+                },
                 Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
                 None => break,
             }
@@ -210,18 +212,18 @@ impl<'a> Lexer<'a> {
         match (first, self.input.peek()) {
             (_, Some(Err(_))) => Err(self.input.next().unwrap().unwrap_err()),
 
-            ('<', Some(Ok('>'))) => {
+            ('<', Some(Ok(ch_span))) if ch_span.ch == '>' => {
                 self.input.next().unwrap()?;
                 Ok(Token::NotEqual)
             }
 
-            ('<', Some(Ok('='))) => {
+            ('<', Some(Ok(ch_span))) if ch_span.ch == '=' => {
                 self.input.next().unwrap()?;
                 Ok(Token::LessEqual)
             }
             ('<', _) => Ok(Token::Less),
 
-            ('>', Some(Ok('='))) => {
+            ('>', Some(Ok(ch_span))) if ch_span.ch == '=' => {
                 self.input.next().unwrap()?;
                 Ok(Token::GreaterEqual)
             }
@@ -240,32 +242,34 @@ impl<'a> Lexer<'a> {
         let mut vtype = VarType::Auto;
         loop {
             match self.input.peek() {
-                Some(Ok(ch)) if ch.is_word() => s.push(self.input.next().unwrap()?),
-                Some(Ok(ch)) if ch.is_separator() => break,
-                Some(Ok('?')) => {
-                    vtype = VarType::Boolean;
-                    self.input.next().unwrap()?;
-                    break;
-                }
-                Some(Ok('#')) => {
-                    vtype = VarType::Double;
-                    self.input.next().unwrap()?;
-                    break;
-                }
-                Some(Ok('%')) => {
-                    vtype = VarType::Integer;
-                    self.input.next().unwrap()?;
-                    break;
-                }
-                Some(Ok('$')) => {
-                    vtype = VarType::Text;
-                    self.input.next().unwrap()?;
-                    break;
-                }
-                Some(Ok(ch)) => {
-                    let msg = format!("Unexpected character in symbol: {}", ch);
-                    return self.handle_bad_peek(msg);
-                }
+                Some(Ok(ch_span)) => match ch_span.ch {
+                    ch if ch.is_word() => s.push(self.input.next().unwrap()?.ch),
+                    ch if ch.is_separator() => break,
+                    '?' => {
+                        vtype = VarType::Boolean;
+                        self.input.next().unwrap()?;
+                        break;
+                    }
+                    '#' => {
+                        vtype = VarType::Double;
+                        self.input.next().unwrap()?;
+                        break;
+                    }
+                    '%' => {
+                        vtype = VarType::Integer;
+                        self.input.next().unwrap()?;
+                        break;
+                    }
+                    '$' => {
+                        vtype = VarType::Text;
+                        self.input.next().unwrap()?;
+                        break;
+                    }
+                    ch => {
+                        let msg = format!("Unexpected character in symbol: {}", ch);
+                        return self.handle_bad_peek(msg);
+                    }
+                },
                 Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
                 None => break,
             }
@@ -309,18 +313,18 @@ impl<'a> Lexer<'a> {
         let mut escaping = false;
         loop {
             match self.input.peek() {
-                Some(Ok(ch)) => {
+                Some(Ok(ch_span)) => {
                     if escaping {
-                        s.push(self.input.next().unwrap()?);
+                        s.push(self.input.next().unwrap()?.ch);
                         escaping = false;
-                    } else if *ch == '\\' {
+                    } else if ch_span.ch == '\\' {
                         self.input.next().unwrap()?;
                         escaping = true;
-                    } else if *ch == delim {
+                    } else if ch_span.ch == delim {
                         self.input.next().unwrap()?;
                         break;
                     } else {
-                        s.push(self.input.next().unwrap()?);
+                        s.push(self.input.next().unwrap()?.ch);
                     }
                 }
                 Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
@@ -337,12 +341,14 @@ impl<'a> Lexer<'a> {
         let mut s = String::new();
         loop {
             match self.input.peek() {
-                Some(Ok(ch)) if ch.is_word() => s.push(self.input.next().unwrap()?),
-                Some(Ok(ch)) if ch.is_separator() => break,
-                Some(Ok(ch)) => {
-                    let msg = format!("Unexpected character in label: {}", ch);
-                    return self.handle_bad_peek(msg);
-                }
+                Some(Ok(ch_span)) => match ch_span.ch {
+                    ch if ch.is_word() => s.push(self.input.next().unwrap()?.ch),
+                    ch if ch.is_separator() => break,
+                    ch => {
+                        let msg = format!("Unexpected character in label: {}", ch);
+                        return self.handle_bad_peek(msg);
+                    }
+                },
                 Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
                 None => break,
             }
@@ -359,7 +365,7 @@ impl<'a> Lexer<'a> {
         loop {
             match self.input.next() {
                 None => return Ok(Token::Eof),
-                Some(Ok('\n')) => return Ok(Token::Eol),
+                Some(Ok(ch_span)) if ch_span.ch == '\n' => return Ok(Token::Eol),
                 Some(Err(e)) => return Err(e),
                 Some(Ok(_)) => (),
             }
@@ -371,8 +377,8 @@ impl<'a> Lexer<'a> {
     fn advance_and_read_next(&mut self) -> io::Result<Option<char>> {
         loop {
             match self.input.next() {
-                Some(Ok(ch)) if ch.is_space() => (),
-                Some(Ok(ch)) => return Ok(Some(ch)),
+                Some(Ok(ch_span)) if ch_span.ch.is_space() => (),
+                Some(Ok(ch_span)) => return Ok(Some(ch_span.ch)),
                 Some(Err(e)) => return Err(e),
                 None => return Ok(None),
             }
