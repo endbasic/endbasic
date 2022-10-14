@@ -612,7 +612,7 @@ mod tests {
 
     #[test]
     fn test_assignment_errors() {
-        do_simple_error_test("a =\n", "Missing expression in assignment");
+        do_simple_error_test("a =\n", "1:4: Missing expression in assignment");
         do_simple_error_test("a = b\n", "Undefined variable b");
         do_simple_error_test("a = 3\na = TRUE\n", "Incompatible types in a assignment");
         do_simple_error_test("a? = 3", "Incompatible types in a? assignment");
@@ -641,7 +641,7 @@ mod tests {
 
     #[test]
     fn test_dim_array_errors() {
-        do_simple_error_test("DIM i()", "Arrays require at least one dimension");
+        do_simple_error_test("DIM i()", "1:6: Arrays require at least one dimension");
         do_simple_error_test("DIM i(FALSE)", "Dimensions in DIM array must be integers");
         do_simple_error_test("DIM i(-3)", "Dimensions in DIM array must be positive");
         do_simple_error_test("DIM i\nDIM i(3)", "Cannot DIM already-defined symbol i");
@@ -755,14 +755,14 @@ mod tests {
 
     #[test]
     fn test_if_errors() {
-        do_simple_error_test("IF TRUE THEN END IF", "Expecting newline after THEN");
+        do_simple_error_test("IF TRUE THEN END IF", "1:14: Expecting newline after THEN");
         do_simple_error_test(
             "IF TRUE THEN\nELSE IF TRUE THEN\nEND IF",
-            "Expecting newline after ELSE",
+            "2:6: Expecting newline after ELSE",
         );
-        do_simple_error_test("IF TRUE\nEND IF\nOUT 3", "No THEN in IF statement");
+        do_simple_error_test("IF TRUE\nEND IF\nOUT 3", "1:8: No THEN in IF statement");
 
-        do_simple_error_test("IF 2\nEND IF", "No THEN in IF statement");
+        do_simple_error_test("IF 2\nEND IF", "1:5: No THEN in IF statement");
         do_simple_error_test("IF 2 THEN\nEND IF", "IF/ELSEIF require a boolean condition");
         do_simple_error_test(
             "IF FALSE THEN\nELSEIF 2 THEN\nEND IF",
@@ -842,8 +842,8 @@ mod tests {
 
     #[test]
     fn test_for_errors() {
-        do_simple_error_test("FOR\nNEXT", "No iterator name in FOR statement");
-        do_simple_error_test("FOR a = 1 TO 10\nEND IF", "Unexpected token End in statement");
+        do_simple_error_test("FOR\nNEXT", "1:4: No iterator name in FOR statement");
+        do_simple_error_test("FOR a = 1 TO 10\nEND IF", "2:1: Unexpected token End in statement");
 
         do_simple_error_test("FOR i = \"a\" TO 3\nNEXT", "FOR supports integer iteration only");
         do_simple_error_test(
@@ -987,10 +987,10 @@ mod tests {
 
     #[test]
     fn test_while_errors() {
-        do_simple_error_test("WHILE\nWEND", "No expression in WHILE statement");
-        do_simple_error_test("WHILE\nEND IF", "WHILE without WEND");
+        do_simple_error_test("WHILE\nWEND", "1:6: No expression in WHILE statement");
+        do_simple_error_test("WHILE\nEND IF", "2:5: WHILE without WEND");
 
-        do_simple_error_test("WHILE 2\n", "WHILE without WEND");
+        do_simple_error_test("WHILE 2\n", "2:1: WHILE without WEND");
         do_simple_error_test("WHILE 2\nWEND", "WHILE requires a boolean condition");
     }
 
@@ -1011,18 +1011,23 @@ mod tests {
 
     #[test]
     fn test_top_level_syntax_errors_prevent_execution() {
-        do_simple_error_test("+ b", "Unexpected token Plus in statement");
-        do_error_test(r#"OUT "a": + b: OUT "b""#, &[], &[], "Unexpected token Plus in statement");
+        do_simple_error_test("+ b", "1:1: Unexpected token Plus in statement");
+        do_error_test(
+            r#"OUT "a": + b: OUT "b""#,
+            &[],
+            &[],
+            "1:10: Unexpected token Plus in statement",
+        );
     }
 
     #[test]
     fn test_inner_level_syntax_errors_prevent_execution() {
-        do_simple_error_test("+ b", "Unexpected token Plus in statement");
+        do_simple_error_test("+ b", "1:1: Unexpected token Plus in statement");
         do_error_test(
             r#"OUT "a": IF TRUE THEN: + b: END IF: OUT "b""#,
             &[],
             &[],
-            "Unexpected token Plus in statement",
+            "1:24: Unexpected token Plus in statement",
         );
     }
 
