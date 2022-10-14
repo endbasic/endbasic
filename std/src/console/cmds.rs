@@ -407,7 +407,7 @@ impl Command for PrintCommand {
         let mut text = String::new();
         for arg in args.iter() {
             if let Some(expr) = arg.0.as_ref() {
-                text += &expr.eval(machine.get_mut_symbols()).await?.to_string();
+                text += &expr.eval(machine.get_mut_symbols()).await?.to_output();
             }
             match arg.1 {
                 ArgSep::End => break,
@@ -596,7 +596,7 @@ mod tests {
         check_stmt_err("INPUT requires a variable reference", "INPUT ;");
         check_stmt_err("INPUT prompt must be a string", "INPUT 3 ; a");
         check_stmt_err("INPUT requires a variable reference", "INPUT ; a + 1");
-        check_stmt_err("Cannot add Text(\"a\") and Boolean(true)", "INPUT \"a\" + TRUE; b?");
+        check_stmt_err("Cannot add \"a\" and TRUE", "INPUT \"a\" + TRUE; b?");
     }
 
     #[test]
@@ -658,6 +658,6 @@ mod tests {
     fn test_print_errors() {
         // Ensure type errors from `Expr` and `Value` bubble up.
         check_stmt_err("1:9: Unexpected value in expression", "PRINT a b");
-        check_stmt_err("Cannot add Integer(3) and Boolean(true)", "PRINT 3 + TRUE");
+        check_stmt_err("Cannot add 3 and TRUE", "PRINT 3 + TRUE");
     }
 }

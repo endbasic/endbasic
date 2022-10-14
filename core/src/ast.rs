@@ -218,6 +218,24 @@ impl From<&str> for Value {
     }
 }
 
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Boolean(true) => write!(f, "TRUE"),
+            Value::Boolean(false) => write!(f, "FALSE"),
+            Value::Double(d) => {
+                let mut s = format!("{}", d);
+                if !s.contains('.') {
+                    s += ".0";
+                }
+                write!(f, "{}", s)
+            }
+            Value::Integer(i) => write!(f, "{}", i),
+            Value::Text(s) => write!(f, "\"{}\"", s),
+        }
+    }
+}
+
 impl Value {
     /// Returns the type of the value as a `VarType`.
     pub fn as_vartype(&self) -> VarType {
@@ -226,6 +244,18 @@ impl Value {
             Value::Double(_) => VarType::Double,
             Value::Integer(_) => VarType::Integer,
             Value::Text(_) => VarType::Text,
+        }
+    }
+
+    /// Consumes the value and generates a string to be used as the output of `PRINT`.  This is
+    /// slightly different from the `Display` implementation because strings aren't double-quoted.
+    pub fn to_output(self) -> String {
+        match self {
+            Value::Boolean(true) => "TRUE".to_owned(),
+            Value::Boolean(false) => "FALSE".to_owned(),
+            Value::Double(d) => format!("{}", d),
+            Value::Integer(i) => format!("{}", i),
+            Value::Text(s) => s,
         }
     }
 }
@@ -370,5 +400,16 @@ mod tests {
         assert!(!VarRef::new("a", VarType::Text).accepts(VarType::Double));
         assert!(!VarRef::new("a", VarType::Text).accepts(VarType::Integer));
         assert!(VarRef::new("a", VarType::Text).accepts(VarType::Text));
+    }
+
+    #[test]
+    fn test_value_display() {
+        assert_eq!("TRUE", format!("{}", Value::Boolean(true)));
+        assert_eq!("FALSE", format!("{}", Value::Boolean(false)));
+        assert_eq!("3.0", format!("{}", Value::Double(3.0)));
+        assert_eq!("3.1", format!("{}", Value::Double(3.1)));
+        assert_eq!("0.51", format!("{}", Value::Double(0.51)));
+        assert_eq!("-56", format!("{}", Value::Integer(-56)));
+        assert_eq!("\"some words\"", format!("{}", Value::Text("some words".to_owned())));
     }
 }
