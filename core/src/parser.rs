@@ -216,6 +216,23 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    /// Expects the peeked token to be `t` and consumes it.  Otherwise, leaves the token in the
+    /// stream and fails with error `err`, pointing at `pos` as the original location of the
+    /// problem.
+    fn expect_and_consume_with_pos(
+        &mut self,
+        t: Token,
+        pos: LineCol,
+        err: &'static str,
+    ) -> Result<()> {
+        let peeked = self.lexer.peek()?;
+        if peeked.token != t {
+            return Err(Error::Bad(pos, err.to_owned()));
+        }
+        self.lexer.consume_peeked();
+        Ok(())
+    }
+
     /// Reads statements until one of the `delims` keywords is found.  The delimiter is not
     /// consumed.
     fn parse_until(&mut self, delims: &[Token]) -> Result<Vec<Statement>> {
@@ -667,7 +684,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses an `IF` statement.
-    fn parse_if(&mut self) -> Result<Statement> {
+    fn parse_if(&mut self, if_pos: LineCol) -> Result<Statement> {
         let expr = self.parse_required_expr("No expression in IF statement")?;
         self.expect_and_consume(Token::Then, "No THEN in IF statement")?;
         self.expect_and_consume(Token::Eol, "Expecting newline after THEN")?;
@@ -707,20 +724,20 @@ impl<'a> Parser<'a> {
             branches.push((Expr::Boolean(true), stmts2));
         }
 
-        self.expect_and_consume(Token::End, "IF without END IF")?;
-        self.expect_and_consume(Token::If, "IF without END IF")?;
+        self.expect_and_consume_with_pos(Token::End, if_pos, "IF without END IF")?;
+        self.expect_and_consume_with_pos(Token::If, if_pos, "IF without END IF")?;
 
         Ok(Statement::If(branches))
     }
 
     /// Advances until the next statement after failing to parse an `IF` statement.
-    fn reset_if(&mut self) -> Result<()> {
+    fn reset_if(&mut self, if_pos: LineCol) -> Result<()> {
         loop {
             match self.lexer.peek()?.token {
                 Token::Eof => break,
                 Token::End => {
                     self.lexer.consume_peeked();
-                    self.expect_and_consume(Token::If, "IF without END IF")?;
+                    self.expect_and_consume_with_pos(Token::If, if_pos, "IF without END IF")?;
                     break;
                 }
                 _ => {
@@ -766,7 +783,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses a `FOR` statement.
-    fn parse_for(&mut self) -> Result<Statement> {
+    fn parse_for(&mut self, for_pos: LineCol) -> Result<Statement> {
         let token_span = self.lexer.read()?;
         let iterator = match token_span.token {
             Token::Symbol(iterator) => match iterator.ref_type() {
@@ -812,7 +829,7 @@ impl<'a> Parser<'a> {
         self.expect_and_consume(Token::Eol, "Expecting newline after FOR")?;
 
         let stmts = self.parse_until(&[Token::Next])?;
-        self.expect_and_consume(Token::Next, "FOR without NEXT")?;
+        self.expect_and_consume_with_pos(Token::Next, for_pos, "FOR without NEXT")?;
 
         Ok(Statement::For(iterator, start, end_condition, next_value, stmts))
     }
@@ -835,24 +852,28 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses a `WHILE` statement.
-    fn parse_while(&mut self) -> Result<Statement> {
+    fn parse_while(&mut self, while_pos: LineCol) -> Result<Statement> {
         let expr = self.parse_required_expr("No expression in WHILE statement")?;
         self.expect_and_consume(Token::Eol, "Expecting newline after WHILE")?;
 
         let stmts = self.parse_until(&[Token::Wend])?;
-        self.expect_and_consume(Token::Wend, "WHILE without WEND")?;
+        self.expect_and_consume_with_pos(Token::Wend, while_pos, "WHILE without WEND")?;
 
         Ok(Statement::While(expr, stmts))
     }
 
     /// Advances until the next statement after failing to parse a `WHILE` statement.
-    fn reset_while(&mut self) -> Result<()> {
+    fn reset_while(&mut self, while_pos: LineCol) -> Result<()> {
         loop {
             match self.lexer.peek()?.token {
                 Token::Eof => break,
                 Token::End => {
                     self.lexer.consume_peeked();
-                    self.expect_and_consume(Token::While, "WHILE without WEND")?;
+                    self.expect_and_consume_with_pos(
+                        Token::While,
+                        while_pos,
+                        "WHILE without WEND",
+                    )?;
                     break;
                 }
                 _ => {
@@ -883,14 +904,14 @@ impl<'a> Parser<'a> {
             Token::Eol => Ok(None),
             Token::Dim => Ok(Some(self.parse_dim()?)),
             Token::If => {
-                let result = self.parse_if();
+                let result = self.parse_if(token_span.pos);
                 if result.is_err() {
-                    self.reset_if()?;
+                    self.reset_if(token_span.pos)?;
                 }
                 Ok(Some(result?))
             }
             Token::For => {
-                let result = self.parse_for();
+                let result = self.parse_for(token_span.pos);
                 if result.is_err() {
                     self.reset_for()?;
                 }
@@ -918,9 +939,9 @@ impl<'a> Parser<'a> {
                 }
             }
             Token::While => {
-                let result = self.parse_while();
+                let result = self.parse_while(token_span.pos);
                 if result.is_err() {
-                    self.reset_while()?;
+                    self.reset_while(token_span.pos)?;
                 }
                 Ok(Some(result?))
             }
@@ -1544,6 +1565,7 @@ mod tests {
         do_expr_error_test("2 3", "1:9: Unexpected value in expression");
 
         do_expr_error_test("(", "1:8: Missing expression");
+
         do_expr_error_test(")", "1:7: Expected comma, semicolon, or end of statement");
         do_expr_error_test("(()", "1:8: Missing expression");
         do_expr_error_test("())", "1:7: Expected expression");
@@ -1731,9 +1753,10 @@ mod tests {
         do_error_test("IF 3 + 1\nPRINT foo\n", "1:9: No THEN in IF statement");
         do_error_test("IF 3 + 1 THEN", "1:14: Expecting newline after THEN");
 
-        do_error_test("IF 1 THEN\n", "2:1: IF without END IF");
-        do_error_test("IF 1 THEN\nELSEIF 1 THEN\n", "3:1: IF without END IF");
-        do_error_test("IF 1 THEN\nELSE\n", "3:1: IF without END IF");
+        do_error_test("IF 1 THEN\n", "1:1: IF without END IF");
+        do_error_test("IF 1 THEN\nELSEIF 1 THEN\n", "1:1: IF without END IF");
+        do_error_test("IF 1 THEN\nELSE\n", "1:1: IF without END IF");
+        do_error_test("REM\n   IF 1 THEN\n", "2:4: IF without END IF");
 
         do_error_test("IF 1 THEN\nELSEIF\n", "2:7: No expression in ELSEIF statement");
         do_error_test("IF 1 THEN\nELSEIF 3 + 1", "2:13: No THEN in ELSEIF statement");
@@ -1748,8 +1771,8 @@ mod tests {
         do_error_test("IF 1 THEN\nELSE", "2:5: Expecting newline after ELSE");
         do_error_test("IF 1 THEN\nELSE foo", "2:6: Expecting newline after ELSE");
 
-        do_error_test("IF 1 THEN\nEND", "2:4: IF without END IF");
-        do_error_test("IF 1 THEN\nEND\n", "2:4: IF without END IF");
+        do_error_test("IF 1 THEN\nEND", "1:1: IF without END IF");
+        do_error_test("IF 1 THEN\nEND\n", "1:1: IF without END IF");
         do_error_test(
             "IF 1 THEN\nEND IF foo",
             "2:8: Expected newline but found token Symbol(VarRef { name: \"foo\", ref_type: Auto })");
@@ -1881,7 +1904,7 @@ mod tests {
         do_error_test("FOR i = 1 TO 3 STEP 1", "1:22: Expecting newline after FOR");
         do_error_test("FOR i = 3 TO 1 STEP -1", "1:23: Expecting newline after FOR");
 
-        do_error_test("FOR i = 0 TO 10\nPRINT i\n", "3:1: FOR without NEXT");
+        do_error_test("    FOR i = 0 TO 10\nPRINT i\n", "1:5: FOR without NEXT");
     }
 
     #[test]
@@ -1969,7 +1992,7 @@ mod tests {
     fn test_while_errors() {
         do_error_test("WHILE\n", "1:6: No expression in WHILE statement");
         do_error_test("WHILE TRUE", "1:11: Expecting newline after WHILE");
-        do_error_test("WHILE TRUE\n", "2:1: WHILE without WEND");
+        do_error_test("\n\nWHILE TRUE\n", "3:1: WHILE without WEND");
         do_error_test("WHILE TRUE\nEND", "2:1: Unexpected token End in statement");
         do_error_test("WHILE TRUE\nEND\n", "2:1: Unexpected token End in statement");
         do_error_test("WHILE TRUE\nEND WHILE\n", "2:1: Unexpected token End in statement");
