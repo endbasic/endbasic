@@ -843,7 +843,7 @@ mod tests {
     #[test]
     fn test_for_errors() {
         do_simple_error_test("FOR\nNEXT", "1:4: No iterator name in FOR statement");
-        do_simple_error_test("FOR a = 1 TO 10\nEND IF", "2:1: Unexpected token End in statement");
+        do_simple_error_test("FOR a = 1 TO 10\nEND IF", "2:1: Unexpected END in statement");
 
         do_simple_error_test("FOR i = \"a\" TO 3\nNEXT", "FOR supports integer iteration only");
         do_simple_error_test(
@@ -1011,23 +1011,18 @@ mod tests {
 
     #[test]
     fn test_top_level_syntax_errors_prevent_execution() {
-        do_simple_error_test("+ b", "1:1: Unexpected token Plus in statement");
-        do_error_test(
-            r#"OUT "a": + b: OUT "b""#,
-            &[],
-            &[],
-            "1:10: Unexpected token Plus in statement",
-        );
+        do_simple_error_test("+ b", "1:1: Unexpected + in statement");
+        do_error_test(r#"OUT "a": + b: OUT "b""#, &[], &[], "1:10: Unexpected + in statement");
     }
 
     #[test]
     fn test_inner_level_syntax_errors_prevent_execution() {
-        do_simple_error_test("+ b", "1:1: Unexpected token Plus in statement");
+        do_simple_error_test("+ b", "1:1: Unexpected + in statement");
         do_error_test(
             r#"OUT "a": IF TRUE THEN: + b: END IF: OUT "b""#,
             &[],
             &[],
-            "1:24: Unexpected token Plus in statement",
+            "1:24: Unexpected + in statement",
         );
     }
 

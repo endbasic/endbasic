@@ -258,9 +258,9 @@ impl<'a> Parser<'a> {
         let expr = self.parse_required_expr("Missing expression in assignment")?;
 
         let next = self.lexer.peek()?;
-        match next.token {
+        match &next.token {
             Token::Eof | Token::Eol => (),
-            _ => return Err(Error::Bad(next.pos, "Unexpected token in assignment".to_owned())),
+            t => return Err(Error::Bad(next.pos, format!("Unexpected {} in assignment", t))),
         }
         Ok(Statement::Assignment(vref, expr))
     }
@@ -271,11 +271,9 @@ impl<'a> Parser<'a> {
         let expr = self.parse_required_expr("Missing expression in array assignment")?;
 
         let next = self.lexer.peek()?;
-        match next.token {
+        match &next.token {
             Token::Eof | Token::Eol => (),
-            _ => {
-                return Err(Error::Bad(next.pos, "Unexpected token in array assignment".to_owned()))
-            }
+            t => return Err(Error::Bad(next.pos, format!("Unexpected {} in array assignment", t))),
         }
         Ok(Statement::ArrayAssignment(vref, subscripts, expr))
     }
@@ -369,7 +367,7 @@ impl<'a> Parser<'a> {
                     t => {
                         return Err(Error::Bad(
                             token_span.pos,
-                            format!("Invalid type name {:?} in DIM AS statement", t),
+                            format!("Invalid type name {} in DIM AS statement", t),
                         ))
                     }
                 }
@@ -378,9 +376,9 @@ impl<'a> Parser<'a> {
         };
 
         let next = self.lexer.peek()?;
-        match next.token {
+        match &next.token {
             Token::Eof | Token::Eol => (),
-            _ => return Err(Error::Bad(next.pos, "Unexpected token in DIM statement".to_owned())),
+            t => return Err(Error::Bad(next.pos, format!("Unexpected {} in DIM statement", t))),
         }
 
         Ok(vartype)
@@ -434,7 +432,7 @@ impl<'a> Parser<'a> {
         loop {
             let peeked = self.lexer.peek()?;
             let pos = peeked.pos;
-            match peeked.token {
+            match &peeked.token {
                 Token::RightParen => {
                     self.lexer.consume_peeked();
                     break;
@@ -449,7 +447,7 @@ impl<'a> Parser<'a> {
                     let expr = self.parse_required_expr("Missing expression")?;
                     exprs.push(expr);
                 }
-                _ => return Err(Error::Bad(pos, "Unexpected token".to_owned())),
+                t => return Err(Error::Bad(pos, format!("Unexpected {}", t))),
             }
         }
 
@@ -544,7 +542,7 @@ impl<'a> Parser<'a> {
                             if !need_operand {
                                 return Err(Error::Bad(
                                     ts.pos,
-                                    "Unexpected token in expression".to_owned(),
+                                    format!("Unexpected {} in expression", ts.token),
                                 ));
                             }
                             op_spans.push(ExprOpSpan::new(ExprOp::LeftParen, ts.pos));
@@ -945,12 +943,8 @@ impl<'a> Parser<'a> {
                 }
                 Ok(Some(result?))
             }
-            t => {
-                return Err(Error::Bad(
-                    token_span.pos,
-                    format!("Unexpected token {:?} in statement", t),
-                ))
-            }
+            Token::Bad(msg) => return Err(Error::Bad(token_span.pos, msg)),
+            t => return Err(Error::Bad(token_span.pos, format!("Unexpected {} in statement", t))),
         };
 
         let token_span = self.lexer.peek()?;
@@ -962,7 +956,7 @@ impl<'a> Parser<'a> {
             _ => {
                 return Err(Error::Bad(
                     token_span.pos,
-                    format!("Expected newline but found token {:?}", token_span.token),
+                    format!("Expected newline but found {}", token_span.token),
                 ))
             }
         };
@@ -1120,15 +1114,15 @@ mod tests {
 
     #[test]
     fn test_array_assignment_errors() {
-        do_error_test("a(", "1:3: Unexpected token");
+        do_error_test("a(", "1:3: Unexpected <<EOF>>");
         do_error_test("a()", "1:2: Expected expression");
         do_error_test("a() =", "1:6: Missing expression in array assignment");
         do_error_test("a() IF", "1:2: Expected expression");
         do_error_test("a() = 3 4", "1:9: Unexpected value in expression");
-        do_error_test("a() = 3 THEN", "1:9: Unexpected token in array assignment");
+        do_error_test("a() = 3 THEN", "1:9: Unexpected THEN in array assignment");
         do_error_test("a(,) = 3", "1:3: Missing expression");
-        do_error_test("a(2;3) = 3", "1:4: Unexpected token");
-        do_error_test("(2) = 3", "1:1: Unexpected token LeftParen in statement");
+        do_error_test("a(2;3) = 3", "1:4: Unexpected ;");
+        do_error_test("(2) = 3", "1:1: Unexpected ( in statement");
     }
 
     #[test]
@@ -1156,10 +1150,10 @@ mod tests {
     fn test_assignment_errors() {
         do_error_test("a =", "1:4: Missing expression in assignment");
         do_error_test("a = b 3", "1:7: Unexpected value in expression");
-        do_error_test("a = b, 3", "1:6: Unexpected token in assignment");
+        do_error_test("a = b, 3", "1:6: Unexpected , in assignment");
         do_error_test("a = if 3", "1:5: Unexpected keyword in expression");
-        do_error_test("true = 1", "1:1: Unexpected token Boolean(true) in statement");
-        do_error_test("3 = a", "1:1: Unexpected token Integer(3) in statement");
+        do_error_test("true = 1", "1:1: Unexpected TRUE in statement");
+        do_error_test("3 = a", "1:1: Unexpected 3 in statement");
     }
 
     #[test]
@@ -1307,17 +1301,17 @@ mod tests {
         do_error_test("DIM 3", "1:5: Expected variable name after DIM");
         do_error_test("DIM AS", "1:5: Expected variable name after DIM");
         do_error_test("DIM foo 3", "1:9: Expected AS or end of statement");
-        do_error_test("DIM a AS", "1:9: Invalid type name Eof in DIM AS statement");
+        do_error_test("DIM a AS", "1:9: Invalid type name <<EOF>> in DIM AS statement");
         do_error_test("DIM a$ AS", "1:5: Type annotation not allowed in a$");
-        do_error_test("DIM a AS 3", "1:10: Invalid type name Integer(3) in DIM AS statement");
-        do_error_test("DIM a AS INTEGER 3", "1:18: Unexpected token in DIM statement");
+        do_error_test("DIM a AS 3", "1:10: Invalid type name 3 in DIM AS statement");
+        do_error_test("DIM a AS INTEGER 3", "1:18: Unexpected 3 in DIM statement");
 
         do_error_test("DIM a()", "1:6: Arrays require at least one dimension");
         do_error_test("DIM a(,)", "1:7: Missing expression");
         do_error_test("DIM a(, 3)", "1:7: Missing expression");
         do_error_test("DIM a(3, )", "1:10: Missing expression");
         do_error_test("DIM a(3, , 4)", "1:10: Missing expression");
-        do_error_test("DIM a(1) AS INTEGER 3", "1:21: Unexpected token in DIM statement");
+        do_error_test("DIM a(1) AS INTEGER 3", "1:21: Unexpected 3 in DIM statement");
     }
 
     /// Wrapper around `do_ok_test` to parse an expression.  Given that expressions alone are not
@@ -1560,7 +1554,7 @@ mod tests {
 
         do_expr_error_test("+3", "1:7: Not enough values to apply operator");
         do_expr_error_test("2 + * 3", "1:9: Not enough values to apply operator");
-        do_expr_error_test("(2(3))", "1:9: Unexpected token in expression");
+        do_expr_error_test("(2(3))", "1:9: Unexpected ( in expression");
         do_expr_error_test("((3)2)", "1:11: Unexpected value in expression");
         do_expr_error_test("2 3", "1:9: Unexpected value in expression");
 
@@ -1773,9 +1767,7 @@ mod tests {
 
         do_error_test("IF 1 THEN\nEND", "1:1: IF without END IF");
         do_error_test("IF 1 THEN\nEND\n", "1:1: IF without END IF");
-        do_error_test(
-            "IF 1 THEN\nEND IF foo",
-            "2:8: Expected newline but found token Symbol(VarRef { name: \"foo\", ref_type: Auto })");
+        do_error_test("IF 1 THEN\nEND IF foo", "2:8: Expected newline but found foo");
 
         do_error_test(
             "IF 1 THEN\nELSE\nELSEIF 2 THEN\nEND IF",
@@ -1783,11 +1775,8 @@ mod tests {
         );
         do_error_test("IF 1 THEN\nELSE\nELSE\nEND IF", "3:1: Duplicate ELSE after ELSE");
 
-        do_error_test_no_reset(
-            "ELSEIF 1 THEN\nEND IF",
-            "1:1: Unexpected token Elseif in statement",
-        );
-        do_error_test_no_reset("ELSE 1\nEND IF", "1:1: Unexpected token Else in statement");
+        do_error_test_no_reset("ELSEIF 1 THEN\nEND IF", "1:1: Unexpected ELSEIF in statement");
+        do_error_test_no_reset("ELSE 1\nEND IF", "1:1: Unexpected ELSE in statement");
     }
 
     #[test]
@@ -1918,8 +1907,8 @@ mod tests {
         do_error_test("GOTO 3\n", "1:6: Expected label name after GOTO");
         do_error_test("GOTO foo\n", "1:6: Expected label name after GOTO");
         do_error_test("GOTO \"foo\"\n", "1:6: Expected label name after GOTO");
-        do_error_test("GOTO @foo, @bar\n", "1:10: Expected newline but found token Comma");
-        do_error_test("GOTO @foo, 3\n", "1:10: Expected newline but found token Comma");
+        do_error_test("GOTO @foo, @bar\n", "1:10: Expected newline but found ,");
+        do_error_test("GOTO @foo, 3\n", "1:10: Expected newline but found ,");
     }
 
     #[test]
@@ -1929,10 +1918,8 @@ mod tests {
 
     #[test]
     fn test_label_errors() {
-        do_error_test(
-            "@foo PRINT",
-            "1:6: Expected newline but found token Symbol(VarRef { name: \"PRINT\", ref_type: Auto })");
-        do_error_test("@foo+", "1:5: Expected newline but found token Plus");
+        do_error_test("@foo PRINT", "1:6: Expected newline but found PRINT");
+        do_error_test("@foo+", "1:5: Expected newline but found +");
     }
 
     #[test]
@@ -1993,9 +1980,9 @@ mod tests {
         do_error_test("WHILE\n", "1:6: No expression in WHILE statement");
         do_error_test("WHILE TRUE", "1:11: Expecting newline after WHILE");
         do_error_test("\n\nWHILE TRUE\n", "3:1: WHILE without WEND");
-        do_error_test("WHILE TRUE\nEND", "2:1: Unexpected token End in statement");
-        do_error_test("WHILE TRUE\nEND\n", "2:1: Unexpected token End in statement");
-        do_error_test("WHILE TRUE\nEND WHILE\n", "2:1: Unexpected token End in statement");
+        do_error_test("WHILE TRUE\nEND", "2:1: Unexpected END in statement");
+        do_error_test("WHILE TRUE\nEND\n", "2:1: Unexpected END in statement");
+        do_error_test("WHILE TRUE\nEND WHILE\n", "2:1: Unexpected END in statement");
 
         do_error_test("WHILE ,\nWEND", "1:7: No expression in WHILE statement");
     }
