@@ -179,7 +179,7 @@ impl Command for OutCommand {
         let mut text = String::new();
         for arg in args.iter() {
             if let Some(expr) = arg.0.as_ref() {
-                text += &expr.eval(machine.get_mut_symbols()).await?.to_string();
+                text += &expr.eval(machine.get_mut_symbols()).await?.to_output();
             }
             match arg.1 {
                 ArgSep::End => break,

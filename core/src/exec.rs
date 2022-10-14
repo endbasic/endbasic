@@ -201,7 +201,7 @@ impl Machine {
         for ss_expr in subscripts {
             match ss_expr.eval(&mut self.symbols).await? {
                 Value::Integer(i) => ds.push(i),
-                v => return new_syntax_error(format!("Subscript {:?} must be an integer", v)),
+                v => return new_syntax_error(format!("Subscript {} must be an integer", v)),
             }
         }
 
@@ -584,10 +584,7 @@ mod tests {
         do_simple_error_test("a = 3\na(0) = 3\n", "Cannot index non-array a");
         do_simple_error_test("DIM a(2)\na() = 3\n", "Cannot index array with 0 subscripts; need 1");
         do_simple_error_test("DIM a(1)\na(-1) = 3\n", "Subscript -1 cannot be negative");
-        do_simple_error_test(
-            "DIM a(1)\na(1, 3.0) = 3\n",
-            "Subscript Double(3.0) must be an integer",
-        );
+        do_simple_error_test("DIM a(1)\na(1, 3.0) = 3\n", "Subscript 3.0 must be an integer");
         do_simple_error_test("DIM a(2)\na$(1) = 3", "Incompatible types in a$ reference");
     }
 
@@ -846,10 +843,7 @@ mod tests {
         do_simple_error_test("FOR a = 1 TO 10\nEND IF", "2:1: Unexpected END in statement");
 
         do_simple_error_test("FOR i = \"a\" TO 3\nNEXT", "FOR supports integer iteration only");
-        do_simple_error_test(
-            "FOR i = 1 TO \"a\"\nNEXT",
-            "Cannot compare Integer(1) and Text(\"a\") with <=",
-        );
+        do_simple_error_test("FOR i = 1 TO \"a\"\nNEXT", "Cannot compare 1 and \"a\" with <=");
 
         do_simple_error_test(
             "FOR i = \"b\" TO 7 STEP -8\nNEXT",
@@ -857,7 +851,7 @@ mod tests {
         );
         do_simple_error_test(
             "FOR i = 1 TO \"b\" STEP -8\nNEXT",
-            "Cannot compare Integer(1) and Text(\"b\") with >=",
+            "Cannot compare 1 and \"b\" with >=",
         );
 
         do_simple_error_test("FOR a = 1.0 TO 10.0\nNEXT", "FOR supports integer iteration only");
