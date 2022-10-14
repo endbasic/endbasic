@@ -18,9 +18,9 @@
 use crate::ast::{VarRef, VarType};
 use crate::reader::{CharReader, CharSpan, LineCol};
 use std::cell::RefCell;
-use std::io;
 use std::iter::Peekable;
 use std::rc::Rc;
+use std::{fmt, io};
 
 /// Collection of valid tokens.
 ///
@@ -28,7 +28,8 @@ use std::rc::Rc;
 /// conditions and require special care.  `Eof` indicates that there are no more tokens.
 /// `Bad` indicates that a token was bad and contains the reason behind the problem, but the
 /// stream remains valid for extraction of further tokens.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
+#[cfg_attr(test, derive(Debug))]
 pub enum Token {
     Eof,
     Eol,
@@ -84,6 +85,72 @@ pub enum Token {
     DoubleName,
     IntegerName,
     TextName,
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // This implementation of Display returns the "canonical format" of a token.  We could
+        // instead capture the original text that was in the input stream and store it in the
+        // TokenSpan and return that.  However, most BASIC implementations make input canonical
+        // so this helps achieve that goal.
+        match self {
+            Token::Eof => write!(f, "<<EOF>>"),
+            Token::Eol => write!(f, "<<NEWLINE>>"),
+            Token::Bad(s) => write!(f, "<<{}>>", s),
+
+            Token::Boolean(false) => write!(f, "FALSE"),
+            Token::Boolean(true) => write!(f, "TRUE"),
+            Token::Double(d) => write!(f, "{}", d),
+            Token::Integer(i) => write!(f, "{}", i),
+            Token::Text(t) => write!(f, "{}", t),
+            Token::Symbol(vref) => write!(f, "{}", vref),
+
+            Token::Label(l) => write!(f, "@{}", l),
+
+            Token::Comma => write!(f, ","),
+            Token::Semicolon => write!(f, ";"),
+            Token::LeftParen => write!(f, "("),
+            Token::RightParen => write!(f, ")"),
+
+            Token::Plus => write!(f, "+"),
+            Token::Minus => write!(f, "-"),
+            Token::Multiply => write!(f, "*"),
+            Token::Divide => write!(f, "/"),
+            Token::Modulo => write!(f, "MOD"),
+
+            Token::Equal => write!(f, "="),
+            Token::NotEqual => write!(f, "<>"),
+            Token::Less => write!(f, "<"),
+            Token::LessEqual => write!(f, "<="),
+            Token::Greater => write!(f, ">"),
+            Token::GreaterEqual => write!(f, ">="),
+
+            Token::And => write!(f, "AND"),
+            Token::Not => write!(f, "NOT"),
+            Token::Or => write!(f, "OR"),
+            Token::Xor => write!(f, "XOR"),
+
+            Token::Else => write!(f, "ELSE"),
+            Token::Elseif => write!(f, "ELSEIF"),
+            Token::End => write!(f, "END"),
+            Token::For => write!(f, "FOR"),
+            Token::Goto => write!(f, "GOTO"),
+            Token::If => write!(f, "IF"),
+            Token::Next => write!(f, "NEXT"),
+            Token::Step => write!(f, "STEP"),
+            Token::Then => write!(f, "THEN"),
+            Token::To => write!(f, "TO"),
+            Token::Wend => write!(f, "WEND"),
+            Token::While => write!(f, "WHILE"),
+
+            Token::Dim => write!(f, "DIM"),
+            Token::As => write!(f, "AS"),
+            Token::BooleanName => write!(f, "BOOLEAN"),
+            Token::DoubleName => write!(f, "DOUBLE"),
+            Token::IntegerName => write!(f, "INTEGER"),
+            Token::TextName => write!(f, "STRING"),
+        }
+    }
 }
 
 /// Extra operations to test properties of a `char` based on the language semantics.
