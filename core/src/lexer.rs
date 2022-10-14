@@ -136,8 +136,7 @@ pub struct TokenSpan {
     pub(crate) token: Token,
 
     /// Start position of the token.
-    #[allow(unused)] // TODO(jmmv): Use this in the parser.
-    pos: LineCol,
+    pub(crate) pos: LineCol,
 
     /// Length of the token in characters.
     #[allow(unused)] // TODO(jmmv): Use this in the parser.

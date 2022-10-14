@@ -15,7 +15,6 @@
 
 //! Abstract Syntax Tree (AST) for the EndBASIC language.
 
-use crate::parser::{Error, Result};
 use std::fmt;
 
 /// Represents an expression and provides mechanisms to evaluate it.
@@ -141,19 +140,15 @@ impl VarRef {
         Self { name: name.into(), ref_type: ref_type }
     }
 
-    /// Transforms this reference into an unannotated name.
-    ///
-    /// This is only valid for references that have no annotations in them.
-    pub fn into_unannotated_string(self) -> Result<String> {
-        if self.ref_type != VarType::Auto {
-            return Err(Error::Bad(format!("Type annotation not allowed in {}", self)));
-        }
-        Ok(self.name)
-    }
-
     /// Returns the name of this reference, without any type annotations.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Returns the name of this reference, without any type annotations, and consumes the
+    /// reference.
+    pub(crate) fn take_name(self) -> String {
+        self.name
     }
 
     /// Adds the type annotation `ref_type` to this reference.
@@ -347,22 +342,6 @@ mod tests {
         assert_eq!("cba#", format!("{}", VarRef::new("cba", VarType::Double)));
         assert_eq!("def%", format!("{}", VarRef::new("def", VarType::Integer)));
         assert_eq!("ghi$", format!("{}", VarRef::new("ghi", VarType::Text)));
-    }
-
-    #[test]
-    fn test_varref_into_unannotated_string() {
-        assert_eq!(
-            "print",
-            &VarRef::new("print", VarType::Auto).into_unannotated_string().unwrap()
-        );
-
-        assert_eq!(
-            "Type annotation not allowed in print$",
-            format!(
-                "{}",
-                &VarRef::new("print", VarType::Text).into_unannotated_string().unwrap_err()
-            )
-        );
     }
 
     #[test]

@@ -674,7 +674,7 @@ mod tests {
         let mut t =
             tester().add_command(DoNothingCommand::new()).add_function(EmptyFunction::new());
 
-        t.run("HELP foo bar").expect_err("Unexpected value in expression").check();
+        t.run("HELP foo bar").expect_err("1:10: Unexpected value in expression").check();
         t.run("HELP foo, bar").expect_err("HELP takes zero or only one argument").check();
 
         t.run("HELP lang%").expect_err("Unknown help topic lang%").check();

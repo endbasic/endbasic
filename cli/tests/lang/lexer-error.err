@@ -1,1 +1,1 @@
-endbasic: Unexpected token Bad("Unexpected character in symbol: ^") in statement
+endbasic: 17:1: Unexpected token Bad("Unexpected character in symbol: ^") in statement

@@ -657,7 +657,7 @@ mod tests {
     #[test]
     fn test_print_errors() {
         // Ensure type errors from `Expr` and `Value` bubble up.
-        check_stmt_err("Unexpected value in expression", "PRINT a b");
+        check_stmt_err("1:9: Unexpected value in expression", "PRINT a b");
         check_stmt_err("Cannot add Integer(3) and Boolean(true)", "PRINT 3 + TRUE");
     }
 }

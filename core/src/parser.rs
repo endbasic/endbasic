@@ -17,6 +17,7 @@
 
 use crate::ast::{ArgSep, Expr, Statement, VarRef, VarType};
 use crate::lexer::{Lexer, PeekableLexer, Token};
+use crate::reader::LineCol;
 use std::cmp::Ordering;
 use std::io;
 
@@ -24,8 +25,8 @@ use std::io;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Bad syntax in the input program.
-    #[error("{0}")]
-    Bad(String),
+    #[error("{}:{}: {}", .0.line, .0.col, .1)]
+    Bad(LineCol, String),
 
     /// I/O error while parsing the input program.
     #[error("read error")]
@@ -34,6 +35,16 @@ pub enum Error {
 
 /// Result for parser return values.
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Transforms a `VarRef` into an unannotated name.
+///
+/// This is only valid for references that have no annotations in them.
+fn vref_to_unannotated_string(vref: VarRef, pos: LineCol) -> Result<String> {
+    if vref.ref_type() != VarType::Auto {
+        return Err(Error::Bad(pos, format!("Type annotation not allowed in {}", vref)));
+    }
+    Ok(vref.take_name())
+}
 
 /// Operators that can appear within an expression.
 ///
@@ -117,21 +128,41 @@ impl ExprOp {
             ExprOp::Xor => 0,
         }
     }
+}
+
+/// Wrapper over an `ExprOp` to extend it with its position.
+struct ExprOpSpan {
+    /// The wrapped expression operation.
+    op: ExprOp,
+
+    /// The position where the operation appears in the input.
+    pos: LineCol,
+}
+
+impl ExprOpSpan {
+    /// Creates a new span from its parts.
+    fn new(op: ExprOp, pos: LineCol) -> Self {
+        Self { op, pos }
+    }
 
     /// Pops operands from the `expr` stack, applies this operation, and pushes the result back.
     fn apply(&self, exprs: &mut Vec<Expr>) -> Result<()> {
-        fn apply1(exprs: &mut Vec<Expr>, f: fn(Box<Expr>) -> Expr) -> Result<()> {
+        fn apply1(exprs: &mut Vec<Expr>, pos: LineCol, f: fn(Box<Expr>) -> Expr) -> Result<()> {
             if exprs.is_empty() {
-                return Err(Error::Bad("Not enough values to apply operator".to_owned()));
+                return Err(Error::Bad(pos, "Not enough values to apply operator".to_owned()));
             }
             let v1 = Box::from(exprs.pop().unwrap());
             exprs.push(f(v1));
             Ok(())
         }
 
-        fn apply2(exprs: &mut Vec<Expr>, f: fn(Box<Expr>, Box<Expr>) -> Expr) -> Result<()> {
+        fn apply2(
+            exprs: &mut Vec<Expr>,
+            pos: LineCol,
+            f: fn(Box<Expr>, Box<Expr>) -> Expr,
+        ) -> Result<()> {
             if exprs.len() < 2 {
-                return Err(Error::Bad("Not enough values to apply operator".to_owned()));
+                return Err(Error::Bad(pos, "Not enough values to apply operator".to_owned()));
             }
             let v2 = Box::from(exprs.pop().unwrap());
             let v1 = Box::from(exprs.pop().unwrap());
@@ -139,24 +170,24 @@ impl ExprOp {
             Ok(())
         }
 
-        match self {
-            ExprOp::Add => apply2(exprs, Expr::Add),
-            ExprOp::Subtract => apply2(exprs, Expr::Subtract),
-            ExprOp::Multiply => apply2(exprs, Expr::Multiply),
-            ExprOp::Divide => apply2(exprs, Expr::Divide),
-            ExprOp::Modulo => apply2(exprs, Expr::Modulo),
-            ExprOp::Equal => apply2(exprs, Expr::Equal),
-            ExprOp::NotEqual => apply2(exprs, Expr::NotEqual),
-            ExprOp::Less => apply2(exprs, Expr::Less),
-            ExprOp::LessEqual => apply2(exprs, Expr::LessEqual),
-            ExprOp::Greater => apply2(exprs, Expr::Greater),
-            ExprOp::GreaterEqual => apply2(exprs, Expr::GreaterEqual),
-            ExprOp::And => apply2(exprs, Expr::And),
-            ExprOp::Or => apply2(exprs, Expr::Or),
-            ExprOp::Xor => apply2(exprs, Expr::Xor),
+        match self.op {
+            ExprOp::Add => apply2(exprs, self.pos, Expr::Add),
+            ExprOp::Subtract => apply2(exprs, self.pos, Expr::Subtract),
+            ExprOp::Multiply => apply2(exprs, self.pos, Expr::Multiply),
+            ExprOp::Divide => apply2(exprs, self.pos, Expr::Divide),
+            ExprOp::Modulo => apply2(exprs, self.pos, Expr::Modulo),
+            ExprOp::Equal => apply2(exprs, self.pos, Expr::Equal),
+            ExprOp::NotEqual => apply2(exprs, self.pos, Expr::NotEqual),
+            ExprOp::Less => apply2(exprs, self.pos, Expr::Less),
+            ExprOp::LessEqual => apply2(exprs, self.pos, Expr::LessEqual),
+            ExprOp::Greater => apply2(exprs, self.pos, Expr::Greater),
+            ExprOp::GreaterEqual => apply2(exprs, self.pos, Expr::GreaterEqual),
+            ExprOp::And => apply2(exprs, self.pos, Expr::And),
+            ExprOp::Or => apply2(exprs, self.pos, Expr::Or),
+            ExprOp::Xor => apply2(exprs, self.pos, Expr::Xor),
 
-            ExprOp::Negate => apply1(exprs, Expr::Negate),
-            ExprOp::Not => apply1(exprs, Expr::Not),
+            ExprOp::Negate => apply1(exprs, self.pos, Expr::Negate),
+            ExprOp::Not => apply1(exprs, self.pos, Expr::Not),
 
             ExprOp::LeftParen => Ok(()),
         }
@@ -179,7 +210,7 @@ impl<'a> Parser<'a> {
     fn expect_and_consume(&mut self, t: Token, err: &'static str) -> Result<()> {
         let peeked = self.lexer.peek()?;
         if peeked.token != t {
-            return Err(Error::Bad(err.to_owned()));
+            return Err(Error::Bad(peeked.pos, err.to_owned()));
         }
         self.lexer.consume_peeked();
         Ok(())
@@ -207,15 +238,12 @@ impl<'a> Parser<'a> {
 
     /// Parses an assignment for the variable reference `varref` already read.
     fn parse_assignment(&mut self, vref: VarRef) -> Result<Statement> {
-        let expr = match self.parse_expr(None)? {
-            Some(expr) => expr,
-            None => return Err(Error::Bad("Missing expression in assignment".to_owned())),
-        };
+        let expr = self.parse_required_expr("Missing expression in assignment")?;
 
         let next = self.lexer.peek()?;
         match next.token {
             Token::Eof | Token::Eol => (),
-            _ => return Err(Error::Bad("Unexpected token in assignment".to_owned())),
+            _ => return Err(Error::Bad(next.pos, "Unexpected token in assignment".to_owned())),
         }
         Ok(Statement::Assignment(vref, expr))
     }
@@ -223,25 +251,26 @@ impl<'a> Parser<'a> {
     /// Parses an assignment to the array `varref` with `subscripts`, both of which have already
     /// been read.
     fn parse_array_assignment(&mut self, vref: VarRef, subscripts: Vec<Expr>) -> Result<Statement> {
-        let expr = match self.parse_expr(None)? {
-            Some(expr) => expr,
-            None => return Err(Error::Bad("Missing expression in array assignment".to_owned())),
-        };
+        let expr = self.parse_required_expr("Missing expression in array assignment")?;
 
         let next = self.lexer.peek()?;
         match next.token {
             Token::Eof | Token::Eol => (),
-            _ => return Err(Error::Bad("Unexpected token in array assignment".to_owned())),
+            _ => {
+                return Err(Error::Bad(next.pos, "Unexpected token in array assignment".to_owned()))
+            }
         }
         Ok(Statement::ArrayAssignment(vref, subscripts, expr))
     }
 
     /// Parses a builtin call (things of the form `INPUT a`).
-    fn parse_builtin_call(&mut self, vref: VarRef, mut first: Option<Expr>) -> Result<Statement> {
-        let mut name = match vref.into_unannotated_string() {
-            Ok(name) => name,
-            Err(e) => return Err(Error::Bad(format!("{}", e))),
-        };
+    fn parse_builtin_call(
+        &mut self,
+        vref: VarRef,
+        vref_pos: LineCol,
+        mut first: Option<Expr>,
+    ) -> Result<Statement> {
+        let mut name = vref_to_unannotated_string(vref, vref_pos)?;
         name.make_ascii_uppercase();
 
         let mut args = vec![];
@@ -266,6 +295,7 @@ impl<'a> Parser<'a> {
                 }
                 _ => {
                     return Err(Error::Bad(
+                        peeked.pos,
                         "Expected comma, semicolon, or end of statement".to_owned(),
                     ))
                 }
@@ -276,10 +306,14 @@ impl<'a> Parser<'a> {
 
     /// Starts processing either an array reference or a builtin call and disambiguates between the
     /// two.
-    fn parse_array_or_builtin_call(&mut self, vref: VarRef) -> Result<Statement> {
+    fn parse_array_or_builtin_call(
+        &mut self,
+        vref: VarRef,
+        vref_pos: LineCol,
+    ) -> Result<Statement> {
         match self.lexer.peek()?.token {
             Token::LeftParen => {
-                self.lexer.consume_peeked();
+                let left_paren = self.lexer.consume_peeked();
                 let mut exprs = self.parse_comma_separated_exprs()?;
                 match self.lexer.peek()?.token {
                     Token::Equal => {
@@ -288,13 +322,16 @@ impl<'a> Parser<'a> {
                     }
                     _ => {
                         if exprs.len() != 1 {
-                            return Err(Error::Bad("Expected expression".to_owned()));
+                            return Err(Error::Bad(
+                                left_paren.pos,
+                                "Expected expression".to_owned(),
+                            ));
                         }
-                        self.parse_builtin_call(vref, Some(exprs.remove(0)))
+                        self.parse_builtin_call(vref, vref_pos, Some(exprs.remove(0)))
                     }
                 }
             }
-            _ => self.parse_builtin_call(vref, None),
+            _ => self.parse_builtin_call(vref, vref_pos, None),
         }
     }
 
@@ -306,26 +343,27 @@ impl<'a> Parser<'a> {
             Token::Eof | Token::Eol => VarType::Integer,
             Token::As => {
                 self.lexer.consume_peeked();
-                match self.lexer.read()?.token {
+                let token_span = self.lexer.read()?;
+                match token_span.token {
                     Token::BooleanName => VarType::Boolean,
                     Token::DoubleName => VarType::Double,
                     Token::IntegerName => VarType::Integer,
                     Token::TextName => VarType::Text,
                     t => {
-                        return Err(Error::Bad(format!(
-                            "Invalid type name {:?} in DIM AS statement",
-                            t
-                        )))
+                        return Err(Error::Bad(
+                            token_span.pos,
+                            format!("Invalid type name {:?} in DIM AS statement", t),
+                        ))
                     }
                 }
             }
-            _ => return Err(Error::Bad("Expected AS or end of statement".to_owned())),
+            _ => return Err(Error::Bad(peeked.pos, "Expected AS or end of statement".to_owned())),
         };
 
         let next = self.lexer.peek()?;
         match next.token {
             Token::Eof | Token::Eol => (),
-            _ => return Err(Error::Bad("Unexpected token in DIM statement".to_owned())),
+            _ => return Err(Error::Bad(next.pos, "Unexpected token in DIM statement".to_owned())),
         }
 
         Ok(vartype)
@@ -333,19 +371,27 @@ impl<'a> Parser<'a> {
 
     /// Parses a `DIM` statement.
     fn parse_dim(&mut self) -> Result<Statement> {
-        let vref = match self.lexer.read()?.token {
+        let token_span = self.lexer.read()?;
+        let vref = match token_span.token {
             Token::Symbol(vref) => vref,
-            _ => return Err(Error::Bad("Expected variable name after DIM".to_owned())),
+            _ => {
+                return Err(Error::Bad(
+                    token_span.pos,
+                    "Expected variable name after DIM".to_owned(),
+                ))
+            }
         };
-        let name = vref.into_unannotated_string()?;
+        let name = vref_to_unannotated_string(vref, token_span.pos)?;
 
-        let peeked = self.lexer.peek()?;
-        match peeked.token {
+        match self.lexer.peek()?.token {
             Token::LeftParen => {
-                self.lexer.consume_peeked();
+                let peeked = self.lexer.consume_peeked();
                 let subscripts = self.parse_comma_separated_exprs()?;
                 if subscripts.is_empty() {
-                    return Err(Error::Bad("Arrays require at least one dimension".to_owned()));
+                    return Err(Error::Bad(
+                        peeked.pos,
+                        "Arrays require at least one dimension".to_owned(),
+                    ));
                 }
                 let vartype = self.parse_dim_as()?;
                 Ok(Statement::DimArray(name, subscripts, vartype))
@@ -362,6 +408,7 @@ impl<'a> Parser<'a> {
     /// consume it).  We expect at least one expression.
     fn parse_comma_separated_exprs(&mut self) -> Result<Vec<Expr>> {
         let mut exprs = vec![];
+        let first_pos = self.lexer.peek()?.pos;
         if let Some(expr) = self.parse_expr(None)? {
             // The first expression is optional to support calls to functions without arguments.
             exprs.push(expr);
@@ -369,6 +416,7 @@ impl<'a> Parser<'a> {
 
         loop {
             let peeked = self.lexer.peek()?;
+            let pos = peeked.pos;
             match peeked.token {
                 Token::RightParen => {
                     self.lexer.consume_peeked();
@@ -379,14 +427,12 @@ impl<'a> Parser<'a> {
                     if exprs.is_empty() {
                         // The first expression (parsed outside the loop) cannot be empty if we
                         // encounter more than one expression.
-                        return Err(Error::Bad("Missing expression".to_owned()));
+                        return Err(Error::Bad(first_pos, "Missing expression".to_owned()));
                     }
-                    match self.parse_expr(None)? {
-                        Some(expr) => exprs.push(expr),
-                        None => return Err(Error::Bad("Missing expression".to_owned())),
-                    }
+                    let expr = self.parse_required_expr("Missing expression")?;
+                    exprs.push(expr);
                 }
-                _ => return Err(Error::Bad("Unexpected token".to_owned())),
+                _ => return Err(Error::Bad(pos, "Unexpected token".to_owned())),
             }
         }
 
@@ -404,7 +450,7 @@ impl<'a> Parser<'a> {
     /// This is an implementation of the Shunting Yard Algorithm by Edgar Dijkstra.
     fn parse_expr(&mut self, first: Option<Expr>) -> Result<Option<Expr>> {
         let mut exprs: Vec<Expr> = vec![];
-        let mut ops: Vec<ExprOp> = vec![];
+        let mut op_spans: Vec<ExprOpSpan> = vec![];
 
         let mut need_operand = true; // Also tracks whether an upcoming minus is unary.
         if let Some(e) = first {
@@ -413,9 +459,9 @@ impl<'a> Parser<'a> {
         }
 
         loop {
-            let mut handle_operand = |e| {
+            let mut handle_operand = |e, pos| {
                 if !need_operand {
-                    return Err(Error::Bad("Unexpected value in expression".to_owned()));
+                    return Err(Error::Bad(pos, "Unexpected value in expression".to_owned()));
                 }
                 need_operand = false;
                 exprs.push(e);
@@ -433,7 +479,7 @@ impl<'a> Parser<'a> {
                 | Token::To
                 | Token::Step => break,
                 Token::RightParen => {
-                    if !ops.contains(&ExprOp::LeftParen) {
+                    if !op_spans.iter().any(|eos| eos.op == ExprOp::LeftParen) {
                         // We encountered an unbalanced parenthesis but we don't know if this is
                         // because we were called from within an argument list (in which case the
                         // caller consumed the opening parenthesis and is expecting to consume the
@@ -445,13 +491,13 @@ impl<'a> Parser<'a> {
                 _ => (),
             };
 
-            let token = self.lexer.consume_peeked();
-            match token.token {
-                Token::Boolean(b) => handle_operand(Expr::Boolean(b))?,
-                Token::Double(d) => handle_operand(Expr::Double(d))?,
-                Token::Integer(i) => handle_operand(Expr::Integer(i))?,
-                Token::Text(t) => handle_operand(Expr::Text(t))?,
-                Token::Symbol(vref) => handle_operand(Expr::Symbol(vref))?,
+            let ts = self.lexer.consume_peeked();
+            match ts.token {
+                Token::Boolean(b) => handle_operand(Expr::Boolean(b), ts.pos)?,
+                Token::Double(d) => handle_operand(Expr::Double(d), ts.pos)?,
+                Token::Integer(i) => handle_operand(Expr::Integer(i), ts.pos)?,
+                Token::Text(t) => handle_operand(Expr::Text(t), ts.pos)?,
+                Token::Symbol(vref) => handle_operand(Expr::Symbol(vref), ts.pos)?,
 
                 Token::LeftParen => {
                     // If the last operand we encountered was a symbol, collapse it and the left
@@ -466,33 +512,34 @@ impl<'a> Parser<'a> {
                                 // parenthesis started a function call... but it did not (it is a
                                 // symbol following a parenthesis) so put both the expression and
                                 // the token back.
-                                ops.push(ExprOp::LeftParen);
+                                op_spans.push(ExprOpSpan::new(ExprOp::LeftParen, ts.pos));
                                 exprs.push(Expr::Symbol(vref));
                                 need_operand = true;
                             }
                         }
                         e => {
                             if let Some(e) = e {
-                                // We popped out the last expression to see if it this left
+                                // We popped out the last expression to see if this left
                                 // parenthesis started a function call... but if it didn't, we have
                                 // to put the expression back.
                                 exprs.push(e);
                             }
                             if !need_operand {
                                 return Err(Error::Bad(
-                                    "Unexpected value in expression".to_owned(),
+                                    ts.pos,
+                                    "Unexpected token in expression".to_owned(),
                                 ));
                             }
-                            ops.push(ExprOp::LeftParen);
+                            op_spans.push(ExprOpSpan::new(ExprOp::LeftParen, ts.pos));
                             need_operand = true;
                         }
                     };
                 }
                 Token::RightParen => {
                     let mut found = false;
-                    while let Some(op) = ops.pop() {
-                        op.apply(&mut exprs)?;
-                        if op == ExprOp::LeftParen {
+                    while let Some(eos) = op_spans.pop() {
+                        eos.apply(&mut exprs)?;
+                        if eos.op == ExprOp::LeftParen {
                             found = true;
                             break;
                         }
@@ -502,7 +549,7 @@ impl<'a> Parser<'a> {
                 }
 
                 Token::Not => {
-                    ops.push(ExprOp::Not);
+                    op_spans.push(ExprOpSpan::new(ExprOp::Not, ts.pos));
                     need_operand = true;
                 }
                 Token::Minus => {
@@ -511,15 +558,15 @@ impl<'a> Parser<'a> {
                         op = ExprOp::Negate;
                     } else {
                         op = ExprOp::Subtract;
-                        while let Some(op2) = ops.last() {
-                            if *op2 == ExprOp::LeftParen || op2.priority() < op.priority() {
+                        while let Some(eos2) = op_spans.last() {
+                            if eos2.op == ExprOp::LeftParen || eos2.op.priority() < op.priority() {
                                 break;
                             }
-                            let op2 = ops.pop().unwrap();
-                            op2.apply(&mut exprs)?;
+                            let eos2 = op_spans.pop().unwrap();
+                            eos2.apply(&mut exprs)?;
                         }
                     }
-                    ops.push(op);
+                    op_spans.push(ExprOpSpan::new(op, ts.pos));
                     need_operand = true;
                 }
 
@@ -536,19 +583,19 @@ impl<'a> Parser<'a> {
                 | Token::And
                 | Token::Or
                 | Token::Xor => {
-                    let op = ExprOp::from(token.token);
-                    while let Some(op2) = ops.last() {
-                        if *op2 == ExprOp::LeftParen || op2.priority() < op.priority() {
+                    let op = ExprOp::from(ts.token);
+                    while let Some(eos2) = op_spans.last() {
+                        if eos2.op == ExprOp::LeftParen || eos2.op.priority() < op.priority() {
                             break;
                         }
-                        let op2 = ops.pop().unwrap();
-                        op2.apply(&mut exprs)?;
+                        let eos2 = op_spans.pop().unwrap();
+                        eos2.apply(&mut exprs)?;
                     }
-                    ops.push(op);
+                    op_spans.push(ExprOpSpan::new(op, ts.pos));
                     need_operand = true;
                 }
 
-                Token::Bad(e) => return Err(Error::Bad(e)),
+                Token::Bad(e) => return Err(Error::Bad(ts.pos, e)),
 
                 Token::Eof
                 | Token::Eol
@@ -576,15 +623,17 @@ impl<'a> Parser<'a> {
                 | Token::TextName
                 | Token::Wend
                 | Token::While => {
-                    return Err(Error::Bad("Unexpected keyword in expression".to_owned()));
+                    return Err(Error::Bad(ts.pos, "Unexpected keyword in expression".to_owned()));
                 }
             };
         }
 
-        while let Some(op) = ops.pop() {
-            match op {
-                ExprOp::LeftParen => return Err(Error::Bad("Unbalanced parenthesis".to_owned())),
-                _ => op.apply(&mut exprs)?,
+        while let Some(eos) = op_spans.pop() {
+            match eos.op {
+                ExprOp::LeftParen => {
+                    return Err(Error::Bad(eos.pos, "Unbalanced parenthesis".to_owned()))
+                }
+                _ => eos.apply(&mut exprs)?,
             }
         }
 
@@ -595,21 +644,31 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Wrapper over `parse_expr` that requires an expression to be present and returns an error
+    /// with `msg` otherwise.
+    fn parse_required_expr(&mut self, msg: &'static str) -> Result<Expr> {
+        let next_pos = self.lexer.peek()?.pos;
+        match self.parse_expr(None)? {
+            Some(expr) => Ok(expr),
+            None => Err(Error::Bad(next_pos, msg.to_owned())),
+        }
+    }
+
     /// Parses a `GOTO` statement.
     fn parse_goto(&mut self) -> Result<Statement> {
-        let target = match self.lexer.read()?.token {
+        let token_span = self.lexer.read()?;
+        let target = match token_span.token {
             Token::Label(target) => target,
-            _ => return Err(Error::Bad("Expected label name after GOTO".to_owned())),
+            _ => {
+                return Err(Error::Bad(token_span.pos, "Expected label name after GOTO".to_owned()))
+            }
         };
         Ok(Statement::Goto(target))
     }
 
     /// Parses an `IF` statement.
     fn parse_if(&mut self) -> Result<Statement> {
-        let expr = match self.parse_expr(None)? {
-            Some(expr) => expr,
-            None => return Err(Error::Bad("No expression in IF statement".to_owned())),
-        };
+        let expr = self.parse_required_expr("No expression in IF statement")?;
         self.expect_and_consume(Token::Then, "No THEN in IF statement")?;
         self.expect_and_consume(Token::Eol, "Expecting newline after THEN")?;
 
@@ -620,12 +679,7 @@ impl<'a> Parser<'a> {
             match peeked.token {
                 Token::Elseif => {
                     self.lexer.consume_peeked();
-                    let expr = match self.parse_expr(None)? {
-                        Some(expr) => expr,
-                        None => {
-                            return Err(Error::Bad("No expression in ELSEIF statement".to_owned()))
-                        }
-                    };
+                    let expr = self.parse_required_expr("No expression in ELSEIF statement")?;
                     self.expect_and_consume(Token::Then, "No THEN in ELSEIF statement")?;
                     self.expect_and_consume(Token::Eol, "Expecting newline after THEN")?;
                     let stmts2 = self.parse_until(&[Token::Elseif, Token::Else, Token::End])?;
@@ -642,8 +696,12 @@ impl<'a> Parser<'a> {
             let stmts2 = self.parse_until(&[Token::Elseif, Token::Else, Token::End])?;
             let peeked = self.lexer.peek()?;
             match peeked.token {
-                Token::Elseif => return Err(Error::Bad("Unexpected ELSEIF after ELSE".to_owned())),
-                Token::Else => return Err(Error::Bad("Duplicate ELSE after ELSE".to_owned())),
+                Token::Elseif => {
+                    return Err(Error::Bad(peeked.pos, "Unexpected ELSEIF after ELSE".to_owned()))
+                }
+                Token::Else => {
+                    return Err(Error::Bad(peeked.pos, "Duplicate ELSE after ELSE".to_owned()))
+                }
                 _ => (),
             }
             branches.push((Expr::Boolean(true), stmts2));
@@ -674,59 +732,68 @@ impl<'a> Parser<'a> {
     }
 
     /// Extracts the optional `STEP` part of a `FOR` statement, with a default of 1.
-    fn parse_step(&mut self) -> Result<i32> {
-        match self.lexer.peek()?.token {
+    fn parse_step(&mut self) -> Result<(i32, LineCol)> {
+        let peeked = self.lexer.peek()?;
+        match peeked.token {
             Token::Step => self.lexer.consume_peeked(),
-            _ => return Ok(1),
+            _ => {
+                // The position we return here for the step isn't truly the right value, but given
+                // that we know the hardcoded step of 1 is valid, the caller will not error out and
+                // will not print the slightly invalid position.
+                return Ok((1, peeked.pos));
+            }
         };
 
-        match self.lexer.peek()?.token {
+        let peeked = self.lexer.peek()?;
+        match peeked.token {
             Token::Integer(i) => {
-                self.lexer.consume_peeked();
-                Ok(i)
+                let peeked = self.lexer.consume_peeked();
+                Ok((i, peeked.pos))
             }
             Token::Minus => {
                 self.lexer.consume_peeked();
-                match self.lexer.peek()?.token {
+                let peeked = self.lexer.peek()?;
+                match peeked.token {
                     Token::Integer(i) => {
-                        self.lexer.consume_peeked();
-                        Ok(-i)
+                        let peeked = self.lexer.consume_peeked();
+                        Ok((-i, peeked.pos))
                     }
-                    _ => Err(Error::Bad("STEP needs an integer".to_owned())),
+                    _ => Err(Error::Bad(peeked.pos, "STEP needs an integer".to_owned())),
                 }
             }
-            _ => Err(Error::Bad("STEP needs an integer".to_owned())),
+            _ => Err(Error::Bad(peeked.pos, "STEP needs an integer".to_owned())),
         }
     }
 
     /// Parses a `FOR` statement.
     fn parse_for(&mut self) -> Result<Statement> {
-        let iterator = match self.lexer.read()?.token {
+        let token_span = self.lexer.read()?;
+        let iterator = match token_span.token {
             Token::Symbol(iterator) => match iterator.ref_type() {
                 // TODO(jmmv): Should we support doubles in for loops?
                 VarType::Auto | VarType::Integer => iterator,
                 _ => {
                     return Err(Error::Bad(
+                        token_span.pos,
                         "Iterator name in FOR statement must be an integer reference".to_owned(),
                     ))
                 }
             },
-            _ => return Err(Error::Bad("No iterator name in FOR statement".to_owned())),
+            _ => {
+                return Err(Error::Bad(
+                    token_span.pos,
+                    "No iterator name in FOR statement".to_owned(),
+                ))
+            }
         };
 
         self.expect_and_consume(Token::Equal, "No equal sign in FOR statement")?;
-        let start = match self.parse_expr(None)? {
-            Some(expr) => expr,
-            None => return Err(Error::Bad("No start expression in FOR statement".to_owned())),
-        };
+        let start = self.parse_required_expr("No start expression in FOR statement")?;
 
         self.expect_and_consume(Token::To, "No TO in FOR statement")?;
-        let end = match self.parse_expr(None)? {
-            Some(expr) => expr,
-            None => return Err(Error::Bad("No end expression in FOR statement".to_owned())),
-        };
+        let end = self.parse_required_expr("No end expression in FOR statement")?;
 
-        let step = self.parse_step()?;
+        let (step, step_pos) = self.parse_step()?;
         let end_condition = match step.cmp(&0) {
             Ordering::Greater => {
                 Expr::LessEqual(Box::from(Expr::Symbol(iterator.clone())), Box::from(end))
@@ -735,7 +802,7 @@ impl<'a> Parser<'a> {
                 Expr::GreaterEqual(Box::from(Expr::Symbol(iterator.clone())), Box::from(end))
             }
             Ordering::Equal => {
-                return Err(Error::Bad("Infinite FOR loop; STEP cannot be 0".to_owned()))
+                return Err(Error::Bad(step_pos, "Infinite FOR loop; STEP cannot be 0".to_owned()))
             }
         };
 
@@ -769,10 +836,7 @@ impl<'a> Parser<'a> {
 
     /// Parses a `WHILE` statement.
     fn parse_while(&mut self) -> Result<Statement> {
-        let expr = match self.parse_expr(None)? {
-            Some(expr) => expr,
-            None => return Err(Error::Bad("No expression in WHILE statement".to_owned())),
-        };
+        let expr = self.parse_required_expr("No expression in WHILE statement")?;
         self.expect_and_consume(Token::Eol, "Expecting newline after WHILE")?;
 
         let stmts = self.parse_until(&[Token::Wend])?;
@@ -813,7 +877,8 @@ impl<'a> Parser<'a> {
                 _ => break,
             }
         }
-        let res = match self.lexer.read()?.token {
+        let token_span = self.lexer.read()?;
+        let res = match token_span.token {
             Token::Eof => return Ok(None),
             Token::Eol => Ok(None),
             Token::Dim => Ok(Some(self.parse_dim()?)),
@@ -849,7 +914,7 @@ impl<'a> Parser<'a> {
                     self.lexer.consume_peeked();
                     Ok(Some(self.parse_assignment(vref)?))
                 } else {
-                    Ok(Some(self.parse_array_or_builtin_call(vref)?))
+                    Ok(Some(self.parse_array_or_builtin_call(vref, token_span.pos)?))
                 }
             }
             Token::While => {
@@ -859,15 +924,26 @@ impl<'a> Parser<'a> {
                 }
                 Ok(Some(result?))
             }
-            t => return Err(Error::Bad(format!("Unexpected token {:?} in statement", t))),
+            t => {
+                return Err(Error::Bad(
+                    token_span.pos,
+                    format!("Unexpected token {:?} in statement", t),
+                ))
+            }
         };
 
-        match self.lexer.peek()?.token {
+        let token_span = self.lexer.peek()?;
+        match token_span.token {
             Token::Eof => (),
             Token::Eol => {
                 self.lexer.consume_peeked();
             }
-            _ => return Err(Error::Bad("Expected newline".to_owned())),
+            _ => {
+                return Err(Error::Bad(
+                    token_span.pos,
+                    format!("Expected newline but found token {:?}", token_span.token),
+                ))
+            }
         };
 
         res
@@ -916,6 +992,30 @@ pub fn parse(input: &mut dyn io::Read) -> Result<Vec<Statement>> {
 mod tests {
     use super::*;
     use crate::ast::VarType;
+
+    #[test]
+    fn test_varref_to_unannotated_string() {
+        assert_eq!(
+            "print",
+            &vref_to_unannotated_string(
+                VarRef::new("print", VarType::Auto),
+                LineCol { line: 0, col: 0 }
+            )
+            .unwrap()
+        );
+
+        assert_eq!(
+            "7:6: Type annotation not allowed in print$",
+            format!(
+                "{}",
+                &vref_to_unannotated_string(
+                    VarRef::new("print", VarType::Text),
+                    LineCol { line: 7, col: 6 }
+                )
+                .unwrap_err()
+            )
+        );
+    }
 
     /// Runs the parser on the given `input` and expects the returned statements to match
     /// `exp_statements`.
@@ -999,15 +1099,15 @@ mod tests {
 
     #[test]
     fn test_array_assignment_errors() {
-        do_error_test("a(", "Unexpected token");
-        do_error_test("a()", "Expected expression");
-        do_error_test("a() =", "Missing expression in array assignment");
-        do_error_test("a() IF", "Expected expression");
-        do_error_test("a() = 3 4", "Unexpected value in expression");
-        do_error_test("a() = 3 THEN", "Unexpected token in array assignment");
-        do_error_test("a(,) = 3", "Missing expression");
-        do_error_test("a(2;3) = 3", "Unexpected token");
-        do_error_test("(2) = 3", "Unexpected token LeftParen in statement");
+        do_error_test("a(", "1:3: Unexpected token");
+        do_error_test("a()", "1:2: Expected expression");
+        do_error_test("a() =", "1:6: Missing expression in array assignment");
+        do_error_test("a() IF", "1:2: Expected expression");
+        do_error_test("a() = 3 4", "1:9: Unexpected value in expression");
+        do_error_test("a() = 3 THEN", "1:9: Unexpected token in array assignment");
+        do_error_test("a(,) = 3", "1:3: Missing expression");
+        do_error_test("a(2;3) = 3", "1:4: Unexpected token");
+        do_error_test("(2) = 3", "1:1: Unexpected token LeftParen in statement");
     }
 
     #[test]
@@ -1033,12 +1133,12 @@ mod tests {
 
     #[test]
     fn test_assignment_errors() {
-        do_error_test("a =", "Missing expression in assignment");
-        do_error_test("a = b 3", "Unexpected value in expression");
-        do_error_test("a = b, 3", "Unexpected token in assignment");
-        do_error_test("a = if 3", "Unexpected keyword in expression");
-        do_error_test("true = 1", "Unexpected token Boolean(true) in statement");
-        do_error_test("3 = a", "Unexpected token Integer(3) in statement");
+        do_error_test("a =", "1:4: Missing expression in assignment");
+        do_error_test("a = b 3", "1:7: Unexpected value in expression");
+        do_error_test("a = b, 3", "1:6: Unexpected token in assignment");
+        do_error_test("a = if 3", "1:5: Unexpected keyword in expression");
+        do_error_test("true = 1", "1:1: Unexpected token Boolean(true) in statement");
+        do_error_test("3 = a", "1:1: Unexpected token Integer(3) in statement");
     }
 
     #[test]
@@ -1109,15 +1209,15 @@ mod tests {
     }
 
     #[test]
-    fn test_builtin_calls_error() {
-        do_error_test("FOO 3 5\n", "Unexpected value in expression");
-        do_error_test("INPUT$ a\n", "Type annotation not allowed in INPUT$");
-        do_error_test("PRINT IF 1\n", "Unexpected keyword in expression");
-        do_error_test("PRINT 3, IF 1\n", "Unexpected keyword in expression");
-        do_error_test("PRINT 3 THEN\n", "Expected comma, semicolon, or end of statement");
-        do_error_test("PRINT ()\n", "Expected expression");
-        do_error_test("PRINT (2, 3)\n", "Expected expression");
-        do_error_test("PRINT (2, 3); 4\n", "Expected expression");
+    fn test_builtin_calls_errors() {
+        do_error_test("FOO 3 5\n", "1:7: Unexpected value in expression");
+        do_error_test("INPUT$ a\n", "1:1: Type annotation not allowed in INPUT$");
+        do_error_test("PRINT IF 1\n", "1:7: Unexpected keyword in expression");
+        do_error_test("PRINT 3, IF 1\n", "1:10: Unexpected keyword in expression");
+        do_error_test("PRINT 3 THEN\n", "1:9: Expected comma, semicolon, or end of statement");
+        do_error_test("PRINT ()\n", "1:7: Expected expression");
+        do_error_test("PRINT (2, 3)\n", "1:7: Expected expression");
+        do_error_test("PRINT (2, 3); 4\n", "1:7: Expected expression");
     }
 
     #[test]
@@ -1182,21 +1282,21 @@ mod tests {
 
     #[test]
     fn test_dim_errors() {
-        do_error_test("DIM", "Expected variable name after DIM");
-        do_error_test("DIM 3", "Expected variable name after DIM");
-        do_error_test("DIM AS", "Expected variable name after DIM");
-        do_error_test("DIM foo 3", "Expected AS or end of statement");
-        do_error_test("DIM a AS", "Invalid type name Eof in DIM AS statement");
-        do_error_test("DIM a$ AS", "Type annotation not allowed in a$");
-        do_error_test("DIM a AS 3", "Invalid type name Integer(3) in DIM AS statement");
-        do_error_test("DIM a AS INTEGER 3", "Unexpected token in DIM statement");
+        do_error_test("DIM", "1:4: Expected variable name after DIM");
+        do_error_test("DIM 3", "1:5: Expected variable name after DIM");
+        do_error_test("DIM AS", "1:5: Expected variable name after DIM");
+        do_error_test("DIM foo 3", "1:9: Expected AS or end of statement");
+        do_error_test("DIM a AS", "1:9: Invalid type name Eof in DIM AS statement");
+        do_error_test("DIM a$ AS", "1:5: Type annotation not allowed in a$");
+        do_error_test("DIM a AS 3", "1:10: Invalid type name Integer(3) in DIM AS statement");
+        do_error_test("DIM a AS INTEGER 3", "1:18: Unexpected token in DIM statement");
 
-        do_error_test("DIM a()", "Arrays require at least one dimension");
-        do_error_test("DIM a(,)", "Missing expression");
-        do_error_test("DIM a(, 3)", "Missing expression");
-        do_error_test("DIM a(3, )", "Missing expression");
-        do_error_test("DIM a(3, , 4)", "Missing expression");
-        do_error_test("DIM a(1) AS INTEGER 3", "Unexpected token in DIM statement");
+        do_error_test("DIM a()", "1:6: Arrays require at least one dimension");
+        do_error_test("DIM a(,)", "1:7: Missing expression");
+        do_error_test("DIM a(, 3)", "1:7: Missing expression");
+        do_error_test("DIM a(3, )", "1:10: Missing expression");
+        do_error_test("DIM a(3, , 4)", "1:10: Missing expression");
+        do_error_test("DIM a(1) AS INTEGER 3", "1:21: Unexpected token in DIM statement");
     }
 
     /// Wrapper around `do_ok_test` to parse an expression.  Given that expressions alone are not
@@ -1434,30 +1534,33 @@ mod tests {
 
     #[test]
     fn test_expr_errors() {
-        do_expr_error_test("+3", "Not enough values to apply operator");
-        do_expr_error_test("2 + * 3", "Not enough values to apply operator");
-        do_expr_error_test("(2(3))", "Unexpected value in expression");
-        do_expr_error_test("((3)2)", "Unexpected value in expression");
-        do_expr_error_test("2 3", "Unexpected value in expression");
+        // Note that all column numbers in the errors below are offset by 6 (due to "PRINT ") as
+        // that's what the do_expr_error_test function is prefixing to the given strings.
 
-        do_expr_error_test("(", "Missing expression");
-        do_expr_error_test(")", "Expected comma, semicolon, or end of statement");
-        do_expr_error_test("(()", "Missing expression");
-        do_expr_error_test("())", "Expected expression");
-        do_expr_error_test("3 + (2 + 1) + (4 - 5", "Unbalanced parenthesis");
+        do_expr_error_test("+3", "1:7: Not enough values to apply operator");
+        do_expr_error_test("2 + * 3", "1:9: Not enough values to apply operator");
+        do_expr_error_test("(2(3))", "1:9: Unexpected token in expression");
+        do_expr_error_test("((3)2)", "1:11: Unexpected value in expression");
+        do_expr_error_test("2 3", "1:9: Unexpected value in expression");
+
+        do_expr_error_test("(", "1:8: Missing expression");
+        do_expr_error_test(")", "1:7: Expected comma, semicolon, or end of statement");
+        do_expr_error_test("(()", "1:8: Missing expression");
+        do_expr_error_test("())", "1:7: Expected expression");
+        do_expr_error_test("3 + (2 + 1) + (4 - 5", "1:21: Unbalanced parenthesis");
         do_expr_error_test(
             "3 + 2 + 1) + (4 - 5)",
-            "Expected comma, semicolon, or end of statement",
+            "1:16: Expected comma, semicolon, or end of statement",
         );
 
-        do_expr_error_test("foo(,)", "Missing expression");
-        do_expr_error_test("foo(, 3)", "Missing expression");
-        do_expr_error_test("foo(3, )", "Missing expression");
-        do_expr_error_test("foo(3, , 4)", "Missing expression");
+        do_expr_error_test("foo(,)", "1:11: Missing expression");
+        do_expr_error_test("foo(, 3)", "1:11: Missing expression");
+        do_expr_error_test("foo(3, )", "1:14: Missing expression");
+        do_expr_error_test("foo(3, , 4)", "1:14: Missing expression");
         // TODO(jmmv): These are not the best error messages...
-        do_expr_error_test("(,)", "Missing expression");
-        do_expr_error_test("(3, 4)", "Expected expression");
-        do_expr_error_test("((), ())", "Missing expression");
+        do_expr_error_test("(,)", "1:8: Missing expression");
+        do_expr_error_test("(3, 4)", "1:7: Expected expression");
+        do_expr_error_test("((), ())", "1:8: Missing expression");
 
         // TODO(jmmv): This succeeds because `PRINT` is interned as a `Token::Symbol` so the
         // expression parser sees it as a variable reference... but this should probably fail.
@@ -1476,7 +1579,10 @@ mod tests {
             "AS", "BOOLEAN", "DIM", "DOUBLE", "ELSE", "ELSEIF", "END", "FOR", "IF", "INTEGER",
             "NEXT", "STRING", "WHILE",
         ] {
-            do_expr_error_test(&format!("2 + {} - 1", kw), "Unexpected keyword in expression");
+            do_expr_error_test(
+                &format!("2 + {} - 1", kw),
+                "1:11: Unexpected keyword in expression",
+            );
         }
     }
 
@@ -1618,36 +1724,47 @@ mod tests {
 
     #[test]
     fn test_if_errors() {
-        do_error_test("IF\n", "No expression in IF statement");
-        do_error_test("IF 3 + 1", "No THEN in IF statement");
-        do_error_test("IF 3 + 1\n", "No THEN in IF statement");
-        do_error_test("IF 3 + 1 PRINT foo\n", "Unexpected value in expression");
-        do_error_test("IF 3 + 1\nPRINT foo\n", "No THEN in IF statement");
-        do_error_test("IF 3 + 1 THEN", "Expecting newline after THEN");
+        do_error_test("IF\n", "1:3: No expression in IF statement");
+        do_error_test("IF 3 + 1", "1:9: No THEN in IF statement");
+        do_error_test("IF 3 + 1\n", "1:9: No THEN in IF statement");
+        do_error_test("IF 3 + 1 PRINT foo\n", "1:10: Unexpected value in expression");
+        do_error_test("IF 3 + 1\nPRINT foo\n", "1:9: No THEN in IF statement");
+        do_error_test("IF 3 + 1 THEN", "1:14: Expecting newline after THEN");
 
-        do_error_test("IF 1 THEN\n", "IF without END IF");
-        do_error_test("IF 1 THEN\nELSEIF 1 THEN\n", "IF without END IF");
-        do_error_test("IF 1 THEN\nELSE\n", "IF without END IF");
+        do_error_test("IF 1 THEN\n", "2:1: IF without END IF");
+        do_error_test("IF 1 THEN\nELSEIF 1 THEN\n", "3:1: IF without END IF");
+        do_error_test("IF 1 THEN\nELSE\n", "3:1: IF without END IF");
 
-        do_error_test("IF 1 THEN\nELSEIF\n", "No expression in ELSEIF statement");
-        do_error_test("IF 1 THEN\nELSEIF 3 + 1", "No THEN in ELSEIF statement");
-        do_error_test("IF 1 THEN\nELSEIF 3 + 1\n", "No THEN in ELSEIF statement");
-        do_error_test("IF 1 THEN\nELSEIF 3 + 1 PRINT foo\n", "Unexpected value in expression");
-        do_error_test("IF 1 THEN\nELSEIF 3 + 1\nPRINT foo\n", "No THEN in ELSEIF statement");
-        do_error_test("IF 1 THEN\nELSEIF 3 + 1 THEN", "Expecting newline after THEN");
+        do_error_test("IF 1 THEN\nELSEIF\n", "2:7: No expression in ELSEIF statement");
+        do_error_test("IF 1 THEN\nELSEIF 3 + 1", "2:13: No THEN in ELSEIF statement");
+        do_error_test("IF 1 THEN\nELSEIF 3 + 1\n", "2:13: No THEN in ELSEIF statement");
+        do_error_test(
+            "IF 1 THEN\nELSEIF 3 + 1 PRINT foo\n",
+            "2:14: Unexpected value in expression",
+        );
+        do_error_test("IF 1 THEN\nELSEIF 3 + 1\nPRINT foo\n", "2:13: No THEN in ELSEIF statement");
+        do_error_test("IF 1 THEN\nELSEIF 3 + 1 THEN", "2:18: Expecting newline after THEN");
 
-        do_error_test("IF 1 THEN\nELSE", "Expecting newline after ELSE");
-        do_error_test("IF 1 THEN\nELSE foo", "Expecting newline after ELSE");
+        do_error_test("IF 1 THEN\nELSE", "2:5: Expecting newline after ELSE");
+        do_error_test("IF 1 THEN\nELSE foo", "2:6: Expecting newline after ELSE");
 
-        do_error_test("IF 1 THEN\nEND", "IF without END IF");
-        do_error_test("IF 1 THEN\nEND\n", "IF without END IF");
-        do_error_test("IF 1 THEN\nEND IF foo", "Expected newline");
+        do_error_test("IF 1 THEN\nEND", "2:4: IF without END IF");
+        do_error_test("IF 1 THEN\nEND\n", "2:4: IF without END IF");
+        do_error_test(
+            "IF 1 THEN\nEND IF foo",
+            "2:8: Expected newline but found token Symbol(VarRef { name: \"foo\", ref_type: Auto })");
 
-        do_error_test("IF 1 THEN\nELSE\nELSEIF 2 THEN\nEND IF", "Unexpected ELSEIF after ELSE");
-        do_error_test("IF 1 THEN\nELSE\nELSE\nEND IF", "Duplicate ELSE after ELSE");
+        do_error_test(
+            "IF 1 THEN\nELSE\nELSEIF 2 THEN\nEND IF",
+            "3:1: Unexpected ELSEIF after ELSE",
+        );
+        do_error_test("IF 1 THEN\nELSE\nELSE\nEND IF", "3:1: Duplicate ELSE after ELSE");
 
-        do_error_test_no_reset("ELSEIF 1 THEN\nEND IF", "Unexpected token Elseif in statement");
-        do_error_test_no_reset("ELSE 1\nEND IF", "Unexpected token Else in statement");
+        do_error_test_no_reset(
+            "ELSEIF 1 THEN\nEND IF",
+            "1:1: Unexpected token Elseif in statement",
+        );
+        do_error_test_no_reset("ELSE 1\nEND IF", "1:1: Unexpected token Else in statement");
     }
 
     #[test]
@@ -1736,29 +1853,35 @@ mod tests {
 
     #[test]
     fn test_for_errors() {
-        do_error_test("FOR\n", "No iterator name in FOR statement");
-        do_error_test("FOR =\n", "No iterator name in FOR statement");
-        do_error_test("FOR a$\n", "Iterator name in FOR statement must be an integer reference");
-        do_error_test("FOR d#\n", "Iterator name in FOR statement must be an integer reference");
+        do_error_test("FOR\n", "1:4: No iterator name in FOR statement");
+        do_error_test("FOR =\n", "1:5: No iterator name in FOR statement");
+        do_error_test(
+            "FOR a$\n",
+            "1:5: Iterator name in FOR statement must be an integer reference",
+        );
+        do_error_test(
+            "FOR d#\n",
+            "1:5: Iterator name in FOR statement must be an integer reference",
+        );
 
-        do_error_test("FOR i 3\n", "No equal sign in FOR statement");
-        do_error_test("FOR i = TO\n", "No start expression in FOR statement");
-        do_error_test("FOR i = NEXT\n", "Unexpected keyword in expression");
+        do_error_test("FOR i 3\n", "1:7: No equal sign in FOR statement");
+        do_error_test("FOR i = TO\n", "1:9: No start expression in FOR statement");
+        do_error_test("FOR i = NEXT\n", "1:9: Unexpected keyword in expression");
 
-        do_error_test("FOR i = 3 STEP\n", "No TO in FOR statement");
-        do_error_test("FOR i = 3 TO STEP\n", "No end expression in FOR statement");
-        do_error_test("FOR i = 3 TO NEXT\n", "Unexpected keyword in expression");
+        do_error_test("FOR i = 3 STEP\n", "1:11: No TO in FOR statement");
+        do_error_test("FOR i = 3 TO STEP\n", "1:14: No end expression in FOR statement");
+        do_error_test("FOR i = 3 TO NEXT\n", "1:14: Unexpected keyword in expression");
 
-        do_error_test("FOR i = 3 TO 1 STEP a\n", "STEP needs an integer");
-        do_error_test("FOR i = 3 TO 1 STEP -a\n", "STEP needs an integer");
-        do_error_test("FOR i = 3 TO 1 STEP NEXT\n", "STEP needs an integer");
-        do_error_test("FOR i = 3 TO 1 STEP 0\n", "Infinite FOR loop; STEP cannot be 0");
+        do_error_test("FOR i = 3 TO 1 STEP a\n", "1:21: STEP needs an integer");
+        do_error_test("FOR i = 3 TO 1 STEP -a\n", "1:22: STEP needs an integer");
+        do_error_test("FOR i = 3 TO 1 STEP NEXT\n", "1:21: STEP needs an integer");
+        do_error_test("FOR i = 3 TO 1 STEP 0\n", "1:21: Infinite FOR loop; STEP cannot be 0");
 
-        do_error_test("FOR i = 3 TO 1", "Expecting newline after FOR");
-        do_error_test("FOR i = 1 TO 3 STEP 1", "Expecting newline after FOR");
-        do_error_test("FOR i = 3 TO 1 STEP -1", "Expecting newline after FOR");
+        do_error_test("FOR i = 3 TO 1", "1:15: Expecting newline after FOR");
+        do_error_test("FOR i = 1 TO 3 STEP 1", "1:22: Expecting newline after FOR");
+        do_error_test("FOR i = 3 TO 1 STEP -1", "1:23: Expecting newline after FOR");
 
-        do_error_test("FOR i = 0 TO 10\nPRINT i\n", "FOR without NEXT");
+        do_error_test("FOR i = 0 TO 10\nPRINT i\n", "3:1: FOR without NEXT");
     }
 
     #[test]
@@ -1768,12 +1891,12 @@ mod tests {
 
     #[test]
     fn test_goto_errors() {
-        do_error_test("GOTO\n", "Expected label name after GOTO");
-        do_error_test("GOTO 3\n", "Expected label name after GOTO");
-        do_error_test("GOTO foo\n", "Expected label name after GOTO");
-        do_error_test("GOTO \"foo\"\n", "Expected label name after GOTO");
-        do_error_test("GOTO @foo, @bar\n", "Expected newline");
-        do_error_test("GOTO @foo, 3\n", "Expected newline");
+        do_error_test("GOTO\n", "1:5: Expected label name after GOTO");
+        do_error_test("GOTO 3\n", "1:6: Expected label name after GOTO");
+        do_error_test("GOTO foo\n", "1:6: Expected label name after GOTO");
+        do_error_test("GOTO \"foo\"\n", "1:6: Expected label name after GOTO");
+        do_error_test("GOTO @foo, @bar\n", "1:10: Expected newline but found token Comma");
+        do_error_test("GOTO @foo, 3\n", "1:10: Expected newline but found token Comma");
     }
 
     #[test]
@@ -1783,8 +1906,10 @@ mod tests {
 
     #[test]
     fn test_label_errors() {
-        do_error_test("@foo PRINT", "Expected newline");
-        do_error_test("@foo+", "Expected newline");
+        do_error_test(
+            "@foo PRINT",
+            "1:6: Expected newline but found token Symbol(VarRef { name: \"PRINT\", ref_type: Auto })");
+        do_error_test("@foo+", "1:5: Expected newline but found token Plus");
     }
 
     #[test]
@@ -1842,13 +1967,13 @@ mod tests {
 
     #[test]
     fn test_while_errors() {
-        do_error_test("WHILE\n", "No expression in WHILE statement");
-        do_error_test("WHILE TRUE", "Expecting newline after WHILE");
-        do_error_test("WHILE TRUE\n", "WHILE without WEND");
-        do_error_test("WHILE TRUE\nEND", "Unexpected token End in statement");
-        do_error_test("WHILE TRUE\nEND\n", "Unexpected token End in statement");
-        do_error_test("WHILE TRUE\nEND WHILE\n", "Unexpected token End in statement");
+        do_error_test("WHILE\n", "1:6: No expression in WHILE statement");
+        do_error_test("WHILE TRUE", "1:11: Expecting newline after WHILE");
+        do_error_test("WHILE TRUE\n", "2:1: WHILE without WEND");
+        do_error_test("WHILE TRUE\nEND", "2:1: Unexpected token End in statement");
+        do_error_test("WHILE TRUE\nEND\n", "2:1: Unexpected token End in statement");
+        do_error_test("WHILE TRUE\nEND WHILE\n", "2:1: Unexpected token End in statement");
 
-        do_error_test("WHILE ,\nWEND", "No expression in WHILE statement");
+        do_error_test("WHILE ,\nWEND", "1:7: No expression in WHILE statement");
     }
 }
