@@ -15,7 +15,7 @@
 
 //! Execution engine for EndBASIC programs.
 
-use crate::ast::{Expr, Statement, Value, VarRef, VarType};
+use crate::ast::*;
 use crate::eval;
 use crate::parser;
 use crate::syms::{CallError, CallableMetadata, Command, Function, Symbol, Symbols};
@@ -183,50 +183,50 @@ impl Machine {
         }
     }
 
-    /// Assigns the value of `expr` to the variable `vref`.
-    async fn assign(&mut self, vref: &VarRef, expr: &Expr) -> Result<()> {
-        let value = expr.eval(&mut self.symbols).await?;
-        self.symbols.set_var(vref, value)?;
+    /// Handles a variable assignment.
+    async fn assign(&mut self, span: &AssignmentSpan) -> Result<()> {
+        let value = span.expr.eval(&mut self.symbols).await?;
+        self.symbols.set_var(&span.vref, value)?;
         Ok(())
     }
 
-    /// Assigns the value of `expr` to the array `vref` in the position `subscripts`.
-    async fn assign_array(
-        &mut self,
-        vref: &VarRef,
-        subscripts: &[Expr],
-        expr: &Expr,
-    ) -> Result<()> {
-        let mut ds = Vec::with_capacity(subscripts.len());
-        for ss_expr in subscripts {
+    /// Handles an array assignment.
+    async fn assign_array(&mut self, span: &ArrayAssignmentSpan) -> Result<()> {
+        let mut ds = Vec::with_capacity(span.subscripts.len());
+        for ss_expr in &span.subscripts {
             match ss_expr.eval(&mut self.symbols).await? {
                 Value::Integer(i) => ds.push(i),
                 v => return new_syntax_error(format!("Subscript {} must be an integer", v)),
             }
         }
 
-        let value = expr.eval(&mut self.symbols).await?;
+        let value = span.expr.eval(&mut self.symbols).await?;
 
-        match self.symbols.get_mut(vref)? {
+        match self.symbols.get_mut(&span.vref)? {
             Some(Symbol::Array(array)) => {
                 array.assign(&ds, value)?;
                 Ok(())
             }
-            Some(_) => new_syntax_error(format!("Cannot index non-array {}", vref.name())),
-            None => new_syntax_error(format!("Cannot index undefined array {}", vref.name())),
+            Some(_) => new_syntax_error(format!("Cannot index non-array {}", span.vref.name())),
+            None => new_syntax_error(format!("Cannot index undefined array {}", span.vref.name())),
         }
     }
 
-    /// Defines a new array `name` of type `subtype` with `dimensions`.  The array must not yet
-    /// exist, and the name may not overlap function or variable names.
-    pub async fn dim_array(
-        &mut self,
-        name: &str,
-        subtype: &VarType,
-        dimensions: &[Expr],
-    ) -> Result<()> {
-        let mut ds = Vec::with_capacity(dimensions.len());
-        for dim_expr in dimensions {
+    /// Handles a builtin call.
+    async fn call_builtin(&mut self, span: &BuiltinCallSpan) -> Result<()> {
+        let cmd = match self.symbols.get(&VarRef::new(&span.name, VarType::Auto))? {
+            Some(Symbol::Command(cmd)) => cmd.clone(),
+            Some(_) => return new_syntax_error(format!("{} is not a command", span.name)),
+            None => return new_syntax_error(format!("Unknown builtin {}", span.name)),
+        };
+        cmd.exec(&span.args, self).await.map_err(|e| Error::from_call_error(cmd.metadata(), e))
+    }
+
+    /// Handles an array definition.  The array must not yet exist, and the name may not overlap
+    /// function or variable names.
+    pub async fn dim_array(&mut self, span: &DimArraySpan) -> Result<()> {
+        let mut ds = Vec::with_capacity(span.dimensions.len());
+        for dim_expr in &span.dimensions {
             match dim_expr.eval(&mut self.symbols).await? {
                 Value::Integer(i) => {
                     if i <= 0 {
@@ -237,16 +237,47 @@ impl Machine {
                 _ => return new_syntax_error("Dimensions in DIM array must be integers"),
             }
         }
-        self.symbols.dim_array(name, *subtype, ds)?;
+        self.symbols.dim_array(&span.name, span.subtype, ds)?;
+        Ok(())
+    }
+
+    /// Executes a `FOR` loop.
+    async fn do_for(&mut self, span: &ForSpan) -> Result<()> {
+        debug_assert!(
+            span.iter.ref_type() == VarType::Auto || span.iter.ref_type() == VarType::Integer
+        );
+        let start_value = span.start.eval(&mut self.symbols).await?;
+        match start_value {
+            Value::Integer(_) => self.symbols.set_var(&span.iter, start_value)?,
+            _ => return new_syntax_error("FOR supports integer iteration only"),
+        }
+
+        loop {
+            match span.end.eval(&mut self.symbols).await? {
+                Value::Boolean(false) => {
+                    break;
+                }
+                Value::Boolean(true) => (),
+                _ => panic!("Built-in condition should have evaluated to a boolean"),
+            }
+
+            self.exec_multiple(&span.body).await?;
+            if self.pending_goto.is_some() {
+                break;
+            }
+
+            let next_value = span.next.eval(&mut self.symbols).await?;
+            self.symbols.set_var(&span.iter, next_value)?;
+        }
         Ok(())
     }
 
     /// Executes an `IF` statement.
-    async fn do_if(&mut self, branches: &[(Expr, Vec<Statement>)]) -> Result<()> {
-        for (expr, stmts) in branches {
-            match expr.eval(&mut self.symbols).await? {
+    async fn do_if(&mut self, span: &IfSpan) -> Result<()> {
+        for branch in &span.branches {
+            match branch.guard.eval(&mut self.symbols).await? {
                 Value::Boolean(true) => {
-                    self.exec_multiple(stmts).await?;
+                    self.exec_multiple(&branch.body).await?;
                     break;
                 }
                 Value::Boolean(false) => (),
@@ -256,49 +287,12 @@ impl Machine {
         Ok(())
     }
 
-    /// Executes a `FOR` loop.
-    async fn do_for(
-        &mut self,
-        iterator: &VarRef,
-        start: &Expr,
-        end: &Expr,
-        next: &Expr,
-        body: &[Statement],
-    ) -> Result<()> {
-        debug_assert!(
-            iterator.ref_type() == VarType::Auto || iterator.ref_type() == VarType::Integer
-        );
-        let start_value = start.eval(&mut self.symbols).await?;
-        match start_value {
-            Value::Integer(_) => self.symbols.set_var(iterator, start_value)?,
-            _ => return new_syntax_error("FOR supports integer iteration only"),
-        }
-
-        loop {
-            match end.eval(&mut self.symbols).await? {
-                Value::Boolean(false) => {
-                    break;
-                }
-                Value::Boolean(true) => (),
-                _ => panic!("Built-in condition should have evaluated to a boolean"),
-            }
-
-            self.exec_multiple(body).await?;
-            if self.pending_goto.is_some() {
-                break;
-            }
-
-            self.assign(iterator, next).await?;
-        }
-        Ok(())
-    }
-
     /// Executes a `WHILE` loop.
-    async fn do_while(&mut self, condition: &Expr, body: &[Statement]) -> Result<()> {
+    async fn do_while(&mut self, span: &WhileSpan) -> Result<()> {
         loop {
-            match condition.eval(&mut self.symbols).await? {
+            match span.expr.eval(&mut self.symbols).await? {
                 Value::Boolean(true) => {
-                    self.exec_multiple(body).await?;
+                    self.exec_multiple(&span.body).await?;
                     if self.pending_goto.is_some() {
                         break;
                     }
@@ -328,10 +322,10 @@ impl Machine {
                 i = 0;
                 seen_labels.clear();
                 while i < stmts.len() {
-                    if let Statement::Label(label) = &stmts[i] {
-                        let ok = seen_labels.insert(label.clone());
+                    if let Statement::Label(span) = &stmts[i] {
+                        let ok = seen_labels.insert(span.name.clone());
                         assert!(ok, "Duplicate label found but not caught during execution");
-                        if target == label {
+                        if target == &span.name {
                             i += 1;
                             self.pending_goto = None;
                             break;
@@ -345,44 +339,23 @@ impl Machine {
             }
 
             match &stmts[i] {
-                Statement::ArrayAssignment(vref, subscripts, value) => {
-                    self.assign_array(vref, subscripts, value).await?
-                }
-                Statement::Assignment(vref, expr) => self.assign(vref, expr).await?,
-                Statement::BuiltinCall(name, args) => {
-                    let cmd = match self.symbols.get(&VarRef::new(name, VarType::Auto))? {
-                        Some(Symbol::Command(cmd)) => cmd.clone(),
-                        Some(_) => return new_syntax_error(format!("{} is not a command", name)),
-                        None => return new_syntax_error(format!("Unknown builtin {}", name)),
-                    };
-                    cmd.exec(args, self)
-                        .await
-                        .map_err(|e| Error::from_call_error(cmd.metadata(), e))?;
-                }
-                Statement::Dim(varname, vartype) => self.symbols.dim(varname, *vartype)?,
-                Statement::DimArray(varname, dimensions, subtype) => {
-                    self.dim_array(varname, subtype, dimensions).await?
-                }
-                Statement::If(branches) => {
-                    self.do_if(branches).await?;
-                }
-                Statement::For(iterator, start, end, next, body) => {
-                    self.do_for(iterator, start, end, next, body).await?;
-                }
-                Statement::Goto(label) => {
-                    self.pending_goto = Some(label.clone());
-                }
-                Statement::Label(label) => {
-                    if !seen_labels.insert(label.clone()) {
+                Statement::ArrayAssignment(span) => self.assign_array(span).await?,
+                Statement::Assignment(span) => self.assign(span).await?,
+                Statement::BuiltinCall(span) => self.call_builtin(span).await?,
+                Statement::Dim(span) => self.symbols.dim(&span.name, span.vtype)?,
+                Statement::DimArray(span) => self.dim_array(span).await?,
+                Statement::For(span) => self.do_for(span).await?,
+                Statement::Goto(span) => self.pending_goto = Some(span.target.clone()),
+                Statement::If(span) => self.do_if(span).await?,
+                Statement::Label(span) => {
+                    if !seen_labels.insert(span.name.clone()) {
                         return new_syntax_error(format!(
                             "Duplicate label {} at this level",
-                            label
+                            span.name
                         ));
                     }
                 }
-                Statement::While(condition, body) => {
-                    self.do_while(condition, body).await?;
-                }
+                Statement::While(span) => self.do_while(span).await?,
             }
 
             i += 1;

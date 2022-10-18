@@ -15,7 +15,7 @@
 
 //! Statement and expression parser for the EndBASIC language.
 
-use crate::ast::{ArgSep, Expr, Statement, VarRef, VarType};
+use crate::ast::*;
 use crate::lexer::{Lexer, PeekableLexer, Token};
 use crate::reader::LineCol;
 use std::cmp::Ordering;
@@ -262,7 +262,7 @@ impl<'a> Parser<'a> {
             Token::Eof | Token::Eol => (),
             t => return Err(Error::Bad(next.pos, format!("Unexpected {} in assignment", t))),
         }
-        Ok(Statement::Assignment(vref, expr))
+        Ok(Statement::Assignment(AssignmentSpan { vref, expr }))
     }
 
     /// Parses an assignment to the array `varref` with `subscripts`, both of which have already
@@ -275,7 +275,7 @@ impl<'a> Parser<'a> {
             Token::Eof | Token::Eol => (),
             t => return Err(Error::Bad(next.pos, format!("Unexpected {} in array assignment", t))),
         }
-        Ok(Statement::ArrayAssignment(vref, subscripts, expr))
+        Ok(Statement::ArrayAssignment(ArrayAssignmentSpan { vref, subscripts, expr }))
     }
 
     /// Parses a builtin call (things of the form `INPUT a`).
@@ -316,7 +316,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        Ok(Statement::BuiltinCall(name, args))
+        Ok(Statement::BuiltinCall(BuiltinCallSpan { name, args }))
     }
 
     /// Starts processing either an array reference or a builtin call and disambiguates between the
@@ -401,19 +401,19 @@ impl<'a> Parser<'a> {
         match self.lexer.peek()?.token {
             Token::LeftParen => {
                 let peeked = self.lexer.consume_peeked();
-                let subscripts = self.parse_comma_separated_exprs()?;
-                if subscripts.is_empty() {
+                let dimensions = self.parse_comma_separated_exprs()?;
+                if dimensions.is_empty() {
                     return Err(Error::Bad(
                         peeked.pos,
                         "Arrays require at least one dimension".to_owned(),
                     ));
                 }
-                let vartype = self.parse_dim_as()?;
-                Ok(Statement::DimArray(name, subscripts, vartype))
+                let subtype = self.parse_dim_as()?;
+                Ok(Statement::DimArray(DimArraySpan { name, dimensions, subtype }))
             }
             _ => {
                 let vartype = self.parse_dim_as()?;
-                Ok(Statement::Dim(name, vartype))
+                Ok(Statement::Dim(DimSpan { name, vtype: vartype }))
             }
         }
     }
@@ -678,7 +678,7 @@ impl<'a> Parser<'a> {
                 return Err(Error::Bad(token_span.pos, "Expected label name after GOTO".to_owned()))
             }
         };
-        Ok(Statement::Goto(target))
+        Ok(Statement::Goto(GotoSpan { target }))
     }
 
     /// Parses an `IF` statement.
@@ -687,8 +687,10 @@ impl<'a> Parser<'a> {
         self.expect_and_consume(Token::Then, "No THEN in IF statement")?;
         self.expect_and_consume(Token::Eol, "Expecting newline after THEN")?;
 
-        let mut branches =
-            vec![(expr, self.parse_until(&[Token::Elseif, Token::Else, Token::End])?)];
+        let mut branches = vec![IfBranchSpan {
+            guard: expr,
+            body: self.parse_until(&[Token::Elseif, Token::Else, Token::End])?,
+        }];
         loop {
             let peeked = self.lexer.peek()?;
             match peeked.token {
@@ -698,7 +700,7 @@ impl<'a> Parser<'a> {
                     self.expect_and_consume(Token::Then, "No THEN in ELSEIF statement")?;
                     self.expect_and_consume(Token::Eol, "Expecting newline after THEN")?;
                     let stmts2 = self.parse_until(&[Token::Elseif, Token::Else, Token::End])?;
-                    branches.push((expr, stmts2));
+                    branches.push(IfBranchSpan { guard: expr, body: stmts2 });
                 }
                 _ => break,
             }
@@ -719,13 +721,13 @@ impl<'a> Parser<'a> {
                 }
                 _ => (),
             }
-            branches.push((Expr::Boolean(true), stmts2));
+            branches.push(IfBranchSpan { guard: Expr::Boolean(true), body: stmts2 });
         }
 
         self.expect_and_consume_with_pos(Token::End, if_pos, "IF without END IF")?;
         self.expect_and_consume_with_pos(Token::If, if_pos, "IF without END IF")?;
 
-        Ok(Statement::If(branches))
+        Ok(Statement::If(IfSpan { branches }))
     }
 
     /// Advances until the next statement after failing to parse an `IF` statement.
@@ -829,7 +831,13 @@ impl<'a> Parser<'a> {
         let stmts = self.parse_until(&[Token::Next])?;
         self.expect_and_consume_with_pos(Token::Next, for_pos, "FOR without NEXT")?;
 
-        Ok(Statement::For(iterator, start, end_condition, next_value, stmts))
+        Ok(Statement::For(ForSpan {
+            iter: iterator,
+            start,
+            end: end_condition,
+            next: next_value,
+            body: stmts,
+        }))
     }
 
     /// Advances until the next statement after failing to parse a `FOR` statement.
@@ -857,7 +865,7 @@ impl<'a> Parser<'a> {
         let stmts = self.parse_until(&[Token::Wend])?;
         self.expect_and_consume_with_pos(Token::Wend, while_pos, "WHILE without WEND")?;
 
-        Ok(Statement::While(expr, stmts))
+        Ok(Statement::While(WhileSpan { expr, body: stmts }))
     }
 
     /// Advances until the next statement after failing to parse a `WHILE` statement.
@@ -925,7 +933,7 @@ impl<'a> Parser<'a> {
                 // same line as other code.  This is intentional to keep the parser simpler.  And,
                 // in any case, because line separators can be a colon character, placing one after
                 // the label name to join it with a statement looks "natural".
-                Ok(Some(Statement::Label(name)))
+                Ok(Some(Statement::Label(LabelSpan { name })))
             }
             Token::Symbol(vref) => {
                 let peeked = self.lexer.peek()?;
@@ -1074,10 +1082,22 @@ mod tests {
         do_ok_test(
             "a=1\nb=2:c=3:' A comment: that follows\nd=4",
             &[
-                Statement::Assignment(VarRef::new("a", VarType::Auto), Expr::Integer(1)),
-                Statement::Assignment(VarRef::new("b", VarType::Auto), Expr::Integer(2)),
-                Statement::Assignment(VarRef::new("c", VarType::Auto), Expr::Integer(3)),
-                Statement::Assignment(VarRef::new("d", VarType::Auto), Expr::Integer(4)),
+                Statement::Assignment(AssignmentSpan {
+                    vref: VarRef::new("a", VarType::Auto),
+                    expr: Expr::Integer(1),
+                }),
+                Statement::Assignment(AssignmentSpan {
+                    vref: VarRef::new("b", VarType::Auto),
+                    expr: Expr::Integer(2),
+                }),
+                Statement::Assignment(AssignmentSpan {
+                    vref: VarRef::new("c", VarType::Auto),
+                    expr: Expr::Integer(3),
+                }),
+                Statement::Assignment(AssignmentSpan {
+                    vref: VarRef::new("d", VarType::Auto),
+                    expr: Expr::Integer(4),
+                }),
             ],
         );
     }
@@ -1087,27 +1107,27 @@ mod tests {
         do_ok_test(
             "a(1)=100\nfoo(2, 3)=\"text\"\nabc$ (5 + z, 6) = TRUE OR FALSE",
             &[
-                Statement::ArrayAssignment(
-                    VarRef::new("a", VarType::Auto),
-                    vec![Expr::Integer(1)],
-                    Expr::Integer(100),
-                ),
-                Statement::ArrayAssignment(
-                    VarRef::new("foo", VarType::Auto),
-                    vec![Expr::Integer(2), Expr::Integer(3)],
-                    Expr::Text("text".to_owned()),
-                ),
-                Statement::ArrayAssignment(
-                    VarRef::new("abc", VarType::Text),
-                    vec![
+                Statement::ArrayAssignment(ArrayAssignmentSpan {
+                    vref: VarRef::new("a", VarType::Auto),
+                    subscripts: vec![Expr::Integer(1)],
+                    expr: Expr::Integer(100),
+                }),
+                Statement::ArrayAssignment(ArrayAssignmentSpan {
+                    vref: VarRef::new("foo", VarType::Auto),
+                    subscripts: vec![Expr::Integer(2), Expr::Integer(3)],
+                    expr: Expr::Text("text".to_owned()),
+                }),
+                Statement::ArrayAssignment(ArrayAssignmentSpan {
+                    vref: VarRef::new("abc", VarType::Text),
+                    subscripts: vec![
                         Expr::Add(
                             Box::from(Expr::Integer(5)),
                             Box::from(Expr::Symbol(VarRef::new("z".to_owned(), VarType::Auto))),
                         ),
                         Expr::Integer(6),
                     ],
-                    Expr::Or(Box::from(Expr::Boolean(true)), Box::from(Expr::Boolean(false))),
-                ),
+                    expr: Expr::Or(Box::from(Expr::Boolean(true)), Box::from(Expr::Boolean(false))),
+                }),
             ],
         );
     }
@@ -1130,18 +1150,21 @@ mod tests {
         do_ok_test(
             "a=1\nfoo$ = \"bar\"\nb$ = 3 + z",
             &[
-                Statement::Assignment(VarRef::new("a", VarType::Auto), Expr::Integer(1)),
-                Statement::Assignment(
-                    VarRef::new("foo", VarType::Text),
-                    Expr::Text("bar".to_owned()),
-                ),
-                Statement::Assignment(
-                    VarRef::new("b", VarType::Text),
-                    Expr::Add(
+                Statement::Assignment(AssignmentSpan {
+                    vref: VarRef::new("a", VarType::Auto),
+                    expr: Expr::Integer(1),
+                }),
+                Statement::Assignment(AssignmentSpan {
+                    vref: VarRef::new("foo", VarType::Text),
+                    expr: Expr::Text("bar".to_owned()),
+                }),
+                Statement::Assignment(AssignmentSpan {
+                    vref: VarRef::new("b", VarType::Text),
+                    expr: Expr::Add(
                         Box::from(Expr::Integer(3)),
                         Box::from(Expr::Symbol(VarRef::new("z", VarType::Auto))),
                     ),
-                ),
+                }),
             ],
         );
     }
@@ -1161,19 +1184,19 @@ mod tests {
         do_ok_test(
             "PRINT a\nPRINT ; 3 , c$\nNOARGS",
             &[
-                Statement::BuiltinCall(
-                    "PRINT".to_owned(),
-                    vec![(Some(Expr::Symbol(VarRef::new("a", VarType::Auto))), ArgSep::End)],
-                ),
-                Statement::BuiltinCall(
-                    "PRINT".to_owned(),
-                    vec![
+                Statement::BuiltinCall(BuiltinCallSpan {
+                    name: "PRINT".to_owned(),
+                    args: vec![(Some(Expr::Symbol(VarRef::new("a", VarType::Auto))), ArgSep::End)],
+                }),
+                Statement::BuiltinCall(BuiltinCallSpan {
+                    name: "PRINT".to_owned(),
+                    args: vec![
                         (None, ArgSep::Short),
                         (Some(Expr::Integer(3)), ArgSep::Long),
                         (Some(Expr::Symbol(VarRef::new("c", VarType::Text))), ArgSep::End),
                     ],
-                ),
-                Statement::BuiltinCall("NOARGS".to_owned(), vec![]),
+                }),
+                Statement::BuiltinCall(BuiltinCallSpan { name: "NOARGS".to_owned(), args: vec![] }),
             ],
         );
     }
@@ -1184,42 +1207,45 @@ mod tests {
 
         do_ok_test(
             "PRINT(1)",
-            &[Statement::BuiltinCall("PRINT".to_owned(), vec![(Some(Integer(1)), ArgSep::End)])],
+            &[Statement::BuiltinCall(BuiltinCallSpan {
+                name: "PRINT".to_owned(),
+                args: vec![(Some(Integer(1)), ArgSep::End)],
+            })],
         );
 
         do_ok_test(
             "PRINT(1), 2",
-            &[Statement::BuiltinCall(
-                "PRINT".to_owned(),
-                vec![(Some(Integer(1)), ArgSep::Long), (Some(Integer(2)), ArgSep::End)],
-            )],
+            &[Statement::BuiltinCall(BuiltinCallSpan {
+                name: "PRINT".to_owned(),
+                args: vec![(Some(Integer(1)), ArgSep::Long), (Some(Integer(2)), ArgSep::End)],
+            })],
         );
 
         do_ok_test(
             "PRINT(1); 2",
-            &[Statement::BuiltinCall(
-                "PRINT".to_owned(),
-                vec![(Some(Integer(1)), ArgSep::Short), (Some(Integer(2)), ArgSep::End)],
-            )],
+            &[Statement::BuiltinCall(BuiltinCallSpan {
+                name: "PRINT".to_owned(),
+                args: vec![(Some(Integer(1)), ArgSep::Short), (Some(Integer(2)), ArgSep::End)],
+            })],
         );
 
         do_ok_test(
             "PRINT(1);",
-            &[Statement::BuiltinCall(
-                "PRINT".to_owned(),
-                vec![(Some(Integer(1)), ArgSep::Short), (None, ArgSep::End)],
-            )],
+            &[Statement::BuiltinCall(BuiltinCallSpan {
+                name: "PRINT".to_owned(),
+                args: vec![(Some(Integer(1)), ArgSep::Short), (None, ArgSep::End)],
+            })],
         );
 
         do_ok_test(
             "PRINT(1) + 2; 3",
-            &[Statement::BuiltinCall(
-                "PRINT".to_owned(),
-                vec![
+            &[Statement::BuiltinCall(BuiltinCallSpan {
+                name: "PRINT".to_owned(),
+                args: vec![
                     (Some(Add(Box::from(Integer(1)), Box::from(Integer(2)))), ArgSep::Short),
                     (Some(Integer(3)), ArgSep::End),
                 ],
-            )],
+            })],
         );
     }
 
@@ -1237,15 +1263,30 @@ mod tests {
 
     #[test]
     fn test_dim_default_type() {
-        do_ok_test("DIM i", &[Statement::Dim("i".to_owned(), VarType::Integer)]);
+        do_ok_test(
+            "DIM i",
+            &[Statement::Dim(DimSpan { name: "i".to_owned(), vtype: VarType::Integer })],
+        );
     }
 
     #[test]
     fn test_dim_as_simple_types() {
-        do_ok_test("DIM i AS BOOLEAN", &[Statement::Dim("i".to_owned(), VarType::Boolean)]);
-        do_ok_test("DIM i AS DOUBLE", &[Statement::Dim("i".to_owned(), VarType::Double)]);
-        do_ok_test("DIM i AS INTEGER", &[Statement::Dim("i".to_owned(), VarType::Integer)]);
-        do_ok_test("DIM i AS STRING", &[Statement::Dim("i".to_owned(), VarType::Text)]);
+        do_ok_test(
+            "DIM i AS BOOLEAN",
+            &[Statement::Dim(DimSpan { name: "i".to_owned(), vtype: VarType::Boolean })],
+        );
+        do_ok_test(
+            "DIM i AS DOUBLE",
+            &[Statement::Dim(DimSpan { name: "i".to_owned(), vtype: VarType::Double })],
+        );
+        do_ok_test(
+            "DIM i AS INTEGER",
+            &[Statement::Dim(DimSpan { name: "i".to_owned(), vtype: VarType::Integer })],
+        );
+        do_ok_test(
+            "DIM i AS STRING",
+            &[Statement::Dim(DimSpan { name: "i".to_owned(), vtype: VarType::Text })],
+        );
     }
 
     #[test]
@@ -1253,9 +1294,9 @@ mod tests {
         do_ok_test(
             "DIM i\nDIM j AS BOOLEAN\nDIM k",
             &[
-                Statement::Dim("i".to_owned(), VarType::Integer),
-                Statement::Dim("j".to_owned(), VarType::Boolean),
-                Statement::Dim("k".to_owned(), VarType::Integer),
+                Statement::Dim(DimSpan { name: "i".to_owned(), vtype: VarType::Integer }),
+                Statement::Dim(DimSpan { name: "j".to_owned(), vtype: VarType::Boolean }),
+                Statement::Dim(DimSpan { name: "k".to_owned(), vtype: VarType::Integer }),
             ],
         );
     }
@@ -1266,23 +1307,27 @@ mod tests {
 
         do_ok_test(
             "DIM i(10)",
-            &[Statement::DimArray("i".to_owned(), vec![Integer(10)], VarType::Integer)],
+            &[Statement::DimArray(DimArraySpan {
+                name: "i".to_owned(),
+                dimensions: vec![Integer(10)],
+                subtype: VarType::Integer,
+            })],
         );
 
         do_ok_test(
             "DIM foo(-5, 0) AS STRING",
-            &[Statement::DimArray(
-                "foo".to_owned(),
-                vec![Negate(Box::from(Integer(5))), Integer(0)],
-                VarType::Text,
-            )],
+            &[Statement::DimArray(DimArraySpan {
+                name: "foo".to_owned(),
+                dimensions: vec![Negate(Box::from(Integer(5))), Integer(0)],
+                subtype: VarType::Text,
+            })],
         );
 
         do_ok_test(
             "DIM foo(bar$() + 3, 8, -1)",
-            &[Statement::DimArray(
-                "foo".to_owned(),
-                vec![
+            &[Statement::DimArray(DimArraySpan {
+                name: "foo".to_owned(),
+                dimensions: vec![
                     Add(
                         Box::from(Call(VarRef::new("bar", VarType::Text), vec![])),
                         Box::from(Integer(3)),
@@ -1290,8 +1335,8 @@ mod tests {
                     Integer(8),
                     Negate(Box::from(Integer(1))),
                 ],
-                VarType::Integer,
-            )],
+                subtype: VarType::Integer,
+            })],
         );
     }
 
@@ -1320,10 +1365,10 @@ mod tests {
     fn do_expr_ok_test(input: &str, expr: Expr) {
         do_ok_test(
             &format!("PRINT {}, 1", input),
-            &[Statement::BuiltinCall(
-                "PRINT".to_owned(),
-                vec![(Some(expr), ArgSep::Long), (Some(Expr::Integer(1)), ArgSep::End)],
-            )],
+            &[Statement::BuiltinCall(BuiltinCallSpan {
+                name: "PRINT".to_owned(),
+                args: vec![(Some(expr), ArgSep::Long), (Some(Expr::Integer(1)), ArgSep::End)],
+            })],
         );
     }
 
@@ -1604,59 +1649,100 @@ mod tests {
 
     #[test]
     fn test_if_empty_branches() {
-        do_ok_test("IF 1 THEN\nEND IF", &[Statement::If(vec![(Expr::Integer(1), vec![])])]);
+        do_ok_test(
+            "IF 1 THEN\nEND IF",
+            &[Statement::If(IfSpan {
+                branches: vec![IfBranchSpan { guard: Expr::Integer(1), body: vec![] }],
+            })],
+        );
         do_ok_test(
             "IF 1 THEN\nREM Some comment to skip over\n\nEND IF",
-            &[Statement::If(vec![(Expr::Integer(1), vec![])])],
+            &[Statement::If(IfSpan {
+                branches: vec![IfBranchSpan { guard: Expr::Integer(1), body: vec![] }],
+            })],
         );
         do_ok_test(
             "IF 1 THEN\nELSEIF 2 THEN\nEND IF",
-            &[Statement::If(vec![(Expr::Integer(1), vec![]), (Expr::Integer(2), vec![])])],
+            &[Statement::If(IfSpan {
+                branches: vec![
+                    IfBranchSpan { guard: Expr::Integer(1), body: vec![] },
+                    IfBranchSpan { guard: Expr::Integer(2), body: vec![] },
+                ],
+            })],
         );
         do_ok_test(
             "IF 1 THEN\nELSEIF 2 THEN\nELSE\nEND IF",
-            &[Statement::If(vec![
-                (Expr::Integer(1), vec![]),
-                (Expr::Integer(2), vec![]),
-                (Expr::Boolean(true), vec![]),
-            ])],
+            &[Statement::If(IfSpan {
+                branches: vec![
+                    IfBranchSpan { guard: Expr::Integer(1), body: vec![] },
+                    IfBranchSpan { guard: Expr::Integer(2), body: vec![] },
+                    IfBranchSpan { guard: Expr::Boolean(true), body: vec![] },
+                ],
+            })],
         );
         do_ok_test(
             "IF 1 THEN\nELSE\nEND IF",
-            &[Statement::If(vec![(Expr::Integer(1), vec![]), (Expr::Boolean(true), vec![])])],
+            &[Statement::If(IfSpan {
+                branches: vec![
+                    IfBranchSpan { guard: Expr::Integer(1), body: vec![] },
+                    IfBranchSpan { guard: Expr::Boolean(true), body: vec![] },
+                ],
+            })],
         );
+    }
+
+    /// Helper to instantiate a trivial `Statement::BuiltinCall` that has no arguments.
+    fn make_bare_builtin_call(name: &str) -> Statement {
+        Statement::BuiltinCall(BuiltinCallSpan { name: name.to_owned(), args: vec![] })
     }
 
     #[test]
     fn test_if_with_one_statement_or_empty_lines() {
         do_ok_test(
             "IF 1 THEN\nPRINT\nEND IF",
-            &[Statement::If(vec![(
-                Expr::Integer(1),
-                vec![Statement::BuiltinCall("PRINT".to_owned(), vec![])],
-            )])],
+            &[Statement::If(IfSpan {
+                branches: vec![IfBranchSpan {
+                    guard: Expr::Integer(1),
+                    body: vec![make_bare_builtin_call("PRINT")],
+                }],
+            })],
         );
         do_ok_test(
             "IF 1 THEN\nREM foo\nELSEIF 2 THEN\nPRINT\nEND IF",
-            &[Statement::If(vec![
-                (Expr::Integer(1), vec![]),
-                (Expr::Integer(2), vec![Statement::BuiltinCall("PRINT".to_owned(), vec![])]),
-            ])],
+            &[Statement::If(IfSpan {
+                branches: vec![
+                    IfBranchSpan { guard: Expr::Integer(1), body: vec![] },
+                    IfBranchSpan {
+                        guard: Expr::Integer(2),
+                        body: vec![make_bare_builtin_call("PRINT")],
+                    },
+                ],
+            })],
         );
         do_ok_test(
             "IF 1 THEN\nELSEIF 2 THEN\nELSE\n\nPRINT\nEND IF",
-            &[Statement::If(vec![
-                (Expr::Integer(1), vec![]),
-                (Expr::Integer(2), vec![]),
-                (Expr::Boolean(true), vec![Statement::BuiltinCall("PRINT".to_owned(), vec![])]),
-            ])],
+            &[Statement::If(IfSpan {
+                branches: vec![
+                    IfBranchSpan { guard: Expr::Integer(1), body: vec![] },
+                    IfBranchSpan { guard: Expr::Integer(2), body: vec![] },
+                    IfBranchSpan {
+                        guard: Expr::Boolean(true),
+                        body: vec![make_bare_builtin_call("PRINT")],
+                    },
+                ],
+            })],
         );
         do_ok_test(
             "IF 1 THEN\n\n\nELSE\nPRINT\nEND IF",
-            &[Statement::If(vec![
-                (Expr::Integer(1), vec![]),
-                (Expr::Boolean(true), vec![Statement::BuiltinCall("PRINT".to_owned(), vec![])]),
-            ])],
+            &[Statement::If(IfSpan {
+                branches: vec![
+                    IfBranchSpan { guard: Expr::Integer(1), body: vec![] },
+                    IfBranchSpan {
+                        guard: Expr::Boolean(true),
+                        body: vec![make_bare_builtin_call("PRINT")],
+                    },
+                ],
+            })],
         );
     }
 
@@ -1679,36 +1765,26 @@ mod tests {
         "#;
         do_ok_test(
             code,
-            &[Statement::If(vec![
-                (
-                    Expr::Integer(1),
-                    vec![
-                        Statement::BuiltinCall("A".to_owned(), vec![]),
-                        Statement::BuiltinCall("B".to_owned(), vec![]),
-                    ],
-                ),
-                (
-                    Expr::Integer(2),
-                    vec![
-                        Statement::BuiltinCall("C".to_owned(), vec![]),
-                        Statement::BuiltinCall("D".to_owned(), vec![]),
-                    ],
-                ),
-                (
-                    Expr::Integer(3),
-                    vec![
-                        Statement::BuiltinCall("E".to_owned(), vec![]),
-                        Statement::BuiltinCall("F".to_owned(), vec![]),
-                    ],
-                ),
-                (
-                    Expr::Boolean(true),
-                    vec![
-                        Statement::BuiltinCall("G".to_owned(), vec![]),
-                        Statement::BuiltinCall("H".to_owned(), vec![]),
-                    ],
-                ),
-            ])],
+            &[Statement::If(IfSpan {
+                branches: vec![
+                    IfBranchSpan {
+                        guard: Expr::Integer(1),
+                        body: vec![make_bare_builtin_call("A"), make_bare_builtin_call("B")],
+                    },
+                    IfBranchSpan {
+                        guard: Expr::Integer(2),
+                        body: vec![make_bare_builtin_call("C"), make_bare_builtin_call("D")],
+                    },
+                    IfBranchSpan {
+                        guard: Expr::Integer(3),
+                        body: vec![make_bare_builtin_call("E"), make_bare_builtin_call("F")],
+                    },
+                    IfBranchSpan {
+                        guard: Expr::Boolean(true),
+                        body: vec![make_bare_builtin_call("G"), make_bare_builtin_call("H")],
+                    },
+                ],
+            })],
         );
     }
 
@@ -1725,16 +1801,23 @@ mod tests {
         "#;
         do_ok_test(
             code,
-            &[Statement::If(vec![
-                (Expr::Integer(1), vec![Statement::BuiltinCall("A".to_owned(), vec![])]),
-                (
-                    Expr::Integer(2),
-                    vec![Statement::If(vec![(
-                        Expr::Integer(3),
-                        vec![Statement::BuiltinCall("B".to_owned(), vec![])],
-                    )])],
-                ),
-            ])],
+            &[Statement::If(IfSpan {
+                branches: vec![
+                    IfBranchSpan {
+                        guard: Expr::Integer(1),
+                        body: vec![make_bare_builtin_call("A")],
+                    },
+                    IfBranchSpan {
+                        guard: Expr::Integer(2),
+                        body: vec![Statement::If(IfSpan {
+                            branches: vec![IfBranchSpan {
+                                guard: Expr::Integer(3),
+                                body: vec![make_bare_builtin_call("B")],
+                            }],
+                        })],
+                    },
+                ],
+            })],
         );
     }
 
@@ -1784,31 +1867,31 @@ mod tests {
         let auto_iter = VarRef::new("i", VarType::Auto);
         do_ok_test(
             "FOR i = 1 TO 10\nNEXT",
-            &[Statement::For(
-                auto_iter.clone(),
-                Expr::Integer(1),
-                Expr::LessEqual(
+            &[Statement::For(ForSpan {
+                iter: auto_iter.clone(),
+                start: Expr::Integer(1),
+                end: Expr::LessEqual(
                     Box::from(Expr::Symbol(auto_iter.clone())),
                     Box::from(Expr::Integer(10)),
                 ),
-                Expr::Add(Box::from(Expr::Symbol(auto_iter)), Box::from(Expr::Integer(1))),
-                vec![],
-            )],
+                next: Expr::Add(Box::from(Expr::Symbol(auto_iter)), Box::from(Expr::Integer(1))),
+                body: vec![],
+            })],
         );
 
         let typed_iter = VarRef::new("i", VarType::Integer);
         do_ok_test(
             "FOR i% = 1 TO 10\nREM Nothing to do\nNEXT",
-            &[Statement::For(
-                typed_iter.clone(),
-                Expr::Integer(1),
-                Expr::LessEqual(
+            &[Statement::For(ForSpan {
+                iter: typed_iter.clone(),
+                start: Expr::Integer(1),
+                end: Expr::LessEqual(
                     Box::from(Expr::Symbol(typed_iter.clone())),
                     Box::from(Expr::Integer(10)),
                 ),
-                Expr::Add(Box::from(Expr::Symbol(typed_iter)), Box::from(Expr::Integer(1))),
-                vec![],
-            )],
+                next: Expr::Add(Box::from(Expr::Symbol(typed_iter)), Box::from(Expr::Integer(1))),
+                body: vec![],
+            })],
         );
     }
 
@@ -1817,16 +1900,16 @@ mod tests {
         let iter = VarRef::new("i", VarType::Auto);
         do_ok_test(
             "FOR i = 0 TO 5\nA\nB\nNEXT",
-            &[Statement::For(
-                iter.clone(),
-                Expr::Integer(0),
-                Expr::LessEqual(Box::from(Expr::Symbol(iter.clone())), Box::from(Expr::Integer(5))),
-                Expr::Add(Box::from(Expr::Symbol(iter)), Box::from(Expr::Integer(1))),
-                vec![
-                    Statement::BuiltinCall("A".to_owned(), vec![]),
-                    Statement::BuiltinCall("B".to_owned(), vec![]),
-                ],
-            )],
+            &[Statement::For(ForSpan {
+                iter: iter.clone(),
+                start: Expr::Integer(0),
+                end: Expr::LessEqual(
+                    Box::from(Expr::Symbol(iter.clone())),
+                    Box::from(Expr::Integer(5)),
+                ),
+                next: Expr::Add(Box::from(Expr::Symbol(iter)), Box::from(Expr::Integer(1))),
+                body: vec![make_bare_builtin_call("A"), make_bare_builtin_call("B")],
+            })],
         );
     }
 
@@ -1835,13 +1918,16 @@ mod tests {
         let iter = VarRef::new("i", VarType::Auto);
         do_ok_test(
             "FOR i = 0 TO 5 STEP 2\nA\nNEXT",
-            &[Statement::For(
-                iter.clone(),
-                Expr::Integer(0),
-                Expr::LessEqual(Box::from(Expr::Symbol(iter.clone())), Box::from(Expr::Integer(5))),
-                Expr::Add(Box::from(Expr::Symbol(iter)), Box::from(Expr::Integer(2))),
-                vec![Statement::BuiltinCall("A".to_owned(), vec![])],
-            )],
+            &[Statement::For(ForSpan {
+                iter: iter.clone(),
+                start: Expr::Integer(0),
+                end: Expr::LessEqual(
+                    Box::from(Expr::Symbol(iter.clone())),
+                    Box::from(Expr::Integer(5)),
+                ),
+                next: Expr::Add(Box::from(Expr::Symbol(iter)), Box::from(Expr::Integer(2))),
+                body: vec![make_bare_builtin_call("A")],
+            })],
         );
     }
 
@@ -1850,16 +1936,16 @@ mod tests {
         let iter = VarRef::new("i", VarType::Auto);
         do_ok_test(
             "FOR i = 5 TO 0 STEP -1\nA\nNEXT",
-            &[Statement::For(
-                iter.clone(),
-                Expr::Integer(5),
-                Expr::GreaterEqual(
+            &[Statement::For(ForSpan {
+                iter: iter.clone(),
+                start: Expr::Integer(5),
+                end: Expr::GreaterEqual(
                     Box::from(Expr::Symbol(iter.clone())),
                     Box::from(Expr::Integer(0)),
                 ),
-                Expr::Add(Box::from(Expr::Symbol(iter)), Box::from(Expr::Integer(-1))),
-                vec![Statement::BuiltinCall("A".to_owned(), vec![])],
-            )],
+                next: Expr::Add(Box::from(Expr::Symbol(iter)), Box::from(Expr::Integer(-1))),
+                body: vec![make_bare_builtin_call("A")],
+            })],
         );
     }
 
@@ -1898,7 +1984,7 @@ mod tests {
 
     #[test]
     fn test_goto_ok() {
-        do_ok_test("GOTO @foo", &[Statement::Goto("foo".to_owned())]);
+        do_ok_test("GOTO @foo", &[Statement::Goto(GotoSpan { target: "foo".to_owned() })]);
     }
 
     #[test]
@@ -1913,7 +1999,7 @@ mod tests {
 
     #[test]
     fn test_label_ok() {
-        do_ok_test("@foo", &[Statement::Label("foo".to_owned())]);
+        do_ok_test("@foo", &[Statement::Label(LabelSpan { name: "foo".to_owned() })]);
     }
 
     #[test]
@@ -1926,25 +2012,25 @@ mod tests {
     fn test_while_empty() {
         do_ok_test(
             "WHILE 2 + 3\nWEND",
-            &[Statement::While(
-                Expr::Add(Box::from(Expr::Integer(2)), Box::from(Expr::Integer(3))),
-                vec![],
-            )],
+            &[Statement::While(WhileSpan {
+                expr: Expr::Add(Box::from(Expr::Integer(2)), Box::from(Expr::Integer(3))),
+                body: vec![],
+            })],
         );
-        do_ok_test("WHILE 5\n\nREM foo\n\nWEND\n", &[Statement::While(Expr::Integer(5), vec![])]);
+        do_ok_test(
+            "WHILE 5\n\nREM foo\n\nWEND\n",
+            &[Statement::While(WhileSpan { expr: Expr::Integer(5), body: vec![] })],
+        );
     }
 
     #[test]
     fn test_while_loops() {
         do_ok_test(
             "WHILE TRUE\nA\nB\nWEND",
-            &[Statement::While(
-                Expr::Boolean(true),
-                vec![
-                    Statement::BuiltinCall("A".to_owned(), vec![]),
-                    Statement::BuiltinCall("B".to_owned(), vec![]),
-                ],
-            )],
+            &[Statement::While(WhileSpan {
+                expr: Expr::Boolean(true),
+                body: vec![make_bare_builtin_call("A"), make_bare_builtin_call("B")],
+            })],
         );
     }
 
@@ -1961,17 +2047,17 @@ mod tests {
         "#;
         do_ok_test(
             code,
-            &[Statement::While(
-                Expr::Boolean(true),
-                vec![
-                    Statement::BuiltinCall("A".to_owned(), vec![]),
-                    Statement::While(
-                        Expr::Boolean(false),
-                        vec![Statement::BuiltinCall("B".to_owned(), vec![])],
-                    ),
-                    Statement::BuiltinCall("C".to_owned(), vec![]),
+            &[Statement::While(WhileSpan {
+                expr: Expr::Boolean(true),
+                body: vec![
+                    make_bare_builtin_call("A"),
+                    Statement::While(WhileSpan {
+                        expr: Expr::Boolean(false),
+                        body: vec![make_bare_builtin_call("B")],
+                    }),
+                    make_bare_builtin_call("C"),
                 ],
-            )],
+            })],
         );
     }
 
