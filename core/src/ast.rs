@@ -273,92 +273,182 @@ pub enum ArgSep {
     Long,
 }
 
-/// Represents a statement in the program along all data to execute it.
+/// Components of an array assignment statement.
 #[derive(Debug, PartialEq)]
-pub enum Statement {
-    /// Represents an assignment to an element of an array.
-    ///
-    /// The first parameter is the reference to the array to modify.  The second parameter is the
-    /// expressions to compute the subscripts to index the array.  the third parameter is the
-    /// expression to compute the value of the modified element.
-    ArrayAssignment(VarRef, Vec<Expr>, Expr),
+pub struct ArrayAssignmentSpan {
+    /// Reference to the array to modify.
+    pub vref: VarRef,
 
-    /// Represents a variable assignment.
-    ///
-    /// The first parameter is the reference to the variable to set.  The second parameter is the
-    /// expression to compute the value for the variable.
-    Assignment(VarRef, Expr),
+    /// Expressions to compute the subscripts to index the array.
+    pub subscripts: Vec<Expr>,
 
-    /// Represents a call to a builtin command such as `PRINT`.
-    ///
-    /// The first parameter is the name of the builtin.  The second parameter is the sequence of
-    /// arguments to pass to the builtin.
+    /// Expression to compute the value of the modified element.
+    pub expr: Expr,
+}
+
+/// Components of an assignment statement.
+#[derive(Debug, PartialEq)]
+pub struct AssignmentSpan {
+    /// Reference to the variable to set.
+    pub vref: VarRef,
+
+    /// Expression to compute the value of the modified variable.
+    pub expr: Expr,
+}
+
+/// Components of an builtin call statement.
+#[derive(Debug, PartialEq)]
+pub struct BuiltinCallSpan {
+    /// Name of the builtin to call.
+    pub name: String,
+
+    /// Sequence of arguments to pass to the builtin.
     ///
     /// Each argument is represented as an optional expression to evaluate and the separator that
     /// was to separate it from the *next* argument.  Because of this, the last argument always
     /// carries `ArgSep::End` as the separator.  The reason the expression is optional is to support
     /// calls of the form `PRINT a, , b`.
-    BuiltinCall(String, Vec<(Option<Expr>, ArgSep)>),
+    //
+    // TODO(jmmv): Each element within this vector should be represented as a `BuiltinCallArgSpan`
+    // but this has implications throughout the codebase because this is directly consumed by every
+    // builtin command implementation.
+    pub args: Vec<(Option<Expr>, ArgSep)>,
+}
 
-    /// Represents a variable declaration.
-    ///
-    /// The first parameter is the name of the variable to set; type annotations are not allowed.
-    /// The second parameter is the type of the variable to be defined.
-    ///
-    /// Given that a declaration causes the variable to be initialized to a default value, it is
-    /// tempting to model this statement as a simple assignment.  However, we must be able to
-    /// detect variable redeclarations at runtime, so we must treat this statement as a separate
-    /// type from assignments.
-    Dim(String, VarType),
+/// Components of a variable definition.
+///
+/// Given that a definition causes the variable to be initialized to a default value, it is
+/// tempting to model this statement as a simple assignment.  However, we must be able to
+/// detect variable redeclarations at runtime, so we must treat this statement as a separate
+/// type from assignments.
+#[derive(Debug, Eq, PartialEq)]
+pub struct DimSpan {
+    /// Name of the variable to be defined.  Type annotations are not allowed, hence why this is
+    /// not a `VarRef`.
+    pub name: String,
 
-    /// Represents an array declaration.
-    ///
-    /// The first parameter is the name of the array to set; type annotations are not allowed.
-    /// The second parameter is the expressions to compute the dimensions of the array.  The third
-    /// parameter is the type of the elements in the array.
-    DimArray(String, Vec<Expr>, VarType),
+    /// Type of the variable to be defined.
+    pub vtype: VarType,
+}
 
-    /// Represents an `IF` statement.
+/// Components of an array definition.
+#[derive(Debug, PartialEq)]
+pub struct DimArraySpan {
+    /// Name of the array to define.  Type annotations are not allowed, hence why this is not a
+    /// `VarRef`.
+    pub name: String,
+
+    /// Expressions to compute the dimensions of the array.
+    pub dimensions: Vec<Expr>,
+
+    /// Type of the array to be defined.
+    pub subtype: VarType,
+}
+
+/// Components of a branch of an `IF` statement.
+#[derive(Debug, PartialEq)]
+pub struct IfBranchSpan {
+    /// Expression that guards execution of this branch.
+    pub guard: Expr,
+
+    /// Statements within the branch.
+    pub body: Vec<Statement>,
+}
+
+/// Components of an `IF` statement.
+#[derive(Debug, PartialEq)]
+pub struct IfSpan {
+    /// Sequence of the branches in the conditional.
     ///
-    /// The first and only parameter is a sequence containing all the branches of the statement.
-    /// Each element is a pair of the conditional guard for the branch and the collection of
-    /// statements in that branch.  The final `ELSE` branch, if present, is also included here
-    /// and its guard clause is always a true expression.
-    If(Vec<(Expr, Vec<Statement>)>),
+    /// Representation of the conditional branches.  The final `ELSE` branch, if present, is also
+    /// included here and its guard clause is always a true expression.
+    pub branches: Vec<IfBranchSpan>,
+}
+
+/// Components of a `FOR` statement.
+///
+/// Note that we do not store the original end and step values, and instead use expressions to
+/// represent the loop condition and the computation of the next iterator value.  We do this
+/// for run-time efficiency.  The reason this is possible is because we force the step to be an
+/// integer literal at parse time and do not allow it to be an expression.
+#[derive(Debug, PartialEq)]
+pub struct ForSpan {
+    /// Iterator name, expressed as a variable reference that must be either automatic or an
+    /// integer.
+    pub iter: VarRef,
+
+    /// Expression to compute the iterator's initial value.
+    pub start: Expr,
+
+    /// Condition to test after each iteration.
+    pub end: Expr,
+
+    /// Expression to compute the iterator's next value.
+    pub next: Expr,
+
+    /// Statements within the loop's body.
+    pub body: Vec<Statement>,
+}
+
+/// Components of a `GOTO` statement.
+#[derive(Debug, Eq, PartialEq)]
+pub struct GotoSpan {
+    /// Name of the label to jump to.
+    pub target: String,
+}
+
+/// Components of a label "statement".
+///
+/// In principle, labels should be just a property of a statement but, for simplicity in the
+/// current model, it's easiest to represent them as their own statement.
+#[derive(Debug, Eq, PartialEq)]
+pub struct LabelSpan {
+    /// Name of the label being defined.
+    pub name: String,
+}
+
+/// Components of a `WHILE` statement.
+#[derive(Debug, PartialEq)]
+pub struct WhileSpan {
+    /// Expression to compute whether to execute the loop's body or not.
+    pub expr: Expr,
+
+    /// Statements within the loop's body.
+    pub body: Vec<Statement>,
+}
+
+/// Represents a statement in the program along all data to execute it.
+#[derive(Debug, PartialEq)]
+pub enum Statement {
+    /// Represents an assignment to an element of an array.
+    ArrayAssignment(ArrayAssignmentSpan),
+
+    /// Represents a variable assignment.
+    Assignment(AssignmentSpan),
+
+    /// Represents a call to a builtin command such as `PRINT`.
+    BuiltinCall(BuiltinCallSpan),
+
+    /// Represents a variable definition.
+    Dim(DimSpan),
+
+    /// Represents an array definition.
+    DimArray(DimArraySpan),
 
     /// Represents a `FOR` statement.
-    ///
-    /// The first parameter is the loop's iterator name, which is expressed a variable reference
-    /// that must be either automatic or an integer.  The second parameter is the expression to
-    /// compute the iterator's initial value, which must evaluate to an integer.  The third
-    /// parameter is the condition to test after each body execution, which if false terminates the
-    /// loop.  The fourth parameter is the expression to compute the iterator's next value.  The
-    /// fifth parameter is the collection of statements within the loop.
-    ///
-    /// Note that we do not store the original end and step values, and instead use expressions to
-    /// represent the loop condition and the computation of the next iterator value.  We do this
-    /// for run-time efficiency.  The reason this is possible is because we force the step to be an
-    /// integer literal at parse time and do not allow it to be an expression.
-    For(VarRef, Expr, Expr, Expr, Vec<Statement>),
+    For(ForSpan),
 
     /// Represents a `GOTO` statement.
-    ///
-    /// The first parameter is the name of the label to jump to.
-    Goto(String),
+    Goto(GotoSpan),
+
+    /// Represents an `IF` statement.
+    If(IfSpan),
 
     /// Represents a label "statement".
-    ///
-    /// The first parameter is the name of the label being defined.
-    ///
-    /// In principle, labels should be just a property of a statement but, for simplicity in the
-    /// current model, it's easiest to represent them as their own statement.
-    Label(String),
+    Label(LabelSpan),
 
     /// Represents a `WHILE` statement.
-    ///
-    /// The first parameter is the loop's condition.  The second parameter is the collection of
-    /// statements within the loop.
-    While(Expr, Vec<Statement>),
+    While(WhileSpan),
 }
 
 #[cfg(test)]
