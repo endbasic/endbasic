@@ -296,17 +296,17 @@ impl<'a> Parser<'a> {
             match peeked.token {
                 Token::Eof | Token::Eol => {
                     if expr.is_some() || !args.is_empty() {
-                        args.push((expr, ArgSep::End));
+                        args.push(ArgSpan { expr, sep: ArgSep::End });
                     }
                     break;
                 }
                 Token::Semicolon => {
                     self.lexer.consume_peeked();
-                    args.push((expr, ArgSep::Short));
+                    args.push(ArgSpan { expr, sep: ArgSep::Short });
                 }
                 Token::Comma => {
                     self.lexer.consume_peeked();
-                    args.push((expr, ArgSep::Long));
+                    args.push(ArgSpan { expr, sep: ArgSep::Long });
                 }
                 _ => {
                     return Err(Error::Bad(
@@ -1186,14 +1186,20 @@ mod tests {
             &[
                 Statement::BuiltinCall(BuiltinCallSpan {
                     name: "PRINT".to_owned(),
-                    args: vec![(Some(Expr::Symbol(VarRef::new("a", VarType::Auto))), ArgSep::End)],
+                    args: vec![ArgSpan {
+                        expr: Some(Expr::Symbol(VarRef::new("a", VarType::Auto))),
+                        sep: ArgSep::End,
+                    }],
                 }),
                 Statement::BuiltinCall(BuiltinCallSpan {
                     name: "PRINT".to_owned(),
                     args: vec![
-                        (None, ArgSep::Short),
-                        (Some(Expr::Integer(3)), ArgSep::Long),
-                        (Some(Expr::Symbol(VarRef::new("c", VarType::Text))), ArgSep::End),
+                        ArgSpan { expr: None, sep: ArgSep::Short },
+                        ArgSpan { expr: Some(Expr::Integer(3)), sep: ArgSep::Long },
+                        ArgSpan {
+                            expr: Some(Expr::Symbol(VarRef::new("c", VarType::Text))),
+                            sep: ArgSep::End,
+                        },
                     ],
                 }),
                 Statement::BuiltinCall(BuiltinCallSpan { name: "NOARGS".to_owned(), args: vec![] }),
@@ -1209,7 +1215,7 @@ mod tests {
             "PRINT(1)",
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
-                args: vec![(Some(Integer(1)), ArgSep::End)],
+                args: vec![ArgSpan { expr: Some(Integer(1)), sep: ArgSep::End }],
             })],
         );
 
@@ -1217,7 +1223,10 @@ mod tests {
             "PRINT(1), 2",
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
-                args: vec![(Some(Integer(1)), ArgSep::Long), (Some(Integer(2)), ArgSep::End)],
+                args: vec![
+                    ArgSpan { expr: Some(Integer(1)), sep: ArgSep::Long },
+                    ArgSpan { expr: Some(Integer(2)), sep: ArgSep::End },
+                ],
             })],
         );
 
@@ -1225,7 +1234,10 @@ mod tests {
             "PRINT(1); 2",
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
-                args: vec![(Some(Integer(1)), ArgSep::Short), (Some(Integer(2)), ArgSep::End)],
+                args: vec![
+                    ArgSpan { expr: Some(Integer(1)), sep: ArgSep::Short },
+                    ArgSpan { expr: Some(Integer(2)), sep: ArgSep::End },
+                ],
             })],
         );
 
@@ -1233,7 +1245,10 @@ mod tests {
             "PRINT(1);",
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
-                args: vec![(Some(Integer(1)), ArgSep::Short), (None, ArgSep::End)],
+                args: vec![
+                    ArgSpan { expr: Some(Integer(1)), sep: ArgSep::Short },
+                    ArgSpan { expr: None, sep: ArgSep::End },
+                ],
             })],
         );
 
@@ -1242,8 +1257,11 @@ mod tests {
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
                 args: vec![
-                    (Some(Add(Box::from(Integer(1)), Box::from(Integer(2)))), ArgSep::Short),
-                    (Some(Integer(3)), ArgSep::End),
+                    ArgSpan {
+                        expr: Some(Add(Box::from(Integer(1)), Box::from(Integer(2)))),
+                        sep: ArgSep::Short,
+                    },
+                    ArgSpan { expr: Some(Integer(3)), sep: ArgSep::End },
                 ],
             })],
         );
@@ -1367,7 +1385,10 @@ mod tests {
             &format!("PRINT {}, 1", input),
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
-                args: vec![(Some(expr), ArgSep::Long), (Some(Expr::Integer(1)), ArgSep::End)],
+                args: vec![
+                    ArgSpan { expr: Some(expr), sep: ArgSep::Long },
+                    ArgSpan { expr: Some(Expr::Integer(1)), sep: ArgSep::End },
+                ],
             })],
         );
     }

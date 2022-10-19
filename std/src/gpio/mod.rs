@@ -16,7 +16,7 @@
 //! GPIO access functions and commands for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -186,7 +186,8 @@ impl Command for GpioSetupCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         match span.args.as_slice() {
-            [(Some(pin), ArgSep::Long), (Some(mode), ArgSep::End)] => {
+            [ArgSpan { expr: Some(pin), sep: ArgSep::Long }, ArgSpan { expr: Some(mode), sep: ArgSep::End }] =>
+            {
                 let pin = Pin::parse(pin, machine).await?;
                 let mode = PinMode::parse(mode, machine).await?;
 
@@ -241,7 +242,7 @@ impl Command for GpioClearCommand {
                 };
                 Ok(())
             }
-            [(Some(pin), ArgSep::End)] => {
+            [ArgSpan { expr: Some(pin), sep: ArgSep::End }] => {
                 let pin = Pin::parse(pin, machine).await?;
                 match MockPins::try_new(machine.get_mut_symbols()) {
                     Some(mut pins) => pins.clear(pin)?,
@@ -330,7 +331,8 @@ impl Command for GpioWriteCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         match span.args.as_slice() {
-            [(Some(pin), ArgSep::Long), (Some(value), ArgSep::End)] => {
+            [ArgSpan { expr: Some(pin), sep: ArgSep::Long }, ArgSpan { expr: Some(value), sep: ArgSep::End }] =>
+            {
                 let pin = Pin::parse(pin, machine).await?;
                 let value = parse_value(value, machine).await?;
                 match MockPins::try_new(machine.get_mut_symbols()) {

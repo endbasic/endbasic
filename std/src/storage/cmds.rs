@@ -18,7 +18,7 @@
 use crate::console::Console;
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Value, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
@@ -130,7 +130,7 @@ impl Command for CdCommand {
         if span.args.len() != 1 {
             return Err(CallError::ArgumentError("CD takes one argument".to_owned()));
         }
-        let arg0 = span.args[0].0.as_ref().expect("Single argument must be present");
+        let arg0 = span.args[0].expr.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_mut_symbols()).await? {
             Value::Text(t) => {
                 self.storage.borrow_mut().cd(&t)?;
@@ -177,18 +177,20 @@ impl Command for DirCommand {
                 show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), "").await?;
                 Ok(())
             }
-            [(Some(path), ArgSep::End)] => match path.eval(machine.get_mut_symbols()).await? {
-                Value::Text(path) => {
-                    show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), &path)
-                        .await?;
-                    Ok(())
+            [ArgSpan { expr: Some(path), sep: ArgSep::End }] => {
+                match path.eval(machine.get_mut_symbols()).await? {
+                    Value::Text(path) => {
+                        show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), &path)
+                            .await?;
+                        Ok(())
+                    }
+                    _ => {
+                        return Err(CallError::ArgumentError(
+                            "DIR requires a string as the path".to_owned(),
+                        ))
+                    }
                 }
-                _ => {
-                    return Err(CallError::ArgumentError(
-                        "DIR requires a string as the path".to_owned(),
-                    ))
-                }
-            },
+            }
             _ => Err(CallError::ArgumentError("DIR takes zero or one argument".to_owned())),
         }
     }
@@ -233,7 +235,8 @@ impl Command for MountCommand {
                 show_drives(&*self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
                 Ok(())
             }
-            [(Some(name), ArgSep::Long), (Some(target), ArgSep::End)] => {
+            [ArgSpan { expr: Some(name), sep: ArgSep::Long }, ArgSpan { expr: Some(target), sep: ArgSep::End }] =>
+            {
                 let name = match name.eval(machine.get_mut_symbols()).await? {
                     Value::Text(t) => t,
                     _ => {
@@ -345,7 +348,7 @@ impl Command for UnmountCommand {
         if span.args.len() != 1 {
             return Err(CallError::ArgumentError("UNMOUNT takes one argument".to_owned()));
         }
-        let arg0 = span.args[0].0.as_ref().expect("Single argument must be present");
+        let arg0 = span.args[0].expr.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_mut_symbols()).await? {
             Value::Text(t) => {
                 self.storage.borrow_mut().unmount(&t)?;

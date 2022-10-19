@@ -115,7 +115,7 @@ impl Command for SwitchLightCommand {
         if span.args.len() != 1 {
             return Err(CallError::SyntaxError);
         }
-        let expr = span.args[0].0.as_ref().expect("A single argument can never be empty");
+        let expr = span.args[0].expr.as_ref().expect("A single argument can never be empty");
         match expr.eval(machine.get_mut_symbols()).await? {
             Value::Integer(i) => {
                 let lights = &mut *self.lights.borrow_mut();

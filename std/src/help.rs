@@ -18,7 +18,7 @@
 use crate::console::{refill_and_print, Console};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Expr, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Symbols,
@@ -378,12 +378,12 @@ impl Command for HelpCommand {
             [] => {
                 self.summary(&topics)?;
             }
-            [(Some(Expr::Symbol(vref)), ArgSep::End)] => {
+            [ArgSpan { expr: Some(Expr::Symbol(vref)), sep: ArgSep::End }] => {
                 let topic = topics.find(&format!("{}", vref))?;
                 let mut console = self.console.borrow_mut();
                 topic.describe(&mut *console)?;
             }
-            [(Some(Expr::Text(name)), ArgSep::End)] => {
+            [ArgSpan { expr: Some(Expr::Text(name)), sep: ArgSep::End }] => {
                 let topic = topics.find(name)?;
                 let mut console = self.console.borrow_mut();
                 topic.describe(&mut *console)?;

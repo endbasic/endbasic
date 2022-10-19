@@ -17,7 +17,7 @@
 
 use crate::console::{Console, PixelsXY};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
@@ -87,7 +87,7 @@ impl Command for GfxLineCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let (x1y1, x2y2) = match span.args.as_slice() {
-            [(Some(x1), ArgSep::Long), (Some(y1), ArgSep::Long), (Some(x2), ArgSep::Long), (Some(y2), ArgSep::End)] => {
+            [ArgSpan { expr: Some(x1), sep: ArgSep::Long }, ArgSpan { expr: Some(y1), sep: ArgSep::Long }, ArgSpan { expr: Some(x2), sep: ArgSep::Long }, ArgSpan { expr: Some(y2), sep: ArgSep::End }] => {
                 (
                     parse_coordinates(x1, y1, machine).await?,
                     parse_coordinates(x2, y2, machine).await?,
@@ -136,7 +136,7 @@ impl Command for GfxPixelCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let xy = match span.args.as_slice() {
-            [(Some(x), ArgSep::Long), (Some(y), ArgSep::End)] => {
+            [ArgSpan { expr: Some(x), sep: ArgSep::Long }, ArgSpan { expr: Some(y), sep: ArgSep::End }] => {
                 parse_coordinates(x, y, machine).await?
             }
             _ => {
@@ -183,7 +183,7 @@ impl Command for GfxRectCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let (x1y1, x2y2) = match span.args.as_slice() {
-            [(Some(x1), ArgSep::Long), (Some(y1), ArgSep::Long), (Some(x2), ArgSep::Long), (Some(y2), ArgSep::End)] => {
+            [ArgSpan { expr: Some(x1), sep: ArgSep::Long }, ArgSpan { expr: Some(y1), sep: ArgSep::Long }, ArgSpan { expr: Some(x2), sep: ArgSep::Long }, ArgSpan { expr: Some(y2), sep: ArgSep::End }] => {
                 (
                     parse_coordinates(x1, y1, machine).await?,
                     parse_coordinates(x2, y2, machine).await?,
@@ -232,7 +232,7 @@ impl Command for GfxRectfCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let (x1y1, x2y2) = match span.args.as_slice() {
-            [(Some(x1), ArgSep::Long), (Some(y1), ArgSep::Long), (Some(x2), ArgSep::Long), (Some(y2), ArgSep::End)] => {
+            [ArgSpan { expr: Some(x1), sep: ArgSep::Long }, ArgSpan { expr: Some(y1), sep: ArgSep::Long }, ArgSpan { expr: Some(x2), sep: ArgSep::Long }, ArgSpan { expr: Some(y2), sep: ArgSep::End }] => {
                 (
                     parse_coordinates(x1, y1, machine).await?,
                     parse_coordinates(x2, y2, machine).await?,
@@ -297,21 +297,23 @@ impl Command for GfxSyncCommand {
                 self.console.borrow_mut().sync_now()?;
                 Ok(())
             }
-            [(Some(b), ArgSep::End)] => match b.eval(machine.get_mut_symbols()).await? {
-                Value::Boolean(b) => {
-                    let mut console = self.console.borrow_mut();
-                    if b {
-                        console.show_cursor()?;
-                    } else {
-                        console.hide_cursor()?;
+            [ArgSpan { expr: Some(b), sep: ArgSep::End }] => {
+                match b.eval(machine.get_mut_symbols()).await? {
+                    Value::Boolean(b) => {
+                        let mut console = self.console.borrow_mut();
+                        if b {
+                            console.show_cursor()?;
+                        } else {
+                            console.hide_cursor()?;
+                        }
+                        console.set_sync(b)?;
+                        Ok(())
                     }
-                    console.set_sync(b)?;
-                    Ok(())
+                    _ => Err(CallError::ArgumentError(
+                        "Argument to GFX_SYNC must be a boolean".to_owned(),
+                    )),
                 }
-                _ => Err(CallError::ArgumentError(
-                    "Argument to GFX_SYNC must be a boolean".to_owned(),
-                )),
-            },
+            }
             _ => Err(CallError::ArgumentError("GFX_SYNC takes zero or one argument".to_owned())),
         }
     }
