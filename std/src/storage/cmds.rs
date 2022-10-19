@@ -18,7 +18,7 @@
 use crate::console::Console;
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
@@ -126,11 +126,11 @@ impl Command for CdCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if args.len() != 1 {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if span.args.len() != 1 {
             return Err(CallError::ArgumentError("CD takes one argument".to_owned()));
         }
-        let arg0 = args[0].0.as_ref().expect("Single argument must be present");
+        let arg0 = span.args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_mut_symbols()).await? {
             Value::Text(t) => {
                 self.storage.borrow_mut().cd(&t)?;
@@ -171,8 +171,8 @@ impl Command for DirCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        match span.args.as_slice() {
             [] => {
                 show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), "").await?;
                 Ok(())
@@ -227,8 +227,8 @@ impl Command for MountCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        match span.args.as_slice() {
             [] => {
                 show_drives(&*self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
                 Ok(())
@@ -290,8 +290,8 @@ impl Command for PwdCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
-        if !args.is_empty() {
+    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
+        if !span.args.is_empty() {
             return Err(CallError::ArgumentError("PWD takes zero arguments".to_owned()));
         }
 
@@ -341,11 +341,11 @@ impl Command for UnmountCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if args.len() != 1 {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if span.args.len() != 1 {
             return Err(CallError::ArgumentError("UNMOUNT takes one argument".to_owned()));
         }
-        let arg0 = args[0].0.as_ref().expect("Single argument must be present");
+        let arg0 = span.args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_mut_symbols()).await? {
             Value::Text(t) => {
                 self.storage.borrow_mut().unmount(&t)?;

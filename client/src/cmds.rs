@@ -17,7 +17,7 @@
 
 use crate::*;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
@@ -106,12 +106,12 @@ impl Command for LoginCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         if self.service.borrow().is_logged_in() {
             return Err(CallError::InternalError("Cannot LOGIN again before LOGOUT".to_owned()));
         }
 
-        let (username, password) = match args {
+        let (username, password) = match span.args.as_slice() {
             [(Some(username), ArgSep::End)] => {
                 match username.eval(machine.get_mut_symbols()).await? {
                     Value::Text(username) => {
@@ -194,8 +194,8 @@ impl Command for LogoutCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
-        if !args.is_empty() {
+    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
+        if !span.args.is_empty() {
             return Err(CallError::ArgumentError("LOGOUT takes no arguments".to_owned()));
         }
 
@@ -336,14 +336,14 @@ impl Command for ShareCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if args.is_empty() {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if span.args.is_empty() {
             return Err(CallError::ArgumentError(
                 "SHARE requires one or more arguments".to_owned(),
             ));
         }
 
-        let filename = match &args[0].0 {
+        let filename = match &span.args[0].0 {
             Some(e) => match e.eval(machine.get_mut_symbols()).await? {
                 Value::Text(t) => t,
                 _ => {
@@ -358,9 +358,9 @@ impl Command for ShareCommand {
                 ))
             }
         };
-        if args[0].1 == ArgSep::End {
+        if span.args[0].1 == ArgSep::End {
             return self.show_acls(&filename).await;
-        } else if args[0].1 != ArgSep::Long {
+        } else if span.args[0].1 != ArgSep::Long {
             return Err(CallError::ArgumentError(
                 "SHARE requires arguments to be separated by commas".to_owned(),
             ));
@@ -368,7 +368,7 @@ impl Command for ShareCommand {
 
         let mut add = FileAcls::default();
         let mut remove = FileAcls::default();
-        for arg in &args[1..] {
+        for arg in &span.args[1..] {
             match arg {
                 (None, _) => {
                     return Err(CallError::ArgumentError(
@@ -518,11 +518,7 @@ impl Command for SignupCommand {
         &self.metadata
     }
 
-    async fn exec(
-        &self,
-        _args: &[(Option<Expr>, ArgSep)],
-        _machine: &mut Machine,
-    ) -> CommandResult {
+    async fn exec(&self, _span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
         let console = &mut *self.console.borrow_mut();
         console.print("")?;
         refill_and_print(

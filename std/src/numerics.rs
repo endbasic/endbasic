@@ -16,7 +16,7 @@
 //! Numerical functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Expr, Value, VarType};
 use endbasic_core::eval::eval_all;
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
@@ -215,8 +215,8 @@ impl Command for DegCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
-        if !args.is_empty() {
+    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
+        if !span.args.is_empty() {
             return Err(CallError::ArgumentError("DEG takes no arguments".to_owned()));
         }
         *self.angle_mode.borrow_mut() = AngleMode::Degrees;
@@ -520,8 +520,8 @@ impl Command for RadCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
-        if !args.is_empty() {
+    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
+        if !span.args.is_empty() {
             return Err(CallError::ArgumentError("RAD takes no arguments".to_owned()));
         }
         *self.angle_mode.borrow_mut() = AngleMode::Radians;
@@ -559,8 +559,8 @@ impl Command for RandomizeCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        match span.args.as_slice() {
             [] => {
                 *self.prng.borrow_mut() = Prng::new_from_entryopy();
             }

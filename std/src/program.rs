@@ -18,7 +18,7 @@
 use crate::console::{read_line, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
@@ -180,11 +180,11 @@ impl Command for DelCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if args.len() != 1 {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if span.args.len() != 1 {
             return Err(CallError::ArgumentError("DEL requires a filename".to_owned()));
         }
-        let arg0 = args[0].0.as_ref().expect("Single argument must be present");
+        let arg0 = span.args[0].0.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_mut_symbols()).await? {
             Value::Text(t) => {
                 let name = add_extension(t)?;
@@ -228,8 +228,8 @@ impl Command for EditCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
-        if !args.is_empty() {
+    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
+        if !span.args.is_empty() {
             return Err(CallError::ArgumentError("EDIT takes no arguments".to_owned()));
         }
 
@@ -268,8 +268,8 @@ impl Command for ListCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
-        if !args.is_empty() {
+    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
+        if !span.args.is_empty() {
             return Err(CallError::ArgumentError("LIST takes no arguments".to_owned()));
         }
         let program = self.program.borrow().text();
@@ -334,11 +334,11 @@ impl Command for LoadCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if args.len() != 1 {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if span.args.len() != 1 {
             return Err(CallError::ArgumentError("LOAD requires a filename".to_owned()));
         }
-        let arg0 = args[0].0.as_ref().expect("Single argument must be present");
+        let arg0 = span.args[0].0.as_ref().expect("Single argument must be present");
         let name = match arg0.eval(machine.get_mut_symbols()).await? {
             Value::Text(t) => add_extension(t)?,
             _ => {
@@ -399,8 +399,8 @@ impl Command for NewCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if !args.is_empty() {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if !span.args.is_empty() {
             return Err(CallError::ArgumentError("NEW takes no arguments".to_owned()));
         }
 
@@ -450,8 +450,8 @@ impl Command for RunCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if !args.is_empty() {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if !span.args.is_empty() {
             return Err(CallError::ArgumentError("RUN takes no arguments".to_owned()));
         }
         machine.clear();
@@ -514,8 +514,8 @@ impl Command for SaveCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        let name = match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        let name = match span.args.as_slice() {
             [] => match self.program.borrow().name() {
                 Some(name) => name.to_owned(),
                 None => {

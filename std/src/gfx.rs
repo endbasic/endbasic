@@ -17,7 +17,7 @@
 
 use crate::console::{Console, PixelsXY};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Expr, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
@@ -85,8 +85,8 @@ impl Command for GfxLineCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        let (x1y1, x2y2) = match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        let (x1y1, x2y2) = match span.args.as_slice() {
             [(Some(x1), ArgSep::Long), (Some(y1), ArgSep::Long), (Some(x2), ArgSep::Long), (Some(y2), ArgSep::End)] => {
                 (
                     parse_coordinates(x1, y1, machine).await?,
@@ -134,8 +134,8 @@ impl Command for GfxPixelCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        let xy = match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        let xy = match span.args.as_slice() {
             [(Some(x), ArgSep::Long), (Some(y), ArgSep::End)] => {
                 parse_coordinates(x, y, machine).await?
             }
@@ -181,8 +181,8 @@ impl Command for GfxRectCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        let (x1y1, x2y2) = match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        let (x1y1, x2y2) = match span.args.as_slice() {
             [(Some(x1), ArgSep::Long), (Some(y1), ArgSep::Long), (Some(x2), ArgSep::Long), (Some(y2), ArgSep::End)] => {
                 (
                     parse_coordinates(x1, y1, machine).await?,
@@ -230,8 +230,8 @@ impl Command for GfxRectfCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        let (x1y1, x2y2) = match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        let (x1y1, x2y2) = match span.args.as_slice() {
             [(Some(x1), ArgSep::Long), (Some(y1), ArgSep::Long), (Some(x2), ArgSep::Long), (Some(y2), ArgSep::End)] => {
                 (
                     parse_coordinates(x1, y1, machine).await?,
@@ -291,8 +291,8 @@ impl Command for GfxSyncCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        match span.args.as_slice() {
             [] => {
                 self.console.borrow_mut().sync_now()?;
                 Ok(())

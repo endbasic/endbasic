@@ -219,7 +219,7 @@ impl Machine {
             Some(_) => return new_syntax_error(format!("{} is not a command", span.name)),
             None => return new_syntax_error(format!("Unknown builtin {}", span.name)),
         };
-        cmd.exec(&span.args, self).await.map_err(|e| Error::from_call_error(cmd.metadata(), e))
+        cmd.exec(span, self).await.map_err(|e| Error::from_call_error(cmd.metadata(), e))
     }
 
     /// Handles an array definition.  The array must not yet exist, and the name may not overlap
