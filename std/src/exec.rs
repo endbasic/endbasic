@@ -16,7 +16,7 @@
 //! Commands that manipulate the machine's state or the program's execution.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
@@ -60,8 +60,8 @@ impl Command for ClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if !args.is_empty() {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if !span.args.is_empty() {
             return Err(CallError::ArgumentError("CLEAR takes no arguments".to_owned()));
         }
         machine.clear();
@@ -96,8 +96,8 @@ impl Command for ExitCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        let arg = match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        let arg = match span.args.as_slice() {
             [] => 0,
             [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols()).await? {
                 Value::Integer(n) => {
@@ -170,8 +170,8 @@ impl Command for SleepCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        let duration = match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        let duration = match span.args.as_slice() {
             [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols()).await? {
                 Value::Integer(n) => {
                     if n < 0 {

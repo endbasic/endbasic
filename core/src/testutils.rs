@@ -15,7 +15,7 @@
 
 //! Test utilities.
 
-use crate::ast::{ArgSep, Expr, Value, VarType};
+use crate::ast::{ArgSep, BuiltinCallSpan, Expr, Value, VarType};
 use crate::eval::{eval_all, Error};
 use crate::exec::Machine;
 use crate::syms::{
@@ -89,8 +89,8 @@ impl Command for ExitCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        let arg = match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        let arg = match span.args.as_slice() {
             [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols()).await? {
                 Value::Integer(n) => {
                     assert!((0..128).contains(&n), "Exit code out of range");
@@ -130,14 +130,14 @@ impl Command for InCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if args.len() != 1 {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if span.args.len() != 1 {
             return Err(CallError::SyntaxError);
         }
-        if args[0].1 != ArgSep::End {
+        if span.args[0].1 != ArgSep::End {
             return Err(CallError::SyntaxError);
         }
-        let vref = match &args[0].0 {
+        let vref = match &span.args[0].0 {
             Some(Expr::Symbol(vref)) => vref,
             _ => return Err(CallError::SyntaxError),
         };
@@ -175,9 +175,9 @@ impl Command for OutCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let mut text = String::new();
-        for arg in args.iter() {
+        for arg in span.args.iter() {
             if let Some(expr) = arg.0.as_ref() {
                 text += &expr.eval(machine.get_mut_symbols()).await?.to_output();
             }

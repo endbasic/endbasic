@@ -15,7 +15,7 @@
 
 //! Symbol definitions and symbols table representation.
 
-use crate::ast::{ArgSep, Expr, Value, VarRef, VarType};
+use crate::ast::{BuiltinCallSpan, Expr, Value, VarRef, VarType};
 use crate::eval::{Error, Result};
 use crate::exec::Machine;
 use async_trait::async_trait;
@@ -553,15 +553,11 @@ pub trait Command {
 
     /// Executes the command.
     ///
-    /// `args` contains the arguments as provided in the invocation of the command.  Each entry in
-    /// this array contains an optional expression (to support things like `PRINT a, , b`) and the
-    /// separator that was used between that argument and the next.  The last entry in `args` always
-    /// has `ArgSep::End` as the separator.
-    ///
+    /// `span` contains the details about the command invocation.
     /// `machine` provides mutable access to the current state of the machine invoking the command.
     ///
     /// Commands cannot return any value except for errors.
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult;
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult;
 }
 
 #[cfg(test)]

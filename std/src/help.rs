@@ -18,7 +18,7 @@
 use crate::console::{refill_and_print, Console};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Expr, VarType};
+use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Expr, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Symbols,
@@ -371,10 +371,10 @@ impl Command for HelpCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let topics = Topics::new(machine.get_symbols());
 
-        match args {
+        match span.args.as_slice() {
             [] => {
                 self.summary(&topics)?;
             }
@@ -447,11 +447,7 @@ Second paragraph of the extended description.",
             &self.metadata
         }
 
-        async fn exec(
-            &self,
-            _args: &[(Option<Expr>, ArgSep)],
-            _machine: &mut Machine,
-        ) -> CommandResult {
+        async fn exec(&self, _span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
             Ok(())
         }
     }

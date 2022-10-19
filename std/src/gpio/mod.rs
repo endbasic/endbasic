@@ -16,7 +16,7 @@
 //! GPIO access functions and commands for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Expr, Value, VarType};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -184,8 +184,8 @@ impl Command for GpioSetupCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        match span.args.as_slice() {
             [(Some(pin), ArgSep::Long), (Some(mode), ArgSep::End)] => {
                 let pin = Pin::parse(pin, machine).await?;
                 let mode = PinMode::parse(mode, machine).await?;
@@ -232,8 +232,8 @@ impl Command for GpioClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        match span.args.as_slice() {
             [] => {
                 match MockPins::try_new(machine.get_mut_symbols()) {
                     Some(mut pins) => pins.clear_all()?,
@@ -328,8 +328,8 @@ impl Command for GpioWriteCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        match span.args.as_slice() {
             [(Some(pin), ArgSep::Long), (Some(value), ArgSep::End)] => {
                 let pin = Pin::parse(pin, machine).await?;
                 let value = parse_value(value, machine).await?;

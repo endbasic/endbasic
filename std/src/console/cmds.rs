@@ -18,7 +18,7 @@
 use crate::console::readline::read_line;
 use crate::console::{CharsXY, ClearType, Console, ConsoleClearable, Key};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Expr, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -73,8 +73,8 @@ impl Command for ClsCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], _machine: &mut Machine) -> CommandResult {
-        if !args.is_empty() {
+    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
+        if !span.args.is_empty() {
             return Err(CallError::ArgumentError("CLS takes no arguments".to_owned()));
         }
         self.console.borrow_mut().clear(ClearType::All)?;
@@ -113,8 +113,8 @@ impl Command for ColorCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        let (fg_expr, bg_expr): (&Option<Expr>, &Option<Expr>) = match args {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        let (fg_expr, bg_expr): (&Option<Expr>, &Option<Expr>) = match span.args.as_slice() {
             [] => (&None, &None),
             [(fg, ArgSep::End)] => (fg, &None),
             [(fg, ArgSep::Long), (bg, ArgSep::End)] => (fg, bg),
@@ -252,12 +252,12 @@ impl Command for InputCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if args.len() != 2 {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if span.args.len() != 2 {
             return Err(CallError::ArgumentError("INPUT requires two arguments".to_owned()));
         }
 
-        let mut prompt = match &args[0].0 {
+        let mut prompt = match &span.args[0].0 {
             Some(e) => match e.eval(machine.get_mut_symbols()).await? {
                 Value::Text(t) => t,
                 _ => {
@@ -268,11 +268,11 @@ impl Command for InputCommand {
             },
             None => "".to_owned(),
         };
-        if let ArgSep::Short = args[0].1 {
+        if let ArgSep::Short = span.args[0].1 {
             prompt += "? ";
         }
 
-        let vref = match &args[1].0 {
+        let vref = match &span.args[1].0 {
             Some(Expr::Symbol(vref)) => vref,
             _ => {
                 return Err(CallError::ArgumentError(
@@ -331,11 +331,11 @@ impl Command for LocateCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
-        if args.len() != 2 {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if span.args.len() != 2 {
             return Err(CallError::ArgumentError("LOCATE takes two arguments".to_owned()));
         }
-        let (column_arg, row_arg) = (&args[0], &args[1]);
+        let (column_arg, row_arg) = (&span.args[0], &span.args[1]);
         if column_arg.1 != ArgSep::Long {
             return Err(CallError::ArgumentError(
                 "LOCATE expects arguments separated by a comma".to_owned(),
@@ -403,9 +403,9 @@ impl Command for PrintCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[(Option<Expr>, ArgSep)], machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let mut text = String::new();
-        for arg in args.iter() {
+        for arg in span.args.iter() {
             if let Some(expr) = arg.0.as_ref() {
                 text += &expr.eval(machine.get_mut_symbols()).await?.to_output();
             }
