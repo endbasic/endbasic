@@ -18,7 +18,7 @@
 use crate::console::{read_line, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Value, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
@@ -184,7 +184,7 @@ impl Command for DelCommand {
         if span.args.len() != 1 {
             return Err(CallError::ArgumentError("DEL requires a filename".to_owned()));
         }
-        let arg0 = span.args[0].0.as_ref().expect("Single argument must be present");
+        let arg0 = span.args[0].expr.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_mut_symbols()).await? {
             Value::Text(t) => {
                 let name = add_extension(t)?;
@@ -338,7 +338,7 @@ impl Command for LoadCommand {
         if span.args.len() != 1 {
             return Err(CallError::ArgumentError("LOAD requires a filename".to_owned()));
         }
-        let arg0 = span.args[0].0.as_ref().expect("Single argument must be present");
+        let arg0 = span.args[0].expr.as_ref().expect("Single argument must be present");
         let name = match arg0.eval(machine.get_mut_symbols()).await? {
             Value::Text(t) => add_extension(t)?,
             _ => {
@@ -524,14 +524,16 @@ impl Command for SaveCommand {
                     ))
                 }
             },
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols()).await? {
-                Value::Text(t) => add_extension(t)?,
-                _ => {
-                    return Err(CallError::ArgumentError(
-                        "SAVE requires a string as the filename".to_owned(),
-                    ))
+            [ArgSpan { expr: Some(expr), sep: ArgSep::End }] => {
+                match expr.eval(machine.get_mut_symbols()).await? {
+                    Value::Text(t) => add_extension(t)?,
+                    _ => {
+                        return Err(CallError::ArgumentError(
+                            "SAVE requires a string as the filename".to_owned(),
+                        ))
+                    }
                 }
-            },
+            }
             _ => return Err(CallError::ArgumentError("SAVE requires a filename".to_owned())),
         };
 

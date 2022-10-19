@@ -17,7 +17,7 @@
 
 use crate::*;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Value, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
@@ -112,7 +112,7 @@ impl Command for LoginCommand {
         }
 
         let (username, password) = match span.args.as_slice() {
-            [(Some(username), ArgSep::End)] => {
+            [ArgSpan { expr: Some(username), sep: ArgSep::End }] => {
                 match username.eval(machine.get_mut_symbols()).await? {
                     Value::Text(username) => {
                         let password =
@@ -126,7 +126,8 @@ impl Command for LoginCommand {
                     }
                 }
             }
-            [(Some(username), ArgSep::Long), (Some(password), ArgSep::End)] => {
+            [ArgSpan { expr: Some(username), sep: ArgSep::Long }, ArgSpan { expr: Some(password), sep: ArgSep::End }] =>
+            {
                 let username = match username.eval(machine.get_mut_symbols()).await? {
                     Value::Text(username) => username,
                     _ => {
@@ -343,7 +344,7 @@ impl Command for ShareCommand {
             ));
         }
 
-        let filename = match &span.args[0].0 {
+        let filename = match &span.args[0].expr {
             Some(e) => match e.eval(machine.get_mut_symbols()).await? {
                 Value::Text(t) => t,
                 _ => {
@@ -358,9 +359,9 @@ impl Command for ShareCommand {
                 ))
             }
         };
-        if span.args[0].1 == ArgSep::End {
+        if span.args[0].sep == ArgSep::End {
             return self.show_acls(&filename).await;
-        } else if span.args[0].1 != ArgSep::Long {
+        } else if span.args[0].sep != ArgSep::Long {
             return Err(CallError::ArgumentError(
                 "SHARE requires arguments to be separated by commas".to_owned(),
             ));
@@ -370,24 +371,26 @@ impl Command for ShareCommand {
         let mut remove = FileAcls::default();
         for arg in &span.args[1..] {
             match arg {
-                (None, _) => {
+                ArgSpan { expr: None, sep: _ } => {
                     return Err(CallError::ArgumentError(
                         "SHARE arguments cannot be empty".to_owned(),
                     ))
                 }
-                (_, ArgSep::Short) => {
+                ArgSpan { expr: _, sep: ArgSep::Short } => {
                     return Err(CallError::ArgumentError(
                         "SHARE requires arguments to be separated by commas".to_owned(),
                     ))
                 }
-                (Some(acl), _) => match acl.eval(machine.get_mut_symbols()).await? {
-                    Value::Text(t) => ShareCommand::parse_acl(t, &mut add, &mut remove)?,
-                    _ => {
-                        return Err(CallError::ArgumentError(
-                            "SHARE requires strings as ACL changes".to_owned(),
-                        ))
+                ArgSpan { expr: Some(acl), sep: _ } => {
+                    match acl.eval(machine.get_mut_symbols()).await? {
+                        Value::Text(t) => ShareCommand::parse_acl(t, &mut add, &mut remove)?,
+                        _ => {
+                            return Err(CallError::ArgumentError(
+                                "SHARE requires strings as ACL changes".to_owned(),
+                            ))
+                        }
                     }
-                },
+                }
             }
         }
         self.storage.borrow_mut().update_acls(&filename, &add, &remove).await?;

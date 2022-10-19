@@ -16,7 +16,7 @@
 //! Commands that manipulate the machine's state or the program's execution.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Value, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
@@ -99,26 +99,28 @@ impl Command for ExitCommand {
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let arg = match span.args.as_slice() {
             [] => 0,
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols()).await? {
-                Value::Integer(n) => {
-                    if n < 0 {
+            [ArgSpan { expr: Some(expr), sep: ArgSep::End }] => {
+                match expr.eval(machine.get_mut_symbols()).await? {
+                    Value::Integer(n) => {
+                        if n < 0 {
+                            return Err(CallError::ArgumentError(
+                                "Exit code must be a positive integer".to_owned(),
+                            ));
+                        }
+                        if n >= 128 {
+                            return Err(CallError::ArgumentError(
+                                "Exit code cannot be larger than 127".to_owned(),
+                            ));
+                        }
+                        n as u8
+                    }
+                    _ => {
                         return Err(CallError::ArgumentError(
                             "Exit code must be a positive integer".to_owned(),
-                        ));
+                        ))
                     }
-                    if n >= 128 {
-                        return Err(CallError::ArgumentError(
-                            "Exit code cannot be larger than 127".to_owned(),
-                        ));
-                    }
-                    n as u8
                 }
-                _ => {
-                    return Err(CallError::ArgumentError(
-                        "Exit code must be a positive integer".to_owned(),
-                    ))
-                }
-            },
+            }
             _ => {
                 return Err(CallError::ArgumentError("EXIT takes zero or one argument".to_owned()))
             }
@@ -172,29 +174,31 @@ impl Command for SleepCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let duration = match span.args.as_slice() {
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols()).await? {
-                Value::Integer(n) => {
-                    if n < 0 {
-                        return Err(CallError::ArgumentError(
-                            "Sleep time must be positive".to_owned(),
-                        ));
+            [ArgSpan { expr: Some(expr), sep: ArgSep::End }] => {
+                match expr.eval(machine.get_mut_symbols()).await? {
+                    Value::Integer(n) => {
+                        if n < 0 {
+                            return Err(CallError::ArgumentError(
+                                "Sleep time must be positive".to_owned(),
+                            ));
+                        }
+                        Duration::from_secs(n as u64)
                     }
-                    Duration::from_secs(n as u64)
-                }
-                Value::Double(n) => {
-                    if n < 0.0 {
-                        return Err(CallError::ArgumentError(
-                            "Sleep time must be positive".to_owned(),
-                        ));
+                    Value::Double(n) => {
+                        if n < 0.0 {
+                            return Err(CallError::ArgumentError(
+                                "Sleep time must be positive".to_owned(),
+                            ));
+                        }
+                        Duration::from_secs_f64(n)
                     }
-                    Duration::from_secs_f64(n)
+                    _ => {
+                        return Err(CallError::ArgumentError(
+                            "Sleep time must be an integer or a double".to_owned(),
+                        ))
+                    }
                 }
-                _ => {
-                    return Err(CallError::ArgumentError(
-                        "Sleep time must be an integer or a double".to_owned(),
-                    ))
-                }
-            },
+            }
             _ => return Err(CallError::ArgumentError("SLEEP takes one argument".to_owned())),
         };
         (self.sleep_fn)(duration).await

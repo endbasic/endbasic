@@ -296,6 +296,18 @@ pub struct AssignmentSpan {
     pub expr: Expr,
 }
 
+/// Single argument to a builtin call statement.
+#[derive(Debug, PartialEq)]
+pub struct ArgSpan {
+    /// Expression to compute the argument's value.  This expression is optional to support calls
+    /// of the form `PRINT a, , b` where some arguments are empty.
+    pub expr: Option<Expr>,
+
+    /// Separator between this argument and the *next*.  The last instance of this type in a call
+    /// always carries a value of `ArgSep::End`.
+    pub sep: ArgSep,
+}
+
 /// Components of an builtin call statement.
 #[derive(Debug, PartialEq)]
 pub struct BuiltinCallSpan {
@@ -303,16 +315,7 @@ pub struct BuiltinCallSpan {
     pub name: String,
 
     /// Sequence of arguments to pass to the builtin.
-    ///
-    /// Each argument is represented as an optional expression to evaluate and the separator that
-    /// was to separate it from the *next* argument.  Because of this, the last argument always
-    /// carries `ArgSep::End` as the separator.  The reason the expression is optional is to support
-    /// calls of the form `PRINT a, , b`.
-    //
-    // TODO(jmmv): Each element within this vector should be represented as a `BuiltinCallArgSpan`
-    // but this has implications throughout the codebase because this is directly consumed by every
-    // builtin command implementation.
-    pub args: Vec<(Option<Expr>, ArgSep)>,
+    pub args: Vec<ArgSpan>,
 }
 
 /// Components of a variable definition.

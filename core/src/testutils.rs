@@ -15,7 +15,7 @@
 
 //! Test utilities.
 
-use crate::ast::{ArgSep, BuiltinCallSpan, Expr, Value, VarType};
+use crate::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
 use crate::eval::{eval_all, Error};
 use crate::exec::Machine;
 use crate::syms::{
@@ -91,13 +91,15 @@ impl Command for ExitCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let arg = match span.args.as_slice() {
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols()).await? {
-                Value::Integer(n) => {
-                    assert!((0..128).contains(&n), "Exit code out of range");
-                    n as u8
+            [ArgSpan { expr: Some(expr), sep: ArgSep::End }] => {
+                match expr.eval(machine.get_mut_symbols()).await? {
+                    Value::Integer(n) => {
+                        assert!((0..128).contains(&n), "Exit code out of range");
+                        n as u8
+                    }
+                    _ => panic!("Exit code must be a positive integer"),
                 }
-                _ => panic!("Exit code must be a positive integer"),
-            },
+            }
             _ => panic!("EXIT takes one argument"),
         };
         machine.exit(arg);
@@ -134,10 +136,10 @@ impl Command for InCommand {
         if span.args.len() != 1 {
             return Err(CallError::SyntaxError);
         }
-        if span.args[0].1 != ArgSep::End {
+        if span.args[0].sep != ArgSep::End {
             return Err(CallError::SyntaxError);
         }
-        let vref = match &span.args[0].0 {
+        let vref = match &span.args[0].expr {
             Some(Expr::Symbol(vref)) => vref,
             _ => return Err(CallError::SyntaxError),
         };
@@ -178,10 +180,10 @@ impl Command for OutCommand {
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let mut text = String::new();
         for arg in span.args.iter() {
-            if let Some(expr) = arg.0.as_ref() {
+            if let Some(expr) = arg.expr.as_ref() {
                 text += &expr.eval(machine.get_mut_symbols()).await?.to_output();
             }
-            match arg.1 {
+            match arg.sep {
                 ArgSep::End => break,
                 ArgSep::Short => text += " ",
                 ArgSep::Long => return Err(CallError::SyntaxError),

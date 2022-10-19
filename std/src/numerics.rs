@@ -16,7 +16,7 @@
 //! Numerical functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
 use endbasic_core::eval::eval_all;
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
@@ -564,16 +564,18 @@ impl Command for RandomizeCommand {
             [] => {
                 *self.prng.borrow_mut() = Prng::new_from_entryopy();
             }
-            [(Some(expr), ArgSep::End)] => match expr.eval(machine.get_mut_symbols()).await? {
-                Value::Integer(n) => {
-                    *self.prng.borrow_mut() = Prng::new_from_seed(n);
+            [ArgSpan { expr: Some(expr), sep: ArgSep::End }] => {
+                match expr.eval(machine.get_mut_symbols()).await? {
+                    Value::Integer(n) => {
+                        *self.prng.borrow_mut() = Prng::new_from_seed(n);
+                    }
+                    _ => {
+                        return Err(CallError::ArgumentError(
+                            "Random seed must be an integer".to_owned(),
+                        ))
+                    }
                 }
-                _ => {
-                    return Err(CallError::ArgumentError(
-                        "Random seed must be an integer".to_owned(),
-                    ))
-                }
-            },
+            }
             _ => {
                 return Err(CallError::ArgumentError(
                     "RANDOMIZE takes zero or one argument".to_owned(),
