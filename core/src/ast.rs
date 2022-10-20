@@ -17,6 +17,33 @@
 
 use std::fmt;
 
+/// Components of a unary operation expression.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnaryOpSpan {
+    /// Expression affected by the operator.
+    pub expr: Expr,
+}
+
+/// Components of a binary operation expression.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BinaryOpSpan {
+    /// Expression on the left side of the operator.
+    pub lhs: Expr,
+
+    /// Expression on the right side of the operator.
+    pub rhs: Expr,
+}
+
+/// Components of an function call or an array reference expression.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FunctionCallSpan {
+    /// Reference to the function to call or array to reference.
+    pub fref: VarRef,
+
+    /// Sequence of arguments to pass to the function.
+    pub args: Vec<Expr>,
+}
+
 /// Represents an expression and provides mechanisms to evaluate it.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
@@ -32,42 +59,42 @@ pub enum Expr {
     Text(String),
 
     /// Arithmetic addition of two expressions.
-    Add(Box<Expr>, Box<Expr>),
+    Add(Box<BinaryOpSpan>),
     /// Arithmetic subtraction of two expressions.
-    Subtract(Box<Expr>, Box<Expr>),
+    Subtract(Box<BinaryOpSpan>),
     /// Arithmetic multiplication of two expressions.
-    Multiply(Box<Expr>, Box<Expr>),
+    Multiply(Box<BinaryOpSpan>),
     /// Arithmetic division of two expressions.
-    Divide(Box<Expr>, Box<Expr>),
+    Divide(Box<BinaryOpSpan>),
     /// Arithmetic modulo operation of two expressions.
-    Modulo(Box<Expr>, Box<Expr>),
+    Modulo(Box<BinaryOpSpan>),
     /// Arithmetic sign flip of an expression.
-    Negate(Box<Expr>),
+    Negate(Box<UnaryOpSpan>),
 
     /// Relational equality comparison of two expressions.
-    Equal(Box<Expr>, Box<Expr>),
+    Equal(Box<BinaryOpSpan>),
     /// Relational inequality comparison of two expressions.
-    NotEqual(Box<Expr>, Box<Expr>),
+    NotEqual(Box<BinaryOpSpan>),
     /// Relational less-than comparison of two expressions.
-    Less(Box<Expr>, Box<Expr>),
+    Less(Box<BinaryOpSpan>),
     /// Relational less-than or equal-to comparison of two expressions.
-    LessEqual(Box<Expr>, Box<Expr>),
+    LessEqual(Box<BinaryOpSpan>),
     /// Relational greater-than comparison of two expressions.
-    Greater(Box<Expr>, Box<Expr>),
+    Greater(Box<BinaryOpSpan>),
     /// Relational greater-than or equal-to comparison of two expressions.
-    GreaterEqual(Box<Expr>, Box<Expr>),
+    GreaterEqual(Box<BinaryOpSpan>),
 
     /// Logical and of two expressions.
-    And(Box<Expr>, Box<Expr>),
+    And(Box<BinaryOpSpan>),
     /// Logical not of an expression.
-    Not(Box<Expr>),
+    Not(Box<UnaryOpSpan>),
     /// Logical or of two expressions.
-    Or(Box<Expr>, Box<Expr>),
+    Or(Box<BinaryOpSpan>),
     /// Logical xor of two expressions.
-    Xor(Box<Expr>, Box<Expr>),
+    Xor(Box<BinaryOpSpan>),
 
     /// A function call or an array reference.
-    Call(VarRef, Vec<Expr>),
+    Call(FunctionCallSpan),
 }
 
 /// Collection of types for a variable.

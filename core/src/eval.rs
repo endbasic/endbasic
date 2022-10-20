@@ -15,7 +15,7 @@
 
 //! Evaluator for EndBASIC expressions.
 
-use crate::ast::{Expr, Value, VarRef, VarType};
+use crate::ast::*;
 use crate::syms::{CallError, CallableMetadata, Function, Symbol, Symbols};
 use async_recursion::async_recursion;
 use std::rc::Rc;
@@ -288,9 +288,13 @@ pub async fn eval_all(exprs: &[Expr], syms: &mut Symbols) -> Result<Vec<Value>> 
 
 impl Expr {
     /// Evaluates the subscripts of an array reference.
-    async fn eval_array_args(&self, syms: &mut Symbols, args: &[Expr]) -> Result<Vec<i32>> {
-        let values = eval_all(args, syms).await?;
-        let mut subscripts = Vec::with_capacity(args.len());
+    async fn eval_array_args(
+        &self,
+        syms: &mut Symbols,
+        span: &FunctionCallSpan,
+    ) -> Result<Vec<i32>> {
+        let values = eval_all(&span.args, syms).await?;
+        let mut subscripts = Vec::with_capacity(span.args.len());
         for v in values {
             match v {
                 Value::Integer(i) => subscripts.push(i),
@@ -305,20 +309,19 @@ impl Expr {
     async fn eval_function_call(
         &self,
         syms: &mut Symbols,
-        fref: &VarRef,
-        args: &[Expr],
+        span: &FunctionCallSpan,
         f: Rc<dyn Function>,
     ) -> Result<Value> {
         let metadata = f.metadata();
-        if !fref.accepts(metadata.return_type()) {
+        if !span.fref.accepts(metadata.return_type()) {
             return Err(Error::new("Incompatible type annotation for function call"));
         }
 
-        let result = f.exec(args, syms).await;
+        let result = f.exec(&span.args, syms).await;
         match result {
             Ok(value) => {
                 debug_assert!(metadata.return_type() != VarType::Auto);
-                let fref = VarRef::new(fref.name(), metadata.return_type());
+                let fref = VarRef::new(span.fref.name(), metadata.return_type());
                 // Given that we only support built-in functions at the moment, this
                 // could well be an assertion.  Doing so could turn into a time bomb
                 // when/if we add user-defined functions, so handle the problem as an
@@ -347,47 +350,68 @@ impl Expr {
             Expr::Integer(i) => Ok(Value::Integer(*i)),
             Expr::Text(s) => Ok(Value::Text(s.clone())),
 
-            Expr::And(lhs, rhs) => Value::and(&lhs.eval(syms).await?, &rhs.eval(syms).await?),
-            Expr::Or(lhs, rhs) => Value::or(&lhs.eval(syms).await?, &rhs.eval(syms).await?),
-            Expr::Xor(lhs, rhs) => Value::xor(&lhs.eval(syms).await?, &rhs.eval(syms).await?),
-            Expr::Not(v) => Value::not(&v.eval(syms).await?),
+            Expr::And(span) => Value::and(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?),
+            Expr::Or(span) => Value::or(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?),
+            Expr::Xor(span) => Value::xor(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?),
+            Expr::Not(span) => Value::not(&span.expr.eval(syms).await?),
 
-            Expr::Equal(lhs, rhs) => Value::eq(&lhs.eval(syms).await?, &rhs.eval(syms).await?),
-            Expr::NotEqual(lhs, rhs) => Value::ne(&lhs.eval(syms).await?, &rhs.eval(syms).await?),
-            Expr::Less(lhs, rhs) => Value::lt(&lhs.eval(syms).await?, &rhs.eval(syms).await?),
-            Expr::LessEqual(lhs, rhs) => Value::le(&lhs.eval(syms).await?, &rhs.eval(syms).await?),
-            Expr::Greater(lhs, rhs) => Value::gt(&lhs.eval(syms).await?, &rhs.eval(syms).await?),
-            Expr::GreaterEqual(lhs, rhs) => {
-                Value::ge(&lhs.eval(syms).await?, &rhs.eval(syms).await?)
+            Expr::Equal(span) => {
+                Value::eq(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+            }
+            Expr::NotEqual(span) => {
+                Value::ne(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+            }
+            Expr::Less(span) => Value::lt(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?),
+            Expr::LessEqual(span) => {
+                Value::le(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+            }
+            Expr::Greater(span) => {
+                Value::gt(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+            }
+            Expr::GreaterEqual(span) => {
+                Value::ge(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
             }
 
-            Expr::Add(lhs, rhs) => Value::add(&lhs.eval(syms).await?, &rhs.eval(syms).await?),
-            Expr::Subtract(lhs, rhs) => Value::sub(&lhs.eval(syms).await?, &rhs.eval(syms).await?),
-            Expr::Multiply(lhs, rhs) => Value::mul(&lhs.eval(syms).await?, &rhs.eval(syms).await?),
-            Expr::Divide(lhs, rhs) => Value::div(&lhs.eval(syms).await?, &rhs.eval(syms).await?),
-            Expr::Modulo(lhs, rhs) => Value::modulo(&lhs.eval(syms).await?, &rhs.eval(syms).await?),
-            Expr::Negate(e) => Value::neg(&e.eval(syms).await?),
+            Expr::Add(span) => Value::add(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?),
+            Expr::Subtract(span) => {
+                Value::sub(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+            }
+            Expr::Multiply(span) => {
+                Value::mul(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+            }
+            Expr::Divide(span) => {
+                Value::div(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+            }
+            Expr::Modulo(span) => {
+                Value::modulo(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+            }
+            Expr::Negate(span) => Value::neg(&span.expr.eval(syms).await?),
 
             Expr::Symbol(vref) => Ok(syms.get_var(vref)?.clone()),
 
-            Expr::Call(fref, args) => {
-                match syms.get(fref)? {
+            Expr::Call(span) => {
+                match syms.get(&span.fref)? {
                     Some(Symbol::Array(_)) => (), // Fallthrough.
                     Some(Symbol::Function(f)) => {
                         let f = f.clone();
-                        return self.eval_function_call(syms, fref, args, f).await;
+                        return self.eval_function_call(syms, span, f).await;
                     }
                     Some(_) => {
-                        return Err(Error::new(format!("{} is not an array or a function", fref)))
+                        return Err(Error::new(format!(
+                            "{} is not an array or a function",
+                            span.fref
+                        )))
                     }
-                    None => return Err(Error::new(format!("Unknown function or array {}", fref))),
+                    None => {
+                        return Err(Error::new(format!("Unknown function or array {}", span.fref)))
+                    }
                 }
 
                 // We have to handle arrays outside of the match above because we cannot hold a
                 // reference to the array while we evaluate subscripts.  This implies that we have
                 // to do a second lookup of the array right below, which isn't great...
-                let subscripts = self.eval_array_args(syms, args).await?;
-                match syms.get(fref)? {
+                let subscripts = self.eval_array_args(syms, span).await?;
+                match syms.get(&span.fref)? {
                     Some(Symbol::Array(array)) => array.index(&subscripts).map(|v| v.clone()),
                     _ => unreachable!(),
                 }
@@ -1028,8 +1052,9 @@ mod tests {
 
     #[test]
     fn test_expr_logical_ops() {
-        let a_bool = Box::from(Expr::Boolean(false));
-        let an_int = Box::from(Expr::Integer(0));
+        let binary_args =
+            Box::from(BinaryOpSpan { lhs: Expr::Boolean(false), rhs: Expr::Integer(0) });
+        let unary_args = Box::from(UnaryOpSpan { expr: Expr::Integer(0) });
 
         // These tests just make sure that we delegate to the `Value` operations for each
         // expression operator to essentially avoid duplicating all those tests.  We do this by
@@ -1038,32 +1063,26 @@ mod tests {
         let mut syms = Symbols::default();
         assert_eq!(
             "Cannot AND FALSE and 0",
-            format!(
-                "{}",
-                block_on(Expr::And(a_bool.clone(), an_int.clone()).eval(&mut syms)).unwrap_err()
-            )
+            format!("{}", block_on(Expr::And(binary_args.clone()).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
             "Cannot OR FALSE and 0",
-            format!(
-                "{}",
-                block_on(Expr::Or(a_bool.clone(), an_int.clone()).eval(&mut syms)).unwrap_err()
-            )
+            format!("{}", block_on(Expr::Or(binary_args.clone()).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
             "Cannot XOR FALSE and 0",
-            format!("{}", block_on(Expr::Xor(a_bool, an_int.clone()).eval(&mut syms)).unwrap_err())
+            format!("{}", block_on(Expr::Xor(binary_args).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
             "Cannot apply NOT to 0",
-            format!("{}", block_on(Expr::Not(an_int).eval(&mut syms)).unwrap_err())
+            format!("{}", block_on(Expr::Not(unary_args).eval(&mut syms)).unwrap_err())
         );
     }
 
     #[test]
     fn test_expr_relational_ops() {
-        let a_bool = Box::from(Expr::Boolean(false));
-        let an_int = Box::from(Expr::Integer(0));
+        let binary_args =
+            Box::from(BinaryOpSpan { lhs: Expr::Boolean(false), rhs: Expr::Integer(0) });
 
         // These tests just make sure that we delegate to the `Value` operations for each
         // expression operator to essentially avoid duplicating all those tests.  We do this by
@@ -1072,55 +1091,44 @@ mod tests {
         let mut syms = Symbols::default();
         assert_eq!(
             "Cannot compare FALSE and 0 with =",
-            format!(
-                "{}",
-                block_on(Expr::Equal(a_bool.clone(), an_int.clone()).eval(&mut syms)).unwrap_err()
-            )
+            format!("{}", block_on(Expr::Equal(binary_args.clone()).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
             "Cannot compare FALSE and 0 with <>",
             format!(
                 "{}",
-                block_on(Expr::NotEqual(a_bool.clone(), an_int.clone()).eval(&mut syms))
-                    .unwrap_err()
+                block_on(Expr::NotEqual(binary_args.clone()).eval(&mut syms)).unwrap_err()
             )
         );
         assert_eq!(
             "Cannot compare FALSE and 0 with <",
-            format!(
-                "{}",
-                block_on(Expr::Less(a_bool.clone(), an_int.clone()).eval(&mut syms)).unwrap_err()
-            )
+            format!("{}", block_on(Expr::Less(binary_args.clone()).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
             "Cannot compare FALSE and 0 with <=",
             format!(
                 "{}",
-                block_on(Expr::LessEqual(a_bool.clone(), an_int.clone()).eval(&mut syms))
-                    .unwrap_err()
+                block_on(Expr::LessEqual(binary_args.clone()).eval(&mut syms)).unwrap_err()
             )
         );
         assert_eq!(
             "Cannot compare FALSE and 0 with >",
             format!(
                 "{}",
-                block_on(Expr::Greater(a_bool.clone(), an_int.clone()).eval(&mut syms))
-                    .unwrap_err()
+                block_on(Expr::Greater(binary_args.clone()).eval(&mut syms)).unwrap_err()
             )
         );
         assert_eq!(
             "Cannot compare FALSE and 0 with >=",
-            format!(
-                "{}",
-                block_on(Expr::GreaterEqual(a_bool, an_int).eval(&mut syms)).unwrap_err()
-            )
+            format!("{}", block_on(Expr::GreaterEqual(binary_args).eval(&mut syms)).unwrap_err())
         );
     }
 
     #[test]
     fn test_expr_arithmetic_ops() {
-        let a_bool = Box::from(Expr::Boolean(false));
-        let an_int = Box::from(Expr::Integer(0));
+        let binary_args =
+            Box::from(BinaryOpSpan { lhs: Expr::Boolean(false), rhs: Expr::Integer(0) });
+        let unary_args = Box::from(UnaryOpSpan { expr: Expr::Boolean(false) });
 
         // These tests just make sure that we delegate to the `Value` operations for each
         // expression operator to essentially avoid duplicating all those tests.  We do this by
@@ -1129,37 +1137,29 @@ mod tests {
         let mut syms = Symbols::default();
         assert_eq!(
             "Cannot add FALSE and 0",
-            format!(
-                "{}",
-                block_on(Expr::Add(a_bool.clone(), an_int.clone()).eval(&mut syms)).unwrap_err()
-            )
+            format!("{}", block_on(Expr::Add(binary_args.clone()).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
             "Cannot subtract 0 from FALSE",
             format!(
                 "{}",
-                block_on(Expr::Subtract(a_bool.clone(), an_int.clone()).eval(&mut syms))
-                    .unwrap_err()
+                block_on(Expr::Subtract(binary_args.clone()).eval(&mut syms)).unwrap_err()
             )
         );
         assert_eq!(
             "Cannot multiply FALSE by 0",
             format!(
                 "{}",
-                block_on(Expr::Multiply(a_bool.clone(), an_int.clone()).eval(&mut syms))
-                    .unwrap_err()
+                block_on(Expr::Multiply(binary_args.clone()).eval(&mut syms)).unwrap_err()
             )
         );
         assert_eq!(
             "Cannot divide FALSE by 0",
-            format!(
-                "{}",
-                block_on(Expr::Divide(a_bool.clone(), an_int).eval(&mut syms)).unwrap_err()
-            )
+            format!("{}", block_on(Expr::Divide(binary_args).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
             "Cannot negate FALSE",
-            format!("{}", block_on(Expr::Negate(a_bool).eval(&mut syms)).unwrap_err())
+            format!("{}", block_on(Expr::Negate(unary_args).eval(&mut syms)).unwrap_err())
         );
     }
 
@@ -1175,13 +1175,13 @@ mod tests {
         assert_eq!(
             Value::Integer(36),
             block_on(
-                Expr::Multiply(
-                    Box::from(Expr::Add(
-                        Box::from(Expr::Symbol(xref.clone())),
-                        Box::from(Expr::Integer(2))
-                    )),
-                    Box::from(Expr::Symbol(yref.clone()))
-                )
+                Expr::Multiply(Box::from(BinaryOpSpan {
+                    lhs: Expr::Add(Box::from(BinaryOpSpan {
+                        lhs: Expr::Symbol(xref.clone()),
+                        rhs: Expr::Integer(2)
+                    })),
+                    rhs: Expr::Symbol(yref.clone())
+                }))
                 .eval(&mut syms)
             )
             .unwrap()
@@ -1190,13 +1190,13 @@ mod tests {
         assert_eq!(
             Value::Boolean(true),
             block_on(
-                Expr::Equal(
-                    Box::from(Expr::Symbol(xref)),
-                    Box::from(Expr::Add(
-                        Box::from(Expr::Integer(7)),
-                        Box::from(Expr::Symbol(yref))
-                    ))
-                )
+                Expr::Equal(Box::from(BinaryOpSpan {
+                    lhs: Expr::Symbol(xref),
+                    rhs: Expr::Add(Box::from(BinaryOpSpan {
+                        lhs: Expr::Integer(7),
+                        rhs: Expr::Symbol(yref)
+                    }))
+                }))
                 .eval(&mut syms)
             )
             .unwrap()
@@ -1207,13 +1207,13 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Equal(
-                        Box::from(Expr::Integer(3)),
-                        Box::from(Expr::Add(
-                            Box::from(Expr::Integer(7)),
-                            Box::from(Expr::Boolean(true))
-                        ))
-                    )
+                    Expr::Equal(Box::from(BinaryOpSpan {
+                        lhs: Expr::Integer(3),
+                        rhs: Expr::Add(Box::from(BinaryOpSpan {
+                            lhs: Expr::Integer(7),
+                            rhs: Expr::Boolean(true)
+                        }))
+                    }))
                     .eval(&mut syms)
                 )
                 .unwrap_err()
@@ -1235,10 +1235,10 @@ mod tests {
         assert_eq!(
             Value::Integer(0),
             block_on(
-                Expr::Call(
-                    VarRef::new("X", VarType::Auto),
-                    vec![Expr::Integer(0), Expr::Integer(3)]
-                )
+                Expr::Call(FunctionCallSpan {
+                    fref: VarRef::new("X", VarType::Auto),
+                    args: vec![Expr::Integer(0), Expr::Integer(3)]
+                })
                 .eval(&mut syms)
             )
             .unwrap()
@@ -1247,10 +1247,10 @@ mod tests {
         assert_eq!(
             Value::Integer(8),
             block_on(
-                Expr::Call(
-                    VarRef::new("X", VarType::Auto),
-                    vec![Expr::Integer(1), Expr::Integer(3)]
-                )
+                Expr::Call(FunctionCallSpan {
+                    fref: VarRef::new("X", VarType::Auto),
+                    args: vec![Expr::Integer(1), Expr::Integer(3)]
+                })
                 .eval(&mut syms)
             )
             .unwrap()
@@ -1259,10 +1259,10 @@ mod tests {
         assert_eq!(
             Value::Integer(8),
             block_on(
-                Expr::Call(
-                    VarRef::new("X", VarType::Integer),
-                    vec![Expr::Integer(1), Expr::Integer(3)]
-                )
+                Expr::Call(FunctionCallSpan {
+                    fref: VarRef::new("X", VarType::Integer),
+                    args: vec![Expr::Integer(1), Expr::Integer(3)]
+                })
                 .eval(&mut syms)
             )
             .unwrap()
@@ -1273,10 +1273,10 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Call(
-                        VarRef::new("X", VarType::Double),
-                        vec![Expr::Integer(1), Expr::Integer(3)]
-                    )
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("X", VarType::Double),
+                        args: vec![Expr::Integer(1), Expr::Integer(3)]
+                    })
                     .eval(&mut syms)
                 )
                 .unwrap_err()
@@ -1288,8 +1288,11 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Call(VarRef::new("X", VarType::Integer), vec![Expr::Integer(1)])
-                        .eval(&mut syms)
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("X", VarType::Integer),
+                        args: vec![Expr::Integer(1)],
+                    })
+                    .eval(&mut syms)
                 )
                 .unwrap_err()
             )
@@ -1300,10 +1303,10 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Call(
-                        VarRef::new("X", VarType::Integer),
-                        vec![Expr::Integer(0), Expr::Integer(-1)]
-                    )
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("X", VarType::Integer),
+                        args: vec![Expr::Integer(0), Expr::Integer(-1)]
+                    })
                     .eval(&mut syms)
                 )
                 .unwrap_err()
@@ -1315,10 +1318,10 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Call(
-                        VarRef::new("X", VarType::Integer),
-                        vec![Expr::Integer(10), Expr::Integer(0)]
-                    )
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("X", VarType::Integer),
+                        args: vec![Expr::Integer(10), Expr::Integer(0)]
+                    })
                     .eval(&mut syms)
                 )
                 .unwrap_err()
@@ -1330,7 +1333,11 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Call(VarRef::new("y".to_owned(), VarType::Text), vec![]).eval(&mut syms)
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("y".to_owned(), VarType::Text),
+                        args: vec![],
+                    })
+                    .eval(&mut syms)
                 )
                 .unwrap_err()
             )
@@ -1346,7 +1353,11 @@ mod tests {
         assert_eq!(
             Value::Integer(0),
             block_on(
-                Expr::Call(VarRef::new("SUM".to_owned(), VarType::Auto), vec![],).eval(&mut syms)
+                Expr::Call(FunctionCallSpan {
+                    fref: VarRef::new("SUM".to_owned(), VarType::Auto),
+                    args: vec![],
+                })
+                .eval(&mut syms)
             )
             .unwrap()
         );
@@ -1354,8 +1365,11 @@ mod tests {
         assert_eq!(
             Value::Integer(5),
             block_on(
-                Expr::Call(VarRef::new("sum".to_owned(), VarType::Auto), vec![Expr::Integer(5)],)
-                    .eval(&mut syms)
+                Expr::Call(FunctionCallSpan {
+                    fref: VarRef::new("sum".to_owned(), VarType::Auto),
+                    args: vec![Expr::Integer(5)],
+                })
+                .eval(&mut syms)
             )
             .unwrap()
         );
@@ -1363,10 +1377,10 @@ mod tests {
         assert_eq!(
             Value::Integer(7),
             block_on(
-                Expr::Call(
-                    VarRef::new("SUM".to_owned(), VarType::Auto),
-                    vec![Expr::Integer(5), Expr::Integer(2)],
-                )
+                Expr::Call(FunctionCallSpan {
+                    fref: VarRef::new("SUM".to_owned(), VarType::Auto),
+                    args: vec![Expr::Integer(5), Expr::Integer(2)],
+                })
                 .eval(&mut syms)
             )
             .unwrap()
@@ -1375,14 +1389,17 @@ mod tests {
         assert_eq!(
             Value::Integer(23),
             block_on(
-                Expr::Call(
-                    VarRef::new("SUM".to_owned(), VarType::Integer),
-                    vec![
+                Expr::Call(FunctionCallSpan {
+                    fref: VarRef::new("SUM".to_owned(), VarType::Integer),
+                    args: vec![
                         Expr::Symbol(xref),
                         Expr::Integer(8),
-                        Expr::Subtract(Box::from(Expr::Integer(100)), Box::from(Expr::Integer(90)))
+                        Expr::Subtract(Box::from(BinaryOpSpan {
+                            lhs: Expr::Integer(100),
+                            rhs: Expr::Integer(90),
+                        }))
                     ],
-                )
+                })
                 .eval(&mut syms)
             )
             .unwrap()
@@ -1393,8 +1410,11 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Call(VarRef::new("SUM".to_owned(), VarType::Text), vec![])
-                        .eval(&mut syms)
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("SUM".to_owned(), VarType::Text),
+                        args: vec![],
+                    })
+                    .eval(&mut syms)
                 )
                 .unwrap_err()
             )
@@ -1405,8 +1425,11 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Call(VarRef::new("SUMA".to_owned(), VarType::Text), vec![])
-                        .eval(&mut syms)
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("SUMA".to_owned(), VarType::Text),
+                        args: vec![],
+                    })
+                    .eval(&mut syms)
                 )
                 .unwrap_err()
             )
@@ -1422,8 +1445,11 @@ mod tests {
             assert_eq!(
                 Value::Boolean(true),
                 block_on(
-                    Expr::Call(VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto), vec![],)
-                        .eval(&mut syms)
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto),
+                        args: vec![],
+                    })
+                    .eval(&mut syms)
                 )
                 .unwrap()
             );
@@ -1438,8 +1464,11 @@ mod tests {
                 format!(
                     "{}",
                     block_on(
-                        Expr::Call(VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto), vec![],)
-                            .eval(&mut syms)
+                        Expr::Call(FunctionCallSpan {
+                            fref: VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto),
+                            args: vec![],
+                        })
+                        .eval(&mut syms)
                     )
                     .unwrap_err()
                 )
@@ -1456,10 +1485,10 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Call(
-                        VarRef::new("ERROR".to_owned(), VarType::Auto),
-                        vec![Expr::Text("argument".to_owned())],
-                    )
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
+                        args: vec![Expr::Text("argument".to_owned())],
+                    })
                     .eval(&mut syms)
                 )
                 .unwrap_err()
@@ -1471,10 +1500,10 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Call(
-                        VarRef::new("ERROR".to_owned(), VarType::Auto),
-                        vec![Expr::Text("eval".to_owned())],
-                    )
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
+                        args: vec![Expr::Text("eval".to_owned())],
+                    })
                     .eval(&mut syms)
                 )
                 .unwrap_err()
@@ -1486,10 +1515,10 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Call(
-                        VarRef::new("ERROR".to_owned(), VarType::Auto),
-                        vec![Expr::Text("internal".to_owned())],
-                    )
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
+                        args: vec![Expr::Text("internal".to_owned())],
+                    })
                     .eval(&mut syms)
                 )
                 .unwrap_err()
@@ -1501,10 +1530,10 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Call(
-                        VarRef::new("ERROR".to_owned(), VarType::Auto),
-                        vec![Expr::Text("syntax".to_owned())],
-                    )
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
+                        args: vec![Expr::Text("syntax".to_owned())],
+                    })
                     .eval(&mut syms)
                 )
                 .unwrap_err()
@@ -1524,8 +1553,11 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Call(VarRef::new("SOMEVAR".to_owned(), VarType::Auto), vec![])
-                        .eval(&mut syms)
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("SOMEVAR".to_owned(), VarType::Auto),
+                        args: vec![],
+                    })
+                    .eval(&mut syms)
                 )
                 .unwrap_err()
             )
@@ -1536,8 +1568,11 @@ mod tests {
             format!(
                 "{}",
                 block_on(
-                    Expr::Call(VarRef::new("EXIT".to_owned(), VarType::Auto), vec![])
-                        .eval(&mut syms)
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("EXIT".to_owned(), VarType::Auto),
+                        args: vec![],
+                    })
+                    .eval(&mut syms)
                 )
                 .unwrap_err()
             )
