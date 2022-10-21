@@ -17,6 +17,41 @@
 
 use std::fmt;
 
+/// Components of a boolean literal expression.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BooleanSpan {
+    /// The boolean literal.
+    pub value: bool,
+}
+
+/// Components of a double literal expression.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DoubleSpan {
+    /// The double literal.
+    pub value: f64,
+}
+
+/// Components of an integer literal expression.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IntegerSpan {
+    /// The integer literal.
+    pub value: i32,
+}
+
+/// Components of a string literal expression.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TextSpan {
+    /// The string literal.
+    pub value: String,
+}
+
+/// Components of a symbol reference expression.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SymbolSpan {
+    /// The symbol reference.
+    pub vref: VarRef,
+}
+
 /// Components of a unary operation expression.
 #[derive(Clone, Debug, PartialEq)]
 pub struct UnaryOpSpan {
@@ -48,15 +83,16 @@ pub struct FunctionCallSpan {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     /// A literal boolean value.
-    Boolean(bool),
+    Boolean(BooleanSpan),
     /// A literal double-precision floating point value.
-    Double(f64),
+    Double(DoubleSpan),
     /// A literal integer value.
-    Integer(i32),
-    /// A reference to a variable.
-    Symbol(VarRef),
+    Integer(IntegerSpan),
     /// A literal string value.
-    Text(String),
+    Text(TextSpan),
+
+    /// A reference to a variable.
+    Symbol(SymbolSpan),
 
     /// Arithmetic addition of two expressions.
     Add(Box<BinaryOpSpan>),

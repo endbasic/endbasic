@@ -140,7 +140,7 @@ impl Command for InCommand {
             return Err(CallError::SyntaxError);
         }
         let vref = match &span.args[0].expr {
-            Some(Expr::Symbol(vref)) => vref,
+            Some(Expr::Symbol(span)) => &span.vref,
             _ => return Err(CallError::SyntaxError),
         };
 

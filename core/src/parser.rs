@@ -512,20 +512,24 @@ impl<'a> Parser<'a> {
 
             let ts = self.lexer.consume_peeked();
             match ts.token {
-                Token::Boolean(b) => handle_operand(Expr::Boolean(b), ts.pos)?,
-                Token::Double(d) => handle_operand(Expr::Double(d), ts.pos)?,
-                Token::Integer(i) => handle_operand(Expr::Integer(i), ts.pos)?,
-                Token::Text(t) => handle_operand(Expr::Text(t), ts.pos)?,
-                Token::Symbol(vref) => handle_operand(Expr::Symbol(vref), ts.pos)?,
+                Token::Boolean(value) => {
+                    handle_operand(Expr::Boolean(BooleanSpan { value }), ts.pos)?
+                }
+                Token::Double(value) => handle_operand(Expr::Double(DoubleSpan { value }), ts.pos)?,
+                Token::Integer(value) => {
+                    handle_operand(Expr::Integer(IntegerSpan { value }), ts.pos)?
+                }
+                Token::Text(value) => handle_operand(Expr::Text(TextSpan { value }), ts.pos)?,
+                Token::Symbol(vref) => handle_operand(Expr::Symbol(SymbolSpan { vref }), ts.pos)?,
 
                 Token::LeftParen => {
                     // If the last operand we encountered was a symbol, collapse it and the left
                     // parenthesis into the beginning of a function call.
                     match exprs.pop() {
-                        Some(Expr::Symbol(vref)) => {
+                        Some(Expr::Symbol(span)) => {
                             if !need_operand {
                                 exprs.push(Expr::Call(FunctionCallSpan {
-                                    fref: vref,
+                                    fref: span.vref,
                                     args: self.parse_comma_separated_exprs()?,
                                 }));
                                 need_operand = false;
@@ -535,7 +539,7 @@ impl<'a> Parser<'a> {
                                 // symbol following a parenthesis) so put both the expression and
                                 // the token back.
                                 op_spans.push(ExprOpSpan::new(ExprOp::LeftParen, ts.pos));
-                                exprs.push(Expr::Symbol(vref));
+                                exprs.push(Expr::Symbol(span));
                                 need_operand = true;
                             }
                         }
@@ -728,7 +732,10 @@ impl<'a> Parser<'a> {
                 }
                 _ => (),
             }
-            branches.push(IfBranchSpan { guard: Expr::Boolean(true), body: stmts2 });
+            branches.push(IfBranchSpan {
+                guard: Expr::Boolean(BooleanSpan { value: true }),
+                body: stmts2,
+            });
         }
 
         self.expect_and_consume_with_pos(Token::End, if_pos, "IF without END IF")?;
@@ -820,11 +827,11 @@ impl<'a> Parser<'a> {
         let (step, step_pos) = self.parse_step()?;
         let end_condition = match step.cmp(&0) {
             Ordering::Greater => Expr::LessEqual(Box::from(BinaryOpSpan {
-                lhs: Expr::Symbol(iterator.clone()),
+                lhs: Expr::Symbol(SymbolSpan { vref: iterator.clone() }),
                 rhs: end,
             })),
             Ordering::Less => Expr::GreaterEqual(Box::from(BinaryOpSpan {
-                lhs: Expr::Symbol(iterator.clone()),
+                lhs: Expr::Symbol(SymbolSpan { vref: iterator.clone() }),
                 rhs: end,
             })),
             Ordering::Equal => {
@@ -833,8 +840,8 @@ impl<'a> Parser<'a> {
         };
 
         let next_value = Expr::Add(Box::from(BinaryOpSpan {
-            lhs: Expr::Symbol(iterator.clone()),
-            rhs: Expr::Integer(step),
+            lhs: Expr::Symbol(SymbolSpan { vref: iterator.clone() }),
+            rhs: Expr::Integer(IntegerSpan { value: step }),
         }));
 
         self.expect_and_consume(Token::Eol, "Expecting newline after FOR")?;
@@ -1027,6 +1034,31 @@ mod tests {
     use super::*;
     use crate::ast::VarType;
 
+    /// Syntactic sugar to instantiate an `Expr::Boolean` for testing.
+    fn expr_boolean(value: bool) -> Expr {
+        Expr::Boolean(BooleanSpan { value })
+    }
+
+    /// Syntactic sugar to instantiate an `Expr::Double` for testing.
+    fn expr_double(value: f64) -> Expr {
+        Expr::Double(DoubleSpan { value })
+    }
+
+    /// Syntactic sugar to instantiate an `Expr::Integer` for testing.
+    fn expr_integer(value: i32) -> Expr {
+        Expr::Integer(IntegerSpan { value })
+    }
+
+    /// Syntactic sugar to instantiate an `Expr::Text` for testing.
+    fn expr_text<S: Into<String>>(value: S) -> Expr {
+        Expr::Text(TextSpan { value: value.into() })
+    }
+
+    /// Syntactic sugar to instantiate an `Expr::Symbol` for testing.
+    fn expr_symbol(vref: VarRef) -> Expr {
+        Expr::Symbol(SymbolSpan { vref })
+    }
+
     #[test]
     fn test_varref_to_unannotated_string() {
         assert_eq!(
@@ -1095,19 +1127,19 @@ mod tests {
             &[
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("a", VarType::Auto),
-                    expr: Expr::Integer(1),
+                    expr: expr_integer(1),
                 }),
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("b", VarType::Auto),
-                    expr: Expr::Integer(2),
+                    expr: expr_integer(2),
                 }),
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("c", VarType::Auto),
-                    expr: Expr::Integer(3),
+                    expr: expr_integer(3),
                 }),
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("d", VarType::Auto),
-                    expr: Expr::Integer(4),
+                    expr: expr_integer(4),
                 }),
             ],
         );
@@ -1120,26 +1152,26 @@ mod tests {
             &[
                 Statement::ArrayAssignment(ArrayAssignmentSpan {
                     vref: VarRef::new("a", VarType::Auto),
-                    subscripts: vec![Expr::Integer(1)],
-                    expr: Expr::Integer(100),
+                    subscripts: vec![expr_integer(1)],
+                    expr: expr_integer(100),
                 }),
                 Statement::ArrayAssignment(ArrayAssignmentSpan {
                     vref: VarRef::new("foo", VarType::Auto),
-                    subscripts: vec![Expr::Integer(2), Expr::Integer(3)],
-                    expr: Expr::Text("text".to_owned()),
+                    subscripts: vec![expr_integer(2), expr_integer(3)],
+                    expr: expr_text("text"),
                 }),
                 Statement::ArrayAssignment(ArrayAssignmentSpan {
                     vref: VarRef::new("abc", VarType::Text),
                     subscripts: vec![
                         Expr::Add(Box::from(BinaryOpSpan {
-                            lhs: Expr::Integer(5),
-                            rhs: Expr::Symbol(VarRef::new("z".to_owned(), VarType::Auto)),
+                            lhs: expr_integer(5),
+                            rhs: expr_symbol(VarRef::new("z".to_owned(), VarType::Auto)),
                         })),
-                        Expr::Integer(6),
+                        expr_integer(6),
                     ],
                     expr: Expr::Or(Box::from(BinaryOpSpan {
-                        lhs: Expr::Boolean(true),
-                        rhs: Expr::Boolean(false),
+                        lhs: expr_boolean(true),
+                        rhs: expr_boolean(false),
                     })),
                 }),
             ],
@@ -1166,17 +1198,17 @@ mod tests {
             &[
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("a", VarType::Auto),
-                    expr: Expr::Integer(1),
+                    expr: expr_integer(1),
                 }),
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("foo", VarType::Text),
-                    expr: Expr::Text("bar".to_owned()),
+                    expr: expr_text("bar"),
                 }),
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("b", VarType::Text),
                     expr: Expr::Add(Box::from(BinaryOpSpan {
-                        lhs: Expr::Integer(3),
-                        rhs: Expr::Symbol(VarRef::new("z", VarType::Auto)),
+                        lhs: expr_integer(3),
+                        rhs: expr_symbol(VarRef::new("z", VarType::Auto)),
                     })),
                 }),
             ],
@@ -1201,7 +1233,7 @@ mod tests {
                 Statement::BuiltinCall(BuiltinCallSpan {
                     name: "PRINT".to_owned(),
                     args: vec![ArgSpan {
-                        expr: Some(Expr::Symbol(VarRef::new("a", VarType::Auto))),
+                        expr: Some(expr_symbol(VarRef::new("a", VarType::Auto))),
                         sep: ArgSep::End,
                     }],
                 }),
@@ -1209,9 +1241,9 @@ mod tests {
                     name: "PRINT".to_owned(),
                     args: vec![
                         ArgSpan { expr: None, sep: ArgSep::Short },
-                        ArgSpan { expr: Some(Expr::Integer(3)), sep: ArgSep::Long },
+                        ArgSpan { expr: Some(expr_integer(3)), sep: ArgSep::Long },
                         ArgSpan {
-                            expr: Some(Expr::Symbol(VarRef::new("c", VarType::Text))),
+                            expr: Some(expr_symbol(VarRef::new("c", VarType::Text))),
                             sep: ArgSep::End,
                         },
                     ],
@@ -1229,7 +1261,7 @@ mod tests {
             "PRINT(1)",
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
-                args: vec![ArgSpan { expr: Some(Integer(1)), sep: ArgSep::End }],
+                args: vec![ArgSpan { expr: Some(expr_integer(1)), sep: ArgSep::End }],
             })],
         );
 
@@ -1238,8 +1270,8 @@ mod tests {
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
                 args: vec![
-                    ArgSpan { expr: Some(Integer(1)), sep: ArgSep::Long },
-                    ArgSpan { expr: Some(Integer(2)), sep: ArgSep::End },
+                    ArgSpan { expr: Some(expr_integer(1)), sep: ArgSep::Long },
+                    ArgSpan { expr: Some(expr_integer(2)), sep: ArgSep::End },
                 ],
             })],
         );
@@ -1249,8 +1281,8 @@ mod tests {
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
                 args: vec![
-                    ArgSpan { expr: Some(Integer(1)), sep: ArgSep::Short },
-                    ArgSpan { expr: Some(Integer(2)), sep: ArgSep::End },
+                    ArgSpan { expr: Some(expr_integer(1)), sep: ArgSep::Short },
+                    ArgSpan { expr: Some(expr_integer(2)), sep: ArgSep::End },
                 ],
             })],
         );
@@ -1260,7 +1292,7 @@ mod tests {
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
                 args: vec![
-                    ArgSpan { expr: Some(Integer(1)), sep: ArgSep::Short },
+                    ArgSpan { expr: Some(expr_integer(1)), sep: ArgSep::Short },
                     ArgSpan { expr: None, sep: ArgSep::End },
                 ],
             })],
@@ -1273,12 +1305,12 @@ mod tests {
                 args: vec![
                     ArgSpan {
                         expr: Some(Add(Box::from(BinaryOpSpan {
-                            lhs: Integer(1),
-                            rhs: Integer(2),
+                            lhs: expr_integer(1),
+                            rhs: expr_integer(2),
                         }))),
                         sep: ArgSep::Short,
                     },
-                    ArgSpan { expr: Some(Integer(3)), sep: ArgSep::End },
+                    ArgSpan { expr: Some(expr_integer(3)), sep: ArgSep::End },
                 ],
             })],
         );
@@ -1344,7 +1376,7 @@ mod tests {
             "DIM i(10)",
             &[Statement::DimArray(DimArraySpan {
                 name: "i".to_owned(),
-                dimensions: vec![Integer(10)],
+                dimensions: vec![expr_integer(10)],
                 subtype: VarType::Integer,
             })],
         );
@@ -1353,7 +1385,10 @@ mod tests {
             "DIM foo(-5, 0) AS STRING",
             &[Statement::DimArray(DimArraySpan {
                 name: "foo".to_owned(),
-                dimensions: vec![Negate(Box::from(UnaryOpSpan { expr: Integer(5) })), Integer(0)],
+                dimensions: vec![
+                    Negate(Box::from(UnaryOpSpan { expr: expr_integer(5) })),
+                    expr_integer(0),
+                ],
                 subtype: VarType::Text,
             })],
         );
@@ -1368,10 +1403,10 @@ mod tests {
                             fref: VarRef::new("bar", VarType::Text),
                             args: vec![],
                         }),
-                        rhs: Integer(3),
+                        rhs: expr_integer(3),
                     })),
-                    Integer(8),
-                    Negate(Box::from(UnaryOpSpan { expr: Integer(1) })),
+                    expr_integer(8),
+                    Negate(Box::from(UnaryOpSpan { expr: expr_integer(1) })),
                 ],
                 subtype: VarType::Integer,
             })],
@@ -1407,7 +1442,7 @@ mod tests {
                 name: "PRINT".to_owned(),
                 args: vec![
                     ArgSpan { expr: Some(expr), sep: ArgSep::Long },
-                    ArgSpan { expr: Some(Expr::Integer(1)), sep: ArgSep::End },
+                    ArgSpan { expr: Some(expr_integer(1)), sep: ArgSep::End },
                 ],
             })],
         );
@@ -1422,38 +1457,39 @@ mod tests {
 
     #[test]
     fn test_expr_literals() {
-        use Expr::*;
-        do_expr_ok_test("TRUE", Boolean(true));
-        do_expr_ok_test("FALSE", Boolean(false));
-        do_expr_ok_test("5", Integer(5));
-        do_expr_ok_test("\"some text\"", Text("some text".to_owned()));
+        do_expr_ok_test("TRUE", expr_boolean(true));
+        do_expr_ok_test("FALSE", expr_boolean(false));
+        do_expr_ok_test("5", expr_integer(5));
+        do_expr_ok_test("\"some text\"", expr_text("some text"));
     }
 
     #[test]
     fn test_expr_symbols() {
-        use Expr::*;
-        do_expr_ok_test("foo", Symbol(VarRef::new("foo", VarType::Auto)));
-        do_expr_ok_test("bar$", Symbol(VarRef::new("bar", VarType::Text)));
+        do_expr_ok_test("foo", expr_symbol(VarRef::new("foo", VarType::Auto)));
+        do_expr_ok_test("bar$", expr_symbol(VarRef::new("bar", VarType::Text)));
     }
 
     #[test]
     fn test_expr_parens() {
         use Expr::*;
-        do_expr_ok_test("(1)", Integer(1));
-        do_expr_ok_test("((1))", Integer(1));
-        do_expr_ok_test(" ( ( 1 ) ) ", Integer(1));
+        do_expr_ok_test("(1)", expr_integer(1));
+        do_expr_ok_test("((1))", expr_integer(1));
+        do_expr_ok_test(" ( ( 1 ) ) ", expr_integer(1));
         do_expr_ok_test(
             "3 * (2 + 5)",
             Multiply(Box::from(BinaryOpSpan {
-                lhs: Integer(3),
-                rhs: Add(Box::from(BinaryOpSpan { lhs: Integer(2), rhs: Integer(5) })),
+                lhs: expr_integer(3),
+                rhs: Add(Box::from(BinaryOpSpan { lhs: expr_integer(2), rhs: expr_integer(5) })),
             })),
         );
         do_expr_ok_test(
             "(7) - (1) + (-2)",
             Add(Box::from(BinaryOpSpan {
-                lhs: Subtract(Box::from(BinaryOpSpan { lhs: Integer(7), rhs: Integer(1) })),
-                rhs: Negate(Box::from(UnaryOpSpan { expr: Integer(2) })),
+                lhs: Subtract(Box::from(BinaryOpSpan {
+                    lhs: expr_integer(7),
+                    rhs: expr_integer(1),
+                })),
+                rhs: Negate(Box::from(UnaryOpSpan { expr: expr_integer(2) })),
             })),
         );
     }
@@ -1461,7 +1497,7 @@ mod tests {
     #[test]
     fn test_expr_arith_ops() {
         use Expr::*;
-        let span = Box::from(BinaryOpSpan { lhs: Integer(1), rhs: Integer(2) });
+        let span = Box::from(BinaryOpSpan { lhs: expr_integer(1), rhs: expr_integer(2) });
         do_expr_ok_test("1 + 2", Add(span.clone()));
         do_expr_ok_test("1 - 2", Subtract(span.clone()));
         do_expr_ok_test("1 * 2", Multiply(span.clone()));
@@ -1472,7 +1508,7 @@ mod tests {
     #[test]
     fn test_expr_rel_ops() {
         use Expr::*;
-        let span = Box::from(BinaryOpSpan { lhs: Integer(1), rhs: Integer(2) });
+        let span = Box::from(BinaryOpSpan { lhs: expr_integer(1), rhs: expr_integer(2) });
         do_expr_ok_test("1 = 2", Equal(span.clone()));
         do_expr_ok_test("1 <> 2", NotEqual(span.clone()));
         do_expr_ok_test("1 < 2", Less(span.clone()));
@@ -1484,7 +1520,7 @@ mod tests {
     #[test]
     fn test_expr_logical_ops() {
         use Expr::*;
-        let span = Box::from(BinaryOpSpan { lhs: Integer(1), rhs: Integer(2) });
+        let span = Box::from(BinaryOpSpan { lhs: expr_integer(1), rhs: expr_integer(2) });
         do_expr_ok_test("1 AND 2", And(span.clone()));
         do_expr_ok_test("1 OR 2", Or(span.clone()));
         do_expr_ok_test("1 XOR 2", Xor(span));
@@ -1493,19 +1529,19 @@ mod tests {
     #[test]
     fn test_expr_logical_ops_not() {
         use Expr::*;
-        do_expr_ok_test("NOT TRUE", Not(Box::from(UnaryOpSpan { expr: Boolean(true) })));
-        do_expr_ok_test("NOT 6", Not(Box::from(UnaryOpSpan { expr: Integer(6) })));
+        do_expr_ok_test("NOT TRUE", Not(Box::from(UnaryOpSpan { expr: expr_boolean(true) })));
+        do_expr_ok_test("NOT 6", Not(Box::from(UnaryOpSpan { expr: expr_integer(6) })));
         do_expr_ok_test(
             "NOT NOT TRUE",
             Not(Box::from(UnaryOpSpan {
-                expr: Not(Box::from(UnaryOpSpan { expr: Boolean(true) })),
+                expr: Not(Box::from(UnaryOpSpan { expr: expr_boolean(true) })),
             })),
         );
         do_expr_ok_test(
             "1 - NOT 4",
             Subtract(Box::from(BinaryOpSpan {
-                lhs: Integer(1),
-                rhs: Not(Box::from(UnaryOpSpan { expr: Integer(4) })),
+                lhs: expr_integer(1),
+                rhs: Not(Box::from(UnaryOpSpan { expr: expr_integer(4) })),
             })),
         );
     }
@@ -1517,20 +1553,29 @@ mod tests {
             "3 * (2 + 5) = (3 + 1 = 2 OR 1 = 3 XOR FALSE * \"a\")",
             Equal(Box::from(BinaryOpSpan {
                 lhs: Multiply(Box::from(BinaryOpSpan {
-                    lhs: Integer(3),
-                    rhs: Add(Box::from(BinaryOpSpan { lhs: Integer(2), rhs: Integer(5) })),
+                    lhs: expr_integer(3),
+                    rhs: Add(Box::from(BinaryOpSpan {
+                        lhs: expr_integer(2),
+                        rhs: expr_integer(5),
+                    })),
                 })),
                 rhs: Xor(Box::from(BinaryOpSpan {
                     lhs: Or(Box::from(BinaryOpSpan {
                         lhs: Equal(Box::from(BinaryOpSpan {
-                            lhs: Add(Box::from(BinaryOpSpan { lhs: Integer(3), rhs: Integer(1) })),
-                            rhs: Integer(2),
+                            lhs: Add(Box::from(BinaryOpSpan {
+                                lhs: expr_integer(3),
+                                rhs: expr_integer(1),
+                            })),
+                            rhs: expr_integer(2),
                         })),
-                        rhs: Equal(Box::from(BinaryOpSpan { lhs: Integer(1), rhs: Integer(3) })),
+                        rhs: Equal(Box::from(BinaryOpSpan {
+                            lhs: expr_integer(1),
+                            rhs: expr_integer(3),
+                        })),
                     })),
                     rhs: Multiply(Box::from(BinaryOpSpan {
-                        lhs: Boolean(false),
-                        rhs: Text("a".to_owned()),
+                        lhs: expr_boolean(false),
+                        rhs: expr_text("a"),
                     })),
                 })),
             })),
@@ -1543,62 +1588,62 @@ mod tests {
 
         do_expr_ok_test(
             "-a",
-            Negate(Box::from(UnaryOpSpan { expr: Symbol(VarRef::new("a", VarType::Auto)) })),
+            Negate(Box::from(UnaryOpSpan { expr: expr_symbol(VarRef::new("a", VarType::Auto)) })),
         );
 
         do_expr_ok_test(
             "1 - -3",
             Subtract(Box::from(BinaryOpSpan {
-                lhs: Integer(1),
-                rhs: Negate(Box::from(UnaryOpSpan { expr: Integer(3) })),
+                lhs: expr_integer(1),
+                rhs: Negate(Box::from(UnaryOpSpan { expr: expr_integer(3) })),
             })),
         );
         do_expr_ok_test(
             "-1 - 3",
             Subtract(Box::from(BinaryOpSpan {
-                lhs: Negate(Box::from(UnaryOpSpan { expr: Integer(1) })),
-                rhs: Integer(3),
+                lhs: Negate(Box::from(UnaryOpSpan { expr: expr_integer(1) })),
+                rhs: expr_integer(3),
             })),
         );
         do_expr_ok_test(
             "5 + -1",
             Add(Box::from(BinaryOpSpan {
-                lhs: Integer(5),
-                rhs: Negate(Box::from(UnaryOpSpan { expr: Integer(1) })),
+                lhs: expr_integer(5),
+                rhs: Negate(Box::from(UnaryOpSpan { expr: expr_integer(1) })),
             })),
         );
         do_expr_ok_test(
             "-5 + 1",
             Add(Box::from(BinaryOpSpan {
-                lhs: Negate(Box::from(UnaryOpSpan { expr: Integer(5) })),
-                rhs: Integer(1),
+                lhs: Negate(Box::from(UnaryOpSpan { expr: expr_integer(5) })),
+                rhs: expr_integer(1),
             })),
         );
         do_expr_ok_test(
             "NOT -3",
             Not(Box::from(UnaryOpSpan {
-                expr: Negate(Box::from(UnaryOpSpan { expr: Integer(3) })),
+                expr: Negate(Box::from(UnaryOpSpan { expr: expr_integer(3) })),
             })),
         );
 
         do_expr_ok_test(
             "1.0 - -3.5",
             Subtract(Box::from(BinaryOpSpan {
-                lhs: Double(1.0),
-                rhs: Negate(Box::from(UnaryOpSpan { expr: Double(3.5) })),
+                lhs: expr_double(1.0),
+                rhs: Negate(Box::from(UnaryOpSpan { expr: expr_double(3.5) })),
             })),
         );
         do_expr_ok_test(
             "5.12 + -0.50",
             Add(Box::from(BinaryOpSpan {
-                lhs: Double(5.12),
-                rhs: Negate(Box::from(UnaryOpSpan { expr: Double(0.50) })),
+                lhs: expr_double(5.12),
+                rhs: Negate(Box::from(UnaryOpSpan { expr: expr_double(0.50) })),
             })),
         );
         do_expr_ok_test(
             "NOT -3",
             Not(Box::from(UnaryOpSpan {
-                expr: Negate(Box::from(UnaryOpSpan { expr: Integer(3) })),
+                expr: Negate(Box::from(UnaryOpSpan { expr: expr_integer(3) })),
             })),
         );
     }
@@ -1614,14 +1659,14 @@ mod tests {
             "one%(1)",
             Call(FunctionCallSpan {
                 fref: VarRef::new("one", VarType::Integer),
-                args: vec![Integer(1)],
+                args: vec![expr_integer(1)],
             }),
         );
         do_expr_ok_test(
             "many$(3, \"x\", TRUE)",
             Call(FunctionCallSpan {
                 fref: VarRef::new("many", VarType::Text),
-                args: vec![Integer(3), Text("x".to_owned()), Boolean(true)],
+                args: vec![expr_integer(3), expr_text("x"), expr_boolean(true)],
             }),
         );
     }
@@ -1644,17 +1689,17 @@ mod tests {
             Call(FunctionCallSpan {
                 fref: VarRef::new("outer", VarType::Boolean),
                 args: vec![
-                    Integer(1),
+                    expr_integer(1),
                     Call(FunctionCallSpan {
                         fref: VarRef::new("inner1", VarType::Auto),
-                        args: vec![Integer(2), Integer(3)],
+                        args: vec![expr_integer(2), expr_integer(3)],
                     }),
-                    Integer(4),
+                    expr_integer(4),
                     Call(FunctionCallSpan {
                         fref: VarRef::new("inner2", VarType::Auto),
                         args: vec![],
                     }),
-                    Integer(5),
+                    expr_integer(5),
                 ],
             }),
         );
@@ -1666,16 +1711,19 @@ mod tests {
         do_expr_ok_test(
             "b AND ask?(34 + 15, ask(1, FALSE), -5)",
             And(Box::from(BinaryOpSpan {
-                lhs: Symbol(VarRef::new("b".to_owned(), VarType::Auto)),
+                lhs: expr_symbol(VarRef::new("b".to_owned(), VarType::Auto)),
                 rhs: Call(FunctionCallSpan {
                     fref: VarRef::new("ask", VarType::Boolean),
                     args: vec![
-                        Add(Box::from(BinaryOpSpan { lhs: Integer(34), rhs: Integer(15) })),
+                        Add(Box::from(BinaryOpSpan {
+                            lhs: expr_integer(34),
+                            rhs: expr_integer(15),
+                        })),
                         Call(FunctionCallSpan {
                             fref: VarRef::new("ask", VarType::Auto),
-                            args: vec![Integer(1), Boolean(false)],
+                            args: vec![expr_integer(1), expr_boolean(false)],
                         }),
-                        Negate(Box::from(UnaryOpSpan { expr: Integer(5) })),
+                        Negate(Box::from(UnaryOpSpan { expr: expr_integer(5) })),
                     ],
                 }),
             })),
@@ -1690,10 +1738,16 @@ mod tests {
         do_expr_ok_test(
             "i = 0 OR i = (j - 1)",
             Or(Box::from(BinaryOpSpan {
-                lhs: Equal(Box::from(BinaryOpSpan { lhs: Symbol(iref.clone()), rhs: Integer(0) })),
+                lhs: Equal(Box::from(BinaryOpSpan {
+                    lhs: expr_symbol(iref.clone()),
+                    rhs: expr_integer(0),
+                })),
                 rhs: Equal(Box::from(BinaryOpSpan {
-                    lhs: Symbol(iref),
-                    rhs: Subtract(Box::from(BinaryOpSpan { lhs: Symbol(jref), rhs: Integer(1) })),
+                    lhs: expr_symbol(iref),
+                    rhs: Subtract(Box::from(BinaryOpSpan {
+                        lhs: expr_symbol(jref),
+                        rhs: expr_integer(1),
+                    })),
                 })),
             })),
         );
@@ -1738,8 +1792,8 @@ mod tests {
         do_expr_ok_test(
             "1 + PRINT",
             Add(Box::from(BinaryOpSpan {
-                lhs: Integer(1),
-                rhs: Symbol(VarRef::new("PRINT", VarType::Auto)),
+                lhs: expr_integer(1),
+                rhs: expr_symbol(VarRef::new("PRINT", VarType::Auto)),
             })),
         );
     }
@@ -1762,21 +1816,21 @@ mod tests {
         do_ok_test(
             "IF 1 THEN\nEND IF",
             &[Statement::If(IfSpan {
-                branches: vec![IfBranchSpan { guard: Expr::Integer(1), body: vec![] }],
+                branches: vec![IfBranchSpan { guard: expr_integer(1), body: vec![] }],
             })],
         );
         do_ok_test(
             "IF 1 THEN\nREM Some comment to skip over\n\nEND IF",
             &[Statement::If(IfSpan {
-                branches: vec![IfBranchSpan { guard: Expr::Integer(1), body: vec![] }],
+                branches: vec![IfBranchSpan { guard: expr_integer(1), body: vec![] }],
             })],
         );
         do_ok_test(
             "IF 1 THEN\nELSEIF 2 THEN\nEND IF",
             &[Statement::If(IfSpan {
                 branches: vec![
-                    IfBranchSpan { guard: Expr::Integer(1), body: vec![] },
-                    IfBranchSpan { guard: Expr::Integer(2), body: vec![] },
+                    IfBranchSpan { guard: expr_integer(1), body: vec![] },
+                    IfBranchSpan { guard: expr_integer(2), body: vec![] },
                 ],
             })],
         );
@@ -1784,9 +1838,9 @@ mod tests {
             "IF 1 THEN\nELSEIF 2 THEN\nELSE\nEND IF",
             &[Statement::If(IfSpan {
                 branches: vec![
-                    IfBranchSpan { guard: Expr::Integer(1), body: vec![] },
-                    IfBranchSpan { guard: Expr::Integer(2), body: vec![] },
-                    IfBranchSpan { guard: Expr::Boolean(true), body: vec![] },
+                    IfBranchSpan { guard: expr_integer(1), body: vec![] },
+                    IfBranchSpan { guard: expr_integer(2), body: vec![] },
+                    IfBranchSpan { guard: expr_boolean(true), body: vec![] },
                 ],
             })],
         );
@@ -1794,8 +1848,8 @@ mod tests {
             "IF 1 THEN\nELSE\nEND IF",
             &[Statement::If(IfSpan {
                 branches: vec![
-                    IfBranchSpan { guard: Expr::Integer(1), body: vec![] },
-                    IfBranchSpan { guard: Expr::Boolean(true), body: vec![] },
+                    IfBranchSpan { guard: expr_integer(1), body: vec![] },
+                    IfBranchSpan { guard: expr_boolean(true), body: vec![] },
                 ],
             })],
         );
@@ -1812,7 +1866,7 @@ mod tests {
             "IF 1 THEN\nPRINT\nEND IF",
             &[Statement::If(IfSpan {
                 branches: vec![IfBranchSpan {
-                    guard: Expr::Integer(1),
+                    guard: expr_integer(1),
                     body: vec![make_bare_builtin_call("PRINT")],
                 }],
             })],
@@ -1821,9 +1875,9 @@ mod tests {
             "IF 1 THEN\nREM foo\nELSEIF 2 THEN\nPRINT\nEND IF",
             &[Statement::If(IfSpan {
                 branches: vec![
-                    IfBranchSpan { guard: Expr::Integer(1), body: vec![] },
+                    IfBranchSpan { guard: expr_integer(1), body: vec![] },
                     IfBranchSpan {
-                        guard: Expr::Integer(2),
+                        guard: expr_integer(2),
                         body: vec![make_bare_builtin_call("PRINT")],
                     },
                 ],
@@ -1833,10 +1887,10 @@ mod tests {
             "IF 1 THEN\nELSEIF 2 THEN\nELSE\n\nPRINT\nEND IF",
             &[Statement::If(IfSpan {
                 branches: vec![
-                    IfBranchSpan { guard: Expr::Integer(1), body: vec![] },
-                    IfBranchSpan { guard: Expr::Integer(2), body: vec![] },
+                    IfBranchSpan { guard: expr_integer(1), body: vec![] },
+                    IfBranchSpan { guard: expr_integer(2), body: vec![] },
                     IfBranchSpan {
-                        guard: Expr::Boolean(true),
+                        guard: expr_boolean(true),
                         body: vec![make_bare_builtin_call("PRINT")],
                     },
                 ],
@@ -1846,9 +1900,9 @@ mod tests {
             "IF 1 THEN\n\n\nELSE\nPRINT\nEND IF",
             &[Statement::If(IfSpan {
                 branches: vec![
-                    IfBranchSpan { guard: Expr::Integer(1), body: vec![] },
+                    IfBranchSpan { guard: expr_integer(1), body: vec![] },
                     IfBranchSpan {
-                        guard: Expr::Boolean(true),
+                        guard: expr_boolean(true),
                         body: vec![make_bare_builtin_call("PRINT")],
                     },
                 ],
@@ -1878,19 +1932,19 @@ mod tests {
             &[Statement::If(IfSpan {
                 branches: vec![
                     IfBranchSpan {
-                        guard: Expr::Integer(1),
+                        guard: expr_integer(1),
                         body: vec![make_bare_builtin_call("A"), make_bare_builtin_call("B")],
                     },
                     IfBranchSpan {
-                        guard: Expr::Integer(2),
+                        guard: expr_integer(2),
                         body: vec![make_bare_builtin_call("C"), make_bare_builtin_call("D")],
                     },
                     IfBranchSpan {
-                        guard: Expr::Integer(3),
+                        guard: expr_integer(3),
                         body: vec![make_bare_builtin_call("E"), make_bare_builtin_call("F")],
                     },
                     IfBranchSpan {
-                        guard: Expr::Boolean(true),
+                        guard: expr_boolean(true),
                         body: vec![make_bare_builtin_call("G"), make_bare_builtin_call("H")],
                     },
                 ],
@@ -1914,14 +1968,14 @@ mod tests {
             &[Statement::If(IfSpan {
                 branches: vec![
                     IfBranchSpan {
-                        guard: Expr::Integer(1),
+                        guard: expr_integer(1),
                         body: vec![make_bare_builtin_call("A")],
                     },
                     IfBranchSpan {
-                        guard: Expr::Integer(2),
+                        guard: expr_integer(2),
                         body: vec![Statement::If(IfSpan {
                             branches: vec![IfBranchSpan {
-                                guard: Expr::Integer(3),
+                                guard: expr_integer(3),
                                 body: vec![make_bare_builtin_call("B")],
                             }],
                         })],
@@ -1979,14 +2033,14 @@ mod tests {
             "FOR i = 1 TO 10\nNEXT",
             &[Statement::For(ForSpan {
                 iter: auto_iter.clone(),
-                start: Expr::Integer(1),
+                start: expr_integer(1),
                 end: Expr::LessEqual(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(auto_iter.clone()),
-                    rhs: Expr::Integer(10),
+                    lhs: expr_symbol(auto_iter.clone()),
+                    rhs: expr_integer(10),
                 })),
                 next: Expr::Add(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(auto_iter),
-                    rhs: Expr::Integer(1),
+                    lhs: expr_symbol(auto_iter),
+                    rhs: expr_integer(1),
                 })),
                 body: vec![],
             })],
@@ -1997,14 +2051,14 @@ mod tests {
             "FOR i% = 1 TO 10\nREM Nothing to do\nNEXT",
             &[Statement::For(ForSpan {
                 iter: typed_iter.clone(),
-                start: Expr::Integer(1),
+                start: expr_integer(1),
                 end: Expr::LessEqual(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(typed_iter.clone()),
-                    rhs: Expr::Integer(10),
+                    lhs: expr_symbol(typed_iter.clone()),
+                    rhs: expr_integer(10),
                 })),
                 next: Expr::Add(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(typed_iter),
-                    rhs: Expr::Integer(1),
+                    lhs: expr_symbol(typed_iter),
+                    rhs: expr_integer(1),
                 })),
                 body: vec![],
             })],
@@ -2018,14 +2072,14 @@ mod tests {
             "FOR i = 0 TO 5\nA\nB\nNEXT",
             &[Statement::For(ForSpan {
                 iter: iter.clone(),
-                start: Expr::Integer(0),
+                start: expr_integer(0),
                 end: Expr::LessEqual(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(iter.clone()),
-                    rhs: Expr::Integer(5),
+                    lhs: expr_symbol(iter.clone()),
+                    rhs: expr_integer(5),
                 })),
                 next: Expr::Add(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(iter),
-                    rhs: Expr::Integer(1),
+                    lhs: expr_symbol(iter),
+                    rhs: expr_integer(1),
                 })),
                 body: vec![make_bare_builtin_call("A"), make_bare_builtin_call("B")],
             })],
@@ -2039,14 +2093,14 @@ mod tests {
             "FOR i = 0 TO 5 STEP 2\nA\nNEXT",
             &[Statement::For(ForSpan {
                 iter: iter.clone(),
-                start: Expr::Integer(0),
+                start: expr_integer(0),
                 end: Expr::LessEqual(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(iter.clone()),
-                    rhs: Expr::Integer(5),
+                    lhs: expr_symbol(iter.clone()),
+                    rhs: expr_integer(5),
                 })),
                 next: Expr::Add(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(iter),
-                    rhs: Expr::Integer(2),
+                    lhs: expr_symbol(iter),
+                    rhs: expr_integer(2),
                 })),
                 body: vec![make_bare_builtin_call("A")],
             })],
@@ -2060,14 +2114,14 @@ mod tests {
             "FOR i = 5 TO 0 STEP -1\nA\nNEXT",
             &[Statement::For(ForSpan {
                 iter: iter.clone(),
-                start: Expr::Integer(5),
+                start: expr_integer(5),
                 end: Expr::GreaterEqual(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(iter.clone()),
-                    rhs: Expr::Integer(0),
+                    lhs: expr_symbol(iter.clone()),
+                    rhs: expr_integer(0),
                 })),
                 next: Expr::Add(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(iter),
-                    rhs: Expr::Integer(-1),
+                    lhs: expr_symbol(iter),
+                    rhs: expr_integer(-1),
                 })),
                 body: vec![make_bare_builtin_call("A")],
             })],
@@ -2139,15 +2193,15 @@ mod tests {
             "WHILE 2 + 3\nWEND",
             &[Statement::While(WhileSpan {
                 expr: Expr::Add(Box::from(BinaryOpSpan {
-                    lhs: Expr::Integer(2),
-                    rhs: Expr::Integer(3),
+                    lhs: expr_integer(2),
+                    rhs: expr_integer(3),
                 })),
                 body: vec![],
             })],
         );
         do_ok_test(
             "WHILE 5\n\nREM foo\n\nWEND\n",
-            &[Statement::While(WhileSpan { expr: Expr::Integer(5), body: vec![] })],
+            &[Statement::While(WhileSpan { expr: expr_integer(5), body: vec![] })],
         );
     }
 
@@ -2156,7 +2210,7 @@ mod tests {
         do_ok_test(
             "WHILE TRUE\nA\nB\nWEND",
             &[Statement::While(WhileSpan {
-                expr: Expr::Boolean(true),
+                expr: expr_boolean(true),
                 body: vec![make_bare_builtin_call("A"), make_bare_builtin_call("B")],
             })],
         );
@@ -2176,11 +2230,11 @@ mod tests {
         do_ok_test(
             code,
             &[Statement::While(WhileSpan {
-                expr: Expr::Boolean(true),
+                expr: expr_boolean(true),
                 body: vec![
                     make_bare_builtin_call("A"),
                     Statement::While(WhileSpan {
-                        expr: Expr::Boolean(false),
+                        expr: expr_boolean(false),
                         body: vec![make_bare_builtin_call("B")],
                     }),
                     make_bare_builtin_call("C"),

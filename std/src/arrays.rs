@@ -37,7 +37,7 @@ async fn parse_bound_args<'a>(
     let mut iter = args.iter();
 
     let arrayref = match iter.next() {
-        Some(Expr::Symbol(arrayref)) => arrayref,
+        Some(Expr::Symbol(span)) => &span.vref,
         _ => return Err(CallError::ArgumentError("Takes one or two arguments".to_owned())),
     };
 

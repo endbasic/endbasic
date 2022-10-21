@@ -275,7 +275,7 @@ impl Command for InputCommand {
         }
 
         let vref = match &span.args[1].expr {
-            Some(Expr::Symbol(vref)) => vref,
+            Some(Expr::Symbol(span)) => &span.vref,
             _ => {
                 return Err(CallError::ArgumentError(
                     "INPUT requires a variable reference".to_owned(),
