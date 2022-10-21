@@ -378,13 +378,13 @@ impl Command for HelpCommand {
             [] => {
                 self.summary(&topics)?;
             }
-            [ArgSpan { expr: Some(Expr::Symbol(vref)), sep: ArgSep::End }] => {
-                let topic = topics.find(&format!("{}", vref))?;
+            [ArgSpan { expr: Some(Expr::Symbol(span)), sep: ArgSep::End }] => {
+                let topic = topics.find(&format!("{}", span.vref))?;
                 let mut console = self.console.borrow_mut();
                 topic.describe(&mut *console)?;
             }
-            [ArgSpan { expr: Some(Expr::Text(name)), sep: ArgSep::End }] => {
-                let topic = topics.find(name)?;
+            [ArgSpan { expr: Some(Expr::Text(span)), sep: ArgSep::End }] => {
+                let topic = topics.find(&span.value)?;
                 let mut console = self.console.borrow_mut();
                 topic.describe(&mut *console)?;
             }

@@ -352,7 +352,7 @@ mod tests {
 
         for args in &["\"a\", 1, 1, 1", "1, \"a\", 1, 1", "1, 1, \"a\", 1", "1, 1, 1, \"a\""] {
             check_stmt_err(
-                "Coordinate Text(\"a\") must be an integer",
+                "Coordinate Text(TextSpan { value: \"a\" }) must be an integer",
                 &format!("{} {}", name, args),
             );
         }
@@ -411,7 +411,7 @@ mod tests {
         }
 
         for cmd in &["GFX_PIXEL \"a\", 1", "GFX_PIXEL 1, \"a\""] {
-            check_stmt_err("Coordinate Text(\"a\") must be an integer", cmd);
+            check_stmt_err("Coordinate Text(TextSpan { value: \"a\" }) must be an integer", cmd);
         }
     }
 
