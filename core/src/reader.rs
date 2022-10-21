@@ -24,8 +24,7 @@ use std::rc::Rc;
 const TAB_LENGTH: usize = 8;
 
 /// Representation of a position within a stream.
-#[derive(Clone, Copy, Debug)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LineCol {
     /// Line number.
     pub(crate) line: usize,

@@ -15,6 +15,7 @@
 
 //! Abstract Syntax Tree (AST) for the EndBASIC language.
 
+use crate::reader::LineCol;
 use std::fmt;
 
 /// Components of a boolean literal expression.
@@ -22,6 +23,9 @@ use std::fmt;
 pub struct BooleanSpan {
     /// The boolean literal.
     pub value: bool,
+
+    /// Starting position of the literal.
+    pub pos: LineCol,
 }
 
 /// Components of a double literal expression.
@@ -29,6 +33,9 @@ pub struct BooleanSpan {
 pub struct DoubleSpan {
     /// The double literal.
     pub value: f64,
+
+    /// Starting position of the literal.
+    pub pos: LineCol,
 }
 
 /// Components of an integer literal expression.
@@ -36,6 +43,9 @@ pub struct DoubleSpan {
 pub struct IntegerSpan {
     /// The integer literal.
     pub value: i32,
+
+    /// Starting position of the literal.
+    pub pos: LineCol,
 }
 
 /// Components of a string literal expression.
@@ -43,6 +53,9 @@ pub struct IntegerSpan {
 pub struct TextSpan {
     /// The string literal.
     pub value: String,
+
+    /// Starting position of the literal.
+    pub pos: LineCol,
 }
 
 /// Components of a symbol reference expression.
@@ -50,6 +63,9 @@ pub struct TextSpan {
 pub struct SymbolSpan {
     /// The symbol reference.
     pub vref: VarRef,
+
+    /// Starting position of the symbol reference.
+    pub pos: LineCol,
 }
 
 /// Components of a unary operation expression.
@@ -57,6 +73,9 @@ pub struct SymbolSpan {
 pub struct UnaryOpSpan {
     /// Expression affected by the operator.
     pub expr: Expr,
+
+    /// Starting position of the operator.
+    pub pos: LineCol,
 }
 
 /// Components of a binary operation expression.
@@ -67,6 +86,9 @@ pub struct BinaryOpSpan {
 
     /// Expression on the right side of the operator.
     pub rhs: Expr,
+
+    /// Starting position of the operator.
+    pub pos: LineCol,
 }
 
 /// Components of an function call or an array reference expression.
@@ -77,6 +99,9 @@ pub struct FunctionCallSpan {
 
     /// Sequence of arguments to pass to the function.
     pub args: Vec<Expr>,
+
+    /// Starting position of the function call.
+    pub pos: LineCol,
 }
 
 /// Represents an expression and provides mechanisms to evaluate it.
