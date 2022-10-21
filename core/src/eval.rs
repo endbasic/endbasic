@@ -424,6 +424,7 @@ impl Expr {
 mod tests {
     use super::*;
     use crate::ast::VarRef;
+    use crate::reader::LineCol;
     use crate::testutils::*;
     use futures_lite::future::block_on;
 
@@ -1006,29 +1007,49 @@ mod tests {
         assert_eq!("Cannot negate \"\"", format!("{}", Text("".to_owned()).neg().unwrap_err()));
     }
 
+    /// Syntactic sugar to instantiate a `LineCol` for testing.
+    fn lc(line: usize, col: usize) -> LineCol {
+        LineCol { line, col }
+    }
+
     /// Syntactic sugar to instantiate an `Expr::Boolean` for testing.
     fn expr_boolean(value: bool) -> Expr {
-        Expr::Boolean(BooleanSpan { value })
+        // The position is currently irrelevant in the tests below as we never query it.
+        let pos = LineCol { line: 1234, col: 5768 };
+
+        Expr::Boolean(BooleanSpan { value, pos })
     }
 
     /// Syntactic sugar to instantiate an `Expr::Double` for testing.
     fn expr_double(value: f64) -> Expr {
-        Expr::Double(DoubleSpan { value })
+        // The position is currently irrelevant in the tests below as we never query it.
+        let pos = LineCol { line: 1234, col: 5768 };
+
+        Expr::Double(DoubleSpan { value, pos })
     }
 
     /// Syntactic sugar to instantiate an `Expr::Integer` for testing.
     fn expr_integer(value: i32) -> Expr {
-        Expr::Integer(IntegerSpan { value })
+        // The position is currently irrelevant in the tests below as we never query it.
+        let pos = LineCol { line: 1234, col: 5768 };
+
+        Expr::Integer(IntegerSpan { value, pos })
     }
 
     /// Syntactic sugar to instantiate an `Expr::Text` for testing.
     fn expr_text<S: Into<String>>(value: S) -> Expr {
-        Expr::Text(TextSpan { value: value.into() })
+        // The position is currently irrelevant in the tests below as we never query it.
+        let pos = LineCol { line: 1234, col: 5768 };
+
+        Expr::Text(TextSpan { value: value.into(), pos })
     }
 
     /// Syntactic sugar to instantiate an `Expr::Symbol` for testing.
     fn expr_symbol(vref: VarRef) -> Expr {
-        Expr::Symbol(SymbolSpan { vref })
+        // The position is currently irrelevant in the tests below as we never query it.
+        let pos = LineCol { line: 1234, col: 5768 };
+
+        Expr::Symbol(SymbolSpan { vref, pos })
     }
 
     #[test]
@@ -1073,9 +1094,12 @@ mod tests {
 
     #[test]
     fn test_expr_logical_ops() {
-        let binary_args =
-            Box::from(BinaryOpSpan { lhs: expr_boolean(false), rhs: expr_integer(0) });
-        let unary_args = Box::from(UnaryOpSpan { expr: expr_integer(0) });
+        let binary_args = Box::from(BinaryOpSpan {
+            lhs: expr_boolean(false),
+            rhs: expr_integer(0),
+            pos: lc(0, 0),
+        });
+        let unary_args = Box::from(UnaryOpSpan { expr: expr_integer(0), pos: lc(0, 0) });
 
         // These tests just make sure that we delegate to the `Value` operations for each
         // expression operator to essentially avoid duplicating all those tests.  We do this by
@@ -1102,8 +1126,11 @@ mod tests {
 
     #[test]
     fn test_expr_relational_ops() {
-        let binary_args =
-            Box::from(BinaryOpSpan { lhs: expr_boolean(false), rhs: expr_integer(0) });
+        let binary_args = Box::from(BinaryOpSpan {
+            lhs: expr_boolean(false),
+            rhs: expr_integer(0),
+            pos: lc(0, 0),
+        });
 
         // These tests just make sure that we delegate to the `Value` operations for each
         // expression operator to essentially avoid duplicating all those tests.  We do this by
@@ -1147,9 +1174,12 @@ mod tests {
 
     #[test]
     fn test_expr_arithmetic_ops() {
-        let binary_args =
-            Box::from(BinaryOpSpan { lhs: expr_boolean(false), rhs: expr_integer(0) });
-        let unary_args = Box::from(UnaryOpSpan { expr: expr_boolean(false) });
+        let binary_args = Box::from(BinaryOpSpan {
+            lhs: expr_boolean(false),
+            rhs: expr_integer(0),
+            pos: lc(0, 0),
+        });
+        let unary_args = Box::from(UnaryOpSpan { expr: expr_boolean(false), pos: lc(0, 0) });
 
         // These tests just make sure that we delegate to the `Value` operations for each
         // expression operator to essentially avoid duplicating all those tests.  We do this by
@@ -1199,9 +1229,11 @@ mod tests {
                 Expr::Multiply(Box::from(BinaryOpSpan {
                     lhs: Expr::Add(Box::from(BinaryOpSpan {
                         lhs: expr_symbol(xref.clone()),
-                        rhs: expr_integer(2)
+                        rhs: expr_integer(2),
+                        pos: lc(0, 0),
                     })),
-                    rhs: expr_symbol(yref.clone())
+                    rhs: expr_symbol(yref.clone()),
+                    pos: lc(0, 0),
                 }))
                 .eval(&mut syms)
             )
@@ -1215,8 +1247,10 @@ mod tests {
                     lhs: expr_symbol(xref),
                     rhs: Expr::Add(Box::from(BinaryOpSpan {
                         lhs: expr_integer(7),
-                        rhs: expr_symbol(yref)
-                    }))
+                        rhs: expr_symbol(yref),
+                        pos: lc(0, 0),
+                    })),
+                    pos: lc(0, 0),
                 }))
                 .eval(&mut syms)
             )
@@ -1232,8 +1266,10 @@ mod tests {
                         lhs: expr_integer(3),
                         rhs: Expr::Add(Box::from(BinaryOpSpan {
                             lhs: expr_integer(7),
-                            rhs: expr_boolean(true)
-                        }))
+                            rhs: expr_boolean(true),
+                            pos: lc(0, 0),
+                        })),
+                        pos: lc(0, 0),
                     }))
                     .eval(&mut syms)
                 )
@@ -1258,7 +1294,8 @@ mod tests {
             block_on(
                 Expr::Call(FunctionCallSpan {
                     fref: VarRef::new("X", VarType::Auto),
-                    args: vec![expr_integer(0), expr_integer(3)]
+                    args: vec![expr_integer(0), expr_integer(3)],
+                    pos: lc(0, 0),
                 })
                 .eval(&mut syms)
             )
@@ -1270,7 +1307,8 @@ mod tests {
             block_on(
                 Expr::Call(FunctionCallSpan {
                     fref: VarRef::new("X", VarType::Auto),
-                    args: vec![expr_integer(1), expr_integer(3)]
+                    args: vec![expr_integer(1), expr_integer(3)],
+                    pos: lc(0, 0),
                 })
                 .eval(&mut syms)
             )
@@ -1282,7 +1320,8 @@ mod tests {
             block_on(
                 Expr::Call(FunctionCallSpan {
                     fref: VarRef::new("X", VarType::Integer),
-                    args: vec![expr_integer(1), expr_integer(3)]
+                    args: vec![expr_integer(1), expr_integer(3)],
+                    pos: lc(0, 0),
                 })
                 .eval(&mut syms)
             )
@@ -1296,7 +1335,8 @@ mod tests {
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("X", VarType::Double),
-                        args: vec![expr_integer(1), expr_integer(3)]
+                        args: vec![expr_integer(1), expr_integer(3)],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
@@ -1312,6 +1352,7 @@ mod tests {
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("X", VarType::Integer),
                         args: vec![expr_integer(1)],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
@@ -1326,7 +1367,8 @@ mod tests {
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("X", VarType::Integer),
-                        args: vec![expr_integer(0), expr_integer(-1)]
+                        args: vec![expr_integer(0), expr_integer(-1)],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
@@ -1341,7 +1383,8 @@ mod tests {
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("X", VarType::Integer),
-                        args: vec![expr_integer(10), expr_integer(0)]
+                        args: vec![expr_integer(10), expr_integer(0)],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
@@ -1357,6 +1400,7 @@ mod tests {
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("y".to_owned(), VarType::Text),
                         args: vec![],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
@@ -1377,6 +1421,7 @@ mod tests {
                 Expr::Call(FunctionCallSpan {
                     fref: VarRef::new("SUM".to_owned(), VarType::Auto),
                     args: vec![],
+                    pos: lc(0, 0),
                 })
                 .eval(&mut syms)
             )
@@ -1389,6 +1434,7 @@ mod tests {
                 Expr::Call(FunctionCallSpan {
                     fref: VarRef::new("sum".to_owned(), VarType::Auto),
                     args: vec![expr_integer(5)],
+                    pos: lc(0, 0),
                 })
                 .eval(&mut syms)
             )
@@ -1401,6 +1447,7 @@ mod tests {
                 Expr::Call(FunctionCallSpan {
                     fref: VarRef::new("SUM".to_owned(), VarType::Auto),
                     args: vec![expr_integer(5), expr_integer(2)],
+                    pos: lc(0, 0),
                 })
                 .eval(&mut syms)
             )
@@ -1418,8 +1465,10 @@ mod tests {
                         Expr::Subtract(Box::from(BinaryOpSpan {
                             lhs: expr_integer(100),
                             rhs: expr_integer(90),
+                            pos: lc(0, 0),
                         }))
                     ],
+                    pos: lc(0, 0),
                 })
                 .eval(&mut syms)
             )
@@ -1434,6 +1483,7 @@ mod tests {
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("SUM".to_owned(), VarType::Text),
                         args: vec![],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
@@ -1449,6 +1499,7 @@ mod tests {
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("SUMA".to_owned(), VarType::Text),
                         args: vec![],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
@@ -1469,6 +1520,7 @@ mod tests {
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto),
                         args: vec![],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
@@ -1488,6 +1540,7 @@ mod tests {
                         Expr::Call(FunctionCallSpan {
                             fref: VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto),
                             args: vec![],
+                            pos: lc(0, 0),
                         })
                         .eval(&mut syms)
                     )
@@ -1509,6 +1562,7 @@ mod tests {
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
                         args: vec![expr_text("argument")],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
@@ -1524,6 +1578,7 @@ mod tests {
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
                         args: vec![expr_text("eval")],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
@@ -1539,6 +1594,7 @@ mod tests {
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
                         args: vec![expr_text("internal")],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
@@ -1554,6 +1610,7 @@ mod tests {
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
                         args: vec![expr_text("syntax")],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
@@ -1577,6 +1634,7 @@ mod tests {
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("SOMEVAR".to_owned(), VarType::Auto),
                         args: vec![],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
@@ -1592,6 +1650,7 @@ mod tests {
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("EXIT".to_owned(), VarType::Auto),
                         args: vec![],
+                        pos: lc(0, 0),
                     })
                     .eval(&mut syms)
                 )
