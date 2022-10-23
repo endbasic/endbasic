@@ -16,8 +16,9 @@
 //! Symbol definitions and symbols table representation.
 
 use crate::ast::{BuiltinCallSpan, FunctionCallSpan, Value, VarRef, VarType};
-use crate::eval::{Error, Result};
+use crate::eval;
 use crate::exec::Machine;
+use crate::value::{Error, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
@@ -37,7 +38,7 @@ pub enum CallError {
     ArgumentError(String),
 
     /// Error while evaluating input arguments.
-    EvalError(Error),
+    EvalError(eval::Error),
 
     /// Any other error not representable by other values.
     InternalError(String),
@@ -50,8 +51,8 @@ pub enum CallError {
     SyntaxError,
 }
 
-impl From<Error> for CallError {
-    fn from(e: Error) -> Self {
+impl From<eval::Error> for CallError {
+    fn from(e: eval::Error) -> Self {
         Self::EvalError(e)
     }
 }

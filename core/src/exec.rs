@@ -19,6 +19,7 @@ use crate::ast::*;
 use crate::eval;
 use crate::parser;
 use crate::syms::{CallError, CallableMetadata, Command, Function, Symbol, Symbols};
+use crate::value;
 use async_recursion::async_recursion;
 use std::collections::HashSet;
 use std::io;
@@ -42,6 +43,10 @@ pub enum Error {
     /// Syntax error.
     #[error("{0}")]
     SyntaxError(String),
+
+    /// Value computation error during execution.
+    #[error("{0}")]
+    ValueError(#[from] value::Error),
 }
 
 impl Error {

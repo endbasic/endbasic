@@ -32,3 +32,4 @@ mod reader;
 pub mod syms;
 #[cfg(test)]
 mod testutils;
+mod value;

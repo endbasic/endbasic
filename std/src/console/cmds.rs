@@ -21,6 +21,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{
     ArgSep, ArgSpan, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarType,
 };
+use endbasic_core::eval;
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -284,7 +285,7 @@ impl Command for InputCommand {
                 ))
             }
         };
-        let vref = machine.get_symbols().qualify_varref(vref)?;
+        let vref = machine.get_symbols().qualify_varref(vref).map_err(eval::Error::from)?;
 
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
@@ -292,7 +293,10 @@ impl Command for InputCommand {
             match read_line(&mut *console, &prompt, &previous_answer, None).await {
                 Ok(answer) => match Value::parse_as(vref.ref_type(), answer.trim_end()) {
                     Ok(value) => {
-                        machine.get_mut_symbols().set_var(&vref, value)?;
+                        machine
+                            .get_mut_symbols()
+                            .set_var(&vref, value)
+                            .map_err(eval::Error::from)?;
                         return Ok(());
                     }
                     Err(e) => {
