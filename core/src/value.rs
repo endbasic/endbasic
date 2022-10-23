@@ -21,7 +21,7 @@ use crate::ast::*;
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
 pub struct Error {
-    message: String,
+    pub(crate) message: String,
 }
 
 impl Error {

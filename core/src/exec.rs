@@ -588,7 +588,7 @@ mod tests {
     #[test]
     fn test_assignment_errors() {
         do_simple_error_test("a =\n", "1:4: Missing expression in assignment");
-        do_simple_error_test("a = b\n", "Undefined variable b");
+        do_simple_error_test("a = b\n", "1:5: Undefined variable b");
         do_simple_error_test("a = 3\na = TRUE\n", "Incompatible types in a assignment");
         do_simple_error_test("a? = 3", "Incompatible types in a? assignment");
     }
@@ -821,7 +821,10 @@ mod tests {
         do_simple_error_test("FOR a = 1 TO 10\nEND IF", "2:1: Unexpected END in statement");
 
         do_simple_error_test("FOR i = \"a\" TO 3\nNEXT", "FOR supports integer iteration only");
-        do_simple_error_test("FOR i = 1 TO \"a\"\nNEXT", "Cannot compare 1 and \"a\" with <=");
+        do_simple_error_test(
+            "FOR i = 1 TO \"a\"\nNEXT",
+            "1:11: Cannot compare 1 and \"a\" with <=",
+        );
 
         do_simple_error_test(
             "FOR i = \"b\" TO 7 STEP -8\nNEXT",
@@ -829,7 +832,7 @@ mod tests {
         );
         do_simple_error_test(
             "FOR i = 1 TO \"b\" STEP -8\nNEXT",
-            "Cannot compare 1 and \"b\" with >=",
+            "1:11: Cannot compare 1 and \"b\" with >=",
         );
 
         do_simple_error_test("FOR a = 1.0 TO 10.0\nNEXT", "FOR supports integer iteration only");
@@ -842,8 +845,8 @@ mod tests {
 
     #[test]
     fn test_function_call_errors() {
-        do_simple_error_test("OUT OUT()", "OUT is not an array or a function");
-        do_simple_error_test("OUT SUM?()", "Incompatible types in SUM? reference");
+        do_simple_error_test("OUT OUT()", "1:5: OUT is not an array or a function");
+        do_simple_error_test("OUT SUM?()", "1:5: Incompatible types in SUM? reference");
     }
 
     #[test]

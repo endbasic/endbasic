@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn test_autoexec_error_is_ignored() {
-        let autoexec = "a = 1: b = undef: c = 2";
+        let autoexec = "a = 1\nb = undef: c = 2";
         let mut tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
         let (console, storage) = (tester.get_console(), tester.get_storage());
         block_on(try_load_autoexec(tester.get_machine(), console, storage)).unwrap();
@@ -237,7 +237,7 @@ mod tests {
             .expect_var("after", 5)
             .expect_prints([
                 "Loading AUTOEXEC.BAS...",
-                "AUTOEXEC.BAS failed: Undefined variable undef",
+                "AUTOEXEC.BAS failed: 2:5: Undefined variable undef",
             ])
             .expect_file("MEMORY:/AUTOEXEC.BAS", autoexec)
             .check();

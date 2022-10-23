@@ -277,15 +277,18 @@ impl Command for InputCommand {
             prompt += "? ";
         }
 
-        let vref = match &span.args[1].expr {
-            Some(Expr::Symbol(span)) => &span.vref,
+        let (vref, pos) = match &span.args[1].expr {
+            Some(Expr::Symbol(span)) => (&span.vref, span.pos),
             _ => {
                 return Err(CallError::ArgumentError(
                     "INPUT requires a variable reference".to_owned(),
                 ))
             }
         };
-        let vref = machine.get_symbols().qualify_varref(vref).map_err(eval::Error::from)?;
+        let vref = machine
+            .get_symbols()
+            .qualify_varref(vref)
+            .map_err(|e| eval::Error::from_value_error(e, pos))?;
 
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
@@ -296,7 +299,7 @@ impl Command for InputCommand {
                         machine
                             .get_mut_symbols()
                             .set_var(&vref, value)
-                            .map_err(eval::Error::from)?;
+                            .map_err(|e| eval::Error::from_value_error(e, pos))?;
                         return Ok(());
                     }
                     Err(e) => {
@@ -509,7 +512,7 @@ mod tests {
 
     #[test]
     fn test_inkey_errors() {
-        check_expr_error("Syntax error in call to INKEY: no arguments allowed", "INKEY(1)");
+        check_expr_error("1:10: Syntax error in call to INKEY: no arguments allowed", "INKEY(1)");
     }
 
     #[test]
@@ -604,7 +607,7 @@ mod tests {
         check_stmt_err("INPUT requires a variable reference", "INPUT ;");
         check_stmt_err("INPUT prompt must be a string", "INPUT 3 ; a");
         check_stmt_err("INPUT requires a variable reference", "INPUT ; a + 1");
-        check_stmt_err("Cannot add \"a\" and TRUE", "INPUT \"a\" + TRUE; b?");
+        check_stmt_err("1:11: Cannot add \"a\" and TRUE", "INPUT \"a\" + TRUE; b?");
     }
 
     #[test]
@@ -666,6 +669,6 @@ mod tests {
     fn test_print_errors() {
         // Ensure type errors from `Expr` and `Value` bubble up.
         check_stmt_err("1:9: Unexpected value in expression", "PRINT a b");
-        check_stmt_err("Cannot add 3 and TRUE", "PRINT 3 + TRUE");
+        check_stmt_err("1:9: Cannot add 3 and TRUE", "PRINT 3 + TRUE");
     }
 }

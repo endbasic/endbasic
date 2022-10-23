@@ -407,7 +407,7 @@ mod tests {
         check_stmt_err("GPIO backend not compiled in", "GPIO_CLEAR");
         check_stmt_err("GPIO backend not compiled in", "GPIO_CLEAR 0");
         check_expr_error(
-            "Error in call to GPIO_READ: GPIO backend not compiled in",
+            "1:10: Error in call to GPIO_READ: GPIO backend not compiled in",
             "GPIO_READ(0)",
         );
         check_stmt_err("GPIO backend not compiled in", "GPIO_WRITE 0, TRUE");
@@ -476,10 +476,16 @@ mod tests {
 
     #[test]
     fn test_gpio_read_errors() {
-        check_expr_error("Syntax error in call to GPIO_READ: expected pin%", r#"GPIO_READ()"#);
-        check_expr_error("Syntax error in call to GPIO_READ: expected pin%", r#"GPIO_READ(1, 2)"#);
+        check_expr_error(
+            "1:10: Syntax error in call to GPIO_READ: expected pin%",
+            r#"GPIO_READ()"#,
+        );
+        check_expr_error(
+            "1:10: Syntax error in call to GPIO_READ: expected pin%",
+            r#"GPIO_READ(1, 2)"#,
+        );
 
-        check_pin_validation("Syntax error in call to GPIO_READ: ", r#"v = GPIO_READ(_PIN_)"#);
+        check_pin_validation("1:5: Syntax error in call to GPIO_READ: ", r#"v = GPIO_READ(_PIN_)"#);
     }
 
     #[test]

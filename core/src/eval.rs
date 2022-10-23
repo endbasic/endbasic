@@ -16,6 +16,7 @@
 //! Evaluator for EndBASIC expressions.
 
 use crate::ast::*;
+use crate::reader::LineCol;
 use crate::syms::{CallError, CallableMetadata, Function, Symbol, Symbols};
 use crate::value;
 use async_recursion::async_recursion;
@@ -23,19 +24,20 @@ use std::rc::Rc;
 
 /// Evaluation errors.
 #[derive(Debug, thiserror::Error)]
-#[error("{message}")]
+#[error("{}:{}: {}", pos.line, pos.col, message)]
 pub struct Error {
+    pos: LineCol,
     message: String,
 }
 
 impl Error {
-    /// Constructs a new evaluation error from a textual `message`.
-    pub(crate) fn new<S: Into<String>>(message: S) -> Self {
-        Self { message: message.into() }
+    /// Constructs a new evaluation error from a textual `message` that happened at `pos`.
+    pub(crate) fn new<S: Into<String>>(pos: LineCol, message: S) -> Self {
+        Self { pos, message: message.into() }
     }
 
     /// Annotates a call evaluation error with the function's metadata.
-    pub(crate) fn from_call_error(md: &CallableMetadata, e: CallError) -> Self {
+    fn from_call_error(md: &CallableMetadata, e: CallError, pos: LineCol) -> Self {
         let message = match e {
             CallError::ArgumentError(e) => {
                 format!("Syntax error in call to {}: {}", md.name(), e)
@@ -47,13 +49,12 @@ impl Error {
                 format!("Syntax error in call to {}: expected {}", md.name(), md.syntax())
             }
         };
-        Self { message }
+        Self { pos, message }
     }
-}
 
-impl From<value::Error> for Error {
-    fn from(e: value::Error) -> Self {
-        Error { message: format!("{}", e) }
+    /// Annotates a value error with a position.
+    pub fn from_value_error(e: value::Error, pos: LineCol) -> Self {
+        Self { pos, message: e.message }
     }
 }
 
@@ -76,6 +77,39 @@ pub async fn eval_all(exprs: &[Expr], syms: &mut Symbols) -> Result<Vec<Value>> 
 }
 
 impl Expr {
+    /// Returns the start position of the expression.
+    pub fn start_pos(&self) -> LineCol {
+        match self {
+            Expr::Boolean(span) => span.pos,
+            Expr::Double(span) => span.pos,
+            Expr::Integer(span) => span.pos,
+            Expr::Text(span) => span.pos,
+
+            Expr::Symbol(span) => span.pos,
+
+            Expr::And(span) => span.lhs.start_pos(),
+            Expr::Or(span) => span.lhs.start_pos(),
+            Expr::Xor(span) => span.lhs.start_pos(),
+            Expr::Not(span) => span.pos,
+
+            Expr::Equal(span) => span.lhs.start_pos(),
+            Expr::NotEqual(span) => span.lhs.start_pos(),
+            Expr::Less(span) => span.lhs.start_pos(),
+            Expr::LessEqual(span) => span.lhs.start_pos(),
+            Expr::Greater(span) => span.lhs.start_pos(),
+            Expr::GreaterEqual(span) => span.lhs.start_pos(),
+
+            Expr::Add(span) => span.lhs.start_pos(),
+            Expr::Subtract(span) => span.lhs.start_pos(),
+            Expr::Multiply(span) => span.lhs.start_pos(),
+            Expr::Divide(span) => span.lhs.start_pos(),
+            Expr::Modulo(span) => span.lhs.start_pos(),
+            Expr::Negate(span) => span.pos,
+
+            Expr::Call(span) => span.pos,
+        }
+    }
+
     /// Evaluates the subscripts of an array reference.
     async fn eval_array_args(
         &self,
@@ -84,10 +118,10 @@ impl Expr {
     ) -> Result<Vec<i32>> {
         let values = eval_all(&span.args, syms).await?;
         let mut subscripts = Vec::with_capacity(span.args.len());
-        for v in values {
+        for (e, v) in span.args.iter().zip(values) {
             match v {
                 Value::Integer(i) => subscripts.push(i),
-                _ => return Err(Error::new("Array subscripts must be integers")),
+                _ => return Err(Error::new(e.start_pos(), "Array subscripts must be integers")),
             }
         }
         Ok(subscripts)
@@ -103,7 +137,7 @@ impl Expr {
     ) -> Result<Value> {
         let metadata = f.metadata();
         if !span.fref.accepts(metadata.return_type()) {
-            return Err(Error::new("Incompatible type annotation for function call"));
+            return Err(Error::new(span.pos, "Incompatible type annotation for function call"));
         }
 
         let result = f.exec(span, syms).await;
@@ -116,14 +150,17 @@ impl Expr {
                 // when/if we add user-defined functions, so handle the problem as an
                 // error.
                 if !fref.accepts(value.as_vartype()) {
-                    return Err(Error::new(format!(
-                        "Value returned by {} is incompatible with its type definition",
-                        fref.name(),
-                    )));
+                    return Err(Error::new(
+                        span.pos,
+                        format!(
+                            "Value returned by {} is incompatible with its type definition",
+                            fref.name(),
+                        ),
+                    ));
                 }
                 Ok(value)
             }
-            Err(e) => Err(Error::from_call_error(metadata, e)),
+            Err(e) => Err(Error::from_call_error(metadata, e, span.pos)),
         }
     }
 
@@ -139,70 +176,92 @@ impl Expr {
             Expr::Integer(span) => Ok(Value::Integer(span.value)),
             Expr::Text(span) => Ok(Value::Text(span.value.clone())),
 
-            Expr::Symbol(span) => Ok(syms.get_var(&span.vref)?.clone()),
+            Expr::Symbol(span) => Ok(syms
+                .get_var(&span.vref)
+                .map_err(|e| Error::from_value_error(e, span.pos))?
+                .clone()),
 
             Expr::And(span) => {
-                Ok(Value::and(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::and(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
             Expr::Or(span) => {
-                Ok(Value::or(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::or(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
             Expr::Xor(span) => {
-                Ok(Value::xor(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::xor(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
-            Expr::Not(span) => Ok(Value::not(&span.expr.eval(syms).await?)?),
+            Expr::Not(span) => Ok(Value::not(&span.expr.eval(syms).await?)
+                .map_err(|e| Error::from_value_error(e, span.pos))?),
 
             Expr::Equal(span) => {
-                Ok(Value::eq(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::eq(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
             Expr::NotEqual(span) => {
-                Ok(Value::ne(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::ne(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
             Expr::Less(span) => {
-                Ok(Value::lt(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::lt(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
             Expr::LessEqual(span) => {
-                Ok(Value::le(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::le(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
             Expr::Greater(span) => {
-                Ok(Value::gt(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::gt(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
             Expr::GreaterEqual(span) => {
-                Ok(Value::ge(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::ge(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
 
             Expr::Add(span) => {
-                Ok(Value::add(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::add(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
             Expr::Subtract(span) => {
-                Ok(Value::sub(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::sub(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
             Expr::Multiply(span) => {
-                Ok(Value::mul(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::mul(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
             Expr::Divide(span) => {
-                Ok(Value::div(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::div(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
             Expr::Modulo(span) => {
-                Ok(Value::modulo(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)?)
+                Ok(Value::modulo(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
-            Expr::Negate(span) => Ok(Value::neg(&span.expr.eval(syms).await?)?),
+            Expr::Negate(span) => Ok(Value::neg(&span.expr.eval(syms).await?)
+                .map_err(|e| Error::from_value_error(e, span.pos))?),
 
             Expr::Call(span) => {
-                match syms.get(&span.fref)? {
+                match syms.get(&span.fref).map_err(|e| Error::from_value_error(e, span.pos))? {
                     Some(Symbol::Array(_)) => (), // Fallthrough.
                     Some(Symbol::Function(f)) => {
                         let f = f.clone();
                         return self.eval_function_call(syms, span, f).await;
                     }
                     Some(_) => {
-                        return Err(Error::new(format!(
-                            "{} is not an array or a function",
-                            span.fref
-                        )))
+                        return Err(Error::new(
+                            span.pos,
+                            format!("{} is not an array or a function", span.fref),
+                        ))
                     }
                     None => {
-                        return Err(Error::new(format!("Unknown function or array {}", span.fref)))
+                        return Err(Error::new(
+                            span.pos,
+                            format!("Unknown function or array {}", span.fref),
+                        ))
                     }
                 }
 
@@ -210,11 +269,15 @@ impl Expr {
                 // reference to the array while we evaluate subscripts.  This implies that we have
                 // to do a second lookup of the array right below, which isn't great...
                 let subscripts = self.eval_array_args(syms, span).await?;
-                let v = match syms.get(&span.fref)? {
-                    Some(Symbol::Array(array)) => array.index(&subscripts).map(|v| v.clone())?,
+                match syms.get(&span.fref).map_err(|e| Error::from_value_error(e, span.pos))? {
+                    Some(Symbol::Array(array)) => {
+                        Ok(array
+                            .index(&subscripts)
+                            .map(|v| v.clone())
+                            .map_err(|e| Error::from_value_error(e, span.pos))?)
+                    }
                     _ => unreachable!(),
-                };
-                Ok(v)
+                }
             }
         }
     }
@@ -305,10 +368,17 @@ mod tests {
         assert_eq!(text_val, block_on(expr_symbol(text_ref).eval(&mut syms)).unwrap());
 
         assert_eq!(
-            "Undefined variable x",
+            "7:6: Undefined variable x",
             format!(
                 "{}",
-                block_on(expr_symbol(VarRef::new("x", VarType::Auto)).eval(&mut syms)).unwrap_err()
+                block_on(
+                    Expr::Symbol(SymbolSpan {
+                        vref: VarRef::new("x", VarType::Auto),
+                        pos: lc(7, 6)
+                    })
+                    .eval(&mut syms)
+                )
+                .unwrap_err()
             )
         );
     }
@@ -318,9 +388,9 @@ mod tests {
         let binary_args = Box::from(BinaryOpSpan {
             lhs: expr_boolean(false),
             rhs: expr_integer(0),
-            pos: lc(0, 0),
+            pos: lc(3, 2),
         });
-        let unary_args = Box::from(UnaryOpSpan { expr: expr_integer(0), pos: lc(0, 0) });
+        let unary_args = Box::from(UnaryOpSpan { expr: expr_integer(0), pos: lc(7, 4) });
 
         // These tests just make sure that we delegate to the `Value` operations for each
         // expression operator to essentially avoid duplicating all those tests.  We do this by
@@ -328,19 +398,19 @@ mod tests {
         // operation.
         let mut syms = Symbols::default();
         assert_eq!(
-            "Cannot AND FALSE and 0",
+            "3:2: Cannot AND FALSE and 0",
             format!("{}", block_on(Expr::And(binary_args.clone()).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
-            "Cannot OR FALSE and 0",
+            "3:2: Cannot OR FALSE and 0",
             format!("{}", block_on(Expr::Or(binary_args.clone()).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
-            "Cannot XOR FALSE and 0",
+            "3:2: Cannot XOR FALSE and 0",
             format!("{}", block_on(Expr::Xor(binary_args).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
-            "Cannot apply NOT to 0",
+            "7:4: Cannot apply NOT to 0",
             format!("{}", block_on(Expr::Not(unary_args).eval(&mut syms)).unwrap_err())
         );
     }
@@ -350,7 +420,7 @@ mod tests {
         let binary_args = Box::from(BinaryOpSpan {
             lhs: expr_boolean(false),
             rhs: expr_integer(0),
-            pos: lc(0, 0),
+            pos: lc(5, 8),
         });
 
         // These tests just make sure that we delegate to the `Value` operations for each
@@ -359,36 +429,36 @@ mod tests {
         // operation.
         let mut syms = Symbols::default();
         assert_eq!(
-            "Cannot compare FALSE and 0 with =",
+            "5:8: Cannot compare FALSE and 0 with =",
             format!("{}", block_on(Expr::Equal(binary_args.clone()).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
-            "Cannot compare FALSE and 0 with <>",
+            "5:8: Cannot compare FALSE and 0 with <>",
             format!(
                 "{}",
                 block_on(Expr::NotEqual(binary_args.clone()).eval(&mut syms)).unwrap_err()
             )
         );
         assert_eq!(
-            "Cannot compare FALSE and 0 with <",
+            "5:8: Cannot compare FALSE and 0 with <",
             format!("{}", block_on(Expr::Less(binary_args.clone()).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
-            "Cannot compare FALSE and 0 with <=",
+            "5:8: Cannot compare FALSE and 0 with <=",
             format!(
                 "{}",
                 block_on(Expr::LessEqual(binary_args.clone()).eval(&mut syms)).unwrap_err()
             )
         );
         assert_eq!(
-            "Cannot compare FALSE and 0 with >",
+            "5:8: Cannot compare FALSE and 0 with >",
             format!(
                 "{}",
                 block_on(Expr::Greater(binary_args.clone()).eval(&mut syms)).unwrap_err()
             )
         );
         assert_eq!(
-            "Cannot compare FALSE and 0 with >=",
+            "5:8: Cannot compare FALSE and 0 with >=",
             format!("{}", block_on(Expr::GreaterEqual(binary_args).eval(&mut syms)).unwrap_err())
         );
     }
@@ -398,9 +468,9 @@ mod tests {
         let binary_args = Box::from(BinaryOpSpan {
             lhs: expr_boolean(false),
             rhs: expr_integer(0),
-            pos: lc(0, 0),
+            pos: lc(5, 8),
         });
-        let unary_args = Box::from(UnaryOpSpan { expr: expr_boolean(false), pos: lc(0, 0) });
+        let unary_args = Box::from(UnaryOpSpan { expr: expr_boolean(false), pos: lc(2, 1) });
 
         // These tests just make sure that we delegate to the `Value` operations for each
         // expression operator to essentially avoid duplicating all those tests.  We do this by
@@ -408,29 +478,29 @@ mod tests {
         // operation.
         let mut syms = Symbols::default();
         assert_eq!(
-            "Cannot add FALSE and 0",
+            "5:8: Cannot add FALSE and 0",
             format!("{}", block_on(Expr::Add(binary_args.clone()).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
-            "Cannot subtract 0 from FALSE",
+            "5:8: Cannot subtract 0 from FALSE",
             format!(
                 "{}",
                 block_on(Expr::Subtract(binary_args.clone()).eval(&mut syms)).unwrap_err()
             )
         );
         assert_eq!(
-            "Cannot multiply FALSE by 0",
+            "5:8: Cannot multiply FALSE by 0",
             format!(
                 "{}",
                 block_on(Expr::Multiply(binary_args.clone()).eval(&mut syms)).unwrap_err()
             )
         );
         assert_eq!(
-            "Cannot divide FALSE by 0",
+            "5:8: Cannot divide FALSE by 0",
             format!("{}", block_on(Expr::Divide(binary_args).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
-            "Cannot negate FALSE",
+            "2:1: Cannot negate FALSE",
             format!("{}", block_on(Expr::Negate(unary_args).eval(&mut syms)).unwrap_err())
         );
     }
@@ -479,7 +549,7 @@ mod tests {
         );
 
         assert_eq!(
-            "Cannot add 7 and TRUE",
+            "3:4: Cannot add 7 and TRUE",
             format!(
                 "{}",
                 block_on(
@@ -488,9 +558,9 @@ mod tests {
                         rhs: Expr::Add(Box::from(BinaryOpSpan {
                             lhs: expr_integer(7),
                             rhs: expr_boolean(true),
-                            pos: lc(0, 0),
+                            pos: lc(3, 4),
                         })),
-                        pos: lc(0, 0),
+                        pos: lc(1, 2),
                     }))
                     .eval(&mut syms)
                 )
@@ -550,14 +620,14 @@ mod tests {
         );
 
         assert_eq!(
-            "Incompatible types in X# reference",
+            "3:4: Incompatible types in X# reference",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("X", VarType::Double),
                         args: vec![expr_integer(1), expr_integer(3)],
-                        pos: lc(0, 0),
+                        pos: lc(3, 4),
                     })
                     .eval(&mut syms)
                 )
@@ -566,14 +636,14 @@ mod tests {
         );
 
         assert_eq!(
-            "Cannot index array with 1 subscripts; need 2",
+            "3:4: Cannot index array with 1 subscripts; need 2",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("X", VarType::Integer),
                         args: vec![expr_integer(1)],
-                        pos: lc(0, 0),
+                        pos: lc(3, 4),
                     })
                     .eval(&mut syms)
                 )
@@ -582,14 +652,14 @@ mod tests {
         );
 
         assert_eq!(
-            "Subscript -1 cannot be negative",
+            "3:4: Subscript -1 cannot be negative",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("X", VarType::Integer),
                         args: vec![expr_integer(0), expr_integer(-1)],
-                        pos: lc(0, 0),
+                        pos: lc(3, 4),
                     })
                     .eval(&mut syms)
                 )
@@ -598,14 +668,14 @@ mod tests {
         );
 
         assert_eq!(
-            "Subscript 10 exceeds limit of 2",
+            "3:4: Subscript 10 exceeds limit of 2",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("X", VarType::Integer),
                         args: vec![expr_integer(10), expr_integer(0)],
-                        pos: lc(0, 0),
+                        pos: lc(3, 4),
                     })
                     .eval(&mut syms)
                 )
@@ -614,14 +684,14 @@ mod tests {
         );
 
         assert_eq!(
-            "Unknown function or array y$",
+            "3:4: Unknown function or array y$",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("y".to_owned(), VarType::Text),
                         args: vec![],
-                        pos: lc(0, 0),
+                        pos: lc(3, 4),
                     })
                     .eval(&mut syms)
                 )
@@ -697,14 +767,14 @@ mod tests {
         );
 
         assert_eq!(
-            "Incompatible types in SUM$ reference",
+            "8:7: Incompatible types in SUM$ reference",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("SUM".to_owned(), VarType::Text),
                         args: vec![],
-                        pos: lc(0, 0),
+                        pos: lc(8, 7),
                     })
                     .eval(&mut syms)
                 )
@@ -713,14 +783,14 @@ mod tests {
         );
 
         assert_eq!(
-            "Unknown function or array SUMA$",
+            "4:6: Unknown function or array SUMA$",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("SUMA".to_owned(), VarType::Text),
                         args: vec![],
-                        pos: lc(0, 0),
+                        pos: lc(4, 6),
                     })
                     .eval(&mut syms)
                 )
@@ -754,14 +824,14 @@ mod tests {
                 .add_function(TypeCheckFunction::new(Value::Integer(5)))
                 .build();
             assert_eq!(
-                "Value returned by TYPE_CHECK is incompatible with its type definition",
+                "9:2: Value returned by TYPE_CHECK is incompatible with its type definition",
                 format!(
                     "{}",
                     block_on(
                         Expr::Call(FunctionCallSpan {
                             fref: VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto),
                             args: vec![],
-                            pos: lc(0, 0),
+                            pos: lc(9, 2),
                         })
                         .eval(&mut syms)
                     )
@@ -776,14 +846,14 @@ mod tests {
         let mut syms = SymbolsBuilder::default().add_function(ErrorFunction::new()).build();
 
         assert_eq!(
-            "Syntax error in call to ERROR: Bad argument",
+            "1:1: Syntax error in call to ERROR: Bad argument",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
                         args: vec![expr_text("argument")],
-                        pos: lc(0, 0),
+                        pos: lc(1, 1),
                     })
                     .eval(&mut syms)
                 )
@@ -792,14 +862,17 @@ mod tests {
         );
 
         assert_eq!(
-            "Error in call to ERROR: Some eval error",
+            "3:2: Error in call to ERROR: 4:5: Some eval error",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
-                        args: vec![expr_text("eval")],
-                        pos: lc(0, 0),
+                        args: vec![Expr::Text(TextSpan {
+                            value: "eval".to_owned(),
+                            pos: lc(4, 5)
+                        })],
+                        pos: lc(3, 2),
                     })
                     .eval(&mut syms)
                 )
@@ -808,14 +881,14 @@ mod tests {
         );
 
         assert_eq!(
-            "Error in call to ERROR: Some internal error",
+            "5:1: Error in call to ERROR: Some internal error",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
                         args: vec![expr_text("internal")],
-                        pos: lc(0, 0),
+                        pos: lc(5, 1),
                     })
                     .eval(&mut syms)
                 )
@@ -824,14 +897,14 @@ mod tests {
         );
 
         assert_eq!(
-            "Syntax error in call to ERROR: expected arg1$",
+            "7:4: Syntax error in call to ERROR: expected arg1$",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
                         args: vec![expr_text("syntax")],
-                        pos: lc(0, 0),
+                        pos: lc(7, 4),
                     })
                     .eval(&mut syms)
                 )
@@ -848,14 +921,14 @@ mod tests {
             .build();
 
         assert_eq!(
-            "SOMEVAR is not an array or a function",
+            "3:9: SOMEVAR is not an array or a function",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("SOMEVAR".to_owned(), VarType::Auto),
                         args: vec![],
-                        pos: lc(0, 0),
+                        pos: lc(3, 9),
                     })
                     .eval(&mut syms)
                 )
@@ -864,14 +937,14 @@ mod tests {
         );
 
         assert_eq!(
-            "EXIT is not an array or a function",
+            "3:7: EXIT is not an array or a function",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("EXIT".to_owned(), VarType::Auto),
                         args: vec![],
-                        pos: lc(0, 0),
+                        pos: lc(3, 7),
                     })
                     .eval(&mut syms)
                 )
