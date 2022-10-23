@@ -16,7 +16,7 @@
 //! Test utilities.
 
 use crate::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarType};
-use crate::eval::{eval_all, Error};
+use crate::eval::{self, eval_all, Error};
 use crate::exec::Machine;
 use crate::syms::{
     Array, CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -146,8 +146,8 @@ impl Command for InCommand {
 
         let mut data = self.data.borrow_mut();
         let raw_value = data.next().unwrap().to_owned();
-        let value = Value::parse_as(vref.ref_type(), raw_value)?;
-        machine.get_mut_symbols().set_var(vref, value)?;
+        let value = Value::parse_as(vref.ref_type(), raw_value).map_err(eval::Error::from)?;
+        machine.get_mut_symbols().set_var(vref, value).map_err(eval::Error::from)?;
         Ok(())
     }
 }
@@ -217,7 +217,7 @@ impl Function for SumFunction {
         let mut result = Value::Integer(0);
         for a in &span.args {
             let value = a.eval(symbols).await?;
-            result = result.add(&value)?;
+            result = result.add(&value).map_err(eval::Error::from)?;
         }
         Ok(result)
     }

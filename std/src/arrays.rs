@@ -17,6 +17,7 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{Expr, FunctionCallSpan, Value, VarType};
+use endbasic_core::eval;
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     Array, CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult, Symbol,
@@ -61,7 +62,7 @@ async fn parse_bound_args<'a>(
         return Err(CallError::ArgumentError("Takes one or two arguments".to_owned()));
     }
 
-    let array = match symbols.get(arrayref)? {
+    let array = match symbols.get(arrayref).map_err(eval::Error::from)? {
         Some(Symbol::Array(array)) => array,
         Some(_) => {
             return Err(CallError::ArgumentError(format!(
