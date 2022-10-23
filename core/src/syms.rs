@@ -15,7 +15,7 @@
 
 //! Symbol definitions and symbols table representation.
 
-use crate::ast::{BuiltinCallSpan, Expr, Value, VarRef, VarType};
+use crate::ast::{BuiltinCallSpan, FunctionCallSpan, Value, VarRef, VarType};
 use crate::eval::{Error, Result};
 use crate::exec::Machine;
 use async_trait::async_trait;
@@ -526,13 +526,14 @@ pub trait Function {
 
     /// Executes the function.
     ///
-    /// `args` contains the unevaluated arguments as provided in the invocation of the function.
-    /// These are needed to support functions that need unevaluated symbol references (such as
-    /// `LBOUND(array)`).  Because most functions don't support this kind of input, they should use
-    /// `eval::eval_all` to process all arguments.
+    /// `span` contains the details about the function call.  The arguments within the span are
+    /// unevaluated as provided in the invocation of the function.  These are needed to support
+    /// functions that need unevaluated symbol references (such as `LBOUND(array)`).  Because most
+    /// functions don't support this kind of input, they should use `eval::eval_all` to process all
+    /// arguments.
     ///
     /// `symbols` provides mutable access to the current state of the machine's symbols.
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult;
+    async fn exec(&self, args: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult;
 }
 
 /// A trait to define a command that is executed by a `Machine`.

@@ -317,7 +317,7 @@ impl Expr {
             return Err(Error::new("Incompatible type annotation for function call"));
         }
 
-        let result = f.exec(&span.args, syms).await;
+        let result = f.exec(span, syms).await;
         match result {
             Ok(value) => {
                 debug_assert!(metadata.return_type() != VarType::Auto);

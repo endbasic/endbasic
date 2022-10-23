@@ -16,7 +16,9 @@
 //! GPIO access functions and commands for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
+use endbasic_core::ast::{
+    ArgSep, ArgSpan, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarType,
+};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -284,8 +286,8 @@ impl Function for GpioReadFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        match args {
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        match span.args.as_slice() {
             [pin] => {
                 let pin = pin.eval(symbols).await?;
                 let pin = Pin::parse_value(&pin)?;

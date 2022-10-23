@@ -18,7 +18,9 @@
 use crate::console::readline::read_line;
 use crate::console::{CharsXY, ClearType, Console, ConsoleClearable, Key};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
+use endbasic_core::ast::{
+    ArgSep, ArgSpan, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarType,
+};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -190,8 +192,8 @@ impl Function for InKeyFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
-        if !args.is_empty() {
+    async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
+        if !span.args.is_empty() {
             return Err(CallError::ArgumentError("no arguments allowed".to_owned()));
         }
 

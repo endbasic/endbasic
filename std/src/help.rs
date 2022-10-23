@@ -406,7 +406,7 @@ pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
 #[cfg(test)]
 pub(crate) mod testutils {
     use super::*;
-    use endbasic_core::ast::Value;
+    use endbasic_core::ast::{FunctionCallSpan, Value};
     use endbasic_core::syms::{
         CallableMetadata, CallableMetadataBuilder, Function, FunctionResult,
     };
@@ -488,7 +488,7 @@ Second paragraph of the extended description.",
             &self.metadata
         }
 
-        async fn exec(&self, _args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
+        async fn exec(&self, _args: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
             Ok(Value::Text("irrelevant".to_owned()))
         }
     }
