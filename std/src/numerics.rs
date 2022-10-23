@@ -16,7 +16,9 @@
 //! Numerical functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
+use endbasic_core::ast::{
+    ArgSep, ArgSpan, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarType,
+};
 use endbasic_core::eval::eval_all;
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
@@ -135,8 +137,8 @@ impl Function for AtnFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
         let n = match args.as_slice() {
             [Value::Double(n)] => *n,
             [Value::Integer(n)] => *n as f64,
@@ -179,8 +181,8 @@ impl Function for CosFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let angle = get_angle(args, symbols, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let angle = get_angle(&span.args, symbols, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.cos()))
     }
 }
@@ -252,8 +254,8 @@ impl Function for DtoiFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
         match args.as_slice() {
             [Value::Double(n)] => Ok(Value::Integer(*n as i32)),
             _ => Err(CallError::SyntaxError),
@@ -285,8 +287,8 @@ impl Function for ItodFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
         match args.as_slice() {
             [Value::Integer(n)] => Ok(Value::Double(*n as f64)),
             _ => Err(CallError::SyntaxError),
@@ -318,11 +320,11 @@ impl Function for MindFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        if args.is_empty() {
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        if span.args.is_empty() {
             return Err(CallError::SyntaxError);
         }
-        let args = eval_all(args, symbols).await?;
+        let args = eval_all(&span.args, symbols).await?;
         let mut min = f64::MAX;
         for arg in args {
             match arg {
@@ -359,11 +361,11 @@ impl Function for MiniFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        if args.is_empty() {
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        if span.args.is_empty() {
             return Err(CallError::SyntaxError);
         }
-        let args = eval_all(args, symbols).await?;
+        let args = eval_all(&span.args, symbols).await?;
         let mut min = i32::MAX;
         for arg in args {
             match arg {
@@ -400,11 +402,11 @@ impl Function for MaxdFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        if args.is_empty() {
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        if span.args.is_empty() {
             return Err(CallError::SyntaxError);
         }
-        let args = eval_all(args, symbols).await?;
+        let args = eval_all(&span.args, symbols).await?;
         let mut max = f64::MIN;
         for arg in args {
             match arg {
@@ -441,11 +443,11 @@ impl Function for MaxiFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        if args.is_empty() {
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        if span.args.is_empty() {
             return Err(CallError::SyntaxError);
         }
-        let args = eval_all(args, symbols).await?;
+        let args = eval_all(&span.args, symbols).await?;
         let mut max = i32::MIN;
         for arg in args {
             match arg {
@@ -482,8 +484,8 @@ impl Function for PiFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
-        if !args.is_empty() {
+    async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
+        if !span.args.is_empty() {
             return Err(CallError::ArgumentError("no arguments allowed".to_owned()));
         }
         Ok(Value::Double(std::f64::consts::PI))
@@ -619,8 +621,8 @@ impl Function for RndFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
         match args.as_slice() {
             [] => Ok(Value::Double(self.prng.borrow_mut().next())),
             [Value::Integer(n)] => match n.cmp(&0) {
@@ -663,8 +665,8 @@ impl Function for SinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let angle = get_angle(args, symbols, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let angle = get_angle(&span.args, symbols, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.sin()))
     }
 }
@@ -699,8 +701,8 @@ impl Function for TanFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let angle = get_angle(args, symbols, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let angle = get_angle(&span.args, symbols, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.tan()))
     }
 }

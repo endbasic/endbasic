@@ -16,7 +16,7 @@
 //! String functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{Expr, Value, VarType};
+use endbasic_core::ast::{FunctionCallSpan, Value, VarType};
 use endbasic_core::eval::eval_all;
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
@@ -56,8 +56,8 @@ impl Function for LeftFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s), Value::Integer(n)] => {
                 if n < &0 {
@@ -96,8 +96,8 @@ impl Function for LenFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s)] => {
                 if s.len() > std::i32::MAX as usize {
@@ -135,8 +135,8 @@ impl Function for LtrimFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s)] => Ok(Value::Text(s.trim_start().to_owned())),
             _ => Err(CallError::SyntaxError),
@@ -173,8 +173,8 @@ impl Function for MidFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s), Value::Integer(start), Value::Integer(length)] => {
                 if *start < 0 {
@@ -220,8 +220,8 @@ impl Function for RightFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s), Value::Integer(n)] => {
                 if n < &0 {
@@ -260,8 +260,8 @@ impl Function for RtrimFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s)] => Ok(Value::Text(s.trim_end().to_owned())),
             _ => Err(CallError::SyntaxError),

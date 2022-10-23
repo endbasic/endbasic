@@ -16,7 +16,7 @@
 //! Array-related functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{Expr, Value, VarType};
+use endbasic_core::ast::{Expr, FunctionCallSpan, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     Array, CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult, Symbol,
@@ -125,8 +125,8 @@ impl Function for LboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let (_array, _dim) = parse_bound_args(args, symbols).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let (_array, _dim) = parse_bound_args(&span.args, symbols).await?;
         Ok(Value::Integer(0))
     }
 }
@@ -161,8 +161,8 @@ impl Function for UboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let (array, dim) = parse_bound_args(args, symbols).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let (array, dim) = parse_bound_args(&span.args, symbols).await?;
         Ok(Value::Integer((array.dimensions()[dim - 1] - 1) as i32))
     }
 }

@@ -15,7 +15,7 @@
 
 //! Test utilities.
 
-use crate::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
+use crate::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarType};
 use crate::eval::{eval_all, Error};
 use crate::exec::Machine;
 use crate::syms::{
@@ -48,8 +48,8 @@ impl Function for ErrorFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(args, symbols).await?;
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s)] => {
                 if s == "argument" {
@@ -213,9 +213,9 @@ impl Function for SumFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
         let mut result = Value::Integer(0);
-        for a in args {
+        for a in &span.args {
             let value = a.eval(symbols).await?;
             result = result.add(&value)?;
         }
@@ -294,8 +294,8 @@ impl Function for TypeCheckFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: &[Expr], _symbols: &mut Symbols) -> FunctionResult {
-        assert!(args.is_empty());
+    async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
+        assert!(span.args.is_empty());
         Ok(self.value.clone())
     }
 }
