@@ -55,7 +55,7 @@ impl Function for ErrorFunction {
                 if s == "argument" {
                     Err(CallError::ArgumentError("Bad argument".to_owned()))
                 } else if s == "eval" {
-                    Err(Error::new("Some eval error").into())
+                    Err(Error::new(span.args[0].start_pos(), "Some eval error").into())
                 } else if s == "internal" {
                     Err(CallError::InternalError("Some internal error".to_owned()))
                 } else if s == "syntax" {
@@ -139,15 +139,19 @@ impl Command for InCommand {
         if span.args[0].sep != ArgSep::End {
             return Err(CallError::SyntaxError);
         }
-        let vref = match &span.args[0].expr {
-            Some(Expr::Symbol(span)) => &span.vref,
+        let (vref, pos) = match &span.args[0].expr {
+            Some(Expr::Symbol(span)) => (&span.vref, span.pos),
             _ => return Err(CallError::SyntaxError),
         };
 
         let mut data = self.data.borrow_mut();
         let raw_value = data.next().unwrap().to_owned();
-        let value = Value::parse_as(vref.ref_type(), raw_value).map_err(eval::Error::from)?;
-        machine.get_mut_symbols().set_var(vref, value).map_err(eval::Error::from)?;
+        let value = Value::parse_as(vref.ref_type(), raw_value)
+            .map_err(|e| eval::Error::from_value_error(e, pos))?;
+        machine
+            .get_mut_symbols()
+            .set_var(vref, value)
+            .map_err(|e| eval::Error::from_value_error(e, pos))?;
         Ok(())
     }
 }
@@ -217,7 +221,8 @@ impl Function for SumFunction {
         let mut result = Value::Integer(0);
         for a in &span.args {
             let value = a.eval(symbols).await?;
-            result = result.add(&value).map_err(eval::Error::from)?;
+            result =
+                result.add(&value).map_err(|e| eval::Error::from_value_error(e, a.start_pos()))?;
         }
         Ok(result)
     }

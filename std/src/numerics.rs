@@ -738,9 +738,9 @@ mod tests {
         check_expr_ok(123f64.atan(), "ATN(123)");
         check_expr_ok(45.5f64.atan(), "ATN(45.5)");
 
-        check_expr_error("Syntax error in call to ATN: expected n%|n#", "ATN()");
-        check_expr_error("Syntax error in call to ATN: expected n%|n#", "ATN(FALSE)");
-        check_expr_error("Syntax error in call to ATN: expected n%|n#", "ATN(3, 4)");
+        check_expr_error("1:10: Syntax error in call to ATN: expected n%|n#", "ATN()");
+        check_expr_error("1:10: Syntax error in call to ATN: expected n%|n#", "ATN(FALSE)");
+        check_expr_error("1:10: Syntax error in call to ATN: expected n%|n#", "ATN(3, 4)");
     }
 
     #[test]
@@ -748,9 +748,9 @@ mod tests {
         check_expr_ok(123f64.cos(), "COS(123)");
         check_expr_ok(45.5f64.cos(), "COS(45.5)");
 
-        check_expr_error("Syntax error in call to COS: expected angle%|angle#", "COS()");
-        check_expr_error("Syntax error in call to COS: expected angle%|angle#", "COS(FALSE)");
-        check_expr_error("Syntax error in call to COS: expected angle%|angle#", "COS(3, 4)");
+        check_expr_error("1:10: Syntax error in call to COS: expected angle%|angle#", "COS()");
+        check_expr_error("1:10: Syntax error in call to COS: expected angle%|angle#", "COS(FALSE)");
+        check_expr_error("1:10: Syntax error in call to COS: expected angle%|angle#", "COS(3, 4)");
     }
 
     #[test]
@@ -790,9 +790,9 @@ mod tests {
         check_expr_ok(std::i32::MAX, "DTOI(12345678901234567890.0)");
         check_expr_ok(std::i32::MIN, "DTOI(-12345678901234567890.0)");
 
-        check_expr_error("Syntax error in call to DTOI: expected expr#", "DTOI()");
-        check_expr_error("Syntax error in call to DTOI: expected expr#", "DTOI(3)");
-        check_expr_error("Syntax error in call to DTOI: expected expr#", "DTOI(3.0, 4)");
+        check_expr_error("1:10: Syntax error in call to DTOI: expected expr#", "DTOI()");
+        check_expr_error("1:10: Syntax error in call to DTOI: expected expr#", "DTOI(3)");
+        check_expr_error("1:10: Syntax error in call to DTOI: expected expr#", "DTOI(3.0, 4)");
     }
 
     #[test]
@@ -806,9 +806,9 @@ mod tests {
         // value of an i32 in the code as a literal.
         check_expr_ok(std::i32::MIN as f64, &format!("ITOD({} - 1)", std::i32::MIN + 1));
 
-        check_expr_error("Syntax error in call to ITOD: expected expr%", "ITOD()");
-        check_expr_error("Syntax error in call to ITOD: expected expr%", "ITOD(3.0)");
-        check_expr_error("Syntax error in call to ITOD: expected expr%", "ITOD(3, 4)");
+        check_expr_error("1:10: Syntax error in call to ITOD: expected expr%", "ITOD()");
+        check_expr_error("1:10: Syntax error in call to ITOD: expected expr%", "ITOD(3.0)");
+        check_expr_error("1:10: Syntax error in call to ITOD: expected expr%", "ITOD(3, 4)");
     }
 
     #[test]
@@ -820,8 +820,14 @@ mod tests {
         check_expr_ok(3.5, "MIND(5.3, 3.5, 4.2)");
         check_expr_ok(-5.3, "MIND(-5.3, -3.5, -4.2)");
 
-        check_expr_error("Syntax error in call to MIND: expected expr#[, .., expr#]", "MIND()");
-        check_expr_error("Syntax error in call to MIND: expected expr#[, .., expr#]", "MIND(3)");
+        check_expr_error(
+            "1:10: Syntax error in call to MIND: expected expr#[, .., expr#]",
+            "MIND()",
+        );
+        check_expr_error(
+            "1:10: Syntax error in call to MIND: expected expr#[, .., expr#]",
+            "MIND(3)",
+        );
     }
 
     #[test]
@@ -833,8 +839,14 @@ mod tests {
         check_expr_ok(3, "MINI(5, 3, 4)");
         check_expr_ok(-5, "MINI(-5, -3, -4)");
 
-        check_expr_error("Syntax error in call to MINI: expected expr%[, .., expr%]", "MINI()");
-        check_expr_error("Syntax error in call to MINI: expected expr%[, .., expr%]", "MINI(3.0)");
+        check_expr_error(
+            "1:10: Syntax error in call to MINI: expected expr%[, .., expr%]",
+            "MINI()",
+        );
+        check_expr_error(
+            "1:10: Syntax error in call to MINI: expected expr%[, .., expr%]",
+            "MINI(3.0)",
+        );
     }
 
     #[test]
@@ -846,8 +858,14 @@ mod tests {
         check_expr_ok(5.3, "MAXD(5.3, 3.5, 4.2)");
         check_expr_ok(-3.5, "MAXD(-5.3, -3.5, -4.2)");
 
-        check_expr_error("Syntax error in call to MAXD: expected expr#[, .., expr#]", "MAXD()");
-        check_expr_error("Syntax error in call to MAXD: expected expr#[, .., expr#]", "MAXD(3)");
+        check_expr_error(
+            "1:10: Syntax error in call to MAXD: expected expr#[, .., expr#]",
+            "MAXD()",
+        );
+        check_expr_error(
+            "1:10: Syntax error in call to MAXD: expected expr#[, .., expr#]",
+            "MAXD(3)",
+        );
     }
 
     #[test]
@@ -859,15 +877,21 @@ mod tests {
         check_expr_ok(5, "MAXI(5, 3, 4)");
         check_expr_ok(-3, "MAXI(-5, -3, -4)");
 
-        check_expr_error("Syntax error in call to MAXI: expected expr%[, .., expr%]", "MAXI()");
-        check_expr_error("Syntax error in call to MAXI: expected expr%[, .., expr%]", "MAXI(3.0)");
+        check_expr_error(
+            "1:10: Syntax error in call to MAXI: expected expr%[, .., expr%]",
+            "MAXI()",
+        );
+        check_expr_error(
+            "1:10: Syntax error in call to MAXI: expected expr%[, .., expr%]",
+            "MAXI(3.0)",
+        );
     }
 
     #[test]
     fn test_pi() {
         check_expr_ok(std::f64::consts::PI, "PI()");
 
-        check_expr_error("Syntax error in call to PI: no arguments allowed", "PI(3)");
+        check_expr_error("1:10: Syntax error in call to PI: no arguments allowed", "PI(3)");
     }
 
     #[test]
@@ -887,9 +911,9 @@ mod tests {
         t.run("result = RND(0)").expect_var("result", 0.2205558922655312).check();
         t.run("result = RND(1)").expect_var("result", 0.8273883964464507).check();
 
-        check_expr_error("Syntax error in call to RND: expected n%", "RND(3.0)");
-        check_expr_error("Syntax error in call to RND: expected n%", "RND(1, 7)");
-        check_expr_error("Syntax error in call to RND: n% cannot be negative", "RND(-1)");
+        check_expr_error("1:10: Syntax error in call to RND: expected n%", "RND(3.0)");
+        check_expr_error("1:10: Syntax error in call to RND: expected n%", "RND(1, 7)");
+        check_expr_error("1:10: Syntax error in call to RND: n% cannot be negative", "RND(-1)");
 
         check_stmt_err("Random seed must be an integer", "RANDOMIZE 3.0");
         check_stmt_err("RANDOMIZE takes zero or one argument", "RANDOMIZE ,");
@@ -900,9 +924,9 @@ mod tests {
         check_expr_ok(123f64.sin(), "SIN(123)");
         check_expr_ok(45.5f64.sin(), "SIN(45.5)");
 
-        check_expr_error("Syntax error in call to SIN: expected angle%|angle#", "SIN()");
-        check_expr_error("Syntax error in call to SIN: expected angle%|angle#", "SIN(FALSE)");
-        check_expr_error("Syntax error in call to SIN: expected angle%|angle#", "SIN(3, 4)");
+        check_expr_error("1:10: Syntax error in call to SIN: expected angle%|angle#", "SIN()");
+        check_expr_error("1:10: Syntax error in call to SIN: expected angle%|angle#", "SIN(FALSE)");
+        check_expr_error("1:10: Syntax error in call to SIN: expected angle%|angle#", "SIN(3, 4)");
     }
 
     #[test]
@@ -910,8 +934,8 @@ mod tests {
         check_expr_ok(123f64.tan(), "TAN(123)");
         check_expr_ok(45.5f64.tan(), "TAN(45.5)");
 
-        check_expr_error("Syntax error in call to TAN: expected angle%|angle#", "TAN()");
-        check_expr_error("Syntax error in call to TAN: expected angle%|angle#", "TAN(FALSE)");
-        check_expr_error("Syntax error in call to TAN: expected angle%|angle#", "TAN(3, 4)");
+        check_expr_error("1:10: Syntax error in call to TAN: expected angle%|angle#", "TAN()");
+        check_expr_error("1:10: Syntax error in call to TAN: expected angle%|angle#", "TAN(FALSE)");
+        check_expr_error("1:10: Syntax error in call to TAN: expected angle%|angle#", "TAN(3, 4)");
     }
 }
