@@ -37,13 +37,18 @@ pub enum Error {
     #[error("{0}")]
     IoError(#[from] io::Error),
 
+    /// Hack to support errors that arise from within a program that is `RUN`.
+    // TODO(jmmv): Consider unifying `CallError` with `exec::Error`.
+    #[error("{0}")]
+    NestedError(String),
+
     /// Parsing error during execution.
     #[error("{0}")]
     ParseError(#[from] parser::Error),
 
     /// Syntax error.
-    #[error("{0}")]
-    SyntaxError(String),
+    #[error("{}:{}: {}", .0.line, .0.col, .1)]
+    SyntaxError(LineCol, String),
 
     /// Value computation error during execution.
     #[error("{0}")]
@@ -55,17 +60,29 @@ impl Error {
     // TODO(jmmv): This is a hack to support the transition to a better Command abstraction within
     // Symbols and exists to minimize the amount of impacted tests.  Should be removed and/or
     // somehow unified with the equivalent function in eval::Error.
-    pub(crate) fn from_call_error(md: &CallableMetadata, e: CallError) -> Self {
+    pub(crate) fn from_call_error(md: &CallableMetadata, e: CallError, pos: LineCol) -> Self {
         match e {
-            CallError::ArgumentError(e) => Self::SyntaxError(e),
+            CallError::ArgumentError(pos2, e) => Self::SyntaxError(
+                pos,
+                format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
+            ),
             CallError::EvalError(e) => Self::EvalError(e),
-            CallError::InternalError(e) => Self::SyntaxError(e),
-            CallError::IoError(e) => Self::IoError(e),
-            CallError::SyntaxError => Self::SyntaxError(format!(
-                "Syntax error in call to {}: expected {}",
-                md.name(),
-                md.syntax()
+            CallError::InternalError(pos2, e) => Self::SyntaxError(
+                pos,
+                format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
+            ),
+            CallError::IoError(e) => Self::IoError(io::Error::new(
+                e.kind(),
+                format!("{}:{}: In call to {}: {}", pos.line, pos.col, md.name(), e),
             )),
+            CallError::NestedError(e) => Self::NestedError(e),
+            CallError::SyntaxError if md.syntax().is_empty() => {
+                Self::SyntaxError(pos, format!("In call to {}: expected no arguments", md.name()))
+            }
+            CallError::SyntaxError => Self::SyntaxError(
+                pos,
+                format!("In call to {}: expected {}", md.name(), md.syntax()),
+            ),
         }
     }
 
@@ -87,8 +104,8 @@ impl Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Instantiates a new `Err(Error::SyntaxError(...))` from a message.  Syntactic sugar.
-fn new_syntax_error<T, S: Into<String>>(message: S) -> Result<T> {
-    Err(Error::SyntaxError(message.into()))
+fn new_syntax_error<T, S: Into<String>>(pos: LineCol, message: S) -> Result<T> {
+    Err(Error::SyntaxError(pos, message.into()))
 }
 
 /// Describes how the machine stopped execution while it was running a script via `exec()`.
@@ -125,7 +142,7 @@ pub struct Machine {
     symbols: Symbols,
     clearables: Vec<Box<dyn Clearable>>,
     stop_reason: Option<StopReason>,
-    pending_goto: Option<String>,
+    pending_goto: Option<GotoSpan>,
 }
 
 impl Machine {
@@ -229,7 +246,12 @@ impl Machine {
         for ss_expr in &span.subscripts {
             match ss_expr.eval(&mut self.symbols).await? {
                 Value::Integer(i) => ds.push(i),
-                v => return new_syntax_error(format!("Subscript {} must be an integer", v)),
+                v => {
+                    return new_syntax_error(
+                        ss_expr.start_pos(),
+                        format!("Subscript {} must be an integer", v),
+                    )
+                }
             }
         }
 
@@ -244,8 +266,14 @@ impl Machine {
                 array.assign(&ds, value).map_err(|e| Error::from_value_error(e, span.vref_pos))?;
                 Ok(())
             }
-            Some(_) => new_syntax_error(format!("Cannot index non-array {}", span.vref.name())),
-            None => new_syntax_error(format!("Cannot index undefined array {}", span.vref.name())),
+            Some(_) => new_syntax_error(
+                span.vref_pos,
+                format!("Cannot index non-array {}", span.vref.name()),
+            ),
+            None => new_syntax_error(
+                span.vref_pos,
+                format!("Cannot index undefined array {}", span.vref.name()),
+            ),
         }
     }
 
@@ -257,10 +285,16 @@ impl Machine {
             .map_err(|e| Error::from_value_error(e, span.name_pos))?
         {
             Some(Symbol::Command(cmd)) => cmd.clone(),
-            Some(_) => return new_syntax_error(format!("{} is not a command", span.name)),
-            None => return new_syntax_error(format!("Unknown builtin {}", span.name)),
+            Some(_) => {
+                return new_syntax_error(span.name_pos, format!("{} is not a command", span.name))
+            }
+            None => {
+                return new_syntax_error(span.name_pos, format!("Unknown builtin {}", span.name))
+            }
         };
-        cmd.exec(span, self).await.map_err(|e| Error::from_call_error(cmd.metadata(), e))
+        cmd.exec(span, self)
+            .await
+            .map_err(|e| Error::from_call_error(cmd.metadata(), e, span.name_pos))
     }
 
     /// Handles an array definition.  The array must not yet exist, and the name may not overlap
@@ -271,11 +305,19 @@ impl Machine {
             match dim_expr.eval(&mut self.symbols).await? {
                 Value::Integer(i) => {
                     if i <= 0 {
-                        return new_syntax_error("Dimensions in DIM array must be positive");
+                        return new_syntax_error(
+                            dim_expr.start_pos(),
+                            "Dimensions in DIM array must be positive",
+                        );
                     }
                     ds.push(i as usize);
                 }
-                _ => return new_syntax_error("Dimensions in DIM array must be integers"),
+                _ => {
+                    return new_syntax_error(
+                        dim_expr.start_pos(),
+                        "Dimensions in DIM array must be integers",
+                    )
+                }
             }
         }
         self.symbols
@@ -295,7 +337,12 @@ impl Machine {
                 .symbols
                 .set_var(&span.iter, start_value)
                 .map_err(|e| Error::from_value_error(e, span.start.start_pos()))?,
-            _ => return new_syntax_error("FOR supports integer iteration only"),
+            _ => {
+                return new_syntax_error(
+                    span.start.start_pos(),
+                    "FOR supports integer iteration only",
+                )
+            }
         }
 
         loop {
@@ -329,7 +376,12 @@ impl Machine {
                     break;
                 }
                 Value::Boolean(false) => (),
-                _ => return new_syntax_error("IF/ELSEIF require a boolean condition"),
+                _ => {
+                    return new_syntax_error(
+                        branch.guard.start_pos(),
+                        "IF/ELSEIF require a boolean condition",
+                    )
+                }
             };
         }
         Ok(())
@@ -346,7 +398,12 @@ impl Machine {
                     }
                 }
                 Value::Boolean(false) => break,
-                _ => return new_syntax_error("WHILE requires a boolean condition"),
+                _ => {
+                    return new_syntax_error(
+                        span.expr.start_pos(),
+                        "WHILE requires a boolean condition",
+                    )
+                }
             }
         }
         Ok(())
@@ -366,7 +423,7 @@ impl Machine {
                 return Ok(());
             }
 
-            if let Some(target) = self.pending_goto.as_ref() {
+            if let Some(GotoSpan { target, .. }) = self.pending_goto.as_ref() {
                 i = 0;
                 seen_labels.clear();
                 while i < stmts.len() {
@@ -396,14 +453,14 @@ impl Machine {
                     .map_err(|e| Error::from_value_error(e, span.name_pos))?,
                 Statement::DimArray(span) => self.dim_array(span).await?,
                 Statement::For(span) => self.do_for(span).await?,
-                Statement::Goto(span) => self.pending_goto = Some(span.target.clone()),
+                Statement::Goto(span) => self.pending_goto = Some(span.clone()),
                 Statement::If(span) => self.do_if(span).await?,
                 Statement::Label(span) => {
                     if !seen_labels.insert(span.name.clone()) {
-                        return new_syntax_error(format!(
-                            "Duplicate label {} at this level",
-                            span.name
-                        ));
+                        return new_syntax_error(
+                            span.name_pos,
+                            format!("Duplicate label {} at this level", span.name),
+                        );
                     }
                 }
                 Statement::While(span) => self.do_while(span).await?,
@@ -422,8 +479,8 @@ impl Machine {
         debug_assert!(self.stop_reason.is_none());
         let stmts = parser::parse(input)?;
         self.exec_multiple(&stmts).await?;
-        if let Some(target) = self.pending_goto.take() {
-            return new_syntax_error(format!("Unknown label {}", target));
+        if let Some(span) = self.pending_goto.take() {
+            return new_syntax_error(span.target_pos, format!("Unknown label {}", span.target));
         }
         Ok(self.stop_reason.take().unwrap_or(StopReason::Eof))
     }
@@ -604,14 +661,14 @@ mod tests {
 
     #[test]
     fn test_array_assignment_errors() {
-        do_simple_error_test("a() = 3\n", "Cannot index undefined array a");
-        do_simple_error_test("a = 3\na(0) = 3\n", "Cannot index non-array a");
+        do_simple_error_test("a() = 3\n", "1:1: Cannot index undefined array a");
+        do_simple_error_test("a = 3\na(0) = 3\n", "2:1: Cannot index non-array a");
         do_simple_error_test(
             "DIM a(2)\na() = 3\n",
             "2:1: Cannot index array with 0 subscripts; need 1",
         );
         do_simple_error_test("DIM a(1)\na(-1) = 3\n", "2:1: Subscript -1 cannot be negative");
-        do_simple_error_test("DIM a(1)\na(1, 3.0) = 3\n", "Subscript 3.0 must be an integer");
+        do_simple_error_test("DIM a(1)\na(1, 3.0) = 3\n", "2:6: Subscript 3.0 must be an integer");
         do_simple_error_test("DIM a(2)\na$(1) = 3", "2:1: Incompatible types in a$ reference");
     }
 
@@ -666,8 +723,8 @@ mod tests {
     #[test]
     fn test_dim_array_errors() {
         do_simple_error_test("DIM i()", "1:6: Arrays require at least one dimension");
-        do_simple_error_test("DIM i(FALSE)", "Dimensions in DIM array must be integers");
-        do_simple_error_test("DIM i(-3)", "Dimensions in DIM array must be positive");
+        do_simple_error_test("DIM i(FALSE)", "1:7: Dimensions in DIM array must be integers");
+        do_simple_error_test("DIM i(-3)", "1:7: Dimensions in DIM array must be positive");
         do_simple_error_test("DIM i\nDIM i(3)", "2:5: Cannot DIM already-defined symbol i");
     }
 
@@ -774,7 +831,7 @@ mod tests {
             END IF
         "#;
         do_ok_test(code, &["3"], &["match"]);
-        do_error_test(code, &["5"], &[], "IF/ELSEIF require a boolean condition");
+        do_error_test(code, &["5"], &[], "5:20: IF/ELSEIF require a boolean condition");
     }
 
     #[test]
@@ -787,10 +844,10 @@ mod tests {
         do_simple_error_test("IF TRUE\nEND IF\nOUT 3", "1:8: No THEN in IF statement");
 
         do_simple_error_test("IF 2\nEND IF", "1:5: No THEN in IF statement");
-        do_simple_error_test("IF 2 THEN\nEND IF", "IF/ELSEIF require a boolean condition");
+        do_simple_error_test("IF 2 THEN\nEND IF", "1:4: IF/ELSEIF require a boolean condition");
         do_simple_error_test(
             "IF FALSE THEN\nELSEIF 2 THEN\nEND IF",
-            "IF/ELSEIF require a boolean condition",
+            "2:8: IF/ELSEIF require a boolean condition",
         );
     }
 
@@ -869,7 +926,10 @@ mod tests {
         do_simple_error_test("FOR\nNEXT", "1:4: No iterator name in FOR statement");
         do_simple_error_test("FOR a = 1 TO 10\nEND IF", "2:1: Unexpected END in statement");
 
-        do_simple_error_test("FOR i = \"a\" TO 3\nNEXT", "FOR supports integer iteration only");
+        do_simple_error_test(
+            "FOR i = \"a\" TO 3\nNEXT",
+            "1:9: FOR supports integer iteration only",
+        );
         do_simple_error_test(
             "FOR i = 1 TO \"a\"\nNEXT",
             "1:11: Cannot compare 1 and \"a\" with <=",
@@ -877,14 +937,17 @@ mod tests {
 
         do_simple_error_test(
             "FOR i = \"b\" TO 7 STEP -8\nNEXT",
-            "FOR supports integer iteration only",
+            "1:9: FOR supports integer iteration only",
         );
         do_simple_error_test(
             "FOR i = 1 TO \"b\" STEP -8\nNEXT",
             "1:11: Cannot compare 1 and \"b\" with >=",
         );
 
-        do_simple_error_test("FOR a = 1.0 TO 10.0\nNEXT", "FOR supports integer iteration only");
+        do_simple_error_test(
+            "FOR a = 1.0 TO 10.0\nNEXT",
+            "1:9: FOR supports integer iteration only",
+        );
     }
 
     #[test]
@@ -931,7 +994,7 @@ mod tests {
     fn test_goto_nested_cannot_go_down() {
         do_simple_error_test(
             "IF TRUE THEN: GOTO @sibling: END IF: IF TRUE THEN: @sibling: OUT 1: END IF",
-            "Unknown label sibling",
+            "1:20: Unknown label sibling",
         );
     }
 
@@ -952,7 +1015,7 @@ mod tests {
 
     #[test]
     fn test_goto_errors() {
-        do_simple_error_test("GOTO @foo", "Unknown label foo");
+        do_simple_error_test("GOTO @foo", "1:6: Unknown label foo");
     }
 
     #[test]
@@ -974,8 +1037,7 @@ mod tests {
         do_ok_test("@foo: IF TRUE THEN: @foo: END IF", &[], &[]);
         do_ok_test("IF TRUE THEN: @foo: END IF: IF TRUE THEN: @foo: END IF", &[], &[]);
 
-        do_simple_error_test("@foo: @bar: @foo", "Duplicate label foo at this level");
-        do_simple_error_test("@foo: @bar: @foo", "Duplicate label foo at this level");
+        do_simple_error_test("@foo: @bar: @foo", "1:13: Duplicate label foo at this level");
 
         do_simple_error_test(
             r#"
@@ -990,7 +1052,7 @@ mod tests {
                         IF i = 3 THEN: GOTO @out: END IF
             @out
             "#,
-            "Duplicate label a at this level",
+            "8:25: Duplicate label a at this level",
         );
     }
 
@@ -1015,7 +1077,7 @@ mod tests {
         do_simple_error_test("WHILE\nEND IF", "1:1: WHILE without WEND");
 
         do_simple_error_test("\n\n\nWHILE 2\n", "4:1: WHILE without WEND");
-        do_simple_error_test("WHILE 2\nWEND", "WHILE requires a boolean condition");
+        do_simple_error_test("WHILE 2\nWEND", "1:7: WHILE requires a boolean condition");
     }
 
     #[test]
@@ -1052,18 +1114,18 @@ mod tests {
 
     #[test]
     fn test_top_level_semantic_errors_allow_execution() {
-        do_simple_error_test("FOO BAR", "Unknown builtin FOO");
-        do_error_test(r#"OUT "a": FOO BAR: OUT "b""#, &[], &["a"], "Unknown builtin FOO");
+        do_simple_error_test("FOO BAR", "1:1: Unknown builtin FOO");
+        do_error_test(r#"OUT "a": FOO BAR: OUT "b""#, &[], &["a"], "1:10: Unknown builtin FOO");
     }
 
     #[test]
     fn test_inner_level_semantic_errors_allow_execution() {
-        do_simple_error_test(r#"IF TRUE THEN: FOO BAR: END IF"#, "Unknown builtin FOO");
+        do_simple_error_test(r#"IF TRUE THEN: FOO BAR: END IF"#, "1:15: Unknown builtin FOO");
         do_error_test(
             r#"OUT "a": IF TRUE THEN: FOO BAR: END IF: OUT "b""#,
             &[],
             &["a"],
-            "Unknown builtin FOO",
+            "1:24: Unknown builtin FOO",
         );
     }
 

@@ -182,7 +182,7 @@ impl Command for DelCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         if span.args.len() != 1 {
-            return Err(CallError::ArgumentError("DEL requires a filename".to_owned()));
+            return Err(CallError::SyntaxError);
         }
         let arg0 = span.args[0].expr.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_mut_symbols()).await? {
@@ -192,6 +192,7 @@ impl Command for DelCommand {
             }
             _ => {
                 return Err(CallError::ArgumentError(
+                    arg0.start_pos(),
                     "DEL requires a string as the filename".to_owned(),
                 ))
             }
@@ -230,7 +231,7 @@ impl Command for EditCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
         if !span.args.is_empty() {
-            return Err(CallError::ArgumentError("EDIT takes no arguments".to_owned()));
+            return Err(CallError::SyntaxError);
         }
 
         let mut console = self.console.borrow_mut();
@@ -270,7 +271,7 @@ impl Command for ListCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
         if !span.args.is_empty() {
-            return Err(CallError::ArgumentError("LIST takes no arguments".to_owned()));
+            return Err(CallError::SyntaxError);
         }
         let program = self.program.borrow().text();
         let program: Vec<&str> = program.lines().collect();
@@ -336,13 +337,14 @@ impl Command for LoadCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         if span.args.len() != 1 {
-            return Err(CallError::ArgumentError("LOAD requires a filename".to_owned()));
+            return Err(CallError::SyntaxError);
         }
         let arg0 = span.args[0].expr.as_ref().expect("Single argument must be present");
         let name = match arg0.eval(machine.get_mut_symbols()).await? {
             Value::Text(t) => add_extension(t)?,
             _ => {
                 return Err(CallError::ArgumentError(
+                    arg0.start_pos(),
                     "LOAD requires a string as the filename".to_owned(),
                 ))
             }
@@ -401,7 +403,7 @@ impl Command for NewCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         if !span.args.is_empty() {
-            return Err(CallError::ArgumentError("NEW takes no arguments".to_owned()));
+            return Err(CallError::SyntaxError);
         }
 
         if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut()).await? {
@@ -452,17 +454,13 @@ impl Command for RunCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         if !span.args.is_empty() {
-            return Err(CallError::ArgumentError("RUN takes no arguments".to_owned()));
+            return Err(CallError::SyntaxError);
         }
         machine.clear();
         let program = self.program.borrow().text();
         let stop_reason = match machine.exec(&mut program.as_bytes()).await {
             Ok(stop_reason) => stop_reason,
-            Err(e) => {
-                // TODO(jmmv): This conversion to an internal error is not great and is just a
-                // workaround for the mess that CallError currently is in the context of commands.
-                return Err(CallError::InternalError(format!("{}", e)));
-            }
+            Err(e) => return Err(CallError::NestedError(format!("{}", e))),
         };
         if stop_reason.as_exit_code() != 0 {
             self.console
@@ -520,6 +518,7 @@ impl Command for SaveCommand {
                 Some(name) => name.to_owned(),
                 None => {
                     return Err(CallError::ArgumentError(
+                        span.name_pos,
                         "Unnamed program; please provide a filename".to_owned(),
                     ))
                 }
@@ -529,12 +528,13 @@ impl Command for SaveCommand {
                     Value::Text(t) => add_extension(t)?,
                     _ => {
                         return Err(CallError::ArgumentError(
+                            expr.start_pos(),
                             "SAVE requires a string as the filename".to_owned(),
                         ))
                     }
                 }
             }
-            _ => return Err(CallError::ArgumentError("SAVE requires a filename".to_owned())),
+            _ => return Err(CallError::SyntaxError),
         };
 
         let full_name = self.storage.borrow().make_canonical(&name)?;
@@ -593,14 +593,14 @@ mod tests {
     fn test_del_errors() {
         check_load_save_common_errors("DEL");
 
-        Tester::default().run("DEL").expect_err("DEL requires a filename").check();
+        Tester::default().run("DEL").expect_err("1:1: In call to DEL: expected filename$").check();
 
-        check_stmt_err("Entry not found", r#"DEL "missing-file""#);
+        check_stmt_err("1:1: In call to DEL: Entry not found", r#"DEL "missing-file""#);
 
         Tester::default()
             .write_file("mismatched-extension.bat", "")
             .run(r#"DEL "mismatched-extension""#)
-            .expect_err("Entry not found")
+            .expect_err("1:1: In call to DEL: Entry not found")
             .expect_file("MEMORY:/mismatched-extension.bat", "")
             .check();
     }
@@ -617,7 +617,7 @@ mod tests {
 
     #[test]
     fn test_edit_errors() {
-        check_stmt_err("EDIT takes no arguments", "EDIT 1");
+        check_stmt_err("1:1: In call to EDIT: expected no arguments", "EDIT 1");
     }
 
     #[test]
@@ -644,7 +644,7 @@ mod tests {
 
     #[test]
     fn test_list_errors() {
-        check_stmt_err("LIST takes no arguments", "LIST 2");
+        check_stmt_err("1:1: In call to LIST: expected no arguments", "LIST 2");
     }
 
     #[test]
@@ -750,18 +750,23 @@ mod tests {
     fn check_load_save_common_errors(cmd: &str) {
         Tester::default()
             .run(format!("{} 3", cmd))
-            .expect_err(format!("{} requires a string as the filename", cmd))
+            .expect_err(format!(
+                "1:1: In call to {}: 1:{}: {} requires a string as the filename",
+                cmd,
+                cmd.len() + 2,
+                cmd
+            ))
             .check();
 
         Tester::default()
             .run(format!(r#"{} "a/b.bas""#, cmd))
-            .expect_err("Too many / separators in path 'a/b.bas'".to_owned())
+            .expect_err(format!("1:1: In call to {}: Too many / separators in path 'a/b.bas'", cmd))
             .check();
 
         for p in &["foo.bak", "foo.ba", "foo.basic"] {
             Tester::default()
                 .run(format!(r#"{} "{}""#, cmd, p))
-                .expect_err("Invalid filename extension".to_owned())
+                .expect_err(format!("1:1: In call to {}: Invalid filename extension", cmd))
                 .check();
         }
     }
@@ -770,14 +775,17 @@ mod tests {
     fn test_load_errors() {
         check_load_save_common_errors("LOAD");
 
-        Tester::default().run("LOAD").expect_err("LOAD requires a filename").check();
+        Tester::default()
+            .run("LOAD")
+            .expect_err("1:1: In call to LOAD: expected filename$")
+            .check();
 
-        check_stmt_err("Entry not found", r#"LOAD "missing-file""#);
+        check_stmt_err("1:1: In call to LOAD: Entry not found", r#"LOAD "missing-file""#);
 
         Tester::default()
             .write_file("mismatched-extension.bat", "")
             .run(r#"LOAD "mismatched-extension""#)
-            .expect_err("Entry not found")
+            .expect_err("1:1: In call to LOAD: Entry not found")
             .expect_file("MEMORY:/mismatched-extension.bat", "")
             .check();
     }
@@ -861,7 +869,7 @@ mod tests {
 
     #[test]
     fn test_new_errors() {
-        check_stmt_err("NEW takes no arguments", "NEW 10");
+        check_stmt_err("1:1: In call to NEW: expected no arguments", "NEW 10");
     }
 
     #[test]
@@ -900,7 +908,7 @@ mod tests {
 
     #[test]
     fn test_run_errors() {
-        check_stmt_err("RUN takes no arguments", "RUN 10");
+        check_stmt_err("1:1: In call to RUN: expected no arguments", "RUN 10");
     }
 
     #[test]
@@ -940,7 +948,7 @@ mod tests {
             .add_input_chars("modified file\n")
             .run("EDIT: SAVE")
             .expect_program(None as Option<&str>, "modified file\n")
-            .expect_err("Unnamed program; please provide a filename")
+            .expect_err("1:7: In call to SAVE: 1:7: Unnamed program; please provide a filename")
             .check();
     }
 

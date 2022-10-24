@@ -24,6 +24,7 @@ use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
     FunctionResult, Symbols,
 };
+use endbasic_core::LineCol;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -44,26 +45,31 @@ pub struct Pin(pub u8);
 
 impl Pin {
     /// Creates a new pin number from an EndBASIC integer value.
-    fn from_i32(i: i32) -> Result<Self, CallError> {
+    fn from_i32(i: i32, pos: LineCol) -> Result<Self, CallError> {
         if i < 0 {
-            return Err(CallError::ArgumentError(format!("Pin number {} must be positive", i)));
+            return Err(CallError::ArgumentError(
+                pos,
+                format!("Pin number {} must be positive", i),
+            ));
         }
         if i > std::u8::MAX as i32 {
-            return Err(CallError::ArgumentError(format!("Pin number {} is too large", i)));
+            return Err(CallError::ArgumentError(pos, format!("Pin number {} is too large", i)));
         }
         Ok(Self(i as u8))
     }
 
     /// Obtains a pin number from an expression.
     async fn parse(expr: &Expr, machine: &mut Machine) -> Result<Pin, CallError> {
-        Pin::parse_value(&expr.eval(machine.get_mut_symbols()).await?)
+        Pin::parse_value(&expr.eval(machine.get_mut_symbols()).await?, expr.start_pos())
     }
 
     /// Obtains a pin number from a value.
-    fn parse_value(value: &Value) -> Result<Pin, CallError> {
+    fn parse_value(value: &Value, pos: LineCol) -> Result<Pin, CallError> {
         match value {
-            Value::Integer(n) => Ok(Pin::from_i32(*n)?),
-            v => Err(CallError::ArgumentError(format!("Pin number {:?} must be an integer", v))),
+            Value::Integer(n) => Ok(Pin::from_i32(*n, pos)?),
+            v => {
+                Err(CallError::ArgumentError(pos, format!("Pin number {:?} must be an integer", v)))
+            }
         }
     }
 }
@@ -93,9 +99,15 @@ impl PinMode {
                 "IN-PULL-UP" => Ok(PinMode::InPullUp),
                 "IN-PULL-DOWN" => Ok(PinMode::InPullDown),
                 "OUT" => Ok(PinMode::Out),
-                s => Err(CallError::ArgumentError(format!("Unknown pin mode {}", s))),
+                s => Err(CallError::ArgumentError(
+                    expr.start_pos(),
+                    format!("Unknown pin mode {}", s),
+                )),
             },
-            v => Err(CallError::ArgumentError(format!("Pin mode {:?} must be a string", v))),
+            v => Err(CallError::ArgumentError(
+                expr.start_pos(),
+                format!("Pin mode {:?} must be a string", v),
+            )),
         }
     }
 }
@@ -104,7 +116,10 @@ impl PinMode {
 async fn parse_value(expr: &Expr, machine: &mut Machine) -> Result<bool, CallError> {
     match expr.eval(machine.get_mut_symbols()).await? {
         Value::Boolean(b) => Ok(b),
-        v => Err(CallError::ArgumentError(format!("Pin value {:?} must be boolean", v))),
+        v => Err(CallError::ArgumentError(
+            expr.start_pos(),
+            format!("Pin value {:?} must be boolean", v),
+        )),
     }
 }
 
@@ -162,7 +177,7 @@ impl GpioSetupCommand {
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_SETUP", VarType::Void)
-                .with_syntax("pin% mode$")
+                .with_syntax("pin%, mode$")
                 .with_category(CATEGORY)
                 .with_description(
                     "Configures a GPIO pin for input or output.
@@ -199,7 +214,7 @@ impl Command for GpioSetupCommand {
                 };
                 Ok(())
             }
-            _ => Err(CallError::ArgumentError("GPIO_SETUP takes two arguments".to_owned())),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
@@ -252,7 +267,7 @@ impl Command for GpioClearCommand {
                 };
                 Ok(())
             }
-            _ => Err(CallError::ArgumentError("GPIO_CLEAR takes zero or one argument".to_owned())),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
@@ -288,9 +303,9 @@ impl Function for GpioReadFunction {
 
     async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
         match span.args.as_slice() {
-            [pin] => {
-                let pin = pin.eval(symbols).await?;
-                let pin = Pin::parse_value(&pin)?;
+            [pin_expr] => {
+                let pin = pin_expr.eval(symbols).await?;
+                let pin = Pin::parse_value(&pin, pin_expr.start_pos())?;
                 let value = match MockPins::try_new(symbols) {
                     Some(mut pins) => pins.read(pin)?,
                     None => self.pins.borrow_mut().read(pin)?,
@@ -313,7 +328,7 @@ impl GpioWriteCommand {
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_WRITE", VarType::Void)
-                .with_syntax("pin% value?")
+                .with_syntax("pin%, value?")
                 .with_category(CATEGORY)
                 .with_description(
                     "Sets the state of a GPIO pin.
@@ -343,7 +358,7 @@ impl Command for GpioWriteCommand {
                 };
                 Ok(())
             }
-            _ => Err(CallError::ArgumentError("GPIO_WRITE takes two arguments".to_owned())),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
@@ -403,14 +418,20 @@ mod tests {
     /// features to validate operation.
     #[test]
     fn test_real_backend() {
-        check_stmt_err("GPIO backend not compiled in", "GPIO_SETUP 0, \"IN\"");
-        check_stmt_err("GPIO backend not compiled in", "GPIO_CLEAR");
-        check_stmt_err("GPIO backend not compiled in", "GPIO_CLEAR 0");
+        check_stmt_err(
+            "1:1: In call to GPIO_SETUP: GPIO backend not compiled in",
+            "GPIO_SETUP 0, \"IN\"",
+        );
+        check_stmt_err("1:1: In call to GPIO_CLEAR: GPIO backend not compiled in", "GPIO_CLEAR");
+        check_stmt_err("1:1: In call to GPIO_CLEAR: GPIO backend not compiled in", "GPIO_CLEAR 0");
         check_expr_error(
-            "1:10: Error in call to GPIO_READ: GPIO backend not compiled in",
+            "1:10: In call to GPIO_READ: GPIO backend not compiled in",
             "GPIO_READ(0)",
         );
-        check_stmt_err("GPIO backend not compiled in", "GPIO_WRITE 0, TRUE");
+        check_stmt_err(
+            "1:1: In call to GPIO_WRITE: GPIO backend not compiled in",
+            "GPIO_WRITE 0, TRUE",
+        );
     }
 
     #[test]
@@ -436,14 +457,17 @@ mod tests {
 
     #[test]
     fn test_gpio_setup_errors() {
-        check_stmt_err("GPIO_SETUP takes two arguments", r#"GPIO_SETUP"#);
-        check_stmt_err("GPIO_SETUP takes two arguments", r#"GPIO_SETUP 1"#);
-        check_stmt_err("GPIO_SETUP takes two arguments", r#"GPIO_SETUP 1; 2"#);
-        check_stmt_err("GPIO_SETUP takes two arguments", r#"GPIO_SETUP 1, 2, 3"#);
+        check_stmt_err("1:1: In call to GPIO_SETUP: expected pin%, mode$", r#"GPIO_SETUP"#);
+        check_stmt_err("1:1: In call to GPIO_SETUP: expected pin%, mode$", r#"GPIO_SETUP 1"#);
+        check_stmt_err("1:1: In call to GPIO_SETUP: expected pin%, mode$", r#"GPIO_SETUP 1; 2"#);
+        check_stmt_err("1:1: In call to GPIO_SETUP: expected pin%, mode$", r#"GPIO_SETUP 1, 2, 3"#);
 
-        check_pin_validation("", r#"GPIO_SETUP _PIN_, "IN""#);
+        check_pin_validation("1:1: In call to GPIO_SETUP: 1:12: ", r#"GPIO_SETUP _PIN_, "IN""#);
 
-        check_stmt_err(r#"Unknown pin mode IN-OUT"#, r#"GPIO_SETUP 1, "IN-OUT""#);
+        check_stmt_err(
+            r#"1:1: In call to GPIO_SETUP: 1:15: Unknown pin mode IN-OUT"#,
+            r#"GPIO_SETUP 1, "IN-OUT""#,
+        );
     }
 
     #[test]
@@ -458,9 +482,9 @@ mod tests {
 
     #[test]
     fn test_gpio_clear_errors() {
-        check_stmt_err("GPIO_CLEAR takes zero or one argument", r#"GPIO_CLEAR 1, 2"#);
+        check_stmt_err("1:1: In call to GPIO_CLEAR: expected [pin%]", r#"GPIO_CLEAR 1, 2"#);
 
-        check_pin_validation("", r#"GPIO_CLEAR _PIN_"#);
+        check_pin_validation("1:1: In call to GPIO_CLEAR: 1:12: ", r#"GPIO_CLEAR _PIN_"#);
     }
 
     #[test]
@@ -476,16 +500,10 @@ mod tests {
 
     #[test]
     fn test_gpio_read_errors() {
-        check_expr_error(
-            "1:10: Syntax error in call to GPIO_READ: expected pin%",
-            r#"GPIO_READ()"#,
-        );
-        check_expr_error(
-            "1:10: Syntax error in call to GPIO_READ: expected pin%",
-            r#"GPIO_READ(1, 2)"#,
-        );
+        check_expr_error("1:10: In call to GPIO_READ: expected pin%", r#"GPIO_READ()"#);
+        check_expr_error("1:10: In call to GPIO_READ: expected pin%", r#"GPIO_READ(1, 2)"#);
 
-        check_pin_validation("1:5: Syntax error in call to GPIO_READ: ", r#"v = GPIO_READ(_PIN_)"#);
+        check_pin_validation("1:5: In call to GPIO_READ: 1:15: ", r#"v = GPIO_READ(_PIN_)"#);
     }
 
     #[test]
@@ -495,12 +513,21 @@ mod tests {
 
     #[test]
     fn test_gpio_write_errors() {
-        check_stmt_err("GPIO_WRITE takes two arguments", r#"GPIO_WRITE"#);
-        check_stmt_err("GPIO_WRITE takes two arguments", r#"GPIO_WRITE 1, TRUE, 2"#);
-        check_stmt_err("GPIO_WRITE takes two arguments", r#"GPIO_WRITE 1; TRUE"#);
+        check_stmt_err("1:1: In call to GPIO_WRITE: expected pin%, value?", r#"GPIO_WRITE"#);
+        check_stmt_err(
+            "1:1: In call to GPIO_WRITE: expected pin%, value?",
+            r#"GPIO_WRITE 1, TRUE, 2"#,
+        );
+        check_stmt_err(
+            "1:1: In call to GPIO_WRITE: expected pin%, value?",
+            r#"GPIO_WRITE 1; TRUE"#,
+        );
 
-        check_pin_validation("", r#"GPIO_WRITE _PIN_, TRUE"#);
+        check_pin_validation("1:1: In call to GPIO_WRITE: 1:12: ", r#"GPIO_WRITE _PIN_, TRUE"#);
 
-        check_stmt_err("Pin value Integer(5) must be boolean", r#"GPIO_WRITE 1, 5"#);
+        check_stmt_err(
+            "1:1: In call to GPIO_WRITE: 1:15: Pin value Integer(5) must be boolean",
+            r#"GPIO_WRITE 1, 5"#,
+        );
     }
 }

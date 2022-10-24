@@ -23,6 +23,7 @@
 #![warn(unsafe_code)]
 
 use endbasic_core::syms::{self, CommandResult};
+use endbasic_core::LineCol;
 use endbasic_std::console::Console;
 use std::cell::RefCell;
 use std::future::Future;
@@ -66,14 +67,14 @@ macro_rules! log_and_panic {
 pub(crate) use log_and_panic;
 
 /// Sleeps for the given period of time.
-fn js_sleep(d: Duration) -> Pin<Box<dyn Future<Output = CommandResult>>> {
+fn js_sleep(d: Duration, pos: LineCol) -> Pin<Box<dyn Future<Output = CommandResult>>> {
     let ms = d.as_millis();
     if ms > std::i32::MAX as u128 {
         // The JavaScript setTimeout function only takes i32s so ensure our value fits.  If it
         // doesn't, you can imagine chaining calls to setTimeout to achieve the desired delay...
         // but the numbers we are talking about are so big that this doesn't make sense.
         return Box::pin(async move {
-            Err(syms::CallError::InternalError("Cannot sleep for that long".to_owned()))
+            Err(syms::CallError::InternalError(pos, "Cannot sleep for that long".to_owned()))
         });
     }
     let ms = ms as i32;
@@ -277,16 +278,20 @@ mod tests {
     #[wasm_bindgen_test]
     async fn test_js_sleep_ok() {
         let before = Date::now();
-        js_sleep(Duration::from_millis(10)).await.unwrap();
+        js_sleep(Duration::from_millis(10), LineCol { line: 1, col: 1 }).await.unwrap();
         let elapsed = Date::now() - before;
         assert!(10.0 <= elapsed);
     }
 
     #[wasm_bindgen_test]
     async fn test_js_sleep_too_big() {
-        match js_sleep(Duration::from_millis(std::i32::MAX as u64 + 1)).await.unwrap_err() {
-            syms::CallError::InternalError(e) => {
-                assert_eq!("Cannot sleep for that long", e)
+        match js_sleep(Duration::from_millis(std::i32::MAX as u64 + 1), LineCol { line: 1, col: 2 })
+            .await
+            .unwrap_err()
+        {
+            syms::CallError::InternalError(pos, e) => {
+                assert_eq!(LineCol { line: 1, col: 2 }, pos);
+                assert_eq!("Cannot sleep for that long", e);
             }
             e => panic!("Unexpected error type: {:?}", e),
         }

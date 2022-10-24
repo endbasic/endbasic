@@ -21,6 +21,7 @@ use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
 };
+use endbasic_core::LineCol;
 use futures_lite::future::{BoxedLocal, FutureExt};
 use std::rc::Rc;
 use std::thread;
@@ -62,7 +63,7 @@ impl Command for ClearCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         if !span.args.is_empty() {
-            return Err(CallError::ArgumentError("CLEAR takes no arguments".to_owned()));
+            return Err(CallError::SyntaxError);
         }
         machine.clear();
         Ok(())
@@ -104,11 +105,13 @@ impl Command for ExitCommand {
                     Value::Integer(n) => {
                         if n < 0 {
                             return Err(CallError::ArgumentError(
+                                expr.start_pos(),
                                 "Exit code must be a positive integer".to_owned(),
                             ));
                         }
                         if n >= 128 {
                             return Err(CallError::ArgumentError(
+                                expr.start_pos(),
                                 "Exit code cannot be larger than 127".to_owned(),
                             ));
                         }
@@ -116,14 +119,13 @@ impl Command for ExitCommand {
                     }
                     _ => {
                         return Err(CallError::ArgumentError(
+                            expr.start_pos(),
                             "Exit code must be a positive integer".to_owned(),
                         ))
                     }
                 }
             }
-            _ => {
-                return Err(CallError::ArgumentError("EXIT takes zero or one argument".to_owned()))
-            }
+            _ => return Err(CallError::SyntaxError),
         };
         machine.exit(arg);
         Ok(())
@@ -131,10 +133,10 @@ impl Command for ExitCommand {
 }
 
 /// Type of the sleep function used by the `SLEEP` command to actually suspend execution.
-pub type SleepFn = Box<dyn Fn(Duration) -> BoxedLocal<CommandResult>>;
+pub type SleepFn = Box<dyn Fn(Duration, LineCol) -> BoxedLocal<CommandResult>>;
 
 /// An implementation of a `SleepFn` that stops the current thread.
-fn system_sleep(d: Duration) -> BoxedLocal<CommandResult> {
+fn system_sleep(d: Duration, _pos: LineCol) -> BoxedLocal<CommandResult> {
     async move {
         thread::sleep(d);
         Ok(())
@@ -173,35 +175,38 @@ impl Command for SleepCommand {
     }
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        let duration = match span.args.as_slice() {
+        let (duration, pos) = match span.args.as_slice() {
             [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
                 match expr.eval(machine.get_mut_symbols()).await? {
                     Value::Integer(n) => {
                         if n < 0 {
                             return Err(CallError::ArgumentError(
+                                expr.start_pos(),
                                 "Sleep time must be positive".to_owned(),
                             ));
                         }
-                        Duration::from_secs(n as u64)
+                        (Duration::from_secs(n as u64), expr.start_pos())
                     }
                     Value::Double(n) => {
                         if n < 0.0 {
                             return Err(CallError::ArgumentError(
+                                expr.start_pos(),
                                 "Sleep time must be positive".to_owned(),
                             ));
                         }
-                        Duration::from_secs_f64(n)
+                        (Duration::from_secs_f64(n), expr.start_pos())
                     }
                     _ => {
                         return Err(CallError::ArgumentError(
+                            expr.start_pos(),
                             "Sleep time must be an integer or a double".to_owned(),
                         ))
                     }
                 }
             }
-            _ => return Err(CallError::ArgumentError("SLEEP takes one argument".to_owned())),
+            _ => return Err(CallError::SyntaxError),
         };
-        (self.sleep_fn)(duration).await
+        (self.sleep_fn)(duration, pos).await
     }
 }
 
@@ -234,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_clear_errors() {
-        check_stmt_err("CLEAR takes no arguments", "CLEAR 123");
+        check_stmt_err("1:1: In call to CLEAR: expected no arguments", "CLEAR 123");
     }
 
     #[test]
@@ -264,38 +269,44 @@ mod tests {
 
     #[test]
     fn test_exit_errors() {
-        check_stmt_err("EXIT takes zero or one argument", "EXIT 1, 2");
-        check_stmt_err("Exit code must be a positive integer", "EXIT -3");
-        check_stmt_err("Exit code cannot be larger than 127", "EXIT 128");
+        check_stmt_err("1:1: In call to EXIT: expected [code%]", "EXIT 1, 2");
+        check_stmt_err(
+            "1:1: In call to EXIT: 1:6: Exit code must be a positive integer",
+            "EXIT -3",
+        );
+        check_stmt_err(
+            "1:1: In call to EXIT: 1:6: Exit code cannot be larger than 127",
+            "EXIT 128",
+        );
     }
 
     #[test]
     fn test_sleep_ok_int() {
-        let sleep_fake = |d: Duration| -> BoxedLocal<CommandResult> {
-            async move { Err(CallError::InternalError(format!("Got {} ms", d.as_millis()))) }
+        let sleep_fake = |d: Duration, pos: LineCol| -> BoxedLocal<CommandResult> {
+            async move { Err(CallError::InternalError(pos, format!("Got {} ms", d.as_millis()))) }
                 .boxed_local()
         };
 
         let mut t = Tester::empty().add_command(SleepCommand::new(Box::from(sleep_fake)));
-        t.run("SLEEP 123").expect_err("Got 123000 ms").check();
+        t.run("SLEEP 123").expect_err("1:1: In call to SLEEP: 1:7: Got 123000 ms").check();
     }
 
     #[test]
     fn test_sleep_ok_float() {
-        let sleep_fake = |d: Duration| -> BoxedLocal<CommandResult> {
+        let sleep_fake = |d: Duration, pos: LineCol| -> BoxedLocal<CommandResult> {
             async move {
                 let ms = d.as_millis();
                 if ms > 123095 && ms < 123105 {
-                    Err(CallError::InternalError("Good".to_owned()))
+                    Err(CallError::InternalError(pos, "Good".to_owned()))
                 } else {
-                    Err(CallError::InternalError(format!("Bad {}", ms)))
+                    Err(CallError::InternalError(pos, format!("Bad {}", ms)))
                 }
             }
             .boxed_local()
         };
 
         let mut t = Tester::empty().add_command(SleepCommand::new(Box::from(sleep_fake)));
-        t.run("SLEEP 123.1").expect_err("Good").check();
+        t.run("SLEEP 123.1").expect_err("1:1: In call to SLEEP: 1:7: Good").check();
     }
 
     #[test]
@@ -307,11 +318,14 @@ mod tests {
 
     #[test]
     fn test_sleep_errors() {
-        check_stmt_err("SLEEP takes one argument", "SLEEP");
-        check_stmt_err("SLEEP takes one argument", "SLEEP 2, 3");
-        check_stmt_err("SLEEP takes one argument", "SLEEP 2; 3");
-        check_stmt_err("Sleep time must be an integer or a double", "SLEEP \"foo\"");
-        check_stmt_err("Sleep time must be positive", "SLEEP -1");
-        check_stmt_err("Sleep time must be positive", "SLEEP -0.001");
+        check_stmt_err("1:1: In call to SLEEP: expected seconds%|seconds#", "SLEEP");
+        check_stmt_err("1:1: In call to SLEEP: expected seconds%|seconds#", "SLEEP 2, 3");
+        check_stmt_err("1:1: In call to SLEEP: expected seconds%|seconds#", "SLEEP 2; 3");
+        check_stmt_err(
+            "1:1: In call to SLEEP: 1:7: Sleep time must be an integer or a double",
+            "SLEEP \"foo\"",
+        );
+        check_stmt_err("1:1: In call to SLEEP: 1:7: Sleep time must be positive", "SLEEP -1");
+        check_stmt_err("1:1: In call to SLEEP: 1:7: Sleep time must be positive", "SLEEP -0.001");
     }
 }

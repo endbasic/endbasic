@@ -509,7 +509,7 @@ pub struct ForSpan {
 }
 
 /// Components of a `GOTO` statement.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GotoSpan {
     /// Name of the label to jump to.
     pub target: String,

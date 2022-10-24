@@ -128,7 +128,7 @@ impl Command for CdCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         if span.args.len() != 1 {
-            return Err(CallError::ArgumentError("CD takes one argument".to_owned()));
+            return Err(CallError::SyntaxError);
         }
         let arg0 = span.args[0].expr.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_mut_symbols()).await? {
@@ -136,7 +136,10 @@ impl Command for CdCommand {
                 self.storage.borrow_mut().cd(&t)?;
             }
             _ => {
-                return Err(CallError::ArgumentError("CD requires a string as the path".to_owned()))
+                return Err(CallError::ArgumentError(
+                    arg0.start_pos(),
+                    "CD requires a string as the path".to_owned(),
+                ))
             }
         }
         Ok(())
@@ -186,12 +189,13 @@ impl Command for DirCommand {
                     }
                     _ => {
                         return Err(CallError::ArgumentError(
+                            path.start_pos(),
                             "DIR requires a string as the path".to_owned(),
                         ))
                     }
                 }
             }
-            _ => Err(CallError::ArgumentError("DIR takes zero or one argument".to_owned())),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
@@ -241,6 +245,7 @@ impl Command for MountCommand {
                     Value::Text(t) => t,
                     _ => {
                         return Err(CallError::ArgumentError(
+                            name.start_pos(),
                             "Drive name must be a string".to_owned(),
                         ))
                     }
@@ -249,6 +254,7 @@ impl Command for MountCommand {
                     Value::Text(t) => t,
                     _ => {
                         return Err(CallError::ArgumentError(
+                            target.start_pos(),
                             "Mount target must be a string".to_owned(),
                         ))
                     }
@@ -256,7 +262,7 @@ impl Command for MountCommand {
                 self.storage.borrow_mut().mount(&name, &target)?;
                 Ok(())
             }
-            _ => Err(CallError::ArgumentError("MOUNT takes zero or two arguments".to_owned())),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
@@ -295,7 +301,7 @@ impl Command for PwdCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
         if !span.args.is_empty() {
-            return Err(CallError::ArgumentError("PWD takes zero arguments".to_owned()));
+            return Err(CallError::SyntaxError);
         }
 
         let storage = self.storage.borrow();
@@ -326,7 +332,7 @@ impl UnmountCommand {
     pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("UNMOUNT", VarType::Void)
-                .with_syntax("drive_name")
+                .with_syntax("drive_name$")
                 .with_category(CATEGORY)
                 .with_description(
                     "Unmounts the given drive.
@@ -346,14 +352,19 @@ impl Command for UnmountCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         if span.args.len() != 1 {
-            return Err(CallError::ArgumentError("UNMOUNT takes one argument".to_owned()));
+            return Err(CallError::SyntaxError);
         }
         let arg0 = span.args[0].expr.as_ref().expect("Single argument must be present");
         match arg0.eval(machine.get_mut_symbols()).await? {
             Value::Text(t) => {
                 self.storage.borrow_mut().unmount(&t)?;
             }
-            _ => return Err(CallError::ArgumentError("Drive name must be a string".to_owned())),
+            _ => {
+                return Err(CallError::ArgumentError(
+                    arg0.start_pos(),
+                    "Drive name must be a string".to_owned(),
+                ))
+            }
         }
         Ok(())
     }
@@ -392,10 +403,10 @@ mod tests {
 
     #[test]
     fn test_cd_errors() {
-        check_stmt_err("Drive 'A' is not mounted", "CD \"A:\"");
-        check_stmt_err("CD takes one argument", "CD");
-        check_stmt_err("CD takes one argument", "CD 2, 3");
-        check_stmt_err("CD requires a string as the path", "CD 2");
+        check_stmt_err("1:1: In call to CD: Drive 'A' is not mounted", "CD \"A:\"");
+        check_stmt_err("1:1: In call to CD: expected path$", "CD");
+        check_stmt_err("1:1: In call to CD: expected path$", "CD 2, 3");
+        check_stmt_err("1:1: In call to CD: 1:4: CD requires a string as the path", "CD 2");
     }
 
     #[test]
@@ -548,8 +559,8 @@ mod tests {
 
     #[test]
     fn test_dir_errors() {
-        check_stmt_err("DIR takes zero or one argument", "DIR 2, 3");
-        check_stmt_err("DIR requires a string as the path", "DIR 2");
+        check_stmt_err("1:1: In call to DIR: expected [path$]", "DIR 2, 3");
+        check_stmt_err("1:1: In call to DIR: 1:5: DIR requires a string as the path", "DIR 2");
     }
 
     #[test]
@@ -595,15 +606,27 @@ mod tests {
 
     #[test]
     fn test_mount_errors() {
-        check_stmt_err("MOUNT takes zero or two arguments", "MOUNT 1");
-        check_stmt_err("MOUNT takes zero or two arguments", "MOUNT 1, 2, 3");
+        check_stmt_err("1:1: In call to MOUNT: expected [drive_name$, target$]", "MOUNT 1");
+        check_stmt_err("1:1: In call to MOUNT: expected [drive_name$, target$]", "MOUNT 1, 2, 3");
 
-        check_stmt_err("Drive name must be a string", "MOUNT 1, \"a\"");
-        check_stmt_err("Mount target must be a string", "MOUNT \"a\", 1");
+        check_stmt_err("1:1: In call to MOUNT: 1:7: Drive name must be a string", "MOUNT 1, \"a\"");
+        check_stmt_err(
+            "1:1: In call to MOUNT: 1:12: Mount target must be a string",
+            "MOUNT \"a\", 1",
+        );
 
-        check_stmt_err("Invalid drive name 'a:'", "MOUNT \"a:\", \"memory://\"");
-        check_stmt_err("Mount URI must be of the form scheme://path", "MOUNT \"a\", \"foo//bar\"");
-        check_stmt_err("Unknown mount scheme 'foo'", "MOUNT \"a\", \"foo://bar\"");
+        check_stmt_err(
+            "1:1: In call to MOUNT: Invalid drive name 'a:'",
+            "MOUNT \"a:\", \"memory://\"",
+        );
+        check_stmt_err(
+            "1:1: In call to MOUNT: Mount URI must be of the form scheme://path",
+            "MOUNT \"a\", \"foo//bar\"",
+        );
+        check_stmt_err(
+            "1:1: In call to MOUNT: Unknown mount scheme 'foo'",
+            "MOUNT \"a\", \"foo://bar\"",
+        );
     }
 
     #[test]
@@ -658,12 +681,12 @@ mod tests {
 
     #[test]
     fn test_unmount_errors() {
-        check_stmt_err("UNMOUNT takes one argument", "UNMOUNT");
-        check_stmt_err("UNMOUNT takes one argument", "UNMOUNT 2, 3");
+        check_stmt_err("1:1: In call to UNMOUNT: expected drive_name$", "UNMOUNT");
+        check_stmt_err("1:1: In call to UNMOUNT: expected drive_name$", "UNMOUNT 2, 3");
 
-        check_stmt_err("Drive name must be a string", "UNMOUNT 1");
+        check_stmt_err("1:1: In call to UNMOUNT: 1:9: Drive name must be a string", "UNMOUNT 1");
 
-        check_stmt_err("Invalid drive name 'a:'", "UNMOUNT \"a:\"");
-        check_stmt_err("Drive 'a' is not mounted", "UNMOUNT \"a\"");
+        check_stmt_err("1:1: In call to UNMOUNT: Invalid drive name 'a:'", "UNMOUNT \"a:\"");
+        check_stmt_err("1:1: In call to UNMOUNT: Drive 'a' is not mounted", "UNMOUNT \"a\"");
     }
 }

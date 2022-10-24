@@ -33,3 +33,5 @@ pub mod syms;
 #[cfg(test)]
 mod testutils;
 mod value;
+
+pub use reader::LineCol;
