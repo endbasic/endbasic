@@ -27,6 +27,10 @@ for the time being.**
 
 *   Fixed erratic insertion of newlines in existing text in the editor.
 
+*   Issue #113: Added line and column tracking to error messages for parsing
+    and execution errors.  Also cleaned up Rust `Debug` impls that leaked
+    into error messages for nicer errors.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
