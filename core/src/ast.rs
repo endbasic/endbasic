@@ -209,6 +209,19 @@ impl VarType {
     }
 }
 
+impl fmt::Display for VarType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VarType::Auto => panic!("Should not try to display an auto type"),
+            VarType::Boolean => write!(f, "BOOLEAN"),
+            VarType::Double => write!(f, "DOUBLE"),
+            VarType::Integer => write!(f, "INTEGER"),
+            VarType::Text => write!(f, "STRING"),
+            VarType::Void => panic!("Should not try to display a void type"),
+        }
+    }
+}
+
 /// Represents a reference to a variable (which doesn't have to exist).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VarRef {

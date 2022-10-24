@@ -43,9 +43,9 @@ async fn parse_coordinate(expr: &Expr, machine: &mut Machine) -> Result<i16, Cal
                 format!("Coordinate {} out of range", i),
             )),
         },
-        _ => Err(CallError::ArgumentError(
+        v => Err(CallError::ArgumentError(
             expr.start_pos(),
-            format!("Coordinate {:?} must be an integer", expr),
+            format!("Coordinate {} must be an integer", v),
         )),
     }
 }
@@ -353,10 +353,9 @@ mod tests {
             let stmt = &format!("{} {}", name, args);
             let pos = stmt.find('"').unwrap() + 1;
             check_stmt_err(
-                format!(
-                    "1:1: In call to {}: 1:{}: Coordinate Text(TextSpan {{ value: \"a\", pos: LineCol {{ line: 1, col: {} }} }}) must be an integer",
-                    name, pos, pos),
-                stmt);
+                format!("1:1: In call to {}: 1:{}: Coordinate \"a\" must be an integer", name, pos),
+                stmt,
+            );
         }
     }
 
@@ -421,8 +420,12 @@ mod tests {
         for cmd in &["GFX_PIXEL \"a\", 1", "GFX_PIXEL 1, \"a\""] {
             let pos = cmd.find('"').unwrap() + 1;
             check_stmt_err(
-                format!("1:1: In call to GFX_PIXEL: 1:{}: Coordinate Text(TextSpan {{ value: \"a\", pos: LineCol {{ line: 1, col: {} }} }}) must be an integer", pos, pos),
-                cmd);
+                format!(
+                    "1:1: In call to GFX_PIXEL: 1:{}: Coordinate \"a\" must be an integer",
+                    pos
+                ),
+                cmd,
+            );
         }
     }
 

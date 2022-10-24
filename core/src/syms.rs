@@ -156,7 +156,7 @@ impl Array {
     pub fn assign(&mut self, subscripts: &[i32], value: Value) -> Result<()> {
         if value.as_vartype() != self.subtype {
             return Err(Error::new(format!(
-                "Cannot assign value of type {:?} to array of type {:?}",
+                "Cannot assign value of type {} to array of type {}",
                 value.as_vartype(),
                 self.subtype
             )));
@@ -625,7 +625,7 @@ mod tests {
         assert_eq!("Subscript 6 exceeds limit of 5", format!("{}", array.index(&[6]).unwrap_err()));
 
         assert_eq!(
-            "Cannot assign value of type Text to array of type Integer",
+            "Cannot assign value of type STRING to array of type INTEGER",
             format!("{}", array.assign(&[0], Value::Text("a".to_owned())).unwrap_err())
         );
     }
@@ -696,7 +696,7 @@ mod tests {
         );
 
         assert_eq!(
-            "Cannot assign value of type Text to array of type Integer",
+            "Cannot assign value of type STRING to array of type INTEGER",
             format!("{}", array.assign(&[0, 0], Value::Text("a".to_owned())).unwrap_err())
         );
     }
