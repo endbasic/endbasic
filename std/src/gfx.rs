@@ -87,7 +87,7 @@ impl Command for GfxLineCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let (x1y1, x2y2) = match span.args.as_slice() {
-            [ArgSpan { expr: Some(x1), sep: ArgSep::Long }, ArgSpan { expr: Some(y1), sep: ArgSep::Long }, ArgSpan { expr: Some(x2), sep: ArgSep::Long }, ArgSpan { expr: Some(y2), sep: ArgSep::End }] => {
+            [ArgSpan { expr: Some(x1), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y1), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(x2), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y2), sep: ArgSep::End, .. }] => {
                 (
                     parse_coordinates(x1, y1, machine).await?,
                     parse_coordinates(x2, y2, machine).await?,
@@ -136,7 +136,7 @@ impl Command for GfxPixelCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let xy = match span.args.as_slice() {
-            [ArgSpan { expr: Some(x), sep: ArgSep::Long }, ArgSpan { expr: Some(y), sep: ArgSep::End }] => {
+            [ArgSpan { expr: Some(x), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y), sep: ArgSep::End, .. }] => {
                 parse_coordinates(x, y, machine).await?
             }
             _ => {
@@ -183,7 +183,7 @@ impl Command for GfxRectCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let (x1y1, x2y2) = match span.args.as_slice() {
-            [ArgSpan { expr: Some(x1), sep: ArgSep::Long }, ArgSpan { expr: Some(y1), sep: ArgSep::Long }, ArgSpan { expr: Some(x2), sep: ArgSep::Long }, ArgSpan { expr: Some(y2), sep: ArgSep::End }] => {
+            [ArgSpan { expr: Some(x1), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y1), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(x2), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y2), sep: ArgSep::End, .. }] => {
                 (
                     parse_coordinates(x1, y1, machine).await?,
                     parse_coordinates(x2, y2, machine).await?,
@@ -232,7 +232,7 @@ impl Command for GfxRectfCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let (x1y1, x2y2) = match span.args.as_slice() {
-            [ArgSpan { expr: Some(x1), sep: ArgSep::Long }, ArgSpan { expr: Some(y1), sep: ArgSep::Long }, ArgSpan { expr: Some(x2), sep: ArgSep::Long }, ArgSpan { expr: Some(y2), sep: ArgSep::End }] => {
+            [ArgSpan { expr: Some(x1), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y1), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(x2), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y2), sep: ArgSep::End, .. }] => {
                 (
                     parse_coordinates(x1, y1, machine).await?,
                     parse_coordinates(x2, y2, machine).await?,
@@ -297,7 +297,7 @@ impl Command for GfxSyncCommand {
                 self.console.borrow_mut().sync_now()?;
                 Ok(())
             }
-            [ArgSpan { expr: Some(b), sep: ArgSep::End }] => {
+            [ArgSpan { expr: Some(b), sep: ArgSep::End, .. }] => {
                 match b.eval(machine.get_mut_symbols()).await? {
                     Value::Boolean(b) => {
                         let mut console = self.console.borrow_mut();

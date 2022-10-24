@@ -112,7 +112,7 @@ impl Command for LoginCommand {
         }
 
         let (username, password) = match span.args.as_slice() {
-            [ArgSpan { expr: Some(username), sep: ArgSep::End }] => {
+            [ArgSpan { expr: Some(username), sep: ArgSep::End, .. }] => {
                 match username.eval(machine.get_mut_symbols()).await? {
                     Value::Text(username) => {
                         let password =
@@ -126,7 +126,7 @@ impl Command for LoginCommand {
                     }
                 }
             }
-            [ArgSpan { expr: Some(username), sep: ArgSep::Long }, ArgSpan { expr: Some(password), sep: ArgSep::End }] =>
+            [ArgSpan { expr: Some(username), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(password), sep: ArgSep::End, .. }] =>
             {
                 let username = match username.eval(machine.get_mut_symbols()).await? {
                     Value::Text(username) => username,
@@ -371,17 +371,17 @@ impl Command for ShareCommand {
         let mut remove = FileAcls::default();
         for arg in &span.args[1..] {
             match arg {
-                ArgSpan { expr: None, sep: _ } => {
+                ArgSpan { expr: None, sep: _, .. } => {
                     return Err(CallError::ArgumentError(
                         "SHARE arguments cannot be empty".to_owned(),
                     ))
                 }
-                ArgSpan { expr: _, sep: ArgSep::Short } => {
+                ArgSpan { expr: _, sep: ArgSep::Short, .. } => {
                     return Err(CallError::ArgumentError(
                         "SHARE requires arguments to be separated by commas".to_owned(),
                     ))
                 }
-                ArgSpan { expr: Some(acl), sep: _ } => {
+                ArgSpan { expr: Some(acl), sep: _, .. } => {
                     match acl.eval(machine.get_mut_symbols()).await? {
                         Value::Text(t) => ShareCommand::parse_acl(t, &mut add, &mut remove)?,
                         _ => {

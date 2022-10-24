@@ -188,7 +188,7 @@ impl Command for GpioSetupCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         match span.args.as_slice() {
-            [ArgSpan { expr: Some(pin), sep: ArgSep::Long }, ArgSpan { expr: Some(mode), sep: ArgSep::End }] =>
+            [ArgSpan { expr: Some(pin), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(mode), sep: ArgSep::End, .. }] =>
             {
                 let pin = Pin::parse(pin, machine).await?;
                 let mode = PinMode::parse(mode, machine).await?;
@@ -244,7 +244,7 @@ impl Command for GpioClearCommand {
                 };
                 Ok(())
             }
-            [ArgSpan { expr: Some(pin), sep: ArgSep::End }] => {
+            [ArgSpan { expr: Some(pin), sep: ArgSep::End, .. }] => {
                 let pin = Pin::parse(pin, machine).await?;
                 match MockPins::try_new(machine.get_mut_symbols()) {
                     Some(mut pins) => pins.clear(pin)?,
@@ -333,7 +333,7 @@ impl Command for GpioWriteCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         match span.args.as_slice() {
-            [ArgSpan { expr: Some(pin), sep: ArgSep::Long }, ArgSpan { expr: Some(value), sep: ArgSep::End }] =>
+            [ArgSpan { expr: Some(pin), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(value), sep: ArgSep::End, .. }] =>
             {
                 let pin = Pin::parse(pin, machine).await?;
                 let value = parse_value(value, machine).await?;

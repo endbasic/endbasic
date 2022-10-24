@@ -177,7 +177,7 @@ impl Command for DirCommand {
                 show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), "").await?;
                 Ok(())
             }
-            [ArgSpan { expr: Some(path), sep: ArgSep::End }] => {
+            [ArgSpan { expr: Some(path), sep: ArgSep::End, .. }] => {
                 match path.eval(machine.get_mut_symbols()).await? {
                     Value::Text(path) => {
                         show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), &path)
@@ -235,7 +235,7 @@ impl Command for MountCommand {
                 show_drives(&*self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
                 Ok(())
             }
-            [ArgSpan { expr: Some(name), sep: ArgSep::Long }, ArgSpan { expr: Some(target), sep: ArgSep::End }] =>
+            [ArgSpan { expr: Some(name), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(target), sep: ArgSep::End, .. }] =>
             {
                 let name = match name.eval(machine.get_mut_symbols()).await? {
                     Value::Text(t) => t,

@@ -119,8 +119,8 @@ impl Command for ColorCommand {
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let (fg_expr, bg_expr): (&Option<Expr>, &Option<Expr>) = match span.args.as_slice() {
             [] => (&None, &None),
-            [ArgSpan { expr: fg, sep: ArgSep::End }] => (fg, &None),
-            [ArgSpan { expr: fg, sep: ArgSep::Long }, ArgSpan { expr: bg, sep: ArgSep::End }] => {
+            [ArgSpan { expr: fg, sep: ArgSep::End, .. }] => (fg, &None),
+            [ArgSpan { expr: fg, sep: ArgSep::Long, .. }, ArgSpan { expr: bg, sep: ArgSep::End, .. }] => {
                 (fg, bg)
             }
             _ => {

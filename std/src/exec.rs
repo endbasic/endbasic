@@ -99,7 +99,7 @@ impl Command for ExitCommand {
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let arg = match span.args.as_slice() {
             [] => 0,
-            [ArgSpan { expr: Some(expr), sep: ArgSep::End }] => {
+            [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
                 match expr.eval(machine.get_mut_symbols()).await? {
                     Value::Integer(n) => {
                         if n < 0 {
@@ -174,7 +174,7 @@ impl Command for SleepCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let duration = match span.args.as_slice() {
-            [ArgSpan { expr: Some(expr), sep: ArgSep::End }] => {
+            [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
                 match expr.eval(machine.get_mut_symbols()).await? {
                     Value::Integer(n) => {
                         if n < 0 {

@@ -367,6 +367,9 @@ pub struct ArrayAssignmentSpan {
     /// Reference to the array to modify.
     pub vref: VarRef,
 
+    /// Position of the `vref`.
+    pub vref_pos: LineCol,
+
     /// Expressions to compute the subscripts to index the array.
     pub subscripts: Vec<Expr>,
 
@@ -379,6 +382,9 @@ pub struct ArrayAssignmentSpan {
 pub struct AssignmentSpan {
     /// Reference to the variable to set.
     pub vref: VarRef,
+
+    /// Position of the `vref`.
+    pub vref_pos: LineCol,
 
     /// Expression to compute the value of the modified variable.
     pub expr: Expr,
@@ -394,6 +400,9 @@ pub struct ArgSpan {
     /// Separator between this argument and the *next*.  The last instance of this type in a call
     /// always carries a value of `ArgSep::End`.
     pub sep: ArgSep,
+
+    /// Position of the `sep`.
+    pub sep_pos: LineCol,
 }
 
 /// Components of an builtin call statement.
@@ -401,6 +410,9 @@ pub struct ArgSpan {
 pub struct BuiltinCallSpan {
     /// Name of the builtin to call.
     pub name: String,
+
+    /// Position of the name.
+    pub name_pos: LineCol,
 
     /// Sequence of arguments to pass to the builtin.
     pub args: Vec<ArgSpan>,
@@ -418,8 +430,14 @@ pub struct DimSpan {
     /// not a `VarRef`.
     pub name: String,
 
+    /// Position of the name.
+    pub name_pos: LineCol,
+
     /// Type of the variable to be defined.
     pub vtype: VarType,
+
+    /// Position of the type.
+    pub vtype_pos: LineCol,
 }
 
 /// Components of an array definition.
@@ -429,11 +447,17 @@ pub struct DimArraySpan {
     /// `VarRef`.
     pub name: String,
 
+    /// Position of the name.
+    pub name_pos: LineCol,
+
     /// Expressions to compute the dimensions of the array.
     pub dimensions: Vec<Expr>,
 
     /// Type of the array to be defined.
     pub subtype: VarType,
+
+    /// Position of the subtype.
+    pub subtype_pos: LineCol,
 }
 
 /// Components of a branch of an `IF` statement.
@@ -468,6 +492,9 @@ pub struct ForSpan {
     /// integer.
     pub iter: VarRef,
 
+    /// Position of the iterator.
+    pub iter_pos: LineCol,
+
     /// Expression to compute the iterator's initial value.
     pub start: Expr,
 
@@ -486,6 +513,9 @@ pub struct ForSpan {
 pub struct GotoSpan {
     /// Name of the label to jump to.
     pub target: String,
+
+    /// Position of the label.
+    pub target_pos: LineCol,
 }
 
 /// Components of a label "statement".
@@ -496,6 +526,9 @@ pub struct GotoSpan {
 pub struct LabelSpan {
     /// Name of the label being defined.
     pub name: String,
+
+    /// Position of the label.
+    pub name_pos: LineCol,
 }
 
 /// Components of a `WHILE` statement.
