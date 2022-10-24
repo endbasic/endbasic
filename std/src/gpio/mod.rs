@@ -67,9 +67,7 @@ impl Pin {
     fn parse_value(value: &Value, pos: LineCol) -> Result<Pin, CallError> {
         match value {
             Value::Integer(n) => Ok(Pin::from_i32(*n, pos)?),
-            v => {
-                Err(CallError::ArgumentError(pos, format!("Pin number {:?} must be an integer", v)))
-            }
+            v => Err(CallError::ArgumentError(pos, format!("Pin number {} must be an integer", v))),
         }
     }
 }
@@ -106,7 +104,7 @@ impl PinMode {
             },
             v => Err(CallError::ArgumentError(
                 expr.start_pos(),
-                format!("Pin mode {:?} must be a string", v),
+                format!("Pin mode {} must be a string", v),
             )),
         }
     }
@@ -118,7 +116,7 @@ async fn parse_value(expr: &Expr, machine: &mut Machine) -> Result<bool, CallErr
         Value::Boolean(b) => Ok(b),
         v => Err(CallError::ArgumentError(
             expr.start_pos(),
-            format!("Pin value {:?} must be boolean", v),
+            format!("Pin value {} must be boolean", v),
         )),
     }
 }
@@ -383,7 +381,7 @@ mod tests {
     /// where the pin number goes.  The `prefix` contains a possible prefix for the error messages.
     fn check_pin_validation(prefix: &str, fmt: &str) {
         check_stmt_err(
-            format!(r#"{}Pin number Boolean(true) must be an integer"#, prefix),
+            format!(r#"{}Pin number TRUE must be an integer"#, prefix),
             &fmt.replace("_PIN_", "TRUE"),
         );
         check_stmt_err(
@@ -526,7 +524,7 @@ mod tests {
         check_pin_validation("1:1: In call to GPIO_WRITE: 1:12: ", r#"GPIO_WRITE _PIN_, TRUE"#);
 
         check_stmt_err(
-            "1:1: In call to GPIO_WRITE: 1:15: Pin value Integer(5) must be boolean",
+            "1:1: In call to GPIO_WRITE: 1:15: Pin value 5 must be boolean",
             r#"GPIO_WRITE 1, 5"#,
         );
     }
