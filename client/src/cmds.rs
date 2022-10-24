@@ -22,6 +22,7 @@ use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
 };
+use endbasic_core::LineCol;
 use endbasic_std::console::{read_line, read_line_secure, refill_and_print, Console};
 use endbasic_std::storage::{FileAcls, Storage};
 use std::cell::RefCell;
@@ -60,7 +61,7 @@ impl LoginCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOGIN", VarType::Void)
-                .with_syntax("username$ [password$]")
+                .with_syntax("username$[, password$]")
                 .with_category(CATEGORY)
                 .with_description(
                     "Logs into the user's account.
@@ -108,7 +109,11 @@ impl Command for LoginCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         if self.service.borrow().is_logged_in() {
-            return Err(CallError::InternalError("Cannot LOGIN again before LOGOUT".to_owned()));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Cannot LOGIN again before LOGOUT".to_owned(),
+            )
+            .into());
         }
 
         let (username, password) = match span.args.as_slice() {
@@ -121,6 +126,7 @@ impl Command for LoginCommand {
                     }
                     _ => {
                         return Err(CallError::ArgumentError(
+                            username.start_pos(),
                             "LOGIN requires a string as the username".to_owned(),
                         ))
                     }
@@ -132,6 +138,7 @@ impl Command for LoginCommand {
                     Value::Text(username) => username,
                     _ => {
                         return Err(CallError::ArgumentError(
+                            username.start_pos(),
                             "LOGIN requires a string as the username".to_owned(),
                         ))
                     }
@@ -140,17 +147,14 @@ impl Command for LoginCommand {
                     Value::Text(password) => password,
                     _ => {
                         return Err(CallError::ArgumentError(
+                            password.start_pos(),
                             "LOGIN requires a string as the password".to_owned(),
                         ))
                     }
                 };
                 (username, password)
             }
-            _ => {
-                return Err(CallError::ArgumentError(
-                    "LOGIN requires one or two arguments".to_owned(),
-                ))
-            }
+            _ => return Err(CallError::SyntaxError),
         };
 
         self.do_login(&username, &password).await
@@ -197,25 +201,29 @@ impl Command for LogoutCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
         if !span.args.is_empty() {
-            return Err(CallError::ArgumentError("LOGOUT takes no arguments".to_owned()));
+            return Err(CallError::SyntaxError);
         }
 
         if !self.service.borrow().is_logged_in() {
             // TODO(jmmv): Now that the access tokens are part of the service, we can easily allow
             // logging in more than once within a session.  Consider adding a LOGOUT command first
             // to make it easier to handle the CLOUD: drive on a second login.
-            return Err(CallError::InternalError("Must LOGIN first".to_owned()));
+            return Err(
+                io::Error::new(io::ErrorKind::InvalidInput, "Must LOGIN first".to_owned()).into()
+            );
         }
 
         let unmounted = match self.storage.borrow_mut().unmount("CLOUD") {
             Ok(()) => true,
             Err(e) if e.kind() == io::ErrorKind::NotFound => false,
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-                return Err(CallError::InternalError(
+                return Err(io::Error::new(
+                    e.kind(),
                     "Cannot log out while the CLOUD drive is active".to_owned(),
-                ))
+                )
+                .into())
             }
-            Err(e) => return Err(CallError::InternalError(format!("Cannot log out: {}", e))),
+            Err(e) => return Err(io::Error::new(e.kind(), format!("Cannot log out: {}", e)).into()),
         };
 
         self.service.borrow_mut().logout().await?;
@@ -258,7 +266,7 @@ impl ShareCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SHARE", VarType::Void)
-                .with_syntax("filename$ [, acl1$, .., aclN$]")
+                .with_syntax("filename$[, acl1$, .., aclN$]")
                 .with_category(CATEGORY)
                 .with_description(
                     "Displays or modifies the ACLs of a file.
@@ -283,7 +291,12 @@ among users of the EndBASIC service.",
 
 impl ShareCommand {
     /// Parses a textual ACL specification and adds it to `add` or `remove.
-    fn parse_acl(mut acl: String, add: &mut FileAcls, remove: &mut FileAcls) -> CommandResult {
+    fn parse_acl(
+        mut acl: String,
+        acl_pos: LineCol,
+        add: &mut FileAcls,
+        remove: &mut FileAcls,
+    ) -> CommandResult {
         let change = if acl.len() < 3 { String::new() } else { acl.split_off(acl.len() - 2) };
         let username = acl; // For clarity after splitting off the ACL change request.
         match (username, change.as_str()) {
@@ -292,10 +305,13 @@ impl ShareCommand {
             (username, "-r") if !username.is_empty() => remove.add_reader(username),
             (username, "-R") if !username.is_empty() => remove.add_reader(username),
             (username, change) => {
-                return Err(CallError::ArgumentError(format!(
-                    "Invalid ACL '{}{}': must be of the form \"username+r\" or \"username-r\"",
-                    username, change
-                )))
+                return Err(CallError::ArgumentError(
+                    acl_pos,
+                    format!(
+                        "Invalid ACL '{}{}': must be of the form \"username+r\" or \"username-r\"",
+                        username, change
+                    ),
+                ))
             }
         }
         Ok(())
@@ -339,9 +355,7 @@ impl Command for ShareCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         if span.args.is_empty() {
-            return Err(CallError::ArgumentError(
-                "SHARE requires one or more arguments".to_owned(),
-            ));
+            return Err(CallError::SyntaxError);
         }
 
         let filename = match &span.args[0].expr {
@@ -349,12 +363,14 @@ impl Command for ShareCommand {
                 Value::Text(t) => t,
                 _ => {
                     return Err(CallError::ArgumentError(
+                        e.start_pos(),
                         "SHARE requires a string as the filename".to_owned(),
                     ))
                 }
             },
             None => {
                 return Err(CallError::ArgumentError(
+                    span.args[0].sep_pos,
                     "SHARE requires a string as the filename".to_owned(),
                 ))
             }
@@ -362,9 +378,7 @@ impl Command for ShareCommand {
         if span.args[0].sep == ArgSep::End {
             return self.show_acls(&filename).await;
         } else if span.args[0].sep != ArgSep::Long {
-            return Err(CallError::ArgumentError(
-                "SHARE requires arguments to be separated by commas".to_owned(),
-            ));
+            return Err(CallError::SyntaxError);
         }
 
         let mut add = FileAcls::default();
@@ -372,20 +386,19 @@ impl Command for ShareCommand {
         for arg in &span.args[1..] {
             match arg {
                 ArgSpan { expr: None, sep: _, .. } => {
-                    return Err(CallError::ArgumentError(
-                        "SHARE arguments cannot be empty".to_owned(),
-                    ))
+                    return Err(CallError::SyntaxError);
                 }
                 ArgSpan { expr: _, sep: ArgSep::Short, .. } => {
-                    return Err(CallError::ArgumentError(
-                        "SHARE requires arguments to be separated by commas".to_owned(),
-                    ))
+                    return Err(CallError::SyntaxError);
                 }
                 ArgSpan { expr: Some(acl), sep: _, .. } => {
                     match acl.eval(machine.get_mut_symbols()).await? {
-                        Value::Text(t) => ShareCommand::parse_acl(t, &mut add, &mut remove)?,
+                        Value::Text(t) => {
+                            ShareCommand::parse_acl(t, acl.start_pos(), &mut add, &mut remove)?
+                        }
                         _ => {
                             return Err(CallError::ArgumentError(
+                                acl.start_pos(),
                                 "SHARE requires strings as ACL changes".to_owned(),
                             ))
                         }
@@ -707,7 +720,7 @@ mod tests {
             Err(io::Error::new(io::ErrorKind::PermissionDenied, "Unknown user")),
         );
         t.run(format!(r#"LOGIN "{}", "{}""#, "bad-user", "the-password"))
-            .expect_err("Unknown user")
+            .expect_err("1:1: In call to LOGIN: Unknown user")
             .check();
         t.get_service().borrow_mut().add_mock_login(
             "the-username",
@@ -715,7 +728,7 @@ mod tests {
             Err(io::Error::new(io::ErrorKind::PermissionDenied, "Invalid password")),
         );
         t.run(format!(r#"LOGIN "{}", "{}""#, "the-username", "bad-password"))
-            .expect_err("Invalid password")
+            .expect_err("1:1: In call to LOGIN: Invalid password")
             .check();
         assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
     }
@@ -731,18 +744,30 @@ mod tests {
         assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
         t.run(r#"LOGIN "the-username", "the-password": LOGIN "a", "b""#)
             .expect_access_token("random token")
-            .expect_err("Cannot LOGIN again before LOGOUT")
+            .expect_err("1:39: In call to LOGIN: Cannot LOGIN again before LOGOUT")
             .check();
         assert!(t.get_storage().borrow().mounted().contains_key("CLOUD"));
     }
 
     #[test]
     fn test_login_errors() {
-        client_check_stmt_err("LOGIN requires one or two arguments", r#"LOGIN"#);
-        client_check_stmt_err("LOGIN requires one or two arguments", r#"LOGIN "a", "b", "c""#);
-        client_check_stmt_err("LOGIN requires a string as the username", r#"LOGIN 3"#);
-        client_check_stmt_err("LOGIN requires a string as the username", r#"LOGIN 3, "a""#);
-        client_check_stmt_err("LOGIN requires a string as the password", r#"LOGIN "a", 3"#);
+        client_check_stmt_err("1:1: In call to LOGIN: expected username$[, password$]", r#"LOGIN"#);
+        client_check_stmt_err(
+            "1:1: In call to LOGIN: expected username$[, password$]",
+            r#"LOGIN "a", "b", "c""#,
+        );
+        client_check_stmt_err(
+            "1:1: In call to LOGIN: 1:7: LOGIN requires a string as the username",
+            r#"LOGIN 3"#,
+        );
+        client_check_stmt_err(
+            "1:1: In call to LOGIN: 1:7: LOGIN requires a string as the username",
+            r#"LOGIN 3, "a""#,
+        );
+        client_check_stmt_err(
+            "1:1: In call to LOGIN: 1:12: LOGIN requires a string as the password",
+            r#"LOGIN "a", 3"#,
+        );
     }
 
     #[tokio::test]
@@ -771,7 +796,7 @@ mod tests {
         t.get_storage().borrow_mut().mount("CLOUD", "memory://").unwrap();
         t.get_storage().borrow_mut().cd("CLOUD:/").unwrap();
         t.run(r#"LOGOUT"#)
-            .expect_err("Cannot log out while the CLOUD drive is active")
+            .expect_err("1:1: In call to LOGOUT: Cannot log out while the CLOUD drive is active")
             .expect_access_token("$")
             .check();
         assert!(t.get_storage().borrow().mounted().contains_key("CLOUD"));
@@ -779,8 +804,8 @@ mod tests {
 
     #[test]
     fn test_logout_errors() {
-        client_check_stmt_err("LOGOUT takes no arguments", r#"LOGOUT "a""#);
-        client_check_stmt_err("Must LOGIN first", r#"LOGOUT"#);
+        client_check_stmt_err("1:1: In call to LOGOUT: expected no arguments", r#"LOGOUT "a""#);
+        client_check_stmt_err("1:1: In call to LOGOUT: Must LOGIN first", r#"LOGOUT"#);
     }
 
     #[test]
@@ -824,10 +849,12 @@ mod tests {
         let mut add = FileAcls::default();
         let mut remove = FileAcls::default();
 
-        ShareCommand::parse_acl("user1+r".to_owned(), &mut add, &mut remove).unwrap();
-        ShareCommand::parse_acl("user2+R".to_owned(), &mut add, &mut remove).unwrap();
-        ShareCommand::parse_acl("X-r".to_owned(), &mut add, &mut remove).unwrap();
-        ShareCommand::parse_acl("Y-R".to_owned(), &mut add, &mut remove).unwrap();
+        let lc = LineCol { line: 0, col: 0 };
+
+        ShareCommand::parse_acl("user1+r".to_owned(), lc, &mut add, &mut remove).unwrap();
+        ShareCommand::parse_acl("user2+R".to_owned(), lc, &mut add, &mut remove).unwrap();
+        ShareCommand::parse_acl("X-r".to_owned(), lc, &mut add, &mut remove).unwrap();
+        ShareCommand::parse_acl("Y-R".to_owned(), lc, &mut add, &mut remove).unwrap();
         assert_eq!(&["user1".to_owned(), "user2".to_owned()], add.readers());
         assert_eq!(&["X".to_owned(), "Y".to_owned()], remove.readers());
     }
@@ -848,8 +875,14 @@ mod tests {
         let mut remove = FileAcls::default().with_readers(["before2".to_owned()]);
 
         for acl in &["", "r", "+r", "-r", "foo+", "bar-"] {
-            let err = ShareCommand::parse_acl(acl.to_string(), &mut add, &mut remove).unwrap_err();
-            let message = format!("{:?}", err);
+            let err = ShareCommand::parse_acl(
+                acl.to_string(),
+                LineCol { line: 12, col: 34 },
+                &mut add,
+                &mut remove,
+            )
+            .unwrap_err();
+            let message = format!("12:34: {:?}", err);
             assert!(message.contains("Invalid ACL"));
             assert!(message.contains(acl));
         }
@@ -905,21 +938,36 @@ mod tests {
 
     #[test]
     fn test_share_errors() {
-        client_check_stmt_err("SHARE requires one or more arguments", r#"SHARE"#);
-        client_check_stmt_err("SHARE requires a string as the filename", r#"SHARE 1"#);
-        client_check_stmt_err("SHARE requires a string as the filename", r#"SHARE , "a""#);
         client_check_stmt_err(
-            "SHARE requires arguments to be separated by commas",
+            "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
+            r#"SHARE"#,
+        );
+        client_check_stmt_err(
+            "1:1: In call to SHARE: 1:7: SHARE requires a string as the filename",
+            r#"SHARE 1"#,
+        );
+        client_check_stmt_err(
+            "1:1: In call to SHARE: 1:7: SHARE requires a string as the filename",
+            r#"SHARE , "a""#,
+        );
+        client_check_stmt_err(
+            "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
             r#"SHARE "a"; "b""#,
         );
         client_check_stmt_err(
-            "SHARE requires arguments to be separated by commas",
+            "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
             r#"SHARE "a", "b"; "c""#,
         );
-        client_check_stmt_err("SHARE arguments cannot be empty", r#"SHARE "a", , "b""#);
-        client_check_stmt_err("SHARE requires strings as ACL changes", r#"SHARE "a", 3, "b""#);
         client_check_stmt_err(
-            r#"Invalid ACL 'foobar': must be of the form "username+r" or "username-r""#,
+            "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
+            r#"SHARE "a", , "b""#,
+        );
+        client_check_stmt_err(
+            "1:1: In call to SHARE: 1:12: SHARE requires strings as ACL changes",
+            r#"SHARE "a", 3, "b""#,
+        );
+        client_check_stmt_err(
+            r#"1:1: In call to SHARE: 1:12: Invalid ACL 'foobar': must be of the form "username+r" or "username-r""#,
             r#"SHARE "a", "foobar""#,
         );
     }
@@ -1082,7 +1130,7 @@ mod tests {
             .add_input_chars("true\n"); // Confirmation.
         let mut c = t.run("SIGNUP".to_owned());
         let output = flatten_output(c.take_captured_out());
-        c.expect_err("Some error").check();
+        c.expect_err("1:1: In call to SIGNUP: Some error").check();
 
         assert!(output.contains("Username: the-username"));
         assert!(output.contains("Email address: some@example.com"));

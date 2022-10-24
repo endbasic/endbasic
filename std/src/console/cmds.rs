@@ -78,7 +78,7 @@ impl Command for ClsCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
         if !span.args.is_empty() {
-            return Err(CallError::ArgumentError("CLS takes no arguments".to_owned()));
+            return Err(CallError::SyntaxError);
         }
         self.console.borrow_mut().clear(ClearType::All)?;
         Ok(())
@@ -124,9 +124,7 @@ impl Command for ColorCommand {
                 (fg, bg)
             }
             _ => {
-                return Err(CallError::ArgumentError(
-                    "COLOR takes at most two arguments separated by a comma".to_owned(),
-                ))
+                return Err(CallError::SyntaxError);
             }
         };
 
@@ -137,10 +135,14 @@ impl Command for ColorCommand {
             match e {
                 Some(e) => match e.eval(machine.get_mut_symbols()).await? {
                     Value::Integer(i) if i >= 0 && i <= std::u8::MAX as i32 => Ok(Some(i as u8)),
-                    Value::Integer(_) => {
-                        Err(CallError::ArgumentError("Color out of range".to_owned()))
-                    }
-                    _ => Err(CallError::ArgumentError("Color must be an integer".to_owned())),
+                    Value::Integer(_) => Err(CallError::ArgumentError(
+                        e.start_pos(),
+                        "Color out of range".to_owned(),
+                    )),
+                    _ => Err(CallError::ArgumentError(
+                        e.start_pos(),
+                        "Color must be an integer".to_owned(),
+                    )),
                 },
                 None => Ok(None),
             }
@@ -195,7 +197,7 @@ impl Function for InKeyFunction {
 
     async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
         if !span.args.is_empty() {
-            return Err(CallError::ArgumentError("no arguments allowed".to_owned()));
+            return Err(CallError::SyntaxError);
         }
 
         let key = self.console.borrow_mut().poll_key().await?;
@@ -259,7 +261,7 @@ impl Command for InputCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         if span.args.len() != 2 {
-            return Err(CallError::ArgumentError("INPUT requires two arguments".to_owned()));
+            return Err(CallError::SyntaxError);
         }
 
         let mut prompt = match &span.args[0].expr {
@@ -267,6 +269,7 @@ impl Command for InputCommand {
                 Value::Text(t) => t,
                 _ => {
                     return Err(CallError::ArgumentError(
+                        e.start_pos(),
                         "INPUT prompt must be a string".to_owned(),
                     ))
                 }
@@ -279,11 +282,13 @@ impl Command for InputCommand {
 
         let (vref, pos) = match &span.args[1].expr {
             Some(Expr::Symbol(span)) => (&span.vref, span.pos),
-            _ => {
+            Some(expr) => {
                 return Err(CallError::ArgumentError(
+                    expr.start_pos(),
                     "INPUT requires a variable reference".to_owned(),
                 ))
             }
+            None => return Err(CallError::SyntaxError),
         };
         let vref = machine
             .get_symbols()
@@ -344,13 +349,11 @@ impl Command for LocateCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         if span.args.len() != 2 {
-            return Err(CallError::ArgumentError("LOCATE takes two arguments".to_owned()));
+            return Err(CallError::SyntaxError);
         }
         let (column_arg, row_arg) = (&span.args[0], &span.args[1]);
         if column_arg.sep != ArgSep::Long {
-            return Err(CallError::ArgumentError(
-                "LOCATE expects arguments separated by a comma".to_owned(),
-            ));
+            return Err(CallError::SyntaxError);
         }
         debug_assert!(row_arg.sep == ArgSep::End);
 
@@ -359,23 +362,41 @@ impl Command for LocateCommand {
                 Value::Integer(i) => match u16::try_from(i) {
                     Ok(v) => v,
                     Err(_) => {
-                        return Err(CallError::ArgumentError("Column out of range".to_owned()))
+                        return Err(CallError::ArgumentError(
+                            arg.start_pos(),
+                            "Column out of range".to_owned(),
+                        ))
                     }
                 },
-                _ => return Err(CallError::ArgumentError("Column must be an integer".to_owned())),
+                _ => {
+                    return Err(CallError::ArgumentError(
+                        arg.start_pos(),
+                        "Column must be an integer".to_owned(),
+                    ))
+                }
             },
-            None => return Err(CallError::ArgumentError("Column cannot be empty".to_owned())),
+            None => return Err(CallError::SyntaxError),
         };
 
         let row = match &row_arg.expr {
             Some(arg) => match arg.eval(machine.get_mut_symbols()).await? {
                 Value::Integer(i) => match u16::try_from(i) {
                     Ok(v) => v,
-                    Err(_) => return Err(CallError::ArgumentError("Row out of range".to_owned())),
+                    Err(_) => {
+                        return Err(CallError::ArgumentError(
+                            arg.start_pos(),
+                            "Row out of range".to_owned(),
+                        ))
+                    }
                 },
-                _ => return Err(CallError::ArgumentError("Row must be an integer".to_owned())),
+                _ => {
+                    return Err(CallError::ArgumentError(
+                        arg.start_pos(),
+                        "Row must be an integer".to_owned(),
+                    ))
+                }
             },
-            None => return Err(CallError::ArgumentError("Row cannot be empty".to_owned())),
+            None => return Err(CallError::SyntaxError),
         };
 
         self.console.borrow_mut().locate(CharsXY::new(column, row))?;
@@ -459,7 +480,7 @@ mod tests {
 
     #[test]
     fn test_cls_errors() {
-        check_stmt_err("CLS takes no arguments", "CLS 1");
+        check_stmt_err("1:1: In call to CLS: expected no arguments", "CLS 1");
     }
 
     #[test]
@@ -479,13 +500,13 @@ mod tests {
 
     #[test]
     fn test_color_errors() {
-        check_stmt_err("COLOR takes at most two arguments separated by a comma", "COLOR 1, 2, 3");
+        check_stmt_err("1:1: In call to COLOR: expected [fg%][, [bg%]]", "COLOR 1, 2, 3");
 
-        check_stmt_err("Color out of range", "COLOR 1000, 0");
-        check_stmt_err("Color out of range", "COLOR 0, 1000");
+        check_stmt_err("1:1: In call to COLOR: 1:7: Color out of range", "COLOR 1000, 0");
+        check_stmt_err("1:1: In call to COLOR: 1:10: Color out of range", "COLOR 0, 1000");
 
-        check_stmt_err("Color must be an integer", "COLOR TRUE, 0");
-        check_stmt_err("Color must be an integer", "COLOR 0, TRUE");
+        check_stmt_err("1:1: In call to COLOR: 1:7: Color must be an integer", "COLOR TRUE, 0");
+        check_stmt_err("1:1: In call to COLOR: 1:10: Color must be an integer", "COLOR 0, TRUE");
     }
 
     #[test]
@@ -512,7 +533,7 @@ mod tests {
 
     #[test]
     fn test_inkey_errors() {
-        check_expr_error("1:10: Syntax error in call to INKEY: no arguments allowed", "INKEY(1)");
+        check_expr_error("1:10: In call to INKEY: expected no arguments", "INKEY(1)");
     }
 
     #[test]
@@ -602,11 +623,17 @@ mod tests {
 
     #[test]
     fn test_input_errors() {
-        check_stmt_err("INPUT requires two arguments", "INPUT");
-        check_stmt_err("INPUT requires two arguments", "INPUT ; ,");
-        check_stmt_err("INPUT requires a variable reference", "INPUT ;");
-        check_stmt_err("INPUT prompt must be a string", "INPUT 3 ; a");
-        check_stmt_err("INPUT requires a variable reference", "INPUT ; a + 1");
+        check_stmt_err("1:1: In call to INPUT: expected [\"prompt\"] <;|,> variableref", "INPUT");
+        check_stmt_err(
+            "1:1: In call to INPUT: expected [\"prompt\"] <;|,> variableref",
+            "INPUT ; ,",
+        );
+        check_stmt_err("1:1: In call to INPUT: expected [\"prompt\"] <;|,> variableref", "INPUT ;");
+        check_stmt_err("1:1: In call to INPUT: 1:7: INPUT prompt must be a string", "INPUT 3 ; a");
+        check_stmt_err(
+            "1:1: In call to INPUT: 1:9: INPUT requires a variable reference",
+            "INPUT ; a + 1",
+        );
         check_stmt_err("1:11: Cannot add \"a\" and TRUE", "INPUT \"a\" + TRUE; b?");
     }
 
@@ -625,20 +652,20 @@ mod tests {
 
     #[test]
     fn test_locate_errors() {
-        check_stmt_err("LOCATE takes two arguments", "LOCATE");
-        check_stmt_err("LOCATE takes two arguments", "LOCATE 1");
-        check_stmt_err("LOCATE takes two arguments", "LOCATE 1, 2, 3");
-        check_stmt_err("LOCATE expects arguments separated by a comma", "LOCATE 1; 2");
+        check_stmt_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE");
+        check_stmt_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE 1");
+        check_stmt_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE 1, 2, 3");
+        check_stmt_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE 1; 2");
 
-        check_stmt_err("Column out of range", "LOCATE -1, 2");
-        check_stmt_err("Column out of range", "LOCATE 70000, 2");
-        check_stmt_err("Column must be an integer", "LOCATE TRUE, 2");
-        check_stmt_err("Column cannot be empty", "LOCATE , 2");
+        check_stmt_err("1:1: In call to LOCATE: 1:8: Column out of range", "LOCATE -1, 2");
+        check_stmt_err("1:1: In call to LOCATE: 1:8: Column out of range", "LOCATE 70000, 2");
+        check_stmt_err("1:1: In call to LOCATE: 1:8: Column must be an integer", "LOCATE TRUE, 2");
+        check_stmt_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE , 2");
 
-        check_stmt_err("Row out of range", "LOCATE 1, -2");
-        check_stmt_err("Row out of range", "LOCATE 1, 70000");
-        check_stmt_err("Row must be an integer", "LOCATE 1, TRUE");
-        check_stmt_err("Row cannot be empty", "LOCATE 1,");
+        check_stmt_err("1:1: In call to LOCATE: 1:11: Row out of range", "LOCATE 1, -2");
+        check_stmt_err("1:1: In call to LOCATE: 1:11: Row out of range", "LOCATE 1, 70000");
+        check_stmt_err("1:1: In call to LOCATE: 1:11: Row must be an integer", "LOCATE 1, TRUE");
+        check_stmt_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE 1,");
     }
 
     #[test]

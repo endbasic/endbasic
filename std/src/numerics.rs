@@ -219,7 +219,7 @@ impl Command for DegCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
         if !span.args.is_empty() {
-            return Err(CallError::ArgumentError("DEG takes no arguments".to_owned()));
+            return Err(CallError::SyntaxError);
         }
         *self.angle_mode.borrow_mut() = AngleMode::Degrees;
         Ok(())
@@ -486,7 +486,7 @@ impl Function for PiFunction {
 
     async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
         if !span.args.is_empty() {
-            return Err(CallError::ArgumentError("no arguments allowed".to_owned()));
+            return Err(CallError::SyntaxError);
         }
         Ok(Value::Double(std::f64::consts::PI))
     }
@@ -524,7 +524,7 @@ impl Command for RadCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
         if !span.args.is_empty() {
-            return Err(CallError::ArgumentError("RAD takes no arguments".to_owned()));
+            return Err(CallError::SyntaxError);
         }
         *self.angle_mode.borrow_mut() = AngleMode::Radians;
         Ok(())
@@ -573,16 +573,13 @@ impl Command for RandomizeCommand {
                     }
                     _ => {
                         return Err(CallError::ArgumentError(
+                            expr.start_pos(),
                             "Random seed must be an integer".to_owned(),
                         ))
                     }
                 }
             }
-            _ => {
-                return Err(CallError::ArgumentError(
-                    "RANDOMIZE takes zero or one argument".to_owned(),
-                ))
-            }
+            _ => return Err(CallError::SyntaxError),
         };
         Ok(())
     }
@@ -628,7 +625,10 @@ impl Function for RndFunction {
             [Value::Integer(n)] => match n.cmp(&0) {
                 Ordering::Equal => Ok(Value::Double(self.prng.borrow_mut().last())),
                 Ordering::Greater => Ok(Value::Double(self.prng.borrow_mut().next())),
-                Ordering::Less => Err(CallError::ArgumentError("n% cannot be negative".to_owned())),
+                Ordering::Less => Err(CallError::ArgumentError(
+                    span.args[0].start_pos(),
+                    "n% cannot be negative".to_owned(),
+                )),
             },
             _ => Err(CallError::SyntaxError),
         }
@@ -738,9 +738,9 @@ mod tests {
         check_expr_ok(123f64.atan(), "ATN(123)");
         check_expr_ok(45.5f64.atan(), "ATN(45.5)");
 
-        check_expr_error("1:10: Syntax error in call to ATN: expected n%|n#", "ATN()");
-        check_expr_error("1:10: Syntax error in call to ATN: expected n%|n#", "ATN(FALSE)");
-        check_expr_error("1:10: Syntax error in call to ATN: expected n%|n#", "ATN(3, 4)");
+        check_expr_error("1:10: In call to ATN: expected n%|n#", "ATN()");
+        check_expr_error("1:10: In call to ATN: expected n%|n#", "ATN(FALSE)");
+        check_expr_error("1:10: In call to ATN: expected n%|n#", "ATN(3, 4)");
     }
 
     #[test]
@@ -748,9 +748,9 @@ mod tests {
         check_expr_ok(123f64.cos(), "COS(123)");
         check_expr_ok(45.5f64.cos(), "COS(45.5)");
 
-        check_expr_error("1:10: Syntax error in call to COS: expected angle%|angle#", "COS()");
-        check_expr_error("1:10: Syntax error in call to COS: expected angle%|angle#", "COS(FALSE)");
-        check_expr_error("1:10: Syntax error in call to COS: expected angle%|angle#", "COS(3, 4)");
+        check_expr_error("1:10: In call to COS: expected angle%|angle#", "COS()");
+        check_expr_error("1:10: In call to COS: expected angle%|angle#", "COS(FALSE)");
+        check_expr_error("1:10: In call to COS: expected angle%|angle#", "COS(3, 4)");
     }
 
     #[test]
@@ -771,8 +771,8 @@ mod tests {
 
     #[test]
     fn test_deg_rad_errors() {
-        check_stmt_err("DEG takes no arguments", "DEG 1");
-        check_stmt_err("RAD takes no arguments", "RAD 1");
+        check_stmt_err("1:1: In call to DEG: expected no arguments", "DEG 1");
+        check_stmt_err("1:1: In call to RAD: expected no arguments", "RAD 1");
     }
 
     #[test]
@@ -790,9 +790,9 @@ mod tests {
         check_expr_ok(std::i32::MAX, "DTOI(12345678901234567890.0)");
         check_expr_ok(std::i32::MIN, "DTOI(-12345678901234567890.0)");
 
-        check_expr_error("1:10: Syntax error in call to DTOI: expected expr#", "DTOI()");
-        check_expr_error("1:10: Syntax error in call to DTOI: expected expr#", "DTOI(3)");
-        check_expr_error("1:10: Syntax error in call to DTOI: expected expr#", "DTOI(3.0, 4)");
+        check_expr_error("1:10: In call to DTOI: expected expr#", "DTOI()");
+        check_expr_error("1:10: In call to DTOI: expected expr#", "DTOI(3)");
+        check_expr_error("1:10: In call to DTOI: expected expr#", "DTOI(3.0, 4)");
     }
 
     #[test]
@@ -806,9 +806,9 @@ mod tests {
         // value of an i32 in the code as a literal.
         check_expr_ok(std::i32::MIN as f64, &format!("ITOD({} - 1)", std::i32::MIN + 1));
 
-        check_expr_error("1:10: Syntax error in call to ITOD: expected expr%", "ITOD()");
-        check_expr_error("1:10: Syntax error in call to ITOD: expected expr%", "ITOD(3.0)");
-        check_expr_error("1:10: Syntax error in call to ITOD: expected expr%", "ITOD(3, 4)");
+        check_expr_error("1:10: In call to ITOD: expected expr%", "ITOD()");
+        check_expr_error("1:10: In call to ITOD: expected expr%", "ITOD(3.0)");
+        check_expr_error("1:10: In call to ITOD: expected expr%", "ITOD(3, 4)");
     }
 
     #[test]
@@ -820,14 +820,8 @@ mod tests {
         check_expr_ok(3.5, "MIND(5.3, 3.5, 4.2)");
         check_expr_ok(-5.3, "MIND(-5.3, -3.5, -4.2)");
 
-        check_expr_error(
-            "1:10: Syntax error in call to MIND: expected expr#[, .., expr#]",
-            "MIND()",
-        );
-        check_expr_error(
-            "1:10: Syntax error in call to MIND: expected expr#[, .., expr#]",
-            "MIND(3)",
-        );
+        check_expr_error("1:10: In call to MIND: expected expr#[, .., expr#]", "MIND()");
+        check_expr_error("1:10: In call to MIND: expected expr#[, .., expr#]", "MIND(3)");
     }
 
     #[test]
@@ -839,14 +833,8 @@ mod tests {
         check_expr_ok(3, "MINI(5, 3, 4)");
         check_expr_ok(-5, "MINI(-5, -3, -4)");
 
-        check_expr_error(
-            "1:10: Syntax error in call to MINI: expected expr%[, .., expr%]",
-            "MINI()",
-        );
-        check_expr_error(
-            "1:10: Syntax error in call to MINI: expected expr%[, .., expr%]",
-            "MINI(3.0)",
-        );
+        check_expr_error("1:10: In call to MINI: expected expr%[, .., expr%]", "MINI()");
+        check_expr_error("1:10: In call to MINI: expected expr%[, .., expr%]", "MINI(3.0)");
     }
 
     #[test]
@@ -858,14 +846,8 @@ mod tests {
         check_expr_ok(5.3, "MAXD(5.3, 3.5, 4.2)");
         check_expr_ok(-3.5, "MAXD(-5.3, -3.5, -4.2)");
 
-        check_expr_error(
-            "1:10: Syntax error in call to MAXD: expected expr#[, .., expr#]",
-            "MAXD()",
-        );
-        check_expr_error(
-            "1:10: Syntax error in call to MAXD: expected expr#[, .., expr#]",
-            "MAXD(3)",
-        );
+        check_expr_error("1:10: In call to MAXD: expected expr#[, .., expr#]", "MAXD()");
+        check_expr_error("1:10: In call to MAXD: expected expr#[, .., expr#]", "MAXD(3)");
     }
 
     #[test]
@@ -877,21 +859,15 @@ mod tests {
         check_expr_ok(5, "MAXI(5, 3, 4)");
         check_expr_ok(-3, "MAXI(-5, -3, -4)");
 
-        check_expr_error(
-            "1:10: Syntax error in call to MAXI: expected expr%[, .., expr%]",
-            "MAXI()",
-        );
-        check_expr_error(
-            "1:10: Syntax error in call to MAXI: expected expr%[, .., expr%]",
-            "MAXI(3.0)",
-        );
+        check_expr_error("1:10: In call to MAXI: expected expr%[, .., expr%]", "MAXI()");
+        check_expr_error("1:10: In call to MAXI: expected expr%[, .., expr%]", "MAXI(3.0)");
     }
 
     #[test]
     fn test_pi() {
         check_expr_ok(std::f64::consts::PI, "PI()");
 
-        check_expr_error("1:10: Syntax error in call to PI: no arguments allowed", "PI(3)");
+        check_expr_error("1:10: In call to PI: expected no arguments", "PI(3)");
     }
 
     #[test]
@@ -911,12 +887,15 @@ mod tests {
         t.run("result = RND(0)").expect_var("result", 0.2205558922655312).check();
         t.run("result = RND(1)").expect_var("result", 0.8273883964464507).check();
 
-        check_expr_error("1:10: Syntax error in call to RND: expected n%", "RND(3.0)");
-        check_expr_error("1:10: Syntax error in call to RND: expected n%", "RND(1, 7)");
-        check_expr_error("1:10: Syntax error in call to RND: n% cannot be negative", "RND(-1)");
+        check_expr_error("1:10: In call to RND: expected n%", "RND(3.0)");
+        check_expr_error("1:10: In call to RND: expected n%", "RND(1, 7)");
+        check_expr_error("1:10: In call to RND: 1:14: n% cannot be negative", "RND(-1)");
 
-        check_stmt_err("Random seed must be an integer", "RANDOMIZE 3.0");
-        check_stmt_err("RANDOMIZE takes zero or one argument", "RANDOMIZE ,");
+        check_stmt_err(
+            "1:1: In call to RANDOMIZE: 1:11: Random seed must be an integer",
+            "RANDOMIZE 3.0",
+        );
+        check_stmt_err("1:1: In call to RANDOMIZE: expected [seed%]", "RANDOMIZE ,");
     }
 
     #[test]
@@ -924,9 +903,9 @@ mod tests {
         check_expr_ok(123f64.sin(), "SIN(123)");
         check_expr_ok(45.5f64.sin(), "SIN(45.5)");
 
-        check_expr_error("1:10: Syntax error in call to SIN: expected angle%|angle#", "SIN()");
-        check_expr_error("1:10: Syntax error in call to SIN: expected angle%|angle#", "SIN(FALSE)");
-        check_expr_error("1:10: Syntax error in call to SIN: expected angle%|angle#", "SIN(3, 4)");
+        check_expr_error("1:10: In call to SIN: expected angle%|angle#", "SIN()");
+        check_expr_error("1:10: In call to SIN: expected angle%|angle#", "SIN(FALSE)");
+        check_expr_error("1:10: In call to SIN: expected angle%|angle#", "SIN(3, 4)");
     }
 
     #[test]
@@ -934,8 +913,8 @@ mod tests {
         check_expr_ok(123f64.tan(), "TAN(123)");
         check_expr_ok(45.5f64.tan(), "TAN(45.5)");
 
-        check_expr_error("1:10: Syntax error in call to TAN: expected angle%|angle#", "TAN()");
-        check_expr_error("1:10: Syntax error in call to TAN: expected angle%|angle#", "TAN(FALSE)");
-        check_expr_error("1:10: Syntax error in call to TAN: expected angle%|angle#", "TAN(3, 4)");
+        check_expr_error("1:10: In call to TAN: expected angle%|angle#", "TAN()");
+        check_expr_error("1:10: In call to TAN: expected angle%|angle#", "TAN(FALSE)");
+        check_expr_error("1:10: In call to TAN: expected angle%|angle#", "TAN(3, 4)");
     }
 }

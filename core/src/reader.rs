@@ -27,10 +27,10 @@ const TAB_LENGTH: usize = 8;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LineCol {
     /// Line number.
-    pub(crate) line: usize,
+    pub line: usize,
 
     /// Column number.
-    pub(crate) col: usize,
+    pub col: usize,
 }
 
 #[derive(Debug)]

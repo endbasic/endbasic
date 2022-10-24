@@ -444,7 +444,7 @@ Output from HELP GPIO_CLEAR:
 
 Output from HELP GPIO_SETUP:
 
-    GPIO_SETUP pin% mode$
+    GPIO_SETUP pin%, mode$
 
     Configures a GPIO pin for input or output.
 
@@ -464,7 +464,7 @@ Output from HELP GPIO_SETUP:
 
 Output from HELP GPIO_WRITE:
 
-    GPIO_WRITE pin% value?
+    GPIO_WRITE pin%, value?
 
     Sets the state of a GPIO pin.
 
@@ -531,7 +531,7 @@ Output from HELP LOCATE:
 
 Output from HELP LOGIN:
 
-    LOGIN username$ [password$]
+    LOGIN username$[, password$]
 
     Logs into the user's account.
 
@@ -646,7 +646,7 @@ Output from HELP SAVE:
 
 Output from HELP SHARE:
 
-    SHARE filename$ [, acl1$, .., aclN$]
+    SHARE filename$[, acl1$, .., aclN$]
 
     Displays or modifies the ACLs of a file.
 
@@ -688,7 +688,7 @@ Output from HELP SLEEP:
 
 Output from HELP UNMOUNT:
 
-    UNMOUNT drive_name
+    UNMOUNT drive_name$
 
     Unmounts the given drive.
 

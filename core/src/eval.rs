@@ -39,14 +39,20 @@ impl Error {
     /// Annotates a call evaluation error with the function's metadata.
     fn from_call_error(md: &CallableMetadata, e: CallError, pos: LineCol) -> Self {
         let message = match e {
-            CallError::ArgumentError(e) => {
-                format!("Syntax error in call to {}: {}", md.name(), e)
+            CallError::ArgumentError(pos, e) => {
+                format!("In call to {}: {}:{}: {}", md.name(), pos.line, pos.col, e)
             }
-            CallError::EvalError(e) => format!("Error in call to {}: {}", md.name(), e),
-            CallError::InternalError(e) => format!("Error in call to {}: {}", md.name(), e),
-            CallError::IoError(e) => format!("Error in call to {}: {}", md.name(), e),
+            CallError::EvalError(e) => format!("In call to {}: {}", md.name(), e),
+            CallError::InternalError(pos, e) => {
+                format!("In call to {}: {}:{}: {}", md.name(), pos.line, pos.col, e)
+            }
+            CallError::IoError(e) => format!("In call to {}: {}", md.name(), e),
+            CallError::NestedError(e) => e,
+            CallError::SyntaxError if md.syntax().is_empty() => {
+                format!("In call to {}: expected no arguments", md.name())
+            }
             CallError::SyntaxError => {
-                format!("Syntax error in call to {}: expected {}", md.name(), md.syntax())
+                format!("In call to {}: expected {}", md.name(), md.syntax())
             }
         };
         Self { pos, message }
@@ -846,13 +852,16 @@ mod tests {
         let mut syms = SymbolsBuilder::default().add_function(ErrorFunction::new()).build();
 
         assert_eq!(
-            "1:1: Syntax error in call to ERROR: Bad argument",
+            "1:1: In call to ERROR: 4:5: Bad argument",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
-                        args: vec![expr_text("argument")],
+                        args: vec![Expr::Text(TextSpan {
+                            value: "argument".to_owned(),
+                            pos: lc(4, 5)
+                        })],
                         pos: lc(1, 1),
                     })
                     .eval(&mut syms)
@@ -862,7 +871,7 @@ mod tests {
         );
 
         assert_eq!(
-            "3:2: Error in call to ERROR: 4:5: Some eval error",
+            "3:2: In call to ERROR: 4:5: Some eval error",
             format!(
                 "{}",
                 block_on(
@@ -881,13 +890,16 @@ mod tests {
         );
 
         assert_eq!(
-            "5:1: Error in call to ERROR: Some internal error",
+            "5:1: In call to ERROR: 4:5: Some internal error",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
                         fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
-                        args: vec![expr_text("internal")],
+                        args: vec![Expr::Text(TextSpan {
+                            value: "internal".to_owned(),
+                            pos: lc(4, 5)
+                        })],
                         pos: lc(5, 1),
                     })
                     .eval(&mut syms)
@@ -897,7 +909,7 @@ mod tests {
         );
 
         assert_eq!(
-            "7:4: Syntax error in call to ERROR: expected arg1$",
+            "7:4: In call to ERROR: expected arg1$",
             format!(
                 "{}",
                 block_on(

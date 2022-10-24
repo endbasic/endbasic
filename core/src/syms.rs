@@ -18,6 +18,7 @@
 use crate::ast::{BuiltinCallSpan, FunctionCallSpan, Value, VarRef, VarType};
 use crate::eval;
 use crate::exec::Machine;
+use crate::reader::LineCol;
 use crate::value::{Error, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -35,16 +36,20 @@ use std::str::Lines;
 #[derive(Debug)]
 pub enum CallError {
     /// A specific parameter had an invalid value.
-    ArgumentError(String),
+    ArgumentError(LineCol, String),
 
     /// Error while evaluating input arguments.
     EvalError(eval::Error),
 
     /// Any other error not representable by other values.
-    InternalError(String),
+    InternalError(LineCol, String),
 
     /// I/O error during execution.
     IoError(io::Error),
+
+    /// Hack to support errors that arise from within a program that is `RUN`.
+    // TODO(jmmv): Consider unifying `CallError` with `exec::Error`.
+    NestedError(String),
 
     /// General mismatch of parameters given to the function with expectations (different numbers,
     /// invalid types).

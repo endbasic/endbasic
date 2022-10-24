@@ -121,12 +121,16 @@ impl Command for SwitchLightCommand {
                 let lights = &mut *self.lights.borrow_mut();
                 if i < 1 {
                     return Err(CallError::ArgumentError(
+                        expr.start_pos(),
                         "Light id cannot be zero or negative".to_owned(),
                     ));
                 }
                 let i = i as usize;
                 if i > lights.len() {
-                    return Err(CallError::ArgumentError("Light id out of range".to_owned()));
+                    return Err(CallError::ArgumentError(
+                        expr.start_pos(),
+                        "Light id out of range".to_owned(),
+                    ));
                 }
                 if lights[i - 1] {
                     println!("Turning light {} off", i);
@@ -135,7 +139,12 @@ impl Command for SwitchLightCommand {
                 }
                 lights[i - 1] = !lights[i - 1];
             }
-            _ => return Err(CallError::ArgumentError("Mismatched expression type".to_owned())),
+            _ => {
+                return Err(CallError::ArgumentError(
+                    expr.start_pos(),
+                    "Mismatched expression type".to_owned(),
+                ))
+            }
         }
         Ok(())
     }

@@ -38,9 +38,15 @@ async fn parse_coordinate(expr: &Expr, machine: &mut Machine) -> Result<i16, Cal
     match expr.eval(machine.get_mut_symbols()).await? {
         Value::Integer(i) => match i16::try_from(i) {
             Ok(i) => Ok(i),
-            Err(_) => Err(CallError::ArgumentError(format!("Coordinate {} out of range", i))),
+            Err(_) => Err(CallError::ArgumentError(
+                expr.start_pos(),
+                format!("Coordinate {} out of range", i),
+            )),
         },
-        _ => Err(CallError::ArgumentError(format!("Coordinate {:?} must be an integer", expr))),
+        _ => Err(CallError::ArgumentError(
+            expr.start_pos(),
+            format!("Coordinate {:?} must be an integer", expr),
+        )),
     }
 }
 
@@ -93,11 +99,7 @@ impl Command for GfxLineCommand {
                     parse_coordinates(x2, y2, machine).await?,
                 )
             }
-            _ => {
-                return Err(CallError::ArgumentError(
-                    "GFX_LINE takes four integer arguments separated by commas".to_owned(),
-                ))
-            }
+            _ => return Err(CallError::SyntaxError),
         };
 
         self.console.borrow_mut().draw_line(x1y1, x2y2)?;
@@ -139,11 +141,7 @@ impl Command for GfxPixelCommand {
             [ArgSpan { expr: Some(x), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y), sep: ArgSep::End, .. }] => {
                 parse_coordinates(x, y, machine).await?
             }
-            _ => {
-                return Err(CallError::ArgumentError(
-                    "GFX_PIXEL takes two integer arguments separated by commas".to_owned(),
-                ))
-            }
+            _ => return Err(CallError::SyntaxError),
         };
 
         self.console.borrow_mut().draw_pixel(xy)?;
@@ -189,11 +187,7 @@ impl Command for GfxRectCommand {
                     parse_coordinates(x2, y2, machine).await?,
                 )
             }
-            _ => {
-                return Err(CallError::ArgumentError(
-                    "GFX_RECT takes four integer arguments separated by commas".to_owned(),
-                ))
-            }
+            _ => return Err(CallError::SyntaxError),
         };
 
         self.console.borrow_mut().draw_rect(x1y1, x2y2)?;
@@ -238,11 +232,7 @@ impl Command for GfxRectfCommand {
                     parse_coordinates(x2, y2, machine).await?,
                 )
             }
-            _ => {
-                return Err(CallError::ArgumentError(
-                    "GFX_RECTF takes four integer arguments separated by commas".to_owned(),
-                ))
-            }
+            _ => return Err(CallError::SyntaxError),
         };
 
         self.console.borrow_mut().draw_rect_filled(x1y1, x2y2)?;
@@ -310,11 +300,12 @@ impl Command for GfxSyncCommand {
                         Ok(())
                     }
                     _ => Err(CallError::ArgumentError(
+                        b.start_pos(),
                         "Argument to GFX_SYNC must be a boolean".to_owned(),
                     )),
                 }
             }
-            _ => Err(CallError::ArgumentError("GFX_SYNC takes zero or one argument".to_owned())),
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
@@ -337,26 +328,34 @@ mod tests {
     fn check_errors_two_xy(name: &'static str) {
         for args in &["1, 2, , 4", "1, 2, 3", "1, 2, 3, 4, 5", "2; 3, 4"] {
             check_stmt_err(
-                &format!("{} takes four integer arguments separated by commas", name),
+                format!("1:1: In call to {}: expected x1%, y1%, x2%, y2%", name),
                 &format!("{} {}", name, args),
             );
         }
 
         for args in &["-40000, 1, 1, 1", "1, -40000, 1, 1", "1, 1, -40000, 1", "1, 1, 1, -40000"] {
-            check_stmt_err("Coordinate -40000 out of range", &format!("{} {}", name, args));
+            let pos = name.len() + 1 + args.find('-').unwrap() + 1;
+            check_stmt_err(
+                format!("1:1: In call to {}: 1:{}: Coordinate -40000 out of range", name, pos),
+                &format!("{} {}", name, args),
+            );
         }
 
         for args in &["40000, 1, 1, 1", "1, 40000, 1, 1", "1, 1, 40000, 1", "1, 1, 1, 40000"] {
-            check_stmt_err("Coordinate 40000 out of range", &format!("{} {}", name, args));
+            let pos = name.len() + 1 + args.find('4').unwrap() + 1;
+            check_stmt_err(
+                format!("1:1: In call to {}: 1:{}: Coordinate 40000 out of range", name, pos),
+                &format!("{} {}", name, args),
+            );
         }
 
         for args in &["\"a\", 1, 1, 1", "1, \"a\", 1, 1", "1, 1, \"a\", 1", "1, 1, 1, \"a\""] {
             let stmt = &format!("{} {}", name, args);
             let pos = stmt.find('"').unwrap() + 1;
             check_stmt_err(
-                &format!(
-                    "Coordinate Text(TextSpan {{ value: \"a\", pos: LineCol {{ line: 1, col: {} }} }}) must be an integer",
-                    pos),
+                format!(
+                    "1:1: In call to {}: 1:{}: Coordinate Text(TextSpan {{ value: \"a\", pos: LineCol {{ line: 1, col: {} }} }}) must be an integer",
+                    name, pos, pos),
                 stmt);
         }
     }
@@ -406,17 +405,23 @@ mod tests {
     #[test]
     fn test_gfx_pixel_errors() {
         for cmd in &["GFX_PIXEL , 2", "GFX_PIXEL 1, 2, 3", "GFX_PIXEL 1", "GFX_PIXEL 1; 2"] {
-            check_stmt_err("GFX_PIXEL takes two integer arguments separated by commas", cmd);
+            check_stmt_err("1:1: In call to GFX_PIXEL: expected x%, y%", cmd);
         }
 
         for cmd in &["GFX_PIXEL -40000, 1", "GFX_PIXEL 1, -40000"] {
-            check_stmt_err("Coordinate -40000 out of range", cmd);
+            check_stmt_err(
+                format!(
+                    "1:1: In call to GFX_PIXEL: 1:{}: Coordinate -40000 out of range",
+                    cmd.find('-').unwrap() + 1
+                ),
+                cmd,
+            );
         }
 
         for cmd in &["GFX_PIXEL \"a\", 1", "GFX_PIXEL 1, \"a\""] {
             let pos = cmd.find('"').unwrap() + 1;
             check_stmt_err(
-                &format!("Coordinate Text(TextSpan {{ value: \"a\", pos: LineCol {{ line: 1, col: {} }} }}) must be an integer", pos),
+                format!("1:1: In call to GFX_PIXEL: 1:{}: Coordinate Text(TextSpan {{ value: \"a\", pos: LineCol {{ line: 1, col: {} }} }}) must be an integer", pos, pos),
                 cmd);
         }
     }
@@ -484,7 +489,10 @@ mod tests {
 
     #[test]
     fn test_gfx_sync_errors() {
-        check_stmt_err("GFX_SYNC takes zero or one argument", "GFX_SYNC 2, 3");
-        check_stmt_err("Argument to GFX_SYNC must be a boolean", "GFX_SYNC 2");
+        check_stmt_err("1:1: In call to GFX_SYNC: expected [enabled?]", "GFX_SYNC 2, 3");
+        check_stmt_err(
+            "1:1: In call to GFX_SYNC: 1:10: Argument to GFX_SYNC must be a boolean",
+            "GFX_SYNC 2",
+        );
     }
 }

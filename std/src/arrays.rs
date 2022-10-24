@@ -39,62 +39,75 @@ async fn parse_bound_args<'a>(
 
     let (arrayref, arraypos) = match iter.next() {
         Some(Expr::Symbol(span)) => (&span.vref, span.pos),
-        _ => return Err(CallError::ArgumentError("Takes one or two arguments".to_owned())),
+        _ => return Err(CallError::SyntaxError),
     };
 
     let dim = match iter.next() {
         Some(expr) => match expr.eval(symbols).await? {
             Value::Integer(i) => {
                 if i < 0 {
-                    return Err(CallError::ArgumentError(format!(
-                        "Dimension {} must be positive",
-                        i
-                    )));
+                    return Err(CallError::ArgumentError(
+                        expr.start_pos(),
+                        format!("Dimension {} must be positive", i),
+                    ));
                 }
-                Some(i as usize)
+                Some((i as usize, expr.start_pos()))
             }
-            _ => return Err(CallError::ArgumentError("Dimension must be an integer".to_owned())),
+            _ => {
+                return Err(CallError::ArgumentError(
+                    expr.start_pos(),
+                    "Dimension must be an integer".to_owned(),
+                ))
+            }
         },
         None => None,
     };
 
     if iter.next().is_some() {
-        return Err(CallError::ArgumentError("Takes one or two arguments".to_owned()));
+        return Err(CallError::SyntaxError);
     }
 
-    let array =
-        match symbols.get(arrayref).map_err(|e| eval::Error::from_value_error(e, arraypos))? {
-            Some(Symbol::Array(array)) => array,
-            Some(_) => {
-                return Err(CallError::ArgumentError(format!(
-                    "{} must be an array reference",
-                    arrayref
-                )))
-            }
-            _ => return Err(CallError::ArgumentError(format!("{} is not defined", arrayref))),
-        };
+    let array = match symbols
+        .get(arrayref)
+        .map_err(|e| eval::Error::from_value_error(e, arraypos))?
+    {
+        Some(Symbol::Array(array)) => array,
+        Some(_) => {
+            return Err(CallError::ArgumentError(
+                arraypos,
+                format!("{} must be an array reference", arrayref),
+            ))
+        }
+        _ => {
+            return Err(CallError::ArgumentError(arraypos, format!("{} is not defined", arrayref)))
+        }
+    };
 
     match dim {
         Some(dim) => {
-            if dim > array.dimensions().len() {
-                return Err(CallError::ArgumentError(format!(
-                    "Array {} has only {} dimensions but asked for {}",
-                    arrayref,
-                    array.dimensions().len(),
-                    dim
-                )));
+            if dim.0 > array.dimensions().len() {
+                return Err(CallError::ArgumentError(
+                    dim.1,
+                    format!(
+                        "Array {} has only {} dimensions but asked for {}",
+                        arrayref,
+                        array.dimensions().len(),
+                        dim.0
+                    ),
+                ));
             }
         }
         None => {
             if array.dimensions().len() != 1 {
                 return Err(CallError::ArgumentError(
+                    arraypos,
                     "Requires a dimension for multidimensional arrays".to_owned(),
                 ));
             }
         }
     }
 
-    Ok((array, dim.unwrap_or(1)))
+    Ok((array, dim.map(|(i, _pos)| i).unwrap_or(1)))
 }
 
 /// The `LBOUND` function.
@@ -184,53 +197,38 @@ mod tests {
     fn do_bound_errors_test(func: &str) {
         Tester::default()
             .run(&format!("DIM x(2): result = {}()", func))
-            .expect_err(format!(
-                "1:20: Syntax error in call to {}: Takes one or two arguments",
-                func
-            ))
+            .expect_err(format!("1:20: In call to {}: expected array[, dimension%]", func))
             .expect_array("x", VarType::Integer, &[2], vec![])
             .check();
 
         Tester::default()
             .run(&format!("DIM x(2): result = {}(x, 1, 2)", func))
-            .expect_err(format!(
-                "1:20: Syntax error in call to {}: Takes one or two arguments",
-                func
-            ))
+            .expect_err(format!("1:20: In call to {}: expected array[, dimension%]", func))
             .expect_array("x", VarType::Integer, &[2], vec![])
             .check();
 
         Tester::default()
             .run(&format!("DIM x(2): result = {}(x, -1)", func))
-            .expect_err(format!(
-                "1:20: Syntax error in call to {}: Dimension -1 must be positive",
-                func
-            ))
+            .expect_err(format!("1:20: In call to {}: 1:30: Dimension -1 must be positive", func))
             .expect_array("x", VarType::Integer, &[2], vec![])
             .check();
 
         Tester::default()
             .run(&format!("DIM x(2): result = {}(x, 1.0)", func))
-            .expect_err(format!(
-                "1:20: Syntax error in call to {}: Dimension must be an integer",
-                func
-            ))
+            .expect_err(format!("1:20: In call to {}: 1:30: Dimension must be an integer", func))
             .expect_array("x", VarType::Integer, &[2], vec![])
             .check();
 
         Tester::default()
             .run(&format!("i = 0: result = {}(i)", func))
-            .expect_err(format!(
-                "1:17: Syntax error in call to {}: i must be an array reference",
-                func
-            ))
+            .expect_err(format!("1:17: In call to {}: 1:24: i must be an array reference", func))
             .expect_var("i", Value::Integer(0))
             .check();
 
         Tester::default()
             .run(&format!("i = 0: result = {}(i$)", func))
             .expect_err(format!(
-                "1:17: Error in call to {}: 1:24: Incompatible types in i$ reference",
+                "1:17: In call to {}: 1:24: Incompatible types in i$ reference",
                 func
             ))
             .expect_var("i", Value::Integer(0))
@@ -238,13 +236,13 @@ mod tests {
 
         Tester::default()
             .run(&format!("result = {}(x)", func))
-            .expect_err(format!("1:10: Syntax error in call to {}: x is not defined", func))
+            .expect_err(format!("1:10: In call to {}: 1:17: x is not defined", func))
             .check();
 
         Tester::default()
             .run(&format!("DIM x(2, 3, 4): result = {}(x)", func))
             .expect_err(format!(
-                "1:26: Syntax error in call to {}: Requires a dimension for multidimensional arrays",
+                "1:26: In call to {}: 1:33: Requires a dimension for multidimensional arrays",
                 func
             ))
             .expect_array("x", VarType::Integer, &[2, 3, 4], vec![])
@@ -253,7 +251,7 @@ mod tests {
         Tester::default()
             .run(&format!("DIM x(2, 3, 4): result = {}(x, 5)", func))
             .expect_err(format!(
-                "1:26: Syntax error in call to {}: Array x has only 3 dimensions but asked for 5",
+                "1:26: In call to {}: 1:36: Array x has only 3 dimensions but asked for 5",
                 func
             ))
             .expect_array("x", VarType::Integer, &[2, 3, 4], vec![])

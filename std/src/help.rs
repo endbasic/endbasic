@@ -23,6 +23,7 @@ use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Symbols,
 };
+use endbasic_core::LineCol;
 use radix_trie::{Trie, TrieCommon};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -271,7 +272,7 @@ impl Topics {
     ///
     /// If `name` is not long enough to uniquely identify a topic or if the topic does not exist,
     /// returns an error.
-    fn find(&self, name: &str) -> Result<&dyn Topic, CallError> {
+    fn find(&self, name: &str, pos: LineCol) -> Result<&dyn Topic, CallError> {
         let key = name.to_ascii_uppercase();
 
         if let Some(topic) = self.0.get(&key) {
@@ -286,15 +287,18 @@ impl Topics {
                     _ => {
                         let completions: Vec<String> =
                             children.iter().map(|(name, _topic)| (*name).to_owned()).collect();
-                        Err(CallError::ArgumentError(format!(
-                            "Ambiguous help topic {}; candidates are: {}",
-                            name,
-                            completions.join(", ")
-                        )))
+                        Err(CallError::ArgumentError(
+                            pos,
+                            format!(
+                                "Ambiguous help topic {}; candidates are: {}",
+                                name,
+                                completions.join(", ")
+                            ),
+                        ))
                     }
                 }
             }
-            None => Err(CallError::ArgumentError(format!("Unknown help topic {}", name))),
+            None => Err(CallError::ArgumentError(pos, format!("Unknown help topic {}", name))),
         }
     }
 
@@ -379,20 +383,16 @@ impl Command for HelpCommand {
                 self.summary(&topics)?;
             }
             [ArgSpan { expr: Some(Expr::Symbol(span)), sep: ArgSep::End, .. }] => {
-                let topic = topics.find(&format!("{}", span.vref))?;
+                let topic = topics.find(&format!("{}", span.vref), span.pos)?;
                 let mut console = self.console.borrow_mut();
                 topic.describe(&mut *console)?;
             }
             [ArgSpan { expr: Some(Expr::Text(span)), sep: ArgSep::End, .. }] => {
-                let topic = topics.find(&span.value)?;
+                let topic = topics.find(&span.value, span.pos)?;
                 let mut console = self.console.borrow_mut();
                 topic.describe(&mut *console)?;
             }
-            _ => {
-                return Err(CallError::ArgumentError(
-                    "HELP takes zero or only one argument".to_owned(),
-                ))
-            }
+            _ => return Err(CallError::SyntaxError),
         }
         Ok(())
     }
@@ -661,7 +661,7 @@ mod tests {
             .add_function(EmptyFunction::new_with_name("ABC"))
             .add_function(EmptyFunction::new_with_name("AABC"))
             .run("help a")
-            .expect_err("Ambiguous help topic a; candidates are: AABC$, AB, ABC$")
+            .expect_err("1:1: In call to HELP: 1:6: Ambiguous help topic a; candidates are: AABC$, AB, ABC$")
             .check();
     }
 
@@ -671,27 +671,37 @@ mod tests {
             tester().add_command(DoNothingCommand::new()).add_function(EmptyFunction::new());
 
         t.run("HELP foo bar").expect_err("1:10: Unexpected value in expression").check();
-        t.run("HELP foo, bar").expect_err("HELP takes zero or only one argument").check();
+        t.run("HELP foo, bar").expect_err("1:1: In call to HELP: expected [topic]").check();
 
-        t.run("HELP lang%").expect_err("Unknown help topic lang%").check();
+        t.run("HELP lang%")
+            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic lang%")
+            .check();
 
-        t.run("HELP foo$").expect_err("Unknown help topic foo$").check();
-        t.run("HELP foo").expect_err("Unknown help topic foo").check();
+        t.run("HELP foo$").expect_err("1:1: In call to HELP: 1:6: Unknown help topic foo$").check();
+        t.run("HELP foo").expect_err("1:1: In call to HELP: 1:6: Unknown help topic foo").check();
 
-        t.run("HELP do_nothing$").expect_err("Unknown help topic do_nothing$").check();
-        t.run("HELP empty?").expect_err("Unknown help topic empty?").check();
+        t.run("HELP do_nothing$")
+            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic do_nothing$")
+            .check();
+        t.run("HELP empty?")
+            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic empty?")
+            .check();
 
         let mut t = tester();
-        t.run("HELP undoc").expect_err("Unknown help topic undoc").check();
+        t.run("HELP undoc")
+            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic undoc")
+            .check();
         t.run("undoc = 3: HELP undoc")
-            .expect_err("Unknown help topic undoc")
+            .expect_err("1:12: In call to HELP: 1:17: Unknown help topic undoc")
             .expect_var("undoc", 3)
             .check();
 
         let mut t = tester();
-        t.run("HELP undoc").expect_err("Unknown help topic undoc").check();
-        t.run("DIM undoc(3): HELP undoc")
-            .expect_err("Unknown help topic undoc")
+        t.run("HELP undoc")
+            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic undoc")
+            .check();
+        t.run("DIM undoc(3)\nHELP undoc")
+            .expect_err("2:1: In call to HELP: 2:6: Unknown help topic undoc")
             .expect_array("undoc", VarType::Integer, &[3], vec![])
             .check();
     }

@@ -61,7 +61,10 @@ impl Function for LeftFunction {
         match args.as_slice() {
             [Value::Text(s), Value::Integer(n)] => {
                 if n < &0 {
-                    Err(CallError::ArgumentError("n% cannot be negative".to_owned()))
+                    Err(CallError::ArgumentError(
+                        span.args[1].start_pos(),
+                        "n% cannot be negative".to_owned(),
+                    ))
                 } else {
                     let n = min(s.len(), *n as usize);
                     Ok(Value::Text(s[..n].to_owned()))
@@ -101,7 +104,10 @@ impl Function for LenFunction {
         match args.as_slice() {
             [Value::Text(s)] => {
                 if s.len() > std::i32::MAX as usize {
-                    Err(CallError::InternalError("String too long".to_owned()))
+                    Err(CallError::InternalError(
+                        span.args[0].start_pos(),
+                        "String too long".to_owned(),
+                    ))
                 } else {
                     Ok(Value::Integer(s.len() as i32))
                 }
@@ -178,9 +184,15 @@ impl Function for MidFunction {
         match args.as_slice() {
             [Value::Text(s), Value::Integer(start), Value::Integer(length)] => {
                 if *start < 0 {
-                    Err(CallError::ArgumentError("start% cannot be negative".to_owned()))
+                    Err(CallError::ArgumentError(
+                        span.args[1].start_pos(),
+                        "start% cannot be negative".to_owned(),
+                    ))
                 } else if *length < 0 {
-                    Err(CallError::ArgumentError("length% cannot be negative".to_owned()))
+                    Err(CallError::ArgumentError(
+                        span.args[2].start_pos(),
+                        "length% cannot be negative".to_owned(),
+                    ))
                 } else {
                     let start = min(s.len(), *start as usize);
                     let end = min(start + (*length as usize), s.len());
@@ -225,7 +237,10 @@ impl Function for RightFunction {
         match args.as_slice() {
             [Value::Text(s), Value::Integer(n)] => {
                 if n < &0 {
-                    Err(CallError::ArgumentError("n% cannot be negative".to_owned()))
+                    Err(CallError::ArgumentError(
+                        span.args[0].start_pos(),
+                        "n% cannot be negative".to_owned(),
+                    ))
                 } else {
                     let n = min(s.len(), *n as usize);
                     Ok(Value::Text(s[s.len() - n..].to_owned()))
@@ -290,18 +305,12 @@ mod tests {
         check_expr_ok("abcdef", r#"LEFT("abcdef", 6)"#);
         check_expr_ok("abcdef", r#"LEFT("abcdef", 10)"#);
 
-        check_expr_error("1:10: Syntax error in call to LEFT: expected expr$, n%", r#"LEFT()"#);
+        check_expr_error("1:10: In call to LEFT: expected expr$, n%", r#"LEFT()"#);
+        check_expr_error("1:10: In call to LEFT: expected expr$, n%", r#"LEFT("", 1, 2)"#);
+        check_expr_error("1:10: In call to LEFT: expected expr$, n%", r#"LEFT(1, 2)"#);
+        check_expr_error("1:10: In call to LEFT: expected expr$, n%", r#"LEFT("", "")"#);
         check_expr_error(
-            "1:10: Syntax error in call to LEFT: expected expr$, n%",
-            r#"LEFT("", 1, 2)"#,
-        );
-        check_expr_error("1:10: Syntax error in call to LEFT: expected expr$, n%", r#"LEFT(1, 2)"#);
-        check_expr_error(
-            "1:10: Syntax error in call to LEFT: expected expr$, n%",
-            r#"LEFT("", "")"#,
-        );
-        check_expr_error(
-            "1:10: Syntax error in call to LEFT: n% cannot be negative",
+            "1:10: In call to LEFT: 1:25: n% cannot be negative",
             r#"LEFT("abcdef", -5)"#,
         );
     }
@@ -312,9 +321,9 @@ mod tests {
         check_expr_ok(1, r#"LEN(" ")"#);
         check_expr_ok(5, r#"LEN("abcde")"#);
 
-        check_expr_error("1:10: Syntax error in call to LEN: expected expr$", r#"LEN()"#);
-        check_expr_error("1:10: Syntax error in call to LEN: expected expr$", r#"LEN(3)"#);
-        check_expr_error("1:10: Syntax error in call to LEN: expected expr$", r#"LEN(" ", 1)"#);
+        check_expr_error("1:10: In call to LEN: expected expr$", r#"LEN()"#);
+        check_expr_error("1:10: In call to LEN: expected expr$", r#"LEN(3)"#);
+        check_expr_error("1:10: In call to LEN: expected expr$", r#"LEN(" ", 1)"#);
     }
 
     #[test]
@@ -324,9 +333,9 @@ mod tests {
         check_expr_ok("", "LTRIM(\"\t\t\")");
         check_expr_ok("foo \t ", "LTRIM(\" \t foo \t \")");
 
-        check_expr_error("1:10: Syntax error in call to LTRIM: expected expr$", r#"LTRIM()"#);
-        check_expr_error("1:10: Syntax error in call to LTRIM: expected expr$", r#"LTRIM(3)"#);
-        check_expr_error("1:10: Syntax error in call to LTRIM: expected expr$", r#"LTRIM(" ", 1)"#);
+        check_expr_error("1:10: In call to LTRIM: expected expr$", r#"LTRIM()"#);
+        check_expr_error("1:10: In call to LTRIM: expected expr$", r#"LTRIM(3)"#);
+        check_expr_error("1:10: In call to LTRIM: expected expr$", r#"LTRIM(" ", 1)"#);
     }
 
     #[test]
@@ -340,28 +349,22 @@ mod tests {
         check_expr_ok("asic", r#"MID("basic", 1, 10)"#);
         check_expr_ok("", r#"MID("basic", 100, 10)"#);
 
+        check_expr_error("1:10: In call to MID: expected expr$, start%[, length%]", r#"MID()"#);
+        check_expr_error("1:10: In call to MID: expected expr$, start%[, length%]", r#"MID(3)"#);
         check_expr_error(
-            "1:10: Syntax error in call to MID: expected expr$, start%[, length%]",
-            r#"MID()"#,
-        );
-        check_expr_error(
-            "1:10: Syntax error in call to MID: expected expr$, start%[, length%]",
-            r#"MID(3)"#,
-        );
-        check_expr_error(
-            "1:10: Syntax error in call to MID: expected expr$, start%[, length%]",
+            "1:10: In call to MID: expected expr$, start%[, length%]",
             r#"MID(" ", 1, 1, 10)"#,
         );
         check_expr_error(
-            "1:10: Syntax error in call to MID: expected expr$, start%[, length%]",
+            "1:10: In call to MID: expected expr$, start%[, length%]",
             r#"MID(" ", "1", "2")"#,
         );
         check_expr_error(
-            "1:10: Syntax error in call to MID: start% cannot be negative",
+            "1:10: In call to MID: 1:24: start% cannot be negative",
             r#"MID("abcdef", -5, 10)"#,
         );
         check_expr_error(
-            "1:10: Syntax error in call to MID: length% cannot be negative",
+            "1:10: In call to MID: 1:27: length% cannot be negative",
             r#"MID("abcdef", 3, -5)"#,
         );
     }
@@ -373,21 +376,12 @@ mod tests {
         check_expr_ok("abcdef", r#"RIGHT("abcdef", 6)"#);
         check_expr_ok("abcdef", r#"RIGHT("abcdef", 10)"#);
 
-        check_expr_error("1:10: Syntax error in call to RIGHT: expected expr$, n%", r#"RIGHT()"#);
+        check_expr_error("1:10: In call to RIGHT: expected expr$, n%", r#"RIGHT()"#);
+        check_expr_error("1:10: In call to RIGHT: expected expr$, n%", r#"RIGHT("", 1, 2)"#);
+        check_expr_error("1:10: In call to RIGHT: expected expr$, n%", r#"RIGHT(1, 2)"#);
+        check_expr_error("1:10: In call to RIGHT: expected expr$, n%", r#"RIGHT("", "")"#);
         check_expr_error(
-            "1:10: Syntax error in call to RIGHT: expected expr$, n%",
-            r#"RIGHT("", 1, 2)"#,
-        );
-        check_expr_error(
-            "1:10: Syntax error in call to RIGHT: expected expr$, n%",
-            r#"RIGHT(1, 2)"#,
-        );
-        check_expr_error(
-            "1:10: Syntax error in call to RIGHT: expected expr$, n%",
-            r#"RIGHT("", "")"#,
-        );
-        check_expr_error(
-            "1:10: Syntax error in call to RIGHT: n% cannot be negative",
+            "1:10: In call to RIGHT: 1:16: n% cannot be negative",
             r#"RIGHT("abcdef", -5)"#,
         );
     }
@@ -399,8 +393,8 @@ mod tests {
         check_expr_ok("", "RTRIM(\"\t\t\")");
         check_expr_ok(" \t foo", "RTRIM(\" \t foo \t \")");
 
-        check_expr_error("1:10: Syntax error in call to RTRIM: expected expr$", r#"RTRIM()"#);
-        check_expr_error("1:10: Syntax error in call to RTRIM: expected expr$", r#"RTRIM(3)"#);
-        check_expr_error("1:10: Syntax error in call to RTRIM: expected expr$", r#"RTRIM(" ", 1)"#);
+        check_expr_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM()"#);
+        check_expr_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM(3)"#);
+        check_expr_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM(" ", 1)"#);
     }
 }

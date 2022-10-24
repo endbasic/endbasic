@@ -52,12 +52,13 @@ impl Function for ErrorFunction {
         let args = eval_all(&span.args, symbols).await?;
         match args.as_slice() {
             [Value::Text(s)] => {
+                let pos = span.args[0].start_pos();
                 if s == "argument" {
-                    Err(CallError::ArgumentError("Bad argument".to_owned()))
+                    Err(CallError::ArgumentError(pos, "Bad argument".to_owned()))
                 } else if s == "eval" {
-                    Err(Error::new(span.args[0].start_pos(), "Some eval error").into())
+                    Err(Error::new(pos, "Some eval error").into())
                 } else if s == "internal" {
-                    Err(CallError::InternalError("Some internal error".to_owned()))
+                    Err(CallError::InternalError(pos, "Some internal error".to_owned()))
                 } else if s == "syntax" {
                     Err(CallError::SyntaxError)
                 } else {
