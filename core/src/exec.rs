@@ -18,6 +18,7 @@
 use crate::ast::*;
 use crate::eval;
 use crate::parser;
+use crate::reader::LineCol;
 use crate::syms::{CallError, CallableMetadata, Command, Function, Symbol, Symbols};
 use crate::value;
 use async_recursion::async_recursion;
@@ -46,7 +47,7 @@ pub enum Error {
 
     /// Value computation error during execution.
     #[error("{0}")]
-    ValueError(#[from] value::Error),
+    ValueError(value::Error),
 }
 
 impl Error {
@@ -66,6 +67,19 @@ impl Error {
                 md.syntax()
             )),
         }
+    }
+
+    /// Annotates a value computation error with a position.
+    fn from_value_error(e: value::Error, pos: LineCol) -> Self {
+        eval::Error::from_value_error(e, pos).into()
+    }
+
+    /// Creates a position-less value computation error.
+    // TODO(jmmv): This only exists because of some public operations in `Machine` that operate
+    // "out of band".  We should probably remove those, put them elsewhere, and/or make them return
+    // a different error type rather than weakening what we store in `Error`.
+    fn from_value_error_without_pos(e: value::Error) -> Self {
+        Self::ValueError(e)
     }
 }
 
@@ -164,7 +178,11 @@ impl Machine {
     /// Retrieves the variable `name` as a boolean.  Fails if it is some other type or if it's not
     /// defined.
     pub fn get_var_as_bool(&self, name: &str) -> Result<bool> {
-        match self.symbols.get_var(&VarRef::new(name, VarType::Boolean))? {
+        match self
+            .symbols
+            .get_var(&VarRef::new(name, VarType::Boolean))
+            .map_err(Error::from_value_error_without_pos)?
+        {
             Value::Boolean(b) => Ok(*b),
             _ => panic!("Invalid type check in get()"),
         }
@@ -173,7 +191,11 @@ impl Machine {
     /// Retrieves the variable `name` as an integer.  Fails if it is some other type or if it's not
     /// defined.
     pub fn get_var_as_int(&self, name: &str) -> Result<i32> {
-        match self.symbols.get_var(&VarRef::new(name, VarType::Integer))? {
+        match self
+            .symbols
+            .get_var(&VarRef::new(name, VarType::Integer))
+            .map_err(Error::from_value_error_without_pos)?
+        {
             Value::Integer(i) => Ok(*i),
             _ => panic!("Invalid type check in get()"),
         }
@@ -182,7 +204,11 @@ impl Machine {
     /// Retrieves the variable `name` as a string.  Fails if it is some other type or if it's not
     /// defined.
     pub fn get_var_as_string(&self, name: &str) -> Result<&str> {
-        match self.symbols.get_var(&VarRef::new(name, VarType::Text))? {
+        match self
+            .symbols
+            .get_var(&VarRef::new(name, VarType::Text))
+            .map_err(Error::from_value_error_without_pos)?
+        {
             Value::Text(s) => Ok(s),
             _ => panic!("Invalid type check in get()"),
         }
@@ -191,7 +217,9 @@ impl Machine {
     /// Handles a variable assignment.
     async fn assign(&mut self, span: &AssignmentSpan) -> Result<()> {
         let value = span.expr.eval(&mut self.symbols).await?;
-        self.symbols.set_var(&span.vref, value)?;
+        self.symbols
+            .set_var(&span.vref, value)
+            .map_err(|e| Error::from_value_error(e, span.vref_pos))?;
         Ok(())
     }
 
@@ -207,9 +235,13 @@ impl Machine {
 
         let value = span.expr.eval(&mut self.symbols).await?;
 
-        match self.symbols.get_mut(&span.vref)? {
+        match self
+            .symbols
+            .get_mut(&span.vref)
+            .map_err(|e| Error::from_value_error(e, span.vref_pos))?
+        {
             Some(Symbol::Array(array)) => {
-                array.assign(&ds, value)?;
+                array.assign(&ds, value).map_err(|e| Error::from_value_error(e, span.vref_pos))?;
                 Ok(())
             }
             Some(_) => new_syntax_error(format!("Cannot index non-array {}", span.vref.name())),
@@ -219,7 +251,11 @@ impl Machine {
 
     /// Handles a builtin call.
     async fn call_builtin(&mut self, span: &BuiltinCallSpan) -> Result<()> {
-        let cmd = match self.symbols.get(&VarRef::new(&span.name, VarType::Auto))? {
+        let cmd = match self
+            .symbols
+            .get(&VarRef::new(&span.name, VarType::Auto))
+            .map_err(|e| Error::from_value_error(e, span.name_pos))?
+        {
             Some(Symbol::Command(cmd)) => cmd.clone(),
             Some(_) => return new_syntax_error(format!("{} is not a command", span.name)),
             None => return new_syntax_error(format!("Unknown builtin {}", span.name)),
@@ -242,7 +278,9 @@ impl Machine {
                 _ => return new_syntax_error("Dimensions in DIM array must be integers"),
             }
         }
-        self.symbols.dim_array(&span.name, span.subtype, ds)?;
+        self.symbols
+            .dim_array(&span.name, span.subtype, ds)
+            .map_err(|e| Error::from_value_error(e, span.name_pos))?;
         Ok(())
     }
 
@@ -253,7 +291,10 @@ impl Machine {
         );
         let start_value = span.start.eval(&mut self.symbols).await?;
         match start_value {
-            Value::Integer(_) => self.symbols.set_var(&span.iter, start_value)?,
+            Value::Integer(_) => self
+                .symbols
+                .set_var(&span.iter, start_value)
+                .map_err(|e| Error::from_value_error(e, span.start.start_pos()))?,
             _ => return new_syntax_error("FOR supports integer iteration only"),
         }
 
@@ -272,7 +313,9 @@ impl Machine {
             }
 
             let next_value = span.next.eval(&mut self.symbols).await?;
-            self.symbols.set_var(&span.iter, next_value)?;
+            self.symbols
+                .set_var(&span.iter, next_value)
+                .map_err(|e| Error::from_value_error(e, span.next.start_pos()))?;
         }
         Ok(())
     }
@@ -347,7 +390,10 @@ impl Machine {
                 Statement::ArrayAssignment(span) => self.assign_array(span).await?,
                 Statement::Assignment(span) => self.assign(span).await?,
                 Statement::BuiltinCall(span) => self.call_builtin(span).await?,
-                Statement::Dim(span) => self.symbols.dim(&span.name, span.vtype)?,
+                Statement::Dim(span) => self
+                    .symbols
+                    .dim(&span.name, span.vtype)
+                    .map_err(|e| Error::from_value_error(e, span.name_pos))?,
                 Statement::DimArray(span) => self.dim_array(span).await?,
                 Statement::For(span) => self.do_for(span).await?,
                 Statement::Goto(span) => self.pending_goto = Some(span.target.clone()),
@@ -560,10 +606,13 @@ mod tests {
     fn test_array_assignment_errors() {
         do_simple_error_test("a() = 3\n", "Cannot index undefined array a");
         do_simple_error_test("a = 3\na(0) = 3\n", "Cannot index non-array a");
-        do_simple_error_test("DIM a(2)\na() = 3\n", "Cannot index array with 0 subscripts; need 1");
-        do_simple_error_test("DIM a(1)\na(-1) = 3\n", "Subscript -1 cannot be negative");
+        do_simple_error_test(
+            "DIM a(2)\na() = 3\n",
+            "2:1: Cannot index array with 0 subscripts; need 1",
+        );
+        do_simple_error_test("DIM a(1)\na(-1) = 3\n", "2:1: Subscript -1 cannot be negative");
         do_simple_error_test("DIM a(1)\na(1, 3.0) = 3\n", "Subscript 3.0 must be an integer");
-        do_simple_error_test("DIM a(2)\na$(1) = 3", "Incompatible types in a$ reference");
+        do_simple_error_test("DIM a(2)\na$(1) = 3", "2:1: Incompatible types in a$ reference");
     }
 
     #[test]
@@ -589,8 +638,8 @@ mod tests {
     fn test_assignment_errors() {
         do_simple_error_test("a =\n", "1:4: Missing expression in assignment");
         do_simple_error_test("a = b\n", "1:5: Undefined variable b");
-        do_simple_error_test("a = 3\na = TRUE\n", "Incompatible types in a assignment");
-        do_simple_error_test("a? = 3", "Incompatible types in a? assignment");
+        do_simple_error_test("a = 3\na = TRUE\n", "2:1: Incompatible types in a assignment");
+        do_simple_error_test("a? = 3", "1:1: Incompatible types in a? assignment");
     }
 
     #[test]
@@ -600,9 +649,9 @@ mod tests {
 
     #[test]
     fn test_dim_errors() {
-        do_simple_error_test("DIM i\nDIM i", "Cannot DIM already-defined symbol i");
-        do_simple_error_test("DIM i\nDIM I", "Cannot DIM already-defined symbol I");
-        do_simple_error_test("i = 0\nDIM i", "Cannot DIM already-defined symbol i");
+        do_simple_error_test("DIM i\nDIM i", "2:5: Cannot DIM already-defined symbol i");
+        do_simple_error_test("DIM i\nDIM I", "2:5: Cannot DIM already-defined symbol I");
+        do_simple_error_test("i = 0\nDIM i", "2:5: Cannot DIM already-defined symbol i");
     }
 
     #[test]
@@ -619,7 +668,7 @@ mod tests {
         do_simple_error_test("DIM i()", "1:6: Arrays require at least one dimension");
         do_simple_error_test("DIM i(FALSE)", "Dimensions in DIM array must be integers");
         do_simple_error_test("DIM i(-3)", "Dimensions in DIM array must be positive");
-        do_simple_error_test("DIM i\nDIM i(3)", "Cannot DIM already-defined symbol i");
+        do_simple_error_test("DIM i\nDIM i(3)", "2:5: Cannot DIM already-defined symbol i");
     }
 
     #[test]
