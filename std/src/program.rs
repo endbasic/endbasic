@@ -524,7 +524,7 @@ impl Command for SaveCommand {
                     ))
                 }
             },
-            [ArgSpan { expr: Some(expr), sep: ArgSep::End }] => {
+            [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
                 match expr.eval(machine.get_mut_symbols()).await? {
                     Value::Text(t) => add_extension(t)?,
                     _ => {

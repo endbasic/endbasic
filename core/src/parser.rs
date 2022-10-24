@@ -256,8 +256,8 @@ impl<'a> Parser<'a> {
         Ok(stmts)
     }
 
-    /// Parses an assignment for the variable reference `varref` already read.
-    fn parse_assignment(&mut self, vref: VarRef) -> Result<Statement> {
+    /// Parses an assignment for the variable reference `vref` already read.
+    fn parse_assignment(&mut self, vref: VarRef, vref_pos: LineCol) -> Result<Statement> {
         let expr = self.parse_required_expr("Missing expression in assignment")?;
 
         let next = self.lexer.peek()?;
@@ -265,12 +265,17 @@ impl<'a> Parser<'a> {
             Token::Eof | Token::Eol => (),
             t => return Err(Error::Bad(next.pos, format!("Unexpected {} in assignment", t))),
         }
-        Ok(Statement::Assignment(AssignmentSpan { vref, expr }))
+        Ok(Statement::Assignment(AssignmentSpan { vref, vref_pos, expr }))
     }
 
     /// Parses an assignment to the array `varref` with `subscripts`, both of which have already
     /// been read.
-    fn parse_array_assignment(&mut self, vref: VarRef, subscripts: Vec<Expr>) -> Result<Statement> {
+    fn parse_array_assignment(
+        &mut self,
+        vref: VarRef,
+        vref_pos: LineCol,
+        subscripts: Vec<Expr>,
+    ) -> Result<Statement> {
         let expr = self.parse_required_expr("Missing expression in array assignment")?;
 
         let next = self.lexer.peek()?;
@@ -278,7 +283,7 @@ impl<'a> Parser<'a> {
             Token::Eof | Token::Eol => (),
             t => return Err(Error::Bad(next.pos, format!("Unexpected {} in array assignment", t))),
         }
-        Ok(Statement::ArrayAssignment(ArrayAssignmentSpan { vref, subscripts, expr }))
+        Ok(Statement::ArrayAssignment(ArrayAssignmentSpan { vref, vref_pos, subscripts, expr }))
     }
 
     /// Parses a builtin call (things of the form `INPUT a`).
@@ -299,17 +304,17 @@ impl<'a> Parser<'a> {
             match peeked.token {
                 Token::Eof | Token::Eol => {
                     if expr.is_some() || !args.is_empty() {
-                        args.push(ArgSpan { expr, sep: ArgSep::End });
+                        args.push(ArgSpan { expr, sep: ArgSep::End, sep_pos: peeked.pos });
                     }
                     break;
                 }
                 Token::Semicolon => {
-                    self.lexer.consume_peeked();
-                    args.push(ArgSpan { expr, sep: ArgSep::Short });
+                    let peeked = self.lexer.consume_peeked();
+                    args.push(ArgSpan { expr, sep: ArgSep::Short, sep_pos: peeked.pos });
                 }
                 Token::Comma => {
-                    self.lexer.consume_peeked();
-                    args.push(ArgSpan { expr, sep: ArgSep::Long });
+                    let peeked = self.lexer.consume_peeked();
+                    args.push(ArgSpan { expr, sep: ArgSep::Long, sep_pos: peeked.pos });
                 }
                 _ => {
                     return Err(Error::Bad(
@@ -319,7 +324,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        Ok(Statement::BuiltinCall(BuiltinCallSpan { name, args }))
+        Ok(Statement::BuiltinCall(BuiltinCallSpan { name, name_pos: vref_pos, args }))
     }
 
     /// Starts processing either an array reference or a builtin call and disambiguates between the
@@ -336,7 +341,7 @@ impl<'a> Parser<'a> {
                 match self.lexer.peek()?.token {
                     Token::Equal => {
                         self.lexer.consume_peeked();
-                        self.parse_array_assignment(vref, exprs)
+                        self.parse_array_assignment(vref, vref_pos, exprs)
                     }
                     _ => {
                         if exprs.len() != 1 {
@@ -355,18 +360,18 @@ impl<'a> Parser<'a> {
 
     /// Parses the `AS typename` clause of a `DIM` statement.  The caller has already consumed the
     /// `AS` token.
-    fn parse_dim_as(&mut self) -> Result<VarType> {
+    fn parse_dim_as(&mut self) -> Result<(VarType, LineCol)> {
         let peeked = self.lexer.peek()?;
-        let vartype = match peeked.token {
-            Token::Eof | Token::Eol => VarType::Integer,
+        let (vtype, vtype_pos) = match peeked.token {
+            Token::Eof | Token::Eol => (VarType::Integer, peeked.pos),
             Token::As => {
                 self.lexer.consume_peeked();
                 let token_span = self.lexer.read()?;
                 match token_span.token {
-                    Token::BooleanName => VarType::Boolean,
-                    Token::DoubleName => VarType::Double,
-                    Token::IntegerName => VarType::Integer,
-                    Token::TextName => VarType::Text,
+                    Token::BooleanName => (VarType::Boolean, token_span.pos),
+                    Token::DoubleName => (VarType::Double, token_span.pos),
+                    Token::IntegerName => (VarType::Integer, token_span.pos),
+                    Token::TextName => (VarType::Text, token_span.pos),
                     t => {
                         return Err(Error::Bad(
                             token_span.pos,
@@ -384,7 +389,7 @@ impl<'a> Parser<'a> {
             t => return Err(Error::Bad(next.pos, format!("Unexpected {} in DIM statement", t))),
         }
 
-        Ok(vartype)
+        Ok((vtype, vtype_pos))
     }
 
     /// Parses a `DIM` statement.
@@ -400,6 +405,7 @@ impl<'a> Parser<'a> {
             }
         };
         let name = vref_to_unannotated_string(vref, token_span.pos)?;
+        let name_pos = token_span.pos;
 
         match self.lexer.peek()?.token {
             Token::LeftParen => {
@@ -411,12 +417,18 @@ impl<'a> Parser<'a> {
                         "Arrays require at least one dimension".to_owned(),
                     ));
                 }
-                let subtype = self.parse_dim_as()?;
-                Ok(Statement::DimArray(DimArraySpan { name, dimensions, subtype }))
+                let (subtype, subtype_pos) = self.parse_dim_as()?;
+                Ok(Statement::DimArray(DimArraySpan {
+                    name,
+                    name_pos,
+                    dimensions,
+                    subtype,
+                    subtype_pos,
+                }))
             }
             _ => {
-                let vartype = self.parse_dim_as()?;
-                Ok(Statement::Dim(DimSpan { name, vtype: vartype }))
+                let (vtype, vtype_pos) = self.parse_dim_as()?;
+                Ok(Statement::Dim(DimSpan { name, name_pos, vtype, vtype_pos }))
             }
         }
     }
@@ -689,13 +701,12 @@ impl<'a> Parser<'a> {
     /// Parses a `GOTO` statement.
     fn parse_goto(&mut self) -> Result<Statement> {
         let token_span = self.lexer.read()?;
-        let target = match token_span.token {
-            Token::Label(target) => target,
-            _ => {
-                return Err(Error::Bad(token_span.pos, "Expected label name after GOTO".to_owned()))
+        match token_span.token {
+            Token::Label(target) => {
+                Ok(Statement::Goto(GotoSpan { target, target_pos: token_span.pos }))
             }
-        };
-        Ok(Statement::Goto(GotoSpan { target }))
+            _ => Err(Error::Bad(token_span.pos, "Expected label name after GOTO".to_owned())),
+        }
     }
 
     /// Parses an `IF` statement.
@@ -861,6 +872,7 @@ impl<'a> Parser<'a> {
 
         Ok(Statement::For(ForSpan {
             iter: iterator,
+            iter_pos: iterator_pos,
             start,
             end: end_condition,
             next: next_value,
@@ -961,13 +973,13 @@ impl<'a> Parser<'a> {
                 // same line as other code.  This is intentional to keep the parser simpler.  And,
                 // in any case, because line separators can be a colon character, placing one after
                 // the label name to join it with a statement looks "natural".
-                Ok(Some(Statement::Label(LabelSpan { name })))
+                Ok(Some(Statement::Label(LabelSpan { name, name_pos: token_span.pos })))
             }
             Token::Symbol(vref) => {
                 let peeked = self.lexer.peek()?;
                 if peeked.token == Token::Equal {
                     self.lexer.consume_peeked();
-                    Ok(Some(self.parse_assignment(vref)?))
+                    Ok(Some(self.parse_assignment(vref, token_span.pos)?))
                 } else {
                     Ok(Some(self.parse_array_or_builtin_call(vref, token_span.pos)?))
                 }
@@ -1142,18 +1154,22 @@ mod tests {
             &[
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("a", VarType::Auto),
+                    vref_pos: lc(1, 1),
                     expr: expr_integer(1, 1, 3),
                 }),
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("b", VarType::Auto),
+                    vref_pos: lc(2, 1),
                     expr: expr_integer(2, 2, 3),
                 }),
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("c", VarType::Auto),
+                    vref_pos: lc(2, 5),
                     expr: expr_integer(3, 2, 7),
                 }),
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("d", VarType::Auto),
+                    vref_pos: lc(3, 1),
                     expr: expr_integer(4, 3, 3),
                 }),
             ],
@@ -1167,16 +1183,19 @@ mod tests {
             &[
                 Statement::ArrayAssignment(ArrayAssignmentSpan {
                     vref: VarRef::new("a", VarType::Auto),
+                    vref_pos: lc(1, 1),
                     subscripts: vec![expr_integer(1, 1, 3)],
                     expr: expr_integer(100, 1, 6),
                 }),
                 Statement::ArrayAssignment(ArrayAssignmentSpan {
                     vref: VarRef::new("foo", VarType::Auto),
+                    vref_pos: lc(2, 1),
                     subscripts: vec![expr_integer(2, 2, 5), expr_integer(3, 2, 8)],
                     expr: expr_text("text", 2, 11),
                 }),
                 Statement::ArrayAssignment(ArrayAssignmentSpan {
                     vref: VarRef::new("abc", VarType::Text),
+                    vref_pos: lc(3, 1),
                     subscripts: vec![
                         Expr::Add(Box::from(BinaryOpSpan {
                             lhs: expr_integer(5, 3, 7),
@@ -1215,14 +1234,17 @@ mod tests {
             &[
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("a", VarType::Auto),
+                    vref_pos: lc(1, 1),
                     expr: expr_integer(1, 1, 3),
                 }),
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("foo", VarType::Text),
+                    vref_pos: lc(2, 1),
                     expr: expr_text("bar", 2, 8),
                 }),
                 Statement::Assignment(AssignmentSpan {
                     vref: VarRef::new("b", VarType::Text),
+                    vref_pos: lc(3, 1),
                     expr: Expr::Add(Box::from(BinaryOpSpan {
                         lhs: expr_integer(3, 3, 6),
                         rhs: expr_symbol(VarRef::new("z", VarType::Auto), 3, 10),
@@ -1250,23 +1272,35 @@ mod tests {
             &[
                 Statement::BuiltinCall(BuiltinCallSpan {
                     name: "PRINT".to_owned(),
+                    name_pos: lc(1, 1),
                     args: vec![ArgSpan {
                         expr: Some(expr_symbol(VarRef::new("a", VarType::Auto), 1, 7)),
                         sep: ArgSep::End,
+                        sep_pos: lc(1, 8),
                     }],
                 }),
                 Statement::BuiltinCall(BuiltinCallSpan {
                     name: "PRINT".to_owned(),
+                    name_pos: lc(2, 1),
                     args: vec![
-                        ArgSpan { expr: None, sep: ArgSep::Short },
-                        ArgSpan { expr: Some(expr_integer(3, 2, 9)), sep: ArgSep::Long },
+                        ArgSpan { expr: None, sep: ArgSep::Short, sep_pos: lc(2, 7) },
+                        ArgSpan {
+                            expr: Some(expr_integer(3, 2, 9)),
+                            sep: ArgSep::Long,
+                            sep_pos: lc(2, 11),
+                        },
                         ArgSpan {
                             expr: Some(expr_symbol(VarRef::new("c", VarType::Text), 2, 13)),
                             sep: ArgSep::End,
+                            sep_pos: lc(2, 15),
                         },
                     ],
                 }),
-                Statement::BuiltinCall(BuiltinCallSpan { name: "NOARGS".to_owned(), args: vec![] }),
+                Statement::BuiltinCall(BuiltinCallSpan {
+                    name: "NOARGS".to_owned(),
+                    name_pos: lc(3, 1),
+                    args: vec![],
+                }),
             ],
         );
     }
@@ -1279,7 +1313,12 @@ mod tests {
             "PRINT(1)",
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
-                args: vec![ArgSpan { expr: Some(expr_integer(1, 1, 7)), sep: ArgSep::End }],
+                name_pos: lc(1, 1),
+                args: vec![ArgSpan {
+                    expr: Some(expr_integer(1, 1, 7)),
+                    sep: ArgSep::End,
+                    sep_pos: lc(1, 9),
+                }],
             })],
         );
 
@@ -1287,9 +1326,18 @@ mod tests {
             "PRINT(1), 2",
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
+                name_pos: lc(1, 1),
                 args: vec![
-                    ArgSpan { expr: Some(expr_integer(1, 1, 7)), sep: ArgSep::Long },
-                    ArgSpan { expr: Some(expr_integer(2, 1, 11)), sep: ArgSep::End },
+                    ArgSpan {
+                        expr: Some(expr_integer(1, 1, 7)),
+                        sep: ArgSep::Long,
+                        sep_pos: lc(1, 9),
+                    },
+                    ArgSpan {
+                        expr: Some(expr_integer(2, 1, 11)),
+                        sep: ArgSep::End,
+                        sep_pos: lc(1, 12),
+                    },
                 ],
             })],
         );
@@ -1298,9 +1346,18 @@ mod tests {
             "PRINT(1); 2",
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
+                name_pos: lc(1, 1),
                 args: vec![
-                    ArgSpan { expr: Some(expr_integer(1, 1, 7)), sep: ArgSep::Short },
-                    ArgSpan { expr: Some(expr_integer(2, 1, 11)), sep: ArgSep::End },
+                    ArgSpan {
+                        expr: Some(expr_integer(1, 1, 7)),
+                        sep: ArgSep::Short,
+                        sep_pos: lc(1, 9),
+                    },
+                    ArgSpan {
+                        expr: Some(expr_integer(2, 1, 11)),
+                        sep: ArgSep::End,
+                        sep_pos: lc(1, 12),
+                    },
                 ],
             })],
         );
@@ -1309,9 +1366,14 @@ mod tests {
             "PRINT(1);",
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
+                name_pos: lc(1, 1),
                 args: vec![
-                    ArgSpan { expr: Some(expr_integer(1, 1, 7)), sep: ArgSep::Short },
-                    ArgSpan { expr: None, sep: ArgSep::End },
+                    ArgSpan {
+                        expr: Some(expr_integer(1, 1, 7)),
+                        sep: ArgSep::Short,
+                        sep_pos: lc(1, 9),
+                    },
+                    ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 10) },
                 ],
             })],
         );
@@ -1320,6 +1382,7 @@ mod tests {
             "PRINT(1) + 2; 3",
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
+                name_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
                         expr: Some(Add(Box::from(BinaryOpSpan {
@@ -1328,8 +1391,13 @@ mod tests {
                             pos: lc(1, 10),
                         }))),
                         sep: ArgSep::Short,
+                        sep_pos: lc(1, 13),
                     },
-                    ArgSpan { expr: Some(expr_integer(3, 1, 15)), sep: ArgSep::End },
+                    ArgSpan {
+                        expr: Some(expr_integer(3, 1, 15)),
+                        sep: ArgSep::End,
+                        sep_pos: lc(1, 16),
+                    },
                 ],
             })],
         );
@@ -1351,7 +1419,12 @@ mod tests {
     fn test_dim_default_type() {
         do_ok_test(
             "DIM i",
-            &[Statement::Dim(DimSpan { name: "i".to_owned(), vtype: VarType::Integer })],
+            &[Statement::Dim(DimSpan {
+                name: "i".to_owned(),
+                name_pos: lc(1, 5),
+                vtype: VarType::Integer,
+                vtype_pos: lc(1, 6),
+            })],
         );
     }
 
@@ -1359,19 +1432,39 @@ mod tests {
     fn test_dim_as_simple_types() {
         do_ok_test(
             "DIM i AS BOOLEAN",
-            &[Statement::Dim(DimSpan { name: "i".to_owned(), vtype: VarType::Boolean })],
+            &[Statement::Dim(DimSpan {
+                name: "i".to_owned(),
+                name_pos: lc(1, 5),
+                vtype: VarType::Boolean,
+                vtype_pos: lc(1, 10),
+            })],
         );
         do_ok_test(
             "DIM i AS DOUBLE",
-            &[Statement::Dim(DimSpan { name: "i".to_owned(), vtype: VarType::Double })],
+            &[Statement::Dim(DimSpan {
+                name: "i".to_owned(),
+                name_pos: lc(1, 5),
+                vtype: VarType::Double,
+                vtype_pos: lc(1, 10),
+            })],
         );
         do_ok_test(
             "DIM i AS INTEGER",
-            &[Statement::Dim(DimSpan { name: "i".to_owned(), vtype: VarType::Integer })],
+            &[Statement::Dim(DimSpan {
+                name: "i".to_owned(),
+                name_pos: lc(1, 5),
+                vtype: VarType::Integer,
+                vtype_pos: lc(1, 10),
+            })],
         );
         do_ok_test(
             "DIM i AS STRING",
-            &[Statement::Dim(DimSpan { name: "i".to_owned(), vtype: VarType::Text })],
+            &[Statement::Dim(DimSpan {
+                name: "i".to_owned(),
+                name_pos: lc(1, 5),
+                vtype: VarType::Text,
+                vtype_pos: lc(1, 10),
+            })],
         );
     }
 
@@ -1380,9 +1473,24 @@ mod tests {
         do_ok_test(
             "DIM i\nDIM j AS BOOLEAN\nDIM k",
             &[
-                Statement::Dim(DimSpan { name: "i".to_owned(), vtype: VarType::Integer }),
-                Statement::Dim(DimSpan { name: "j".to_owned(), vtype: VarType::Boolean }),
-                Statement::Dim(DimSpan { name: "k".to_owned(), vtype: VarType::Integer }),
+                Statement::Dim(DimSpan {
+                    name: "i".to_owned(),
+                    name_pos: lc(1, 5),
+                    vtype: VarType::Integer,
+                    vtype_pos: lc(1, 6),
+                }),
+                Statement::Dim(DimSpan {
+                    name: "j".to_owned(),
+                    name_pos: lc(2, 5),
+                    vtype: VarType::Boolean,
+                    vtype_pos: lc(2, 10),
+                }),
+                Statement::Dim(DimSpan {
+                    name: "k".to_owned(),
+                    name_pos: lc(3, 5),
+                    vtype: VarType::Integer,
+                    vtype_pos: lc(3, 6),
+                }),
             ],
         );
     }
@@ -1395,8 +1503,10 @@ mod tests {
             "DIM i(10)",
             &[Statement::DimArray(DimArraySpan {
                 name: "i".to_owned(),
+                name_pos: lc(1, 5),
                 dimensions: vec![expr_integer(10, 1, 7)],
                 subtype: VarType::Integer,
+                subtype_pos: lc(1, 10),
             })],
         );
 
@@ -1404,11 +1514,13 @@ mod tests {
             "DIM foo(-5, 0) AS STRING",
             &[Statement::DimArray(DimArraySpan {
                 name: "foo".to_owned(),
+                name_pos: lc(1, 5),
                 dimensions: vec![
                     Negate(Box::from(UnaryOpSpan { expr: expr_integer(5, 1, 10), pos: lc(1, 9) })),
                     expr_integer(0, 1, 13),
                 ],
                 subtype: VarType::Text,
+                subtype_pos: lc(1, 19),
             })],
         );
 
@@ -1416,6 +1528,7 @@ mod tests {
             "DIM foo(bar$() + 3, 8, -1)",
             &[Statement::DimArray(DimArraySpan {
                 name: "foo".to_owned(),
+                name_pos: lc(1, 5),
                 dimensions: vec![
                     Add(Box::from(BinaryOpSpan {
                         lhs: Call(FunctionCallSpan {
@@ -1430,6 +1543,7 @@ mod tests {
                     Negate(Box::from(UnaryOpSpan { expr: expr_integer(1, 1, 25), pos: lc(1, 24) })),
                 ],
                 subtype: VarType::Integer,
+                subtype_pos: lc(1, 27),
             })],
         );
     }
@@ -1461,11 +1575,17 @@ mod tests {
             &format!("PRINT {}, 1", input),
             &[Statement::BuiltinCall(BuiltinCallSpan {
                 name: "PRINT".to_owned(),
+                name_pos: lc(1, 1),
                 args: vec![
-                    ArgSpan { expr: Some(expr), sep: ArgSep::Long },
+                    ArgSpan {
+                        expr: Some(expr),
+                        sep: ArgSep::Long,
+                        sep_pos: lc(1, 7 + input.len()),
+                    },
                     ArgSpan {
                         expr: Some(expr_integer(1, 1, 6 + input.len() + 3)),
                         sep: ArgSep::End,
+                        sep_pos: lc(1, 10 + input.len()),
                     },
                 ],
             })],
@@ -2004,8 +2124,12 @@ mod tests {
     }
 
     /// Helper to instantiate a trivial `Statement::BuiltinCall` that has no arguments.
-    fn make_bare_builtin_call(name: &str) -> Statement {
-        Statement::BuiltinCall(BuiltinCallSpan { name: name.to_owned(), args: vec![] })
+    fn make_bare_builtin_call(name: &str, line: usize, col: usize) -> Statement {
+        Statement::BuiltinCall(BuiltinCallSpan {
+            name: name.to_owned(),
+            name_pos: LineCol { line, col },
+            args: vec![],
+        })
     }
 
     #[test]
@@ -2015,7 +2139,7 @@ mod tests {
             &[Statement::If(IfSpan {
                 branches: vec![IfBranchSpan {
                     guard: expr_integer(1, 1, 4),
-                    body: vec![make_bare_builtin_call("PRINT")],
+                    body: vec![make_bare_builtin_call("PRINT", 2, 1)],
                 }],
             })],
         );
@@ -2026,7 +2150,7 @@ mod tests {
                     IfBranchSpan { guard: expr_integer(1, 1, 4), body: vec![] },
                     IfBranchSpan {
                         guard: expr_integer(2, 3, 8),
-                        body: vec![make_bare_builtin_call("PRINT")],
+                        body: vec![make_bare_builtin_call("PRINT", 4, 1)],
                     },
                 ],
             })],
@@ -2039,7 +2163,7 @@ mod tests {
                     IfBranchSpan { guard: expr_integer(2, 2, 8), body: vec![] },
                     IfBranchSpan {
                         guard: expr_boolean(true, 3, 1),
-                        body: vec![make_bare_builtin_call("PRINT")],
+                        body: vec![make_bare_builtin_call("PRINT", 5, 1)],
                     },
                 ],
             })],
@@ -2051,7 +2175,7 @@ mod tests {
                     IfBranchSpan { guard: expr_integer(1, 1, 4), body: vec![] },
                     IfBranchSpan {
                         guard: expr_boolean(true, 4, 1),
-                        body: vec![make_bare_builtin_call("PRINT")],
+                        body: vec![make_bare_builtin_call("PRINT", 5, 1)],
                     },
                 ],
             })],
@@ -2081,19 +2205,31 @@ mod tests {
                 branches: vec![
                     IfBranchSpan {
                         guard: expr_integer(1, 2, 16),
-                        body: vec![make_bare_builtin_call("A"), make_bare_builtin_call("B")],
+                        body: vec![
+                            make_bare_builtin_call("A", 3, 17),
+                            make_bare_builtin_call("B", 4, 17),
+                        ],
                     },
                     IfBranchSpan {
                         guard: expr_integer(2, 5, 20),
-                        body: vec![make_bare_builtin_call("C"), make_bare_builtin_call("D")],
+                        body: vec![
+                            make_bare_builtin_call("C", 6, 17),
+                            make_bare_builtin_call("D", 7, 17),
+                        ],
                     },
                     IfBranchSpan {
                         guard: expr_integer(3, 8, 20),
-                        body: vec![make_bare_builtin_call("E"), make_bare_builtin_call("F")],
+                        body: vec![
+                            make_bare_builtin_call("E", 9, 17),
+                            make_bare_builtin_call("F", 10, 17),
+                        ],
                     },
                     IfBranchSpan {
                         guard: expr_boolean(true, 11, 13),
-                        body: vec![make_bare_builtin_call("G"), make_bare_builtin_call("H")],
+                        body: vec![
+                            make_bare_builtin_call("G", 12, 17),
+                            make_bare_builtin_call("H", 13, 17),
+                        ],
                     },
                 ],
             })],
@@ -2117,14 +2253,14 @@ mod tests {
                 branches: vec![
                     IfBranchSpan {
                         guard: expr_integer(1, 2, 16),
-                        body: vec![make_bare_builtin_call("A")],
+                        body: vec![make_bare_builtin_call("A", 3, 17)],
                     },
                     IfBranchSpan {
                         guard: expr_integer(2, 4, 20),
                         body: vec![Statement::If(IfSpan {
                             branches: vec![IfBranchSpan {
                                 guard: expr_integer(3, 5, 20),
-                                body: vec![make_bare_builtin_call("B")],
+                                body: vec![make_bare_builtin_call("B", 6, 21)],
                             }],
                         })],
                     },
@@ -2181,6 +2317,7 @@ mod tests {
             "FOR i = 1 TO 10\nNEXT",
             &[Statement::For(ForSpan {
                 iter: auto_iter.clone(),
+                iter_pos: lc(1, 5),
                 start: expr_integer(1, 1, 9),
                 end: Expr::LessEqual(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(auto_iter.clone(), 1, 5),
@@ -2201,6 +2338,7 @@ mod tests {
             "FOR i% = 1 TO 10\nREM Nothing to do\nNEXT",
             &[Statement::For(ForSpan {
                 iter: typed_iter.clone(),
+                iter_pos: lc(1, 5),
                 start: expr_integer(1, 1, 10),
                 end: Expr::LessEqual(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(typed_iter.clone(), 1, 5),
@@ -2224,6 +2362,7 @@ mod tests {
             "FOR i = 0 TO 5\nA\nB\nNEXT",
             &[Statement::For(ForSpan {
                 iter: iter.clone(),
+                iter_pos: lc(1, 5),
                 start: expr_integer(0, 1, 9),
                 end: Expr::LessEqual(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(iter.clone(), 1, 5),
@@ -2235,7 +2374,7 @@ mod tests {
                     rhs: expr_integer(1, 1, 15),
                     pos: lc(1, 11),
                 })),
-                body: vec![make_bare_builtin_call("A"), make_bare_builtin_call("B")],
+                body: vec![make_bare_builtin_call("A", 2, 1), make_bare_builtin_call("B", 3, 1)],
             })],
         );
     }
@@ -2247,6 +2386,7 @@ mod tests {
             "FOR i = 0 TO 5 STEP 2\nA\nNEXT",
             &[Statement::For(ForSpan {
                 iter: iter.clone(),
+                iter_pos: lc(1, 5),
                 start: expr_integer(0, 1, 9),
                 end: Expr::LessEqual(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(iter.clone(), 1, 5),
@@ -2258,7 +2398,7 @@ mod tests {
                     rhs: expr_integer(2, 1, 21),
                     pos: lc(1, 11),
                 })),
-                body: vec![make_bare_builtin_call("A")],
+                body: vec![make_bare_builtin_call("A", 2, 1)],
             })],
         );
     }
@@ -2270,6 +2410,7 @@ mod tests {
             "FOR i = 5 TO 0 STEP -1\nA\nNEXT",
             &[Statement::For(ForSpan {
                 iter: iter.clone(),
+                iter_pos: lc(1, 5),
                 start: expr_integer(5, 1, 9),
                 end: Expr::GreaterEqual(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(iter.clone(), 1, 5),
@@ -2281,7 +2422,7 @@ mod tests {
                     rhs: expr_integer(-1, 1, 22),
                     pos: lc(1, 11),
                 })),
-                body: vec![make_bare_builtin_call("A")],
+                body: vec![make_bare_builtin_call("A", 2, 1)],
             })],
         );
     }
@@ -2321,7 +2462,10 @@ mod tests {
 
     #[test]
     fn test_goto_ok() {
-        do_ok_test("GOTO @foo", &[Statement::Goto(GotoSpan { target: "foo".to_owned() })]);
+        do_ok_test(
+            "GOTO @foo",
+            &[Statement::Goto(GotoSpan { target: "foo".to_owned(), target_pos: lc(1, 6) })],
+        );
     }
 
     #[test]
@@ -2336,7 +2480,10 @@ mod tests {
 
     #[test]
     fn test_label_ok() {
-        do_ok_test("@foo", &[Statement::Label(LabelSpan { name: "foo".to_owned() })]);
+        do_ok_test(
+            "@foo",
+            &[Statement::Label(LabelSpan { name: "foo".to_owned(), name_pos: lc(1, 1) })],
+        );
     }
 
     #[test]
@@ -2370,7 +2517,7 @@ mod tests {
             "WHILE TRUE\nA\nB\nWEND",
             &[Statement::While(WhileSpan {
                 expr: expr_boolean(true, 1, 7),
-                body: vec![make_bare_builtin_call("A"), make_bare_builtin_call("B")],
+                body: vec![make_bare_builtin_call("A", 2, 1), make_bare_builtin_call("B", 3, 1)],
             })],
         );
     }
@@ -2391,12 +2538,12 @@ mod tests {
             &[Statement::While(WhileSpan {
                 expr: expr_boolean(true, 2, 19),
                 body: vec![
-                    make_bare_builtin_call("A"),
+                    make_bare_builtin_call("A", 3, 17),
                     Statement::While(WhileSpan {
                         expr: expr_boolean(false, 4, 23),
-                        body: vec![make_bare_builtin_call("B")],
+                        body: vec![make_bare_builtin_call("B", 5, 21)],
                     }),
-                    make_bare_builtin_call("C"),
+                    make_bare_builtin_call("C", 7, 17),
                 ],
             })],
         );

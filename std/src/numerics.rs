@@ -566,7 +566,7 @@ impl Command for RandomizeCommand {
             [] => {
                 *self.prng.borrow_mut() = Prng::new_from_entryopy();
             }
-            [ArgSpan { expr: Some(expr), sep: ArgSep::End }] => {
+            [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
                 match expr.eval(machine.get_mut_symbols()).await? {
                     Value::Integer(n) => {
                         *self.prng.borrow_mut() = Prng::new_from_seed(n);

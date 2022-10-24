@@ -91,7 +91,7 @@ impl Command for ExitCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let arg = match span.args.as_slice() {
-            [ArgSpan { expr: Some(expr), sep: ArgSep::End }] => {
+            [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
                 match expr.eval(machine.get_mut_symbols()).await? {
                     Value::Integer(n) => {
                         assert!((0..128).contains(&n), "Exit code out of range");
