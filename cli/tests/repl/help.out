@@ -243,6 +243,7 @@ Output from HELP NUMERICAL:
     >> RANDOMIZE    Reinitializes the pseudo-random number generator.
     >> RND#         Returns a random number in the [0..1] range.
     >> SIN#         Computes the sine of an angle.
+    >> SQR#         Computes the square root of the given number.
     >> TAN#         Computes the tangent of an angle.
 
     Type HELP followed by the name of a symbol for details.
@@ -881,6 +882,12 @@ Output from HELP SIN:
 
     The input angle% or angle# is measured in degrees or radians depending
     on the angle mode as selected by the DEG and RAD commands.
+
+Output from HELP SQR:
+
+    SQR#(num%|num#)
+
+    Computes the square root of the given number.
 
 Output from HELP TAN:
 

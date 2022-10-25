@@ -671,6 +671,47 @@ impl Function for SinFunction {
     }
 }
 
+/// The `SQR` function.
+pub struct SqrFunction {
+    metadata: CallableMetadata,
+}
+
+impl SqrFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("SQR", VarType::Double)
+                .with_syntax("num%|num#")
+                .with_category(CATEGORY)
+                .with_description("Computes the square root of the given number.")
+                .build(),
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for SqrFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
+        let num = match args.as_slice() {
+            [Value::Integer(i)] => *i as f64,
+            [Value::Double(d)] => *d,
+            _ => return Err(CallError::SyntaxError),
+        };
+        if num < 0.0 {
+            return Err(CallError::ArgumentError(
+                span.args[0].start_pos(),
+                "Cannot take square root of a negative number".to_owned(),
+            ));
+        }
+        Ok(Value::Double(num.sqrt()))
+    }
+}
+
 /// The `TAN` function.
 pub struct TanFunction {
     metadata: CallableMetadata,
@@ -726,6 +767,7 @@ pub fn add_all(machine: &mut Machine) {
     machine.add_command(RadCommand::new(angle_mode.clone()));
     machine.add_function(RndFunction::new(prng));
     machine.add_function(SinFunction::new(angle_mode.clone()));
+    machine.add_function(SqrFunction::new());
     machine.add_function(TanFunction::new(angle_mode));
 }
 
@@ -906,6 +948,26 @@ mod tests {
         check_expr_error("1:10: In call to SIN: expected angle%|angle#", "SIN()");
         check_expr_error("1:10: In call to SIN: expected angle%|angle#", "SIN(FALSE)");
         check_expr_error("1:10: In call to SIN: expected angle%|angle#", "SIN(3, 4)");
+    }
+
+    #[test]
+    fn test_sqr() {
+        check_expr_ok(0f64.sqrt(), "SQR(0)");
+        check_expr_ok(0f64.sqrt(), "SQR(-0.0)");
+        check_expr_ok(9f64.sqrt(), "SQR(9)");
+        check_expr_ok(100.50f64.sqrt(), "SQR(100.50)");
+
+        check_expr_error("1:10: In call to SQR: expected num%|num#", "SQR()");
+        check_expr_error("1:10: In call to SQR: expected num%|num#", "SQR(FALSE)");
+        check_expr_error("1:10: In call to SQR: expected num%|num#", "SQR(3, 4)");
+        check_expr_error(
+            "1:10: In call to SQR: 1:14: Cannot take square root of a negative number",
+            "SQR(-3)",
+        );
+        check_expr_error(
+            "1:10: In call to SQR: 1:14: Cannot take square root of a negative number",
+            "SQR(-0.1)",
+        );
     }
 
     #[test]

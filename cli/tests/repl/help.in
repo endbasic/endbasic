@@ -236,6 +236,9 @@ HELP RTRIM
 PRINT "Output from HELP SIN:"
 HELP SIN
 
+PRINT "Output from HELP SQR:"
+HELP SQR
+
 PRINT "Output from HELP TAN:"
 HELP TAN
 
