@@ -114,6 +114,10 @@ impl Value {
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs == rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs == rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs == rhs)),
+
+            (Value::Double(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs == *rhs as f64)),
+            (Value::Integer(lhs), Value::Double(rhs)) => Ok(Value::Boolean(*lhs as f64 == *rhs)),
+
             (_, _) => Err(Error::new(format!("Cannot compare {} and {} with =", self, other))),
         }
     }
@@ -125,6 +129,10 @@ impl Value {
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs != rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs != rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs != rhs)),
+
+            (Value::Double(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs != *rhs as f64)),
+            (Value::Integer(lhs), Value::Double(rhs)) => Ok(Value::Boolean(*lhs as f64 != *rhs)),
+
             (_, _) => Err(Error::new(format!("Cannot compare {} and {} with <>", self, other))),
         }
     }
@@ -135,6 +143,10 @@ impl Value {
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs < rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs < rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs < rhs)),
+
+            (Value::Double(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs < *rhs as f64)),
+            (Value::Integer(lhs), Value::Double(rhs)) => Ok(Value::Boolean((*lhs as f64) < *rhs)),
+
             (_, _) => Err(Error::new(format!("Cannot compare {} and {} with <", self, other))),
         }
     }
@@ -145,6 +157,10 @@ impl Value {
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
+
+            (Value::Double(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs <= *rhs as f64)),
+            (Value::Integer(lhs), Value::Double(rhs)) => Ok(Value::Boolean(*lhs as f64 <= *rhs)),
+
             (_, _) => Err(Error::new(format!("Cannot compare {} and {} with <=", self, other))),
         }
     }
@@ -155,6 +171,10 @@ impl Value {
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs > rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs > rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs > rhs)),
+
+            (Value::Double(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs > *rhs as f64)),
+            (Value::Integer(lhs), Value::Double(rhs)) => Ok(Value::Boolean(*lhs as f64 > *rhs)),
+
             (_, _) => Err(Error::new(format!("Cannot compare {} and {} with >", self, other))),
         }
     }
@@ -165,6 +185,10 @@ impl Value {
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
+
+            (Value::Double(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(*lhs >= *rhs as f64)),
+            (Value::Integer(lhs), Value::Double(rhs)) => Ok(Value::Boolean(*lhs as f64 >= *rhs)),
+
             (_, _) => Err(Error::new(format!("Cannot compare {} and {} with >=", self, other))),
         }
     }
@@ -175,9 +199,13 @@ impl Value {
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs + rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_add(*rhs) {
                 Some(i) => Ok(Value::Integer(i)),
-                None => Err(Error::new(format!("Overflow adding {} and {}", lhs, rhs))),
+                None => Ok(Value::Double(*lhs as f64 + *rhs as f64)),
             },
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Text(lhs.to_owned() + rhs)),
+
+            (Value::Double(lhs), Value::Integer(rhs)) => Ok(Value::Double(lhs + *rhs as f64)),
+            (Value::Integer(lhs), Value::Double(rhs)) => Ok(Value::Double(*lhs as f64 + rhs)),
+
             (_, _) => Err(Error::new(format!("Cannot add {} and {}", self, other))),
         }
     }
@@ -188,8 +216,12 @@ impl Value {
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs - rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_sub(*rhs) {
                 Some(i) => Ok(Value::Integer(i)),
-                None => Err(Error::new(format!("Overflow subtracting {} from {}", rhs, lhs))),
+                None => Ok(Value::Double(*lhs as f64 - *rhs as f64)),
             },
+
+            (Value::Double(lhs), Value::Integer(rhs)) => Ok(Value::Double(lhs - *rhs as f64)),
+            (Value::Integer(lhs), Value::Double(rhs)) => Ok(Value::Double(*lhs as f64 - rhs)),
+
             (_, _) => Err(Error::new(format!("Cannot subtract {} from {}", other, self))),
         }
     }
@@ -200,8 +232,12 @@ impl Value {
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs * rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_mul(*rhs) {
                 Some(i) => Ok(Value::Integer(i)),
-                None => Err(Error::new(format!("Overflow multiplying {} by {}", lhs, rhs))),
+                None => Ok(Value::Double(*lhs as f64 * *rhs as f64)),
             },
+
+            (Value::Double(lhs), Value::Integer(rhs)) => Ok(Value::Double(lhs * *rhs as f64)),
+            (Value::Integer(lhs), Value::Double(rhs)) => Ok(Value::Double(*lhs as f64 * rhs)),
+
             (_, _) => Err(Error::new(format!("Cannot multiply {} by {}", self, other))),
         }
     }
@@ -216,9 +252,13 @@ impl Value {
                 }
                 match lhs.checked_div(*rhs) {
                     Some(i) => Ok(Value::Integer(i)),
-                    None => Err(Error::new(format!("Overflow dividing {} by {}", lhs, rhs))),
+                    None => Ok(Value::Double(*lhs as f64 / *rhs as f64)),
                 }
             }
+
+            (Value::Double(lhs), Value::Integer(rhs)) => Ok(Value::Double(lhs / *rhs as f64)),
+            (Value::Integer(lhs), Value::Double(rhs)) => Ok(Value::Double(*lhs as f64 / rhs)),
+
             (_, _) => Err(Error::new(format!("Cannot divide {} by {}", self, other))),
         }
     }
@@ -233,9 +273,13 @@ impl Value {
                 }
                 match lhs.checked_rem(*rhs) {
                     Some(i) => Ok(Value::Integer(i)),
-                    None => Err(Error::new(format!("Overflow modulo {} by {}", lhs, rhs))),
+                    None => Ok(Value::Double(*lhs as f64 % *rhs as f64)),
                 }
             }
+
+            (Value::Double(lhs), Value::Integer(rhs)) => Ok(Value::Double(lhs % *rhs as f64)),
+            (Value::Integer(lhs), Value::Double(rhs)) => Ok(Value::Double(*lhs as f64 % rhs)),
+
             (_, _) => Err(Error::new(format!("Cannot modulo {} by {}", self, other))),
         }
     }
@@ -248,19 +292,20 @@ impl Value {
                 let exp = match u32::try_from(*rhs) {
                     Ok(exp) => exp,
                     Err(_) => {
-                        return Err(Error::new(format!(
-                            "Exponent {} must be a positive integer",
-                            rhs
-                        )))
+                        return Ok(Value::Double((*lhs as f64).powf(*rhs as f64)));
                     }
                 };
                 match lhs.checked_pow(exp) {
                     Some(i) => Ok(Value::Integer(i)),
-                    None => {
-                        Err(Error::new(format!("Overflow raising {} to the power of {}", lhs, rhs)))
-                    }
+                    None => Ok(Value::Double((*lhs as f64).powf(*rhs as f64))),
                 }
             }
+
+            (Value::Double(lhs), Value::Integer(rhs)) => Ok(Value::Double(lhs.powf(*rhs as f64))),
+            (Value::Integer(lhs), Value::Double(rhs)) => {
+                Ok(Value::Double((*lhs as f64).powf(*rhs)))
+            }
+
             (_, _) => Err(Error::new(format!("Cannot raise {} to the power of {}", self, other))),
         }
     }
@@ -271,7 +316,7 @@ impl Value {
             Value::Double(d) => Ok(Value::Double(-d)),
             Value::Integer(i) => match i.checked_neg() {
                 Some(i) => Ok(Value::Integer(i)),
-                None => Err(Error::new(format!("Overflow negating {}", i))),
+                None => Ok(Value::Double(-(*i as f64))),
             },
             _ => Err(Error::new(format!("Cannot negate {}", self))),
         }
@@ -467,17 +512,13 @@ mod tests {
 
         assert_eq!(Boolean(true), Double(2.5).eq(&Double(2.5)).unwrap());
         assert_eq!(Boolean(false), Double(3.5).eq(&Double(3.6)).unwrap());
-        assert_eq!(
-            "Cannot compare 4.0 and 1 with =",
-            format!("{}", Double(4.0).eq(&Integer(1)).unwrap_err())
-        );
+        assert_eq!(Boolean(true), Double(4.0).eq(&Integer(4)).unwrap());
+        assert_eq!(Boolean(false), Double(1.2).eq(&Integer(1)).unwrap());
 
         assert_eq!(Boolean(true), Integer(2).eq(&Integer(2)).unwrap());
         assert_eq!(Boolean(false), Integer(3).eq(&Integer(4)).unwrap());
-        assert_eq!(
-            "Cannot compare 4 and 1.0 with =",
-            format!("{}", Integer(4).eq(&Double(1.0)).unwrap_err())
-        );
+        assert_eq!(Boolean(true), Integer(4).eq(&Double(4.0)).unwrap());
+        assert_eq!(Boolean(false), Integer(1).eq(&Double(1.2)).unwrap());
 
         assert_eq!(Boolean(true), Text("a".to_owned()).eq(&Text("a".to_owned())).unwrap());
         assert_eq!(Boolean(false), Text("b".to_owned()).eq(&Text("c".to_owned())).unwrap());
@@ -498,17 +539,13 @@ mod tests {
 
         assert_eq!(Boolean(false), Double(2.5).ne(&Double(2.5)).unwrap());
         assert_eq!(Boolean(true), Double(3.5).ne(&Double(3.6)).unwrap());
-        assert_eq!(
-            "Cannot compare 4.0 and 1 with <>",
-            format!("{}", Double(4.0).ne(&Integer(1)).unwrap_err())
-        );
+        assert_eq!(Boolean(false), Double(4.0).ne(&Integer(4)).unwrap());
+        assert_eq!(Boolean(true), Double(1.2).ne(&Integer(1)).unwrap());
 
         assert_eq!(Boolean(false), Integer(2).ne(&Integer(2)).unwrap());
         assert_eq!(Boolean(true), Integer(3).ne(&Integer(4)).unwrap());
-        assert_eq!(
-            "Cannot compare 4 and 1.0 with <>",
-            format!("{}", Integer(4).ne(&Double(1.0)).unwrap_err())
-        );
+        assert_eq!(Boolean(false), Integer(4).ne(&Double(4.0)).unwrap());
+        assert_eq!(Boolean(true), Integer(4).ne(&Double(4.2)).unwrap());
 
         assert_eq!(Boolean(false), Text("a".to_owned()).ne(&Text("a".to_owned())).unwrap());
         assert_eq!(Boolean(true), Text("b".to_owned()).ne(&Text("c".to_owned())).unwrap());
@@ -527,17 +564,15 @@ mod tests {
 
         assert_eq!(Boolean(false), Double(2.5).lt(&Double(2.5)).unwrap());
         assert_eq!(Boolean(true), Double(3.5).lt(&Double(3.6)).unwrap());
-        assert_eq!(
-            "Cannot compare 4.0 and 1 with <",
-            format!("{}", Double(4.0).lt(&Integer(1)).unwrap_err())
-        );
+        assert_eq!(Boolean(false), Double(4.0).lt(&Integer(1)).unwrap());
+        assert_eq!(Boolean(false), Double(4.0).lt(&Integer(4)).unwrap());
+        assert_eq!(Boolean(true), Double(4.9).lt(&Integer(5)).unwrap());
 
         assert_eq!(Boolean(false), Integer(2).lt(&Integer(2)).unwrap());
         assert_eq!(Boolean(true), Integer(3).lt(&Integer(4)).unwrap());
-        assert_eq!(
-            "Cannot compare 4 and 1.0 with <",
-            format!("{}", Integer(4).lt(&Double(1.0)).unwrap_err())
-        );
+        assert_eq!(Boolean(false), Integer(4).lt(&Double(3.9)).unwrap());
+        assert_eq!(Boolean(false), Integer(4).lt(&Double(4.0)).unwrap());
+        assert_eq!(Boolean(true), Integer(4).lt(&Double(4.1)).unwrap());
 
         assert_eq!(Boolean(false), Text("a".to_owned()).lt(&Text("a".to_owned())).unwrap());
         assert_eq!(Boolean(true), Text("a".to_owned()).lt(&Text("c".to_owned())).unwrap());
@@ -557,18 +592,16 @@ mod tests {
         assert_eq!(Boolean(false), Double(2.1).le(&Double(2.0)).unwrap());
         assert_eq!(Boolean(true), Double(2.1).le(&Double(2.1)).unwrap());
         assert_eq!(Boolean(true), Double(2.1).le(&Double(2.2)).unwrap());
-        assert_eq!(
-            "Cannot compare 4.0 and 1 with <=",
-            format!("{}", Double(4.0).le(&Integer(1)).unwrap_err())
-        );
+        assert_eq!(Boolean(false), Double(3.1).le(&Integer(3)).unwrap());
+        assert_eq!(Boolean(true), Double(3.9).le(&Integer(4)).unwrap());
+        assert_eq!(Boolean(true), Double(4.0).le(&Integer(4)).unwrap());
 
         assert_eq!(Boolean(false), Integer(2).le(&Integer(1)).unwrap());
         assert_eq!(Boolean(true), Integer(2).le(&Integer(2)).unwrap());
         assert_eq!(Boolean(true), Integer(2).le(&Integer(3)).unwrap());
-        assert_eq!(
-            "Cannot compare 4 and 1.0 with <=",
-            format!("{}", Integer(4).le(&Double(1.0)).unwrap_err())
-        );
+        assert_eq!(Boolean(false), Integer(4).le(&Double(3.9)).unwrap());
+        assert_eq!(Boolean(true), Integer(4).le(&Double(4.0)).unwrap());
+        assert_eq!(Boolean(true), Integer(4).le(&Double(4.1)).unwrap());
 
         assert_eq!(Boolean(false), Text("b".to_owned()).le(&Text("a".to_owned())).unwrap());
         assert_eq!(Boolean(true), Text("a".to_owned()).le(&Text("a".to_owned())).unwrap());
@@ -588,17 +621,15 @@ mod tests {
 
         assert_eq!(Boolean(false), Double(2.1).gt(&Double(2.1)).unwrap());
         assert_eq!(Boolean(true), Double(4.1).gt(&Double(4.0)).unwrap());
-        assert_eq!(
-            "Cannot compare 4.0 and 1 with >",
-            format!("{}", Double(4.0).gt(&Integer(1)).unwrap_err())
-        );
+        assert_eq!(Boolean(false), Double(3.9).gt(&Integer(4)).unwrap());
+        assert_eq!(Boolean(false), Double(4.0).gt(&Integer(4)).unwrap());
+        assert_eq!(Boolean(true), Double(4.1).gt(&Integer(4)).unwrap());
 
         assert_eq!(Boolean(false), Integer(2).gt(&Integer(2)).unwrap());
         assert_eq!(Boolean(true), Integer(4).gt(&Integer(3)).unwrap());
-        assert_eq!(
-            "Cannot compare 4 and 1.0 with >",
-            format!("{}", Integer(4).gt(&Double(1.0)).unwrap_err())
-        );
+        assert_eq!(Boolean(false), Integer(4).gt(&Double(4.0)).unwrap());
+        assert_eq!(Boolean(false), Integer(4).gt(&Double(4.1)).unwrap());
+        assert_eq!(Boolean(true), Integer(4).gt(&Double(3.9)).unwrap());
 
         assert_eq!(Boolean(false), Text("a".to_owned()).gt(&Text("a".to_owned())).unwrap());
         assert_eq!(Boolean(true), Text("c".to_owned()).gt(&Text("a".to_owned())).unwrap());
@@ -618,18 +649,16 @@ mod tests {
         assert_eq!(Boolean(false), Double(2.0).ge(&Double(2.1)).unwrap());
         assert_eq!(Boolean(true), Double(2.1).ge(&Double(2.1)).unwrap());
         assert_eq!(Boolean(true), Double(2.2).ge(&Double(2.1)).unwrap());
-        assert_eq!(
-            "Cannot compare 4.0 and 1 with >=",
-            format!("{}", Double(4.0).ge(&Integer(1)).unwrap_err())
-        );
+        assert_eq!(Boolean(false), Double(3.9).ge(&Integer(4)).unwrap());
+        assert_eq!(Boolean(true), Double(4.0).ge(&Integer(4)).unwrap());
+        assert_eq!(Boolean(true), Double(4.1).ge(&Integer(4)).unwrap());
 
         assert_eq!(Boolean(false), Integer(1).ge(&Integer(2)).unwrap());
         assert_eq!(Boolean(true), Integer(2).ge(&Integer(2)).unwrap());
         assert_eq!(Boolean(true), Integer(4).ge(&Integer(3)).unwrap());
-        assert_eq!(
-            "Cannot compare 4 and 1.0 with >=",
-            format!("{}", Integer(4).ge(&Double(1.0)).unwrap_err())
-        );
+        assert_eq!(Boolean(false), Integer(4).ge(&Double(4.1)).unwrap());
+        assert_eq!(Boolean(true), Integer(4).ge(&Double(4.0)).unwrap());
+        assert_eq!(Boolean(true), Integer(4).ge(&Double(3.9)).unwrap());
 
         assert_eq!(Boolean(false), Text("".to_owned()).ge(&Text("b".to_owned())).unwrap());
         assert_eq!(Boolean(true), Text("a".to_owned()).ge(&Text("a".to_owned())).unwrap());
@@ -648,21 +677,15 @@ mod tests {
         );
 
         assert_eq!(Double(7.1), Double(2.1).add(&Double(5.0)).unwrap());
-        assert_eq!(
-            "Cannot add 4.0 and 5",
-            format!("{}", Double(4.0).add(&Integer(5)).unwrap_err())
-        );
+        assert_eq!(Double(9.5), Double(4.5).add(&Integer(5)).unwrap());
 
         assert_eq!(Integer(5), Integer(2).add(&Integer(3)).unwrap());
         assert_eq!(Integer(std::i32::MAX), Integer(std::i32::MAX).add(&Integer(0)).unwrap());
         assert_eq!(
-            format!("Overflow adding {} and 1", std::i32::MAX),
-            format!("{}", Integer(std::i32::MAX).add(&Integer(1)).unwrap_err())
+            Double(std::i32::MAX as f64 + 1.0),
+            Integer(std::i32::MAX).add(&Integer(1)).unwrap()
         );
-        assert_eq!(
-            "Cannot add 4 and 5.0",
-            format!("{}", Integer(4).add(&Double(5.0)).unwrap_err())
-        );
+        assert_eq!(Double(9.3), Integer(4).add(&Double(5.3)).unwrap());
 
         assert_eq!(Text("ab".to_owned()), Text("a".to_owned()).add(&Text("b".to_owned())).unwrap());
         assert_eq!(
@@ -679,21 +702,15 @@ mod tests {
         );
 
         assert_eq!(Double(-1.0), Double(2.5).sub(&Double(3.5)).unwrap());
-        assert_eq!(
-            "Cannot subtract 5 from 4.0",
-            format!("{}", Double(4.0).sub(&Integer(5)).unwrap_err())
-        );
+        assert_eq!(Double(-1.5), Double(3.5).sub(&Integer(5)).unwrap());
 
         assert_eq!(Integer(-1), Integer(2).sub(&Integer(3)).unwrap());
         assert_eq!(Integer(std::i32::MIN), Integer(std::i32::MIN).sub(&Integer(0)).unwrap());
         assert_eq!(
-            format!("Overflow subtracting 1 from {}", std::i32::MIN),
-            format!("{}", Integer(std::i32::MIN).sub(&Integer(1)).unwrap_err())
+            Double(std::i32::MIN as f64 - 1.0),
+            Integer(std::i32::MIN).sub(&Integer(1)).unwrap()
         );
-        assert_eq!(
-            "Cannot subtract 5.0 from 4",
-            format!("{}", Integer(4).sub(&Double(5.0)).unwrap_err())
-        );
+        assert_eq!(Double(-1.5), Integer(4).sub(&Double(5.5)).unwrap());
 
         assert_eq!(
             "Cannot subtract \"a\" from \"ab\"",
@@ -709,21 +726,15 @@ mod tests {
         );
 
         assert_eq!(Double(40.0), Double(4.0).mul(&Double(10.0)).unwrap());
-        assert_eq!(
-            "Cannot multiply 4.0 by 5",
-            format!("{}", Double(4.0).mul(&Integer(5)).unwrap_err())
-        );
+        assert_eq!(Double(20.5), Double(4.1).mul(&Integer(5)).unwrap());
 
         assert_eq!(Integer(6), Integer(2).mul(&Integer(3)).unwrap());
         assert_eq!(Integer(std::i32::MAX), Integer(std::i32::MAX).mul(&Integer(1)).unwrap());
         assert_eq!(
-            format!("Overflow multiplying {} by 2", std::i32::MAX),
-            format!("{}", Integer(std::i32::MAX).mul(&Integer(2)).unwrap_err())
+            Double(std::i32::MAX as f64 * 2.0),
+            Integer(std::i32::MAX).mul(&Integer(2)).unwrap()
         );
-        assert_eq!(
-            "Cannot multiply 4 by 5.0",
-            format!("{}", Integer(4).mul(&Double(5.0)).unwrap_err())
-        );
+        assert_eq!(Double(20.8), Integer(4).mul(&Double(5.2)).unwrap());
 
         assert_eq!(
             "Cannot multiply \"\" by \"a\"",
@@ -740,23 +751,17 @@ mod tests {
 
         assert_eq!(Double(4.0), Double(10.0).div(&Double(2.5)).unwrap());
         assert_eq!(Double(f64::INFINITY), Double(1.0).div(&Double(0.0)).unwrap());
-        assert_eq!(
-            "Cannot divide 4.0 by 5",
-            format!("{}", Double(4.0).div(&Integer(5)).unwrap_err())
-        );
+        assert_eq!(Double(5.1), Double(10.2).div(&Integer(2)).unwrap());
 
         assert_eq!(Integer(2), Integer(10).div(&Integer(5)).unwrap());
         assert_eq!(Integer(6), Integer(20).div(&Integer(3)).unwrap());
         assert_eq!(Integer(std::i32::MIN), Integer(std::i32::MIN).div(&Integer(1)).unwrap());
         assert_eq!("Division by zero", format!("{}", Integer(4).div(&Integer(0)).unwrap_err()));
         assert_eq!(
-            format!("Overflow dividing {} by -1", std::i32::MIN),
-            format!("{}", Integer(std::i32::MIN).div(&Integer(-1)).unwrap_err())
+            Double(std::i32::MIN as f64 / -1.0),
+            Integer(std::i32::MIN).div(&Integer(-1)).unwrap()
         );
-        assert_eq!(
-            "Cannot divide 4 by 5.0",
-            format!("{}", Integer(4).div(&Double(5.0)).unwrap_err())
-        );
+        assert_eq!(Double(4.0), Integer(10).div(&Double(2.5)).unwrap());
 
         assert_eq!(
             "Cannot divide \"\" by \"a\"",
@@ -776,22 +781,16 @@ mod tests {
             Double(d) => assert!(d.is_nan()),
             _ => panic!("Did not get a double"),
         };
-        assert_eq!(
-            "Cannot modulo 4.0 by 5",
-            format!("{}", Double(4.0).modulo(&Integer(5)).unwrap_err())
-        );
+        assert_eq!(Double(10.3 % 2.0), Double(10.3).modulo(&Integer(2)).unwrap());
 
         assert_eq!(Integer(0), Integer(10).modulo(&Integer(5)).unwrap());
         assert_eq!(Integer(2), Integer(20).modulo(&Integer(3)).unwrap());
         assert_eq!("Modulo by zero", format!("{}", Integer(4).modulo(&Integer(0)).unwrap_err()));
         assert_eq!(
-            format!("Overflow modulo {} by -1", std::i32::MIN),
-            format!("{}", Integer(std::i32::MIN).modulo(&Integer(-1)).unwrap_err())
+            Double(std::i32::MIN as f64 % -1.0),
+            Integer(std::i32::MIN).modulo(&Integer(-1)).unwrap()
         );
-        assert_eq!(
-            "Cannot modulo 4 by 5.0",
-            format!("{}", Integer(4).modulo(&Double(5.0)).unwrap_err())
-        );
+        assert_eq!(Double(10.0 % 3.0), Integer(10).modulo(&Double(3.0)).unwrap());
 
         assert_eq!(
             "Cannot modulo \"\" by \"a\"",
@@ -808,26 +807,17 @@ mod tests {
 
         assert_eq!(Double(1.0), Double(0.0).pow(&Double(0.0)).unwrap());
         assert_eq!(Double(2.0f64.powf(3.1)), Double(2.0).pow(&Double(3.1)).unwrap());
-        assert_eq!(
-            "Cannot raise 4.0 to the power of 5",
-            format!("{}", Double(4.0).pow(&Integer(5)).unwrap_err())
-        );
+        assert_eq!(Double(1024.0), Double(4.0).pow(&Integer(5)).unwrap());
 
         assert_eq!(Integer(1), Integer(0).pow(&Integer(0)).unwrap());
         assert_eq!(Integer(9), Integer(3).pow(&Integer(2)).unwrap());
         assert_eq!(Integer(std::i32::MAX), Integer(std::i32::MAX).pow(&Integer(1)).unwrap());
         assert_eq!(
-            format!("Overflow raising {} to the power of 2", std::i32::MAX),
-            format!("{}", Integer(std::i32::MAX).pow(&Integer(2)).unwrap_err())
+            Double((std::i32::MAX as f64).powf(2.0)),
+            Integer(std::i32::MAX).pow(&Integer(2)).unwrap()
         );
-        assert_eq!(
-            "Exponent -3 must be a positive integer",
-            format!("{}", Integer(1).pow(&Integer(-3)).unwrap_err())
-        );
-        assert_eq!(
-            "Cannot raise 4 to the power of 5.0",
-            format!("{}", Integer(4).pow(&Double(5.0)).unwrap_err())
-        );
+        assert_eq!(Double(1f64.powf(-3.0)), Integer(1).pow(&Integer(-3)).unwrap());
+        assert_eq!(Double(1024.0), Integer(4).pow(&Double(5.0)).unwrap());
 
         assert_eq!(
             "Cannot raise \"\" to the power of \"a\"",
@@ -844,10 +834,7 @@ mod tests {
 
         assert_eq!(Integer(-6), Integer(6).neg().unwrap());
         assert_eq!(Integer(5), Integer(-5).neg().unwrap());
-        assert_eq!(
-            format!("Overflow negating {}", std::i32::MIN),
-            format!("{}", Integer(std::i32::MIN).neg().unwrap_err())
-        );
+        assert_eq!(Double(-(std::i32::MIN as f64)), Integer(std::i32::MIN).neg().unwrap());
 
         assert_eq!("Cannot negate \"\"", format!("{}", Text("".to_owned()).neg().unwrap_err()));
     }
