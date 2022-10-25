@@ -31,6 +31,8 @@ for the time being.**
     and execution errors.  Also cleaned up Rust `Debug` impls that leaked
     into error messages for nicer errors.
 
+*   Added the `SQR` function.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
