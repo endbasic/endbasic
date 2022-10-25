@@ -43,9 +43,9 @@ not intend to be fully compatible with them.  The library currently contains:
 *   Hardware interaction: `GPIO_CLEAR`, `GPIO_READ`, `GPIO_SETUP`, `GPIO_WRITE`.
 *   File system interaction: `CD`, `DIR`, `MOUNT`, `PWD`, `UNMOUNT`.
 *   Interpreter interaction: `CLEAR`, `EXIT`, `HELP`.
-*   Numerics: `DTOI`, `ITOD`, `MIND`, `MINI`, `MAXD`, `MAXI`, `RANDOMIZE`,
-    `RND`.
-*   Program manipulation: ``DEL`, `EDIT`, `LIST`, `LOAD`,`NEW`, `RUN`, `SAVE`.
+*   Numerics: `ATN`, `COS`, `DEG`, `DTOI`, `ITOD`, `MAXD`, `MAXI`, `MIND`,
+    `MINI`, `PI`, `RAD`, `RANDOMIZE`, `RND`, `SIN`, `TAN`.
+*   Program manipulation: `DEL`, `EDIT`, `LIST`, `LOAD`,`NEW`, `RUN`, `SAVE`.
 *   Strings: `LEFT`, `LEN`, `LTRIM`, `MID`, `RIGHT`, `RTRIM`.
 
 ## Design principles
