@@ -40,6 +40,10 @@ for the time being.**
     doubles are automatically converted between them, and added the `CINT` and
     `INT` functions.
 
+*   Issue #114: Removed the `MAXD`/`MAXI` and `MIND`/`MINI` duality in favor of
+    simpler `MAX` and `MIN` functions that can mix and match integers and
+    doubles.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
