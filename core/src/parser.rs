@@ -63,6 +63,7 @@ enum ExprOp {
     Multiply,
     Divide,
     Modulo,
+    Power,
     Negate,
 
     Equal,
@@ -92,6 +93,7 @@ impl ExprOp {
             Token::Multiply => ExprOp::Multiply,
             Token::Divide => ExprOp::Divide,
             Token::Modulo => ExprOp::Modulo,
+            Token::Exponent => ExprOp::Power,
             Token::And => ExprOp::And,
             Token::Or => ExprOp::Or,
             Token::Xor => ExprOp::Xor,
@@ -105,6 +107,7 @@ impl ExprOp {
     fn priority(&self) -> i8 {
         match self {
             ExprOp::LeftParen => 5,
+            ExprOp::Power => 5,
 
             ExprOp::Negate => 4,
             ExprOp::Not => 4,
@@ -180,6 +183,7 @@ impl ExprOpSpan {
             ExprOp::Multiply => apply2(exprs, self.pos, Expr::Multiply),
             ExprOp::Divide => apply2(exprs, self.pos, Expr::Divide),
             ExprOp::Modulo => apply2(exprs, self.pos, Expr::Modulo),
+            ExprOp::Power => apply2(exprs, self.pos, Expr::Power),
             ExprOp::Equal => apply2(exprs, self.pos, Expr::Equal),
             ExprOp::NotEqual => apply2(exprs, self.pos, Expr::NotEqual),
             ExprOp::Less => apply2(exprs, self.pos, Expr::Less),
@@ -624,6 +628,7 @@ impl<'a> Parser<'a> {
                 | Token::Multiply
                 | Token::Divide
                 | Token::Modulo
+                | Token::Exponent
                 | Token::And
                 | Token::Or
                 | Token::Xor => {
@@ -1659,7 +1664,8 @@ mod tests {
         do_expr_ok_test("1 + 2", Add(span.clone()));
         do_expr_ok_test("1 - 2", Subtract(span.clone()));
         do_expr_ok_test("1 * 2", Multiply(span.clone()));
-        do_expr_ok_test("1 / 2", Divide(span));
+        do_expr_ok_test("1 / 2", Divide(span.clone()));
+        do_expr_ok_test("1 ^ 2", Power(span));
         let span = Box::from(BinaryOpSpan {
             lhs: expr_integer(1, 1, 7),
             rhs: expr_integer(2, 1, 13),
@@ -1790,6 +1796,47 @@ mod tests {
                     pos: lc(1, 41),
                 })),
                 pos: lc(1, 19),
+            })),
+        );
+        do_expr_ok_test(
+            "-1 ^ 3",
+            Negate(Box::from(UnaryOpSpan {
+                expr: Power(Box::from(BinaryOpSpan {
+                    lhs: expr_integer(1, 1, 8),
+                    rhs: expr_integer(3, 1, 12),
+                    pos: lc(1, 10),
+                })),
+                pos: lc(1, 7),
+            })),
+        );
+        do_expr_ok_test(
+            "-(1 ^ 3)",
+            Negate(Box::from(UnaryOpSpan {
+                expr: Power(Box::from(BinaryOpSpan {
+                    lhs: expr_integer(1, 1, 9),
+                    rhs: expr_integer(3, 1, 13),
+                    pos: lc(1, 11),
+                })),
+                pos: lc(1, 7),
+            })),
+        );
+        do_expr_ok_test(
+            "(-1) ^ 3",
+            Power(Box::from(BinaryOpSpan {
+                lhs: Negate(Box::from(UnaryOpSpan { expr: expr_integer(1, 1, 9), pos: lc(1, 8) })),
+                rhs: expr_integer(3, 1, 14),
+                pos: lc(1, 12),
+            })),
+        );
+        do_expr_ok_test(
+            "1 ^ (-3)",
+            Power(Box::from(BinaryOpSpan {
+                lhs: expr_integer(1, 1, 7),
+                rhs: Negate(Box::from(UnaryOpSpan {
+                    expr: expr_integer(3, 1, 13),
+                    pos: lc(1, 12),
+                })),
+                pos: lc(1, 9),
             })),
         );
     }

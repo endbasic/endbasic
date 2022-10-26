@@ -14,5 +14,5 @@
 ' under the License.
 
 PRINT "foo"
-PRINT^ "foo" ' Invalid symbol in token.
+PRINT| "foo" ' Invalid symbol in token.
 PRINT "bar"

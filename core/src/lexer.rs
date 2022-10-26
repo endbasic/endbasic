@@ -53,6 +53,7 @@ pub enum Token {
     Multiply,
     Divide,
     Modulo,
+    Exponent,
 
     Equal,
     NotEqual,
@@ -117,6 +118,7 @@ impl fmt::Display for Token {
             Token::Multiply => write!(f, "*"),
             Token::Divide => write!(f, "/"),
             Token::Modulo => write!(f, "MOD"),
+            Token::Exponent => write!(f, "^"),
 
             Token::Equal => write!(f, "="),
             Token::NotEqual => write!(f, "<>"),
@@ -171,9 +173,8 @@ trait CharOps {
 impl CharOps for char {
     fn is_separator(&self) -> bool {
         match *self {
-            '\n' | ':' | '(' | ')' | '\'' | '=' | '<' | '>' | ';' | ',' | '+' | '-' | '*' | '/' => {
-                true
-            }
+            '\n' | ':' | '(' | ')' | '\'' | '=' | '<' | '>' | ';' | ',' | '+' | '-' | '*' | '/'
+            | '^' => true,
             ch => ch.is_space(),
         }
     }
@@ -533,6 +534,7 @@ impl<'a> Lexer<'a> {
             '-' => Ok(TokenSpan::new(Token::Minus, ch_span.pos, 1)),
             '*' => Ok(TokenSpan::new(Token::Multiply, ch_span.pos, 1)),
             '/' => Ok(TokenSpan::new(Token::Divide, ch_span.pos, 1)),
+            '^' => Ok(TokenSpan::new(Token::Exponent, ch_span.pos, 1)),
 
             '=' => Ok(TokenSpan::new(Token::Equal, ch_span.pos, 1)),
             '<' | '>' => self.consume_operator(ch_span),
@@ -969,12 +971,13 @@ mod tests {
         do_operator_test("/", Token::Divide);
         do_operator_test("MOD", Token::Modulo);
         do_operator_test("mod", Token::Modulo);
+        do_operator_test("^", Token::Exponent);
     }
 
     #[test]
     fn test_operator_no_spaces() {
         do_ok_test(
-            "z=2 654<>a32 3.1<0.1",
+            "z=2 654<>a32 3.1<0.1 8^7",
             &[
                 ts(new_auto_symbol("z"), 1, 1, 1),
                 ts(Token::Equal, 1, 2, 1),
@@ -985,7 +988,10 @@ mod tests {
                 ts(Token::Double(3.1), 1, 14, 3),
                 ts(Token::Less, 1, 17, 1),
                 ts(Token::Double(0.1), 1, 18, 3),
-                ts(Token::Eof, 1, 21, 0),
+                ts(Token::Integer(8), 1, 22, 1),
+                ts(Token::Exponent, 1, 23, 1),
+                ts(Token::Integer(7), 1, 24, 1),
+                ts(Token::Eof, 1, 25, 0),
             ],
         );
     }
@@ -1106,14 +1112,16 @@ mod tests {
         );
 
         do_ok_test(
-            "+ - ! * /",
+            "+ - ! * / MOD ^",
             &[
                 ts(Token::Plus, 1, 1, 1),
                 ts(Token::Minus, 1, 3, 1),
                 ts(Token::Bad("Unknown character: !".to_owned()), 1, 5, 1),
                 ts(Token::Multiply, 1, 7, 1),
                 ts(Token::Divide, 1, 9, 1),
-                ts(Token::Eof, 1, 10, 0),
+                ts(Token::Modulo, 1, 11, 3),
+                ts(Token::Exponent, 1, 15, 1),
+                ts(Token::Eof, 1, 16, 0),
             ],
         );
 

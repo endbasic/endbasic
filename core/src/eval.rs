@@ -110,6 +110,7 @@ impl Expr {
             Expr::Multiply(span) => span.lhs.start_pos(),
             Expr::Divide(span) => span.lhs.start_pos(),
             Expr::Modulo(span) => span.lhs.start_pos(),
+            Expr::Power(span) => span.lhs.start_pos(),
             Expr::Negate(span) => span.pos,
 
             Expr::Call(span) => span.pos,
@@ -245,6 +246,10 @@ impl Expr {
             }
             Expr::Modulo(span) => {
                 Ok(Value::modulo(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
+            }
+            Expr::Power(span) => {
+                Ok(Value::pow(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
                     .map_err(|e| Error::from_value_error(e, span.pos))?)
             }
             Expr::Negate(span) => Ok(Value::neg(&span.expr.eval(syms).await?)
@@ -503,7 +508,15 @@ mod tests {
         );
         assert_eq!(
             "5:8: Cannot divide FALSE by 0",
-            format!("{}", block_on(Expr::Divide(binary_args).eval(&mut syms)).unwrap_err())
+            format!("{}", block_on(Expr::Divide(binary_args.clone()).eval(&mut syms)).unwrap_err())
+        );
+        assert_eq!(
+            "5:8: Cannot modulo FALSE by 0",
+            format!("{}", block_on(Expr::Modulo(binary_args.clone()).eval(&mut syms)).unwrap_err())
+        );
+        assert_eq!(
+            "5:8: Cannot raise FALSE to the power of 0",
+            format!("{}", block_on(Expr::Power(binary_args).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
             "2:1: Cannot negate FALSE",

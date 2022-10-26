@@ -31,7 +31,7 @@ for the time being.**
     and execution errors.  Also cleaned up Rust `Debug` impls that leaked
     into error messages for nicer errors.
 
-*   Added the `SQR` function.
+*   Added support for the exponent (`^`) operator and the `SQR` function.
 
 ## Changes in version 0.9.0
 

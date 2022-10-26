@@ -44,7 +44,7 @@ const LANG_REFERENCE: &str = r"
         DIM varname[(dim1[, ..., dimN])] [AS BOOLEAN|DOUBLE|INTEGER|STRING]
 
     Expressions:
-        a + b      a - b       a * b     a / b      a MOD b    -a
+        a + b      a - b       a * b     a / b      a MOD b    a ^ b     -a
         a AND b    NOT a       a OR b    a XOR b
         a = b      a <> b      a < b     a <= b     a > b      a >= b
         (a)        varref
