@@ -234,10 +234,8 @@ Output from HELP NUMERICAL:
     >> COS#         Computes the cosine of an angle.
     >> DEG          Sets degrees mode of calculation.
     >> INT%         Casts the given numeric expression to an integer (with truncation).
-    >> MAXD#        Returns the maximum number out of a set of doubles.
-    >> MAXI%        Returns the maximum number out of a set of integers.
-    >> MIND#        Returns the minimum number out of a set of doubles.
-    >> MINI%        Returns the minimum number out of a set of integers.
+    >> MAX#         Returns the maximum number out of a set of numbers.
+    >> MIN#         Returns the minimum number out of a set of numbers.
     >> PI#          Returns the Archimedes' constant.
     >> RAD          Sets radians mode of calculation.
     >> RANDOMIZE    Reinitializes the pseudo-random number generator.
@@ -804,29 +802,17 @@ Output from HELP LTRIM:
 
     Returns a copy of a string with leading whitespace removed.
 
-Output from HELP MIND:
+Output from HELP MAX:
 
-    MIND#(expr#[, .., expr#])
+    MAX#(expr<%|#>[, .., expr<%|#>])
 
-    Returns the minimum number out of a set of doubles.
+    Returns the maximum number out of a set of numbers.
 
-Output from HELP MINI:
+Output from HELP MIN:
 
-    MINI%(expr%[, .., expr%])
+    MIN#(expr<%|#>[, .., expr<%|#>])
 
-    Returns the minimum number out of a set of integers.
-
-Output from HELP MAXD:
-
-    MAXD#(expr#[, .., expr#])
-
-    Returns the maximum number out of a set of doubles.
-
-Output from HELP MAXI:
-
-    MAXI%(expr%[, .., expr%])
-
-    Returns the maximum number out of a set of integers.
+    Returns the minimum number out of a set of numbers.
 
 Output from HELP MID:
 

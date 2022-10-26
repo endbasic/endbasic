@@ -206,17 +206,11 @@ HELP LBOUND
 PRINT "Output from HELP LTRIM:"
 HELP LTRIM
 
-PRINT "Output from HELP MIND:"
-HELP MIND
+PRINT "Output from HELP MAX:"
+HELP MAX
 
-PRINT "Output from HELP MINI:"
-HELP MINI
-
-PRINT "Output from HELP MAXD:"
-HELP MAXD
-
-PRINT "Output from HELP MAXI:"
-HELP MAXI
+PRINT "Output from HELP MIN:"
+HELP MIN
 
 PRINT "Output from HELP MID:"
 HELP MID

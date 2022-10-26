@@ -319,108 +319,26 @@ impl Function for IntFunction {
     }
 }
 
-/// The `MIND` function.
-pub struct MindFunction {
+/// The `MAX` function.
+pub struct MaxFunction {
     metadata: CallableMetadata,
 }
 
-impl MindFunction {
+impl MaxFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("MIND", VarType::Double)
-                .with_syntax("expr#[, .., expr#]")
+            metadata: CallableMetadataBuilder::new("MAX", VarType::Double)
+                .with_syntax("expr<%|#>[, .., expr<%|#>]")
                 .with_category(CATEGORY)
-                .with_description("Returns the minimum number out of a set of doubles.")
+                .with_description("Returns the maximum number out of a set of numbers.")
                 .build(),
         })
     }
 }
 
 #[async_trait(?Send)]
-impl Function for MindFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
-    }
-
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        if span.args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
-        let args = eval_all(&span.args, symbols).await?;
-        let mut min = f64::MAX;
-        for arg in args {
-            match arg {
-                Value::Double(n) if n < min => min = n,
-                Value::Double(_) => (),
-                _ => return Err(CallError::SyntaxError),
-            }
-        }
-        Ok(Value::Double(min))
-    }
-}
-
-/// The `MINI` function.
-pub struct MiniFunction {
-    metadata: CallableMetadata,
-}
-
-impl MiniFunction {
-    /// Creates a new instance of the function.
-    pub fn new() -> Rc<Self> {
-        Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("MINI", VarType::Integer)
-                .with_syntax("expr%[, .., expr%]")
-                .with_category(CATEGORY)
-                .with_description("Returns the minimum number out of a set of integers.")
-                .build(),
-        })
-    }
-}
-
-#[async_trait(?Send)]
-impl Function for MiniFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
-    }
-
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        if span.args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
-        let args = eval_all(&span.args, symbols).await?;
-        let mut min = i32::MAX;
-        for arg in args {
-            match arg {
-                Value::Integer(n) if n < min => min = n,
-                Value::Integer(_) => (),
-                _ => return Err(CallError::SyntaxError),
-            }
-        }
-        Ok(Value::Integer(min))
-    }
-}
-
-/// The `MAXD` function.
-pub struct MaxdFunction {
-    metadata: CallableMetadata,
-}
-
-impl MaxdFunction {
-    /// Creates a new instance of the function.
-    pub fn new() -> Rc<Self> {
-        Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("MAXD", VarType::Double)
-                .with_syntax("expr#[, .., expr#]")
-                .with_category(CATEGORY)
-                .with_description("Returns the maximum number out of a set of doubles.")
-                .build(),
-        })
-    }
-}
-
-#[async_trait(?Send)]
-impl Function for MaxdFunction {
+impl Function for MaxFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -431,37 +349,38 @@ impl Function for MaxdFunction {
         }
         let args = eval_all(&span.args, symbols).await?;
         let mut max = f64::MIN;
-        for arg in args {
-            match arg {
-                Value::Double(n) if n > max => max = n,
-                Value::Double(_) => (),
-                _ => return Err(CallError::SyntaxError),
+        for (arg, value) in span.args.iter().zip(args) {
+            let n = value
+                .as_f64()
+                .map_err(|e| CallError::ArgumentError(arg.start_pos(), format!("{}", e)))?;
+            if n > max {
+                max = n;
             }
         }
         Ok(Value::Double(max))
     }
 }
 
-/// The `MAXI` function.
-pub struct MaxiFunction {
+/// The `MIN` function.
+pub struct MinFunction {
     metadata: CallableMetadata,
 }
 
-impl MaxiFunction {
+impl MinFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("MAXI", VarType::Integer)
-                .with_syntax("expr%[, .., expr%]")
+            metadata: CallableMetadataBuilder::new("MIN", VarType::Double)
+                .with_syntax("expr<%|#>[, .., expr<%|#>]")
                 .with_category(CATEGORY)
-                .with_description("Returns the maximum number out of a set of integers.")
+                .with_description("Returns the minimum number out of a set of numbers.")
                 .build(),
         })
     }
 }
 
 #[async_trait(?Send)]
-impl Function for MaxiFunction {
+impl Function for MinFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -471,15 +390,16 @@ impl Function for MaxiFunction {
             return Err(CallError::SyntaxError);
         }
         let args = eval_all(&span.args, symbols).await?;
-        let mut max = i32::MIN;
-        for arg in args {
-            match arg {
-                Value::Integer(n) if n > max => max = n,
-                Value::Integer(_) => (),
-                _ => return Err(CallError::SyntaxError),
+        let mut min = f64::MAX;
+        for (arg, value) in span.args.iter().zip(args) {
+            let n = value
+                .as_f64()
+                .map_err(|e| CallError::ArgumentError(arg.start_pos(), format!("{}", e)))?;
+            if n < min {
+                min = n;
             }
         }
-        Ok(Value::Integer(max))
+        Ok(Value::Double(min))
     }
 }
 
@@ -782,10 +702,8 @@ pub fn add_all(machine: &mut Machine) {
     machine.add_function(CintFunction::new());
     machine.add_function(CosFunction::new(angle_mode.clone()));
     machine.add_function(IntFunction::new());
-    machine.add_function(MindFunction::new());
-    machine.add_function(MiniFunction::new());
-    machine.add_function(MaxdFunction::new());
-    machine.add_function(MaxiFunction::new());
+    machine.add_function(MaxFunction::new());
+    machine.add_function(MinFunction::new());
     machine.add_function(PiFunction::new());
     machine.add_command(RadCommand::new(angle_mode.clone()));
     machine.add_function(RndFunction::new(prng));
@@ -875,55 +793,47 @@ mod tests {
     }
 
     #[test]
-    fn test_mind() {
-        check_expr_ok(0.0, "MIND(0.0)");
-        check_expr_ok(0.0, "MIND(0.0, 0.0)");
+    fn test_max() {
+        check_expr_ok(0.0, "MAX(0)");
+        check_expr_ok(0.0, "MAX(0, 0)");
 
-        check_expr_ok(1.0, "MIND(1.0)");
-        check_expr_ok(3.5, "MIND(5.3, 3.5, 4.2)");
-        check_expr_ok(-5.3, "MIND(-5.3, -3.5, -4.2)");
+        check_expr_ok(0.0, "MAX(0.0)");
+        check_expr_ok(0.0, "MAX(0.0, 0.0)");
 
-        check_expr_error("1:10: In call to MIND: expected expr#[, .., expr#]", "MIND()");
-        check_expr_error("1:10: In call to MIND: expected expr#[, .., expr#]", "MIND(3)");
+        check_expr_ok(1.0, "MAX(1)");
+        check_expr_ok(5.0, "MAX(5, 3, 4)");
+        check_expr_ok(-3.0, "MAX(-5, -3, -4)");
+
+        check_expr_ok(1.0, "MAX(1.0)");
+        check_expr_ok(5.3, "MAX(5.3, 3.5, 4.2)");
+        check_expr_ok(-3.5, "MAX(-5.3, -3.5, -4.2)");
+
+        check_expr_ok(2.5, "MAX(1, 0.5, 2.5, 2)");
+
+        check_expr_error("1:10: In call to MAX: expected expr<%|#>[, .., expr<%|#>]", "MAX()");
+        check_expr_error("1:10: In call to MAX: 1:14: FALSE is not a number", "MAX(FALSE)");
     }
 
     #[test]
-    fn test_mini() {
-        check_expr_ok(0, "MINI(0)");
-        check_expr_ok(0, "MINI(0, 0)");
+    fn test_min() {
+        check_expr_ok(0.0, "MIN(0)");
+        check_expr_ok(0.0, "MIN(0, 0)");
 
-        check_expr_ok(1, "MINI(1)");
-        check_expr_ok(3, "MINI(5, 3, 4)");
-        check_expr_ok(-5, "MINI(-5, -3, -4)");
+        check_expr_ok(0.0, "MIN(0.0)");
+        check_expr_ok(0.0, "MIN(0.0, 0.0)");
 
-        check_expr_error("1:10: In call to MINI: expected expr%[, .., expr%]", "MINI()");
-        check_expr_error("1:10: In call to MINI: expected expr%[, .., expr%]", "MINI(3.0)");
-    }
+        check_expr_ok(1.0, "MIN(1)");
+        check_expr_ok(3.0, "MIN(5, 3, 4)");
+        check_expr_ok(-5.0, "MIN(-5, -3, -4)");
 
-    #[test]
-    fn test_maxd() {
-        check_expr_ok(0.0, "MAXD(0.0)");
-        check_expr_ok(0.0, "MAXD(0.0, 0.0)");
+        check_expr_ok(1.0, "MIN(1.0)");
+        check_expr_ok(3.5, "MIN(5.3, 3.5, 4.2)");
+        check_expr_ok(-5.3, "MIN(-5.3, -3.5, -4.2)");
 
-        check_expr_ok(1.0, "MAXD(1.0)");
-        check_expr_ok(5.3, "MAXD(5.3, 3.5, 4.2)");
-        check_expr_ok(-3.5, "MAXD(-5.3, -3.5, -4.2)");
+        check_expr_ok(0.5, "MIN(1, 0.5, 2.5, 2)");
 
-        check_expr_error("1:10: In call to MAXD: expected expr#[, .., expr#]", "MAXD()");
-        check_expr_error("1:10: In call to MAXD: expected expr#[, .., expr#]", "MAXD(3)");
-    }
-
-    #[test]
-    fn test_maxi() {
-        check_expr_ok(0, "MAXI(0)");
-        check_expr_ok(0, "MAXI(0, 0)");
-
-        check_expr_ok(1, "MAXI(1)");
-        check_expr_ok(5, "MAXI(5, 3, 4)");
-        check_expr_ok(-3, "MAXI(-5, -3, -4)");
-
-        check_expr_error("1:10: In call to MAXI: expected expr%[, .., expr%]", "MAXI()");
-        check_expr_error("1:10: In call to MAXI: expected expr%[, .., expr%]", "MAXI(3.0)");
+        check_expr_error("1:10: In call to MIN: expected expr<%|#>[, .., expr<%|#>]", "MIN()");
+        check_expr_error("1:10: In call to MIN: 1:14: FALSE is not a number", "MIN(FALSE)");
     }
 
     #[test]
