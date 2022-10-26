@@ -129,6 +129,8 @@ pub enum Expr {
     Divide(Box<BinaryOpSpan>),
     /// Arithmetic modulo operation of two expressions.
     Modulo(Box<BinaryOpSpan>),
+    /// Arithmetic power operation of two expressions.
+    Power(Box<BinaryOpSpan>),
     /// Arithmetic sign flip of an expression.
     Negate(Box<UnaryOpSpan>),
 

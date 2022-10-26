@@ -16,6 +16,7 @@
 //! Operations on EndBASIC values.
 
 use crate::ast::*;
+use std::convert::TryFrom;
 
 /// Evaluation errors.
 #[derive(Debug, thiserror::Error)]
@@ -236,6 +237,31 @@ impl Value {
                 }
             }
             (_, _) => Err(Error::new(format!("Cannot modulo {} by {}", self, other))),
+        }
+    }
+
+    /// Performs a power operation.
+    pub fn pow(&self, other: &Self) -> Result<Self> {
+        match (self, other) {
+            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs.powf(*rhs))),
+            (Value::Integer(lhs), Value::Integer(rhs)) => {
+                let exp = match u32::try_from(*rhs) {
+                    Ok(exp) => exp,
+                    Err(_) => {
+                        return Err(Error::new(format!(
+                            "Exponent {} must be a positive integer",
+                            rhs
+                        )))
+                    }
+                };
+                match lhs.checked_pow(exp) {
+                    Some(i) => Ok(Value::Integer(i)),
+                    None => {
+                        Err(Error::new(format!("Overflow raising {} to the power of {}", lhs, rhs)))
+                    }
+                }
+            }
+            (_, _) => Err(Error::new(format!("Cannot raise {} to the power of {}", self, other))),
         }
     }
 
@@ -770,6 +796,42 @@ mod tests {
         assert_eq!(
             "Cannot modulo \"\" by \"a\"",
             format!("{}", Text("".to_owned()).modulo(&Text("a".to_owned())).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_value_power() {
+        assert_eq!(
+            "Cannot raise FALSE to the power of TRUE",
+            format!("{}", Boolean(false).pow(&Boolean(true)).unwrap_err())
+        );
+
+        assert_eq!(Double(1.0), Double(0.0).pow(&Double(0.0)).unwrap());
+        assert_eq!(Double(2.0f64.powf(3.1)), Double(2.0).pow(&Double(3.1)).unwrap());
+        assert_eq!(
+            "Cannot raise 4.0 to the power of 5",
+            format!("{}", Double(4.0).pow(&Integer(5)).unwrap_err())
+        );
+
+        assert_eq!(Integer(1), Integer(0).pow(&Integer(0)).unwrap());
+        assert_eq!(Integer(9), Integer(3).pow(&Integer(2)).unwrap());
+        assert_eq!(Integer(std::i32::MAX), Integer(std::i32::MAX).pow(&Integer(1)).unwrap());
+        assert_eq!(
+            format!("Overflow raising {} to the power of 2", std::i32::MAX),
+            format!("{}", Integer(std::i32::MAX).pow(&Integer(2)).unwrap_err())
+        );
+        assert_eq!(
+            "Exponent -3 must be a positive integer",
+            format!("{}", Integer(1).pow(&Integer(-3)).unwrap_err())
+        );
+        assert_eq!(
+            "Cannot raise 4 to the power of 5.0",
+            format!("{}", Integer(4).pow(&Double(5.0)).unwrap_err())
+        );
+
+        assert_eq!(
+            "Cannot raise \"\" to the power of \"a\"",
+            format!("{}", Text("".to_owned()).pow(&Text("a".to_owned())).unwrap_err())
         );
     }
 
