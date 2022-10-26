@@ -655,6 +655,13 @@ mod tests {
     }
 
     #[test]
+    fn test_array_assignment_ok_casting() {
+        do_ok_test("DIM a(1)\na(0) = 3.6\nOUT a(0)", &[], &["4"]);
+        do_ok_test("DIM a(1) AS INTEGER\na(0) = 3.6\nOUT a(0)", &[], &["4"]);
+        do_ok_test("DIM a(1) AS DOUBLE\na(0) = 3\nOUT a(0)", &[], &["3"]);
+    }
+
+    #[test]
     fn test_array_assignment_ok_case_insensitive() {
         do_ok_test("DIM a(3)\nA(1) = 5\na(2) = 1\nOUT A(0); a(1); A(2)", &[], &["0 5 1"]);
     }
@@ -677,6 +684,9 @@ mod tests {
         do_ok_test("a = TRUE\nOUT a; a?", &[], &["TRUE TRUE"]);
         do_ok_test("a? = FALSE\nOUT a; a?", &[], &["FALSE FALSE"]);
 
+        do_ok_test("a = 3.5\nOUT a; a#", &[], &["3.5 3.5"]);
+        do_ok_test("a# = 3.5\nOUT a; a#", &[], &["3.5 3.5"]);
+
         do_ok_test("a = 3\nOUT a; a%", &[], &["3 3"]);
         do_ok_test("a% = 3\nOUT a; a%", &[], &["3 3"]);
 
@@ -684,6 +694,21 @@ mod tests {
         do_ok_test("a$ = \"some text\"\nOUT a; a$", &[], &["some text some text"]);
 
         do_ok_test("a = 1\na = a + 1\nOUT a", &[], &["2"]);
+    }
+
+    #[test]
+    fn test_assignment_ok_casting() {
+        do_ok_test("a = 5.2\nOUT a; a#", &[], &["5.2 5.2"]);
+        do_ok_test("a% = 5.2\nOUT a; a%", &[], &["5 5"]);
+
+        do_ok_test("a = 3 + 5.2\nOUT a; a#", &[], &["8.2 8.2"]);
+        do_ok_test("a = 3.7 + 5.2\nOUT a; a#", &[], &["8.9 8.9"]);
+
+        do_ok_test("a% = 3 + 5.2\nOUT a; a%", &[], &["8 8"]);
+        do_ok_test("a% = 3.7 + 5.2\nOUT a; a%", &[], &["9 9"]);
+
+        do_ok_test("a# = 3\nOUT a; a#", &[], &["3 3"]);
+        do_ok_test("a# = 2.8 + 3\nOUT a; a#", &[], &["5.8 5.8"]);
     }
 
     #[test]
@@ -695,8 +720,14 @@ mod tests {
     fn test_assignment_errors() {
         do_simple_error_test("a =\n", "1:4: Missing expression in assignment");
         do_simple_error_test("a = b\n", "1:5: Undefined variable b");
-        do_simple_error_test("a = 3\na = TRUE\n", "2:1: Incompatible types in a assignment");
-        do_simple_error_test("a? = 3", "1:1: Incompatible types in a? assignment");
+        do_simple_error_test(
+            "a = 3\na = TRUE\n",
+            "2:1: Cannot assign value of type BOOLEAN to variable of type INTEGER",
+        );
+        do_simple_error_test(
+            "a? = 3",
+            "1:1: Cannot assign value of type INTEGER to variable of type BOOLEAN",
+        );
     }
 
     #[test]

@@ -154,6 +154,7 @@ impl Array {
 
     /// Assings the `value` to the array position indicated by the `subscripts`.
     pub fn assign(&mut self, subscripts: &[i32], value: Value) -> Result<()> {
+        let value = value.maybe_cast(self.subtype)?;
         if value.as_vartype() != self.subtype {
             return Err(Error::new(format!(
                 "Cannot assign value of type {} to array of type {}",
@@ -382,10 +383,16 @@ impl Symbols {
     /// If the variable is already defined, then the type of the new value must be compatible with
     /// the existing variable.  In other words: a variable cannot change types while it's alive.
     pub fn set_var(&mut self, vref: &VarRef, value: Value) -> Result<()> {
+        let value = value.maybe_cast(vref.ref_type())?;
         match self.get_mut(vref)? {
             Some(Symbol::Variable(old_value)) => {
+                let value = value.maybe_cast(old_value.as_vartype())?;
                 if mem::discriminant(&value) != mem::discriminant(old_value) {
-                    return Err(Error::new(format!("Incompatible types in {} assignment", vref)));
+                    return Err(Error::new(format!(
+                        "Cannot assign value of type {} to variable of type {}",
+                        value.as_vartype(),
+                        old_value.as_vartype(),
+                    )));
                 }
                 *old_value = value;
                 Ok(())
@@ -393,7 +400,11 @@ impl Symbols {
             Some(_) => Err(Error::new(format!("Cannot redefine {} as a variable", vref))),
             None => {
                 if !vref.accepts(value.as_vartype()) {
-                    return Err(Error::new(format!("Incompatible types in {} assignment", vref)));
+                    return Err(Error::new(format!(
+                        "Cannot assign value of type {} to variable of type {}",
+                        value.as_vartype(),
+                        vref.ref_type(),
+                    )));
                 }
                 self.by_name.insert(vref.name().to_ascii_uppercase(), Symbol::Variable(value));
                 Ok(())
@@ -733,6 +744,24 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_array_integer_to_double() {
+        let mut array = Array::new(VarType::Double, vec![1]);
+        array.assign(&[0], Value::Integer(3)).unwrap();
+        assert_eq!(&Value::Double(3.0), array.index(&[0]).unwrap());
+    }
+
+    #[test]
+    fn test_array_double_to_integer() {
+        let mut array = Array::new(VarType::Integer, vec![3]);
+        array.assign(&[0], Value::Double(5.4)).unwrap();
+        array.assign(&[1], Value::Double(5.5)).unwrap();
+        array.assign(&[2], Value::Double(5.6)).unwrap();
+        assert_eq!(&Value::Integer(5), array.index(&[0]).unwrap());
+        assert_eq!(&Value::Integer(6), array.index(&[1]).unwrap());
+        assert_eq!(&Value::Integer(6), array.index(&[2]).unwrap());
     }
 
     #[test]
@@ -1083,46 +1112,114 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_symbols_set_var_new_check_types() {
-        for ref_type in &[VarType::Auto, VarType::Text] {
-            let mut syms = Symbols::default();
-            syms.set_var(&VarRef::new("v", *ref_type), Value::Text("a".to_owned())).unwrap();
-            match syms.get(&VarRef::new("v", VarType::Auto)).unwrap().unwrap() {
-                Symbol::Variable(value) => assert_eq!(&Value::Text("a".to_owned()), value),
-                _ => panic!("Got something that is not the variable we asked for"),
-            }
+    /// Checks that the variable `name` in `syms` has the value in `exp_value`.
+    fn check_var(syms: &Symbols, name: &str, exp_value: Value) {
+        match syms.get(&VarRef::new(name, VarType::Auto)).unwrap().unwrap() {
+            Symbol::Variable(value) => assert_eq!(exp_value, *value),
+            _ => panic!("Got something that is not the variable we asked for"),
         }
+    }
 
+    #[test]
+    fn test_symbols_set_var_new_check_types_ok() {
+        for value in [
+            Value::Boolean(true),
+            Value::Double(3.4),
+            Value::Integer(5),
+            Value::Text("a".to_owned()),
+        ] {
+            let mut syms = Symbols::default();
+            syms.set_var(&VarRef::new("a", VarType::Auto), value.clone()).unwrap();
+            check_var(&syms, "a", value.clone());
+            syms.set_var(&VarRef::new("v", value.as_vartype()), value.clone()).unwrap();
+            check_var(&syms, "v", value);
+        }
+    }
+
+    #[test]
+    fn test_symbols_set_var_new_check_types_incompatible() {
         let mut syms = Symbols::default();
         assert_eq!(
-            "Incompatible types in v% assignment",
+            "Cannot assign value of type BOOLEAN to variable of type INTEGER",
             format!(
                 "{}",
-                syms.set_var(&VarRef::new("v", VarType::Integer), Value::Double(3.0)).unwrap_err()
+                syms.set_var(&VarRef::new("v", VarType::Integer), Value::Boolean(false))
+                    .unwrap_err()
             )
         );
     }
 
     #[test]
-    fn test_symbols_set_var_existing_check_types() {
-        for ref_type in &[VarType::Auto, VarType::Integer] {
-            let mut syms = SymbolsBuilder::default().add_var("V", Value::Integer(10)).build();
-            syms.set_var(&VarRef::new("v", *ref_type), Value::Integer(3)).unwrap();
-            match syms.get(&VarRef::new("v", VarType::Auto)).unwrap().unwrap() {
-                Symbol::Variable(value) => assert_eq!(&Value::Integer(3), value),
-                _ => panic!("Got something that is not the variable we asked for"),
-            }
-        }
+    fn test_symbols_set_var_new_integer_to_double() {
+        let mut syms = Symbols::default();
+        syms.set_var(&VarRef::new("v", VarType::Double), Value::Integer(3)).unwrap();
+        check_var(&syms, "v", Value::Double(3.0));
+    }
 
-        let mut syms = SymbolsBuilder::default().add_var("V", Value::Integer(10)).build();
+    #[test]
+    fn test_symbols_set_var_new_double_to_integer() {
+        for (expected, actual) in [(4, 4.4), (5, 4.5), (5, 4.6)] {
+            let mut syms = Symbols::default();
+            syms.set_var(&VarRef::new("v", VarType::Integer), Value::Double(actual)).unwrap();
+            check_var(&syms, "v", Value::Integer(expected));
+        }
+    }
+
+    #[test]
+    fn test_symbols_set_var_existing_check_types_ok() {
+        for value in [
+            Value::Boolean(true),
+            Value::Double(3.4),
+            Value::Integer(5),
+            Value::Text("a".to_owned()),
+        ] {
+            let mut syms = SymbolsBuilder::default()
+                .add_var("A", value.clone())
+                .add_var("V", value.clone())
+                .build();
+            syms.set_var(&VarRef::new("a", VarType::Auto), value.clone()).unwrap();
+            check_var(&syms, "a", value.clone());
+            syms.set_var(&VarRef::new("v", value.as_vartype()), value.clone()).unwrap();
+            check_var(&syms, "v", value);
+        }
+    }
+
+    #[test]
+    fn test_symbols_set_var_existing_check_types_incompatible() {
+        let mut syms = SymbolsBuilder::default().add_var("V", Value::Double(10.0)).build();
         assert_eq!(
-            "Incompatible types in v assignment",
+            "Cannot assign value of type BOOLEAN to variable of type DOUBLE",
             format!(
                 "{}",
-                syms.set_var(&VarRef::new("v", VarType::Auto), Value::Double(3.0)).unwrap_err()
+                syms.set_var(&VarRef::new("v", VarType::Auto), Value::Boolean(true)).unwrap_err()
             )
         );
+    }
+
+    #[test]
+    fn test_symbols_set_existing_integer_to_double() {
+        let mut syms = SymbolsBuilder::default()
+            .add_var("A", Value::Double(1.0))
+            .add_var("V", Value::Double(1.0))
+            .build();
+        syms.set_var(&VarRef::new("a", VarType::Auto), Value::Integer(3)).unwrap();
+        syms.set_var(&VarRef::new("v", VarType::Double), Value::Integer(3)).unwrap();
+        check_var(&syms, "a", Value::Double(3.0));
+        check_var(&syms, "v", Value::Double(3.0));
+    }
+
+    #[test]
+    fn test_symbols_set_existing_double_to_integer() {
+        for (expected, actual) in [(4, 4.4), (5, 4.5), (5, 4.6)] {
+            let mut syms = SymbolsBuilder::default()
+                .add_var("A", Value::Integer(1))
+                .add_var("V", Value::Integer(1))
+                .build();
+            syms.set_var(&VarRef::new("a", VarType::Auto), Value::Double(actual)).unwrap();
+            syms.set_var(&VarRef::new("v", VarType::Integer), Value::Double(actual)).unwrap();
+            check_var(&syms, "a", Value::Integer(expected));
+            check_var(&syms, "v", Value::Integer(expected));
+        }
     }
 
     #[test]
