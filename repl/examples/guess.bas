@@ -36,7 +36,7 @@ losses% = 0
 again? = TRUE
 WHILE again?
     PRINT
-    secret% = DTOI%(RND#(1) * ITOD#(max_num%))
+    secret% = INT%(RND#(1) * max_num%)
     PRINT "Alright! I have a secret number between 0 and"; max_num%
 
     attempts% = max_attempts%
