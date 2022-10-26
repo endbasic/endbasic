@@ -33,6 +33,9 @@ for the time being.**
 
 *   Added support for the exponent (`^`) operator and the `SQR` function.
 
+*   Issue #114: Added transparent promotion from integers to doubles, and
+    truncation (via rounding) from doubles to integers.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**

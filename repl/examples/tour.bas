@@ -62,7 +62,10 @@ PRINT "* Strings ($): Literals are double-quoted."
 PRINT
 PRINT "Type annotations are optional when the type can be deduced.  The only time"
 PRINT "when they are required is when defining new variables via INPUT."
-PRINT "There are no type promotions (not even between integers and doubles)."
+PRINT
+PRINT "Integer values are automatically promoted to doubles when they appear in a"
+PRINT "double expression, and doubles are rounded when assigned to an integer"
+PRINT "variable."
 PRINT
 PRINT "A trivial program to ask a question and print an answer would look like:"
 PRINT
