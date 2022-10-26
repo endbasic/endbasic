@@ -16,7 +16,7 @@
 ' A sample program to test the scripting interpreter.
 
 RANDOMIZE 10
-PRINT "The random number is:"; DTOI(RND() * 100.0)
+PRINT "The random number is:"; INT(RND() * 100.0)
 
 ' Call a command that is for interactive purposes only and expect an error.
 HELP RANDOMIZE

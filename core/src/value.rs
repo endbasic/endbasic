@@ -105,7 +105,7 @@ impl Value {
     ///
     /// Can return an error when the conversion is feasible but it is not possible, such as trying
     /// to cast a NaN to an integer.
-    pub(crate) fn maybe_cast(self, target: VarType) -> Result<Value> {
+    pub fn maybe_cast(self, target: VarType) -> Result<Value> {
         match (target, self) {
             (VarType::Integer, d @ Value::Double(_)) => Ok(Value::Integer(d.as_i32()?)),
             (VarType::Double, i @ Value::Integer(_)) => Ok(Value::Double(i.as_f64()?)),

@@ -151,6 +151,51 @@ impl Function for AtnFunction {
     }
 }
 
+/// The `CINT` function.
+pub struct CintFunction {
+    metadata: CallableMetadata,
+}
+
+impl CintFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("CINT", VarType::Integer)
+                .with_syntax("expr<%|#>")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Casts the given numeric expression to an integer (with rounding).
+When casting a double value to an integer, the double value is first rounded to the closest \
+integer.  For example, 4.4 becomes 4, but both 4.5 and 4.6 become 5.",
+                )
+                .build(),
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for CintFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        if span.args.len() != 1 {
+            return Err(CallError::SyntaxError);
+        }
+        let mut args = eval_all(&span.args, symbols).await?;
+        let value =
+            args.pop().unwrap().maybe_cast(VarType::Integer).map_err(|e| {
+                CallError::ArgumentError(span.args[0].start_pos(), format!("{}", e))
+            })?;
+        debug_assert!(args.is_empty());
+        match value {
+            Value::Double(_) | Value::Integer(_) => Ok(value),
+            _ => Err(CallError::SyntaxError),
+        }
+    }
+}
+
 /// The `COS` function.
 pub struct CosFunction {
     metadata: CallableMetadata,
@@ -226,22 +271,22 @@ impl Command for DegCommand {
     }
 }
 
-/// The `DTOI` function.
-pub struct DtoiFunction {
+/// The `INT` function.
+pub struct IntFunction {
     metadata: CallableMetadata,
 }
 
-impl DtoiFunction {
+impl IntFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("DTOI", VarType::Integer)
-                .with_syntax("expr#")
+            metadata: CallableMetadataBuilder::new("INT", VarType::Integer)
+                .with_syntax("expr<%|#>")
                 .with_category(CATEGORY)
                 .with_description(
-                    "Rounds the given double to the closest integer.
-If the value is too small or too big to fit in the integer's range, returns the smallest or \
-biggest possible integer that fits, respectively.",
+                    "Casts the given numeric expression to an integer (with truncation).
+When casting a double value to an integer, the double value is first truncated to the smallest
+integer that is not larger than the double value.  For example, all of 4.4, 4.5 and 4.6 become 4.",
                 )
                 .build(),
         })
@@ -249,48 +294,26 @@ biggest possible integer that fits, respectively.",
 }
 
 #[async_trait(?Send)]
-impl Function for DtoiFunction {
+impl Function for IntFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
     async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        match args.as_slice() {
-            [Value::Double(n)] => Ok(Value::Integer(*n as i32)),
-            _ => Err(CallError::SyntaxError),
+        if span.args.len() != 1 {
+            return Err(CallError::SyntaxError);
         }
-    }
-}
-
-/// The `ITOD` function.
-pub struct ItodFunction {
-    metadata: CallableMetadata,
-}
-
-impl ItodFunction {
-    /// Creates a new instance of the function.
-    pub fn new() -> Rc<Self> {
-        Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("ITOD", VarType::Double)
-                .with_syntax("expr%")
-                .with_category(CATEGORY)
-                .with_description("Converts the given integer to a double.")
-                .build(),
-        })
-    }
-}
-
-#[async_trait(?Send)]
-impl Function for ItodFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
-    }
-
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        match args.as_slice() {
-            [Value::Integer(n)] => Ok(Value::Double(*n as f64)),
+        let mut args = eval_all(&span.args, symbols).await?;
+        let value = match args.pop().unwrap() {
+            Value::Double(d) => Value::Double(d.floor()),
+            v => v,
+        };
+        debug_assert!(args.is_empty());
+        let value = value
+            .maybe_cast(VarType::Integer)
+            .map_err(|e| CallError::ArgumentError(span.args[0].start_pos(), format!("{}", e)))?;
+        match value {
+            Value::Double(_) | Value::Integer(_) => Ok(value),
             _ => Err(CallError::SyntaxError),
         }
     }
@@ -603,7 +626,7 @@ impl RndFunction {
 If n% is zero, returns the previously generated random number.  If n% is positive, returns a new \
 random number.
 If you need to generate an integer random number within a specific range, say [0..100], compute it \
-with an expression like DTOI%(RND#(1) * 100.0).
+with an expression like CINT%(RND#(1) * 100.0).
 WARNING: These random numbers offer no cryptographic guarantees.",
                 )
                 .build(),
@@ -756,9 +779,9 @@ pub fn add_all(machine: &mut Machine) {
     machine.add_command(RandomizeCommand::new(prng.clone()));
     machine.add_command(DegCommand::new(angle_mode.clone()));
     machine.add_function(AtnFunction::new(angle_mode.clone()));
+    machine.add_function(CintFunction::new());
     machine.add_function(CosFunction::new(angle_mode.clone()));
-    machine.add_function(DtoiFunction::new());
-    machine.add_function(ItodFunction::new());
+    machine.add_function(IntFunction::new());
     machine.add_function(MindFunction::new());
     machine.add_function(MiniFunction::new());
     machine.add_function(MaxdFunction::new());
@@ -783,6 +806,23 @@ mod tests {
         check_expr_error("1:10: In call to ATN: expected n%|n#", "ATN()");
         check_expr_error("1:10: In call to ATN: expected n%|n#", "ATN(FALSE)");
         check_expr_error("1:10: In call to ATN: expected n%|n#", "ATN(3, 4)");
+    }
+
+    #[test]
+    fn test_cint() {
+        check_expr_ok(0, "CINT(0.1)");
+        check_expr_ok(0, "CINT(-0.1)");
+        check_expr_ok(1, "CINT(0.9)");
+        check_expr_ok(-1, "CINT(-0.9)");
+
+        check_expr_error("1:10: In call to CINT: expected expr<%|#>", "CINT()");
+        check_expr_error("1:10: In call to CINT: expected expr<%|#>", "CINT(FALSE)");
+        check_expr_error("1:10: In call to CINT: expected expr<%|#>", "CINT(3.0, 4)");
+
+        check_expr_error(
+            "1:10: In call to CINT: 1:15: Cannot cast -1234567890123456 to integer due to overflow",
+            "CINT(-1234567890123456.0)",
+        );
     }
 
     #[test]
@@ -818,39 +858,20 @@ mod tests {
     }
 
     #[test]
-    fn test_dtoi() {
-        check_expr_ok(0, "DTOI( 0.1)");
-        check_expr_ok(0, "DTOI(-0.1)");
-        check_expr_ok(0, "DTOI( 0.9)");
-        check_expr_ok(0, "DTOI(-0.9)");
+    fn test_int() {
+        check_expr_ok(0, "INT(0.1)");
+        check_expr_ok(-1, "INT(-0.1)");
+        check_expr_ok(0, "INT(0.9)");
+        check_expr_ok(-1, "INT(-0.9)");
 
-        check_expr_ok(100, "DTOI( 100.1)");
-        check_expr_ok(-100, "DTOI(-100.1)");
-        check_expr_ok(100, "DTOI( 100.9)");
-        check_expr_ok(-100, "DTOI(-100.9)");
+        check_expr_error("1:10: In call to INT: expected expr<%|#>", "INT()");
+        check_expr_error("1:10: In call to INT: expected expr<%|#>", "INT(FALSE)");
+        check_expr_error("1:10: In call to INT: expected expr<%|#>", "INT(3.0, 4)");
 
-        check_expr_ok(std::i32::MAX, "DTOI(12345678901234567890.0)");
-        check_expr_ok(std::i32::MIN, "DTOI(-12345678901234567890.0)");
-
-        check_expr_error("1:10: In call to DTOI: expected expr#", "DTOI()");
-        check_expr_error("1:10: In call to DTOI: expected expr#", "DTOI(3)");
-        check_expr_error("1:10: In call to DTOI: expected expr#", "DTOI(3.0, 4)");
-    }
-
-    #[test]
-    fn test_itod() {
-        check_expr_ok(0.0, "ITOD(0)");
-        check_expr_ok(10.0, "ITOD(10)");
-        check_expr_ok(-10.0, "ITOD(-10)");
-
-        check_expr_ok(std::i32::MAX as f64, &format!("ITOD({})", std::i32::MAX));
-        // TODO(jmmv): Due to limitations in the lexer/parser, we cannot represent the minimum
-        // value of an i32 in the code as a literal.
-        check_expr_ok(std::i32::MIN as f64, &format!("ITOD({} - 1)", std::i32::MIN + 1));
-
-        check_expr_error("1:10: In call to ITOD: expected expr%", "ITOD()");
-        check_expr_error("1:10: In call to ITOD: expected expr%", "ITOD(3.0)");
-        check_expr_error("1:10: In call to ITOD: expected expr%", "ITOD(3, 4)");
+        check_expr_error(
+            "1:10: In call to INT: 1:14: Cannot cast -1234567890123456 to integer due to overflow",
+            "INT(-1234567890123456.0)",
+        );
     }
 
     #[test]

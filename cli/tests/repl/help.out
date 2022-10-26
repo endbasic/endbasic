@@ -230,10 +230,10 @@ Output from HELP NUMERICAL:
     Numerical functions
 
     >> ATN#         Computes the arc-tangent of a number.
+    >> CINT%        Casts the given numeric expression to an integer (with rounding).
     >> COS#         Computes the cosine of an angle.
     >> DEG          Sets degrees mode of calculation.
-    >> DTOI%        Rounds the given double to the closest integer.
-    >> ITOD#        Converts the given integer to a double.
+    >> INT%         Casts the given numeric expression to an integer (with truncation).
     >> MAXD#        Returns the maximum number out of a set of doubles.
     >> MAXI%        Returns the maximum number out of a set of integers.
     >> MIND#        Returns the minimum number out of a set of doubles.
@@ -704,6 +704,16 @@ Output from HELP ATN:
     The resulting angle is measured in degrees or radians depending on the
     angle mode as selected by the DEG and RAD commands.
 
+Output from HELP CINT:
+
+    CINT%(expr<%|#>)
+
+    Casts the given numeric expression to an integer (with rounding).
+
+    When casting a double value to an integer, the double value is first
+    rounded to the closest integer.  For example, 4.4 becomes 4, but both
+    4.5 and 4.6 become 5.
+
 Output from HELP COS:
 
     COS#(angle%|angle#)
@@ -712,16 +722,6 @@ Output from HELP COS:
 
     The input angle% or angle# is measured in degrees or radians depending
     on the angle mode as selected by the DEG and RAD commands.
-
-Output from HELP DTOI:
-
-    DTOI%(expr#)
-
-    Rounds the given double to the closest integer.
-
-    If the value is too small or too big to fit in the integer's range,
-    returns the smallest or biggest possible integer that fits,
-    respectively.
 
 Output from HELP GPIO_READ:
 
@@ -757,11 +757,17 @@ Output from HELP INKEY:
     This non-blocking design lets you to combine the reception of multiple
     evens, such as from GPIO_INPUT?, within the same loop.
 
-Output from HELP ITOD:
+Output from HELP INT:
 
-    ITOD#(expr%)
+    INT%(expr<%|#>)
 
-    Converts the given integer to a double.
+    Casts the given numeric expression to an integer (with truncation).
+
+    When casting a double value to an integer, the double value is first
+    truncated to the smallest
+
+    integer that is not larger than the double value.  For example, all of
+    4.4, 4.5 and 4.6 become 4.
 
 Output from HELP LEFT:
 
@@ -863,7 +869,7 @@ Output from HELP RND:
     is positive, returns a new random number.
 
     If you need to generate an integer random number within a specific
-    range, say [0..100], compute it with an expression like DTOI%(RND#(1) *
+    range, say [0..100], compute it with an expression like CINT%(RND#(1) *
     100.0).
 
     WARNING: These random numbers offer no cryptographic guarantees.

@@ -36,6 +36,10 @@ for the time being.**
 *   Issue #114: Added transparent promotion from integers to doubles, and
     truncation (via rounding) from doubles to integers.
 
+*   Issue #114: Removed the `DTOI` and `ITOD` functions now that integers and
+    doubles are automatically converted between them, and added the `CINT` and
+    `INT` functions.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
