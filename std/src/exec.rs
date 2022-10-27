@@ -16,7 +16,7 @@
 //! Commands that manipulate the machine's state or the program's execution.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
@@ -101,29 +101,23 @@ impl Command for ExitCommand {
         let arg = match span.args.as_slice() {
             [] => 0,
             [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
-                match expr.eval(machine.get_mut_symbols()).await? {
-                    Value::Integer(n) => {
-                        if n < 0 {
-                            return Err(CallError::ArgumentError(
-                                expr.start_pos(),
-                                "Exit code must be a positive integer".to_owned(),
-                            ));
-                        }
-                        if n >= 128 {
-                            return Err(CallError::ArgumentError(
-                                expr.start_pos(),
-                                "Exit code cannot be larger than 127".to_owned(),
-                            ));
-                        }
-                        n as u8
-                    }
-                    _ => {
-                        return Err(CallError::ArgumentError(
-                            expr.start_pos(),
-                            "Exit code must be a positive integer".to_owned(),
-                        ))
-                    }
+                let value = expr.eval(machine.get_mut_symbols()).await?;
+                let n = value
+                    .as_i32()
+                    .map_err(|e| CallError::ArgumentError(expr.start_pos(), format!("{}", e)))?;
+                if n < 0 {
+                    return Err(CallError::ArgumentError(
+                        expr.start_pos(),
+                        "Exit code must be a positive integer".to_owned(),
+                    ));
                 }
+                if n >= 128 {
+                    return Err(CallError::ArgumentError(
+                        expr.start_pos(),
+                        "Exit code cannot be larger than 127".to_owned(),
+                    ));
+                }
+                n as u8
             }
             _ => return Err(CallError::SyntaxError),
         };
@@ -155,7 +149,7 @@ impl SleepCommand {
     pub fn new(sleep_fn: SleepFn) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SLEEP", VarType::Void)
-                .with_syntax("seconds%|seconds#")
+                .with_syntax("seconds<%|#>")
                 .with_category(CATEGORY)
                 .with_description(
                     "Suspends program execution.
@@ -177,32 +171,17 @@ impl Command for SleepCommand {
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let (duration, pos) = match span.args.as_slice() {
             [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
-                match expr.eval(machine.get_mut_symbols()).await? {
-                    Value::Integer(n) => {
-                        if n < 0 {
-                            return Err(CallError::ArgumentError(
-                                expr.start_pos(),
-                                "Sleep time must be positive".to_owned(),
-                            ));
-                        }
-                        (Duration::from_secs(n as u64), expr.start_pos())
-                    }
-                    Value::Double(n) => {
-                        if n < 0.0 {
-                            return Err(CallError::ArgumentError(
-                                expr.start_pos(),
-                                "Sleep time must be positive".to_owned(),
-                            ));
-                        }
-                        (Duration::from_secs_f64(n), expr.start_pos())
-                    }
-                    _ => {
-                        return Err(CallError::ArgumentError(
-                            expr.start_pos(),
-                            "Sleep time must be an integer or a double".to_owned(),
-                        ))
-                    }
+                let value = expr.eval(machine.get_mut_symbols()).await?;
+                let n = value
+                    .as_f64()
+                    .map_err(|e| CallError::ArgumentError(expr.start_pos(), format!("{}", e)))?;
+                if n < 0.0 {
+                    return Err(CallError::ArgumentError(
+                        expr.start_pos(),
+                        "Sleep time must be positive".to_owned(),
+                    ));
                 }
+                (Duration::from_secs_f64(n), expr.start_pos())
             }
             _ => return Err(CallError::SyntaxError),
         };
@@ -257,6 +236,12 @@ mod tests {
             .expect_ok(StopReason::Exited(code))
             .expect_var("a", 3)
             .check();
+
+        Tester::default()
+            .run(format!("a = 3: EXIT {}.2: a = 4", code))
+            .expect_ok(StopReason::Exited(code))
+            .expect_var("a", 3)
+            .check();
     }
 
     #[test]
@@ -270,6 +255,7 @@ mod tests {
     #[test]
     fn test_exit_errors() {
         check_stmt_err("1:1: In call to EXIT: expected [code%]", "EXIT 1, 2");
+        check_stmt_err("1:1: In call to EXIT: 1:6: \"b\" is not a number", "EXIT \"b\"");
         check_stmt_err(
             "1:1: In call to EXIT: 1:6: Exit code must be a positive integer",
             "EXIT -3",
@@ -318,13 +304,10 @@ mod tests {
 
     #[test]
     fn test_sleep_errors() {
-        check_stmt_err("1:1: In call to SLEEP: expected seconds%|seconds#", "SLEEP");
-        check_stmt_err("1:1: In call to SLEEP: expected seconds%|seconds#", "SLEEP 2, 3");
-        check_stmt_err("1:1: In call to SLEEP: expected seconds%|seconds#", "SLEEP 2; 3");
-        check_stmt_err(
-            "1:1: In call to SLEEP: 1:7: Sleep time must be an integer or a double",
-            "SLEEP \"foo\"",
-        );
+        check_stmt_err("1:1: In call to SLEEP: expected seconds<%|#>", "SLEEP");
+        check_stmt_err("1:1: In call to SLEEP: expected seconds<%|#>", "SLEEP 2, 3");
+        check_stmt_err("1:1: In call to SLEEP: expected seconds<%|#>", "SLEEP 2; 3");
+        check_stmt_err("1:1: In call to SLEEP: 1:7: \"foo\" is not a number", "SLEEP \"foo\"");
         check_stmt_err("1:1: In call to SLEEP: 1:7: Sleep time must be positive", "SLEEP -1");
         check_stmt_err("1:1: In call to SLEEP: 1:7: Sleep time must be positive", "SLEEP -0.001");
     }

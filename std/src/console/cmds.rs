@@ -133,17 +133,20 @@ impl Command for ColorCommand {
             machine: &mut Machine,
         ) -> Result<Option<u8>, CallError> {
             match e {
-                Some(e) => match e.eval(machine.get_mut_symbols()).await? {
-                    Value::Integer(i) if i >= 0 && i <= std::u8::MAX as i32 => Ok(Some(i as u8)),
-                    Value::Integer(_) => Err(CallError::ArgumentError(
-                        e.start_pos(),
-                        "Color out of range".to_owned(),
-                    )),
-                    _ => Err(CallError::ArgumentError(
-                        e.start_pos(),
-                        "Color must be an integer".to_owned(),
-                    )),
-                },
+                Some(expr) => {
+                    let value = expr.eval(machine.get_mut_symbols()).await?;
+                    let i = value.as_i32().map_err(|e| {
+                        CallError::ArgumentError(expr.start_pos(), format!("{}", e))
+                    })?;
+                    if i >= 0 && i <= std::u8::MAX as i32 {
+                        Ok(Some(i as u8))
+                    } else {
+                        Err(CallError::ArgumentError(
+                            expr.start_pos(),
+                            "Color out of range".to_owned(),
+                        ))
+                    }
+                }
                 None => Ok(None),
             }
         }
@@ -358,8 +361,12 @@ impl Command for LocateCommand {
         debug_assert!(row_arg.sep == ArgSep::End);
 
         let column = match &column_arg.expr {
-            Some(arg) => match arg.eval(machine.get_mut_symbols()).await? {
-                Value::Integer(i) => match u16::try_from(i) {
+            Some(arg) => {
+                let value = arg.eval(machine.get_mut_symbols()).await?;
+                let i = value
+                    .as_i32()
+                    .map_err(|e| CallError::ArgumentError(arg.start_pos(), format!("{}", e)))?;
+                match u16::try_from(i) {
                     Ok(v) => v,
                     Err(_) => {
                         return Err(CallError::ArgumentError(
@@ -367,20 +374,18 @@ impl Command for LocateCommand {
                             "Column out of range".to_owned(),
                         ))
                     }
-                },
-                _ => {
-                    return Err(CallError::ArgumentError(
-                        arg.start_pos(),
-                        "Column must be an integer".to_owned(),
-                    ))
                 }
-            },
+            }
             None => return Err(CallError::SyntaxError),
         };
 
         let row = match &row_arg.expr {
-            Some(arg) => match arg.eval(machine.get_mut_symbols()).await? {
-                Value::Integer(i) => match u16::try_from(i) {
+            Some(arg) => {
+                let value = arg.eval(machine.get_mut_symbols()).await?;
+                let i = value
+                    .as_i32()
+                    .map_err(|e| CallError::ArgumentError(arg.start_pos(), format!("{}", e)))?;
+                match u16::try_from(i) {
                     Ok(v) => v,
                     Err(_) => {
                         return Err(CallError::ArgumentError(
@@ -388,14 +393,8 @@ impl Command for LocateCommand {
                             "Row out of range".to_owned(),
                         ))
                     }
-                },
-                _ => {
-                    return Err(CallError::ArgumentError(
-                        arg.start_pos(),
-                        "Row must be an integer".to_owned(),
-                    ))
                 }
-            },
+            }
             None => return Err(CallError::SyntaxError),
         };
 
@@ -505,8 +504,8 @@ mod tests {
         check_stmt_err("1:1: In call to COLOR: 1:7: Color out of range", "COLOR 1000, 0");
         check_stmt_err("1:1: In call to COLOR: 1:10: Color out of range", "COLOR 0, 1000");
 
-        check_stmt_err("1:1: In call to COLOR: 1:7: Color must be an integer", "COLOR TRUE, 0");
-        check_stmt_err("1:1: In call to COLOR: 1:10: Color must be an integer", "COLOR 0, TRUE");
+        check_stmt_err("1:1: In call to COLOR: 1:7: TRUE is not a number", "COLOR TRUE, 0");
+        check_stmt_err("1:1: In call to COLOR: 1:10: TRUE is not a number", "COLOR 0, TRUE");
     }
 
     #[test]
@@ -659,12 +658,12 @@ mod tests {
 
         check_stmt_err("1:1: In call to LOCATE: 1:8: Column out of range", "LOCATE -1, 2");
         check_stmt_err("1:1: In call to LOCATE: 1:8: Column out of range", "LOCATE 70000, 2");
-        check_stmt_err("1:1: In call to LOCATE: 1:8: Column must be an integer", "LOCATE TRUE, 2");
+        check_stmt_err("1:1: In call to LOCATE: 1:8: TRUE is not a number", "LOCATE TRUE, 2");
         check_stmt_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE , 2");
 
         check_stmt_err("1:1: In call to LOCATE: 1:11: Row out of range", "LOCATE 1, -2");
         check_stmt_err("1:1: In call to LOCATE: 1:11: Row out of range", "LOCATE 1, 70000");
-        check_stmt_err("1:1: In call to LOCATE: 1:11: Row must be an integer", "LOCATE 1, TRUE");
+        check_stmt_err("1:1: In call to LOCATE: 1:11: TRUE is not a number", "LOCATE 1, TRUE");
         check_stmt_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE 1,");
     }
 

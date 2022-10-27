@@ -60,10 +60,11 @@ async fn get_angle(
     symbols: &mut Symbols,
     angle_mode: &AngleMode,
 ) -> Result<f64, CallError> {
-    let args = eval_all(args, symbols).await?;
-    let angle = match args.as_slice() {
-        [Value::Double(n)] => *n,
-        [Value::Integer(n)] => *n as f64,
+    let values = eval_all(args, symbols).await?;
+    let angle = match values.as_slice() {
+        [v] => v
+            .as_f64()
+            .map_err(|e| CallError::ArgumentError(args[0].start_pos(), format!("{}", e)))?,
         _ => return Err(CallError::SyntaxError),
     };
     match angle_mode {
@@ -118,7 +119,7 @@ impl AtnFunction {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("ATN", VarType::Double)
-                .with_syntax("n%|n#")
+                .with_syntax("n<%|#>")
                 .with_category(CATEGORY)
                 .with_description(
                     "Computes the arc-tangent of a number.
@@ -207,7 +208,7 @@ impl CosFunction {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("COS", VarType::Double)
-                .with_syntax("angle%|angle#")
+                .with_syntax("angle<%|#>")
                 .with_category(CATEGORY)
                 .with_description(
                     "Computes the cosine of an angle.
@@ -510,17 +511,11 @@ impl Command for RandomizeCommand {
                 *self.prng.borrow_mut() = Prng::new_from_entryopy();
             }
             [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
-                match expr.eval(machine.get_mut_symbols()).await? {
-                    Value::Integer(n) => {
-                        *self.prng.borrow_mut() = Prng::new_from_seed(n);
-                    }
-                    _ => {
-                        return Err(CallError::ArgumentError(
-                            expr.start_pos(),
-                            "Random seed must be an integer".to_owned(),
-                        ))
-                    }
-                }
+                let n = expr.eval(machine.get_mut_symbols()).await?;
+                let n = n
+                    .as_i32()
+                    .map_err(|e| CallError::ArgumentError(expr.start_pos(), format!("{}", e)))?;
+                *self.prng.borrow_mut() = Prng::new_from_seed(n);
             }
             _ => return Err(CallError::SyntaxError),
         };
@@ -565,14 +560,19 @@ impl Function for RndFunction {
         let args = eval_all(&span.args, symbols).await?;
         match args.as_slice() {
             [] => Ok(Value::Double(self.prng.borrow_mut().next())),
-            [Value::Integer(n)] => match n.cmp(&0) {
-                Ordering::Equal => Ok(Value::Double(self.prng.borrow_mut().last())),
-                Ordering::Greater => Ok(Value::Double(self.prng.borrow_mut().next())),
-                Ordering::Less => Err(CallError::ArgumentError(
-                    span.args[0].start_pos(),
-                    "n% cannot be negative".to_owned(),
-                )),
-            },
+            [n] => {
+                let n = n.as_i32().map_err(|e| {
+                    CallError::ArgumentError(span.args[0].start_pos(), format!("{}", e))
+                })?;
+                match n.cmp(&0) {
+                    Ordering::Equal => Ok(Value::Double(self.prng.borrow_mut().last())),
+                    Ordering::Greater => Ok(Value::Double(self.prng.borrow_mut().next())),
+                    Ordering::Less => Err(CallError::ArgumentError(
+                        span.args[0].start_pos(),
+                        "n% cannot be negative".to_owned(),
+                    )),
+                }
+            }
             _ => Err(CallError::SyntaxError),
         }
     }
@@ -589,7 +589,7 @@ impl SinFunction {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SIN", VarType::Double)
-                .with_syntax("angle%|angle#")
+                .with_syntax("angle<%|#>")
                 .with_category(CATEGORY)
                 .with_description(
                     "Computes the sine of an angle.
@@ -624,7 +624,7 @@ impl SqrFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SQR", VarType::Double)
-                .with_syntax("num%|num#")
+                .with_syntax("num<%|#>")
                 .with_category(CATEGORY)
                 .with_description("Computes the square root of the given number.")
                 .build(),
@@ -666,7 +666,7 @@ impl TanFunction {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("TAN", VarType::Double)
-                .with_syntax("angle%|angle#")
+                .with_syntax("angle<%|#>")
                 .with_category(CATEGORY)
                 .with_description(
                     "Computes the tangent of an angle.
@@ -721,9 +721,9 @@ mod tests {
         check_expr_ok(123f64.atan(), "ATN(123)");
         check_expr_ok(45.5f64.atan(), "ATN(45.5)");
 
-        check_expr_error("1:10: In call to ATN: expected n%|n#", "ATN()");
-        check_expr_error("1:10: In call to ATN: expected n%|n#", "ATN(FALSE)");
-        check_expr_error("1:10: In call to ATN: expected n%|n#", "ATN(3, 4)");
+        check_expr_error("1:10: In call to ATN: expected n<%|#>", "ATN()");
+        check_expr_error("1:10: In call to ATN: expected n<%|#>", "ATN(FALSE)");
+        check_expr_error("1:10: In call to ATN: expected n<%|#>", "ATN(3, 4)");
     }
 
     #[test]
@@ -748,9 +748,9 @@ mod tests {
         check_expr_ok(123f64.cos(), "COS(123)");
         check_expr_ok(45.5f64.cos(), "COS(45.5)");
 
-        check_expr_error("1:10: In call to COS: expected angle%|angle#", "COS()");
-        check_expr_error("1:10: In call to COS: expected angle%|angle#", "COS(FALSE)");
-        check_expr_error("1:10: In call to COS: expected angle%|angle#", "COS(3, 4)");
+        check_expr_error("1:10: In call to COS: expected angle<%|#>", "COS()");
+        check_expr_error("1:10: In call to COS: 1:14: FALSE is not a number", "COS(FALSE)");
+        check_expr_error("1:10: In call to COS: expected angle<%|#>", "COS(3, 4)");
     }
 
     #[test]
@@ -856,19 +856,20 @@ mod tests {
         t.run("RANDOMIZE 10").check();
 
         t.run("result = RND(1)").expect_var("result", 0.7097578208683426).check();
-        t.run("result = RND(1)").expect_var("result", 0.2205558922655312).check();
+        t.run("result = RND(1.1)").expect_var("result", 0.2205558922655312).check();
         t.run("result = RND(0)").expect_var("result", 0.2205558922655312).check();
-        t.run("result = RND(1)").expect_var("result", 0.8273883964464507).check();
+        t.run("result = RND(10)").expect_var("result", 0.8273883964464507).check();
 
-        check_expr_error("1:10: In call to RND: expected n%", "RND(3.0)");
+        t.run("RANDOMIZE 10.2").expect_var("result", 0.8273883964464507).check();
+
+        t.run("result = RND(1)").expect_var("result", 0.7097578208683426).check();
+
         check_expr_error("1:10: In call to RND: expected n%", "RND(1, 7)");
+        check_expr_error("1:10: In call to RND: 1:14: FALSE is not a number", "RND(FALSE)");
         check_expr_error("1:10: In call to RND: 1:14: n% cannot be negative", "RND(-1)");
 
-        check_stmt_err(
-            "1:1: In call to RANDOMIZE: 1:11: Random seed must be an integer",
-            "RANDOMIZE 3.0",
-        );
         check_stmt_err("1:1: In call to RANDOMIZE: expected [seed%]", "RANDOMIZE ,");
+        check_stmt_err("1:1: In call to RANDOMIZE: 1:11: TRUE is not a number", "RANDOMIZE TRUE");
     }
 
     #[test]
@@ -876,9 +877,9 @@ mod tests {
         check_expr_ok(123f64.sin(), "SIN(123)");
         check_expr_ok(45.5f64.sin(), "SIN(45.5)");
 
-        check_expr_error("1:10: In call to SIN: expected angle%|angle#", "SIN()");
-        check_expr_error("1:10: In call to SIN: expected angle%|angle#", "SIN(FALSE)");
-        check_expr_error("1:10: In call to SIN: expected angle%|angle#", "SIN(3, 4)");
+        check_expr_error("1:10: In call to SIN: expected angle<%|#>", "SIN()");
+        check_expr_error("1:10: In call to SIN: 1:14: FALSE is not a number", "SIN(FALSE)");
+        check_expr_error("1:10: In call to SIN: expected angle<%|#>", "SIN(3, 4)");
     }
 
     #[test]
@@ -888,9 +889,9 @@ mod tests {
         check_expr_ok(9f64.sqrt(), "SQR(9)");
         check_expr_ok(100.50f64.sqrt(), "SQR(100.50)");
 
-        check_expr_error("1:10: In call to SQR: expected num%|num#", "SQR()");
-        check_expr_error("1:10: In call to SQR: expected num%|num#", "SQR(FALSE)");
-        check_expr_error("1:10: In call to SQR: expected num%|num#", "SQR(3, 4)");
+        check_expr_error("1:10: In call to SQR: expected num<%|#>", "SQR()");
+        check_expr_error("1:10: In call to SQR: expected num<%|#>", "SQR(FALSE)");
+        check_expr_error("1:10: In call to SQR: expected num<%|#>", "SQR(3, 4)");
         check_expr_error(
             "1:10: In call to SQR: 1:14: Cannot take square root of a negative number",
             "SQR(-3)",
@@ -906,8 +907,8 @@ mod tests {
         check_expr_ok(123f64.tan(), "TAN(123)");
         check_expr_ok(45.5f64.tan(), "TAN(45.5)");
 
-        check_expr_error("1:10: In call to TAN: expected angle%|angle#", "TAN()");
-        check_expr_error("1:10: In call to TAN: expected angle%|angle#", "TAN(FALSE)");
-        check_expr_error("1:10: In call to TAN: expected angle%|angle#", "TAN(3, 4)");
+        check_expr_error("1:10: In call to TAN: expected angle<%|#>", "TAN()");
+        check_expr_error("1:10: In call to TAN: 1:14: FALSE is not a number", "TAN(FALSE)");
+        check_expr_error("1:10: In call to TAN: expected angle<%|#>", "TAN(3, 4)");
     }
 }

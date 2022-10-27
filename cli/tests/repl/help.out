@@ -677,7 +677,7 @@ Output from HELP SIGNUP:
 
 Output from HELP SLEEP:
 
-    SLEEP seconds%|seconds#
+    SLEEP seconds<%|#>
 
     Suspends program execution.
 
@@ -695,7 +695,7 @@ Output from HELP UNMOUNT:
 
 Output from HELP ATN:
 
-    ATN#(n%|n#)
+    ATN#(n<%|#>)
 
     Computes the arc-tangent of a number.
 
@@ -714,7 +714,7 @@ Output from HELP CINT:
 
 Output from HELP COS:
 
-    COS#(angle%|angle#)
+    COS#(angle<%|#>)
 
     Computes the cosine of an angle.
 
@@ -868,7 +868,7 @@ Output from HELP RTRIM:
 
 Output from HELP SIN:
 
-    SIN#(angle%|angle#)
+    SIN#(angle<%|#>)
 
     Computes the sine of an angle.
 
@@ -877,13 +877,13 @@ Output from HELP SIN:
 
 Output from HELP SQR:
 
-    SQR#(num%|num#)
+    SQR#(num<%|#>)
 
     Computes the square root of the given number.
 
 Output from HELP TAN:
 
-    TAN#(angle%|angle#)
+    TAN#(angle<%|#>)
 
     Computes the tangent of an angle.
 
