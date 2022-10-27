@@ -60,15 +60,13 @@ impl Pin {
 
     /// Obtains a pin number from an expression.
     async fn parse(expr: &Expr, machine: &mut Machine) -> Result<Pin, CallError> {
-        Pin::parse_value(&expr.eval(machine.get_mut_symbols()).await?, expr.start_pos())
+        Pin::parse_value(expr.eval(machine.get_mut_symbols()).await?, expr.start_pos())
     }
 
     /// Obtains a pin number from a value.
-    fn parse_value(value: &Value, pos: LineCol) -> Result<Pin, CallError> {
-        match value {
-            Value::Integer(n) => Ok(Pin::from_i32(*n, pos)?),
-            v => Err(CallError::ArgumentError(pos, format!("Pin number {} must be an integer", v))),
-        }
+    fn parse_value(value: Value, pos: LineCol) -> Result<Pin, CallError> {
+        let n = value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
+        Pin::from_i32(n, pos)
     }
 }
 
@@ -303,7 +301,7 @@ impl Function for GpioReadFunction {
         match span.args.as_slice() {
             [pin_expr] => {
                 let pin = pin_expr.eval(symbols).await?;
-                let pin = Pin::parse_value(&pin, pin_expr.start_pos())?;
+                let pin = Pin::parse_value(pin, pin_expr.start_pos())?;
                 let value = match MockPins::try_new(symbols) {
                     Some(mut pins) => pins.read(pin)?,
                     None => self.pins.borrow_mut().read(pin)?,
@@ -380,10 +378,7 @@ mod tests {
     /// The given input `fmt` string contains the command to test with a placeholder `_PIN` for
     /// where the pin number goes.  The `prefix` contains a possible prefix for the error messages.
     fn check_pin_validation(prefix: &str, fmt: &str) {
-        check_stmt_err(
-            format!(r#"{}Pin number TRUE must be an integer"#, prefix),
-            &fmt.replace("_PIN_", "TRUE"),
-        );
+        check_stmt_err(format!(r#"{}TRUE is not a number"#, prefix), &fmt.replace("_PIN_", "TRUE"));
         check_stmt_err(
             format!(r#"{}Pin number 123456789 is too large"#, prefix),
             &fmt.replace("_PIN_", "123456789"),
@@ -436,15 +431,19 @@ mod tests {
     fn test_gpio_setup_ok() {
         for mode in &["in", "IN"] {
             do_mock_test(format!(r#"GPIO_SETUP 5, "{}""#, mode), &[501]);
+            do_mock_test(format!(r#"GPIO_SETUP 5.2, "{}""#, mode), &[501]);
         }
         for mode in &["in-pull-down", "IN-PULL-DOWN"] {
             do_mock_test(format!(r#"GPIO_SETUP 6, "{}""#, mode), &[602]);
+            do_mock_test(format!(r#"GPIO_SETUP 6.2, "{}""#, mode), &[602]);
         }
         for mode in &["in-pull-up", "IN-PULL-UP"] {
             do_mock_test(format!(r#"GPIO_SETUP 7, "{}""#, mode), &[703]);
+            do_mock_test(format!(r#"GPIO_SETUP 7.2, "{}""#, mode), &[703]);
         }
         for mode in &["out", "OUT"] {
             do_mock_test(format!(r#"GPIO_SETUP 8, "{}""#, mode), &[804]);
+            do_mock_test(format!(r#"GPIO_SETUP 8.2, "{}""#, mode), &[804]);
         }
     }
 
@@ -476,6 +475,7 @@ mod tests {
     #[test]
     fn test_gpio_clear_one() {
         do_mock_test("GPIO_CLEAR 4", &[405]);
+        do_mock_test("GPIO_CLEAR 4.1", &[405]);
     }
 
     #[test]
@@ -490,7 +490,7 @@ mod tests {
         do_mock_test(
             "__GPIO_MOCK_DATA(0) = 310
             __GPIO_MOCK_DATA(2) = 311
-            GPIO_WRITE 5, GPIO_READ(3)
+            GPIO_WRITE 5, GPIO_READ(3.1)
             GPIO_WRITE 7, GPIO_READ(3)",
             &[310, 520, 311, 721],
         );
@@ -506,7 +506,7 @@ mod tests {
 
     #[test]
     fn test_gpio_write_ok() {
-        do_mock_test("GPIO_WRITE 3, TRUE: GPIO_WRITE 3, FALSE", &[321, 320]);
+        do_mock_test("GPIO_WRITE 3, TRUE: GPIO_WRITE 3.1, FALSE", &[321, 320]);
     }
 
     #[test]

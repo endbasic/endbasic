@@ -43,23 +43,19 @@ async fn parse_bound_args<'a>(
     };
 
     let dim = match iter.next() {
-        Some(expr) => match expr.eval(symbols).await? {
-            Value::Integer(i) => {
-                if i < 0 {
-                    return Err(CallError::ArgumentError(
-                        expr.start_pos(),
-                        format!("Dimension {} must be positive", i),
-                    ));
-                }
-                Some((i as usize, expr.start_pos()))
-            }
-            _ => {
+        Some(expr) => {
+            let value = expr.eval(symbols).await?;
+            let i = value
+                .as_i32()
+                .map_err(|e| CallError::ArgumentError(expr.start_pos(), format!("{}", e)))?;
+            if i < 0 {
                 return Err(CallError::ArgumentError(
                     expr.start_pos(),
-                    "Dimension must be an integer".to_owned(),
-                ))
+                    format!("Dimension {} must be positive", i),
+                ));
             }
-        },
+            Some((i as usize, expr.start_pos()))
+        }
         None => None,
     };
 
@@ -214,8 +210,8 @@ mod tests {
             .check();
 
         Tester::default()
-            .run(&format!("DIM x(2): result = {}(x, 1.0)", func))
-            .expect_err(format!("1:20: In call to {}: 1:30: Dimension must be an integer", func))
+            .run(&format!("DIM x(2): result = {}(x, TRUE)", func))
+            .expect_err(format!("1:20: In call to {}: 1:30: TRUE is not a number", func))
             .expect_array("x", VarType::Integer, &[2], vec![])
             .check();
 
@@ -273,7 +269,7 @@ mod tests {
             .check();
 
         Tester::default()
-            .run("DIM x(10, 20): result = LBOUND(x, 2)")
+            .run("DIM x(10, 20): result = LBOUND(x, 2.1)")
             .expect_var("result", 0i32)
             .expect_array("x", VarType::Integer, &[10, 20], vec![])
             .check();
@@ -299,7 +295,7 @@ mod tests {
             .check();
 
         Tester::default()
-            .run("DIM x(10, 20): result = UBOUND(x, 2)")
+            .run("DIM x(10, 20): result = UBOUND(x, 2.1)")
             .expect_var("result", 19i32)
             .expect_array("x", VarType::Integer, &[10, 20], vec![])
             .check();

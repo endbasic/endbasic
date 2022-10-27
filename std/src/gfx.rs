@@ -35,17 +35,14 @@ in this section.";
 
 /// Parses an expression that represents a single coordinate.
 async fn parse_coordinate(expr: &Expr, machine: &mut Machine) -> Result<i16, CallError> {
-    match expr.eval(machine.get_mut_symbols()).await? {
-        Value::Integer(i) => match i16::try_from(i) {
-            Ok(i) => Ok(i),
-            Err(_) => Err(CallError::ArgumentError(
-                expr.start_pos(),
-                format!("Coordinate {} out of range", i),
-            )),
-        },
-        v => Err(CallError::ArgumentError(
+    let value = expr.eval(machine.get_mut_symbols()).await?;
+    let i =
+        value.as_i32().map_err(|e| CallError::ArgumentError(expr.start_pos(), format!("{}", e)))?;
+    match i16::try_from(i) {
+        Ok(i) => Ok(i),
+        Err(_) => Err(CallError::ArgumentError(
             expr.start_pos(),
-            format!("Coordinate {} must be an integer", v),
+            format!("Coordinate {} out of range", i),
         )),
     }
 }
@@ -353,7 +350,7 @@ mod tests {
             let stmt = &format!("{} {}", name, args);
             let pos = stmt.find('"').unwrap() + 1;
             check_stmt_err(
-                format!("1:1: In call to {}: 1:{}: Coordinate \"a\" must be an integer", name, pos),
+                format!("1:1: In call to {}: 1:{}: \"a\" is not a number", name, pos),
                 stmt,
             );
         }
@@ -370,7 +367,7 @@ mod tests {
             .check();
 
         Tester::default()
-            .run("GFX_LINE -31000, -32000, 31000, 32000")
+            .run("GFX_LINE -31000.3, -32000.2, 31000.4, 31999.8")
             .expect_output([CapturedOut::DrawLine(
                 PixelsXY { x: -31000, y: -32000 },
                 PixelsXY { x: 31000, y: 32000 },
@@ -396,7 +393,7 @@ mod tests {
             .check();
 
         Tester::default()
-            .run("GFX_PIXEL 31000, 32000")
+            .run("GFX_PIXEL 30999.5, 31999.7")
             .expect_output([CapturedOut::DrawPixel(PixelsXY { x: 31000, y: 32000 })])
             .check();
     }
@@ -420,10 +417,7 @@ mod tests {
         for cmd in &["GFX_PIXEL \"a\", 1", "GFX_PIXEL 1, \"a\""] {
             let pos = cmd.find('"').unwrap() + 1;
             check_stmt_err(
-                format!(
-                    "1:1: In call to GFX_PIXEL: 1:{}: Coordinate \"a\" must be an integer",
-                    pos
-                ),
+                format!("1:1: In call to GFX_PIXEL: 1:{}: \"a\" is not a number", pos),
                 cmd,
             );
         }
@@ -432,7 +426,7 @@ mod tests {
     #[test]
     fn test_gfx_rect_ok() {
         Tester::default()
-            .run("GFX_RECT 1, 2, 3, 4")
+            .run("GFX_RECT 1.1, 2.3, 2.5, 3.9")
             .expect_output([CapturedOut::DrawRect(
                 PixelsXY { x: 1, y: 2 },
                 PixelsXY { x: 3, y: 4 },
@@ -456,7 +450,7 @@ mod tests {
     #[test]
     fn test_gfx_rectf_ok() {
         Tester::default()
-            .run("GFX_RECTF 1, 2, 3, 4")
+            .run("GFX_RECTF 1.1, 2.3, 2.5, 3.9")
             .expect_output([CapturedOut::DrawRectFilled(
                 PixelsXY { x: 1, y: 2 },
                 PixelsXY { x: 3, y: 4 },
