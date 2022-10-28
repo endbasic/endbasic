@@ -51,6 +51,10 @@ for the time being.**
     keyword as an argument separator and thus be of the form
     `MOUNT target$ AS $drive_name$`.
 
+*   Fixed `PRINT` so that, if the statement ends in a comma or in a semicolon,
+    no newline character is printed.  Useful to construct output lines in
+    multiple steps and matches the behavior of other BASIC implementations.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**

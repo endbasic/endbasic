@@ -414,13 +414,15 @@ impl PrintCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("PRINT", VarType::Void)
-                .with_syntax("[expr1 [<;|,> .. exprN]]")
+                .with_syntax("[expr1 [<;|,> [.. exprN]]]")
                 .with_category(CATEGORY)
                 .with_description(
                     "Prints a message to the console.
 The expressions given as arguments are all evaluated and converted to strings.  Arguments \
 separated by the short `;` separator are concatenated with a single space, while arguments \
-separated by the long `,` separator are concatenated with a tab character.",
+separated by the long `,` separator are concatenated with a tab character.
+If the last expression is empty (i.e. if the statement ends in a semicolon or a comma), then \
+the cursor position remains on the same line of the message right after what was printed.",
                 )
                 .build(),
             console,
@@ -436,9 +438,13 @@ impl Command for PrintCommand {
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         let mut text = String::new();
+        let mut nl = true;
         for arg in span.args.iter() {
             if let Some(expr) = arg.expr.as_ref() {
                 text += &expr.eval(machine.get_mut_symbols()).await?.to_output();
+                nl = true;
+            } else {
+                nl = false;
             }
             match arg.sep {
                 ArgSep::End => break,
@@ -452,7 +458,11 @@ impl Command for PrintCommand {
                 ArgSep::As => return Err(CallError::SyntaxError),
             }
         }
-        self.console.borrow_mut().print(&text)?;
+        if nl {
+            self.console.borrow_mut().print(&text)?;
+        } else {
+            self.console.borrow_mut().write(&text)?;
+        }
         Ok(())
     }
 }
@@ -671,9 +681,18 @@ mod tests {
     #[test]
     fn test_print_ok() {
         Tester::default().run("PRINT").expect_prints([""]).check();
-        Tester::default().run("PRINT ;").expect_prints([" "]).check();
-        Tester::default().run("PRINT ,").expect_prints(["        "]).check();
-        Tester::default().run("PRINT ;,;,").expect_prints(["                "]).check();
+        Tester::default()
+            .run("PRINT ;")
+            .expect_output([CapturedOut::Write(" ".to_owned())])
+            .check();
+        Tester::default()
+            .run("PRINT ,")
+            .expect_output([CapturedOut::Write("        ".to_owned())])
+            .check();
+        Tester::default()
+            .run("PRINT ;,;,")
+            .expect_output([CapturedOut::Write("                ".to_owned())])
+            .check();
         Tester::default().run("PRINT \"abcdefg\", 1").expect_prints(["abcdefg 1"]).check();
         Tester::default().run("PRINT \"abcdefgh\", 1").expect_prints(["abcdefgh        1"]).check();
 
@@ -690,13 +709,26 @@ mod tests {
             .expect_prints(["foo     foo", "foos"])
             .expect_var("word", "foo")
             .check();
+
+        Tester::default()
+            .run(r#"word = "foo": PRINT word,: PRINT word;: PRINT word + "s""#)
+            .expect_output([
+                CapturedOut::Write("foo     ".to_owned()),
+                CapturedOut::Write("foo ".to_owned()),
+                CapturedOut::Print("foos".to_owned()),
+            ])
+            .expect_var("word", "foo")
+            .check();
     }
 
     #[test]
     fn test_print_errors() {
-        check_stmt_err("1:1: In call to PRINT: expected [expr1 [<;|,> .. exprN]]", "PRINT 3 AS b");
         check_stmt_err(
-            "1:1: In call to PRINT: expected [expr1 [<;|,> .. exprN]]",
+            "1:1: In call to PRINT: expected [expr1 [<;|,> [.. exprN]]]",
+            "PRINT 3 AS b",
+        );
+        check_stmt_err(
+            "1:1: In call to PRINT: expected [expr1 [<;|,> [.. exprN]]]",
             "PRINT 3, 4 AS b",
         );
         // Ensure type errors from `Expr` and `Value` bubble up.
