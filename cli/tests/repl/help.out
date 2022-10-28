@@ -590,7 +590,7 @@ Output from HELP PWD:
 
 Output from HELP PRINT:
 
-    PRINT [expr1 [<;|,> .. exprN]]
+    PRINT [expr1 [<;|,> [.. exprN]]]
 
     Prints a message to the console.
 
@@ -598,6 +598,10 @@ Output from HELP PRINT:
     strings.  Arguments separated by the short `;` separator are
     concatenated with a single space, while arguments separated by the long
     `,` separator are concatenated with a tab character.
+
+    If the last expression is empty (i.e. if the statement ends in a
+    semicolon or a comma), then the cursor position remains on the same
+    line of the message right after what was printed.
 
 Output from HELP RAD:
 
