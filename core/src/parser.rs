@@ -785,7 +785,10 @@ impl<'a> Parser<'a> {
     }
 
     /// Extracts the optional `STEP` part of a `FOR` statement, with a default of 1.
-    fn parse_step(&mut self) -> Result<(i32, LineCol)> {
+    ///
+    /// Returns the step as an expression, an `Ordering` value representing how the step value
+    /// compares to zero, and whether the step is a double or not.
+    fn parse_step(&mut self) -> Result<(Expr, Ordering, bool)> {
         let peeked = self.lexer.peek()?;
         match peeked.token {
             Token::Step => self.lexer.consume_peeked(),
@@ -793,28 +796,46 @@ impl<'a> Parser<'a> {
                 // The position we return here for the step isn't truly the right value, but given
                 // that we know the hardcoded step of 1 is valid, the caller will not error out and
                 // will not print the slightly invalid position.
-                return Ok((1, peeked.pos));
+                return Ok((
+                    Expr::Integer(IntegerSpan { value: 1, pos: peeked.pos }),
+                    Ordering::Greater,
+                    false,
+                ));
             }
         };
 
         let peeked = self.lexer.peek()?;
         match peeked.token {
+            Token::Double(d) => {
+                let peeked = self.lexer.consume_peeked();
+                let sign = if d == 0.0 { Ordering::Equal } else { Ordering::Greater };
+                Ok((Expr::Double(DoubleSpan { value: d, pos: peeked.pos }), sign, true))
+            }
             Token::Integer(i) => {
                 let peeked = self.lexer.consume_peeked();
-                Ok((i, peeked.pos))
+                Ok((Expr::Integer(IntegerSpan { value: i, pos: peeked.pos }), i.cmp(&0), false))
             }
             Token::Minus => {
                 self.lexer.consume_peeked();
                 let peeked = self.lexer.peek()?;
                 match peeked.token {
+                    Token::Double(d) => {
+                        let peeked = self.lexer.consume_peeked();
+                        let sign = if d == 0.0 { Ordering::Equal } else { Ordering::Less };
+                        Ok((Expr::Double(DoubleSpan { value: -d, pos: peeked.pos }), sign, true))
+                    }
                     Token::Integer(i) => {
                         let peeked = self.lexer.consume_peeked();
-                        Ok((-i, peeked.pos))
+                        Ok((
+                            Expr::Integer(IntegerSpan { value: -i, pos: peeked.pos }),
+                            (-i).cmp(&0),
+                            false,
+                        ))
                     }
-                    _ => Err(Error::Bad(peeked.pos, "STEP needs an integer".to_owned())),
+                    _ => Err(Error::Bad(peeked.pos, "STEP needs a literal number".to_owned())),
                 }
             }
-            _ => Err(Error::Bad(peeked.pos, "STEP needs an integer".to_owned())),
+            _ => Err(Error::Bad(peeked.pos, "STEP needs a literal number".to_owned())),
         }
     }
 
@@ -823,12 +844,11 @@ impl<'a> Parser<'a> {
         let token_span = self.lexer.read()?;
         let iterator = match token_span.token {
             Token::Symbol(iterator) => match iterator.ref_type() {
-                // TODO(jmmv): Should we support doubles in for loops?
-                VarType::Auto | VarType::Integer => iterator,
+                VarType::Auto | VarType::Double | VarType::Integer => iterator,
                 _ => {
                     return Err(Error::Bad(
                         token_span.pos,
-                        "Iterator name in FOR statement must be an integer reference".to_owned(),
+                        "Iterator name in FOR statement must be a numeric reference".to_owned(),
                     ))
                 }
             },
@@ -847,8 +867,8 @@ impl<'a> Parser<'a> {
         let to_span = self.expect_and_consume(Token::To, "No TO in FOR statement")?;
         let end = self.parse_required_expr("No end expression in FOR statement")?;
 
-        let (step, step_pos) = self.parse_step()?;
-        let end_condition = match step.cmp(&0) {
+        let (step, step_sign, iter_double) = self.parse_step()?;
+        let end_condition = match step_sign {
             Ordering::Greater => Expr::LessEqual(Box::from(BinaryOpSpan {
                 lhs: Expr::Symbol(SymbolSpan { vref: iterator.clone(), pos: iterator_pos }),
                 rhs: end,
@@ -860,13 +880,16 @@ impl<'a> Parser<'a> {
                 pos: to_span.pos,
             })),
             Ordering::Equal => {
-                return Err(Error::Bad(step_pos, "Infinite FOR loop; STEP cannot be 0".to_owned()))
+                return Err(Error::Bad(
+                    step.start_pos(),
+                    "Infinite FOR loop; STEP cannot be 0".to_owned(),
+                ))
             }
         };
 
         let next_value = Expr::Add(Box::from(BinaryOpSpan {
             lhs: Expr::Symbol(SymbolSpan { vref: iterator.clone(), pos: iterator_pos }),
-            rhs: Expr::Integer(IntegerSpan { value: step, pos: step_pos }),
+            rhs: step,
             pos: to_span.pos,
         }));
 
@@ -878,6 +901,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::For(ForSpan {
             iter: iterator,
             iter_pos: iterator_pos,
+            iter_double,
             start,
             end: end_condition,
             next: next_value,
@@ -2365,6 +2389,7 @@ mod tests {
             &[Statement::For(ForSpan {
                 iter: auto_iter.clone(),
                 iter_pos: lc(1, 5),
+                iter_double: false,
                 start: expr_integer(1, 1, 9),
                 end: Expr::LessEqual(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(auto_iter.clone(), 1, 5),
@@ -2380,22 +2405,23 @@ mod tests {
             })],
         );
 
-        let typed_iter = VarRef::new("i", VarType::Integer);
+        let typed_iter = VarRef::new("d", VarType::Double);
         do_ok_test(
-            "FOR i% = 1 TO 10\nREM Nothing to do\nNEXT",
+            "FOR d# = 1.0 TO 10.2\nREM Nothing to do\nNEXT",
             &[Statement::For(ForSpan {
                 iter: typed_iter.clone(),
                 iter_pos: lc(1, 5),
-                start: expr_integer(1, 1, 10),
+                iter_double: false,
+                start: expr_double(1.0, 1, 10),
                 end: Expr::LessEqual(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(typed_iter.clone(), 1, 5),
-                    rhs: expr_integer(10, 1, 15),
-                    pos: lc(1, 12),
+                    rhs: expr_double(10.2, 1, 17),
+                    pos: lc(1, 14),
                 })),
                 next: Expr::Add(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(typed_iter, 1, 5),
-                    rhs: expr_integer(1, 1, 17),
-                    pos: lc(1, 12),
+                    rhs: expr_integer(1, 1, 21),
+                    pos: lc(1, 14),
                 })),
                 body: vec![],
             })],
@@ -2410,6 +2436,7 @@ mod tests {
             &[Statement::For(ForSpan {
                 iter: iter.clone(),
                 iter_pos: lc(1, 5),
+                iter_double: false,
                 start: expr_integer(0, 1, 9),
                 end: Expr::LessEqual(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(iter.clone(), 1, 5),
@@ -2434,6 +2461,7 @@ mod tests {
             &[Statement::For(ForSpan {
                 iter: iter.clone(),
                 iter_pos: lc(1, 5),
+                iter_double: false,
                 start: expr_integer(0, 1, 9),
                 end: Expr::LessEqual(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(iter.clone(), 1, 5),
@@ -2443,6 +2471,28 @@ mod tests {
                 next: Expr::Add(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(iter, 1, 5),
                     rhs: expr_integer(2, 1, 21),
+                    pos: lc(1, 11),
+                })),
+                body: vec![make_bare_builtin_call("A", 2, 1)],
+            })],
+        );
+
+        let iter = VarRef::new("i", VarType::Auto);
+        do_ok_test(
+            "FOR i = 0 TO 5 STEP 2.5\nA\nNEXT",
+            &[Statement::For(ForSpan {
+                iter: iter.clone(),
+                iter_pos: lc(1, 5),
+                iter_double: true,
+                start: expr_integer(0, 1, 9),
+                end: Expr::LessEqual(Box::from(BinaryOpSpan {
+                    lhs: expr_symbol(iter.clone(), 1, 5),
+                    rhs: expr_integer(5, 1, 14),
+                    pos: lc(1, 11),
+                })),
+                next: Expr::Add(Box::from(BinaryOpSpan {
+                    lhs: expr_symbol(iter, 1, 5),
+                    rhs: expr_double(2.5, 1, 21),
                     pos: lc(1, 11),
                 })),
                 body: vec![make_bare_builtin_call("A", 2, 1)],
@@ -2458,6 +2508,7 @@ mod tests {
             &[Statement::For(ForSpan {
                 iter: iter.clone(),
                 iter_pos: lc(1, 5),
+                iter_double: false,
                 start: expr_integer(5, 1, 9),
                 end: Expr::GreaterEqual(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(iter.clone(), 1, 5),
@@ -2472,6 +2523,28 @@ mod tests {
                 body: vec![make_bare_builtin_call("A", 2, 1)],
             })],
         );
+
+        let iter = VarRef::new("i", VarType::Auto);
+        do_ok_test(
+            "FOR i = 5 TO 0 STEP -1.2\nA\nNEXT",
+            &[Statement::For(ForSpan {
+                iter: iter.clone(),
+                iter_pos: lc(1, 5),
+                iter_double: true,
+                start: expr_integer(5, 1, 9),
+                end: Expr::GreaterEqual(Box::from(BinaryOpSpan {
+                    lhs: expr_symbol(iter.clone(), 1, 5),
+                    rhs: expr_integer(0, 1, 14),
+                    pos: lc(1, 11),
+                })),
+                next: Expr::Add(Box::from(BinaryOpSpan {
+                    lhs: expr_symbol(iter, 1, 5),
+                    rhs: expr_double(-1.2, 1, 22),
+                    pos: lc(1, 11),
+                })),
+                body: vec![make_bare_builtin_call("A", 2, 1)],
+            })],
+        );
     }
 
     #[test]
@@ -2480,13 +2553,10 @@ mod tests {
         do_error_test("FOR =\n", "1:5: No iterator name in FOR statement");
         do_error_test(
             "FOR a$\n",
-            "1:5: Iterator name in FOR statement must be an integer reference",
-        );
-        do_error_test(
-            "FOR d#\n",
-            "1:5: Iterator name in FOR statement must be an integer reference",
+            "1:5: Iterator name in FOR statement must be a numeric reference",
         );
 
+        do_error_test("FOR d#\n", "1:7: No equal sign in FOR statement");
         do_error_test("FOR i 3\n", "1:7: No equal sign in FOR statement");
         do_error_test("FOR i = TO\n", "1:9: No start expression in FOR statement");
         do_error_test("FOR i = NEXT\n", "1:9: Unexpected keyword in expression");
@@ -2495,10 +2565,11 @@ mod tests {
         do_error_test("FOR i = 3 TO STEP\n", "1:14: No end expression in FOR statement");
         do_error_test("FOR i = 3 TO NEXT\n", "1:14: Unexpected keyword in expression");
 
-        do_error_test("FOR i = 3 TO 1 STEP a\n", "1:21: STEP needs an integer");
-        do_error_test("FOR i = 3 TO 1 STEP -a\n", "1:22: STEP needs an integer");
-        do_error_test("FOR i = 3 TO 1 STEP NEXT\n", "1:21: STEP needs an integer");
+        do_error_test("FOR i = 3 TO 1 STEP a\n", "1:21: STEP needs a literal number");
+        do_error_test("FOR i = 3 TO 1 STEP -a\n", "1:22: STEP needs a literal number");
+        do_error_test("FOR i = 3 TO 1 STEP NEXT\n", "1:21: STEP needs a literal number");
         do_error_test("FOR i = 3 TO 1 STEP 0\n", "1:21: Infinite FOR loop; STEP cannot be 0");
+        do_error_test("FOR i = 3 TO 1 STEP 0.0\n", "1:21: Infinite FOR loop; STEP cannot be 0");
 
         do_error_test("FOR i = 3 TO 1", "1:15: Expecting newline after FOR");
         do_error_test("FOR i = 1 TO 3 STEP 1", "1:22: Expecting newline after FOR");

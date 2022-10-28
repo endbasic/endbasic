@@ -44,6 +44,9 @@ for the time being.**
     simpler `MAX` and `MIN` functions that can mix and match integers and
     doubles.
 
+*   Issue #114: Added support for doubles in `FOR` iteration, both to specify
+    the loop range and the step.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
