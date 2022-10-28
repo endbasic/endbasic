@@ -24,8 +24,8 @@ DIR
 LOAD "demos:/hello.bas"
 
 ' Replace some default drives with two more.
-MOUNT "A", "memory://"
-MOUNT "B", "memory://"
+MOUNT "memory://" AS "A"
+MOUNT "memory://" AS "B"
 CD "A:/"
 UNMOUNT "DEMOS"
 UNMOUNT "MEMORY"

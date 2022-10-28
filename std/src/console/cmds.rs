@@ -449,6 +449,7 @@ impl Command for PrintCommand {
                         text += " ";
                     }
                 }
+                ArgSep::As => return Err(CallError::SyntaxError),
             }
         }
         self.console.borrow_mut().print(&text)?;
@@ -693,6 +694,11 @@ mod tests {
 
     #[test]
     fn test_print_errors() {
+        check_stmt_err("1:1: In call to PRINT: expected [expr1 [<;|,> .. exprN]]", "PRINT 3 AS b");
+        check_stmt_err(
+            "1:1: In call to PRINT: expected [expr1 [<;|,> .. exprN]]",
+            "PRINT 3, 4 AS b",
+        );
         // Ensure type errors from `Expr` and `Value` bubble up.
         check_stmt_err("1:9: Unexpected value in expression", "PRINT a b");
         check_stmt_err("1:9: Cannot add 3 and TRUE", "PRINT 3 + TRUE");

@@ -191,7 +191,7 @@ impl Command for OutCommand {
             match arg.sep {
                 ArgSep::End => break,
                 ArgSep::Short => text += " ",
-                ArgSep::Long => return Err(CallError::SyntaxError),
+                ArgSep::Long | ArgSep::As => return Err(CallError::SyntaxError),
             }
         }
         self.data.borrow_mut().push(text);

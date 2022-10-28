@@ -47,6 +47,10 @@ for the time being.**
 *   Issue #114: Added support for doubles in `FOR` iteration, both to specify
     the loop range and the step.
 
+*   Changed the syntax of the `MOUNT` command to take advantage of the `AS`
+    keyword as an argument separator and thus be of the form
+    `MOUNT target$ AS $drive_name$`.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**

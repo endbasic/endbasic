@@ -374,6 +374,9 @@ pub enum ArgSep {
 
     /// Long separator (`,`).
     Long,
+
+    /// `AS` separator.
+    As,
 }
 
 /// Components of an array assignment statement.

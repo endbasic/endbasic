@@ -320,6 +320,10 @@ impl<'a> Parser<'a> {
                     let peeked = self.lexer.consume_peeked();
                     args.push(ArgSpan { expr, sep: ArgSep::Long, sep_pos: peeked.pos });
                 }
+                Token::As => {
+                    let peeked = self.lexer.consume_peeked();
+                    args.push(ArgSpan { expr, sep: ArgSep::As, sep_pos: peeked.pos });
+                }
                 _ => {
                     return Err(Error::Bad(
                         peeked.pos,
@@ -507,6 +511,7 @@ impl<'a> Parser<'a> {
             match self.lexer.peek()?.token {
                 Token::Eof
                 | Token::Eol
+                | Token::As
                 | Token::Comma
                 | Token::Semicolon
                 | Token::Then
@@ -648,6 +653,7 @@ impl<'a> Parser<'a> {
 
                 Token::Eof
                 | Token::Eol
+                | Token::As
                 | Token::Comma
                 | Token::Semicolon
                 | Token::Then
@@ -656,8 +662,7 @@ impl<'a> Parser<'a> {
                     panic!("Field separators handled above")
                 }
 
-                Token::As
-                | Token::BooleanName
+                Token::BooleanName
                 | Token::Dim
                 | Token::DoubleName
                 | Token::Else
@@ -1297,7 +1302,7 @@ mod tests {
     #[test]
     fn test_builtin_calls() {
         do_ok_test(
-            "PRINT a\nPRINT ; 3 , c$\nNOARGS",
+            "PRINT a\nPRINT ; 3 , c$\nNOARGS\nNAME 3 AS 4",
             &[
                 Statement::BuiltinCall(BuiltinCallSpan {
                     name: "PRINT".to_owned(),
@@ -1329,6 +1334,22 @@ mod tests {
                     name: "NOARGS".to_owned(),
                     name_pos: lc(3, 1),
                     args: vec![],
+                }),
+                Statement::BuiltinCall(BuiltinCallSpan {
+                    name: "NAME".to_owned(),
+                    name_pos: lc(4, 1),
+                    args: vec![
+                        ArgSpan {
+                            expr: Some(expr_integer(3, 4, 6)),
+                            sep: ArgSep::As,
+                            sep_pos: lc(4, 8),
+                        },
+                        ArgSpan {
+                            expr: Some(expr_integer(4, 4, 11)),
+                            sep: ArgSep::End,
+                            sep_pos: lc(4, 12),
+                        },
+                    ],
                 }),
             ],
         );
@@ -2140,8 +2161,8 @@ mod tests {
     #[test]
     fn test_expr_errors_due_to_keywords() {
         for kw in &[
-            "AS", "BOOLEAN", "DIM", "DOUBLE", "ELSE", "ELSEIF", "END", "FOR", "IF", "INTEGER",
-            "NEXT", "STRING", "WHILE",
+            "BOOLEAN", "DIM", "DOUBLE", "ELSE", "ELSEIF", "END", "FOR", "IF", "INTEGER", "NEXT",
+            "STRING", "WHILE",
         ] {
             do_expr_error_test(
                 &format!("2 + {} - 1", kw),
