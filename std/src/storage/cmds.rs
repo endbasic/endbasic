@@ -212,7 +212,7 @@ impl MountCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("MOUNT", VarType::Void)
-                .with_syntax("[drive_name$, target$]")
+                .with_syntax("[target$ AS drive_name$]")
                 .with_category(CATEGORY)
                 .with_description(
                     "Lists the mounted drives or mounts a new drive.
@@ -239,7 +239,7 @@ impl Command for MountCommand {
                 show_drives(&*self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
                 Ok(())
             }
-            [ArgSpan { expr: Some(name), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(target), sep: ArgSep::End, .. }] =>
+            [ArgSpan { expr: Some(target), sep: ArgSep::As, .. }, ArgSpan { expr: Some(name), sep: ArgSep::End, .. }] =>
             {
                 let name = match name.eval(machine.get_mut_symbols()).await? {
                     Value::Text(t) => t,
@@ -596,7 +596,7 @@ mod tests {
     #[test]
     fn test_mount_mount() {
         let mut t = Tester::default();
-        t.run("MOUNT \"abc\", \"memory://\"").check();
+        t.run(r#"MOUNT "memory://" AS "abc""#).check();
 
         let mut exp_info = BTreeMap::default();
         exp_info.insert("MEMORY", "memory://");
@@ -606,26 +606,29 @@ mod tests {
 
     #[test]
     fn test_mount_errors() {
-        check_stmt_err("1:1: In call to MOUNT: expected [drive_name$, target$]", "MOUNT 1");
-        check_stmt_err("1:1: In call to MOUNT: expected [drive_name$, target$]", "MOUNT 1, 2, 3");
+        check_stmt_err("1:1: In call to MOUNT: expected [target$ AS drive_name$]", "MOUNT 1");
+        check_stmt_err("1:1: In call to MOUNT: expected [target$ AS drive_name$]", "MOUNT 1, 2, 3");
 
-        check_stmt_err("1:1: In call to MOUNT: 1:7: Drive name must be a string", "MOUNT 1, \"a\"");
         check_stmt_err(
-            "1:1: In call to MOUNT: 1:12: Mount target must be a string",
-            "MOUNT \"a\", 1",
+            "1:1: In call to MOUNT: 1:14: Drive name must be a string",
+            r#"MOUNT "a" AS 1"#,
+        );
+        check_stmt_err(
+            "1:1: In call to MOUNT: 1:7: Mount target must be a string",
+            r#"MOUNT 1 AS "a""#,
         );
 
         check_stmt_err(
             "1:1: In call to MOUNT: Invalid drive name 'a:'",
-            "MOUNT \"a:\", \"memory://\"",
+            r#"MOUNT "memory://" AS "a:""#,
         );
         check_stmt_err(
             "1:1: In call to MOUNT: Mount URI must be of the form scheme://path",
-            "MOUNT \"a\", \"foo//bar\"",
+            r#"MOUNT "foo//bar" AS "a""#,
         );
         check_stmt_err(
             "1:1: In call to MOUNT: Unknown mount scheme 'foo'",
-            "MOUNT \"a\", \"foo://bar\"",
+            r#"MOUNT "foo://bar" AS "a""#,
         );
     }
 

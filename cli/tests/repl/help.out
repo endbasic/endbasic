@@ -553,7 +553,7 @@ Output from HELP LOGOUT:
 
 Output from HELP MOUNT:
 
-    MOUNT [drive_name$, target$]
+    MOUNT [target$ AS drive_name$]
 
     Lists the mounted drives or mounts a new drive.
 

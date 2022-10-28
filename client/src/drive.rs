@@ -369,7 +369,7 @@ mod tests {
             }),
         );
         t.run(format!(
-            r#"LOGIN "{}", "{}": MOUNT "x", "cloud://user2": DIR "cloud:/": DIR "x:/""#,
+            r#"LOGIN "{}", "{}": MOUNT "cloud://user2" AS "x": DIR "cloud:/": DIR "x:/""#,
             "mock-username", "mock-password",
         ))
         .expect_access_token("random token")
