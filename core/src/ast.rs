@@ -510,6 +510,10 @@ pub struct ForSpan {
     /// Position of the iterator.
     pub iter_pos: LineCol,
 
+    /// If true, the iterator computation needs to be performed as a double so that, when the
+    /// iterator variable is not yet defined, it gains the correct type.
+    pub iter_double: bool,
+
     /// Expression to compute the iterator's initial value.
     pub start: Expr,
 

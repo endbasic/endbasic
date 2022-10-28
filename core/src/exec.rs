@@ -329,18 +329,29 @@ impl Machine {
     /// Executes a `FOR` loop.
     async fn do_for(&mut self, span: &ForSpan) -> Result<()> {
         debug_assert!(
-            span.iter.ref_type() == VarType::Auto || span.iter.ref_type() == VarType::Integer
+            span.iter.ref_type() == VarType::Auto
+                || span.iter.ref_type() == VarType::Double
+                || span.iter.ref_type() == VarType::Integer
         );
+        if span.iter_double
+            && span.iter.ref_type() == VarType::Auto
+            && self.symbols.get(&span.iter).expect("Type is auto so get must succeed").is_none()
+        {
+            self.symbols
+                .dim(span.iter.name(), VarType::Double)
+                .expect("DIM of undefined variable must succeed");
+        }
         let start_value = span.start.eval(&mut self.symbols).await?;
         match start_value {
-            Value::Integer(_) => self
-                .symbols
-                .set_var(&span.iter, start_value)
-                .map_err(|e| Error::from_value_error(e, span.start.start_pos()))?,
+            Value::Double(_) | Value::Integer(_) => {
+                self.symbols
+                    .set_var(&span.iter, start_value)
+                    .map_err(|e| Error::from_value_error(e, span.start.start_pos()))?
+            }
             _ => {
                 return new_syntax_error(
                     span.start.start_pos(),
-                    "FOR supports integer iteration only",
+                    "FOR supports numeric iteration only",
                 )
             }
         }
@@ -884,45 +895,65 @@ mod tests {
 
     #[test]
     fn test_for_incrementing() {
-        let code = r#"
-            IN first
-            IN last
-            FOR a = first TO last
-                OUT "a is"; a
-            NEXT
-        "#;
-        do_ok_test(code, &["0", "0"], &["a is 0"]);
-        do_ok_test(code, &["0", "3"], &["a is 0", "a is 1", "a is 2", "a is 3"]);
+        do_ok_test("FOR a = 0 TO 0: OUT a: NEXT", &[], &["0"]);
+        do_ok_test("FOR a = 0 TO 3: OUT a: NEXT", &[], &["0", "1", "2", "3"]);
+        do_ok_test("FOR a = 1.3 TO 3: OUT a: NEXT", &[], &["1.3", "2.3"]);
+        do_ok_test("FOR a = 1.3 TO 3.3: OUT a: NEXT", &[], &["1.3", "2.3", "3.3"]);
+        do_ok_test("FOR a = 1 TO 3.3: OUT a: NEXT", &[], &["1", "2", "3"]);
+        do_ok_test("FOR a = 1 TO 3.7: OUT a: NEXT", &[], &["1", "2", "3"]);
+        do_ok_test("FOR a# = 1 TO 2: OUT a: NEXT", &[], &["1", "2"]);
+        do_ok_test("FOR a = 1.1 TO 2.1: b% = (a * 10): OUT b: NEXT", &[], &["11", "21"]);
+        do_ok_test("FOR a# = 1.1 TO 2.1: b% = (a * 10): OUT b: NEXT", &[], &["11", "21"]);
     }
 
     #[test]
     fn test_for_incrementing_with_step() {
-        let code = r#"
-            IN first
-            IN last
-            FOR a = first TO last STEP 3
-                OUT "a is"; a
-            NEXT
-        "#;
-        do_ok_test(code, &["0", "0"], &["a is 0"]);
-        do_ok_test(code, &["0", "2"], &["a is 0"]);
-        do_ok_test(code, &["0", "3"], &["a is 0", "a is 3"]);
-        do_ok_test(code, &["0", "10"], &["a is 0", "a is 3", "a is 6", "a is 9"]);
+        do_ok_test("FOR a = 0 TO 0 STEP 3: OUT a: NEXT", &[], &["0"]);
+        do_ok_test("FOR a = 0 TO 2 STEP 3: OUT a: NEXT", &[], &["0"]);
+        do_ok_test("FOR a = 0 TO 3 STEP 3: OUT a: NEXT", &[], &["0", "3"]);
+        do_ok_test("FOR a = 0 TO 10 STEP 3: OUT a: NEXT", &[], &["0", "3", "6", "9"]);
+        do_ok_test("FOR a = 1 TO 2 STEP 0.4: b% = (a * 10): OUT b: NEXT", &[], &["10", "14", "18"]);
+        do_ok_test(
+            "FOR a# = 1 TO 2 STEP 0.4: b% = (a * 10): OUT b: NEXT",
+            &[],
+            &["10", "14", "18"],
+        );
     }
 
     #[test]
     fn test_for_decrementing_with_step() {
-        let code = r#"
-            IN first
-            IN last
-            FOR a = first TO last STEP -2
-                OUT "a is"; a
+        do_ok_test("FOR a = 0 TO 0 STEP -2: OUT a: NEXT", &[], &["0"]);
+        do_ok_test("FOR a = 2 TO 0 STEP -2: OUT a: NEXT", &[], &["2", "0"]);
+        do_ok_test("FOR a = -2 TO -6 STEP -2: OUT a: NEXT", &[], &["-2", "-4", "-6"]);
+        do_ok_test("FOR a = 10 TO 1 STEP -2: OUT a: NEXT", &[], &["10", "8", "6", "4", "2"]);
+        do_ok_test(
+            "FOR a# = 2 TO 1 STEP -0.4: b% = (a * 10): OUT b: NEXT",
+            &[],
+            &["20", "16", "12"],
+        );
+    }
+
+    #[test]
+    fn test_for_doubles_on_integer_iterator() {
+        // This tests a corner case where using a DOUBLE step value on a variable that is declared
+        // as an INTEGER results in an infinite loop due to rounding.  We could error our in this
+        // case (or force the iterator to be a DOUBLE if it is not yet defined), but I'm not yet
+        // sure if there would be legitimate reasons for someone to want this.
+        do_ok_test(
+            r#"
+            i = 0
+            DIM a AS INTEGER
+            FOR a = 1.0 TO 2.0 STEP 0.4
+                i = i + 1
+                IF i = 100 THEN
+                    GOTO @out
+                END IF
             NEXT
-        "#;
-        do_ok_test(code, &["0", "0"], &["a is 0"]);
-        do_ok_test(code, &["2", "0"], &["a is 2", "a is 0"]);
-        do_ok_test(code, &["-2", "-6"], &["a is -2", "a is -4", "a is -6"]);
-        do_ok_test(code, &["10", "1"], &["a is 10", "a is 8", "a is 6", "a is 4", "a is 2"]);
+            @out: OUT i
+            "#,
+            &[],
+            &["100"],
+        );
     }
 
     #[test]
@@ -959,7 +990,7 @@ mod tests {
 
         do_simple_error_test(
             "FOR i = \"a\" TO 3\nNEXT",
-            "1:9: FOR supports integer iteration only",
+            "1:9: FOR supports numeric iteration only",
         );
         do_simple_error_test(
             "FOR i = 1 TO \"a\"\nNEXT",
@@ -968,16 +999,11 @@ mod tests {
 
         do_simple_error_test(
             "FOR i = \"b\" TO 7 STEP -8\nNEXT",
-            "1:9: FOR supports integer iteration only",
+            "1:9: FOR supports numeric iteration only",
         );
         do_simple_error_test(
             "FOR i = 1 TO \"b\" STEP -8\nNEXT",
             "1:11: Cannot compare 1 and \"b\" with >=",
-        );
-
-        do_simple_error_test(
-            "FOR a = 1.0 TO 10.0\nNEXT",
-            "1:9: FOR supports integer iteration only",
         );
     }
 
