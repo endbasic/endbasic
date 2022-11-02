@@ -67,6 +67,7 @@ pub enum Token {
     Or,
     Xor,
 
+    Data,
     Else,
     Elseif,
     End,
@@ -132,6 +133,7 @@ impl fmt::Display for Token {
             Token::Or => write!(f, "OR"),
             Token::Xor => write!(f, "XOR"),
 
+            Token::Data => write!(f, "DATA"),
             Token::Else => write!(f, "ELSE"),
             Token::Elseif => write!(f, "ELSEIF"),
             Token::End => write!(f, "END"),
@@ -387,6 +389,7 @@ impl<'a> Lexer<'a> {
             "AND" => Token::And,
             "AS" => Token::As,
             "BOOLEAN" => Token::BooleanName,
+            "DATA" => Token::Data,
             "DIM" => Token::Dim,
             "DOUBLE" => Token::DoubleName,
             "ELSE" => Token::Else,
@@ -815,6 +818,28 @@ mod tests {
                 ts(Token::Text("this \"is escaped\" \\ a".to_owned()), 1, 1, 23),
                 ts(Token::Integer(1), 1, 29, 1),
                 ts(Token::Eof, 1, 30, 0),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_data() {
+        do_ok_test("DATA", &[ts(Token::Data, 1, 1, 4), ts(Token::Eof, 1, 5, 0)]);
+
+        do_ok_test("data", &[ts(Token::Data, 1, 1, 4), ts(Token::Eof, 1, 5, 0)]);
+
+        // Common BASIC interprets things like "2 + foo" as a single string but we interpret
+        // separate tokens.  "Fixing" this to read data in the same way requires entering a
+        // separate lexing mode just for DATA statements, which is not very interesting.  We can
+        // ask for strings to always be double-quoted.
+        do_ok_test(
+            "DATA 2 + foo",
+            &[
+                ts(Token::Data, 1, 1, 4),
+                ts(Token::Integer(2), 1, 6, 1),
+                ts(Token::Plus, 1, 8, 1),
+                ts(new_auto_symbol("foo"), 1, 10, 3),
+                ts(Token::Eof, 1, 13, 0),
             ],
         );
     }

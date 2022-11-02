@@ -39,8 +39,11 @@ currently supports:
 *   Variable types: boolean (`?`), double (`#`), integer (`%`), and string
     (`$`).
 *   Strong typing with optional variable type annotations.
+*   `DATA` statements for literal primitive values.  Booleans, numbers, and
+    strings are supported, but strings must be double-quoted.
 *   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` statements.
 *   `FOR x = ... TO ... [STEP ...]` / `NEXT` loops.
+*   `GOTO @label` statements and `@label` annotations.
 *   `WHILE ...` / `WEND` loops.
 *   UTF-8 everywhere (I think).
 

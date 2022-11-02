@@ -108,6 +108,34 @@ impl Command for ExitCommand {
     }
 }
 
+/// Grabs all `DATA` values available during execution.
+pub(crate) struct GetDataCommand {
+    metadata: CallableMetadata,
+    data: Rc<RefCell<Vec<Option<Value>>>>,
+}
+
+impl GetDataCommand {
+    /// Creates a new command that sets aside all data values.
+    pub(crate) fn new(data: Rc<RefCell<Vec<Option<Value>>>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GETDATA", VarType::Void).test_build(),
+            data,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for GetDataCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, _span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        *self.data.borrow_mut() = machine.get_data().to_vec();
+        Ok(())
+    }
+}
+
 /// Simplified version of `INPUT` to feed input values based on some golden `data`.
 ///
 /// Every time this command is invoked, it yields the next value from the `data` iterator and

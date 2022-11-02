@@ -57,11 +57,12 @@ const LANG_REFERENCE: &str = r"
         WHILE expr: ...: WEND
 
     Misc:
-        st1: st2    Separates statements (same as a newline).
-        REM text    Comment until end of line.
-        ' text      Comment until end of line.
-        ,           Long separator for arguments to builtin call.
-        ;           Short separator for arguments to builtin call.
+        st1: st2     Separates statements (same as a newline).
+        REM text     Comment until end of line.
+        ' text       Comment until end of line.
+        ,            Long separator for arguments to builtin call.
+        ;            Short separator for arguments to builtin call.
+        DATA a, b    Registers literal primitive values for later reads.
 ";
 
 /// Returns the header for the help summary.
