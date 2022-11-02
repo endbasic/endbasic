@@ -436,6 +436,13 @@ pub struct BuiltinCallSpan {
     pub args: Vec<ArgSpan>,
 }
 
+/// Components of a data statement.
+#[derive(Debug, PartialEq)]
+pub struct DataSpan {
+    /// Collection of optional literal values.
+    pub values: Vec<Option<Value>>,
+}
+
 /// Components of a variable definition.
 ///
 /// Given that a definition causes the variable to be initialized to a default value, it is
@@ -574,6 +581,9 @@ pub enum Statement {
 
     /// Represents a call to a builtin command such as `PRINT`.
     BuiltinCall(BuiltinCallSpan),
+
+    /// Represents a `DATA` statement.
+    Data(DataSpan),
 
     /// Represents a variable definition.
     Dim(DimSpan),

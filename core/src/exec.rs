@@ -143,6 +143,7 @@ pub struct Machine {
     clearables: Vec<Box<dyn Clearable>>,
     stop_reason: Option<StopReason>,
     pending_goto: Option<GotoSpan>,
+    data: Vec<Option<Value>>,
 }
 
 impl Machine {
@@ -180,6 +181,11 @@ impl Machine {
     /// call.
     pub fn exit(&mut self, code: u8) {
         self.stop_reason = Some(StopReason::Exited(code));
+    }
+
+    /// Obtains immutable access to the data values available during the *current* execution.
+    pub fn get_data(&self) -> &[Option<Value>] {
+        &self.data
     }
 
     /// Obtains immutable access to the state of the symbols.
@@ -420,6 +426,28 @@ impl Machine {
         Ok(())
     }
 
+    /// Extracts all `DATA` values from a collection of statements into `data`.
+    ///
+    /// Note that this *mutates* `stmts` by removing the values from the `DATA` statements.  This is
+    /// done for efficiency: we won't need the values again during execution and copying them would
+    /// be expensive.
+    fn extract_data(stmts: &mut [Statement], data: &mut Vec<Option<Value>>) {
+        for stmt in stmts {
+            match stmt {
+                Statement::Data(span) => data.append(&mut span.values),
+
+                Statement::For(span) => Machine::extract_data(&mut span.body, data),
+                Statement::If(span) => {
+                    for branch in &mut span.branches {
+                        Machine::extract_data(&mut branch.body, data)
+                    }
+                }
+                Statement::While(span) => Machine::extract_data(&mut span.body, data),
+                _ => (),
+            }
+        }
+    }
+
     /// Executes a collection of statements.
     ///
     /// All callers of this function should inspect `self.pending_goto` to see if it is set after
@@ -458,6 +486,10 @@ impl Machine {
                 Statement::ArrayAssignment(span) => self.assign_array(span).await?,
                 Statement::Assignment(span) => self.assign(span).await?,
                 Statement::BuiltinCall(span) => self.call_builtin(span).await?,
+                Statement::Data(span) => debug_assert!(
+                    span.values.is_empty(),
+                    "DATA values must have been consumed before execution by extract_data()"
+                ),
                 Statement::Dim(span) => self
                     .symbols
                     .dim(&span.name, span.vtype)
@@ -488,11 +520,19 @@ impl Machine {
     /// different programs on the same machine, all sharing state.
     pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<StopReason> {
         debug_assert!(self.stop_reason.is_none());
-        let stmts = parser::parse(input)?;
-        self.exec_multiple(&stmts).await?;
+        let mut stmts = parser::parse(input)?;
+
+        assert!(self.data.is_empty());
+        Machine::extract_data(&mut stmts, &mut self.data);
+
+        let result = self.exec_multiple(&stmts).await;
+        self.data.clear();
+        result?;
+
         if let Some(span) = self.pending_goto.take() {
             return new_syntax_error(span.target_pos, format!("Unknown label {}", span.target));
         }
+
         Ok(self.stop_reason.take().unwrap_or(StopReason::Eof))
     }
 }
@@ -539,6 +579,62 @@ mod tests {
         assert!(machine.get_var_as_bool("a").is_err());
         assert!(machine.get_var_as_int("b").is_err());
         assert!(*cleared.borrow());
+    }
+
+    #[test]
+    fn test_get_data() {
+        let captured_data = Rc::from(RefCell::from(vec![]));
+        let mut machine = Machine::default();
+        machine.add_command(GetDataCommand::new(captured_data.clone()));
+
+        assert!(machine.get_data().is_empty());
+
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut b"DATA 3: GETDATA".as_ref())).unwrap()
+        );
+        assert!(machine.get_data().is_empty());
+        assert_eq!(&[Some(Value::Integer(3))], captured_data.borrow().as_slice());
+
+        assert_eq!(
+            StopReason::Eof,
+            block_on(
+                machine.exec(
+                    &mut b"
+                        GETDATA
+                        IF FALSE THEN: DATA 5: ELSE: DATA 6: END IF
+                        WHILE FALSE: DATA 1: WEND
+                        FOR i = 0 TO 0: DATA 0: NEXT
+                    "
+                    .as_ref()
+                )
+            )
+            .unwrap()
+        );
+        assert!(machine.get_data().is_empty());
+        assert_eq!(
+            &[
+                Some(Value::Integer(5)),
+                Some(Value::Integer(6)),
+                Some(Value::Integer(1)),
+                Some(Value::Integer(0))
+            ],
+            captured_data.borrow().as_slice()
+        );
+    }
+
+    #[test]
+    fn test_get_data_is_empty_after_execution() {
+        let mut machine = Machine::default();
+
+        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut b"DATA 3".as_ref())).unwrap());
+        assert!(machine.get_data().is_empty());
+
+        block_on(machine.exec(&mut b"DATA 3: abc".as_ref())).unwrap_err();
+        assert!(machine.get_data().is_empty());
+
+        block_on(machine.exec(&mut b"DATA 3: GOTO @foo".as_ref())).unwrap_err();
+        assert!(machine.get_data().is_empty());
     }
 
     #[test]

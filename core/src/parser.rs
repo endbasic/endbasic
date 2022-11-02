@@ -366,6 +366,76 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parses a `DATA` statement.
+    fn parse_data(&mut self) -> Result<Statement> {
+        let mut values = vec![];
+        loop {
+            let peeked = self.lexer.peek()?;
+            match peeked.token {
+                Token::Eof | Token::Eol => {
+                    values.push(None);
+                    break;
+                }
+                _ => (),
+            }
+
+            let token_span = self.lexer.read()?;
+            match token_span.token {
+                Token::Boolean(b) => values.push(Some(Value::Boolean(b))),
+                Token::Double(d) => values.push(Some(Value::Double(d))),
+                Token::Integer(i) => values.push(Some(Value::Integer(i))),
+                Token::Text(t) => values.push(Some(Value::Text(t))),
+
+                Token::Minus => {
+                    let token_span = self.lexer.read()?;
+                    match token_span.token {
+                        Token::Double(d) => values.push(Some(Value::Double(-d))),
+                        Token::Integer(i) => values.push(Some(Value::Integer(-i))),
+                        _ => {
+                            return Err(Error::Bad(
+                                token_span.pos,
+                                "Expected number after -".to_owned(),
+                            ))
+                        }
+                    }
+                }
+
+                Token::Eof | Token::Eol => panic!("Should not be consumed here; handled above"),
+
+                Token::Comma => {
+                    values.push(None);
+                    continue;
+                }
+
+                t => {
+                    return Err(Error::Bad(
+                        token_span.pos,
+                        format!("Unexpected {} in DATA statement", t),
+                    ))
+                }
+            }
+
+            let peeked = self.lexer.peek()?;
+            match &peeked.token {
+                Token::Eof | Token::Eol => {
+                    break;
+                }
+
+                Token::Comma => {
+                    self.lexer.consume_peeked();
+                }
+
+                t => {
+                    return Err(Error::Bad(
+                        peeked.pos,
+                        format!("Expected comma after datum but found {}", t),
+                    ))
+                }
+            }
+        }
+        Ok(Statement::Data(DataSpan { values }))
+    }
+
     /// Parses the `AS typename` clause of a `DIM` statement.  The caller has already consumed the
     /// `AS` token.
     fn parse_dim_as(&mut self) -> Result<(VarType, LineCol)> {
@@ -663,6 +733,7 @@ impl<'a> Parser<'a> {
                 }
 
                 Token::BooleanName
+                | Token::Data
                 | Token::Dim
                 | Token::DoubleName
                 | Token::Else
@@ -980,6 +1051,7 @@ impl<'a> Parser<'a> {
         }
         let token_span = self.lexer.read()?;
         let res = match token_span.token {
+            Token::Data => Ok(Some(self.parse_data()?)),
             Token::Eof => return Ok(None),
             Token::Eol => Ok(None),
             Token::Dim => Ok(Some(self.parse_dim()?)),
@@ -1463,6 +1535,72 @@ mod tests {
         do_error_test("PRINT ()\n", "1:7: Expected expression");
         do_error_test("PRINT (2, 3)\n", "1:7: Expected expression");
         do_error_test("PRINT (2, 3); 4\n", "1:7: Expected expression");
+    }
+
+    #[test]
+    fn test_data() {
+        do_ok_test("DATA", &[Statement::Data(DataSpan { values: vec![None] })]);
+
+        do_ok_test("DATA , ", &[Statement::Data(DataSpan { values: vec![None, None] })]);
+        do_ok_test(
+            "DATA , , ,",
+            &[Statement::Data(DataSpan { values: vec![None, None, None, None] })],
+        );
+
+        do_ok_test(
+            "DATA 1: DATA 2",
+            &[
+                Statement::Data(DataSpan { values: vec![Some(Value::Integer(1))] }),
+                Statement::Data(DataSpan { values: vec![Some(Value::Integer(2))] }),
+            ],
+        );
+
+        do_ok_test(
+            "DATA TRUE, -3, 5.1, \"foo\"",
+            &[Statement::Data(DataSpan {
+                values: vec![
+                    Some(Value::Boolean(true)),
+                    Some(Value::Integer(-3)),
+                    Some(Value::Double(5.1)),
+                    Some(Value::Text("foo".to_owned())),
+                ],
+            })],
+        );
+
+        do_ok_test(
+            "DATA , TRUE, , 3, , 5.1, , \"foo\",",
+            &[Statement::Data(DataSpan {
+                values: vec![
+                    None,
+                    Some(Value::Boolean(true)),
+                    None,
+                    Some(Value::Integer(3)),
+                    None,
+                    Some(Value::Double(5.1)),
+                    None,
+                    Some(Value::Text("foo".to_owned())),
+                    None,
+                ],
+            })],
+        );
+
+        do_ok_test(
+            "DATA -3, -5.1",
+            &[Statement::Data(DataSpan {
+                values: vec![Some(Value::Integer(-3)), Some(Value::Double(-5.1))],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_data_errors() {
+        do_error_test("DATA + 2", "1:6: Unexpected + in DATA statement");
+        do_error_test("DATA ;", "1:6: Unexpected ; in DATA statement");
+        do_error_test("DATA 5 + 1", "1:8: Expected comma after datum but found +");
+        do_error_test("DATA 5 ; 1", "1:8: Expected comma after datum but found ;");
+        do_error_test("DATA -FALSE", "1:7: Expected number after -");
+        do_error_test("DATA -\"abc\"", "1:7: Expected number after -");
+        do_error_test("DATA -foo", "1:7: Expected number after -");
     }
 
     #[test]
@@ -2161,8 +2299,8 @@ mod tests {
     #[test]
     fn test_expr_errors_due_to_keywords() {
         for kw in &[
-            "BOOLEAN", "DIM", "DOUBLE", "ELSE", "ELSEIF", "END", "FOR", "IF", "INTEGER", "NEXT",
-            "STRING", "WHILE",
+            "BOOLEAN", "DATA", "DIM", "DOUBLE", "ELSE", "ELSEIF", "END", "FOR", "GOTO", "IF",
+            "INTEGER", "NEXT", "STRING", "WHILE",
         ] {
             do_expr_error_test(
                 &format!("2 + {} - 1", kw),

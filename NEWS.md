@@ -55,6 +55,10 @@ for the time being.**
     no newline character is printed.  Useful to construct output lines in
     multiple steps and matches the behavior of other BASIC implementations.
 
+*   Issue #154: Added support for the `DATA` statement.  Booleans, numbers,
+    and strings are supported, but strings must be double-quoted (as opposed
+    to other BASIC implementations where the double-quoting is optional).
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
