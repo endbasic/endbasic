@@ -364,7 +364,7 @@ impl Value {
 }
 
 /// Types of separators between arguments to a `BuiltinCall`.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ArgSep {
     /// Filler for the separator in the last argument.
     End,

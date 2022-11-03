@@ -17,6 +17,7 @@ Output from HELP:
     >> Array functions
     >> Cloud access
     >> Console
+    >> Data management
     >> File system
     >> Graphics
     >> Hardware interface
@@ -103,6 +104,15 @@ Output from HELP CONSOLE:
     >> INPUT     Obtains user input from the console.
     >> LOCATE    Moves the cursor to the given position.
     >> PRINT     Prints a message to the console.
+
+    Type HELP followed by the name of a symbol for details.
+
+Output from HELP "DATA":
+
+    Data management
+
+    >> READ       Extracts data values from DATA statements.
+    >> RESTORE    Resets the index of the data element to be returned.
 
     Type HELP followed by the name of a symbol for details.
 
@@ -624,6 +634,40 @@ Output from HELP RANDOMIZE:
     random numbers.
 
     WARNING: These random numbers offer no cryptographic guarantees.
+
+Output from HELP READ:
+
+    READ vref1 [, .., vrefN]
+
+    Extracts data values from DATA statements.
+
+    DATA statements can appear anywhere in the program and they register
+    data values into an array of values.  READ is then used to extract
+    values from this array into the provided variables in the order in
+    which they were defined.  In other words: READ maintains an internal
+    index into the data array that gets incremented by the number of
+    provided variables every time it is executed.
+
+    The variable references in the vref1..vrefN list must match the types
+    or be compatible with the values in the corresponding position of the
+    data array.  Empty values in the data array can be specified by DATA,
+    and those are converted into the default values for the relevant types:
+    booleans are false, numbers are 0, and strings are empty.
+
+    Attempting to extract more values than are defined by DATA results in
+    an "out of data" error.
+
+    The index that READ uses to extract DATA values can be reset by RESTORE
+    and, more generally, by CLEAR.
+
+Output from HELP RESTORE:
+
+    RESTORE
+
+    Resets the index of the data element to be returned.
+
+    This allows READ to re-return the same elements that were previously
+    extracted from the array of values defined by DATA.
 
 Output from HELP RUN:
 
