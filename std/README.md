@@ -38,6 +38,7 @@ not intend to be fully compatible with them.  The library currently contains:
 
 *   Arrays: `LBOUND`, `UBOUND`.
 *   Console manipulation: `CLS`, `COLOR`, `INKEY`, `INPUT`, `LOCATE`, `PRINT`.
+*   Data manipulation: `READ`, `RESTORE`.
 *   Date and time manipulation: `SLEEP`.
 *   Graphics: `GFX_LINE`, `GFX_RECT`, `GFX_RECTF`.
 *   Hardware interaction: `GPIO_CLEAR`, `GPIO_READ`, `GPIO_SETUP`, `GPIO_WRITE`.

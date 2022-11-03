@@ -29,6 +29,7 @@ use std::rc::Rc;
 // TODO(jmmv): Should narrow the exposed interface by 1.0.0.
 pub mod arrays;
 pub mod console;
+pub mod data;
 pub mod exec;
 pub mod gfx;
 pub mod gpio;
@@ -89,6 +90,7 @@ impl MachineBuilder {
         let mut machine = Machine::default();
         arrays::add_all(&mut machine);
         console::add_all(&mut machine, self.get_console());
+        data::add_all(&mut machine);
         gfx::add_all(&mut machine, self.get_console());
         gpio::add_all(&mut machine, self.get_gpio_pins());
         exec::add_all(&mut machine, self.sleep_fn);
