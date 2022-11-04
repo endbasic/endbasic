@@ -177,13 +177,13 @@ impl Command for DirCommand {
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         match span.args.as_slice() {
             [] => {
-                show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), "").await?;
+                show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), "").await?;
                 Ok(())
             }
             [ArgSpan { expr: Some(path), sep: ArgSep::End, .. }] => {
                 match path.eval(machine.get_mut_symbols()).await? {
                     Value::Text(path) => {
-                        show_dir(&*self.storage.borrow(), &mut *self.console.borrow_mut(), &path)
+                        show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), &path)
                             .await?;
                         Ok(())
                     }
@@ -236,7 +236,7 @@ impl Command for MountCommand {
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
         match span.args.as_slice() {
             [] => {
-                show_drives(&*self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
+                show_drives(&self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
                 Ok(())
             }
             [ArgSpan { expr: Some(target), sep: ArgSep::As, .. }, ArgSpan { expr: Some(name), sep: ArgSep::End, .. }] =>
@@ -498,7 +498,7 @@ mod tests {
             .expect_file("OTHER:/foo.bas", "hello")
             .check();
 
-        prints.extend(&[
+        prints.extend([
             "",
             "    Directory of OTHER:/",
             "",
@@ -540,7 +540,7 @@ mod tests {
             .check();
 
         t.get_storage().borrow_mut().cd("other:/").unwrap();
-        prints.extend(&[
+        prints.extend([
             "",
             "    Directory of OTHER:/",
             "",
@@ -582,7 +582,7 @@ mod tests {
 
         t.get_storage().borrow_mut().cd("o:").unwrap();
         t.get_storage().borrow_mut().unmount("memory").unwrap();
-        prints.extend(&[
+        prints.extend([
             "",
             "    Name    Target",
             "    O       origin://",

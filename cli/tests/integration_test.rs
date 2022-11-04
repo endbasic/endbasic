@@ -108,10 +108,10 @@ fn read_golden(path: &Path) -> String {
 /// Replaces the parts of the output that can change due to the environment with placeholders.
 fn apply_mocks(input: String) -> String {
     let version_re = regex::Regex::new(VERSION_RE).unwrap();
-    let input = version_re.replace_all(&input, "X.Y.Z").to_owned();
+    let input = version_re.replace_all(&input, "X.Y.Z").into_owned();
 
     let date_re = regex::Regex::new(DATE_RE).unwrap();
-    let input = date_re.replace_all(&input, "YYYY-MM-DD HH:MM").to_owned();
+    let input = date_re.replace_all(&input, "YYYY-MM-DD HH:MM").into_owned();
 
     let file_uri_re = regex::Regex::new(FILE_URI_RE).unwrap();
     file_uri_re.replace_all(&input, "file:///PATH/TO/TMPDIR").into()
