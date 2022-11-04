@@ -19,5 +19,5 @@ RANDOMIZE 10
 PRINT "The random number is:"; INT(RND() * 100.0)
 
 ' Call a command that is for interactive purposes only and expect an error.
-HELP RANDOMIZE
+HELP "RANDOMIZE"
 PRINT "Not reached"

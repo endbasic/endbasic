@@ -30,8 +30,8 @@ use std::rc::Rc;
 const CATEGORY: &str = "Graphics
 The EndBASIC console overlays text and graphics in the same canvas.  The consequence of this \
 design choice is that the console has two coordinate systems: the character-based system, used by
-the commands described in HELP CONSOLE, and the pixel-based system, used by the commands described \
-in this section.";
+the commands described in HELP \"CONSOLE\", and the pixel-based system, used by the commands \
+described in this section.";
 
 /// Parses an expression that represents a single coordinate.
 async fn parse_coordinate(expr: &Expr, machine: &mut Machine) -> Result<i16, CallError> {

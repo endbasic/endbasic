@@ -17,4 +17,4 @@
 ' present and when it is not.  Do this by running an arbitrary command that
 ' is only present in interactive mode.
 
-HELP RUN
+HELP "RUN"

@@ -38,7 +38,7 @@ The EndBASIC console is the display you are seeing: both the interpreter and the
 effects of all commands happen within the same console.  There is no separate output window as \
 other didactical interpreters provide.  This unified console supports text and, depending on the \
 output backend, graphics.  This help section focuses on the textual console; for information about \
-graphics, run HELP GRAPHICS.
+graphics, run HELP \"GRAPHICS\".
 The text console is a matrix of variable size.  The upper left position is row 0 and column 0.  \
 Each position in this matrix contains a character and a color attribute.  The color attribute \
 indicates the foreground and background colors of that character.  There is a default attribute \
