@@ -62,6 +62,11 @@ for the time being.**
 
 *   Added the `ASC` and `CHR` functions.
 
+*   Modified the `HELP` command to only accept a string as its argument,
+    instead of also recognizing a bare word.  The latter was only approximate
+    and would cause confusion when typing something like `HELP DATA`, which
+    would result in a parse error.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**

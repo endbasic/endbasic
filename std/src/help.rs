@@ -320,16 +320,16 @@ impl HelpCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("HELP", VarType::Void)
-                .with_syntax("[topic]")
+                .with_syntax("[topic$]")
                 .with_category(CATEGORY)
                 .with_description(
                     "Prints interactive help.
 Without arguments, shows a summary of all available top-level help topics.
-With a single argument, which may be a bare name or a string, shows detailed information about the \
-given help topic, command, or function. Topic names with spaces in them must be double-quoted.
+With a single argument, which must be a string, shows detailed information about the given help \
+topic, command, or function.
 Topic names are case-insensitive and can be specified as prefixes, in which case the topic whose \
-name starts with the prefix will be shown. For example, the following invocations are all \
-equivalent: HELP CON, HELP console, HELP \"Console manipulation\".",
+name starts with the prefix will be shown.  For example, the following invocations are all \
+equivalent: HELP \"CON\", HELP \"console\", HELP \"Console manipulation\".",
                 )
                 .build(),
             console,
@@ -361,7 +361,7 @@ equivalent: HELP CON, HELP console, HELP \"Console manipulation\".",
         )?;
         refill_and_print(
             &mut *console,
-            ["Type HELP HELP for details on how to specify topic names."],
+            ["Type HELP \"HELP\" for details on how to specify topic names."],
             "    ",
         )?;
         console.print("")?;
@@ -382,11 +382,6 @@ impl Command for HelpCommand {
         match span.args.as_slice() {
             [] => {
                 self.summary(&topics)?;
-            }
-            [ArgSpan { expr: Some(Expr::Symbol(span)), sep: ArgSep::End, .. }] => {
-                let topic = topics.find(&format!("{}", span.vref), span.pos)?;
-                let mut console = self.console.borrow_mut();
-                topic.describe(&mut *console)?;
             }
             [ArgSpan { expr: Some(Expr::Text(span)), sep: ArgSep::End, .. }] => {
                 let topic = topics.find(&span.value, span.pos)?;
@@ -523,7 +518,7 @@ mod tests {
                 "    >> Testing",
                 "",
                 "    Type HELP followed by the name of a topic for details.",
-                "    Type HELP HELP for details on how to specify topic names.",
+                "    Type HELP \"HELP\" for details on how to specify topic names.",
                 "",
             ])
             .check();
@@ -534,7 +529,7 @@ mod tests {
         tester()
             .add_command(DoNothingCommand::new())
             .add_function(EmptyFunction::new())
-            .run("help testing")
+            .run(r#"help "testing""#)
             .expect_prints([
                 "",
                 "    Testing",
@@ -554,7 +549,7 @@ mod tests {
     fn test_help_describe_command() {
         tester()
             .add_command(DoNothingCommand::new())
-            .run("help Do_Nothing")
+            .run(r#"help "Do_Nothing""#)
             .expect_prints([
                 "",
                 "    DO_NOTHING this [would] <be|the> syntax \"specification\"",
@@ -572,7 +567,7 @@ mod tests {
     fn do_help_describe_function_test(name: &str) {
         tester()
             .add_function(EmptyFunction::new())
-            .run(format!("help {}", name))
+            .run(format!(r#"help "{}""#, name))
             .expect_prints([
                 "",
                 "    EMPTY$(this [would] <be|the> syntax \"specification\")",
@@ -599,7 +594,7 @@ mod tests {
 
     #[test]
     fn test_help_lang() {
-        for cmd in &["help lang", "help language", r#"help "Language Reference""#] {
+        for cmd in &[r#"help "lang""#, r#"help "language""#, r#"help "Language Reference""#] {
             tester()
                 .run(*cmd)
                 .expect_prints(LANG_REFERENCE.lines().collect::<Vec<&str>>())
@@ -629,7 +624,7 @@ mod tests {
             ]
         }
 
-        for cmd in &["help aa", "help aab", "help aabc"] {
+        for cmd in &[r#"help "aa""#, r#"help "aab""#, r#"help "aabc""#] {
             tester()
                 .add_function(EmptyFunction::new_with_name("AABC"))
                 .add_function(EmptyFunction::new_with_name("ABC"))
@@ -639,7 +634,7 @@ mod tests {
                 .check();
         }
 
-        for cmd in &["help b", "help bc"] {
+        for cmd in &[r#"help "b""#, r#"help "bc""#] {
             tester()
                 .add_function(EmptyFunction::new_with_name("AABC"))
                 .add_function(EmptyFunction::new_with_name("ABC"))
@@ -653,7 +648,7 @@ mod tests {
             .add_command(DoNothingCommand::new_with_name("AAAB"))
             .add_command(DoNothingCommand::new_with_name("AAAA"))
             .add_command(DoNothingCommand::new_with_name("AAAAA"))
-            .run("help aaaa")
+            .run(r#"help "aaaa""#)
             .expect_prints(exp_output("AAAA", false))
             .check();
 
@@ -661,7 +656,7 @@ mod tests {
             .add_command(DoNothingCommand::new_with_name("AB"))
             .add_function(EmptyFunction::new_with_name("ABC"))
             .add_function(EmptyFunction::new_with_name("AABC"))
-            .run("help a")
+            .run(r#"help "a""#)
             .expect_err("1:1: In call to HELP: 1:6: Ambiguous help topic a; candidates are: AABC$, AB, ABC$")
             .check();
     }
@@ -671,38 +666,44 @@ mod tests {
         let mut t =
             tester().add_command(DoNothingCommand::new()).add_function(EmptyFunction::new());
 
-        t.run("HELP foo bar").expect_err("1:10: Unexpected value in expression").check();
-        t.run("HELP foo, bar").expect_err("1:1: In call to HELP: expected [topic]").check();
+        t.run(r#"HELP foo bar"#).expect_err("1:10: Unexpected value in expression").check();
+        t.run(r#"HELP "foo", bar"#).expect_err("1:1: In call to HELP: expected [topic$]").check();
+        t.run(r#"HELP foo"#).expect_err("1:1: In call to HELP: expected [topic$]").check();
+        t.run(r#"HELP 3"#).expect_err("1:1: In call to HELP: expected [topic$]").check();
 
-        t.run("HELP lang%")
+        t.run(r#"HELP "lang%""#)
             .expect_err("1:1: In call to HELP: 1:6: Unknown help topic lang%")
             .check();
 
-        t.run("HELP foo$").expect_err("1:1: In call to HELP: 1:6: Unknown help topic foo$").check();
-        t.run("HELP foo").expect_err("1:1: In call to HELP: 1:6: Unknown help topic foo").check();
+        t.run(r#"HELP "foo$""#)
+            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic foo$")
+            .check();
+        t.run(r#"HELP "foo""#)
+            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic foo")
+            .check();
 
-        t.run("HELP do_nothing$")
+        t.run(r#"HELP "do_nothing$""#)
             .expect_err("1:1: In call to HELP: 1:6: Unknown help topic do_nothing$")
             .check();
-        t.run("HELP empty?")
+        t.run(r#"HELP "empty?""#)
             .expect_err("1:1: In call to HELP: 1:6: Unknown help topic empty?")
             .check();
 
         let mut t = tester();
-        t.run("HELP undoc")
+        t.run(r#"HELP "undoc""#)
             .expect_err("1:1: In call to HELP: 1:6: Unknown help topic undoc")
             .check();
-        t.run("undoc = 3: HELP undoc")
+        t.run(r#"undoc = 3: HELP "undoc""#)
             .expect_err("1:12: In call to HELP: 1:17: Unknown help topic undoc")
             .expect_var("undoc", 3)
             .check();
 
         let mut t = tester();
-        t.run("HELP undoc")
+        t.run(r#"HELP "undoc""#)
             .expect_err("1:1: In call to HELP: 1:6: Unknown help topic undoc")
             .check();
-        t.run("DIM undoc(3)\nHELP undoc")
-            .expect_err("2:1: In call to HELP: 2:6: Unknown help topic undoc")
+        t.run(r#"DIM undoc(3): HELP "undoc""#)
+            .expect_err("1:15: In call to HELP: 1:20: Unknown help topic undoc")
             .expect_array("undoc", VarType::Integer, &[3], vec![])
             .check();
     }

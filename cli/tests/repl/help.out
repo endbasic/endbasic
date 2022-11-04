@@ -28,9 +28,9 @@ Output from HELP:
     >> String and character functions
 
     Type HELP followed by the name of a topic for details.
-    Type HELP HELP for details on how to specify topic names.
+    Type HELP "HELP" for details on how to specify topic names.
 
-Output from HELP ARRAY:
+Output from HELP "ARRAY":
 
     Array functions
 
@@ -39,7 +39,7 @@ Output from HELP ARRAY:
 
     Type HELP followed by the name of a symbol for details.
 
-Output from HELP CLOUD:
+Output from HELP "CLOUD":
 
     Cloud access
 
@@ -69,7 +69,7 @@ Output from HELP CLOUD:
 
     Type HELP followed by the name of a symbol for details.
 
-Output from HELP CONSOLE:
+Output from HELP "CONSOLE":
 
     Console
 
@@ -79,7 +79,7 @@ Output from HELP CONSOLE:
     interpreters provide.  This unified console supports text and,
     depending on the output backend, graphics.  This help section focuses
     on the textual console; for information about graphics, run HELP
-    GRAPHICS.
+    "GRAPHICS".
 
     The text console is a matrix of variable size.  The upper left position
     is row 0 and column 0.  Each position in this matrix contains a
@@ -155,7 +155,7 @@ Output from HELP "FILE SYSTEM":
 
     Type HELP followed by the name of a symbol for details.
 
-Output from HELP GRAPHICS:
+Output from HELP "GRAPHICS":
 
     Graphics
 
@@ -163,7 +163,7 @@ Output from HELP GRAPHICS:
     The consequence of this design choice is that the console has two
     coordinate systems: the character-based system, used by
 
-    the commands described in HELP CONSOLE, and the pixel-based system,
+    the commands described in HELP "CONSOLE", and the pixel-based system,
     used by the commands described in this section.
 
     >> GFX_LINE     Draws a line from (x1,y1) to (x2,y2).
@@ -174,7 +174,7 @@ Output from HELP GRAPHICS:
 
     Type HELP followed by the name of a symbol for details.
 
-Output from HELP HARDWARE:
+Output from HELP "HARDWARE":
 
     Hardware interface
 
@@ -191,7 +191,7 @@ Output from HELP HARDWARE:
 
     Type HELP followed by the name of a symbol for details.
 
-Output from HELP INTERPRETER:
+Output from HELP "INTERPRETER":
 
     Interpreter
 
@@ -202,7 +202,7 @@ Output from HELP INTERPRETER:
 
     Type HELP followed by the name of a symbol for details.
 
-Output from HELP LANG:
+Output from HELP "LANG":
 
     Symbols (variable, array and function references):
         name?    Boolean (TRUE and FALSE).
@@ -236,7 +236,7 @@ Output from HELP LANG:
         ;            Short separator for arguments to builtin call.
         DATA a, b    Registers literal primitive values for later reads.
 
-Output from HELP NUMERICAL:
+Output from HELP "NUMERICAL":
 
     Numerical functions
 
@@ -257,7 +257,7 @@ Output from HELP NUMERICAL:
 
     Type HELP followed by the name of a symbol for details.
 
-Output from HELP STORED:
+Output from HELP "STORED":
 
     Stored program
 
@@ -288,7 +288,7 @@ Output from HELP STORED:
 
     Type HELP followed by the name of a symbol for details.
 
-Output from HELP STRING:
+Output from HELP "STRING":
 
     String and character functions
 
@@ -303,13 +303,13 @@ Output from HELP STRING:
 
     Type HELP followed by the name of a symbol for details.
 
-Output from HELP CD:
+Output from HELP "CD":
 
     CD path$
 
     Changes the current path.
 
-Output from HELP CLEAR:
+Output from HELP "CLEAR":
 
     CLEAR
 
@@ -323,13 +323,13 @@ Output from HELP CLEAR:
     The stored program is kept in memory.  To clear that too, use NEW (but
     don't forget to first SAVE your program!).
 
-Output from HELP CLS:
+Output from HELP "CLS":
 
     CLS
 
     Clears the screen.
 
-Output from HELP COLOR:
+Output from HELP "COLOR":
 
     COLOR [fg%][, [bg%]]
 
@@ -341,7 +341,7 @@ Output from HELP COLOR:
     other color specifiable in the 0 to 255 range, as it might be
     transparent.
 
-Output from HELP DEG:
+Output from HELP "DEG":
 
     DEG
 
@@ -351,7 +351,7 @@ Output from HELP DEG:
     radians.  DEG configures the environment to use degrees until
     instructed otherwise.
 
-Output from HELP DEL:
+Output from HELP "DEL":
 
     DEL filename$
 
@@ -362,19 +362,19 @@ Output from HELP DEL:
 
     See the "File system" help topic for information on the path syntax.
 
-Output from HELP DIR:
+Output from HELP "DIR":
 
     DIR [path$]
 
     Displays the list of files on the current or given path.
 
-Output from HELP EDIT:
+Output from HELP "EDIT":
 
     EDIT
 
     Interactively edits the stored program.
 
-Output from HELP EXIT:
+Output from HELP "EXIT":
 
     EXIT [code%]
 
@@ -382,7 +382,7 @@ Output from HELP EXIT:
 
     The optional code indicates the return value to return to the system.
 
-Output from HELP GFX_LINE:
+Output from HELP "GFX_LINE":
 
     GFX_LINE x1%, y1%, x2%, y2%
 
@@ -390,7 +390,7 @@ Output from HELP GFX_LINE:
 
     The line is drawn using the foreground color as selected by COLOR.
 
-Output from HELP GFX_PIXEL:
+Output from HELP "GFX_PIXEL":
 
     GFX_PIXEL x%, y%
 
@@ -398,7 +398,7 @@ Output from HELP GFX_PIXEL:
 
     The pixel is drawn using the foreground color as selected by COLOR.
 
-Output from HELP GFX_RECT:
+Output from HELP "GFX_RECT":
 
     GFX_RECT x1%, y1%, x2%, y2%
 
@@ -407,7 +407,7 @@ Output from HELP GFX_RECT:
     The outline of the rectangle is drawn using the foreground color as
     selected by COLOR and the area of the rectangle is left untouched.
 
-Output from HELP GFX_RECTF:
+Output from HELP "GFX_RECTF":
 
     GFX_RECTF x1%, y1%, x2%, y2%
 
@@ -416,7 +416,7 @@ Output from HELP GFX_RECTF:
     The outline and area of the rectangle are drawn using the foreground
     color as selected by COLOR.
 
-Output from HELP GFX_SYNC:
+Output from HELP "GFX_SYNC":
 
     GFX_SYNC [enabled?]
 
@@ -444,7 +444,7 @@ Output from HELP GFX_SYNC:
     interpreter, you will not be able to see what you are typing any longer
     until you reenable video syncing.
 
-Output from HELP GPIO_CLEAR:
+Output from HELP "GPIO_CLEAR":
 
     GPIO_CLEAR [pin%]
 
@@ -454,7 +454,7 @@ Output from HELP GPIO_CLEAR:
     is given, only that pin is reset.  It is OK if the given pin has never
     been configured before.
 
-Output from HELP GPIO_SETUP:
+Output from HELP "GPIO_SETUP":
 
     GPIO_SETUP pin%, mode$
 
@@ -474,7 +474,7 @@ Output from HELP GPIO_SETUP:
     It is OK to reconfigure an already configured pin without clearing its
     state first.
 
-Output from HELP GPIO_WRITE:
+Output from HELP "GPIO_WRITE":
 
     GPIO_WRITE pin%, value?
 
@@ -483,25 +483,24 @@ Output from HELP GPIO_WRITE:
     A FALSE value? sets the pin to low, and a TRUE value? sets the pin to
     high.
 
-Output from HELP HELP:
+Output from HELP "HELP":
 
-    HELP [topic]
+    HELP [topic$]
 
     Prints interactive help.
 
     Without arguments, shows a summary of all available top-level help
     topics.
 
-    With a single argument, which may be a bare name or a string, shows
-    detailed information about the given help topic, command, or function.
-    Topic names with spaces in them must be double-quoted.
+    With a single argument, which must be a string, shows detailed
+    information about the given help topic, command, or function.
 
     Topic names are case-insensitive and can be specified as prefixes, in
     which case the topic whose name starts with the prefix will be shown.
-    For example, the following invocations are all equivalent: HELP CON,
-    HELP console, HELP "Console manipulation".
+    For example, the following invocations are all equivalent: HELP "CON",
+    HELP "console", HELP "Console manipulation".
 
-Output from HELP INPUT:
+Output from HELP "INPUT":
 
     INPUT ["prompt"] <;|,> variableref
 
@@ -515,13 +514,13 @@ Output from HELP INPUT:
     The second expression to this function must be a bare variable
     reference and indicates the variable to update with the obtained input.
 
-Output from HELP LIST:
+Output from HELP "LIST":
 
     LIST
 
     Prints the currently-loaded program.
 
-Output from HELP LOAD:
+Output from HELP "LOAD":
 
     LOAD filename$
 
@@ -535,13 +534,13 @@ Output from HELP LOAD:
 
     See the "File system" help topic for information on the path syntax.
 
-Output from HELP LOCATE:
+Output from HELP "LOCATE":
 
     LOCATE column%, row%
 
     Moves the cursor to the given position.
 
-Output from HELP LOGIN:
+Output from HELP "LOGIN":
 
     LOGIN username$[, password$]
 
@@ -554,7 +553,7 @@ Output from HELP LOGIN:
 
     To create an account, use the SIGNUP command.
 
-Output from HELP LOGOUT:
+Output from HELP "LOGOUT":
 
     LOGOUT
 
@@ -564,7 +563,7 @@ Output from HELP LOGOUT:
     consequence of this, running LOGOUT from within the CLOUD drive will
     fail.
 
-Output from HELP MOUNT:
+Output from HELP "MOUNT":
 
     MOUNT [target$ AS drive_name$]
 
@@ -576,7 +575,7 @@ Output from HELP MOUNT:
     Drive names are specified without a colon at the end, and targets are
     given in the form of a URI.
 
-Output from HELP NEW:
+Output from HELP "NEW":
 
     NEW
 
@@ -591,7 +590,7 @@ Output from HELP NEW:
     ask before discarding any unsaved modifications.  To reset resources
     but avoid clearing the stored program, use CLEAR instead.
 
-Output from HELP PWD:
+Output from HELP "PWD":
 
     PWD
 
@@ -601,7 +600,7 @@ Output from HELP PWD:
     real path that is accessible by the underlying operating system,
     displays such path as well.
 
-Output from HELP PRINT:
+Output from HELP "PRINT":
 
     PRINT [expr1 [<;|,> [.. exprN]]]
 
@@ -616,7 +615,7 @@ Output from HELP PRINT:
     semicolon or a comma), then the cursor position remains on the same
     line of the message right after what was printed.
 
-Output from HELP RAD:
+Output from HELP "RAD":
 
     RAD
 
@@ -626,7 +625,7 @@ Output from HELP RAD:
     but it can be set to degrees with the DEG command.  RAD restores the
     environment to use radians mode.
 
-Output from HELP RANDOMIZE:
+Output from HELP "RANDOMIZE":
 
     RANDOMIZE [seed%]
 
@@ -637,7 +636,7 @@ Output from HELP RANDOMIZE:
 
     WARNING: These random numbers offer no cryptographic guarantees.
 
-Output from HELP READ:
+Output from HELP "READ":
 
     READ vref1 [, .., vrefN]
 
@@ -662,7 +661,7 @@ Output from HELP READ:
     The index that READ uses to extract DATA values can be reset by RESTORE
     and, more generally, by CLEAR.
 
-Output from HELP RESTORE:
+Output from HELP "RESTORE":
 
     RESTORE
 
@@ -671,7 +670,7 @@ Output from HELP RESTORE:
     This allows READ to re-return the same elements that were previously
     extracted from the array of values defined by DATA.
 
-Output from HELP RUN:
+Output from HELP "RUN":
 
     RUN
 
@@ -680,7 +679,7 @@ Output from HELP RUN:
     This issues a CLEAR operation before starting the program to prevent
     previous leftover state from interfering with the new execution.
 
-Output from HELP SAVE:
+Output from HELP "SAVE":
 
     SAVE [filename$]
 
@@ -694,7 +693,7 @@ Output from HELP SAVE:
 
     See the "File system" help topic for information on the path syntax.
 
-Output from HELP SHARE:
+Output from HELP "SHARE":
 
     SHARE filename$[, acl1$, .., aclN$]
 
@@ -716,7 +715,7 @@ Output from HELP SHARE:
     Note that this command only works for cloud-based drives as it is
     designed to share files among users of the EndBASIC service.
 
-Output from HELP SIGNUP:
+Output from HELP "SIGNUP":
 
     SIGNUP
 
@@ -726,7 +725,7 @@ Output from HELP SIGNUP:
     account in the EndBASIC cloud service.  You will be asked for
     confirmation before proceeding.
 
-Output from HELP SLEEP:
+Output from HELP "SLEEP":
 
     SLEEP seconds<%|#>
 
@@ -736,7 +735,7 @@ Output from HELP SLEEP:
     specified either as an integer or as a floating point number for finer
     precision.
 
-Output from HELP UNMOUNT:
+Output from HELP "UNMOUNT":
 
     UNMOUNT drive_name$
 
@@ -744,7 +743,7 @@ Output from HELP UNMOUNT:
 
     Drive names are specified without a colon at the end.
 
-Output from HELP ASC:
+Output from HELP "ASC":
 
     ASC%(char$)
 
@@ -757,7 +756,7 @@ Output from HELP ASC:
 
     See CHR$() for the inverse of this function.
 
-Output from HELP ATN:
+Output from HELP "ATN":
 
     ATN#(n<%|#>)
 
@@ -766,7 +765,7 @@ Output from HELP ATN:
     The resulting angle is measured in degrees or radians depending on the
     angle mode as selected by the DEG and RAD commands.
 
-Output from HELP CHR:
+Output from HELP "CHR":
 
     CHR$(code%)
 
@@ -774,7 +773,7 @@ Output from HELP CHR:
 
     See ASC%() for the inverse of this function.
 
-Output from HELP CINT:
+Output from HELP "CINT":
 
     CINT%(expr<%|#>)
 
@@ -784,7 +783,7 @@ Output from HELP CINT:
     rounded to the closest integer.  For example, 4.4 becomes 4, but both
     4.5 and 4.6 become 5.
 
-Output from HELP COS:
+Output from HELP "COS":
 
     COS#(angle<%|#>)
 
@@ -793,7 +792,7 @@ Output from HELP COS:
     The input angle% or angle# is measured in degrees or radians depending
     on the angle mode as selected by the DEG and RAD commands.
 
-Output from HELP GPIO_READ:
+Output from HELP "GPIO_READ":
 
     GPIO_READ?(pin%)
 
@@ -802,7 +801,7 @@ Output from HELP GPIO_READ:
     Returns FALSE to represent a low value, and TRUE to represent a high
     value.
 
-Output from HELP INKEY:
+Output from HELP "INKEY":
 
     INKEY$()
 
@@ -827,7 +826,7 @@ Output from HELP INKEY:
     This non-blocking design lets you to combine the reception of multiple
     evens, such as from GPIO_INPUT?, within the same loop.
 
-Output from HELP INT:
+Output from HELP "INT":
 
     INT%(expr<%|#>)
 
@@ -839,7 +838,7 @@ Output from HELP INT:
     integer that is not larger than the double value.  For example, all of
     4.4, 4.5 and 4.6 become 4.
 
-Output from HELP LEFT:
+Output from HELP "LEFT":
 
     LEFT$(expr$, n%)
 
@@ -850,13 +849,13 @@ Output from HELP LEFT:
     If n% is greater than or equal to the number of characters in expr$,
     returns expr$.
 
-Output from HELP LEN:
+Output from HELP "LEN":
 
     LEN%(expr$)
 
     Returns the length of the string in expr$.
 
-Output from HELP LBOUND:
+Output from HELP "LBOUND":
 
     LBOUND%(array[, dimension%])
 
@@ -868,25 +867,25 @@ Output from HELP LBOUND:
     For one-dimensional arrays, the dimension% is optional.  For
     multi-dimensional arrays, the dimension% is a 1-indexed integer.
 
-Output from HELP LTRIM:
+Output from HELP "LTRIM":
 
     LTRIM$(expr$)
 
     Returns a copy of a string with leading whitespace removed.
 
-Output from HELP MAX:
+Output from HELP "MAX":
 
     MAX#(expr<%|#>[, .., expr<%|#>])
 
     Returns the maximum number out of a set of numbers.
 
-Output from HELP MIN:
+Output from HELP "MIN":
 
     MIN#(expr<%|#>[, .., expr<%|#>])
 
     Returns the minimum number out of a set of numbers.
 
-Output from HELP MID:
+Output from HELP "MID":
 
     MID$(expr$, start%[, length%])
 
@@ -900,13 +899,13 @@ Output from HELP MID:
 
     until the end of the string.
 
-Output from HELP PI:
+Output from HELP "PI":
 
     PI#()
 
     Returns the Archimedes' constant.
 
-Output from HELP RIGHT:
+Output from HELP "RIGHT":
 
     RIGHT$(expr$, n%)
 
@@ -917,7 +916,7 @@ Output from HELP RIGHT:
     If n% is greater than or equal to the number of characters in expr$,
     returns expr$.
 
-Output from HELP RND:
+Output from HELP "RND":
 
     RND#(n%)
 
@@ -932,13 +931,13 @@ Output from HELP RND:
 
     WARNING: These random numbers offer no cryptographic guarantees.
 
-Output from HELP RTRIM:
+Output from HELP "RTRIM":
 
     RTRIM$(expr$)
 
     Returns a copy of a string with trailing whitespace removed.
 
-Output from HELP SIN:
+Output from HELP "SIN":
 
     SIN#(angle<%|#>)
 
@@ -947,13 +946,13 @@ Output from HELP SIN:
     The input angle% or angle# is measured in degrees or radians depending
     on the angle mode as selected by the DEG and RAD commands.
 
-Output from HELP SQR:
+Output from HELP "SQR":
 
     SQR#(num<%|#>)
 
     Computes the square root of the given number.
 
-Output from HELP TAN:
+Output from HELP "TAN":
 
     TAN#(angle<%|#>)
 
@@ -962,7 +961,7 @@ Output from HELP TAN:
     The input angle% or angle# is measured in degrees or radians depending
     on the angle mode as selected by the DEG and RAD commands.
 
-Output from HELP UBOUND:
+Output from HELP "UBOUND":
 
     UBOUND%(array[, dimension%])
 
