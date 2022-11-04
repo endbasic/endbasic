@@ -47,7 +47,8 @@ not intend to be fully compatible with them.  The library currently contains:
 *   Numerics: `ATN`, `CINT`, `COS`, `DEG`, `INT`, `MAX`, `MIN`, `PI`, `RAD`,
     `RANDOMIZE`, `RND`, `SIN`, `SQR`, `TAN`.
 *   Program manipulation: `DEL`, `EDIT`, `LIST`, `LOAD`,`NEW`, `RUN`, `SAVE`.
-*   Strings: `LEFT`, `LEN`, `LTRIM`, `MID`, `RIGHT`, `RTRIM`.
+*   Strings and characters: `ASC`, `CHR`, `LEFT`, `LEN`, `LTRIM`, `MID`,
+    `RIGHT`, `RTRIM`.
 
 ## Design principles
 

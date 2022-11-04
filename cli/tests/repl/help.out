@@ -25,7 +25,7 @@ Output from HELP:
     >> Language reference
     >> Numerical functions
     >> Stored program
-    >> String functions
+    >> String and character functions
 
     Type HELP followed by the name of a topic for details.
     Type HELP HELP for details on how to specify topic names.
@@ -290,8 +290,10 @@ Output from HELP STORED:
 
 Output from HELP STRING:
 
-    String functions
+    String and character functions
 
+    >> ASC%      Returns the UTF character code of the input character.
+    >> CHR$      Returns the UTF character that corresponds to the given code.
     >> LEFT$     Returns a given number of characters from the left side of a string.
     >> LEN%      Returns the length of the string in expr$.
     >> LTRIM$    Returns a copy of a string with leading whitespace removed.
@@ -742,6 +744,19 @@ Output from HELP UNMOUNT:
 
     Drive names are specified without a colon at the end.
 
+Output from HELP ASC:
+
+    ASC%(char$)
+
+    Returns the UTF character code of the input character.
+
+    The input char$ argument is a string that must be 1-character long.
+
+    This is called ASC for historical reasons but supports more than just
+    ASCII characters in this implementation of BASIC.
+
+    See CHR$() for the inverse of this function.
+
 Output from HELP ATN:
 
     ATN#(n<%|#>)
@@ -750,6 +765,14 @@ Output from HELP ATN:
 
     The resulting angle is measured in degrees or radians depending on the
     angle mode as selected by the DEG and RAD commands.
+
+Output from HELP CHR:
+
+    CHR$(code%)
+
+    Returns the UTF character that corresponds to the given code.
+
+    See ASC%() for the inverse of this function.
 
 Output from HELP CINT:
 

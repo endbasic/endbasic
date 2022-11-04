@@ -23,10 +23,124 @@ use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult, Symbols,
 };
 use std::cmp::min;
+use std::convert::TryFrom;
 use std::rc::Rc;
 
 /// Category description for all symbols provided by this module.
-const CATEGORY: &str = "String functions";
+const CATEGORY: &str = "String and character functions";
+
+/// The `ASC` function.
+pub struct AscFunction {
+    metadata: CallableMetadata,
+}
+
+impl AscFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("ASC", VarType::Integer)
+                .with_syntax("char$")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns the UTF character code of the input character.
+The input char$ argument is a string that must be 1-character long.
+This is called ASC for historical reasons but supports more than just ASCII characters in this \
+implementation of BASIC.
+See CHR$() for the inverse of this function.",
+                )
+                .build(),
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for AscFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
+        match args.as_slice() {
+            [Value::Text(s)] => {
+                let mut chars = s.chars();
+                let ch = match chars.next() {
+                    Some(ch) => ch,
+                    None => {
+                        return Err(CallError::ArgumentError(
+                            span.args[0].start_pos(),
+                            format!("Input string \"{}\" must be 1-character long", s),
+                        ));
+                    }
+                };
+                if chars.next().is_some() {
+                    return Err(CallError::ArgumentError(
+                        span.args[0].start_pos(),
+                        format!("Input string \"{}\" must be 1-character long", s),
+                    ));
+                }
+                let ch = i32::try_from(ch as u32).expect("Unicode code points end at U+10FFFF");
+                Ok(Value::Integer(ch))
+            }
+            _ => Err(CallError::SyntaxError),
+        }
+    }
+}
+
+/// The `CHR` function.
+pub struct ChrFunction {
+    metadata: CallableMetadata,
+}
+
+impl ChrFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("CHR", VarType::Text)
+                .with_syntax("code%")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns the UTF character that corresponds to the given code.
+See ASC%() for the inverse of this function.",
+                )
+                .build(),
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for ChrFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
+        match args.as_slice() {
+            [v @ Value::Integer(_) | v @ Value::Double(_)] => {
+                let pos = span.args[0].start_pos();
+
+                let i = v.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
+                if i < 0 {
+                    return Err(CallError::ArgumentError(
+                        pos,
+                        format!("Character code {} must be positive", i),
+                    ));
+                }
+                let code = i as u32;
+
+                match char::from_u32(code) {
+                    Some(ch) => Ok(Value::Text(format!("{}", ch))),
+                    None => Err(CallError::ArgumentError(
+                        pos,
+                        format!("Invalid character code {}", code),
+                    )),
+                }
+            }
+            _ => Err(CallError::SyntaxError),
+        }
+    }
+}
 
 /// The `LEFT` function.
 pub struct LeftFunction {
@@ -298,6 +412,8 @@ impl Function for RtrimFunction {
 
 /// Adds all symbols provided by this module to the given `machine`.
 pub fn add_all(machine: &mut Machine) {
+    machine.add_function(AscFunction::new());
+    machine.add_function(ChrFunction::new());
     machine.add_function(LeftFunction::new());
     machine.add_function(LenFunction::new());
     machine.add_function(LtrimFunction::new());
@@ -309,6 +425,51 @@ pub fn add_all(machine: &mut Machine) {
 #[cfg(test)]
 mod tests {
     use crate::testutils::*;
+
+    #[test]
+    fn test_asc() {
+        check_expr_ok('a' as i32, r#"ASC("a")"#);
+        check_expr_ok(' ' as i32, r#"ASC(" ")"#);
+        check_expr_ok('오' as i32, r#"ASC("오")"#);
+
+        check_expr_error("1:10: In call to ASC: expected char$", r#"ASC()"#);
+        check_expr_error("1:10: In call to ASC: expected char$", r#"ASC(3)"#);
+        check_expr_error("1:10: In call to ASC: expected char$", r#"ASC("a", 1)"#);
+        check_expr_error(
+            "1:10: In call to ASC: 1:14: Input string \"\" must be 1-character long",
+            r#"ASC("")"#,
+        );
+        check_expr_error(
+            "1:10: In call to ASC: 1:14: Input string \"ab\" must be 1-character long",
+            r#"ASC("ab")"#,
+        );
+    }
+
+    #[test]
+    fn test_chr() {
+        check_expr_ok("a", r#"CHR(97)"#);
+        check_expr_ok("c", r#"CHR(98.6)"#);
+        check_expr_ok(" ", r#"CHR(32)"#);
+        check_expr_ok("오", r#"CHR(50724)"#);
+
+        check_expr_error("1:10: In call to CHR: expected code%", r#"CHR()"#);
+        check_expr_error("1:10: In call to CHR: expected code%", r#"CHR(FALSE)"#);
+        check_expr_error("1:10: In call to CHR: expected code%", r#"CHR("a", 1)"#);
+        check_expr_error(
+            "1:10: In call to CHR: 1:14: Character code -1 must be positive",
+            r#"CHR(-1)"#,
+        );
+        check_expr_error(
+            "1:10: In call to CHR: 1:14: Invalid character code 55296",
+            r#"CHR(55296)"#,
+        );
+    }
+
+    #[test]
+    fn test_asc_chr_integration() {
+        check_expr_ok("a", r#"CHR(ASC("a"))"#);
+        check_expr_ok('a' as i32, r#"ASC(CHR(97))"#);
+    }
 
     #[test]
     fn test_left() {
