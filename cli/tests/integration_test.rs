@@ -35,6 +35,9 @@ const FILE_URI_RE: &str = "file://[^ \n\"]+";
 /// Matches a version number.
 const VERSION_RE: &str = "[0-9]+\\.[0-9]+\\.[0-9]+";
 
+/// Matches a year range.
+const YEAR_RANGE_RE: &str = "[0-9]{4}-[0-9]{4}";
+
 /// Computes the path to the directory where this test's binary lives.
 fn self_dir() -> PathBuf {
     let self_exe = env::current_exe().expect("Cannot get self's executable path");
@@ -101,6 +104,12 @@ fn read_golden(path: &Path) -> String {
     );
     let date_re = regex::Regex::new(DATE_RE).unwrap();
     assert!(!date_re.is_match(&golden), "Golden file {} contains a date", path.display());
+    let year_range_re = regex::Regex::new(YEAR_RANGE_RE).unwrap();
+    assert!(
+        !year_range_re.is_match(&golden),
+        "Golden file {} contains a year range",
+        path.display()
+    );
 
     golden
 }
@@ -112,6 +121,9 @@ fn apply_mocks(input: String) -> String {
 
     let date_re = regex::Regex::new(DATE_RE).unwrap();
     let input = date_re.replace_all(&input, "YYYY-MM-DD HH:MM").into_owned();
+
+    let year_range_re = regex::Regex::new(YEAR_RANGE_RE).unwrap();
+    let input = year_range_re.replace_all(&input, "YYYY-YYYY").into_owned();
 
     let file_uri_re = regex::Regex::new(FILE_URI_RE).unwrap();
     file_uri_re.replace_all(&input, "file:///PATH/TO/TMPDIR").into()

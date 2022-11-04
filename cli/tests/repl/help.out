@@ -1,13 +1,12 @@
 
-    Welcome to EndBASIC X.Y.Z.
+    EndBASIC X.Y.Z
+    Copyright YYYY-YYYY Julio Merino
 
     Type HELP for interactive usage information.
-    For a guided tour, type: LOAD "DEMOS:/TOUR.BAS": RUN
 
 Output from HELP:
 
-    EndBASIC X.Y.Z
-    Copyright 2020-2022 Julio Merino
+    This is EndBASIC X.Y.Z.
 
     Project page at <https://www.endbasic.dev/>
     License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>
@@ -29,6 +28,7 @@ Output from HELP:
 
     Type HELP followed by the name of a topic for details.
     Type HELP "HELP" for details on how to specify topic names.
+    Type LOAD "DEMOS:/TOUR.BAS": RUN for a guided tour.
 
 Output from HELP "ARRAY":
 
