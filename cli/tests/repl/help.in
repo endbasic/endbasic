@@ -185,8 +185,14 @@ HELP UNMOUNT
 ' Help on functions.
 '
 
+PRINT "Output from HELP ASC:"
+HELP ASC
+
 PRINT "Output from HELP ATN:"
 HELP ATN
+
+PRINT "Output from HELP CHR:"
+HELP CHR
 
 PRINT "Output from HELP CINT:"
 HELP CINT

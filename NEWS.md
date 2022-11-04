@@ -60,6 +60,8 @@ for the time being.**
     strings must be double-quoted (as opposed to other BASIC implementations
     where the double-quoting is optional).
 
+*   Added the `ASC` and `CHR` functions.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
