@@ -46,7 +46,7 @@ not intend to be fully compatible with them.  The library currently contains:
 *   Interpreter interaction: `CLEAR`, `EXIT`, `HELP`.
 *   Numerics: `ATN`, `CINT`, `COS`, `DEG`, `INT`, `MAX`, `MIN`, `PI`, `RAD`,
     `RANDOMIZE`, `RND`, `SIN`, `SQR`, `TAN`.
-*   Program manipulation: `DEL`, `EDIT`, `LIST`, `LOAD`,`NEW`, `RUN`, `SAVE`.
+*   Program manipulation: `EDIT`, `KILL`, `LIST`, `LOAD`,`NEW`, `RUN`, `SAVE`.
 *   Strings and characters: `ASC`, `CHR`, `LEFT`, `LEN`, `LTRIM`, `MID`,
     `RIGHT`, `RTRIM`.
 

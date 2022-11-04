@@ -146,20 +146,20 @@ pub async fn continue_if_modified(
     }
 }
 
-/// The `DEL` command.
+/// The `KILL` command.
 // TODO(jmmv): This should be in the storage module because it isn't really tied to the stored
 // program.  However, this currently relies on the automatic addition of extensions to file names,
 // which is logic that should only exist here.  Maybe we should remove that from this command.
-pub struct DelCommand {
+pub struct KillCommand {
     metadata: CallableMetadata,
     storage: Rc<RefCell<Storage>>,
 }
 
-impl DelCommand {
-    /// Creates a new `DEL` command that deletes a file from `storage`.
+impl KillCommand {
+    /// Creates a new `KILL` command that deletes a file from `storage`.
     pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("DEL", VarType::Void)
+            metadata: CallableMetadataBuilder::new("KILL", VarType::Void)
                 .with_syntax("filename$")
                 .with_category(CATEGORY)
                 .with_description(
@@ -175,7 +175,7 @@ See the \"File system\" help topic for information on the path syntax.",
 }
 
 #[async_trait(?Send)]
-impl Command for DelCommand {
+impl Command for KillCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -193,7 +193,7 @@ impl Command for DelCommand {
             _ => {
                 return Err(CallError::ArgumentError(
                     arg0.start_pos(),
-                    "DEL requires a string as the filename".to_owned(),
+                    "KILL requires a string as the filename".to_owned(),
                 ))
             }
         }
@@ -556,8 +556,8 @@ pub fn add_all(
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 ) {
-    machine.add_command(DelCommand::new(storage.clone()));
     machine.add_command(EditCommand::new(console.clone(), program.clone()));
+    machine.add_command(KillCommand::new(storage.clone()));
     machine.add_command(ListCommand::new(console.clone(), program.clone()));
     machine.add_command(LoadCommand::new(console.clone(), storage.clone(), program.clone()));
     machine.add_command(NewCommand::new(console.clone(), program.clone()));
@@ -576,13 +576,13 @@ mod tests {
     const YES_ANSWERS: &[&str] = &["y\n", "yes\n", "Y\n", "YES\n", "true\n", "TRUE\n"];
 
     #[test]
-    fn test_del_ok() {
+    fn test_kill_ok() {
         for p in &["foo", "foo.bas"] {
             Tester::default()
                 .set_program(Some("foo.bas"), "Leave me alone")
                 .write_file("bar.bas", "")
                 .write_file("foo.bas", "line 1\n  line 2\n")
-                .run(format!(r#"DEL "{}""#, p))
+                .run(format!(r#"KILL "{}""#, p))
                 .expect_program(Some("foo.bas"), "Leave me alone")
                 .expect_file("MEMORY:/bar.bas", "")
                 .check();
@@ -590,17 +590,20 @@ mod tests {
     }
 
     #[test]
-    fn test_del_errors() {
-        check_load_save_common_errors("DEL");
+    fn test_kill_errors() {
+        check_load_save_common_errors("KILL");
 
-        Tester::default().run("DEL").expect_err("1:1: In call to DEL: expected filename$").check();
+        Tester::default()
+            .run("KILL")
+            .expect_err("1:1: In call to KILL: expected filename$")
+            .check();
 
-        check_stmt_err("1:1: In call to DEL: Entry not found", r#"DEL "missing-file""#);
+        check_stmt_err("1:1: In call to KILL: Entry not found", r#"KILL "missing-file""#);
 
         Tester::default()
             .write_file("mismatched-extension.bat", "")
-            .run(r#"DEL "mismatched-extension""#)
-            .expect_err("1:1: In call to DEL: Entry not found")
+            .run(r#"KILL "mismatched-extension""#)
+            .expect_err("1:1: In call to KILL: Entry not found")
             .expect_file("MEMORY:/mismatched-extension.bat", "")
             .check();
     }
