@@ -177,7 +177,7 @@ mod tests {
         write_file(&dir.path().join("a.bas"), &[]);
         write_file(&dir.path().join("a.bat"), &[]);
 
-        let mut drive = DirectoryDrive::new(&dir.path()).unwrap();
+        let mut drive = DirectoryDrive::new(dir.path()).unwrap();
         block_on(drive.delete("a.bas")).unwrap();
         assert!(!dir.path().join("a.bas").exists());
         assert!(dir.path().join("a.bat").exists());
@@ -186,7 +186,7 @@ mod tests {
     #[test]
     fn test_directorydrive_delete_missing_file() {
         let dir = tempfile::tempdir().unwrap();
-        let mut drive = DirectoryDrive::new(&dir.path()).unwrap();
+        let mut drive = DirectoryDrive::new(dir.path()).unwrap();
         assert_eq!(io::ErrorKind::NotFound, block_on(drive.delete("a.bas")).unwrap_err().kind());
     }
 
@@ -194,7 +194,7 @@ mod tests {
     fn test_directorydrive_enumerate_nothing() {
         let dir = tempfile::tempdir().unwrap();
 
-        let drive = DirectoryDrive::new(&dir.path()).unwrap();
+        let drive = DirectoryDrive::new(dir.path()).unwrap();
         assert!(block_on(drive.enumerate()).unwrap().dirents().is_empty());
     }
 
@@ -204,7 +204,7 @@ mod tests {
         write_file(&dir.path().join("empty.bas"), &[]);
         write_file(&dir.path().join("some file.bas"), &["this is not empty"]);
 
-        let drive = DirectoryDrive::new(&dir.path()).unwrap();
+        let drive = DirectoryDrive::new(dir.path()).unwrap();
         let files = block_on(drive.enumerate()).unwrap();
         assert_eq!(2, files.dirents().len());
         let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875);
@@ -223,7 +223,7 @@ mod tests {
     fn test_directorydrive_enumerate_ignores_non_files() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join("will-be-ignored")).unwrap();
-        let drive = DirectoryDrive::new(&dir.path()).unwrap();
+        let drive = DirectoryDrive::new(dir.path()).unwrap();
         assert!(block_on(drive.enumerate()).unwrap().dirents().is_empty());
     }
 
@@ -234,9 +234,9 @@ mod tests {
 
         let dir = tempfile::tempdir().unwrap();
         write_file(&dir.path().join("some file.bas"), &["this is not empty"]);
-        unix_fs::symlink(&Path::new("some file.bas"), &dir.path().join("a link.bas")).unwrap();
+        unix_fs::symlink(Path::new("some file.bas"), &dir.path().join("a link.bas")).unwrap();
 
-        let drive = DirectoryDrive::new(&dir.path()).unwrap();
+        let drive = DirectoryDrive::new(dir.path()).unwrap();
         let files = block_on(drive.enumerate()).unwrap();
         assert_eq!(2, files.dirents().len());
         let metadata =
@@ -263,7 +263,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         write_file(&dir.path().join("some file.bas"), &["one line", "two lines"]);
 
-        let drive = DirectoryDrive::new(&dir.path()).unwrap();
+        let drive = DirectoryDrive::new(dir.path()).unwrap();
         assert_eq!("one line\ntwo lines\n", block_on(drive.get("some file.bas")).unwrap());
     }
 
@@ -271,7 +271,7 @@ mod tests {
     fn test_directorydrive_put() {
         let dir = tempfile::tempdir().unwrap();
 
-        let mut drive = DirectoryDrive::new(&dir.path()).unwrap();
+        let mut drive = DirectoryDrive::new(dir.path()).unwrap();
         block_on(drive.put("some file.bas", "a b c\nd e\n")).unwrap();
         check_file(&dir.path().join("some file.bas"), &["a b c", "d e"]);
     }
@@ -280,7 +280,7 @@ mod tests {
     fn test_directorydrive_system_path() {
         let dir = tempfile::tempdir().unwrap();
 
-        let drive = DirectoryDrive::new(&dir.path()).unwrap();
+        let drive = DirectoryDrive::new(dir.path()).unwrap();
         assert_eq!(
             dir.path().canonicalize().unwrap().join("foo"),
             drive.system_path("foo").unwrap()

@@ -344,7 +344,7 @@ equivalent: HELP CON, HELP console, HELP \"Console manipulation\".",
         }
 
         console.print("")?;
-        refill_and_print(&mut *console, &["Top-level help topics:"], "    ")?;
+        refill_and_print(&mut *console, ["Top-level help topics:"], "    ")?;
         console.print("")?;
         for topic in topics.values() {
             if topic.show_in_summary() {
@@ -356,12 +356,12 @@ equivalent: HELP CON, HELP console, HELP \"Console manipulation\".",
         console.print("")?;
         refill_and_print(
             &mut *console,
-            &["Type HELP followed by the name of a topic for details."],
+            ["Type HELP followed by the name of a topic for details."],
             "    ",
         )?;
         refill_and_print(
             &mut *console,
-            &["Type HELP HELP for details on how to specify topic names."],
+            ["Type HELP HELP for details on how to specify topic names."],
             "    ",
         )?;
         console.print("")?;
