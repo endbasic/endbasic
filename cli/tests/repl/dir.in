@@ -33,7 +33,7 @@ third
 SAVE "some lines and a long name.bas"
 DIR ' Two files.
 
-DEL "empty.bas"
+KILL "empty.bas"
 DIR ' One file again.
 
 DIR "demos:"

@@ -67,6 +67,9 @@ for the time being.**
     and would cause confusion when typing something like `HELP DATA`, which
     would result in a parse error.
 
+*   Renamed `DEL` as `KILL` to match QuickBASIC and avoid confusion with a
+    potential future `DELETE` command implementation.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**

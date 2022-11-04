@@ -278,8 +278,8 @@ Output from HELP "STORED":
     See the "File system" help topic for information on where the programs
     can be saved and loaded from.
 
-    >> DEL     Deletes the given program.
     >> EDIT    Interactively edits the stored program.
+    >> KILL    Deletes the given program.
     >> LIST    Prints the currently-loaded program.
     >> LOAD    Loads the given program.
     >> NEW     Restores initial machine state and creates a new program.
@@ -350,17 +350,6 @@ Output from HELP "DEG":
     The default condition for the trigonometric functions is to use
     radians.  DEG configures the environment to use degrees until
     instructed otherwise.
-
-Output from HELP "DEL":
-
-    DEL filename$
-
-    Deletes the given program.
-
-    The filename must be a string and must be a valid EndBASIC path.  The
-    .BAS extension is optional but, if present, it must be .BAS.
-
-    See the "File system" help topic for information on the path syntax.
 
 Output from HELP "DIR":
 
@@ -513,6 +502,17 @@ Output from HELP "INPUT":
 
     The second expression to this function must be a bare variable
     reference and indicates the variable to update with the obtained input.
+
+Output from HELP "KILL":
+
+    KILL filename$
+
+    Deletes the given program.
+
+    The filename must be a string and must be a valid EndBASIC path.  The
+    .BAS extension is optional but, if present, it must be .BAS.
+
+    See the "File system" help topic for information on the path syntax.
 
 Output from HELP "LIST":
 

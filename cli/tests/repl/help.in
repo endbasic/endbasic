@@ -82,9 +82,6 @@ HELP "COLOR"
 PRINT "Output from HELP \"DEG\":"
 HELP "DEG"
 
-PRINT "Output from HELP \"DEL\":"
-HELP "DEL"
-
 PRINT "Output from HELP \"DIR\":"
 HELP "DIR"
 
@@ -123,6 +120,9 @@ HELP "HELP"
 
 PRINT "Output from HELP \"INPUT\":"
 HELP "INPUT"
+
+PRINT "Output from HELP \"KILL\":"
+HELP "KILL"
 
 PRINT "Output from HELP \"LIST\":"
 HELP "LIST"
