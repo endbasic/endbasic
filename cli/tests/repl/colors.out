@@ -1,8 +1,8 @@
 
-    Welcome to EndBASIC X.Y.Z.
+    EndBASIC X.Y.Z
+    Copyright YYYY-YYYY Julio Merino
 
     Type HELP for interactive usage information.
-    For a guided tour, type: LOAD "DEMOS:/TOUR.BAS": RUN
 
 [2J[1;1H[38;5;5m[48;5;4mHello
 [38;5;4m[48;5;3mHello

@@ -69,8 +69,7 @@ const LANG_REFERENCE: &str = r"
 fn header() -> Vec<String> {
     vec![
         "".to_owned(),
-        format!("    EndBASIC {}", env!("CARGO_PKG_VERSION")),
-        "    Copyright 2020-2022 Julio Merino".to_owned(),
+        format!("    This is EndBASIC {}.", env!("CARGO_PKG_VERSION")),
         "".to_owned(),
         format!("    Project page at <{}>", env!("CARGO_PKG_HOMEPAGE")),
         "    License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>".to_owned(),
@@ -364,6 +363,11 @@ equivalent: HELP \"CON\", HELP \"console\", HELP \"Console manipulation\".",
             ["Type HELP \"HELP\" for details on how to specify topic names."],
             "    ",
         )?;
+        refill_and_print(
+            &mut *console,
+            [r#"Type LOAD "DEMOS:/TOUR.BAS": RUN for a guided tour."#],
+            "    ",
+        )?;
         console.print("")?;
 
         Ok(())
@@ -519,6 +523,7 @@ mod tests {
                 "",
                 "    Type HELP followed by the name of a topic for details.",
                 "    Type HELP \"HELP\" for details on how to specify topic names.",
+                "    Type LOAD \"DEMOS:/TOUR.BAS\": RUN for a guided tour.",
                 "",
             ])
             .check();

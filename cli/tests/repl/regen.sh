@@ -28,6 +28,7 @@ run() {
 date_re="[0-9]{4}-[0-9]{2}-[0-9]{2} [0-2][0-9]:[0-5][0-9]"
 file_uri_re="file://[^ \n\"]+"
 version_re="[0-9]+\\.[0-9]+\\.[0-9]+"
+year_range_re="[0-9]{4}-[0-9]{4}"
 
 for outfile in "${@}"; do
     basfile="${outfile%.*}.bas"
@@ -69,6 +70,7 @@ for outfile in "${@}"; do
     sed -E -e "s,${date_re},YYYY-MM-DD HH:MM,g" \
         -e "s,${file_uri_re},file:///PATH/TO/TMPDIR,g" \
         -e "s,${version_re},X.Y.Z,g" \
+        -e "s,${year_range_re},YYYY-YYYY,g" \
         "${outfile}.new" >"${outfile}.tmp"
     mv "${outfile}.tmp" "${outfile}"
     rm -f "${outfile}.new" "${outfile}.tmp"
