@@ -21,6 +21,7 @@ use crate::parser;
 use crate::reader::LineCol;
 use crate::syms::{CallError, CallableMetadata, Command, Function, Symbol, Symbols};
 use crate::value;
+use async_channel::{Receiver, Sender, TryRecvError};
 use async_recursion::async_recursion;
 use std::collections::HashSet;
 use std::io;
@@ -108,6 +109,13 @@ fn new_syntax_error<T, S: Into<String>>(pos: LineCol, message: S) -> Result<T> {
     Err(Error::SyntaxError(pos, message.into()))
 }
 
+/// Signals that can be delivered to the machine.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Signal {
+    /// Asks the machine to stop execution of the currently-running program.
+    Break,
+}
+
 /// Describes how the machine stopped execution while it was running a script via `exec()`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[must_use]
@@ -117,6 +125,9 @@ pub enum StopReason {
 
     /// Execution terminated because the machine was asked to terminate with `exit()`.
     Exited(u8),
+
+    /// Execution terminated because the machine received a break signal.
+    Break,
 }
 
 impl StopReason {
@@ -125,6 +136,14 @@ impl StopReason {
         match self {
             StopReason::Eof => 0,
             StopReason::Exited(i) => *i as i32,
+            StopReason::Break => {
+                // This mimics the behavior of typical Unix shells, which translate a signal to a
+                // numerical exit code, but this is not accurate.  First, because a CTRL+C sequence
+                // should be exposed as a SIGINT signal to whichever process is waiting for us, and
+                // second because this is not meaningful on Windows.  But for now this will do.
+                const SIGINT: i32 = 2;
+                128 + SIGINT
+            }
         }
     }
 }
@@ -137,16 +156,34 @@ pub trait Clearable {
 }
 
 /// Executes an EndBASIC program and tracks its state.
-#[derive(Default)]
 pub struct Machine {
     symbols: Symbols,
     clearables: Vec<Box<dyn Clearable>>,
+    signals_chan: (Sender<Signal>, Receiver<Signal>),
     stop_reason: Option<StopReason>,
     pending_goto: Option<GotoSpan>,
     data: Vec<Option<Value>>,
 }
 
+impl Default for Machine {
+    fn default() -> Self {
+        Self::with_signals_chan(async_channel::unbounded())
+    }
+}
+
 impl Machine {
+    /// Constructs a new empty machine with the given signals communication channel.
+    pub fn with_signals_chan(signals: (Sender<Signal>, Receiver<Signal>)) -> Self {
+        Self {
+            symbols: Symbols::default(),
+            clearables: vec![],
+            signals_chan: signals,
+            stop_reason: None,
+            pending_goto: None,
+            data: vec![],
+        }
+    }
+
     /// Registers the given clearable.
     ///
     /// In the common case, functions and commands hold a reference to the out-of-machine state
@@ -165,6 +202,11 @@ impl Machine {
     /// Registers the given builtin function, which must not yet be registered.
     pub fn add_function(&mut self, function: Rc<dyn Function>) {
         self.symbols.add_function(function)
+    }
+
+    /// Obtains a channel via which to send signals to the machine during execution.
+    pub fn get_signals_tx(&self) -> Sender<Signal> {
+        self.signals_chan.0.clone()
     }
 
     /// Resets the state of the machine by clearing all variable.
@@ -237,8 +279,14 @@ impl Machine {
         }
     }
 
-    /// Returns true if execution should stop because we have git a stop condition.
-    fn should_stop(&self) -> bool {
+    /// Returns true if execution should stop because we have hit a stop condition.
+    fn should_stop(&mut self) -> bool {
+        match self.signals_chan.1.try_recv() {
+            Ok(Signal::Break) => self.stop_reason = Some(StopReason::Break),
+            Err(TryRecvError::Empty) => (),
+            Err(TryRecvError::Closed) => panic!("Channel unexpectedly closed"),
+        }
+
         self.stop_reason.is_some()
     }
 
@@ -517,6 +565,13 @@ impl Machine {
             i += 1;
         }
         Ok(())
+    }
+
+    /// Consumes any pending signals so that they don't interfere with an upcoming execution.
+    pub fn drain_signals(&mut self) {
+        while self.signals_chan.1.try_recv().is_ok() {
+            // Do nothing.
+        }
     }
 
     /// Executes a program extracted from the `input` readable.
@@ -964,6 +1019,31 @@ mod tests {
                 .expect("Execution failed")
         );
         assert_eq!(&["2"], captured_out.borrow().as_slice());
+    }
+
+    #[tokio::test]
+    async fn test_signals_stop() {
+        let mut machine = Machine::default();
+        let signals_tx = machine.get_signals_tx();
+
+        // This is a best-effort test because we are trying to exercise a condition for which we
+        // have no synchronization primitives.
+        for _ in 0..10 {
+            let input = &mut "WHILE TRUE: WEND".as_bytes();
+            machine.drain_signals();
+            let future = machine.exec(input);
+
+            // There is no guarantee that the tight loop inside the machine is running immediately
+            // at this point (particularly because we run with just one thread in this test), thus
+            // we may send the signal prematurely.  We would still get a `Break` stop reason because
+            // we would detect the signal *before* entering the loop, but that would defeat the
+            // purpose of this test.  Give a chance to the machine code to run first and get stuck.
+            tokio::task::yield_now().await;
+
+            signals_tx.send(Signal::Break).await.unwrap();
+            let result = future.await;
+            assert_eq!(StopReason::Break, result.unwrap());
+        }
     }
 
     #[test]
