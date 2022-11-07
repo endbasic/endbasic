@@ -22,7 +22,8 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
-use endbasic_core::exec::{Machine, Result};
+use async_channel::{Receiver, Sender};
+use endbasic_core::exec::{Machine, Result, Signal};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -48,6 +49,7 @@ pub struct MachineBuilder {
     console: Option<Rc<RefCell<dyn console::Console>>>,
     gpio_pins: Option<Rc<RefCell<dyn gpio::Pins>>>,
     sleep_fn: Option<exec::SleepFn>,
+    signals_chan: Option<(Sender<Signal>, Receiver<Signal>)>,
 }
 
 impl MachineBuilder {
@@ -69,6 +71,12 @@ impl MachineBuilder {
         self
     }
 
+    /// Overrides the default signals channel with the given one.
+    pub fn with_signals_chan(mut self, chan: (Sender<Signal>, Receiver<Signal>)) -> Self {
+        self.signals_chan = Some(chan);
+        self
+    }
+
     /// Lazily initializes the `console` field with a default value and returns it.
     pub fn get_console(&mut self) -> Rc<RefCell<dyn console::Console>> {
         if self.console.is_none() {
@@ -87,12 +95,20 @@ impl MachineBuilder {
 
     /// Builds the interpreter.
     pub fn build(mut self) -> Result<Machine> {
-        let mut machine = Machine::default();
+        let console = self.get_console();
+        let gpio_pins = self.get_gpio_pins();
+
+        let signals_chan = match self.signals_chan {
+            Some(pair) => pair,
+            None => async_channel::unbounded(),
+        };
+
+        let mut machine = Machine::with_signals_chan(signals_chan);
         arrays::add_all(&mut machine);
-        console::add_all(&mut machine, self.get_console());
+        console::add_all(&mut machine, console.clone());
         data::add_all(&mut machine);
-        gfx::add_all(&mut machine, self.get_console());
-        gpio::add_all(&mut machine, self.get_gpio_pins());
+        gfx::add_all(&mut machine, console);
+        gpio::add_all(&mut machine, gpio_pins);
         exec::add_all(&mut machine, self.sleep_fn);
         numerics::add_all(&mut machine);
         strings::add_all(&mut machine);

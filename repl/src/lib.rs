@@ -113,13 +113,18 @@ pub async fn run_from_cloud(
 
     console.print("")?;
     let code = match result {
-        Ok(StopReason::Eof) => {
+        Ok(r @ StopReason::Eof) => {
             console.print("**** Program exited due to EOF ****")?;
-            0
+            r.as_exit_code()
         }
-        Ok(StopReason::Exited(code)) => {
+        Ok(r @ StopReason::Exited(_)) => {
+            let code = r.as_exit_code();
             console.print(&format!("**** Program exited with code {} ****", code))?;
-            code as i32
+            code
+        }
+        Ok(r @ StopReason::Break) => {
+            console.print("**** Program stopped due to BREAK ****")?;
+            r.as_exit_code()
         }
         Err(e) => {
             console.print(&format!("**** ERROR: {} ****", e))?;
@@ -190,11 +195,17 @@ pub async fn run_repl_loop(
             }
         }
 
-        #[allow(clippy::collapsible_if)]
-        if stop_reason != StopReason::Eof {
-            if !continue_if_modified(&*program.borrow(), &mut *console.borrow_mut()).await? {
-                console.borrow_mut().print("Exit aborted; resuming REPL loop.")?;
+        match stop_reason {
+            StopReason::Eof => (),
+            StopReason::Break => {
+                console.borrow_mut().print("**** BREAK ****")?;
                 stop_reason = StopReason::Eof;
+            }
+            StopReason::Exited(_) => {
+                if !continue_if_modified(&*program.borrow(), &mut *console.borrow_mut()).await? {
+                    console.borrow_mut().print("Exit aborted; resuming REPL loop.")?;
+                    stop_reason = StopReason::Eof;
+                }
             }
         }
     }

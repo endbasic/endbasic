@@ -12,9 +12,11 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
+async-channel = "1.5"
 async-recursion = "0.3"
 async-trait = "0.1"
 thiserror = "1.0"
 
 [dev-dependencies]
 futures-lite = "1.1"
+tokio = { version = "1", features = ["full"] }
