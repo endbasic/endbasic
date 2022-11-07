@@ -75,6 +75,9 @@ for the time being.**
     previously observed with this implementation (or provide an easy way to
     fix them later if not).
 
+*   Fixed `EXIT` so that it works in the context of `WHILE` loops and so that
+    no further expressions are evaluated in `FOR` and `IF statements.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
