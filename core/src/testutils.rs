@@ -227,6 +227,56 @@ impl Command for OutCommand {
     }
 }
 
+/// Simplified version of `PRINT` that captures all calls to it into `data` and that can be used
+/// in the context of a function by using the first argument as the return value of the function.
+pub struct OutfFunction {
+    metadata: CallableMetadata,
+    data: Rc<RefCell<Vec<String>>>,
+}
+
+impl OutfFunction {
+    /// Creates a new function that captures all calls into `data`.
+    pub fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("OUTF", VarType::Integer).test_build(),
+            data,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for OutfFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        if span.args.len() < 2 {
+            return Err(CallError::SyntaxError);
+        }
+
+        let args = eval_all(&span.args, symbols).await?;
+        let mut iter = args.into_iter();
+        let result = match iter.next() {
+            Some(v @ Value::Integer(_)) => v,
+            _ => return Err(CallError::SyntaxError),
+        };
+
+        let mut text = String::new();
+        let mut first = true;
+        for arg in iter {
+            if !first {
+                text += " ";
+            }
+            first = false;
+
+            text += &arg.to_output();
+        }
+        self.data.borrow_mut().push(text);
+        Ok(result)
+    }
+}
+
 /// Sums a collection of integers of arbitrary length.
 pub struct SumFunction {
     metadata: CallableMetadata,

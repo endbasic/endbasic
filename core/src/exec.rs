@@ -237,6 +237,11 @@ impl Machine {
         }
     }
 
+    /// Returns true if execution should stop because we have git a stop condition.
+    fn should_stop(&self) -> bool {
+        self.stop_reason.is_some()
+    }
+
     /// Handles a variable assignment.
     async fn assign(&mut self, span: &AssignmentSpan) -> Result<()> {
         let value = span.expr.eval(&mut self.symbols).await?;
@@ -372,7 +377,7 @@ impl Machine {
             }
 
             self.exec_multiple(&span.body).await?;
-            if self.pending_goto.is_some() {
+            if self.should_stop() || self.pending_goto.is_some() {
                 break;
             }
 
@@ -410,7 +415,7 @@ impl Machine {
             match span.expr.eval(&mut self.symbols).await? {
                 Value::Boolean(true) => {
                     self.exec_multiple(&span.body).await?;
-                    if self.pending_goto.is_some() {
+                    if self.should_stop() || self.pending_goto.is_some() {
                         break;
                     }
                 }
@@ -458,7 +463,7 @@ impl Machine {
         let mut seen_labels = HashSet::<String>::default();
         let mut i = 0;
         while i < stmts.len() || self.pending_goto.is_some() {
-            if self.stop_reason.is_some() {
+            if self.should_stop() {
                 return Ok(());
             }
 
@@ -704,7 +709,8 @@ mod tests {
         let mut machine = Machine::default();
         machine.add_command(ExitCommand::new());
         machine.add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))));
-        machine.add_command(OutCommand::new(captured_out));
+        machine.add_command(OutCommand::new(captured_out.clone()));
+        machine.add_function(OutfFunction::new(captured_out));
         machine.add_function(SumFunction::new());
         block_on(machine.exec(&mut input.as_bytes()))
     }
@@ -885,6 +891,40 @@ mod tests {
                 .expect("Execution failed")
         );
         assert_eq!(&["1", "2"], captured_out.borrow().as_slice());
+    }
+
+    #[test]
+    fn test_exit_if() {
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        let input = r#"
+            IF TRUE THEN
+                OUT OUTF(1, 100)
+                EXIT 0
+                OUT OUTF(2, 200)
+            ELSEIF OUTF(3, 300) THEN
+                OUT OUTF(4, 400)
+            ELSE
+                OUT OUTF(5, 500)
+            END IF
+            "#;
+        assert_eq!(StopReason::Exited(0), run(input, &[], captured_out.clone()).unwrap());
+        assert_eq!(&["100", "1"], captured_out.borrow().as_slice());
+    }
+
+    #[test]
+    fn test_exit_for() {
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        let input = r#"FOR i = 1 TO OUTF(10, i * 100): IF i = 3 THEN: EXIT 0: END IF: OUT i: NEXT"#;
+        assert_eq!(StopReason::Exited(0), run(input, &[], captured_out.clone()).unwrap());
+        assert_eq!(&["100", "1", "200", "2", "300"], captured_out.borrow().as_slice());
+    }
+
+    #[test]
+    fn test_exit_while() {
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        let input = r#"i = 1: WHILE i < OUTF(10, i * 100): IF i = 4 THEN: EXIT 0: END IF: OUT i: i = i + 1: WEND"#;
+        assert_eq!(StopReason::Exited(0), run(input, &[], captured_out.clone()).unwrap());
+        assert_eq!(&["100", "1", "200", "2", "300", "3", "400"], captured_out.borrow().as_slice());
     }
 
     #[test]
