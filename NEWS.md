@@ -78,6 +78,8 @@ for the time being.**
 *   Fixed `EXIT` so that it works in the context of `WHILE` loops and so that
     no further expressions are evaluated in `FOR` and `IF statements.
 
+*   Issue #111: Added support to interrupt running programs via `CTRL+C`.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**

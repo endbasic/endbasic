@@ -171,6 +171,10 @@ pub async fn run_repl_loop(
             console::read_line(&mut *console, "", "", Some(&mut history)).await
         };
 
+        // Any signals entered during console input should not impact upcoming execution.  Drain
+        // them all.
+        machine.drain_signals();
+
         match line {
             Ok(line) => match machine.exec(&mut line.as_bytes()).await {
                 Ok(reason) => stop_reason = reason,
@@ -215,6 +219,8 @@ pub async fn run_repl_loop(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use endbasic_core::exec::Signal;
+    use endbasic_std::console::Key;
     use endbasic_std::storage::{Drive, DriveFactory, InMemoryDrive};
     use endbasic_std::testutils::*;
     use futures_lite::future::block_on;
@@ -357,5 +363,22 @@ mod tests {
         checker.expect_program(Some("AUTORUN:/the-path.bas"), MockDriveFactory::SCRIPT).check();
 
         assert!(output.contains("You are now being dropped into"));
+    }
+
+    #[test]
+    fn test_run_repl_loop_signal_before_exec() {
+        let mut tester = Tester::default();
+        let (console, program) = (tester.get_console(), tester.get_program());
+        let signals_tx = tester.get_machine().get_signals_tx();
+
+        {
+            let mut console = console.borrow_mut();
+            console.add_input_chars("PRINT");
+            block_on(signals_tx.send(Signal::Break)).unwrap();
+            console.add_input_chars(" 123");
+            console.add_input_keys(&[Key::NewLine, Key::Eof]);
+        }
+        block_on(run_repl_loop(tester.get_machine(), console, program)).unwrap();
+        tester.run("").expect_prints(["123", "End of input by CTRL-D"]).check();
     }
 }

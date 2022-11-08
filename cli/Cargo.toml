@@ -19,6 +19,7 @@ rpi = ["endbasic-rpi"]
 
 [dependencies]
 anyhow = "1.0"
+async-channel = "1.5"
 dirs = "2.0"
 getopts = "0.2"
 thiserror = "1.0"

@@ -19,7 +19,7 @@ use crate::console::{read_line, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
-use endbasic_core::exec::Machine;
+use endbasic_core::exec::{Machine, StopReason};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
 };
@@ -462,10 +462,16 @@ impl Command for RunCommand {
             Ok(stop_reason) => stop_reason,
             Err(e) => return Err(CallError::NestedError(format!("{}", e))),
         };
-        if stop_reason.as_exit_code() != 0 {
-            self.console
-                .borrow_mut()
-                .print(&format!("Program exited with code {}", stop_reason.as_exit_code()))?;
+        match stop_reason {
+            StopReason::Break => self.console.borrow_mut().print("**** BREAK ****")?,
+            stop_reason => {
+                if stop_reason.as_exit_code() != 0 {
+                    self.console.borrow_mut().print(&format!(
+                        "Program exited with code {}",
+                        stop_reason.as_exit_code()
+                    ))?;
+                }
+            }
         }
         Ok(())
     }
