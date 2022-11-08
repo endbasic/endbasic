@@ -12,8 +12,15 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
+async-channel = "1.5"
 async-trait = "0.1"
 crossterm = "0.18"
+tokio = { version = "1", features = ["rt"] }
+
+[dependencies.endbasic-core]
+version = "0.9.99" # ENDBASIC-VERSION
+path = "../core"
+
 
 [dependencies.endbasic-std]
 version = "0.9.99" # ENDBASIC-VERSION

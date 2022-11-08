@@ -22,15 +22,17 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
+use async_channel::{Receiver, Sender, TryRecvError};
 use async_trait::async_trait;
 use crossterm::{cursor, event, execute, style, terminal, tty::IsTty, QueueableCommand};
+use endbasic_core::exec::Signal;
 use endbasic_std::console::{
     get_env_var_as_u16, read_key_from_stdin, CharsXY, ClearType, Console, Key,
 };
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::io::{self, StdoutLock, Write};
-use std::time::Duration;
+use tokio::task::JoinHandle;
 
 /// Converts a `crossterm::ErrorKind` to an `io::Error`.
 fn crossterm_error_to_io_error(e: crossterm::ErrorKind) -> io::Error {
@@ -49,9 +51,6 @@ pub struct TerminalConsole {
     /// raw mode for finer-grained control.
     is_tty: bool,
 
-    /// Line-oriented buffer to hold input when not operating in raw mode.
-    buffer: VecDeque<Key>,
-
     /// Current foreground color.
     fg_color: Option<u8>,
 
@@ -66,6 +65,14 @@ pub struct TerminalConsole {
 
     /// Whether video syncing is enabled or not.
     sync_enabled: bool,
+
+    /// Handler for key events.
+    // Must come before `on_key_rx` so that the handler is terminated before we close the channel,
+    // or else any last-minute sends from the handler would panic.
+    _key_handler: JoinHandle<()>,
+
+    /// Channel to receive key presses from the terminal.
+    on_key_rx: Receiver<Key>,
 }
 
 impl Drop for TerminalConsole {
@@ -78,80 +85,127 @@ impl Drop for TerminalConsole {
 
 impl TerminalConsole {
     /// Creates a new console based on the properties of stdin/stdout.
-    pub fn from_stdio() -> io::Result<Self> {
+    ///
+    /// This spawns a background task to handle console input so this must be run in the context of
+    /// an Tokio runtime.
+    pub fn from_stdio(signals_tx: Sender<Signal>) -> io::Result<Self> {
+        let (on_key_tx, on_key_rx) = async_channel::unbounded();
+
         let is_tty = io::stdin().is_tty() && io::stdout().is_tty();
-        if is_tty {
+
+        let key_handler = if is_tty {
             terminal::enable_raw_mode().map_err(crossterm_error_to_io_error)?;
-        }
+            tokio::task::spawn(TerminalConsole::raw_key_handler(on_key_tx, signals_tx))
+        } else {
+            tokio::task::spawn(TerminalConsole::stdio_key_handler(on_key_tx))
+        };
+
         Ok(Self {
             is_tty,
-            buffer: VecDeque::default(),
             fg_color: None,
             bg_color: None,
             cursor_visible: true,
             alt_active: false,
             sync_enabled: true,
+            _key_handler: key_handler,
+            on_key_rx,
         })
     }
 
-    /// Reads a single key from the connected TTY.  This assumes the TTY is in raw mode.
-    ///
-    /// If the next event extracted from the terminal is *not* a key press, returns None.  The
-    /// caller should then retry until it gets a key.
-    fn try_read_key_from_tty(&mut self) -> io::Result<Option<Key>> {
-        let ev = event::read().map_err(crossterm_error_to_io_error)?;
-        match ev {
-            event::Event::Key(ev) => {
-                let key = match ev.code {
-                    event::KeyCode::Backspace => Key::Backspace,
-                    event::KeyCode::End => Key::End,
-                    event::KeyCode::Esc => Key::Escape,
-                    event::KeyCode::Home => Key::Home,
-                    event::KeyCode::Tab => Key::Tab,
-                    event::KeyCode::Up => Key::ArrowUp,
-                    event::KeyCode::Down => Key::ArrowDown,
-                    event::KeyCode::Left => Key::ArrowLeft,
-                    event::KeyCode::Right => Key::ArrowRight,
-                    event::KeyCode::PageDown => Key::PageDown,
-                    event::KeyCode::PageUp => Key::PageUp,
-                    event::KeyCode::Char('a') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        Key::Home
-                    }
-                    event::KeyCode::Char('b') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        Key::ArrowLeft
-                    }
-                    event::KeyCode::Char('c') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        Key::Interrupt
-                    }
-                    event::KeyCode::Char('d') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        Key::Eof
-                    }
-                    event::KeyCode::Char('e') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        Key::End
-                    }
-                    event::KeyCode::Char('f') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        Key::ArrowRight
-                    }
-                    event::KeyCode::Char('j') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        Key::NewLine
-                    }
-                    event::KeyCode::Char('m') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        Key::NewLine
-                    }
-                    event::KeyCode::Char('n') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        Key::ArrowDown
-                    }
-                    event::KeyCode::Char('p') if ev.modifiers == event::KeyModifiers::CONTROL => {
-                        Key::ArrowUp
-                    }
-                    event::KeyCode::Char(ch) => Key::Char(ch),
-                    event::KeyCode::Enter => Key::NewLine,
+    /// Async task to wait for key events on a raw terminal and translate them into events for the
+    /// console or the machine.
+    async fn raw_key_handler(on_key_tx: Sender<Key>, signals_tx: Sender<Signal>) {
+        use event::{KeyCode, KeyModifiers};
+
+        let mut done = false;
+        while !done {
+            let key = match event::read().map_err(crossterm_error_to_io_error) {
+                Ok(event::Event::Key(ev)) => match ev.code {
+                    KeyCode::Backspace => Key::Backspace,
+                    KeyCode::End => Key::End,
+                    KeyCode::Esc => Key::Escape,
+                    KeyCode::Home => Key::Home,
+                    KeyCode::Tab => Key::Tab,
+                    KeyCode::Up => Key::ArrowUp,
+                    KeyCode::Down => Key::ArrowDown,
+                    KeyCode::Left => Key::ArrowLeft,
+                    KeyCode::Right => Key::ArrowRight,
+                    KeyCode::PageDown => Key::PageDown,
+                    KeyCode::PageUp => Key::PageUp,
+                    KeyCode::Char('a') if ev.modifiers == KeyModifiers::CONTROL => Key::Home,
+                    KeyCode::Char('b') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowLeft,
+                    KeyCode::Char('c') if ev.modifiers == KeyModifiers::CONTROL => Key::Interrupt,
+                    KeyCode::Char('d') if ev.modifiers == KeyModifiers::CONTROL => Key::Eof,
+                    KeyCode::Char('e') if ev.modifiers == KeyModifiers::CONTROL => Key::End,
+                    KeyCode::Char('f') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowRight,
+                    KeyCode::Char('j') if ev.modifiers == KeyModifiers::CONTROL => Key::NewLine,
+                    KeyCode::Char('m') if ev.modifiers == KeyModifiers::CONTROL => Key::NewLine,
+                    KeyCode::Char('n') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowDown,
+                    KeyCode::Char('p') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowUp,
+                    KeyCode::Char(ch) => Key::Char(ch),
+                    KeyCode::Enter => Key::NewLine,
                     _ => Key::Unknown(format!("{:?}", ev)),
-                };
-                Ok(Some(key))
+                },
+                Ok(_) => {
+                    // Not a key event; ignore and try again.
+                    continue;
+                }
+                Err(e) => {
+                    // There is not much we can do if we get an error from crossterm.  Try to funnel
+                    // the error somehow to the caller so that we can display that something went
+                    // wrong... and continue anyhow.
+                    Key::Unknown(format!("{:?}", e))
+                }
+            };
+
+            done = key == Key::Eof;
+            if key == Key::Interrupt {
+                // Handling CTRL+C in this way isn't great because this is not the same as handling
+                // SIGINT on Unix builds.  First, we are unable to stop long-running operations like
+                // sleeps; and second, a real SIGINT will kill the interpreter completely instead of
+                // coming this way.  We need a real signal handler and we probably should not be
+                // running in raw mode all the time.
+                signals_tx
+                    .send(Signal::Break)
+                    .await
+                    .expect("Send to unbounded channel should not have failed")
+            } else {
+                on_key_tx.send(key).await.expect("Send to unbounded channel should not have failed")
             }
-            _ => Ok(None),
         }
+
+        signals_tx.close();
+        on_key_tx.close();
+    }
+
+    /// Async task to wait for key events on a non-raw terminal and translate them into events for
+    /// the console or the machine.
+    async fn stdio_key_handler(on_key_tx: Sender<Key>) {
+        // TODO(jmmv): We should probably install a signal handler here to capture SIGINT and
+        // funnel it to the Machine via signals_rx, as we do in the raw_key_handler.  This would
+        // help ensure both consoles behave in the same way, but there is strictly no need for this
+        // because, when we do not configure the terminal in raw mode, we aren't capturing CTRL+C
+        // and the default system handler will work.
+
+        let mut buffer = VecDeque::default();
+
+        let mut done = false;
+        while !done {
+            let key = match read_key_from_stdin(&mut buffer) {
+                Ok(key) => key,
+                Err(e) => {
+                    // There is not much we can do if we get an error from stdin.  Try to funnel
+                    // the error somehow to the caller so that we can display that something went
+                    // wrong... and continue anyhow.
+                    Key::Unknown(format!("{:?}", e))
+                }
+            };
+
+            done = key == Key::Eof;
+            on_key_tx.send(key).await.expect("Send to unbounded channel should not have failed")
+        }
+
+        on_key_tx.close();
     }
 
     /// Flushes the console, which has already been written to via `lock`, if syncing is enabled.
@@ -272,16 +326,10 @@ impl Console for TerminalConsole {
 
     async fn poll_key(&mut self) -> io::Result<Option<Key>> {
         if self.is_tty {
-            loop {
-                if !event::poll(Duration::default()).map_err(crossterm_error_to_io_error)? {
-                    return Ok(None);
-                }
-
-                let key = self.try_read_key_from_tty()?;
-                if key.is_some() {
-                    return Ok(key);
-                }
-                // Non-key event; try again.
+            match self.on_key_rx.try_recv() {
+                Ok(k) => Ok(Some(k)),
+                Err(TryRecvError::Empty) => Ok(None),
+                Err(TryRecvError::Closed) => panic!("Channel unexpectedly closed"),
             }
         } else {
             Err(io::Error::new(io::ErrorKind::Other, "Cannot poll keys from stdin"))
@@ -289,16 +337,7 @@ impl Console for TerminalConsole {
     }
 
     async fn read_key(&mut self) -> io::Result<Key> {
-        if self.is_tty {
-            loop {
-                if let Some(key) = self.try_read_key_from_tty()? {
-                    return Ok(key);
-                }
-                // Non-key event; try again.
-            }
-        } else {
-            read_key_from_stdin(&mut self.buffer)
-        }
+        Ok(self.on_key_rx.recv().await.unwrap())
     }
 
     fn show_cursor(&mut self) -> io::Result<()> {

@@ -22,6 +22,8 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
+use async_channel::{Receiver, Sender};
+use endbasic_core::exec::Signal;
 use endbasic_core::syms::{self, CommandResult};
 use endbasic_core::LineCol;
 use endbasic_std::console::Console;
@@ -121,6 +123,7 @@ pub struct WebTerminal {
     console: CanvasConsole,
     on_screen_keyboard: OnScreenKeyboard,
     service_url: String,
+    signals_chan: (Sender<Signal>, Receiver<Signal>),
 }
 
 #[wasm_bindgen]
@@ -128,17 +131,18 @@ impl WebTerminal {
     /// Creates a new instance of the `WebTerminal`.
     #[wasm_bindgen(constructor)]
     pub fn new(terminal: HtmlCanvasElement, service_url: String) -> Self {
-        let input = WebInput::default();
+        let signals_chan = async_channel::unbounded();
+        let input = WebInput::new(signals_chan.0.clone());
         let on_screen_keyboard = input.on_screen_keyboard();
         let console = match CanvasConsole::new(terminal, input) {
             Ok(console) => console,
             Err(e) => log_and_panic!("Console initialization failed: {}", e),
         };
 
-        Self { console, on_screen_keyboard, service_url }
+        Self { console, on_screen_keyboard, service_url, signals_chan }
     }
 
-    /// Generates a new `OnScreenKeyboard` that can inject keypresses into this terminal.
+    /// Generates a new `OnScreenKeyboard` that can inject key events into this terminal.
     pub fn on_screen_keyboard(&self) -> OnScreenKeyboard {
         self.on_screen_keyboard.clone()
     }
@@ -169,6 +173,7 @@ impl WebTerminal {
         let console = Rc::from(RefCell::from(self.console));
         let mut builder = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
+            .with_signals_chan(self.signals_chan)
             .with_sleep_fn(Box::from(js_sleep))
             .make_interactive()
             .with_program(Rc::from(RefCell::from(endbasic_repl::editor::Editor::default())));

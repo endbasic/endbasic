@@ -17,6 +17,7 @@
 
 use crate::log_and_panic;
 use async_channel::{self, Receiver, Sender, TryRecvError};
+use endbasic_core::exec::Signal;
 use endbasic_std::console::Key;
 use std::io;
 use wasm_bindgen::prelude::*;
@@ -79,6 +80,7 @@ fn on_key_event_into_key(dom_event: KeyboardEvent) -> Key {
 #[derive(Clone)]
 pub struct OnScreenKeyboard {
     on_key_tx: Sender<Key>,
+    signals_tx: Sender<Signal>,
 }
 
 #[wasm_bindgen]
@@ -92,12 +94,20 @@ impl OnScreenKeyboard {
 
     /// Pushes a new captured `dom_event` input event into the input.
     pub fn inject_input_event(&self, dom_event: InputEvent) {
+        // TODO(jmmv): Add an on-screen button to send CTRL+C events.
         self.safe_try_send(on_input_event_into_key(dom_event))
     }
 
     /// Pushes a new captured `dom_event` keyboard event into the input.
     pub fn inject_keyboard_event(&self, dom_event: KeyboardEvent) {
-        self.safe_try_send(on_key_event_into_key(dom_event))
+        let key = on_key_event_into_key(dom_event);
+        if key == Key::Interrupt {
+            if let Err(e) = self.signals_tx.try_send(Signal::Break) {
+                log_and_panic!("Send to unbounded channel must succeed: {}", e);
+            }
+        } else {
+            self.safe_try_send(key)
+        }
     }
 
     /// Generates a fake Escape key press.
@@ -131,19 +141,19 @@ impl OnScreenKeyboard {
 pub struct WebInput {
     on_key_rx: Receiver<Key>,
     on_key_tx: Sender<Key>,
-}
-
-impl Default for WebInput {
-    fn default() -> Self {
-        let (on_key_tx, on_key_rx) = async_channel::unbounded();
-        Self { on_key_rx, on_key_tx }
-    }
+    signals_tx: Sender<Signal>,
 }
 
 impl WebInput {
+    /// Creates a new `WebInput` that can inject events into the interpreter via `signals_tx`.
+    pub(crate) fn new(signals_tx: Sender<Signal>) -> Self {
+        let (on_key_tx, on_key_rx) = async_channel::unbounded();
+        Self { on_key_rx, on_key_tx, signals_tx }
+    }
+
     /// Generates a new `OnScreenKeyboard` that can inject key events.
     pub(crate) fn on_screen_keyboard(&self) -> OnScreenKeyboard {
-        OnScreenKeyboard { on_key_tx: self.on_key_tx.clone() }
+        OnScreenKeyboard { on_key_tx: self.on_key_tx.clone(), signals_tx: self.signals_tx.clone() }
     }
 
     /// Gets the next key event, if one is available.

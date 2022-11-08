@@ -17,7 +17,9 @@
 
 use crate::host::{self, Request, Response};
 use crate::spec::Resolution;
+use async_channel::Sender;
 use async_trait::async_trait;
+use endbasic_core::exec::Signal;
 use endbasic_std::console::{CharsXY, ClearType, Console, Key, PixelsXY};
 use std::io;
 use std::path::PathBuf;
@@ -47,12 +49,21 @@ impl SdlConsole {
         resolution: Resolution,
         font_path: PathBuf,
         font_size: u16,
+        signals_tx: Sender<Signal>,
     ) -> io::Result<Self> {
         let (request_tx, request_rx) = mpsc::sync_channel(1);
         let (response_tx, response_rx) = mpsc::sync_channel(1);
         let (on_key_tx, on_key_rx) = mpsc::channel();
         let handle = thread::spawn(move || {
-            host::run(resolution, font_path, font_size, request_rx, response_tx, on_key_tx);
+            host::run(
+                resolution,
+                font_path,
+                font_size,
+                request_rx,
+                response_tx,
+                on_key_tx,
+                signals_tx,
+            );
         });
 
         // Wait for the console to be up and running.  We must do this for error propagation but
@@ -183,9 +194,11 @@ impl Console for SdlConsole {
 #[cfg(test)]
 mod testutils {
     use super::*;
+    use async_channel::{Receiver, TryRecvError};
     use flate2::read::GzDecoder;
     use flate2::write::GzEncoder;
     use flate2::Compression;
+    use futures_lite::future::block_on;
     use once_cell::sync::Lazy;
     use sdl2::event::Event;
     use sdl2::rwops::RWops;
@@ -229,6 +242,9 @@ mod testutils {
         /// The SDL console under test.
         console: SdlConsole,
 
+        /// Channel via which we receive signals from the console.
+        signals_rx: Receiver<Signal>,
+
         /// Guard to ensure there is a single `SdlConsole` alive at any given time. This must come
         /// after `console` because the Rust drop rules dictate that struct elements are dropped in
         /// the order in which they are defined.
@@ -239,18 +255,33 @@ mod testutils {
         /// Creates a new test context and ensures no other test is running at the same time.
         pub(crate) fn new() -> Self {
             let lock = TEST_LOCK.lock().unwrap();
+            let signals_chan = async_channel::unbounded();
             let console = SdlConsole::new(
                 Resolution::windowed(800, 600).unwrap(),
                 src_path("sdl/src/IBMPlexMono-Regular-6.0.0.ttf"),
                 16,
+                signals_chan.0,
             )
             .unwrap();
-            Self { _lock: lock, console }
+            Self { _lock: lock, signals_rx: signals_chan.1, console }
         }
 
         /// Obtains access to the SDL console.
         pub(crate) fn console(&mut self) -> &mut SdlConsole {
             &mut self.console
+        }
+
+        /// Synchronously waits for the reception of just one signal.
+        pub(crate) fn wait_one_signal(&self) -> Signal {
+            let signal = block_on(self.signals_rx.recv()).unwrap();
+
+            match self.signals_rx.try_recv() {
+                Ok(signal) => panic!("Received duplicate signal {:?}", signal),
+                Err(TryRecvError::Empty) => (),
+                Err(TryRecvError::Closed) => panic!("Channel must be alive"),
+            }
+
+            signal
         }
 
         /// Injects an SDL event into the console.
@@ -519,7 +550,8 @@ mod tests {
         assert_poll_is_none(test.console());
 
         test.push_event(key_down(Keycode::C, Mod::LCTRLMOD));
-        assert_poll_is_key(test.console(), Key::Interrupt);
+        assert_poll_is_none(test.console());
+        assert_eq!(Signal::Break, test.wait_one_signal());
         assert_poll_is_none(test.console());
 
         // TODO(jmmv): We aren't testing textual input because push_event doesn't support injecting
@@ -540,7 +572,8 @@ mod tests {
         });
         test.push_event(Event::JoyButtonUp { timestamp: 0, which: 0, button_idx: 0 });
         test.push_event(key_down(Keycode::C, Mod::LCTRLMOD));
-        assert_poll_is_key(test.console(), Key::Interrupt);
+        assert_poll_is_none(test.console());
+        assert_eq!(Signal::Break, test.wait_one_signal());
         assert_poll_is_none(test.console());
 
         test.verify("sdl-empty");
@@ -555,9 +588,9 @@ mod tests {
         assert_eq!(Key::Eof, block_on(test.console().read_key()).unwrap());
 
         test.push_event(key_down(Keycode::C, Mod::LCTRLMOD));
-        assert_eq!(Key::Interrupt, block_on(test.console().read_key()).unwrap());
+        assert_eq!(Signal::Break, test.wait_one_signal());
         test.push_event(key_down(Keycode::C, Mod::RCTRLMOD));
-        assert_eq!(Key::Interrupt, block_on(test.console().read_key()).unwrap());
+        assert_eq!(Signal::Break, test.wait_one_signal());
 
         test.push_event(key_down(Keycode::D, Mod::LCTRLMOD));
         assert_eq!(Key::Eof, block_on(test.console().read_key()).unwrap());
