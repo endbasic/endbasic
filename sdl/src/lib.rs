@@ -28,7 +28,23 @@ use std::io;
 use std::rc::Rc;
 
 mod console;
+mod font;
 mod spec;
+
+/// Converts a flat string error message to an `io::Error`.
+fn string_error_to_io_error(e: String) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, e)
+}
+
+/// Represents a rectangular size in pixels.
+#[derive(Clone, Copy)]
+struct SizeInPixels {
+    /// The width in pixels.
+    width: u16,
+
+    /// The height in pixels.
+    height: u16,
+}
 
 /// Creates the graphical console based on the given `spec`.
 pub fn setup(spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {

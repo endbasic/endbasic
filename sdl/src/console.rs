@@ -15,18 +15,18 @@
 
 //! Implementation of the EndBASIC console using SDL.
 
+use crate::font::{font_error_to_io_error, MonospacedFont};
+use crate::{string_error_to_io_error, SizeInPixels};
 use async_trait::async_trait;
 use endbasic_std::console::{
     ansi_color_to_rgb, CharsXY, ClearType, Console, Key, LineBuffer, PixelsXY,
 };
-use once_cell::sync::Lazy;
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
 use sdl2::pixels::{Color, PixelFormatEnum};
 use sdl2::rect::{Point, Rect};
 use sdl2::render::{SurfaceCanvas, TextureCreator, TextureValueError, UpdateTextureError};
 use sdl2::surface::{Surface, SurfaceContext};
-use sdl2::ttf::{Font, FontError, InitError, Sdl2TtfContext};
 use sdl2::video::{Window, WindowBuildError};
 use sdl2::{EventPump, Sdl};
 use std::convert::TryFrom;
@@ -42,38 +42,8 @@ const DEFAULT_FG_COLOR: Color = Color::WHITE;
 /// via the `COLOR` command.
 const DEFAULT_BG_COLOR: Color = Color::BLACK;
 
-/// Global instance of the SDL TTF font loader.  Trying to deal with the lifetime of the derived
-/// fonts seems to be incredibly hard because of how we hide the `SdlConsole` implementation behind
-/// the `Console` trait.  It might be possible to do this in a better way, but for now, keeping the
-/// context global works well and is simple enough.
-static TTF_CONTEXT: Lazy<Result<Sdl2TtfContext, InitError>> = Lazy::new(sdl2::ttf::init);
-
 /// Converts a `fmt::Error` to an `io::Error`.
 fn fmt_error_to_io_error(e: fmt::Error) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, e)
-}
-
-/// Converts a `FontError` to an `io::Error`.
-fn font_error_to_io_error(e: FontError) -> io::Error {
-    let kind = match e {
-        FontError::InvalidLatin1Text(_) => io::ErrorKind::InvalidInput,
-        FontError::SdlError(_) => io::ErrorKind::Other,
-    };
-    io::Error::new(kind, e)
-}
-
-/// Converts an `InitError` to an `io::Error`.
-fn init_error_to_io_error(e: &'static InitError) -> io::Error {
-    match e {
-        InitError::AlreadyInitializedError => {
-            panic!("Initialization from once_cell should happen only once")
-        }
-        InitError::InitializationError(e) => io::Error::new(e.kind(), format!("{}", e)),
-    }
-}
-
-/// Converts a flat string error message to an `io::Error`.
-fn string_error_to_io_error(e: String) -> io::Error {
     io::Error::new(io::ErrorKind::Other, e)
 }
 
@@ -171,16 +141,6 @@ impl ClampedMul<usize, usize> for usize {
     }
 }
 
-/// Represents a rectangular size in pixels.
-#[derive(Clone, Copy)]
-struct SizeInPixels {
-    /// The width in pixels.
-    width: u16,
-
-    /// The height in pixels.
-    height: u16,
-}
-
 impl ClampedMul<SizeInPixels, PixelsXY> for CharsXY {
     fn clamped_mul(self, rhs: SizeInPixels) -> PixelsXY {
         PixelsXY { x: self.x.clamped_mul(rhs.width), y: self.y.clamped_mul(rhs.height) }
@@ -215,88 +175,6 @@ fn rect_points(x1y1: PixelsXY, x2y2: PixelsXY) -> Rect {
     let y1 = i32::from(y1);
 
     Rect::new(x1, y1, width, height)
-}
-
-/// Wrapper around a monospaced SDL font.
-struct MonospacedFont<'a> {
-    font: Font<'a, 'static>,
-    glyph_size: SizeInPixels,
-}
-
-impl<'a> MonospacedFont<'a> {
-    /// Loads the font from the file `path` with `point_size`.  If the loaded font is not
-    /// monospaced, returns an error.
-    fn load(path: &Path, point_size: u16) -> io::Result<MonospacedFont<'a>> {
-        let ttf_context = TTF_CONTEXT.as_ref().map_err(init_error_to_io_error)?;
-
-        let font = ttf_context.load_font(path, point_size).map_err(string_error_to_io_error)?;
-
-        if !font.face_is_fixed_width() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("Font {} is not monospaced", path.display()),
-            ));
-        }
-
-        let glyph_size = {
-            let metrics = match font.find_glyph_metrics('A') {
-                Some(metrics) => metrics,
-                None => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "Font lacks a glyph for 'A'; is it valid?",
-                    ))
-                }
-            };
-
-            let width = match u16::try_from(metrics.advance) {
-                Ok(0) => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid font width 0"))
-                }
-                Ok(width) => width,
-                Err(e) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("Invalid font width {}: {}", metrics.advance, e),
-                    ))
-                }
-            };
-
-            let height = match u16::try_from(font.height()) {
-                Ok(0) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "Invalid font height 0",
-                    ))
-                }
-                Ok(height) => height,
-                Err(e) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("Invalid font height {}: {}", font.height(), e),
-                    ))
-                }
-            };
-
-            SizeInPixels { width, height }
-        };
-
-        Ok(MonospacedFont { font, glyph_size })
-    }
-
-    /// Computes the number of characters that fit within the given pixels `area`.
-    fn chars_in_area(&self, area: SizeInPixels) -> CharsXY {
-        debug_assert!(area.width > 0);
-        debug_assert!(area.height > 0);
-        CharsXY::new(
-            area.width
-                .checked_div(self.glyph_size.width)
-                .expect("Glyph size tested for non-zero during init"),
-            area.height
-                .checked_div(self.glyph_size.height)
-                .expect("Glyph size tested for non-zero during init"),
-        )
-    }
 }
 
 /// Given an SDL `event`, converts it to a `Key` event if it is a key press; otherwise, returns
@@ -1025,6 +903,7 @@ mod testutils {
     use flate2::read::GzDecoder;
     use flate2::write::GzEncoder;
     use flate2::Compression;
+    use once_cell::sync::Lazy;
     use sdl2::rwops::RWops;
     use std::env;
     use std::fs::File;
