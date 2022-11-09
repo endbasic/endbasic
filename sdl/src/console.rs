@@ -16,6 +16,7 @@
 //! Implementation of the EndBASIC console using SDL.
 
 use crate::font::{font_error_to_io_error, MonospacedFont};
+use crate::spec::Resolution;
 use crate::{string_error_to_io_error, SizeInPixels};
 use async_trait::async_trait;
 use endbasic_std::console::{
@@ -247,44 +248,6 @@ fn parse_event(event: Event) -> io::Result<Option<Key>> {
         }
 
         _ => Ok(None),
-    }
-}
-
-/// Configures the resolution of the graphical console.
-#[derive(Debug, PartialEq)]
-pub(crate) enum Resolution {
-    /// Tells the console to start in full screen mode at the current desktop resolution.
-    FullScreenDesktop,
-
-    /// Tells the console to start in full screen mode at the given resolution.
-    FullScreen((u32, u32)),
-
-    /// Tells the console to start in windowed mode at the given resolution.
-    Windowed((u32, u32)),
-}
-
-impl Resolution {
-    /// Ensures that the given resolution is valid to some extent.
-    fn validate_width_and_height(width: u32, height: u32) -> io::Result<()> {
-        if width == 0 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Console width cannot be 0"));
-        }
-        if height == 0 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Console height cannot be 0"));
-        }
-        Ok(())
-    }
-
-    /// Creates a new instance of this enum of type `FullScreen` after validating the parameters.
-    pub(crate) fn full_screen(width: u32, height: u32) -> io::Result<Self> {
-        Resolution::validate_width_and_height(width, height)?;
-        Ok(Self::FullScreen((width, height)))
-    }
-
-    /// Creates a new instance of this enum of type `Windowed` after validating the parameters.
-    pub(crate) fn windowed(width: u32, height: u32) -> io::Result<Self> {
-        Resolution::validate_width_and_height(width, height)?;
-        Ok(Self::Windowed((width, height)))
     }
 }
 
