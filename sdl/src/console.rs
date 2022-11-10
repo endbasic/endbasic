@@ -15,295 +15,24 @@
 
 //! Implementation of the EndBASIC console using SDL.
 
-use crate::font::{font_error_to_io_error, MonospacedFont};
+use crate::host::{self, Request, Response};
 use crate::spec::Resolution;
-use crate::{string_error_to_io_error, SizeInPixels};
 use async_trait::async_trait;
-use endbasic_std::console::{
-    ansi_color_to_rgb, CharsXY, ClearType, Console, Key, LineBuffer, PixelsXY,
-};
-use sdl2::event::Event;
-use sdl2::keyboard::{Keycode, Mod};
-use sdl2::pixels::{Color, PixelFormatEnum};
-use sdl2::rect::{Point, Rect};
-use sdl2::render::{SurfaceCanvas, TextureCreator, TextureValueError, UpdateTextureError};
-use sdl2::surface::{Surface, SurfaceContext};
-use sdl2::video::{Window, WindowBuildError};
-use sdl2::{EventPump, Sdl};
-use std::convert::TryFrom;
-use std::fmt::{self, Write};
+use endbasic_std::console::{CharsXY, ClearType, Console, Key, PixelsXY};
 use std::io;
-use std::path::Path;
-
-/// Default foreground color, used at console creation time and when requesting the default color
-/// via the `COLOR` command.
-const DEFAULT_FG_COLOR: Color = Color::WHITE;
-
-/// Default background color, used at console creation time and when requesting the default color
-/// via the `COLOR` command.
-const DEFAULT_BG_COLOR: Color = Color::BLACK;
-
-/// Converts a `fmt::Error` to an `io::Error`.
-fn fmt_error_to_io_error(e: fmt::Error) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, e)
-}
-
-/// Converts a `TextureValueError` to an `io::Error`.
-fn texture_value_error_to_io_error(e: TextureValueError) -> io::Error {
-    let kind = match e {
-        TextureValueError::HeightOverflows(_)
-        | TextureValueError::WidthOverflows(_)
-        | TextureValueError::WidthMustBeMultipleOfTwoForFormat(_, _) => io::ErrorKind::InvalidInput,
-        TextureValueError::SdlError(_) => io::ErrorKind::Other,
-    };
-    io::Error::new(kind, e)
-}
-
-/// Converts an `UpdateTextureError` to an `io::Error`.
-fn update_texture_error_to_io_error(e: UpdateTextureError) -> io::Error {
-    let kind = match e {
-        UpdateTextureError::HeightMustBeMultipleOfTwoForFormat(_, _)
-        | UpdateTextureError::PitchMustBeMultipleOfTwoForFormat(_, _)
-        | UpdateTextureError::PitchOverflows(_)
-        | UpdateTextureError::WidthMustBeMultipleOfTwoForFormat(_, _)
-        | UpdateTextureError::XMustBeMultipleOfTwoForFormat(_, _)
-        | UpdateTextureError::YMustBeMultipleOfTwoForFormat(_, _) => io::ErrorKind::InvalidInput,
-        UpdateTextureError::SdlError(_) => io::ErrorKind::Other,
-    };
-    io::Error::new(kind, e)
-}
-
-/// Converts a `WindowBuildError` to an `io::Error`.
-fn window_build_error_to_io_error(e: WindowBuildError) -> io::Error {
-    let kind = match e {
-        WindowBuildError::HeightOverflows(_) | WindowBuildError::WidthOverflows(_) => {
-            io::ErrorKind::InvalidInput
-        }
-        WindowBuildError::InvalidTitle(_) => panic!("Hardcoded window title is invalid"),
-        WindowBuildError::SdlError(_) => io::ErrorKind::Other,
-    };
-    io::Error::new(kind, e)
-}
-
-/// Conversion between types with silent value clamping.
-trait ClampedInto<T> {
-    /// Converts self into `T` capping values at `T`'s maximum or minimum boundaries.
-    fn clamped_into(self) -> T;
-}
-
-impl ClampedInto<u16> for u32 {
-    fn clamped_into(self) -> u16 {
-        if self > u32::from(u16::MAX) {
-            u16::MAX
-        } else {
-            self as u16
-        }
-    }
-}
-
-/// Multiplication of values into a narrower type with silent value clamping.
-trait ClampedMul<T, O> {
-    /// Multiplies self by `rhs` and clamps the result to fit in `O`.
-    fn clamped_mul(self, rhs: T) -> O;
-}
-
-impl ClampedMul<u16, i16> for u16 {
-    fn clamped_mul(self, rhs: u16) -> i16 {
-        let product = u32::from(self) * u32::from(rhs);
-        if product > i16::MAX as u32 {
-            i16::MAX
-        } else {
-            product as i16
-        }
-    }
-}
-
-impl ClampedMul<u16, i32> for u16 {
-    fn clamped_mul(self, rhs: u16) -> i32 {
-        match i32::from(self).checked_mul(i32::from(rhs)) {
-            Some(v) => v,
-            None => i32::MAX,
-        }
-    }
-}
-
-impl ClampedMul<u16, u32> for u16 {
-    fn clamped_mul(self, rhs: u16) -> u32 {
-        u32::from(self).checked_mul(u32::from(rhs)).expect("Result must have fit")
-    }
-}
-
-impl ClampedMul<usize, usize> for usize {
-    fn clamped_mul(self, rhs: usize) -> usize {
-        match self.checked_mul(rhs) {
-            Some(v) => v,
-            None => usize::MAX,
-        }
-    }
-}
-
-impl ClampedMul<SizeInPixels, PixelsXY> for CharsXY {
-    fn clamped_mul(self, rhs: SizeInPixels) -> PixelsXY {
-        PixelsXY { x: self.x.clamped_mul(rhs.width), y: self.y.clamped_mul(rhs.height) }
-    }
-}
-
-/// Constructs an SDL `Point` from a `PixelsXY`.
-fn point_xy(xy: PixelsXY) -> Point {
-    Point::new(i32::from(xy.x), i32::from(xy.y))
-}
-
-/// Constructs an SDL `Rect` from a `PixelsXY` `origin` and a `PixelsSize` `size`.
-fn rect_origin_size(origin: PixelsXY, size: SizeInPixels) -> Rect {
-    Rect::new(
-        i32::from(origin.x),
-        i32::from(origin.y),
-        u32::from(size.width),
-        u32::from(size.height),
-    )
-}
-
-/// Constructs an SDL `Rect` from two `PixelsXY` points.
-fn rect_points(x1y1: PixelsXY, x2y2: PixelsXY) -> Rect {
-    let (x1, x2) = if x1y1.x < x2y2.x { (x1y1.x, x2y2.x) } else { (x2y2.x, x1y1.x) };
-    let (y1, y2) = if x1y1.y < x2y2.y { (x1y1.y, x2y2.y) } else { (x2y2.y, x1y1.y) };
-
-    let width =
-        u32::try_from(i32::from(x2) - i32::from(x1)).expect("Width must have been non-negative");
-    let height =
-        u32::try_from(i32::from(y2) - i32::from(y1)).expect("Height must have been non-negative");
-    let x1 = i32::from(x1);
-    let y1 = i32::from(y1);
-
-    Rect::new(x1, y1, width, height)
-}
-
-/// Given an SDL `event`, converts it to a `Key` event if it is a key press; otherwise, returns
-/// `None` for unknown events.
-fn parse_event(event: Event) -> io::Result<Option<Key>> {
-    match event {
-        Event::Quit { .. } => {
-            // TODO(jmmv): This isn't really a key so we should be handling it in some other way.
-            // For now, we recognize it here so that closing the window causes the interpreter to
-            // exit... but that only works when the interpreter is waiting for input (which means
-            // that this also confuses INKEY).
-            Ok(Some(Key::Eof))
-        }
-
-        Event::KeyDown { keycode: Some(keycode), keymod, .. } => match keycode {
-            Keycode::A if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Ok(Some(Key::Home))
-            }
-            Keycode::B if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Ok(Some(Key::ArrowLeft))
-            }
-            Keycode::C if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Ok(Some(Key::Interrupt))
-            }
-            Keycode::D if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Ok(Some(Key::Eof))
-            }
-            Keycode::E if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Ok(Some(Key::End))
-            }
-            Keycode::F if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Ok(Some(Key::ArrowRight))
-            }
-            Keycode::J if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Ok(Some(Key::NewLine))
-            }
-            Keycode::M if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Ok(Some(Key::NewLine))
-            }
-            Keycode::N if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Ok(Some(Key::ArrowDown))
-            }
-            Keycode::P if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Ok(Some(Key::ArrowUp))
-            }
-
-            Keycode::Backspace => Ok(Some(Key::Backspace)),
-            Keycode::End => Ok(Some(Key::End)),
-            Keycode::Escape => Ok(Some(Key::Escape)),
-            Keycode::Home => Ok(Some(Key::Home)),
-            Keycode::Return => Ok(Some(Key::NewLine)),
-            Keycode::Tab => Ok(Some(Key::Tab)),
-
-            Keycode::Down => Ok(Some(Key::ArrowDown)),
-            Keycode::Left => Ok(Some(Key::ArrowLeft)),
-            Keycode::Right => Ok(Some(Key::ArrowRight)),
-            Keycode::Up => Ok(Some(Key::ArrowUp)),
-
-            Keycode::PageDown => Ok(Some(Key::PageDown)),
-            Keycode::PageUp => Ok(Some(Key::PageUp)),
-
-            _ => Ok(None),
-        },
-
-        Event::TextInput { text, .. } => {
-            let mut chars = text.chars();
-            let first =
-                chars.next().unwrap_or_else(|| panic!("Cannot handle TextInput event: {:?}", text));
-            Ok(Some(Key::Char(first)))
-        }
-
-        _ => Ok(None),
-    }
-}
+use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError};
+use std::thread::{self, JoinHandle};
 
 /// Implementation of the EndBASIC console on top of an SDL2 window.
+///
+/// This is only the "client" part of the console, which implements the `Console` trait and
+/// delegates all operations to a backing thread implemented by the `host` module.
 pub(crate) struct SdlConsole {
-    /// SDL2 library context.  Must remain alive for the lifetime of the console: if it is dropped
-    /// early, all further SDL operations fail.
-    _context: Sdl,
-
-    /// Monospaced font to use in the console.
-    font: MonospacedFont<'static>,
-
-    /// Event pump to read keyboard events from.
-    event_pump: EventPump,
-
-    /// Window that hosts the console.
-    window: Window,
-
-    /// Off-screen canvas in which to draw the console.  Use `present_canvas` to copy the contents
-    /// of this surface onto the window.
-    canvas: SurfaceCanvas<'static>,
-
-    /// The pixel format used in the `canvas`; cached to avoid calls into SDL.
-    pixel_format: PixelFormatEnum,
-
-    /// The texture creator for the `canvas`; cached to avoid calls into SDL.
-    texture_creator: TextureCreator<SurfaceContext<'static>>,
-
-    /// Size of the console in pixels.
-    size_pixels: SizeInPixels,
-
-    /// Size of the console in characters.  This is derived from `size_pixels` and the `font` glyph
-    /// metrics.
-    size_chars: CharsXY,
-
-    /// Location of the cursor.
-    cursor_pos: CharsXY,
-
-    /// Whether the cursor is visible or not.
-    cursor_visible: bool,
-
-    /// Raw pixels at the cursor position before the cursor was drawn.  Used to restore the previous
-    /// contents when the cursor moves.
-    cursor_backup: Vec<u8>,
-
-    /// Current foreground color.  Used for text and graphical rendering.
-    fg_color: Color,
-
-    /// Current background color.  Used to clear text.
-    bg_color: Color,
-
-    /// State of the console right before entering the "alternate" console.
-    alt_backup: Option<(Vec<u8>, CharsXY, Color, Color)>,
-
-    /// Whether video syncing is enabled or not.
-    sync_enabled: bool,
+    handle: Option<JoinHandle<()>>,
+    request_tx: SyncSender<Request>,
+    response_rx: Receiver<Response>,
+    on_key_rx: Receiver<Key>,
 }
 
 impl SdlConsole {
@@ -316,373 +45,66 @@ impl SdlConsole {
     /// owns the SDL context.
     pub(crate) fn new(
         resolution: Resolution,
-        font_path: &Path,
+        font_path: PathBuf,
         font_size: u16,
     ) -> io::Result<Self> {
-        let font = MonospacedFont::load(font_path, font_size)?;
+        let (request_tx, request_rx) = mpsc::sync_channel(1);
+        let (response_tx, response_rx) = mpsc::sync_channel(1);
+        let (on_key_tx, on_key_rx) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            host::run(resolution, font_path, font_size, request_rx, response_tx, on_key_tx);
+        });
 
-        let context = sdl2::init().map_err(string_error_to_io_error)?;
-        let event_pump = context.event_pump().map_err(string_error_to_io_error)?;
-        let video = context.video().map_err(string_error_to_io_error)?;
-
-        video.text_input().start();
-
-        let mut title = format!("EndBASIC {}", env!("CARGO_PKG_VERSION"));
-        let mut window = match resolution {
-            Resolution::FullScreenDesktop => {
-                let mut window = video.window(&title, 0, 0);
-                window.fullscreen_desktop();
-                window
+        // Wait for the console to be up and running.  We must do this for error propagation but
+        // also to ensure that the caller can free up the local temporary font resources, if any.
+        match response_rx.recv().expect("Channel must be alive") {
+            Response::Empty(Ok(())) => {
+                Ok(Self { handle: Some(handle), request_tx, response_rx, on_key_rx })
             }
-            Resolution::FullScreen(size) => {
-                let mut window = video.window(&title, size.0, size.1);
-                window.fullscreen();
-                window
-            }
-            Resolution::Windowed(size) => {
-                let mut window = video.window(&title, size.0, size.1);
-                window.position_centered();
-                window
-            }
-        }
-        .opengl()
-        .build()
-        .map_err(window_build_error_to_io_error)?;
-
-        let size_pixels = {
-            let (width, height) = window.drawable_size();
-            SizeInPixels { width: width.clamped_into(), height: height.clamped_into() }
-        };
-        let size_chars = font.chars_in_area(size_pixels);
-
-        write!(
-            &mut title,
-            " - {}x{} pixels, {}x{} chars",
-            size_pixels.width, size_pixels.height, size_chars.x, size_chars.y
-        )
-        .map_err(fmt_error_to_io_error)?;
-        window.set_title(&title).expect("There should have been no NULLs in the formatted title");
-
-        let pixel_format = window.window_pixel_format();
-        let surface =
-            Surface::new(u32::from(size_pixels.width), u32::from(size_pixels.height), pixel_format)
-                .map_err(string_error_to_io_error)?;
-        let canvas = surface.into_canvas().map_err(string_error_to_io_error)?;
-        let texture_creator = canvas.texture_creator();
-
-        let mut console = Self {
-            _context: context,
-            font,
-            event_pump,
-            window,
-            canvas,
-            pixel_format,
-            texture_creator,
-            size_pixels,
-            size_chars,
-            cursor_pos: CharsXY::default(),
-            cursor_visible: true,
-            cursor_backup: vec![],
-            bg_color: DEFAULT_BG_COLOR,
-            fg_color: DEFAULT_FG_COLOR,
-            alt_backup: None,
-            sync_enabled: true,
-        };
-
-        console.clear(ClearType::All)?;
-
-        Ok(console)
-    }
-
-    /// Renders the current contents of `self.canvas` onto the output window irrespective of the
-    /// status of the sync flag.
-    fn force_present_canvas(&mut self) -> io::Result<()> {
-        let mut window_surface =
-            self.window.surface(&self.event_pump).map_err(string_error_to_io_error)?;
-        self.canvas
-            .surface()
-            .blit(None, &mut window_surface, None)
-            .map_err(string_error_to_io_error)?;
-        window_surface.finish().map_err(string_error_to_io_error)
-    }
-
-    /// Renders the current contents of `self.canvas` onto the output window.
-    fn present_canvas(&mut self) -> io::Result<()> {
-        if self.sync_enabled {
-            self.force_present_canvas()
-        } else {
-            Ok(())
+            Response::Empty(Err(e)) => Err(e),
+            r => panic!("Unexpected response {:?}", r),
         }
     }
 
-    /// Draws the cursor at the current position and saves the previous contents of the screen so
-    /// that `clear_cursor` can restore them.
-    ///
-    /// Does not present the canvas.
-    fn draw_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible || !self.sync_enabled {
-            return Ok(());
+    /// Issues a synchronous call against the console host for a request that returns nothing but
+    /// an error (if any).
+    fn call(&self, request: Request) -> io::Result<()> {
+        self.request_tx.send(request).expect("Channel must be alive");
+        match self.response_rx.recv().expect("Channel must be alive") {
+            Response::Empty(Ok(v)) => Ok(v),
+            Response::Empty(Err(e)) => Err(e),
+            r => panic!("Unexpected response {:?}", r),
         }
-
-        let rect = rect_origin_size(
-            self.cursor_pos.clamped_mul(self.font.glyph_size),
-            self.font.glyph_size,
-        );
-
-        assert!(self.cursor_backup.is_empty());
-        self.cursor_backup =
-            self.canvas.read_pixels(rect, self.pixel_format).map_err(string_error_to_io_error)?;
-
-        self.canvas.set_draw_color(self.fg_color);
-        self.canvas.fill_rect(rect).map_err(string_error_to_io_error)?;
-        Ok(())
     }
+}
 
-    /// Clears the cursor at the current position by restoring the contents of the screen saved by
-    /// an earlier call to `draw_cursor`.
-    ///
-    /// Does not present the canvas.
-    fn clear_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible || !self.sync_enabled || self.cursor_backup.is_empty() {
-            return Ok(());
-        }
-
-        let rect = rect_origin_size(
-            self.cursor_pos.clamped_mul(self.font.glyph_size),
-            self.font.glyph_size,
-        );
-
-        let mut texture = self
-            .texture_creator
-            .create_texture_static(None, rect.width(), rect.height())
-            .map_err(texture_value_error_to_io_error)?;
-        texture
-            .update(
-                None,
-                &self.cursor_backup,
-                usize::try_from(rect.width())
-                    .expect("Width must fit in usize")
-                    .clamped_mul(self.pixel_format.byte_size_per_pixel()),
-            )
-            .map_err(update_texture_error_to_io_error)?;
-        self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)?;
-        self.cursor_backup.clear();
-        Ok(())
-    }
-
-    /// Moves the cursor to beginning of the next line, scrolling the console if necessary.
-    ///
-    /// Does not clear nor draw the cursor, and also does not present the canvas.
-    fn open_line(&mut self) -> io::Result<()> {
-        if self.cursor_pos.y < self.size_chars.y - 1 {
-            self.cursor_pos.x = 0;
-            self.cursor_pos.y += 1;
-            return Ok(());
-        }
-
-        let mut shifted = {
-            let src = self.canvas.surface();
-            let mut temp = Surface::new(src.width(), src.height(), self.pixel_format)
-                .map_err(string_error_to_io_error)?;
-            src.blit(
-                Rect::new(
-                    0,
-                    i32::from(self.font.glyph_size.height),
-                    u32::from(self.size_pixels.width),
-                    u32::from(self.size_pixels.height - self.font.glyph_size.height),
-                ),
-                &mut temp,
-                None,
-            )
-            .map_err(string_error_to_io_error)?;
-            temp
-        };
-        shifted
-            .fill_rect(
-                Rect::new(
-                    0,
-                    i32::from(self.size_pixels.height - self.font.glyph_size.height),
-                    u32::from(self.size_pixels.width),
-                    u32::from(self.font.glyph_size.height),
-                ),
-                self.bg_color,
-            )
-            .map_err(string_error_to_io_error)?;
-        shifted.blit(None, self.canvas.surface_mut(), None).map_err(string_error_to_io_error)?;
-
-        self.cursor_pos.x = 0;
-        Ok(())
-    }
-
-    /// Renders the given text at the `start` position.
-    ///
-    /// Does not handle overflow nor scrolling, and also does not present the canvas.
-    fn raw_write(&mut self, text: &str, start: PixelsXY) -> io::Result<()> {
-        debug_assert!(!text.is_empty(), "SDL does not like empty strings");
-
-        let len = match u16::try_from(text.chars().count()) {
-            Ok(v) => v,
-            Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "String too long")),
-        };
-
-        let surface = self
-            .font
-            .font
-            .render(text)
-            .shaded(self.fg_color, self.bg_color)
-            .map_err(font_error_to_io_error)?;
-        let texture = self
-            .texture_creator
-            .create_texture_from_surface(&surface)
-            .map_err(texture_value_error_to_io_error)?;
-
-        let rect = Rect::new(
-            i32::from(start.x),
-            i32::from(start.y),
-            len.clamped_mul(self.font.glyph_size.width),
-            u32::from(self.font.glyph_size.height),
-        );
-        self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)?;
-
-        Ok(())
-    }
-
-    /// Renders the given text at the current cursor position, with wrapping and
-    /// scrolling if necessary.
-    ///
-    /// Does not present the canvas.
-    fn raw_write_wrapped(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!text.is_empty(), "SDL does not like empty strings");
-
-        let mut line_buffer = LineBuffer::from(text);
-
-        loop {
-            let fit_chars = self.size_chars.x - self.cursor_pos.x;
-
-            let remaining = line_buffer.split_off(usize::from(fit_chars));
-            let len = line_buffer.len();
-            self.raw_write(
-                &line_buffer.into_inner(),
-                self.cursor_pos.clamped_mul(self.font.glyph_size),
-            )?;
-            self.cursor_pos.x +=
-                u16::try_from(len).expect("Partial length was computed to fit on the screen");
-
-            line_buffer = remaining;
-            if line_buffer.is_empty() {
-                break;
-            } else {
-                self.open_line()?;
-            }
-        }
-
-        Ok(())
+impl Drop for SdlConsole {
+    fn drop(&mut self) {
+        self.request_tx.send(Request::Exit).expect("Channel must be alive");
+        self.handle
+            .take()
+            .expect("Handle must always be present")
+            .join()
+            .expect("Thread should not have panicked");
     }
 }
 
 #[async_trait(?Send)]
 impl Console for SdlConsole {
     fn clear(&mut self, how: ClearType) -> io::Result<()> {
-        self.canvas.set_draw_color(self.bg_color);
-        match how {
-            ClearType::All => {
-                self.canvas.clear();
-                self.cursor_pos.y = 0;
-                self.cursor_pos.x = 0;
-
-                // We intentionally do not draw the cursor here and wait until the first time we
-                // write text to the console.  This allows the user to clear the screen and render
-                // graphics if they want to without interference.
-                self.cursor_backup.clear();
-            }
-            ClearType::CurrentLine => {
-                self.clear_cursor()?;
-                self.canvas
-                    .fill_rect(Rect::new(
-                        0,
-                        self.cursor_pos.y.clamped_mul(self.font.glyph_size.height),
-                        u32::from(self.size_pixels.width),
-                        u32::from(self.font.glyph_size.height),
-                    ))
-                    .map_err(string_error_to_io_error)?;
-                self.cursor_pos.x = 0;
-                self.draw_cursor()?;
-            }
-            ClearType::PreviousChar => {
-                if self.cursor_pos.x > 0 {
-                    self.clear_cursor()?;
-                    let previous_pos = CharsXY::new(self.cursor_pos.x - 1, self.cursor_pos.y);
-                    self.canvas
-                        .fill_rect(rect_origin_size(
-                            previous_pos.clamped_mul(self.font.glyph_size),
-                            self.font.glyph_size,
-                        ))
-                        .map_err(string_error_to_io_error)?;
-                    self.cursor_pos = previous_pos;
-                    self.draw_cursor()?;
-                }
-            }
-            ClearType::UntilNewLine => {
-                self.clear_cursor()?;
-                let pos = self.cursor_pos.clamped_mul(self.font.glyph_size);
-                debug_assert!(pos.x >= 0, "Inputs to pos are unsigned");
-                debug_assert!(pos.y >= 0, "Inputs to pos are unsigned");
-                let height = self.font.glyph_size.height;
-                self.canvas
-                    .fill_rect(Rect::new(
-                        i32::from(pos.x),
-                        i32::from(pos.y),
-                        u32::try_from(i32::from(self.size_pixels.width) - i32::from(pos.x))
-                            .expect("pos must have been positive"),
-                        u32::from(height),
-                    ))
-                    .map_err(string_error_to_io_error)?;
-                self.draw_cursor()?;
-            }
-        }
-
-        self.present_canvas()
+        self.call(Request::Clear(how))
     }
 
     fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
-        self.fg_color = match fg {
-            Some(fg) => {
-                let rgb = ansi_color_to_rgb(fg);
-                Color::RGB(rgb.0, rgb.1, rgb.2)
-            }
-            None => DEFAULT_FG_COLOR,
-        };
-
-        self.bg_color = match bg {
-            Some(bg) => {
-                let rgb = ansi_color_to_rgb(bg);
-                Color::RGB(rgb.0, rgb.1, rgb.2)
-            }
-            None => DEFAULT_BG_COLOR,
-        };
-
-        Ok(())
+        self.call(Request::Color(fg, bg))
     }
 
     fn enter_alt(&mut self) -> io::Result<()> {
-        if self.alt_backup.is_some() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Cannot nest alternate screens",
-            ));
-        }
-
-        let pixels =
-            self.canvas.read_pixels(None, self.pixel_format).map_err(string_error_to_io_error)?;
-        self.alt_backup = Some((pixels, self.cursor_pos, self.fg_color, self.bg_color));
-
-        self.clear(ClearType::All)
+        self.call(Request::EnterAlt)
     }
 
     fn hide_cursor(&mut self) -> io::Result<()> {
-        self.clear_cursor()?;
-        self.cursor_visible = false;
-        self.present_canvas()
+        self.call(Request::HideCursor)
     }
 
     fn is_interactive(&self) -> bool {
@@ -690,173 +112,71 @@ impl Console for SdlConsole {
     }
 
     fn leave_alt(&mut self) -> io::Result<()> {
-        let (pixels, cursor_pos, fg_color, bg_color) = match self.alt_backup.take() {
-            Some(t) => t,
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Cannot leave alternate screen; not entered",
-                ))
-            }
-        };
-
-        self.clear_cursor()?;
-
-        {
-            let mut texture = self
-                .texture_creator
-                .create_texture_static(
-                    None,
-                    u32::from(self.size_pixels.width),
-                    u32::from(self.size_pixels.height),
-                )
-                .map_err(texture_value_error_to_io_error)?;
-            texture
-                .update(
-                    None,
-                    &pixels,
-                    usize::from(self.size_pixels.width)
-                        .clamped_mul(self.pixel_format.byte_size_per_pixel()),
-                )
-                .map_err(update_texture_error_to_io_error)?;
-
-            self.canvas.clear();
-            self.canvas.copy(&texture, None, None).map_err(string_error_to_io_error)?;
-        }
-
-        self.cursor_pos = cursor_pos;
-        self.fg_color = fg_color;
-        self.bg_color = bg_color;
-        self.draw_cursor()?;
-        self.present_canvas()?;
-
-        debug_assert!(self.alt_backup.is_none());
-        Ok(())
+        self.call(Request::LeaveAlt)
     }
 
     fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
-        self.clear_cursor()?;
-        self.cursor_pos = pos;
-        self.draw_cursor()?;
-        self.present_canvas()
+        self.call(Request::Locate(pos))
     }
 
     fn move_within_line(&mut self, off: i16) -> io::Result<()> {
-        self.clear_cursor()?;
-        if off < 0 {
-            self.cursor_pos.x -= -off as u16;
-        } else {
-            self.cursor_pos.x += off as u16;
-        }
-        self.draw_cursor()?;
-        self.present_canvas()
+        self.call(Request::MoveWithinLine(off))
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!endbasic_std::console::has_control_chars_str(text));
-
-        self.clear_cursor()?;
-        if !text.is_empty() {
-            self.raw_write_wrapped(text)?;
-        }
-        self.open_line()?;
-        self.draw_cursor()?;
-        self.present_canvas()
+        self.call(Request::Print(text.to_owned()))
     }
 
     async fn poll_key(&mut self) -> io::Result<Option<Key>> {
-        loop {
-            let event = self.event_pump.poll_event();
-            match event {
-                Some(event) => {
-                    if let Some(key) = parse_event(event)? {
-                        return Ok(Some(key));
-                    }
-                    // Non-key event; try again.
-                }
-                None => return Ok(None),
-            }
+        match self.on_key_rx.try_recv() {
+            Ok(k) => Ok(Some(k)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) => panic!("Channel must be alive"),
         }
     }
 
     async fn read_key(&mut self) -> io::Result<Key> {
-        loop {
-            let event = self.event_pump.wait_event();
-            if let Some(event) = parse_event(event)? {
-                return Ok(event);
-            }
-            // Non-key event; try again.
-        }
+        Ok(self.on_key_rx.recv().expect("Channel must be alive"))
     }
 
     fn show_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible {
-            self.cursor_visible = true;
-            if let Err(e) = self.draw_cursor() {
-                self.cursor_visible = false;
-                return Err(e);
-            }
-        }
-        self.present_canvas()
+        self.call(Request::ShowCursor)
     }
 
     fn size(&self) -> io::Result<CharsXY> {
-        Ok(self.size_chars)
+        self.request_tx.send(Request::Size).expect("Channel must be alive");
+        match self.response_rx.recv().expect("Channel must be alive") {
+            Response::Size(size) => Ok(size),
+            _ => panic!("Unexpected response type"),
+        }
     }
 
     fn write(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!endbasic_std::console::has_control_chars_u8(text.as_bytes()));
-
-        if text.is_empty() {
-            return Ok(());
-        }
-
-        self.clear_cursor()?;
-        self.raw_write_wrapped(text)?;
-        self.draw_cursor()?;
-        self.present_canvas()
+        self.call(Request::Write(text.to_owned()))
     }
 
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        self.canvas.set_draw_color(self.fg_color);
-        self.canvas.draw_line(point_xy(x1y1), point_xy(x2y2)).map_err(string_error_to_io_error)?;
-        self.present_canvas()
+        self.call(Request::DrawLine(x1y1, x2y2))
     }
 
     fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
-        self.canvas.set_draw_color(self.fg_color);
-        self.canvas.draw_point(point_xy(xy)).map_err(string_error_to_io_error)?;
-        self.present_canvas()
+        self.call(Request::DrawPixel(xy))
     }
 
     fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        let rect = rect_points(x1y1, x2y2);
-        self.canvas.set_draw_color(self.fg_color);
-        self.canvas.draw_rect(rect).map_err(string_error_to_io_error)?;
-        self.present_canvas()
+        self.call(Request::DrawRect(x1y1, x2y2))
     }
 
     fn draw_rect_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        let rect = rect_points(x1y1, x2y2);
-        self.canvas.set_draw_color(self.fg_color);
-        self.canvas.fill_rect(rect).map_err(string_error_to_io_error)?;
-        self.present_canvas()
+        self.call(Request::DrawRectFilled(x1y1, x2y2))
     }
 
     fn sync_now(&mut self) -> io::Result<()> {
-        if self.sync_enabled {
-            Ok(())
-        } else {
-            self.force_present_canvas()
-        }
+        self.call(Request::SyncNow)
     }
 
     fn set_sync(&mut self, enabled: bool) -> io::Result<()> {
-        if !self.sync_enabled {
-            self.force_present_canvas()?;
-        }
-        self.sync_enabled = enabled;
-        Ok(())
+        self.call(Request::SetSync(enabled))
     }
 }
 
@@ -867,7 +187,9 @@ mod testutils {
     use flate2::write::GzEncoder;
     use flate2::Compression;
     use once_cell::sync::Lazy;
+    use sdl2::event::Event;
     use sdl2::rwops::RWops;
+    use sdl2::surface::Surface;
     use std::env;
     use std::fs::File;
     use std::io::{self, BufReader, Read};
@@ -919,7 +241,7 @@ mod testutils {
             let lock = TEST_LOCK.lock().unwrap();
             let console = SdlConsole::new(
                 Resolution::windowed(800, 600).unwrap(),
-                &src_path("sdl/src/IBMPlexMono-Regular-6.0.0.ttf"),
+                src_path("sdl/src/IBMPlexMono-Regular-6.0.0.ttf"),
                 16,
             )
             .unwrap();
@@ -931,16 +253,19 @@ mod testutils {
             &mut self.console
         }
 
+        /// Injects an SDL event into the console.
+        pub(crate) fn push_event(&self, ev: Event) {
+            self.console.call(Request::PushEvent(ev)).unwrap()
+        }
+
         /// Verifies that the current state of the console matches a golden imagine.  `bmp_basename`
         /// indicates the name of the BMP image to use, without an extension.
         pub(crate) fn verify(self, bmp_basename: &'static str) {
             let golden_bmp_gz = src_path("sdl/src").join(format!("{}.bmp.gz", bmp_basename));
 
-            let surface = self.console.window.surface(&self.console.event_pump).unwrap();
-
             if env::var("REGEN_BMPS").as_ref().map(String::as_str) == Ok("true") {
                 let golden_bmp = src_path("sdl/src").join(format!("{}.bmp", bmp_basename));
-                surface.save_bmp(&golden_bmp).unwrap();
+                self.console.call(Request::SaveBmp(golden_bmp.clone())).unwrap();
                 let mut input = BufReader::new(File::open(golden_bmp).unwrap());
                 let output = File::create(golden_bmp_gz).unwrap();
                 let mut encoder = GzEncoder::new(output, Compression::default());
@@ -954,6 +279,12 @@ mod testutils {
                 panic!("Golden data regenerated; flip REGEN_BMPS back to false");
             }
 
+            self.console.request_tx.send(Request::ReadPixels).unwrap();
+            let (actual, pixel_format) = match self.console.response_rx.recv().unwrap() {
+                Response::Pixels(Ok(data)) => data,
+                _ => panic!(),
+            };
+
             let input = BufReader::new(File::open(golden_bmp_gz).unwrap());
             let mut decoder = GzDecoder::new(input);
             let mut buffer = vec![];
@@ -963,14 +294,8 @@ mod testutils {
                 .unwrap()
                 .into_canvas()
                 .unwrap()
-                .read_pixels(None, self.console.pixel_format)
+                .read_pixels(None, pixel_format)
                 .unwrap();
-
-            let mut actual =
-                Surface::new(surface.width(), surface.height(), self.console.pixel_format).unwrap();
-            surface.blit(None, &mut actual, None).unwrap();
-            let actual =
-                actual.into_canvas().unwrap().read_pixels(None, self.console.pixel_format).unwrap();
 
             // Compare images for equality.  In theory, they should be pixel-perfect across
             // platforms, but in practice, I'm encountering minor color variations (e.g. FreeBSD
@@ -1000,94 +325,11 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use futures_lite::future::block_on;
+    use sdl2::event::Event;
+    use sdl2::keyboard::{Keycode, Mod};
     use sdl2::mouse::MouseButton;
     use std::thread;
     use std::time::Duration;
-
-    #[test]
-    fn test_clamp_into_u32_u16() {
-        assert_eq!(0u16, 0u32.clamped_into());
-        assert_eq!(10u16, 10u32.clamped_into());
-        assert_eq!(u16::MAX, u32::from(u16::MAX).clamped_into());
-        assert_eq!(u16::MAX, u32::MAX.clamped_into());
-    }
-
-    #[test]
-    fn test_clamped_mul_u16_u16_i16() {
-        assert_eq!(0i16, ClampedMul::<u16, i16>::clamped_mul(0u16, 0u16));
-        assert_eq!(55i16, ClampedMul::<u16, i16>::clamped_mul(11u16, 5u16));
-        assert_eq!(i16::MAX, ClampedMul::<u16, i16>::clamped_mul(u16::MAX, u16::MAX));
-    }
-
-    #[test]
-    fn test_clamped_mul_u16_u16_i32() {
-        assert_eq!(0i32, ClampedMul::<u16, i32>::clamped_mul(0u16, 0u16));
-        assert_eq!(55i32, ClampedMul::<u16, i32>::clamped_mul(11u16, 5u16));
-        assert_eq!(i32::MAX, ClampedMul::<u16, i32>::clamped_mul(u16::MAX, u16::MAX));
-    }
-
-    #[test]
-    fn test_clamped_mul_u16_u16_u32() {
-        assert_eq!(0u32, ClampedMul::<u16, u32>::clamped_mul(0u16, 0u16));
-        assert_eq!(55u32, ClampedMul::<u16, u32>::clamped_mul(11u16, 5u16));
-        assert_eq!(4294836225u32, ClampedMul::<u16, u32>::clamped_mul(u16::MAX, u16::MAX));
-    }
-
-    #[test]
-    fn test_clamped_mul_usize_usize_usize() {
-        assert_eq!(0, ClampedMul::<usize, usize>::clamped_mul(0, 0));
-        assert_eq!(55, ClampedMul::<usize, usize>::clamped_mul(11, 5));
-        assert_eq!(usize::MAX, ClampedMul::<usize, usize>::clamped_mul(usize::MAX, usize::MAX));
-    }
-
-    #[test]
-    fn test_rect_origin_size() {
-        assert_eq!(
-            Rect::new(-31000, -32000, 63000, 64000),
-            rect_origin_size(
-                PixelsXY { x: -31000, y: -32000 },
-                SizeInPixels { width: 63000, height: 64000 }
-            )
-        );
-    }
-
-    #[test]
-    fn test_rect_points() {
-        assert_eq!(
-            Rect::new(10, 20, 100, 200),
-            rect_points(PixelsXY { x: 10, y: 20 }, PixelsXY { x: 110, y: 220 })
-        );
-        assert_eq!(
-            Rect::new(10, 20, 100, 200),
-            rect_points(PixelsXY { x: 110, y: 20 }, PixelsXY { x: 10, y: 220 })
-        );
-        assert_eq!(
-            Rect::new(10, 20, 100, 200),
-            rect_points(PixelsXY { x: 10, y: 220 }, PixelsXY { x: 110, y: 20 })
-        );
-        assert_eq!(
-            Rect::new(10, 20, 100, 200),
-            rect_points(PixelsXY { x: 110, y: 220 }, PixelsXY { x: 10, y: 20 })
-        );
-
-        assert_eq!(
-            Rect::new(-31000, -32000, 31005, 32010),
-            rect_points(PixelsXY { x: 5, y: -32000 }, PixelsXY { x: -31000, y: 10 })
-        );
-        assert_eq!(
-            Rect::new(10, 5, 30990, 31995),
-            rect_points(PixelsXY { x: 31000, y: 5 }, PixelsXY { x: 10, y: 32000 })
-        );
-
-        assert_eq!(
-            Rect::new(-31000, -32000, 62000, 64000),
-            rect_points(PixelsXY { x: -31000, y: -32000 }, PixelsXY { x: 31000, y: 32000 })
-        );
-        assert_eq!(
-            Rect::new(-31000, -32000, 62000, 64000),
-            rect_points(PixelsXY { x: 31000, y: 32000 }, PixelsXY { x: -31000, y: -32000 })
-        );
-    }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
@@ -1242,8 +484,6 @@ mod tests {
     fn test_sdl_console_poll_key() {
         let mut test = SdlTest::new();
 
-        let ev = test.console()._context.event().unwrap();
-
         /// Ensure the console doesn't return a key press for a brief period of time.
         ///
         /// Given that this is based on timing, the console could still report an event long after
@@ -1274,22 +514,22 @@ mod tests {
 
         assert_poll_is_none(test.console());
 
-        ev.push_event(Event::Quit { timestamp: 0 }).unwrap();
+        test.push_event(Event::Quit { timestamp: 0 });
         assert_poll_is_key(test.console(), Key::Eof);
         assert_poll_is_none(test.console());
 
-        ev.push_event(key_down(Keycode::C, Mod::LCTRLMOD)).unwrap();
+        test.push_event(key_down(Keycode::C, Mod::LCTRLMOD));
         assert_poll_is_key(test.console(), Key::Interrupt);
         assert_poll_is_none(test.console());
 
         // TODO(jmmv): We aren't testing textual input because push_event doesn't support injecting
         // Event::TextInput events.  At least check that individual key presses are ignored, because
         // those would otherwise "hide" the follow-up text input events.
-        ev.push_event(key_down(Keycode::A, Mod::empty())).unwrap();
+        test.push_event(key_down(Keycode::A, Mod::empty()));
         assert_poll_is_none(test.console());
 
         // Check that non-keyboard events are ignored until a key event is received.
-        ev.push_event(Event::MouseButtonDown {
+        test.push_event(Event::MouseButtonDown {
             timestamp: 0,
             window_id: 0,
             which: 0,
@@ -1297,10 +537,9 @@ mod tests {
             clicks: 0,
             x: 0,
             y: 0,
-        })
-        .unwrap();
-        ev.push_event(Event::JoyButtonUp { timestamp: 0, which: 0, button_idx: 0 }).unwrap();
-        ev.push_event(key_down(Keycode::C, Mod::LCTRLMOD)).unwrap();
+        });
+        test.push_event(Event::JoyButtonUp { timestamp: 0, which: 0, button_idx: 0 });
+        test.push_event(key_down(Keycode::C, Mod::LCTRLMOD));
         assert_poll_is_key(test.console(), Key::Interrupt);
         assert_poll_is_none(test.console());
 
@@ -1312,23 +551,21 @@ mod tests {
     fn test_sdl_console_read_key() {
         let mut test = SdlTest::new();
 
-        let ev = test.console()._context.event().unwrap();
-
-        ev.push_event(Event::Quit { timestamp: 0 }).unwrap();
+        test.push_event(Event::Quit { timestamp: 0 });
         assert_eq!(Key::Eof, block_on(test.console().read_key()).unwrap());
 
-        ev.push_event(key_down(Keycode::C, Mod::LCTRLMOD)).unwrap();
+        test.push_event(key_down(Keycode::C, Mod::LCTRLMOD));
         assert_eq!(Key::Interrupt, block_on(test.console().read_key()).unwrap());
-        ev.push_event(key_down(Keycode::C, Mod::RCTRLMOD)).unwrap();
+        test.push_event(key_down(Keycode::C, Mod::RCTRLMOD));
         assert_eq!(Key::Interrupt, block_on(test.console().read_key()).unwrap());
 
-        ev.push_event(key_down(Keycode::D, Mod::LCTRLMOD)).unwrap();
+        test.push_event(key_down(Keycode::D, Mod::LCTRLMOD));
         assert_eq!(Key::Eof, block_on(test.console().read_key()).unwrap());
-        ev.push_event(key_down(Keycode::D, Mod::RCTRLMOD)).unwrap();
+        test.push_event(key_down(Keycode::D, Mod::RCTRLMOD));
         assert_eq!(Key::Eof, block_on(test.console().read_key()).unwrap());
 
-        ev.push_event(key_down(Keycode::D, Mod::empty())).unwrap();
-        ev.push_event(key_down(Keycode::Up, Mod::empty())).unwrap();
+        test.push_event(key_down(Keycode::D, Mod::empty()));
+        test.push_event(key_down(Keycode::Up, Mod::empty()));
         match block_on(test.console().read_key()).unwrap() {
             Key::ArrowUp => (),
             Key::Char('d') => panic!("Char key not ignored as intended"),
@@ -1432,7 +669,7 @@ mod tests {
         assert_eq!(
             io::ErrorKind::InvalidInput,
             test.console()
-                .raw_write(&very_long_string, PixelsXY { x: 0, y: 0 })
+                .call(Request::RawWrite(very_long_string, PixelsXY { x: 0, y: 0 }))
                 .unwrap_err()
                 .kind()
         );

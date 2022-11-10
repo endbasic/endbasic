@@ -70,6 +70,11 @@ for the time being.**
 *   Renamed `DEL` as `KILL` to match QuickBASIC and avoid confusion with a
     potential future `DELETE` command implementation.
 
+*   Rewrote the SDL console internals to use a separate thread that implements
+    the SDL main loop.  This might fix some rendering issues that have been
+    previously observed with this implementation (or provide an easy way to
+    fix them later if not).
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**

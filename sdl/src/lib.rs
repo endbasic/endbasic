@@ -29,6 +29,7 @@ use std::rc::Rc;
 
 mod console;
 mod font;
+mod host;
 mod spec;
 
 /// Converts a flat string error message to an `io::Error`.
@@ -52,11 +53,11 @@ pub fn setup(spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
     let console = match spec.1 {
         None => {
             let default_font = spec::TempFont::default_font()?;
-            console::SdlConsole::new(spec.0, &default_font.path(), spec.2)?
+            console::SdlConsole::new(spec.0, default_font.path(), spec.2)?
             // The console has been created at this point, so it should be safe to drop
             // default_font and clean up the on-disk file backing it up.
         }
-        Some(font_path) => console::SdlConsole::new(spec.0, font_path, spec.2)?,
+        Some(font_path) => console::SdlConsole::new(spec.0, font_path.to_owned(), spec.2)?,
     };
     Ok(Rc::from(RefCell::from(console)))
 }
