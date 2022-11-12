@@ -68,18 +68,9 @@ macro_rules! log_and_panic {
 }
 pub(crate) use log_and_panic;
 
-/// Sleeps for the given period of time.
-fn js_sleep(d: Duration, pos: LineCol) -> Pin<Box<dyn Future<Output = CommandResult>>> {
-    let ms = d.as_millis();
-    if ms > std::i32::MAX as u128 {
-        // The JavaScript setTimeout function only takes i32s so ensure our value fits.  If it
-        // doesn't, you can imagine chaining calls to setTimeout to achieve the desired delay...
-        // but the numbers we are talking about are so big that this doesn't make sense.
-        return Box::pin(async move {
-            Err(syms::CallError::InternalError(pos, "Cannot sleep for that long".to_owned()))
-        });
-    }
-    let ms = ms as i32;
+/// Sleeps for the given period of time in `ms`.
+fn do_sleep<T: 'static>(ms: i32, ret: T) -> Pin<Box<dyn Future<Output = T>>> {
+    assert!(ms >= 0, "Must have been validated by the caller");
 
     let (timeout_tx, timeout_rx) = async_channel::unbounded();
     let callback = {
@@ -104,8 +95,44 @@ fn js_sleep(d: Duration, pos: LineCol) -> Pin<Box<dyn Future<Output = CommandRes
         if let Err(e) = timeout_rx.recv().await {
             log_and_panic!("Failed to wait for timeout: {}", e);
         }
-        Ok(())
+        ret
     })
+}
+
+/// Implementation of a `SleepFn` using `do_sleep`.
+fn js_sleep(d: Duration, pos: LineCol) -> Pin<Box<dyn Future<Output = CommandResult>>> {
+    let ms = d.as_millis();
+    if ms > std::i32::MAX as u128 {
+        // The JavaScript setTimeout function only takes i32s so ensure our value fits.  If it
+        // doesn't, you can imagine chaining calls to setTimeout to achieve the desired delay...
+        // but the numbers we are talking about are so big that this doesn't make sense.
+        return Box::pin(async move {
+            Err(syms::CallError::InternalError(pos, "Cannot sleep for that long".to_owned()))
+        });
+    }
+    let ms = ms as i32;
+
+    do_sleep(ms, Ok(()))
+}
+
+/// Implementation of a `YieldNowFn` that relies on a zero timeout to yield back execution to the
+/// JavaScript interpreter.  Uses `counter` to track how many times this has been called and avoid
+/// yielding too frequently.
+//
+// TODO(jmmv): This is a big hack that we need to support interrupting running programs via CTRL+C
+// and it doesn't work very well: execution of programs, especially if they are doing any
+// rendering, flickers due to this.  We should fix this by converting the `Machine` into a
+// bytecode interpreter so that we can trivially pause execution every n cycles and control the
+// loop from here.
+fn js_yield_now(counter: Rc<RefCell<usize>>) -> Pin<Box<dyn Future<Output = ()>>> {
+    let mut counter = counter.borrow_mut();
+    if *counter < 100000 {
+        *counter += 1;
+        Box::pin(async move {})
+    } else {
+        *counter = 0;
+        do_sleep(0, ())
+    }
 }
 
 /// Sets up the common storage drives.
@@ -170,9 +197,12 @@ impl WebTerminal {
             None => log_and_panic!("Failed to get window"),
         };
 
+        let counter = Rc::from(RefCell::from(0));
+
         let console = Rc::from(RefCell::from(self.console));
         let mut builder = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
+            .with_yield_now_fn(Box::from(move || js_yield_now(counter.clone())))
             .with_signals_chan(self.signals_chan)
             .with_sleep_fn(Box::from(js_sleep))
             .make_interactive()
