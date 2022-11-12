@@ -24,7 +24,9 @@ use crate::value;
 use async_channel::{Receiver, Sender, TryRecvError};
 use async_recursion::async_recursion;
 use std::collections::HashSet;
+use std::future::Future;
 use std::io;
+use std::pin::Pin;
 use std::rc::Rc;
 
 /// Execution errors.
@@ -155,10 +157,14 @@ pub trait Clearable {
     fn reset_state(&self, syms: &mut Symbols);
 }
 
+/// Type of the function used by the execution loop to yield execution.
+pub type YieldNowFn = Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()> + 'static>>>;
+
 /// Executes an EndBASIC program and tracks its state.
 pub struct Machine {
     symbols: Symbols,
     clearables: Vec<Box<dyn Clearable>>,
+    yield_now_fn: Option<YieldNowFn>,
     signals_chan: (Sender<Signal>, Receiver<Signal>),
     stop_reason: Option<StopReason>,
     pending_goto: Option<GotoSpan>,
@@ -167,7 +173,7 @@ pub struct Machine {
 
 impl Default for Machine {
     fn default() -> Self {
-        Self::with_signals_chan(async_channel::unbounded())
+        Self::with_signals_chan_and_yield_now_fn(async_channel::unbounded(), None)
     }
 }
 
@@ -177,6 +183,24 @@ impl Machine {
         Self {
             symbols: Symbols::default(),
             clearables: vec![],
+            yield_now_fn: None,
+            signals_chan: signals,
+            stop_reason: None,
+            pending_goto: None,
+            data: vec![],
+        }
+    }
+
+    /// Constructs a new empty machine with the given signals communication channel and yielding
+    /// function.
+    pub fn with_signals_chan_and_yield_now_fn(
+        signals: (Sender<Signal>, Receiver<Signal>),
+        yield_now_fn: Option<YieldNowFn>,
+    ) -> Self {
+        Self {
+            symbols: Symbols::default(),
+            clearables: vec![],
+            yield_now_fn,
             signals_chan: signals,
             stop_reason: None,
             pending_goto: None,
@@ -280,7 +304,11 @@ impl Machine {
     }
 
     /// Returns true if execution should stop because we have hit a stop condition.
-    fn should_stop(&mut self) -> bool {
+    async fn should_stop(&mut self) -> bool {
+        if let Some(yield_now) = self.yield_now_fn.as_ref() {
+            (yield_now)().await;
+        }
+
         match self.signals_chan.1.try_recv() {
             Ok(Signal::Break) => self.stop_reason = Some(StopReason::Break),
             Err(TryRecvError::Empty) => (),
@@ -425,7 +453,7 @@ impl Machine {
             }
 
             self.exec_multiple(&span.body).await?;
-            if self.should_stop() || self.pending_goto.is_some() {
+            if self.should_stop().await || self.pending_goto.is_some() {
                 break;
             }
 
@@ -463,7 +491,7 @@ impl Machine {
             match span.expr.eval(&mut self.symbols).await? {
                 Value::Boolean(true) => {
                     self.exec_multiple(&span.body).await?;
-                    if self.should_stop() || self.pending_goto.is_some() {
+                    if self.should_stop().await || self.pending_goto.is_some() {
                         break;
                     }
                 }
@@ -511,7 +539,7 @@ impl Machine {
         let mut seen_labels = HashSet::<String>::default();
         let mut i = 0;
         while i < stmts.len() || self.pending_goto.is_some() {
-            if self.should_stop() {
+            if self.should_stop().await {
                 return Ok(());
             }
 
