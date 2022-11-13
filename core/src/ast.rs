@@ -381,6 +381,7 @@ pub enum ArgSep {
 
 /// Components of an array assignment statement.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 pub struct ArrayAssignmentSpan {
     /// Reference to the array to modify.
     pub vref: VarRef,
@@ -397,6 +398,7 @@ pub struct ArrayAssignmentSpan {
 
 /// Components of an assignment statement.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 pub struct AssignmentSpan {
     /// Reference to the variable to set.
     pub vref: VarRef,
@@ -410,6 +412,7 @@ pub struct AssignmentSpan {
 
 /// Single argument to a builtin call statement.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 pub struct ArgSpan {
     /// Expression to compute the argument's value.  This expression is optional to support calls
     /// of the form `PRINT a, , b` where some arguments are empty.
@@ -425,6 +428,7 @@ pub struct ArgSpan {
 
 /// Components of an builtin call statement.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 pub struct BuiltinCallSpan {
     /// Name of the builtin to call.
     pub name: String,
@@ -450,6 +454,7 @@ pub struct DataSpan {
 /// detect variable redeclarations at runtime, so we must treat this statement as a separate
 /// type from assignments.
 #[derive(Debug, Eq, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 pub struct DimSpan {
     /// Name of the variable to be defined.  Type annotations are not allowed, hence why this is
     /// not a `VarRef`.
@@ -467,6 +472,7 @@ pub struct DimSpan {
 
 /// Components of an array definition.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 pub struct DimArraySpan {
     /// Name of the array to define.  Type annotations are not allowed, hence why this is not a
     /// `VarRef`.

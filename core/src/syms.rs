@@ -325,6 +325,12 @@ impl Symbols {
     }
 
     /// Obtains the value of a symbol or `None` if it is not defined.
+    pub fn get_auto(&self, var: &str) -> Option<&Symbol> {
+        let key = var.to_ascii_uppercase();
+        self.by_name.get(&key)
+    }
+
+    /// Obtains the value of a symbol or `None` if it is not defined.
     ///
     /// Returns an error if the type annotation in the symbol reference does not match its type.
     pub fn get_mut(&mut self, vref: &VarRef) -> Result<Option<&mut Symbol>> {
@@ -921,7 +927,7 @@ mod tests {
 
     #[test]
     fn test_symbols_get_check_types() {
-        // If modifying this test, update the identical test for get_mut() below.
+        // If modifying this test, update the identical test for get_auto() and get_mut().
         let syms = SymbolsBuilder::default()
             .add_array("BOOL_ARRAY", VarType::Boolean)
             .add_command(ExitCommand::new())
@@ -974,7 +980,7 @@ mod tests {
 
     #[test]
     fn test_symbols_get_case_insensitivity() {
-        // If modifying this test, update the identical test for get_mut() below.
+        // If modifying this test, update the identical test for get_auto() and get_mut().
         let syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
             .add_command(ExitCommand::new())
@@ -997,14 +1003,14 @@ mod tests {
 
     #[test]
     fn test_symbols_get_undefined() {
-        // If modifying this test, update the identical test for get_mut() below.
+        // If modifying this test, update the identical test for get_auto() and get_mut().
         let syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
         assert!(syms.get(&VarRef::new("SOME_THIN", VarType::Integer)).unwrap().is_none());
     }
 
     #[test]
     fn test_symbols_get_mut_check_types() {
-        // If modifying this test, update the identical test for get() above.
+        // If modifying this test, update the identical test for get() and get_auto().
         let mut syms = SymbolsBuilder::default()
             .add_array("BOOL_ARRAY", VarType::Boolean)
             .add_command(ExitCommand::new())
@@ -1057,7 +1063,7 @@ mod tests {
 
     #[test]
     fn test_symbols_get_mut_case_insensitivity() {
-        // If modifying this test, update the identical test for get() above.
+        // If modifying this test, update the identical test for get() and get_auto().
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
             .add_command(ExitCommand::new())
@@ -1080,9 +1086,70 @@ mod tests {
 
     #[test]
     fn test_symbols_get_mut_undefined() {
-        // If modifying this test, update the identical test for get() above.
+        // If modifying this test, update the identical test for get() and get_auto().
         let mut syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
         assert!(syms.get_mut(&VarRef::new("SOME_THIN", VarType::Integer)).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_symbols_get_auto() {
+        // If modifying this test, update the identical test for get() and get_mut().
+        let syms = SymbolsBuilder::default()
+            .add_array("BOOL_ARRAY", VarType::Boolean)
+            .add_command(ExitCommand::new())
+            .add_function(SumFunction::new())
+            .add_var("STRING_VAR", Value::Text("".to_owned()))
+            .build();
+
+        match syms.get_auto("bool_array").unwrap() {
+            Symbol::Array(array) => assert_eq!(VarType::Boolean, array.subtype()),
+            _ => panic!("Got something that is not the array we asked for"),
+        }
+
+        match syms.get_auto("exit").unwrap() {
+            Symbol::Command(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
+            _ => panic!("Got something that is not the command we asked for"),
+        }
+
+        match syms.get_auto("sum").unwrap() {
+            Symbol::Function(f) => assert_eq!(VarType::Integer, f.metadata().return_type()),
+            _ => panic!("Got something that is not the function we asked for"),
+        }
+
+        match syms.get_auto("string_var").unwrap() {
+            Symbol::Variable(value) => assert_eq!(VarType::Text, value.as_vartype()),
+            _ => panic!("Got something that is not the variable we asked for"),
+        }
+    }
+
+    #[test]
+    fn test_symbols_get_auto_case_insensitivity() {
+        // If modifying this test, update the identical test for get() and get_mut().
+        let syms = SymbolsBuilder::default()
+            .add_array("SOMEARRAY", VarType::Integer)
+            .add_command(ExitCommand::new())
+            .add_function(SumFunction::new())
+            .add_var("SOMEVAR", Value::Boolean(true))
+            .build();
+
+        assert!(syms.get_auto("somearray").is_some());
+        assert!(syms.get_auto("SomeArray").is_some());
+
+        assert!(syms.get_auto("exit").is_some());
+        assert!(syms.get_auto("Exit").is_some());
+
+        assert!(syms.get_auto("sum").is_some());
+        assert!(syms.get_auto("Sum").is_some());
+
+        assert!(syms.get_auto("somevar").is_some());
+        assert!(syms.get_auto("SomeVar").is_some());
+    }
+
+    #[test]
+    fn test_symbols_get_auto_undefined() {
+        // If modifying this test, update the identical test for get() and get_mut().
+        let syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
+        assert!(syms.get_auto("SOME_THIN").is_none());
     }
 
     #[test]

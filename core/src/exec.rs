@@ -16,14 +16,14 @@
 //! Execution engine for EndBASIC programs.
 
 use crate::ast::*;
+use crate::bytecode::*;
+use crate::compiler;
 use crate::eval;
 use crate::parser;
 use crate::reader::LineCol;
 use crate::syms::{CallError, CallableMetadata, Command, Function, Symbol, Symbols};
 use crate::value;
 use async_channel::{Receiver, Sender, TryRecvError};
-use async_recursion::async_recursion;
-use std::collections::HashSet;
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
@@ -32,6 +32,10 @@ use std::rc::Rc;
 /// Execution errors.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Compilation error during execution.
+    #[error("{0}")]
+    CompilerError(#[from] compiler::Error),
+
     /// Evaluation error during execution.
     #[error("{0}")]
     EvalError(#[from] eval::Error),
@@ -167,7 +171,6 @@ pub struct Machine {
     yield_now_fn: Option<YieldNowFn>,
     signals_chan: (Sender<Signal>, Receiver<Signal>),
     stop_reason: Option<StopReason>,
-    pending_goto: Option<GotoSpan>,
     data: Vec<Option<Value>>,
 }
 
@@ -186,7 +189,6 @@ impl Machine {
             yield_now_fn: None,
             signals_chan: signals,
             stop_reason: None,
-            pending_goto: None,
             data: vec![],
         }
     }
@@ -203,7 +205,6 @@ impl Machine {
             yield_now_fn,
             signals_chan: signals,
             stop_reason: None,
-            pending_goto: None,
             data: vec![],
         }
     }
@@ -413,193 +414,79 @@ impl Machine {
         Ok(())
     }
 
-    /// Executes a `FOR` loop.
-    async fn do_for(&mut self, span: &ForSpan) -> Result<()> {
-        debug_assert!(
-            span.iter.ref_type() == VarType::Auto
-                || span.iter.ref_type() == VarType::Double
-                || span.iter.ref_type() == VarType::Integer
-        );
-        if span.iter_double
-            && span.iter.ref_type() == VarType::Auto
-            && self.symbols.get(&span.iter).expect("Type is auto so get must succeed").is_none()
-        {
-            self.symbols
-                .dim(span.iter.name(), VarType::Double)
-                .expect("DIM of undefined variable must succeed");
-        }
-        let start_value = span.start.eval(&mut self.symbols).await?;
-        match start_value {
-            Value::Double(_) | Value::Integer(_) => {
-                self.symbols
-                    .set_var(&span.iter, start_value)
-                    .map_err(|e| Error::from_value_error(e, span.start.start_pos()))?
-            }
-            _ => {
-                return new_syntax_error(
-                    span.start.start_pos(),
-                    "FOR supports numeric iteration only",
-                )
-            }
-        }
-
-        loop {
-            match span.end.eval(&mut self.symbols).await? {
-                Value::Boolean(false) => {
-                    break;
-                }
-                Value::Boolean(true) => (),
-                _ => panic!("Built-in condition should have evaluated to a boolean"),
-            }
-
-            self.exec_multiple(&span.body).await?;
-            if self.should_stop().await || self.pending_goto.is_some() {
-                break;
-            }
-
-            let next_value = span.next.eval(&mut self.symbols).await?;
-            self.symbols
-                .set_var(&span.iter, next_value)
-                .map_err(|e| Error::from_value_error(e, span.next.start_pos()))?;
-        }
-        Ok(())
-    }
-
-    /// Executes an `IF` statement.
-    async fn do_if(&mut self, span: &IfSpan) -> Result<()> {
-        for branch in &span.branches {
-            match branch.guard.eval(&mut self.symbols).await? {
-                Value::Boolean(true) => {
-                    self.exec_multiple(&branch.body).await?;
-                    break;
-                }
-                Value::Boolean(false) => (),
-                _ => {
-                    return new_syntax_error(
-                        branch.guard.start_pos(),
-                        "IF/ELSEIF require a boolean condition",
-                    )
-                }
-            };
-        }
-        Ok(())
-    }
-
-    /// Executes a `WHILE` loop.
-    async fn do_while(&mut self, span: &WhileSpan) -> Result<()> {
-        loop {
-            match span.expr.eval(&mut self.symbols).await? {
-                Value::Boolean(true) => {
-                    self.exec_multiple(&span.body).await?;
-                    if self.should_stop().await || self.pending_goto.is_some() {
-                        break;
-                    }
-                }
-                Value::Boolean(false) => break,
-                _ => {
-                    return new_syntax_error(
-                        span.expr.start_pos(),
-                        "WHILE requires a boolean condition",
-                    )
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Extracts all `DATA` values from a collection of statements into `data`.
-    ///
-    /// Note that this *mutates* `stmts` by removing the values from the `DATA` statements.  This is
-    /// done for efficiency: we won't need the values again during execution and copying them would
-    /// be expensive.
-    fn extract_data(stmts: &mut [Statement], data: &mut Vec<Option<Value>>) {
-        for stmt in stmts {
-            match stmt {
-                Statement::Data(span) => data.append(&mut span.values),
-
-                Statement::For(span) => Machine::extract_data(&mut span.body, data),
-                Statement::If(span) => {
-                    for branch in &mut span.branches {
-                        Machine::extract_data(&mut branch.body, data)
-                    }
-                }
-                Statement::While(span) => Machine::extract_data(&mut span.body, data),
-                _ => (),
-            }
-        }
-    }
-
-    /// Executes a collection of statements.
-    ///
-    /// All callers of this function should inspect `self.pending_goto` to see if it is set after
-    /// this completes.  If that's the case, the callers must unwind processing as soon as possible
-    /// so that the target of the `GOTO` can be found.
-    #[async_recursion(?Send)]
-    async fn exec_multiple(&mut self, stmts: &[Statement]) -> Result<()> {
-        let mut seen_labels = HashSet::<String>::default();
-        let mut i = 0;
-        while i < stmts.len() || self.pending_goto.is_some() {
-            if self.should_stop().await {
-                return Ok(());
-            }
-
-            if let Some(GotoSpan { target, .. }) = self.pending_goto.as_ref() {
-                i = 0;
-                seen_labels.clear();
-                while i < stmts.len() {
-                    if let Statement::Label(span) = &stmts[i] {
-                        let ok = seen_labels.insert(span.name.clone());
-                        assert!(ok, "Duplicate label found but not caught during execution");
-                        if target == &span.name {
-                            i += 1;
-                            self.pending_goto = None;
-                            break;
-                        }
-                    }
-                    i += 1;
-                }
-                if i == stmts.len() {
-                    return Ok(());
-                }
-            }
-
-            match &stmts[i] {
-                Statement::ArrayAssignment(span) => self.assign_array(span).await?,
-                Statement::Assignment(span) => self.assign(span).await?,
-                Statement::BuiltinCall(span) => self.call_builtin(span).await?,
-                Statement::Data(span) => debug_assert!(
-                    span.values.is_empty(),
-                    "DATA values must have been consumed before execution by extract_data()"
-                ),
-                Statement::Dim(span) => self
-                    .symbols
-                    .dim(&span.name, span.vtype)
-                    .map_err(|e| Error::from_value_error(e, span.name_pos))?,
-                Statement::DimArray(span) => self.dim_array(span).await?,
-                Statement::For(span) => self.do_for(span).await?,
-                Statement::Goto(span) => self.pending_goto = Some(span.clone()),
-                Statement::If(span) => self.do_if(span).await?,
-                Statement::Label(span) => {
-                    if !seen_labels.insert(span.name.clone()) {
-                        return new_syntax_error(
-                            span.name_pos,
-                            format!("Duplicate label {} at this level", span.name),
-                        );
-                    }
-                }
-                Statement::While(span) => self.do_while(span).await?,
-            }
-
-            i += 1;
-        }
-        Ok(())
-    }
-
     /// Consumes any pending signals so that they don't interfere with an upcoming execution.
     pub fn drain_signals(&mut self) {
         while self.signals_chan.1.try_recv().is_ok() {
             // Do nothing.
         }
+    }
+
+    /// Helper for `exec` that only worries about instructions and not data.
+    async fn exec_safe(&mut self, instrs: Vec<Instruction>) -> Result<()> {
+        let mut pc = 0;
+        while pc < instrs.len() {
+            if self.should_stop().await {
+                break;
+            }
+
+            let instr = &instrs[pc];
+            match instr {
+                Instruction::ArrayAssignment(span) => {
+                    self.assign_array(span).await?;
+                    pc += 1;
+                }
+
+                Instruction::Assignment(span) => {
+                    self.assign(span).await?;
+                    pc += 1;
+                }
+
+                Instruction::BuiltinCall(span) => {
+                    self.call_builtin(span).await?;
+                    pc += 1;
+                }
+
+                Instruction::Dim(span) => {
+                    self.symbols
+                        .dim(&span.name, span.vtype)
+                        .map_err(|e| Error::from_value_error(e, span.name_pos))?;
+                    pc += 1;
+                }
+
+                Instruction::DimArray(span) => {
+                    self.dim_array(span).await?;
+                    pc += 1;
+                }
+
+                Instruction::Jump(span) => {
+                    pc = span.addr;
+                }
+
+                Instruction::JumpIfDefined(span) => {
+                    if self.symbols.get_auto(&span.var).is_some() {
+                        pc = span.addr;
+                    } else {
+                        pc += 1;
+                    }
+                }
+
+                Instruction::JumpIfNotTrue(span) => {
+                    match span.cond.eval(&mut self.symbols).await? {
+                        Value::Boolean(true) => pc += 1,
+                        Value::Boolean(false) => pc = span.addr,
+                        _ => {
+                            return new_syntax_error(span.cond.start_pos(), span.error_msg);
+                        }
+                    }
+                }
+
+                Instruction::Nop => {
+                    pc += 1;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Executes a program extracted from the `input` readable.
@@ -608,18 +495,17 @@ impl Machine {
     /// different programs on the same machine, all sharing state.
     pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<StopReason> {
         debug_assert!(self.stop_reason.is_none());
-        let mut stmts = parser::parse(input)?;
+
+        // TODO(jmmv): It should be possible to make the parser return statements one at a time and
+        // stream them to the compiler, instead of buffering everything in a vector.
+        let stmts = parser::parse(input)?;
+        let image = compiler::compile(stmts)?;
 
         assert!(self.data.is_empty());
-        Machine::extract_data(&mut stmts, &mut self.data);
-
-        let result = self.exec_multiple(&stmts).await;
+        self.data = image.data;
+        let result = self.exec_safe(image.instrs).await;
         self.data.clear();
         result?;
-
-        if let Some(span) = self.pending_goto.take() {
-            return new_syntax_error(span.target_pos, format!("Unknown label {}", span.target));
-        }
 
         Ok(self.stop_reason.take().unwrap_or(StopReason::Eof))
     }
@@ -1234,7 +1120,7 @@ mod tests {
 
         do_simple_error_test(
             "FOR i = \"a\" TO 3\nNEXT",
-            "1:9: FOR supports numeric iteration only",
+            "1:13: Cannot compare \"a\" and 3 with <=",
         );
         do_simple_error_test(
             "FOR i = 1 TO \"a\"\nNEXT",
@@ -1243,7 +1129,7 @@ mod tests {
 
         do_simple_error_test(
             "FOR i = \"b\" TO 7 STEP -8\nNEXT",
-            "1:9: FOR supports numeric iteration only",
+            "1:13: Cannot compare \"b\" and 7 with >=",
         );
         do_simple_error_test(
             "FOR i = 1 TO \"b\" STEP -8\nNEXT",
@@ -1292,10 +1178,11 @@ mod tests {
     }
 
     #[test]
-    fn test_goto_nested_cannot_go_down() {
-        do_simple_error_test(
-            "IF TRUE THEN: GOTO @sibling: END IF: IF TRUE THEN: @sibling: OUT 1: END IF",
-            "1:20: Unknown label sibling",
+    fn test_goto_nested_can_go_down() {
+        do_ok_test(
+            "IF TRUE THEN: GOTO @sibling: OUT 1: END IF: IF TRUE THEN: @sibling: OUT 2: END IF",
+            &[],
+            &["2"],
         );
     }
 
@@ -1312,6 +1199,11 @@ mod tests {
             .expect("Execution failed")
         );
         assert!(captured_out.borrow().is_empty());
+    }
+
+    #[test]
+    fn test_goto_middle_of_line() {
+        do_ok_test("GOTO @middle\nOUT 1: @middle: OUT 2", &[], &["2"]);
     }
 
     #[test]
@@ -1335,10 +1227,13 @@ mod tests {
 
     #[test]
     fn test_label_duplicate() {
-        do_ok_test("@foo: IF TRUE THEN: @foo: END IF", &[], &[]);
-        do_ok_test("IF TRUE THEN: @foo: END IF: IF TRUE THEN: @foo: END IF", &[], &[]);
+        do_simple_error_test("@foo: IF TRUE THEN: @foo: END IF", "1:21: Duplicate label foo");
+        do_simple_error_test(
+            "IF TRUE THEN: @foo: END IF: IF TRUE THEN: @foo: END IF",
+            "1:43: Duplicate label foo",
+        );
 
-        do_simple_error_test("@foo: @bar: @foo", "1:13: Duplicate label foo at this level");
+        do_simple_error_test("@foo: @bar: @foo", "1:13: Duplicate label foo");
 
         do_simple_error_test(
             r#"
@@ -1353,7 +1248,7 @@ mod tests {
                         IF i = 3 THEN: GOTO @out: END IF
             @out
             "#,
-            "8:25: Duplicate label a at this level",
+            "8:25: Duplicate label a",
         );
     }
 

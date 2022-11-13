@@ -16,8 +16,7 @@ for the time being.**
 
 *   Added support for labels and `GOTO`.  At this point, label names must be
     prefixed with an `@` sign to resolve parsing ambiguities with the `:` line
-    delimiter.  Furthermore, the targets of a `GOTO` must be at the same or an
-    upper level in the control flow of the code.
+    delimiter.
 
 *   Modified the interpreter to parse the full program before executing it,
     which is a requirement for supporting `GOTO`s and features like `DATA`.
@@ -79,6 +78,9 @@ for the time being.**
     no further expressions are evaluated in `FOR` and `IF statements.
 
 *   Issue #111: Added support to interrupt running programs via `CTRL+C`.
+
+*   Rewrote the execution interpreter to be based on an iterative loop over
+    a simplified bytecode representation instead of walking over the AST.
 
 ## Changes in version 0.9.0
 
