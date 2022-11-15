@@ -543,7 +543,7 @@ pub struct ForSpan {
     pub body: Vec<Statement>,
 }
 
-/// Components of a `GOTO` statement.
+/// Components of a `GOTO` or a `GOSUB` statement.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GotoSpan {
     /// Name of the label to jump to.
@@ -564,6 +564,13 @@ pub struct LabelSpan {
 
     /// Position of the label.
     pub name_pos: LineCol,
+}
+
+/// Components of a `RETURN` statement.
+#[derive(Debug, Eq, PartialEq)]
+pub struct ReturnSpan {
+    /// Position of the statement.
+    pub pos: LineCol,
 }
 
 /// Components of a `WHILE` statement.
@@ -600,6 +607,9 @@ pub enum Statement {
     /// Represents a `FOR` statement.
     For(ForSpan),
 
+    /// Represents a `GOSUB` statement.
+    Gosub(GotoSpan),
+
     /// Represents a `GOTO` statement.
     Goto(GotoSpan),
 
@@ -608,6 +618,9 @@ pub enum Statement {
 
     /// Represents a label "statement".
     Label(LabelSpan),
+
+    /// Represents a `RETURN` statement.
+    Return(ReturnSpan),
 
     /// Represents a `WHILE` statement.
     While(WhileSpan),

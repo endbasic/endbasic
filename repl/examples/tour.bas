@@ -76,8 +76,6 @@ PRINT "Expressions work as you would expect, with the usual operator precedence"
 PRINT "rules.  Expressions can take function calls too, but I'll let you find what"
 PRINT "those are via HELP."
 PRINT
-PRINT "There are no line numbers and no plans to add them... so, sorry, no GOTO!"
-PRINT
 COLOR 11
 INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
 
@@ -130,8 +128,14 @@ PRINT "    i% = i% + 1"
 PRINT "    GOTO @repeat"
 PRINT "    @out"
 PRINT
-PRINT "The GOTO targets must be at the same or an upper level of the control flow."
-PRINT "Line numbers are not supported."
+PRINT "GOSUB-style subroutines look like this:"
+PRINT
+PRINT "    GOTO @main"
+PRINT "    @sub"
+PRINT "    PRINT \"Hello from subroutine!\""
+PRINT "    RETURN"
+PRINT "    @main"
+PRINT "    GOSUB @sub"
 PRINT
 COLOR 11
 INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$

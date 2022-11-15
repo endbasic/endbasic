@@ -62,6 +62,9 @@ pub enum Instruction {
     /// Represents a call to a builtin command such as `PRINT`.
     BuiltinCall(BuiltinCallSpan),
 
+    /// Represents an unconditional call to a location that will return.
+    Call(JumpSpan),
+
     /// Represents a variable definition.
     Dim(DimSpan),
 
@@ -79,6 +82,9 @@ pub enum Instruction {
 
     /// Represents an instruction that does nothing.
     Nop,
+
+    /// Represents a return after a call.
+    Return(ReturnSpan),
 }
 
 /// Representation of a compiled program.

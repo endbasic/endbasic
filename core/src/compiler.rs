@@ -49,8 +49,9 @@ struct Compiler {
     /// Mapping of discovered labels to the addresses where they are.
     labels: HashMap<String, Address>,
 
-    /// Location of the `GOTO` statements that require patching once labels have been discovered.
-    unresolved_gotos: HashMap<Address, GotoSpan>,
+    /// Location of the `GOTO` and `GOSUB` statements that require patching once labels have been
+    /// discovered.  The boolean indicates whether this is a `GOSUB` or not.
+    unresolved_gotos: HashMap<Address, (GotoSpan, bool)>,
 
     /// Instructions compiled so far.
     instrs: Vec<Instruction>,
@@ -200,9 +201,14 @@ impl Compiler {
                 self.compile_for(span)?;
             }
 
+            Statement::Gosub(span) => {
+                let goto_pc = self.emit(Instruction::Nop);
+                self.unresolved_gotos.insert(goto_pc, (span, true));
+            }
+
             Statement::Goto(span) => {
                 let goto_pc = self.emit(Instruction::Nop);
-                self.unresolved_gotos.insert(goto_pc, span);
+                self.unresolved_gotos.insert(goto_pc, (span, false));
             }
 
             Statement::If(span) => {
@@ -216,6 +222,10 @@ impl Compiler {
                         format!("Duplicate label {}", span.name),
                     ));
                 }
+            }
+
+            Statement::Return(span) => {
+                self.emit(Instruction::Return(span));
             }
 
             Statement::While(span) => {
@@ -239,7 +249,7 @@ impl Compiler {
     /// Finishes compilation and returns the image representing the compiled program.
     #[allow(clippy::wrong_self_convention)]
     fn to_image(mut self) -> Result<Image> {
-        for (pc, span) in self.unresolved_gotos {
+        for (pc, (span, is_gosub)) in self.unresolved_gotos {
             let addr = match self.labels.get(&span.target) {
                 Some(addr) => *addr,
                 None => {
@@ -250,7 +260,11 @@ impl Compiler {
                 }
             };
 
-            self.instrs[pc] = Instruction::Jump(JumpSpan { addr });
+            if is_gosub {
+                self.instrs[pc] = Instruction::Call(JumpSpan { addr });
+            } else {
+                self.instrs[pc] = Instruction::Jump(JumpSpan { addr });
+            }
         }
         Ok(Image { instrs: self.instrs, data: self.data })
     }
@@ -609,6 +623,24 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Jump(JumpSpan { addr: 1 }))
             .expect_instr(1, Instruction::Jump(JumpSpan { addr: 0 }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_gosub_and_return() {
+        Tester::default()
+            .parse("@sub\nFOO\nRETURN\nGOSUB @sub")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "FOO".to_owned(),
+                    name_pos: lc(2, 1),
+                    args: vec![],
+                }),
+            )
+            .expect_instr(1, Instruction::Return(ReturnSpan { pos: lc(3, 1) }))
+            .expect_instr(2, Instruction::Call(JumpSpan { addr: 0 }))
             .check();
     }
 

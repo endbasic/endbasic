@@ -43,6 +43,7 @@ currently supports:
     strings are supported, but strings must be double-quoted.
 *   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` statements.
 *   `FOR x = ... TO ... [STEP ...]` / `NEXT` loops.
+*   `GOSUB @label` / `RETURN` for procedure execution.
 *   `GOTO @label` statements and `@label` annotations.
 *   `WHILE ...` / `WEND` loops.
 *   UTF-8 everywhere (I think).

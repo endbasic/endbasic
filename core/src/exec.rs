@@ -424,6 +424,7 @@ impl Machine {
     /// Helper for `exec` that only worries about instructions and not data.
     async fn exec_safe(&mut self, instrs: Vec<Instruction>) -> Result<()> {
         let mut pc = 0;
+        let mut addr_stack = vec![];
         while pc < instrs.len() {
             if self.should_stop().await {
                 break;
@@ -444,6 +445,11 @@ impl Machine {
                 Instruction::BuiltinCall(span) => {
                     self.call_builtin(span).await?;
                     pc += 1;
+                }
+
+                Instruction::Call(span) => {
+                    addr_stack.push(pc + 1);
+                    pc = span.addr;
                 }
 
                 Instruction::Dim(span) => {
@@ -483,6 +489,13 @@ impl Machine {
                 Instruction::Nop => {
                     pc += 1;
                 }
+
+                Instruction::Return(span) => match addr_stack.pop() {
+                    Some(addr) => pc = addr,
+                    None => {
+                        return new_syntax_error(span.pos, "No address to return to".to_owned())
+                    }
+                },
             }
         }
 
@@ -1146,6 +1159,64 @@ mod tests {
     fn test_function_call_errors() {
         do_simple_error_test("OUT OUT()", "1:5: OUT is not an array or a function");
         do_simple_error_test("OUT SUM?()", "1:5: Incompatible types in SUM? reference");
+    }
+
+    #[test]
+    fn test_gosub_and_return() {
+        do_ok_test(
+            r#"
+                i = 10
+                GOSUB @sub
+                GOSUB @sub
+                GOTO @end
+                @sub: OUT i: i = i + 1: RETURN
+                @end
+            "#,
+            &[],
+            &["10", "11"],
+        );
+    }
+
+    #[test]
+    fn test_gosub_and_return_nested() {
+        do_ok_test(
+            r#"
+                GOTO @main
+                @sub1: OUT 1: GOSUB @sub2: OUT 2: RETURN
+                @sub2: OUT 3: RETURN
+                @main
+                GOSUB @sub1
+            "#,
+            &[],
+            &["1", "3", "2"],
+        );
+    }
+
+    #[test]
+    fn test_gosub_and_return_from_other() {
+        do_ok_test(
+            r#"
+                GOTO @main
+                @sub1: OUT 1: GOTO @sub2: RETURN
+                @sub2: OUT 3: RETURN
+                @main
+                GOSUB @sub1
+            "#,
+            &[],
+            &["1", "3"],
+        );
+    }
+
+    #[test]
+    fn test_gosub_without_return() {
+        do_ok_test(r#"GOSUB @sub: @sub: OUT 1"#, &[], &["1"]);
+    }
+
+    #[test]
+    fn test_gosub_and_return_errors() {
+        do_simple_error_test("GOSUB @foo", "1:7: Unknown label foo");
+        do_simple_error_test("RETURN", "1:1: No address to return to");
+        do_simple_error_test("GOTO @foo\n@foo: RETURN", "2:7: No address to return to");
     }
 
     #[test]
