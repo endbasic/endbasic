@@ -32,7 +32,6 @@ use endbasic_std::console::{
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::io::{self, StdoutLock, Write};
-use tokio::task::JoinHandle;
 
 /// Converts a `crossterm::ErrorKind` to an `io::Error`.
 fn crossterm_error_to_io_error(e: crossterm::ErrorKind) -> io::Error {
@@ -66,11 +65,6 @@ pub struct TerminalConsole {
     /// Whether video syncing is enabled or not.
     sync_enabled: bool,
 
-    /// Handler for key events.
-    // Must come before `on_key_rx` so that the handler is terminated before we close the channel,
-    // or else any last-minute sends from the handler would panic.
-    _key_handler: JoinHandle<()>,
-
     /// Channel to receive key presses from the terminal.
     on_key_rx: Receiver<Key>,
 }
@@ -93,12 +87,12 @@ impl TerminalConsole {
 
         let is_tty = io::stdin().is_tty() && io::stdout().is_tty();
 
-        let key_handler = if is_tty {
+        if is_tty {
             terminal::enable_raw_mode().map_err(crossterm_error_to_io_error)?;
-            tokio::task::spawn(TerminalConsole::raw_key_handler(on_key_tx, signals_tx))
+            tokio::task::spawn(TerminalConsole::raw_key_handler(on_key_tx, signals_tx));
         } else {
-            tokio::task::spawn(TerminalConsole::stdio_key_handler(on_key_tx))
-        };
+            tokio::task::spawn(TerminalConsole::stdio_key_handler(on_key_tx));
+        }
 
         Ok(Self {
             is_tty,
@@ -107,7 +101,6 @@ impl TerminalConsole {
             cursor_visible: true,
             alt_active: false,
             sync_enabled: true,
-            _key_handler: key_handler,
             on_key_rx,
         })
     }
@@ -170,7 +163,10 @@ impl TerminalConsole {
                     .await
                     .expect("Send to unbounded channel should not have failed")
             } else {
-                on_key_tx.send(key).await.expect("Send to unbounded channel should not have failed")
+                // This should never fail but can if the receiver outruns the console because we
+                // don't await for the handler to terminate (which we cannot do safely because
+                // `Drop` is not async).
+                let _ = on_key_tx.send(key).await;
             }
         }
 
@@ -202,7 +198,11 @@ impl TerminalConsole {
             };
 
             done = key == Key::Eof;
-            on_key_tx.send(key).await.expect("Send to unbounded channel should not have failed")
+
+            // This should never fail but can if the receiver outruns the console because we don't
+            // await for the handler to terminate (which we cannot do safely because `Drop` is not
+            // async).
+            let _ = on_key_tx.send(key).await;
         }
 
         on_key_tx.close();
