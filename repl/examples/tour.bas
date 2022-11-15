@@ -13,13 +13,34 @@
 ' License for the specific language governing permissions and limitations
 ' under the License.
 
+GOTO @main
+
+' Clears the screen and prints the title in `title$`.
+@banner
 CLS
 COLOR 11
 PRINT
-PRINT " EndBASIC tour: Welcome!"
-PRINT "========================="
+title$ = " EndBASIC tour: " + title$
+underline$ = ""
+FOR i = 1 TO LEN%(title$) + 1
+    underline$ = underline$ + "="
+NEXT
+PRINT title$
+PRINT underline
 COLOR
 PRINT
+RETURN
+
+' Waits for a key press at the end of a demo screen.
+@wait
+PRINT
+COLOR 11
+INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
+RETURN
+
+@main
+
+title = "Welcome!": GOSUB @banner
 PRINT "Welcome to the EndBASIC tour demo program.  I'm glad you have made it this far!"
 PRINT
 PRINT "EndBASIC is an interpreter for a BASIC-like language and is inspired by"
@@ -42,17 +63,9 @@ PRINT "system."
 COLOR
 PRINT
 PRINT "Without further ado, let's get started!"
-PRINT
-COLOR 11
-INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
+GOSUB @wait
 
-CLS
-COLOR 11
-PRINT
-PRINT " EndBASIC tour: The basics"
-PRINT "==========================="
-COLOR
-PRINT
+title = "The basics": GOSUB @banner
 PRINT "There are four primitive types:"
 PRINT
 PRINT "* Booleans (?): Literals TRUE and FALSE."
@@ -75,17 +88,9 @@ PRINT
 PRINT "Expressions work as you would expect, with the usual operator precedence"
 PRINT "rules.  Expressions can take function calls too, but I'll let you find what"
 PRINT "those are via HELP."
-PRINT
-COLOR 11
-INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
+GOSUB @wait
 
-CLS
-COLOR 11
-PRINT
-PRINT " EndBASIC tour: Structured control flow"
-PRINT "========================================"
-COLOR
-PRINT
+title = "Structured control flow": GOSUB @banner
 PRINT "Fully-specified if statements look like this:"
 PRINT
 PRINT "    IF a% = 1 THEN"
@@ -107,17 +112,9 @@ PRINT
 PRINT "    FOR a = 1 TO 10 STEP 2"
 PRINT "        PRINT a"
 PRINT "    NEXT"
-PRINT
-COLOR 11
-INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
+GOSUB @wait
 
-CLS
-COLOR 11
-PRINT
-PRINT " EndBASIC tour: Unstructured control flow"
-PRINT "=========================================="
-COLOR
-PRINT
+title = "Unstructured control flow": GOSUB @banner
 PRINT "Labels and jumps look like this:"
 PRINT
 PRINT "    i% = 1"
@@ -136,17 +133,9 @@ PRINT "    PRINT \"Hello from subroutine!\""
 PRINT "    RETURN"
 PRINT "    @main"
 PRINT "    GOSUB @sub"
-PRINT
-COLOR 11
-INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
+GOSUB @wait
 
-CLS
-COLOR 11
-PRINT
-PRINT " EndBASIC tour: File manipulation"
-PRINT "=================================="
-COLOR
-PRINT
+title = "File manipulation": GOSUB @banner
 PRINT "Given that you are reading this tour, you have already encountered how to"
 PRINT "load a program and run it.  But here is how you'd go about creating a new"
 PRINT "program from scratch:"
@@ -165,17 +154,9 @@ PRINT "a different name."
 PRINT
 PRINT "If you are in the browser, rest assured that all programs are stored in"
 PRINT "your browser's local storage.  Nothing goes to the cloud."
-PRINT
-COLOR 11
-INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
+GOSUB @wait
 
-CLS
-COLOR 11
-PRINT
-PRINT " EndBASIC tour: The file system"
-PRINT "================================"
-COLOR
-PRINT
+title = "The file system": GOSUB @banner
 PRINT "In the previous page, you learned how to create files and how to save and"
 PRINT "load them.  Those examples used relative paths.  However, EndBASIC supports"
 PRINT "multiple drives (although it does not yet support directories)."
@@ -198,17 +179,9 @@ PRINT
 PRINT "Pay attention to the double quotes surrounding these arguments: these are"
 PRINT "EndBASIC commands and thus you must provide the arguments as strings.  You"
 PRINT "are bound to trip over this a few times due to muscle memory..."
-PRINT
-COLOR 11
-INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
+GOSUB @wait
 
-CLS
-COLOR 11
-PRINT
-PRINT " EndBASIC tour: Screen manipulation"
-PRINT "===================================="
-COLOR
-PRINT
+title = "Screen manipulation": GOSUB @banner
 PRINT "You have several commands at your disposal to manipulate the contents of"
 PRINT "the screen.  Visual features are particularly interesting for teaching"
 PRINT "purposes, so expect more in this regard."
@@ -227,34 +200,18 @@ FOR c% = 8 TO 15
     PRINT "This is color"; c%
 NEXT
 COLOR
-PRINT
-COLOR 11
-INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
+GOSUB @wait
 
-CLS
-COLOR 11
-PRINT
-PRINT " EndBASIC tour: Hardware access"
-PRINT "================================"
-COLOR
-PRINT
+title = "Hardware access": GOSUB @banner
 PRINT "If you happen to be running on a Raspberry Pi, EndBASIC has some support"
 PRINT "to manipulate its hardware.  At the moment this includes only basic access"
 PRINT "to the GPIO lines.  See the \"DEMOS:/GPIO.BAS\" demo for an example."
 PRINT
 PRINT "Please note that you have to be running on a Raspberry Pi *AND* you must"
 PRINT "have compiled EndBASIC with --features=rpi for this to work."
-PRINT
-COLOR 11
-INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
+GOSUB @wait
 
-CLS
-COLOR 11
-PRINT
-PRINT " EndBASIC tour: Enjoy"
-PRINT "======================"
-COLOR
-PRINT
+title = "Enjoy": GOSUB @banner
 PRINT "And that's it for the tour.  You can now type EDIT to see the code that"
 PRINT "took you over this journey, load other demo files or... just go forth and"
 PRINT "explore.  HELP, MOUNT, and DIR are your friends at any point, but so that"
