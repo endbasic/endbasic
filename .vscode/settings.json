@@ -77,6 +77,8 @@
         "endbasic",
         "eval",
         "framebuffer",
+        "gosub",
+        "gosubs",
         "gotos",
         "instr",
         "instrs",

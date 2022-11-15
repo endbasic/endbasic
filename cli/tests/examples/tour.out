@@ -50,8 +50,6 @@ Expressions work as you would expect, with the usual operator precedence
 rules.  Expressions can take function calls too, but I'll let you find what
 those are via HELP.
 
-There are no line numbers and no plans to add them... so, sorry, no GOTO!
-
 [38;5;11m[2J[1;1H
  EndBASIC tour: Structured control flow
 ========================================
@@ -92,8 +90,14 @@ Labels and jumps look like this:
     GOTO @repeat
     @out
 
-The GOTO targets must be at the same or an upper level of the control flow.
-Line numbers are not supported.
+GOSUB-style subroutines look like this:
+
+    GOTO @main
+    @sub
+    PRINT "Hello from subroutine!"
+    RETURN
+    @main
+    GOSUB @sub
 
 [38;5;11m[2J[1;1H
  EndBASIC tour: File manipulation

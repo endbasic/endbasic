@@ -740,11 +740,13 @@ impl<'a> Parser<'a> {
                 | Token::Elseif
                 | Token::End
                 | Token::For
+                | Token::Gosub
                 | Token::Goto
                 | Token::If
                 | Token::IntegerName
                 | Token::Label(_)
                 | Token::Next
+                | Token::Return
                 | Token::TextName
                 | Token::Wend
                 | Token::While => {
@@ -776,6 +778,17 @@ impl<'a> Parser<'a> {
         match self.parse_expr(None)? {
             Some(expr) => Ok(expr),
             None => Err(Error::Bad(next_pos, msg.to_owned())),
+        }
+    }
+
+    /// Parses a `GOSUB` statement.
+    fn parse_gosub(&mut self) -> Result<Statement> {
+        let token_span = self.lexer.read()?;
+        match token_span.token {
+            Token::Label(target) => {
+                Ok(Statement::Gosub(GotoSpan { target, target_pos: token_span.pos }))
+            }
+            _ => Err(Error::Bad(token_span.pos, "Expected label name after GOSUB".to_owned())),
         }
     }
 
@@ -1069,6 +1082,10 @@ impl<'a> Parser<'a> {
                 }
                 Ok(Some(result?))
             }
+            Token::Gosub => {
+                let result = self.parse_gosub();
+                Ok(Some(result?))
+            }
             Token::Goto => {
                 let result = self.parse_goto();
                 Ok(Some(result?))
@@ -1081,6 +1098,7 @@ impl<'a> Parser<'a> {
                 // the label name to join it with a statement looks "natural".
                 Ok(Some(Statement::Label(LabelSpan { name, name_pos: token_span.pos })))
             }
+            Token::Return => Ok(Some(Statement::Return(ReturnSpan { pos: token_span.pos }))),
             Token::Symbol(vref) => {
                 let peeked = self.lexer.peek()?;
                 if peeked.token == Token::Equal {
@@ -2299,8 +2317,8 @@ mod tests {
     #[test]
     fn test_expr_errors_due_to_keywords() {
         for kw in &[
-            "BOOLEAN", "DATA", "DIM", "DOUBLE", "ELSE", "ELSEIF", "END", "FOR", "GOTO", "IF",
-            "INTEGER", "NEXT", "STRING", "WHILE",
+            "BOOLEAN", "DATA", "DIM", "DOUBLE", "ELSE", "ELSEIF", "END", "FOR", "GOSUB", "GOTO",
+            "IF", "INTEGER", "NEXT", "RETURN", "STRING", "WHILE",
         ] {
             do_expr_error_test(
                 &format!("2 + {} - 1", kw),
@@ -2735,6 +2753,24 @@ mod tests {
         do_error_test("FOR i = 3 TO 1 STEP -1", "1:23: Expecting newline after FOR");
 
         do_error_test("    FOR i = 0 TO 10\nPRINT i\n", "1:5: FOR without NEXT");
+    }
+
+    #[test]
+    fn test_gosub_ok() {
+        do_ok_test(
+            "GOSUB @foo",
+            &[Statement::Gosub(GotoSpan { target: "foo".to_owned(), target_pos: lc(1, 7) })],
+        );
+    }
+
+    #[test]
+    fn test_gosub_errors() {
+        do_error_test("GOSUB\n", "1:6: Expected label name after GOSUB");
+        do_error_test("GOSUB 3\n", "1:7: Expected label name after GOSUB");
+        do_error_test("GOSUB foo\n", "1:7: Expected label name after GOSUB");
+        do_error_test("GOSUB \"foo\"\n", "1:7: Expected label name after GOSUB");
+        do_error_test("GOSUB @foo, @bar\n", "1:11: Expected newline but found ,");
+        do_error_test("GOSUB @foo, 3\n", "1:11: Expected newline but found ,");
     }
 
     #[test]

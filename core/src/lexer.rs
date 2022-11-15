@@ -72,9 +72,11 @@ pub enum Token {
     Elseif,
     End,
     For,
+    Gosub,
     Goto,
     If,
     Next,
+    Return,
     Step,
     Then,
     To,
@@ -138,9 +140,11 @@ impl fmt::Display for Token {
             Token::Elseif => write!(f, "ELSEIF"),
             Token::End => write!(f, "END"),
             Token::For => write!(f, "FOR"),
+            Token::Gosub => write!(f, "GOSUB"),
             Token::Goto => write!(f, "GOTO"),
             Token::If => write!(f, "IF"),
             Token::Next => write!(f, "NEXT"),
+            Token::Return => write!(f, "RETURN"),
             Token::Step => write!(f, "STEP"),
             Token::Then => write!(f, "THEN"),
             Token::To => write!(f, "TO"),
@@ -397,6 +401,7 @@ impl<'a> Lexer<'a> {
             "END" => Token::End,
             "FALSE" => Token::Boolean(false),
             "FOR" => Token::For,
+            "GOSUB" => Token::Gosub,
             "GOTO" => Token::Goto,
             "IF" => Token::If,
             "INTEGER" => Token::IntegerName,
@@ -405,6 +410,7 @@ impl<'a> Lexer<'a> {
             "NOT" => Token::Not,
             "OR" => Token::Or,
             "REM" => return self.consume_rest_of_line(),
+            "RETURN" => Token::Return,
             "STEP" => Token::Step,
             "STRING" => Token::TextName,
             "THEN" => Token::Then,
@@ -932,6 +938,13 @@ mod tests {
     }
 
     #[test]
+    fn test_gosub() {
+        do_ok_test("GOSUB", &[ts(Token::Gosub, 1, 1, 5), ts(Token::Eof, 1, 6, 0)]);
+
+        do_ok_test("gosub", &[ts(Token::Gosub, 1, 1, 5), ts(Token::Eof, 1, 6, 0)]);
+    }
+
+    #[test]
     fn test_goto() {
         do_ok_test("GOTO", &[ts(Token::Goto, 1, 1, 4), ts(Token::Eof, 1, 5, 0)]);
 
@@ -950,6 +963,13 @@ mod tests {
                 ts(Token::Eof, 1, 19, 0),
             ],
         );
+    }
+
+    #[test]
+    fn test_return() {
+        do_ok_test("RETURN", &[ts(Token::Return, 1, 1, 6), ts(Token::Eof, 1, 7, 0)]);
+
+        do_ok_test("return", &[ts(Token::Return, 1, 1, 6), ts(Token::Eof, 1, 7, 0)]);
     }
 
     #[test]

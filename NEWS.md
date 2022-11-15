@@ -82,6 +82,8 @@ for the time being.**
 *   Rewrote the execution interpreter to be based on an iterative loop over
     a simplified bytecode representation instead of walking over the AST.
 
+*   Added support for `GOSUB` and `RETURN`.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
