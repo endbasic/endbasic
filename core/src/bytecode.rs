@@ -50,6 +50,20 @@ pub struct JumpIfNotTrueSpan {
     pub error_msg: &'static str,
 }
 
+/// Components of a change to the error handler.
+#[derive(Clone, Copy)]
+#[cfg_attr(test, derive(Debug, Eq, PartialEq))]
+pub enum ErrorHandlerSpan {
+    /// Jumps to the included address on error.
+    Jump(Address),
+
+    /// Sets the error handler to the default.
+    None,
+
+    /// Sets the error handler to resume execution at to the next instruction.
+    ResumeNext,
+}
+
 /// Representation of all possible instructions in the bytecode.
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub enum Instruction {
@@ -85,6 +99,9 @@ pub enum Instruction {
 
     /// Represents a return after a call.
     Return(ReturnSpan),
+
+    /// Represents a change in the error handler state.
+    SetErrorHandler(ErrorHandlerSpan),
 }
 
 /// Representation of a compiled program.

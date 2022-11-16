@@ -732,7 +732,7 @@ mod tests {
             "PRINT 3, 4 AS b",
         );
         // Ensure type errors from `Expr` and `Value` bubble up.
-        check_stmt_err("1:9: Unexpected value in expression", "PRINT a b");
+        check_stmt_uncatchable_err("1:9: Unexpected value in expression", "PRINT a b");
         check_stmt_err("1:9: Cannot add 3 and TRUE", "PRINT 3 + TRUE");
     }
 }

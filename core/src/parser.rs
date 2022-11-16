@@ -739,6 +739,7 @@ impl<'a> Parser<'a> {
                 | Token::Else
                 | Token::Elseif
                 | Token::End
+                | Token::Error
                 | Token::For
                 | Token::Gosub
                 | Token::Goto
@@ -746,6 +747,8 @@ impl<'a> Parser<'a> {
                 | Token::IntegerName
                 | Token::Label(_)
                 | Token::Next
+                | Token::On
+                | Token::Resume
                 | Token::Return
                 | Token::TextName
                 | Token::Wend
@@ -1015,6 +1018,36 @@ impl<'a> Parser<'a> {
         self.reset()
     }
 
+    /// Parses an `ON ERROR` statement.  Only `ON` has been consumed so far.
+    fn parse_on(&mut self) -> Result<Statement> {
+        self.expect_and_consume(Token::Error, "Expected ERROR after ON")?;
+
+        let token_span = self.lexer.read()?;
+        match token_span.token {
+            Token::Goto => {
+                let token_span = self.lexer.read()?;
+                match token_span.token {
+                    Token::Integer(0) => Ok(Statement::OnError(OnErrorSpan::Reset)),
+                    Token::Label(target) => Ok(Statement::OnError(OnErrorSpan::Goto(GotoSpan {
+                        target,
+                        target_pos: token_span.pos,
+                    }))),
+                    _ => Err(Error::Bad(
+                        token_span.pos,
+                        "Expected label name or 0 after ON ERROR GOTO".to_owned(),
+                    )),
+                }
+            }
+            Token::Resume => {
+                self.expect_and_consume(Token::Next, "Expected NEXT after ON ERROR RESUME")?;
+                Ok(Statement::OnError(OnErrorSpan::ResumeNext))
+            }
+            _ => {
+                Err(Error::Bad(token_span.pos, "Expected GOTO or RESUME after ON ERROR".to_owned()))
+            }
+        }
+    }
+
     /// Parses a `WHILE` statement.
     fn parse_while(&mut self, while_pos: LineCol) -> Result<Statement> {
         let expr = self.parse_required_expr("No expression in WHILE statement")?;
@@ -1098,6 +1131,7 @@ impl<'a> Parser<'a> {
                 // the label name to join it with a statement looks "natural".
                 Ok(Some(Statement::Label(LabelSpan { name, name_pos: token_span.pos })))
             }
+            Token::On => Ok(Some(self.parse_on()?)),
             Token::Return => Ok(Some(Statement::Return(ReturnSpan { pos: token_span.pos }))),
             Token::Symbol(vref) => {
                 let peeked = self.lexer.peek()?;
@@ -2317,8 +2351,8 @@ mod tests {
     #[test]
     fn test_expr_errors_due_to_keywords() {
         for kw in &[
-            "BOOLEAN", "DATA", "DIM", "DOUBLE", "ELSE", "ELSEIF", "END", "FOR", "GOSUB", "GOTO",
-            "IF", "INTEGER", "NEXT", "RETURN", "STRING", "WHILE",
+            "BOOLEAN", "DATA", "DIM", "DOUBLE", "ELSE", "ELSEIF", "END", "ERROR", "FOR", "GOSUB",
+            "GOTO", "IF", "INTEGER", "NEXT", "ON", "RESUME", "RETURN", "STRING", "WHILE",
         ] {
             do_expr_error_test(
                 &format!("2 + {} - 1", kw),
@@ -2803,6 +2837,38 @@ mod tests {
     fn test_label_errors() {
         do_error_test("@foo PRINT", "1:6: Expected newline but found PRINT");
         do_error_test("@foo+", "1:5: Expected newline but found +");
+    }
+
+    #[test]
+    fn test_parse_on_error_ok() {
+        do_ok_test("ON ERROR GOTO 0", &[Statement::OnError(OnErrorSpan::Reset)]);
+
+        do_ok_test(
+            "ON ERROR GOTO @foo",
+            &[Statement::OnError(OnErrorSpan::Goto(GotoSpan {
+                target: "foo".to_owned(),
+                target_pos: lc(1, 15),
+            }))],
+        );
+
+        do_ok_test("ON ERROR RESUME NEXT", &[Statement::OnError(OnErrorSpan::ResumeNext)]);
+    }
+
+    #[test]
+    fn test_parse_on_error_errors() {
+        do_error_test("ON", "1:3: Expected ERROR after ON");
+        do_error_test("ON NEXT", "1:4: Expected ERROR after ON");
+        do_error_test("ON ERROR", "1:9: Expected GOTO or RESUME after ON ERROR");
+        do_error_test("ON ERROR FOR", "1:10: Expected GOTO or RESUME after ON ERROR");
+
+        do_error_test("ON ERROR RESUME", "1:16: Expected NEXT after ON ERROR RESUME");
+        do_error_test("ON ERROR RESUME 3", "1:17: Expected NEXT after ON ERROR RESUME");
+        do_error_test("ON ERROR RESUME NEXT 3", "1:22: Expected newline but found 3");
+
+        do_error_test("ON ERROR GOTO", "1:14: Expected label name or 0 after ON ERROR GOTO");
+        do_error_test("ON ERROR GOTO 100", "1:15: Expected label name or 0 after ON ERROR GOTO");
+        do_error_test("ON ERROR GOTO NEXT", "1:15: Expected label name or 0 after ON ERROR GOTO");
+        do_error_test("ON ERROR GOTO 0 @a", "1:17: Expected newline but found @a");
     }
 
     #[test]

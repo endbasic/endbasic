@@ -417,6 +417,14 @@ impl Symbols {
             }
         }
     }
+
+    /// Unsets the symbol `name` irrespective of its type.
+    pub fn unset(&mut self, name: &str) -> Result<()> {
+        match self.by_name.remove(name) {
+            Some(_) => Ok(()),
+            None => Err(Error::new(format!("{} is not defined", name))),
+        }
+    }
 }
 
 /// Builder pattern for a callable's metadata.
@@ -1365,5 +1373,30 @@ mod tests {
             "Undefined variable SOME_THIN",
             format!("{}", syms.get_var(&VarRef::new("SOME_THIN", VarType::Integer)).unwrap_err())
         );
+    }
+
+    #[test]
+    fn test_symbols_unset_ok() {
+        let mut syms = SymbolsBuilder::default()
+            .add_array("SOMEARRAY", VarType::Integer)
+            .add_command(ExitCommand::new())
+            .add_function(SumFunction::new())
+            .add_var("SOMEVAR", Value::Boolean(true))
+            .build();
+
+        let mut count = 4;
+        for name in ["SOMEARRAY", "EXIT", "SUM", "SOMEVAR"] {
+            syms.unset(name).unwrap();
+            count -= 1;
+            assert_eq!(count, syms.as_hashmap().len());
+        }
+        assert_eq!(0, count);
+    }
+
+    #[test]
+    fn test_symbols_unset_undefined() {
+        let mut syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
+        syms.unset("FOO").unwrap_err();
+        assert_eq!(1, syms.as_hashmap().len());
     }
 }

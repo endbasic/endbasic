@@ -105,6 +105,19 @@ impl Error {
     fn from_value_error_without_pos(e: value::Error) -> Self {
         Self::ValueError(e)
     }
+
+    /// Returns true if this type of error can be caught by `ON ERROR`.
+    fn is_catchable(&self) -> bool {
+        match self {
+            Error::CompilerError(_) => false,
+            Error::EvalError(_) => true,
+            Error::IoError(_) => true,
+            Error::NestedError(_) => false,
+            Error::ParseError(_) => false,
+            Error::SyntaxError(..) => true,
+            Error::ValueError(_) => false,
+        }
+    }
 }
 
 /// Result for execution return values.
@@ -163,6 +176,19 @@ pub trait Clearable {
 
 /// Type of the function used by the execution loop to yield execution.
 pub type YieldNowFn = Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()> + 'static>>>;
+
+/// Machine state for the execution of an individual chunk of code.
+struct Context {
+    pc: Address,
+    addr_stack: Vec<Address>,
+    err_handler: ErrorHandlerSpan,
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Self { pc: 0, addr_stack: vec![], err_handler: ErrorHandlerSpan::None }
+    }
+}
 
 /// Executes an EndBASIC program and tracks its state.
 pub struct Machine {
@@ -421,65 +447,64 @@ impl Machine {
         }
     }
 
-    /// Helper for `exec` that only worries about instructions and not data.
-    async fn exec_safe(&mut self, instrs: Vec<Instruction>) -> Result<()> {
-        let mut pc = 0;
-        let mut addr_stack = vec![];
-        while pc < instrs.len() {
+    /// Helper for `exec` that only worries about execution.  Errors are handled on the caller side
+    /// depending on the `ON ERROR` handling policy that is currently configured.
+    async fn exec_safe(&mut self, context: &mut Context, instrs: &[Instruction]) -> Result<()> {
+        while context.pc < instrs.len() {
             if self.should_stop().await {
                 break;
             }
 
-            let instr = &instrs[pc];
+            let instr = &instrs[context.pc];
             match instr {
                 Instruction::ArrayAssignment(span) => {
                     self.assign_array(span).await?;
-                    pc += 1;
+                    context.pc += 1;
                 }
 
                 Instruction::Assignment(span) => {
                     self.assign(span).await?;
-                    pc += 1;
+                    context.pc += 1;
                 }
 
                 Instruction::BuiltinCall(span) => {
                     self.call_builtin(span).await?;
-                    pc += 1;
+                    context.pc += 1;
                 }
 
                 Instruction::Call(span) => {
-                    addr_stack.push(pc + 1);
-                    pc = span.addr;
+                    context.addr_stack.push(context.pc + 1);
+                    context.pc = span.addr;
                 }
 
                 Instruction::Dim(span) => {
                     self.symbols
                         .dim(&span.name, span.vtype)
                         .map_err(|e| Error::from_value_error(e, span.name_pos))?;
-                    pc += 1;
+                    context.pc += 1;
                 }
 
                 Instruction::DimArray(span) => {
                     self.dim_array(span).await?;
-                    pc += 1;
+                    context.pc += 1;
                 }
 
                 Instruction::Jump(span) => {
-                    pc = span.addr;
+                    context.pc = span.addr;
                 }
 
                 Instruction::JumpIfDefined(span) => {
                     if self.symbols.get_auto(&span.var).is_some() {
-                        pc = span.addr;
+                        context.pc = span.addr;
                     } else {
-                        pc += 1;
+                        context.pc += 1;
                     }
                 }
 
                 Instruction::JumpIfNotTrue(span) => {
                     match span.cond.eval(&mut self.symbols).await? {
-                        Value::Boolean(true) => pc += 1,
-                        Value::Boolean(false) => pc = span.addr,
+                        Value::Boolean(true) => context.pc += 1,
+                        Value::Boolean(false) => context.pc = span.addr,
                         _ => {
                             return new_syntax_error(span.cond.start_pos(), span.error_msg);
                         }
@@ -487,15 +512,20 @@ impl Machine {
                 }
 
                 Instruction::Nop => {
-                    pc += 1;
+                    context.pc += 1;
                 }
 
-                Instruction::Return(span) => match addr_stack.pop() {
-                    Some(addr) => pc = addr,
+                Instruction::Return(span) => match context.addr_stack.pop() {
+                    Some(addr) => context.pc = addr,
                     None => {
                         return new_syntax_error(span.pos, "No address to return to".to_owned())
                     }
                 },
+
+                Instruction::SetErrorHandler(span) => {
+                    context.err_handler = *span;
+                    context.pc += 1;
+                }
             }
         }
 
@@ -516,7 +546,32 @@ impl Machine {
 
         assert!(self.data.is_empty());
         self.data = image.data;
-        let result = self.exec_safe(image.instrs).await;
+
+        let mut context = Context::default();
+        let mut result;
+        loop {
+            result = self.exec_safe(&mut context, &image.instrs).await;
+            match result.as_ref() {
+                Ok(()) => break,
+                Err(e) if e.is_catchable() => {
+                    let _ignore = self.symbols.unset("ERRMSG");
+                    self.symbols
+                        .set_var(
+                            &VarRef::new("ERRMSG", VarType::Text),
+                            Value::Text(format!("{}", e)),
+                        )
+                        .expect("Cannot fail; we have previously unset the variable.");
+
+                    match context.err_handler {
+                        ErrorHandlerSpan::Jump(addr) => context.pc = addr,
+                        ErrorHandlerSpan::None => break,
+                        ErrorHandlerSpan::ResumeNext => context.pc += 1,
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+
         self.data.clear();
         result?;
 
@@ -693,6 +748,7 @@ mod tests {
         machine.add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))));
         machine.add_command(OutCommand::new(captured_out.clone()));
         machine.add_function(OutfFunction::new(captured_out));
+        machine.add_function(RaiseFunction::new());
         machine.add_function(SumFunction::new());
         block_on(machine.exec(&mut input.as_bytes()))
     }
@@ -1320,6 +1376,102 @@ mod tests {
             @out
             "#,
             "8:25: Duplicate label a",
+        );
+    }
+
+    #[test]
+    fn test_on_error_goto_label() {
+        do_ok_test(
+            r#"
+            ON ERROR GOTO @foo
+            OUT 1
+            OUT RAISE("syntax")
+            OUT 2
+            @foo
+            OUT ERRMSG
+            "#,
+            &[],
+            &["1", "4:17: In call to RAISE: expected arg1$"],
+        );
+    }
+
+    #[test]
+    fn test_on_error_reset() {
+        do_error_test(
+            r#"
+            ON ERROR GOTO @foo
+            OUT 1
+            OUT RAISE("syntax")
+            @foo
+            ON ERROR GOTO 0
+            OUT 2
+            OUT RAISE("syntax")
+            "#,
+            &[],
+            &["1", "2"],
+            "8:17: In call to RAISE: expected arg1$",
+        );
+    }
+
+    #[test]
+    fn test_on_error_resume_next() {
+        do_ok_test(
+            r#"
+            ON ERROR RESUME NEXT
+            OUT 1
+            OUT RAISE("syntax")
+            OUT ERRMSG
+            "#,
+            &[],
+            &["1", "4:17: In call to RAISE: expected arg1$"],
+        );
+    }
+
+    #[test]
+    fn test_on_error_types() {
+        do_ok_test(
+            r#"ON ERROR RESUME NEXT: OUT RAISE("argument"): OUT ERRMSG"#,
+            &[],
+            &["1:27: In call to RAISE: 1:33: Bad argument"],
+        );
+
+        do_ok_test(
+            r#"ON ERROR RESUME NEXT: OUT RAISE("eval"): OUT ERRMSG"#,
+            &[],
+            &["1:27: In call to RAISE: 1:33: Some eval error"],
+        );
+
+        do_ok_test(
+            r#"ON ERROR RESUME NEXT: OUT RAISE("internal"): OUT ERRMSG"#,
+            &[],
+            &["1:27: In call to RAISE: 1:33: Some internal error"],
+        );
+
+        do_ok_test(
+            r#"ON ERROR RESUME NEXT: OUT RAISE("io"): OUT ERRMSG"#,
+            &[],
+            &["1:27: In call to RAISE: Some I/O error"],
+        );
+
+        do_ok_test(
+            r#"ON ERROR RESUME NEXT: OUT RAISE("syntax"): OUT ERRMSG"#,
+            &[],
+            &["1:27: In call to RAISE: expected arg1$"],
+        );
+    }
+
+    #[test]
+    fn test_on_error_unset_incompatible_errmsg() {
+        do_ok_test(
+            r#"
+            ERRMSG = 3 ' This should be a string and not cause trouble.
+            ON ERROR RESUME NEXT
+            OUT ERRMSG
+            OUT RAISE("syntax")
+            OUT ERRMSG
+            "#,
+            &[],
+            &["3", "5:17: In call to RAISE: expected arg1$"],
         );
     }
 

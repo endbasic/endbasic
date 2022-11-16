@@ -44,6 +44,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 enum FixupType {
     Gosub,
     Goto,
+    OnError,
 }
 
 /// Describes a location in the code needs fixing up after all addresses have been laid out.
@@ -62,6 +63,11 @@ impl Fixup {
     /// Constructs a `Fixup` for a `GOTO` instruction.
     fn from_goto(span: GotoSpan) -> Self {
         Self { target: span.target, target_pos: span.target_pos, ftype: FixupType::Goto }
+    }
+
+    /// Constructs a `Fixup` for a `ON ERROR GOTO` instruction.
+    fn from_on_error(span: GotoSpan) -> Self {
+        Self { target: span.target, target_pos: span.target_pos, ftype: FixupType::OnError }
     }
 }
 
@@ -177,6 +183,22 @@ impl Compiler {
         Ok(())
     }
 
+    /// Compiles an `ON ERROR` statement and appends its instructions to the compilation context.
+    fn compile_on_error(&mut self, span: OnErrorSpan) {
+        match span {
+            OnErrorSpan::Goto(span) => {
+                let goto_pc = self.emit(Instruction::Nop);
+                self.fixups.insert(goto_pc, Fixup::from_on_error(span));
+            }
+            OnErrorSpan::Reset => {
+                self.emit(Instruction::SetErrorHandler(ErrorHandlerSpan::None));
+            }
+            OnErrorSpan::ResumeNext => {
+                self.emit(Instruction::SetErrorHandler(ErrorHandlerSpan::ResumeNext));
+            }
+        }
+    }
+
     /// Compiles a `WHILE` loop and appends its instructions to the compilation context.
     fn compile_while(&mut self, span: WhileSpan) -> Result<()> {
         let start_pc = self.emit(Instruction::Nop);
@@ -248,6 +270,10 @@ impl Compiler {
                 }
             }
 
+            Statement::OnError(span) => {
+                self.compile_on_error(span);
+            }
+
             Statement::Return(span) => {
                 self.emit(Instruction::Return(span));
             }
@@ -287,6 +313,9 @@ impl Compiler {
             match fixup.ftype {
                 FixupType::Gosub => self.instrs[pc] = Instruction::Call(JumpSpan { addr }),
                 FixupType::Goto => self.instrs[pc] = Instruction::Jump(JumpSpan { addr }),
+                FixupType::OnError => {
+                    self.instrs[pc] = Instruction::SetErrorHandler(ErrorHandlerSpan::Jump(addr))
+                }
             }
         }
         Ok(Image { instrs: self.instrs, data: self.data })
@@ -755,6 +784,42 @@ mod tests {
                     args: vec![],
                 }),
             )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_on_error_reset() {
+        Tester::default()
+            .parse("ON ERROR GOTO 0")
+            .compile()
+            .expect_instr(0, Instruction::SetErrorHandler(ErrorHandlerSpan::None))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_on_error_goto_label() {
+        Tester::default()
+            .parse("ON ERROR GOTO @foo\n\n\n@foo")
+            .compile()
+            .expect_instr(0, Instruction::SetErrorHandler(ErrorHandlerSpan::Jump(1)))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_on_error_goto_unknown_label() {
+        Tester::default()
+            .parse("ON ERROR GOTO @foo")
+            .compile()
+            .expect_err("1:15: Unknown label foo")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_on_error_resume_next() {
+        Tester::default()
+            .parse("ON ERROR RESUME NEXT")
+            .compile()
+            .expect_instr(0, Instruction::SetErrorHandler(ErrorHandlerSpan::ResumeNext))
             .check();
     }
 

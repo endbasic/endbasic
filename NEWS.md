@@ -84,6 +84,10 @@ for the time being.**
 
 *   Added support for `GOSUB` and `RETURN`.
 
+*   Added support for catching errors via `ON ERROR GOTO` and `ON ERROR
+    RESUME NEXT`, both of which set a new `ERRMSG` variable with the details
+    of the error that was caught.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**

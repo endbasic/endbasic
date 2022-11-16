@@ -503,13 +503,28 @@ impl<'a> Checker<'a> {
         self
     }
 
-    /// Expects the invocation to have erroneously terminated with the exact `message`.
+    /// Expects the invocation to have erroneously terminated with the exact `message` that comes
+    /// from an error that can be caught.
     ///
     /// If not called, defaults to expecting that execution terminated due to EOF.  This or
     /// `expect_err` can only be called once.
     pub fn expect_err<S: Into<String>>(mut self, message: S) -> Self {
+        let message = message.into();
         assert_eq!(Ok(StopReason::Eof), self.exp_result);
-        self.exp_result = Err(message.into());
+        self.exp_result = Err(message.clone());
+        self.exp_vars.insert("ERRMSG".to_string(), Value::Text(message));
+        self
+    }
+
+    /// Expects the invocation to have erroneously terminated with the exact `message` that comes
+    /// from an error that cannot be caught (such as a parse error).
+    ///
+    /// If not called, defaults to expecting that execution terminated due to EOF.  This or
+    /// `expect_err` can only be called once.
+    pub fn expect_uncatchable_err<S: Into<String>>(mut self, message: S) -> Self {
+        let message = message.into();
+        assert_eq!(Ok(StopReason::Eof), self.exp_result);
+        self.exp_result = Err(message);
         self
     }
 
@@ -683,6 +698,12 @@ impl<'a> Checker<'a> {
 /// Executes `stmt` on a default `Tester` instance and checks that it fails with `exp_error`.
 pub fn check_stmt_err<S: Into<String>>(exp_error: S, stmt: &str) {
     Tester::default().run(stmt).expect_err(exp_error).check();
+}
+
+/// Executes `stmt` on a default `Tester` instance and checks that it fails with
+/// `exp_uncatchable_error`.
+pub fn check_stmt_uncatchable_err<S: Into<String>>(exp_error: S, stmt: &str) {
+    Tester::default().run(stmt).expect_uncatchable_err(exp_error).check();
 }
 
 /// Executes `expr` on a scripting interpreter and ensures that the result is `exp_value`.
