@@ -329,7 +329,7 @@ impl Console for TerminalConsole {
             match self.on_key_rx.try_recv() {
                 Ok(k) => Ok(Some(k)),
                 Err(TryRecvError::Empty) => Ok(None),
-                Err(TryRecvError::Closed) => panic!("Channel unexpectedly closed"),
+                Err(TryRecvError::Closed) => Ok(Some(Key::Eof)),
             }
         } else {
             Err(io::Error::new(io::ErrorKind::Other, "Cannot poll keys from stdin"))
@@ -337,7 +337,10 @@ impl Console for TerminalConsole {
     }
 
     async fn read_key(&mut self) -> io::Result<Key> {
-        Ok(self.on_key_rx.recv().await.unwrap())
+        match self.on_key_rx.recv().await {
+            Ok(k) => Ok(k),
+            Err(_) => Ok(Key::Eof),
+        }
     }
 
     fn show_cursor(&mut self) -> io::Result<()> {
