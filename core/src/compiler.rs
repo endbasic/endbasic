@@ -40,6 +40,31 @@ impl Error {
 /// Result for compiler return values.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Indicates the type of fixup required at the address.
+enum FixupType {
+    Gosub,
+    Goto,
+}
+
+/// Describes a location in the code needs fixing up after all addresses have been laid out.
+struct Fixup {
+    target: String,
+    target_pos: LineCol,
+    ftype: FixupType,
+}
+
+impl Fixup {
+    /// Constructs a `Fixup` for a `GOSUB` instruction.
+    fn from_gosub(span: GotoSpan) -> Self {
+        Self { target: span.target, target_pos: span.target_pos, ftype: FixupType::Gosub }
+    }
+
+    /// Constructs a `Fixup` for a `GOTO` instruction.
+    fn from_goto(span: GotoSpan) -> Self {
+        Self { target: span.target, target_pos: span.target_pos, ftype: FixupType::Goto }
+    }
+}
+
 /// Compilation context to accumulate the results of the translation of various translation units.
 #[derive(Default)]
 struct Compiler {
@@ -49,9 +74,8 @@ struct Compiler {
     /// Mapping of discovered labels to the addresses where they are.
     labels: HashMap<String, Address>,
 
-    /// Location of the `GOTO` and `GOSUB` statements that require patching once labels have been
-    /// discovered.  The boolean indicates whether this is a `GOSUB` or not.
-    unresolved_gotos: HashMap<Address, (GotoSpan, bool)>,
+    /// Mapping of addresses that need fixing up to the type of the fixup they require.
+    fixups: HashMap<Address, Fixup>,
 
     /// Instructions compiled so far.
     instrs: Vec<Instruction>,
@@ -202,13 +226,13 @@ impl Compiler {
             }
 
             Statement::Gosub(span) => {
-                let goto_pc = self.emit(Instruction::Nop);
-                self.unresolved_gotos.insert(goto_pc, (span, true));
+                let gosub_pc = self.emit(Instruction::Nop);
+                self.fixups.insert(gosub_pc, Fixup::from_gosub(span));
             }
 
             Statement::Goto(span) => {
                 let goto_pc = self.emit(Instruction::Nop);
-                self.unresolved_gotos.insert(goto_pc, (span, false));
+                self.fixups.insert(goto_pc, Fixup::from_goto(span));
             }
 
             Statement::If(span) => {
@@ -249,21 +273,20 @@ impl Compiler {
     /// Finishes compilation and returns the image representing the compiled program.
     #[allow(clippy::wrong_self_convention)]
     fn to_image(mut self) -> Result<Image> {
-        for (pc, (span, is_gosub)) in self.unresolved_gotos {
-            let addr = match self.labels.get(&span.target) {
+        for (pc, fixup) in self.fixups {
+            let addr = match self.labels.get(&fixup.target) {
                 Some(addr) => *addr,
                 None => {
                     return Err(Error::new(
-                        span.target_pos,
-                        format!("Unknown label {}", span.target),
+                        fixup.target_pos,
+                        format!("Unknown label {}", fixup.target),
                     ));
                 }
             };
 
-            if is_gosub {
-                self.instrs[pc] = Instruction::Call(JumpSpan { addr });
-            } else {
-                self.instrs[pc] = Instruction::Jump(JumpSpan { addr });
+            match fixup.ftype {
+                FixupType::Gosub => self.instrs[pc] = Instruction::Call(JumpSpan { addr }),
+                FixupType::Goto => self.instrs[pc] = Instruction::Jump(JumpSpan { addr }),
             }
         }
         Ok(Image { instrs: self.instrs, data: self.data })
