@@ -71,11 +71,14 @@ pub enum Token {
     Else,
     Elseif,
     End,
+    Error,
     For,
     Gosub,
     Goto,
     If,
     Next,
+    On,
+    Resume,
     Return,
     Step,
     Then,
@@ -139,11 +142,14 @@ impl fmt::Display for Token {
             Token::Else => write!(f, "ELSE"),
             Token::Elseif => write!(f, "ELSEIF"),
             Token::End => write!(f, "END"),
+            Token::Error => write!(f, "ERROR"),
             Token::For => write!(f, "FOR"),
             Token::Gosub => write!(f, "GOSUB"),
             Token::Goto => write!(f, "GOTO"),
             Token::If => write!(f, "IF"),
             Token::Next => write!(f, "NEXT"),
+            Token::On => write!(f, "ON"),
+            Token::Resume => write!(f, "RESUME"),
             Token::Return => write!(f, "RETURN"),
             Token::Step => write!(f, "STEP"),
             Token::Then => write!(f, "THEN"),
@@ -399,6 +405,7 @@ impl<'a> Lexer<'a> {
             "ELSE" => Token::Else,
             "ELSEIF" => Token::Elseif,
             "END" => Token::End,
+            "ERROR" => Token::Error,
             "FALSE" => Token::Boolean(false),
             "FOR" => Token::For,
             "GOSUB" => Token::Gosub,
@@ -408,8 +415,10 @@ impl<'a> Lexer<'a> {
             "MOD" => Token::Modulo,
             "NEXT" => Token::Next,
             "NOT" => Token::Not,
+            "ON" => Token::On,
             "OR" => Token::Or,
             "REM" => return self.consume_rest_of_line(),
+            "RESUME" => Token::Resume,
             "RETURN" => Token::Return,
             "STEP" => Token::Step,
             "STRING" => Token::TextName,
@@ -963,6 +972,35 @@ mod tests {
                 ts(Token::Eof, 1, 19, 0),
             ],
         );
+    }
+
+    #[test]
+    fn test_on_error() {
+        for s in ["ON ERROR GOTO @foo", "on error goto @foo"] {
+            do_ok_test(
+                s,
+                &[
+                    ts(Token::On, 1, 1, 2),
+                    ts(Token::Error, 1, 4, 5),
+                    ts(Token::Goto, 1, 10, 4),
+                    ts(Token::Label("foo".to_owned()), 1, 15, 4),
+                    ts(Token::Eof, 1, 19, 0),
+                ],
+            );
+        }
+
+        for s in ["ON ERROR RESUME NEXT", "on error resume next"] {
+            do_ok_test(
+                s,
+                &[
+                    ts(Token::On, 1, 1, 2),
+                    ts(Token::Error, 1, 4, 5),
+                    ts(Token::Resume, 1, 10, 6),
+                    ts(Token::Next, 1, 17, 4),
+                    ts(Token::Eof, 1, 21, 0),
+                ],
+            );
+        }
     }
 
     #[test]

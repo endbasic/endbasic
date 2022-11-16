@@ -100,6 +100,28 @@ GOSUB-style subroutines look like this:
     GOSUB @sub
 
 [38;5;11m[2J[1;1H
+ EndBASIC tour: Error handling
+===============================
+[39m
+Certain types of errors can be caught for inspection and program recovery.
+
+To jump to a label when a recoverable error is caught:
+
+    ON ERROR GOTO @label
+
+To continue execution at the next statement after an error is caught:
+
+    ON ERROR RESUME NEXT
+
+To reset the error handler to its default, which terminates program execution
+on an error:
+
+    ON ERROR GOTO 0
+
+The ERRMSG variable is set to the string that describes the error that was
+caught.
+
+[38;5;11m[2J[1;1H
  EndBASIC tour: File manipulation
 ==================================
 [39m

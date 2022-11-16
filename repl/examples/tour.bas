@@ -135,6 +135,26 @@ PRINT "    @main"
 PRINT "    GOSUB @sub"
 GOSUB @wait
 
+title = "Error handling": GOSUB @banner
+PRINT "Certain types of errors can be caught for inspection and program recovery."
+PRINT
+PRINT "To jump to a label when a recoverable error is caught:"
+PRINT
+PRINT "    ON ERROR GOTO @label"
+PRINT
+PRINT "To continue execution at the next statement after an error is caught:"
+PRINT
+PRINT "    ON ERROR RESUME NEXT"
+PRINT
+PRINT "To reset the error handler to its default, which terminates program execution"
+PRINT "on an error:"
+PRINT
+PRINT "    ON ERROR GOTO 0"
+PRINT
+PRINT "The ERRMSG variable is set to the string that describes the error that was"
+PRINT "caught."
+GOSUB @wait
+
 title = "File manipulation": GOSUB @banner
 PRINT "Given that you are reading this tour, you have already encountered how to"
 PRINT "load a program and run it.  But here is how you'd go about creating a new"

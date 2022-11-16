@@ -46,6 +46,7 @@ currently supports:
 *   `GOSUB @label` / `RETURN` for procedure execution.
 *   `GOTO @label` statements and `@label` annotations.
 *   `WHILE ...` / `WEND` loops.
+*   Error handling via `ON ERROR GOTO` and `ON ERROR RESUME NEXT`.
 *   UTF-8 everywhere (I think).
 
 ## Design principles

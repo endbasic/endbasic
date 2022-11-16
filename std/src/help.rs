@@ -57,6 +57,11 @@ const LANG_REFERENCE: &str = r"
         FOR varref = expr TO expr [STEP int]: ...: NEXT
         WHILE expr: ...: WEND
 
+    Error handling:
+        ON ERROR GOTO 0         Terminate program execution on error.
+        ON ERROR GOTO @label    Jump to @label on error.
+        ON ERROR RESUME NEXT    Skip to the next statement on error.
+
     Misc:
         st1: st2     Separates statements (same as a newline).
         REM text     Comment until end of line.
@@ -672,7 +677,9 @@ mod tests {
         let mut t =
             tester().add_command(DoNothingCommand::new()).add_function(EmptyFunction::new());
 
-        t.run(r#"HELP foo bar"#).expect_err("1:10: Unexpected value in expression").check();
+        t.run(r#"HELP foo bar"#)
+            .expect_uncatchable_err("1:10: Unexpected value in expression")
+            .check();
         t.run(r#"HELP "foo", bar"#).expect_err("1:1: In call to HELP: expected [topic$]").check();
         t.run(r#"HELP foo"#).expect_err("1:1: In call to HELP: expected [topic$]").check();
         t.run(r#"HELP 3"#).expect_err("1:1: In call to HELP: expected [topic$]").check();

@@ -566,6 +566,19 @@ pub struct LabelSpan {
     pub name_pos: LineCol,
 }
 
+/// Components of an `ON ERROR` statement.
+#[derive(Debug, Eq, PartialEq)]
+pub enum OnErrorSpan {
+    /// Components of an `ON ERROR GOTO @label` statement.
+    Goto(GotoSpan),
+
+    /// Components of an `ON ERROR GOTO 0` statement.
+    Reset,
+
+    /// Components of an `ON ERROR RESUME NEXT` statement.
+    ResumeNext,
+}
+
 /// Components of a `RETURN` statement.
 #[derive(Debug, Eq, PartialEq)]
 pub struct ReturnSpan {
@@ -618,6 +631,9 @@ pub enum Statement {
 
     /// Represents a label "statement".
     Label(LabelSpan),
+
+    /// Represents an `ON ERROR` statement.
+    OnError(OnErrorSpan),
 
     /// Represents a `RETURN` statement.
     Return(ReturnSpan),
