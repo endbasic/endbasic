@@ -25,17 +25,18 @@ use crate::syms::{
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::io;
 use std::rc::Rc;
 
 /// Returns the error type asked for in an argument.
-pub struct ErrorFunction {
+pub struct RaiseFunction {
     metadata: CallableMetadata,
 }
 
-impl ErrorFunction {
+impl RaiseFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("ERROR", VarType::Boolean)
+            metadata: CallableMetadataBuilder::new("RAISE", VarType::Boolean)
                 .with_syntax("arg1$")
                 .test_build(),
         })
@@ -43,7 +44,7 @@ impl ErrorFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for ErrorFunction {
+impl Function for RaiseFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -59,6 +60,8 @@ impl Function for ErrorFunction {
                     Err(Error::new(pos, "Some eval error").into())
                 } else if s == "internal" {
                     Err(CallError::InternalError(pos, "Some internal error".to_owned()))
+                } else if s == "io" {
+                    Err(io::Error::new(io::ErrorKind::Other, "Some I/O error".to_owned()).into())
                 } else if s == "syntax" {
                     Err(CallError::SyntaxError)
                 } else {
