@@ -862,15 +862,15 @@ mod tests {
 
     #[test]
     fn test_expr_function_error_check() {
-        let mut syms = SymbolsBuilder::default().add_function(ErrorFunction::new()).build();
+        let mut syms = SymbolsBuilder::default().add_function(RaiseFunction::new()).build();
 
         assert_eq!(
-            "1:1: In call to ERROR: 4:5: Bad argument",
+            "1:1: In call to RAISE: 4:5: Bad argument",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
-                        fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
+                        fref: VarRef::new("RAISE".to_owned(), VarType::Auto),
                         args: vec![Expr::Text(TextSpan {
                             value: "argument".to_owned(),
                             pos: lc(4, 5)
@@ -884,12 +884,12 @@ mod tests {
         );
 
         assert_eq!(
-            "3:2: In call to ERROR: 4:5: Some eval error",
+            "3:2: In call to RAISE: 4:5: Some eval error",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
-                        fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
+                        fref: VarRef::new("RAISE".to_owned(), VarType::Auto),
                         args: vec![Expr::Text(TextSpan {
                             value: "eval".to_owned(),
                             pos: lc(4, 5)
@@ -903,12 +903,12 @@ mod tests {
         );
 
         assert_eq!(
-            "5:1: In call to ERROR: 4:5: Some internal error",
+            "5:1: In call to RAISE: 4:5: Some internal error",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
-                        fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
+                        fref: VarRef::new("RAISE".to_owned(), VarType::Auto),
                         args: vec![Expr::Text(TextSpan {
                             value: "internal".to_owned(),
                             pos: lc(4, 5)
@@ -922,12 +922,28 @@ mod tests {
         );
 
         assert_eq!(
-            "7:4: In call to ERROR: expected arg1$",
+            "5:1: In call to RAISE: Some I/O error",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
-                        fref: VarRef::new("ERROR".to_owned(), VarType::Auto),
+                        fref: VarRef::new("RAISE".to_owned(), VarType::Auto),
+                        args: vec![Expr::Text(TextSpan { value: "io".to_owned(), pos: lc(4, 5) })],
+                        pos: lc(5, 1),
+                    })
+                    .eval(&mut syms)
+                )
+                .unwrap_err()
+            )
+        );
+
+        assert_eq!(
+            "7:4: In call to RAISE: expected arg1$",
+            format!(
+                "{}",
+                block_on(
+                    Expr::Call(FunctionCallSpan {
+                        fref: VarRef::new("RAISE".to_owned(), VarType::Auto),
                         args: vec![expr_text("syntax")],
                         pos: lc(7, 4),
                     })
