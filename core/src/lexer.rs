@@ -472,13 +472,25 @@ impl<'a> Lexer<'a> {
     /// Consumes the label definition at the current position.
     fn consume_label(&mut self, first: CharSpan) -> io::Result<TokenSpan> {
         let mut s = String::new();
+
+        match self.input.peek() {
+            Some(Ok(ch_span)) => match ch_span.ch {
+                ch if ch.is_word() && !ch.is_numeric() => s.push(self.input.next().unwrap()?.ch),
+                _ch => (),
+            },
+            Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
+            None => (),
+        }
+        if s.is_empty() {
+            return Ok(TokenSpan::new(Token::Bad("Empty label name".to_owned()), first.pos, 1));
+        }
+
         loop {
             match self.input.peek() {
                 Some(Ok(ch_span)) => match ch_span.ch {
                     ch if ch.is_word() => s.push(self.input.next().unwrap()?.ch),
                     ch if ch.is_separator() => break,
                     ch => {
-                        self.input.next().unwrap()?;
                         let msg = format!("Unexpected character in label: {}", ch);
                         return self.handle_bad_read(msg, first.pos);
                     }
@@ -487,9 +499,7 @@ impl<'a> Lexer<'a> {
                 None => break,
             }
         }
-        if s.is_empty() {
-            return Ok(TokenSpan::new(Token::Bad("Empty label name".to_owned()), first.pos, 1));
-        }
+
         let token_len = s.len() + 1;
         Ok(TokenSpan::new(Token::Label(s), first.pos, token_len))
     }
@@ -963,12 +973,12 @@ mod tests {
     #[test]
     fn test_label() {
         do_ok_test(
-            "@Foo123 @a @Z @123",
+            "@Foo123 @a @Z @_ok",
             &[
                 ts(Token::Label("Foo123".to_owned()), 1, 1, 7),
                 ts(Token::Label("a".to_owned()), 1, 9, 2),
                 ts(Token::Label("Z".to_owned()), 1, 12, 2),
-                ts(Token::Label("123".to_owned()), 1, 15, 4),
+                ts(Token::Label("_ok".to_owned()), 1, 15, 4),
                 ts(Token::Eof, 1, 19, 0),
             ],
         );
@@ -1214,6 +1224,15 @@ mod tests {
                 ts(Token::Bad("Empty label name".to_owned()), 1, 1, 1),
                 ts(Token::Plus, 1, 2, 1),
                 ts(Token::Eof, 1, 3, 0),
+            ],
+        );
+
+        do_ok_test(
+            "@123",
+            &[
+                ts(Token::Bad("Empty label name".to_owned()), 1, 1, 1),
+                ts(Token::Integer(123), 1, 2, 3),
+                ts(Token::Eof, 1, 5, 0),
             ],
         );
     }
