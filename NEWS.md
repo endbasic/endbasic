@@ -14,9 +14,9 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
-*   Added support for labels and `GOTO`.  At this point, label names must be
-    prefixed with an `@` sign to resolve parsing ambiguities with the `:` line
-    delimiter.
+*   Issue #153: Added support for labels and `GOTO`.  At this point, label
+    names must be prefixed with an `@` sign to resolve parsing ambiguities with
+    the `:` line delimiter.
 
 *   Modified the interpreter to parse the full program before executing it,
     which is a requirement for supporting `GOTO`s and features like `DATA`.
@@ -84,9 +84,9 @@ for the time being.**
 
 *   Added support for `GOSUB` and `RETURN`.
 
-*   Added support for catching errors via `ON ERROR GOTO` and `ON ERROR
-    RESUME NEXT`, both of which set a new `ERRMSG` variable with the details
-    of the error that was caught.
+*   Issue #121: Added support for catching errors via `ON ERROR GOTO` and `ON
+    ERROR RESUME NEXT`, both of which set a new `ERRMSG` variable with the
+    details of the error that was caught.
 
 ## Changes in version 0.9.0
 
