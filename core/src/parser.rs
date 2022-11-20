@@ -1124,12 +1124,9 @@ impl<'a> Parser<'a> {
                 Ok(Some(result?))
             }
             Token::Label(name) => {
-                // Handling a label here means that it must be followed by a newline, which might
-                // seem "strange" considering that other languages allow specifying a label in the
-                // same line as other code.  This is intentional to keep the parser simpler.  And,
-                // in any case, because line separators can be a colon character, placing one after
-                // the label name to join it with a statement looks "natural".
-                Ok(Some(Statement::Label(LabelSpan { name, name_pos: token_span.pos })))
+                // When we encounter a label, we must return early to avoid looking for a line
+                // ending given that the next statement may start after the label we found.
+                return Ok(Some(Statement::Label(LabelSpan { name, name_pos: token_span.pos })));
             }
             Token::On => Ok(Some(self.parse_on()?)),
             Token::Return => Ok(Some(Statement::Return(ReturnSpan { pos: token_span.pos }))),
@@ -2826,17 +2823,41 @@ mod tests {
     }
 
     #[test]
-    fn test_label_ok() {
+    fn test_label_own_line() {
         do_ok_test(
-            "@foo",
-            &[Statement::Label(LabelSpan { name: "foo".to_owned(), name_pos: lc(1, 1) })],
+            "@foo\nPRINT",
+            &[
+                Statement::Label(LabelSpan { name: "foo".to_owned(), name_pos: lc(1, 1) }),
+                make_bare_builtin_call("PRINT", 2, 1),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_label_before_statement() {
+        do_ok_test(
+            "@foo PRINT",
+            &[
+                Statement::Label(LabelSpan { name: "foo".to_owned(), name_pos: lc(1, 1) }),
+                make_bare_builtin_call("PRINT", 1, 6),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_label_multiple_same_line() {
+        do_ok_test(
+            "@foo @bar",
+            &[
+                Statement::Label(LabelSpan { name: "foo".to_owned(), name_pos: lc(1, 1) }),
+                Statement::Label(LabelSpan { name: "bar".to_owned(), name_pos: lc(1, 6) }),
+            ],
         );
     }
 
     #[test]
     fn test_label_errors() {
-        do_error_test("@foo PRINT", "1:6: Expected newline but found PRINT");
-        do_error_test("@foo+", "1:5: Expected newline but found +");
+        do_error_test("PRINT @foo", "1:7: Unexpected keyword in expression");
     }
 
     #[test]
