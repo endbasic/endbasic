@@ -45,6 +45,6 @@ WHILE TRUE
     IF i = 5 THEN: GOTO @done: END IF
     i = i + 1
     GOTO @start
-    @done: GOTO @out
+    @done GOTO @out
 WEND
-@out: PRINT "Escaped infinite loop"
+@out PRINT "Escaped infinite loop"

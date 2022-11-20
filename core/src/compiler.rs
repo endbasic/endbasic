@@ -670,7 +670,7 @@ mod tests {
     #[test]
     fn test_compile_goto() {
         Tester::default()
-            .parse("@first: GOTO @second")
+            .parse("@first GOTO @second")
             .parse("@second: GOTO @first")
             .compile()
             .expect_instr(0, Instruction::Jump(JumpSpan { addr: 1 }))
