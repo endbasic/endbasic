@@ -273,21 +273,9 @@ impl Command for ListCommand {
         if !span.args.is_empty() {
             return Err(CallError::SyntaxError);
         }
-        let program = self.program.borrow().text();
-        let program: Vec<&str> = program.lines().collect();
-        let digits = {
-            let mut digits = 0;
-            let mut count = program.len();
-            while count > 0 {
-                digits += 1;
-                count /= 10;
-            }
-            digits
-        };
         let mut console = self.console.borrow_mut();
-        for (i, line) in program.into_iter().enumerate() {
-            let formatted = format!("{:digits$} | {}", i + 1, line, digits = digits);
-            console.print(&formatted)?;
+        for line in self.program.borrow().text().lines() {
+            console.print(line)?;
         }
         Ok(())
     }
@@ -636,18 +624,8 @@ mod tests {
         Tester::default()
             .set_program(None, "one\n\nthree\n")
             .run("LIST")
-            .expect_prints(["1 | one", "2 | ", "3 | three"])
+            .expect_prints(["one", "", "three"])
             .expect_program(None as Option<&str>, "one\n\nthree\n")
-            .check();
-
-        Tester::default()
-            .set_program(None, "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n")
-            .run("LIST")
-            .expect_prints([
-                " 1 | a", " 2 | b", " 3 | c", " 4 | d", " 5 | e", " 6 | f", " 7 | g", " 8 | h",
-                " 9 | i", "10 | j",
-            ])
-            .expect_program(None as Option<&str>, "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n")
             .check();
     }
 
