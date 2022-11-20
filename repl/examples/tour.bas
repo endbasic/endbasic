@@ -118,28 +118,31 @@ title = "Unstructured control flow": GOSUB @banner
 PRINT "Labels and jumps look like this:"
 PRINT
 PRINT "    i% = 1"
-PRINT "    @repeat"
-PRINT "    PRINT i%"
+PRINT "    20 PRINT i%"
 PRINT "    IF i% = 10 THEN: GOTO @out: END IF"
 PRINT "    i% = i% + 1"
-PRINT "    GOTO @repeat"
+PRINT "    GOTO 20"
 PRINT "    @out"
 PRINT
 PRINT "GOSUB-style subroutines look like this:"
 PRINT
 PRINT "    GOTO @main"
-PRINT "    @sub"
+PRINT "    100"
 PRINT "    PRINT \"Hello from subroutine!\""
 PRINT "    RETURN"
 PRINT "    @main"
-PRINT "    GOSUB @sub"
+PRINT "    GOSUB 100"
+PRINT
+PRINT "Note that GOTO and GOSUB targets can be both @-labels and explicitly assigned"
+PRINT "line numbers."
 GOSUB @wait
 
 title = "Error handling": GOSUB @banner
 PRINT "Certain types of errors can be caught for inspection and program recovery."
 PRINT
-PRINT "To jump to a label when a recoverable error is caught:"
+PRINT "To jump to a line number or label when a recoverable error is caught:"
 PRINT
+PRINT "    ON ERROR GOTO 100"
 PRINT "    ON ERROR GOTO @label"
 PRINT
 PRINT "To continue execution at the next statement after an error is caught:"

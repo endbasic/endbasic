@@ -788,6 +788,10 @@ impl<'a> Parser<'a> {
     fn parse_gosub(&mut self) -> Result<Statement> {
         let token_span = self.lexer.read()?;
         match token_span.token {
+            Token::Integer(i) => {
+                let target = format!("{}", i);
+                Ok(Statement::Gosub(GotoSpan { target, target_pos: token_span.pos }))
+            }
             Token::Label(target) => {
                 Ok(Statement::Gosub(GotoSpan { target, target_pos: token_span.pos }))
             }
@@ -799,6 +803,10 @@ impl<'a> Parser<'a> {
     fn parse_goto(&mut self) -> Result<Statement> {
         let token_span = self.lexer.read()?;
         match token_span.token {
+            Token::Integer(i) => {
+                let target = format!("{}", i);
+                Ok(Statement::Goto(GotoSpan { target, target_pos: token_span.pos }))
+            }
             Token::Label(target) => {
                 Ok(Statement::Goto(GotoSpan { target, target_pos: token_span.pos }))
             }
@@ -1027,7 +1035,11 @@ impl<'a> Parser<'a> {
             Token::Goto => {
                 let token_span = self.lexer.read()?;
                 match token_span.token {
-                    Token::Integer(0) => Ok(Statement::OnError(OnErrorSpan::Reset)),
+                    Token::Integer(i) if i == 0 => Ok(Statement::OnError(OnErrorSpan::Reset)),
+                    Token::Integer(i) => Ok(Statement::OnError(OnErrorSpan::Goto(GotoSpan {
+                        target: format!("{}", i),
+                        target_pos: token_span.pos,
+                    }))),
                     Token::Label(target) => Ok(Statement::OnError(OnErrorSpan::Goto(GotoSpan {
                         target,
                         target_pos: token_span.pos,
@@ -1122,6 +1134,12 @@ impl<'a> Parser<'a> {
             Token::Goto => {
                 let result = self.parse_goto();
                 Ok(Some(result?))
+            }
+            Token::Integer(i) => {
+                let name = format!("{}", i);
+                // When we encounter a line number, we must return early to avoid looking for a line
+                // ending given that the next statement may start after the label we found.
+                return Ok(Some(Statement::Label(LabelSpan { name, name_pos: token_span.pos })));
             }
             Token::Label(name) => {
                 // When we encounter a label, we must return early to avoid looking for a line
@@ -1417,7 +1435,6 @@ mod tests {
         do_error_test("a = b, 3", "1:6: Unexpected , in assignment");
         do_error_test("a = if 3", "1:5: Unexpected keyword in expression");
         do_error_test("true = 1", "1:1: Unexpected TRUE in statement");
-        do_error_test("3 = a", "1:1: Unexpected 3 in statement");
     }
 
     #[test]
@@ -2789,6 +2806,11 @@ mod tests {
     #[test]
     fn test_gosub_ok() {
         do_ok_test(
+            "GOSUB 10",
+            &[Statement::Gosub(GotoSpan { target: "10".to_owned(), target_pos: lc(1, 7) })],
+        );
+
+        do_ok_test(
             "GOSUB @foo",
             &[Statement::Gosub(GotoSpan { target: "foo".to_owned(), target_pos: lc(1, 7) })],
         );
@@ -2797,7 +2819,6 @@ mod tests {
     #[test]
     fn test_gosub_errors() {
         do_error_test("GOSUB\n", "1:6: Expected label name after GOSUB");
-        do_error_test("GOSUB 3\n", "1:7: Expected label name after GOSUB");
         do_error_test("GOSUB foo\n", "1:7: Expected label name after GOSUB");
         do_error_test("GOSUB \"foo\"\n", "1:7: Expected label name after GOSUB");
         do_error_test("GOSUB @foo, @bar\n", "1:11: Expected newline but found ,");
@@ -2807,6 +2828,11 @@ mod tests {
     #[test]
     fn test_goto_ok() {
         do_ok_test(
+            "GOTO 10",
+            &[Statement::Goto(GotoSpan { target: "10".to_owned(), target_pos: lc(1, 6) })],
+        );
+
+        do_ok_test(
             "GOTO @foo",
             &[Statement::Goto(GotoSpan { target: "foo".to_owned(), target_pos: lc(1, 6) })],
         );
@@ -2815,7 +2841,6 @@ mod tests {
     #[test]
     fn test_goto_errors() {
         do_error_test("GOTO\n", "1:5: Expected label name after GOTO");
-        do_error_test("GOTO 3\n", "1:6: Expected label name after GOTO");
         do_error_test("GOTO foo\n", "1:6: Expected label name after GOTO");
         do_error_test("GOTO \"foo\"\n", "1:6: Expected label name after GOTO");
         do_error_test("GOTO @foo, @bar\n", "1:10: Expected newline but found ,");
@@ -2865,6 +2890,14 @@ mod tests {
         do_ok_test("ON ERROR GOTO 0", &[Statement::OnError(OnErrorSpan::Reset)]);
 
         do_ok_test(
+            "ON ERROR GOTO 10",
+            &[Statement::OnError(OnErrorSpan::Goto(GotoSpan {
+                target: "10".to_owned(),
+                target_pos: lc(1, 15),
+            }))],
+        );
+
+        do_ok_test(
             "ON ERROR GOTO @foo",
             &[Statement::OnError(OnErrorSpan::Goto(GotoSpan {
                 target: "foo".to_owned(),
@@ -2887,7 +2920,6 @@ mod tests {
         do_error_test("ON ERROR RESUME NEXT 3", "1:22: Expected newline but found 3");
 
         do_error_test("ON ERROR GOTO", "1:14: Expected label name or 0 after ON ERROR GOTO");
-        do_error_test("ON ERROR GOTO 100", "1:15: Expected label name or 0 after ON ERROR GOTO");
         do_error_test("ON ERROR GOTO NEXT", "1:15: Expected label name or 0 after ON ERROR GOTO");
         do_error_test("ON ERROR GOTO 0 @a", "1:17: Expected newline but found @a");
     }

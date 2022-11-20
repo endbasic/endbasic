@@ -1223,9 +1223,9 @@ mod tests {
             r#"
                 i = 10
                 GOSUB @sub
-                GOSUB @sub
+                GOSUB 20
                 GOTO @end
-                @sub: OUT i: i = i + 1: RETURN
+                @sub 20: OUT i: i = i + 1: RETURN
                 @end
             "#,
             &[],
@@ -1330,16 +1330,18 @@ mod tests {
 
     #[test]
     fn test_goto_middle_of_line() {
-        do_ok_test("GOTO @middle\nOUT 1: @middle: OUT 2", &[], &["2"]);
+        do_ok_test("GOTO 20\nOUT 1: 20 OUT 2", &[], &["2"]);
     }
 
     #[test]
     fn test_goto_errors() {
+        do_simple_error_test("GOTO 10", "1:6: Unknown label 10");
         do_simple_error_test("GOTO @foo", "1:6: Unknown label foo");
     }
 
     #[test]
     fn test_label_ok() {
+        do_ok_test("OUT 1: 10: 20 OUT 2", &[], &["1", "2"]);
         do_ok_test("OUT 1: @foo: OUT 2", &[], &["1", "2"]);
     }
 
@@ -1376,6 +1378,21 @@ mod tests {
             @out
             "#,
             "8:25: Duplicate label a",
+        );
+    }
+
+    #[test]
+    fn test_on_error_goto_line() {
+        do_ok_test(
+            r#"
+            ON ERROR GOTO 100
+            OUT 1
+            OUT RAISE("syntax")
+            OUT 2
+            100 OUT ERRMSG
+            "#,
+            &[],
+            &["1", "4:17: In call to RAISE: expected arg1$"],
         );
     }
 

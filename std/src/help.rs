@@ -51,14 +51,15 @@ const LANG_REFERENCE: &str = r"
         arrayref(s1[, ..., sN])          funcref(a1[, ..., aN])
 
     Flow control:
-        GOSUB @label: @label RETURN
-        @label1 @label2: GOTO @label1
+        10 GOTO 10: @label GOTO @label
+        10 RETURN: GOSUB 10: @label RETURN: GOSUB @label
         IF expr THEN: ...: ELSEIF expr THEN: ...: ELSE: ...: END IF
         FOR varref = expr TO expr [STEP int]: ...: NEXT
         WHILE expr: ...: WEND
 
     Error handling:
         ON ERROR GOTO 0         Terminate program execution on error.
+        ON ERROR GOTO 100       Jump to line 100 on error.
         ON ERROR GOTO @label    Jump to @label on error.
         ON ERROR RESUME NEXT    Skip to the next statement on error.
 

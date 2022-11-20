@@ -83,21 +83,23 @@ For loops look like this:
 Labels and jumps look like this:
 
     i% = 1
-    @repeat
-    PRINT i%
+    20 PRINT i%
     IF i% = 10 THEN: GOTO @out: END IF
     i% = i% + 1
-    GOTO @repeat
+    GOTO 20
     @out
 
 GOSUB-style subroutines look like this:
 
     GOTO @main
-    @sub
+    100
     PRINT "Hello from subroutine!"
     RETURN
     @main
-    GOSUB @sub
+    GOSUB 100
+
+Note that GOTO and GOSUB targets can be both @-labels and explicitly assigned
+line numbers.
 
 [38;5;11m[2J[1;1H
  EndBASIC tour: Error handling
@@ -105,8 +107,9 @@ GOSUB-style subroutines look like this:
 [39m
 Certain types of errors can be caught for inspection and program recovery.
 
-To jump to a label when a recoverable error is caught:
+To jump to a line number or label when a recoverable error is caught:
 
+    ON ERROR GOTO 100
     ON ERROR GOTO @label
 
 To continue execution at the next statement after an error is caught:
