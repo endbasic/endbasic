@@ -88,11 +88,12 @@ for the time being.**
     ERROR RESUME NEXT`, both of which set a new `ERRMSG` variable with the
     details of the error that was caught.
 
-#   Issue #155: Added support for "line numbers as labels", just like
+*   Issue #155: Added support for "line numbers as labels", just like
     QuickBASIC does, which permits running the traditional `10 GOTO 10`
     program.  Note, however, that these line numbers have nothing to do with
     the actual line numbers in the file and that's something I still would
-    like to address somehow in the future.
+    like to address somehow in the future.  On this topic, also removed line
+    numbers from the output of `LIST`.
 
 ## Changes in version 0.9.0
 
