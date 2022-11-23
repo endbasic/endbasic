@@ -20,7 +20,7 @@ use crate::spec::Resolution;
 use async_channel::Sender;
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
-use endbasic_std::console::{CharsXY, ClearType, Console, Key, PixelsXY};
+use endbasic_std::console::{remove_control_chars, CharsXY, ClearType, Console, Key, PixelsXY};
 use std::io;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError};
@@ -135,7 +135,8 @@ impl Console for SdlConsole {
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
-        self.call(Request::Print(text.to_owned()))
+        let text = remove_control_chars(text);
+        self.call(Request::Print(text))
     }
 
     async fn poll_key(&mut self) -> io::Result<Option<Key>> {
@@ -163,7 +164,8 @@ impl Console for SdlConsole {
     }
 
     fn write(&mut self, text: &str) -> io::Result<()> {
-        self.call(Request::Write(text.to_owned()))
+        let text = remove_control_chars(text);
+        self.call(Request::Write(text))
     }
 
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {

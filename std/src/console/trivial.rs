@@ -15,7 +15,9 @@
 
 //! Trivial stdio-based console implementation for when we have nothing else.
 
-use crate::console::{get_env_var_as_u16, read_key_from_stdin, CharsXY, ClearType, Console, Key};
+use crate::console::{
+    get_env_var_as_u16, read_key_from_stdin, remove_control_chars, CharsXY, ClearType, Console, Key,
+};
 use async_trait::async_trait;
 use std::collections::VecDeque;
 use std::io::{self, StdoutLock, Write};
@@ -82,7 +84,7 @@ impl Console for TrivialConsole {
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!crate::console::has_control_chars_str(text));
+        let text = remove_control_chars(text);
 
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
@@ -110,7 +112,7 @@ impl Console for TrivialConsole {
     }
 
     fn write(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!crate::console::has_control_chars_u8(text.as_bytes()));
+        let text = remove_control_chars(text);
 
         let stdout = io::stdout();
         let mut stdout = stdout.lock();

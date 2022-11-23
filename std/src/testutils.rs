@@ -15,12 +15,12 @@
 
 //! Test utilities for consumers of the EndBASIC interpreter.
 
-use crate::console::{self, CharsXY, ClearType, Console, Key, PixelsXY};
+use crate::console::{self, remove_control_chars, CharsXY, ClearType, Console, Key, PixelsXY};
 use crate::gpio;
 use crate::program::Program;
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{Value, VarType};
+use endbasic_core::ast::{Value, VarRef, VarType};
 use endbasic_core::exec::{self, Machine, StopReason};
 use endbasic_core::syms::{Array, Command, Function, Symbol};
 use futures_lite::future::block_on;
@@ -204,9 +204,9 @@ impl Console for MockConsole {
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!console::has_control_chars_str(text));
+        let text = remove_control_chars(text.to_owned());
 
-        self.captured_out.push(CapturedOut::Print(text.to_owned()));
+        self.captured_out.push(CapturedOut::Print(text));
         Ok(())
     }
 
@@ -234,9 +234,9 @@ impl Console for MockConsole {
     }
 
     fn write(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!console::has_control_chars_u8(text.as_bytes()));
+        let text = remove_control_chars(text.to_owned());
 
-        self.captured_out.push(CapturedOut::Write(text.to_owned()));
+        self.captured_out.push(CapturedOut::Write(text));
         Ok(())
     }
 
@@ -432,6 +432,12 @@ impl Tester {
     /// externally-instantiated commands into the testing features.
     pub fn get_storage(&self) -> Rc<RefCell<Storage>> {
         self.storage.clone()
+    }
+
+    /// Sets a variable to an initial value.
+    pub fn set_var(mut self, name: &str, value: Value) -> Self {
+        self.machine.get_mut_symbols().set_var(&VarRef::new(name, VarType::Auto), value).unwrap();
+        self
     }
 
     /// Sets the initial name of the recorded program to `name` (if any) and its contents to `text`.
