@@ -810,7 +810,7 @@ Output from HELP "GPIO_READ":
 
 Output from HELP "INKEY":
 
-    INKEY$()
+    INKEY$
 
     Checks for an available key press and returns it.
 
@@ -828,7 +828,7 @@ Output from HELP "INKEY":
     explicitly poll the keyboard.  For example, to wait until the escape
     key is pressed, you could do:
 
-    k$ = "": WHILE k$ <> "ESC": k = INKEY$(): SLEEP 0.01: WEND
+    k$ = "": WHILE k$ <> "ESC": k = INKEY$: SLEEP 0.01: WEND
 
     This non-blocking design lets you to combine the reception of multiple
     evens, such as from GPIO_INPUT?, within the same loop.
@@ -908,7 +908,7 @@ Output from HELP "MID":
 
 Output from HELP "PI":
 
-    PI#()
+    PI#
 
     Returns the Archimedes' constant.
 

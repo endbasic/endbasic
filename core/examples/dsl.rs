@@ -34,7 +34,7 @@ use std::rc::Rc;
 
 /// Sample code that uses our DSL to control the lights.
 const INPUT: &str = r#"
-total = NUM_LIGHTS()
+total = NUM_LIGHTS
 
 ' Start by turning all lights on.
 FOR i = 1 TO total

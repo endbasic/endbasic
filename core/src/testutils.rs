@@ -82,7 +82,9 @@ impl ExitCommand {
     /// Creates a new command that terminates execution once called.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("EXIT", VarType::Void).test_build(),
+            metadata: CallableMetadataBuilder::new("EXIT", VarType::Void)
+                .with_syntax("code%")
+                .test_build(),
         })
     }
 }
@@ -133,7 +135,10 @@ impl Command for GetDataCommand {
         &self.metadata
     }
 
-    async fn exec(&self, _span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if !span.args.is_empty() {
+            return Err(CallError::SyntaxError);
+        }
         *self.data.borrow_mut() = machine.get_data().to_vec();
         Ok(())
     }
@@ -201,7 +206,9 @@ impl OutCommand {
     /// Creates a new command that captures all calls into `data`.
     pub fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("OUT", VarType::Void).test_build(),
+            metadata: CallableMetadataBuilder::new("OUT", VarType::Void)
+                .with_syntax("[arg1 <;|,> argN]")
+                .test_build(),
             data,
         })
     }
@@ -241,7 +248,9 @@ impl OutfFunction {
     /// Creates a new function that captures all calls into `data`.
     pub fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("OUTF", VarType::Integer).test_build(),
+            metadata: CallableMetadataBuilder::new("OUTF", VarType::Integer)
+                .with_syntax("arg1 [<;|,> argN]")
+                .test_build(),
             data,
         })
     }
@@ -288,7 +297,9 @@ pub struct SumFunction {
 impl SumFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("SUM", VarType::Integer).test_build(),
+            metadata: CallableMetadataBuilder::new("SUM", VarType::Integer)
+                .with_syntax("[n1% .. nN%]")
+                .test_build(),
         })
     }
 }

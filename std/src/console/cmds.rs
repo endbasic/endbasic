@@ -182,7 +182,7 @@ end or CTRL+E (END), enter (ENTER), CTRL+D (EOF), escape (ESC), home or CTRL+A (
 CTRL+C (INT), page up (PGUP), page down (PGDOWN), and tab (TAB).
 This function never blocks.  To wait for a key press, you need to explicitly poll the keyboard.  \
 For example, to wait until the escape key is pressed, you could do:
-k$ = \"\": WHILE k$ <> \"ESC\": k = INKEY$(): SLEEP 0.01: WEND
+k$ = \"\": WHILE k$ <> \"ESC\": k = INKEY$: SLEEP 0.01: WEND
 This non-blocking design lets you to combine the reception of multiple evens, such as from \
 GPIO_INPUT?, within the same loop.",
                 )
@@ -522,19 +522,19 @@ mod tests {
     #[test]
     fn test_inkey_ok() {
         Tester::default()
-            .run("result = INKEY()")
+            .run("result = INKEY")
             .expect_var("result", Value::Text("".to_owned()))
             .check();
 
         Tester::default()
             .add_input_chars("x")
-            .run("result = INKEY()")
+            .run("result = INKEY")
             .expect_var("result", Value::Text("x".to_owned()))
             .check();
 
         Tester::default()
             .add_input_keys(&[Key::CarriageReturn, Key::Backspace, Key::NewLine])
-            .run("r1 = INKEY(): r2 = INKEY(): r3 = INKEY()")
+            .run("r1 = INKEY$: r2 = INKEY: r3 = INKEY$")
             .expect_var("r1", Value::Text("ENTER".to_owned()))
             .expect_var("r2", Value::Text("BS".to_owned()))
             .expect_var("r3", Value::Text("ENTER".to_owned()))
@@ -543,7 +543,14 @@ mod tests {
 
     #[test]
     fn test_inkey_errors() {
-        check_expr_error("1:10: In call to INKEY: expected no arguments", "INKEY(1)");
+        check_expr_error(
+            "1:10: In call to INKEY: expected no arguments nor parenthesis",
+            "INKEY()",
+        );
+        check_expr_error(
+            "1:10: In call to INKEY: expected no arguments nor parenthesis",
+            "INKEY(1)",
+        );
     }
 
     #[test]

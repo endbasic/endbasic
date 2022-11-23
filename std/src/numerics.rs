@@ -838,9 +838,10 @@ mod tests {
 
     #[test]
     fn test_pi() {
-        check_expr_ok(std::f64::consts::PI, "PI()");
+        check_expr_ok(std::f64::consts::PI, "PI");
 
-        check_expr_error("1:10: In call to PI: expected no arguments", "PI(3)");
+        check_expr_error("1:10: In call to PI: expected no arguments nor parenthesis", "PI()");
+        check_expr_error("1:10: In call to PI: expected no arguments nor parenthesis", "PI(3)");
     }
 
     #[test]
