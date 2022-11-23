@@ -722,6 +722,28 @@ mod tests {
     }
 
     #[test]
+    fn test_print_control_chars() {
+        let mut found_any = false;
+        for i in 0..1024 {
+            let ch = char::from_u32(i).unwrap();
+            let ch_var = format!("{}", ch);
+            let exp_ch = if ch.is_control() {
+                found_any = true;
+                " "
+            } else {
+                &ch_var
+            };
+            Tester::default()
+                .set_var("ch", Value::Text(ch_var.clone()))
+                .run("PRINT ch")
+                .expect_prints([exp_ch])
+                .expect_var("ch", Value::Text(ch_var.clone()))
+                .check();
+        }
+        assert!(found_any, "Test did not exercise what we wanted");
+    }
+
+    #[test]
     fn test_print_errors() {
         check_stmt_err(
             "1:1: In call to PRINT: expected [expr1 [<;|,> [.. exprN]]]",

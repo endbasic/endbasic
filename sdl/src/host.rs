@@ -772,7 +772,10 @@ impl Context {
 
     /// Handler for a `Request::Print`.
     fn print(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!endbasic_std::console::has_control_chars_str(text));
+        debug_assert!(
+            !endbasic_std::console::has_control_chars(text),
+            "Must have been stripped off by the client"
+        );
 
         self.clear_cursor()?;
         if !text.is_empty() {
@@ -817,7 +820,10 @@ impl Context {
 
     /// Handler for a `Request::Write`.
     fn write(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!endbasic_std::console::has_control_chars_u8(text.as_bytes()));
+        debug_assert!(
+            !endbasic_std::console::has_control_chars(text),
+            "Must have been stripped off by the client"
+        );
 
         if text.is_empty() {
             return Ok(());

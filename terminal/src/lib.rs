@@ -27,7 +27,7 @@ use async_trait::async_trait;
 use crossterm::{cursor, event, execute, style, terminal, tty::IsTty, QueueableCommand};
 use endbasic_core::exec::Signal;
 use endbasic_std::console::{
-    get_env_var_as_u16, read_key_from_stdin, CharsXY, ClearType, Console, Key,
+    get_env_var_as_u16, read_key_from_stdin, remove_control_chars, CharsXY, ClearType, Console, Key,
 };
 use std::cmp::Ordering;
 use std::collections::VecDeque;
@@ -311,7 +311,7 @@ impl Console for TerminalConsole {
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!endbasic_std::console::has_control_chars_str(text));
+        let text = remove_control_chars(text.to_owned());
 
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
@@ -369,7 +369,7 @@ impl Console for TerminalConsole {
     }
 
     fn write(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!endbasic_std::console::has_control_chars_u8(text.as_bytes()));
+        let text = remove_control_chars(text.to_owned());
 
         let stdout = io::stdout();
         let mut stdout = stdout.lock();

@@ -40,4 +40,8 @@ WHILE row < 10
     row = row + 1
 WEND
 
+FOR i = 0 TO 255
+    PRINT CHR(i);
+NEXT
+
 LOCATE 0, 100

@@ -24,7 +24,8 @@ use crate::input::WebInput;
 use crate::log_and_panic;
 use async_trait::async_trait;
 use endbasic_std::console::{
-    ansi_color_to_rgb, CharsXY, ClearType, Console, Key, LineBuffer, PixelsXY, RGB,
+    ansi_color_to_rgb, remove_control_chars, CharsXY, ClearType, Console, Key, LineBuffer,
+    PixelsXY, RGB,
 };
 use js_sys::Map;
 use std::convert::TryFrom;
@@ -404,7 +405,7 @@ impl CanvasConsole {
 
     /// Renders the given text at the current cursor position, with wrapping and
     /// scrolling if necessary.
-    fn raw_write_wrapped(&mut self, text: &str) -> io::Result<()> {
+    fn raw_write_wrapped(&mut self, text: String) -> io::Result<()> {
         debug_assert!(!text.is_empty(), "It doesn't make sense to render an empty string");
 
         let mut line_buffer = LineBuffer::from(text);
@@ -588,7 +589,7 @@ impl Console for CanvasConsole {
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!endbasic_std::console::has_control_chars_str(text));
+        let text = remove_control_chars(text);
 
         self.clear_cursor()?;
         if !text.is_empty() {
@@ -622,11 +623,11 @@ impl Console for CanvasConsole {
     }
 
     fn write(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!endbasic_std::console::has_control_chars_u8(text.as_bytes()));
-
         if text.is_empty() {
             return Ok(());
         }
+
+        let text = remove_control_chars(text);
 
         self.clear_cursor()?;
         self.raw_write_wrapped(text)?;

@@ -265,19 +265,9 @@ impl Clearable for ConsoleClearable {
 }
 
 /// Checks if a given string has control characters.
-pub fn has_control_chars_str(s: &str) -> bool {
+pub fn has_control_chars(s: &str) -> bool {
     for ch in s.chars() {
         if ch.is_control() {
-            return true;
-        }
-    }
-    false
-}
-
-/// Checks if a byte array has ASCII control characters.
-pub fn has_control_chars_u8(s: &[u8]) -> bool {
-    for ch in s {
-        if *ch < 32 {
             return true;
         }
     }
@@ -285,11 +275,20 @@ pub fn has_control_chars_u8(s: &[u8]) -> bool {
 }
 
 /// Removes control characters from a string to make it suitable for printing.
-pub fn remove_control_chars(s: &str) -> String {
+pub fn remove_control_chars<S: Into<String>>(s: S) -> String {
+    let s = s.into();
+
+    // Handle the expected common case first.  We use this function to strip control characters
+    // before printing them to the console, and thus we expect such input strings to rarely include
+    // control characters.
+    if !has_control_chars(&s) {
+        return s;
+    }
+
     let mut o = String::with_capacity(s.len());
     for ch in s.chars() {
         if ch.is_control() {
-            o.push_str("<<CONTROL>>");
+            o.push(' ');
         } else {
             o.push(ch);
         }
@@ -350,32 +349,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_has_control_chars_str() {
-        assert!(!has_control_chars_str(""));
-        assert!(!has_control_chars_str("foo bar^baz"));
+    fn test_has_control_chars() {
+        assert!(!has_control_chars(""));
+        assert!(!has_control_chars("foo bar^baz"));
 
-        assert!(has_control_chars_str("foo\nbar"));
-        assert!(has_control_chars_str("foo\rbar"));
-        assert!(has_control_chars_str("foo\x08bar"));
-    }
-
-    #[test]
-    fn test_has_control_chars_u8() {
-        assert!(!has_control_chars_u8(b""));
-        assert!(!has_control_chars_u8(b"foo bar^baz"));
-
-        assert!(has_control_chars_u8(b"foo\nbar"));
-        assert!(has_control_chars_u8(b"foo\rbar"));
-        assert!(has_control_chars_u8(b"foo\x08bar"));
+        assert!(has_control_chars("foo\nbar"));
+        assert!(has_control_chars("foo\rbar"));
+        assert!(has_control_chars("foo\x08bar"));
     }
 
     #[test]
     fn test_remove_control_chars() {
         assert_eq!("", remove_control_chars(""));
         assert_eq!("foo bar", remove_control_chars("foo bar"));
-        assert_eq!(
-            "foo<<CONTROL>><<CONTROL>>bar<<CONTROL>>baz<<CONTROL>>",
-            remove_control_chars("foo\r\nbar\rbaz\n")
-        );
+        assert_eq!("foo  bar baz ", remove_control_chars("foo\r\nbar\rbaz\n"));
     }
 }
