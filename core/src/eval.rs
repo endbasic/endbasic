@@ -183,10 +183,38 @@ impl Expr {
             Expr::Integer(span) => Ok(Value::Integer(span.value)),
             Expr::Text(span) => Ok(Value::Text(span.value.clone())),
 
-            Expr::Symbol(span) => Ok(syms
-                .get_var(&span.vref)
-                .map_err(|e| Error::from_value_error(e, span.pos))?
-                .clone()),
+            Expr::Symbol(span) => {
+                match syms.get(&span.vref).map_err(|e| Error::from_value_error(e, span.pos))? {
+                    Some(Symbol::Variable(v)) => Ok(v.clone()),
+                    Some(Symbol::Function(f)) => {
+                        if !f.metadata().is_argless() {
+                            return Err(Error::new(
+                                span.pos,
+                                format!("{} requires one or more arguments", span.vref.name()),
+                            ));
+                        }
+                        let f = f.clone();
+                        let span = FunctionCallSpan {
+                            fref: span.vref.clone(),
+                            args: vec![],
+                            pos: span.pos,
+                        };
+                        Ok(self.eval_function_call(syms, &span, f).await?)
+                    }
+                    Some(_) => {
+                        return Err(Error::new(
+                            span.pos,
+                            format!("{} is not a variable", span.vref.name()),
+                        ))
+                    }
+                    None => {
+                        return Err(Error::new(
+                            span.pos,
+                            format!("Undefined variable {}", span.vref.name()),
+                        ))
+                    }
+                }
+            }
 
             Expr::And(span) => {
                 Ok(Value::and(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
@@ -259,9 +287,19 @@ impl Expr {
                 match syms.get(&span.fref).map_err(|e| Error::from_value_error(e, span.pos))? {
                     Some(Symbol::Array(_)) => (), // Fallthrough.
                     Some(Symbol::Function(f)) => {
+                        if f.metadata().is_argless() {
+                            return Err(Error::new(
+                                span.pos,
+                                format!(
+                                    "In call to {}: expected no arguments nor parenthesis",
+                                    f.metadata().name()
+                                ),
+                            ));
+                        }
                         let f = f.clone();
                         return self.eval_function_call(syms, span, f).await;
                     }
+
                     Some(_) => {
                         return Err(Error::new(
                             span.pos,
@@ -827,9 +865,8 @@ mod tests {
             assert_eq!(
                 Value::Boolean(true),
                 block_on(
-                    Expr::Call(FunctionCallSpan {
-                        fref: VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto),
-                        args: vec![],
+                    Expr::Symbol(SymbolSpan {
+                        vref: VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto),
                         pos: lc(0, 0),
                     })
                     .eval(&mut syms)
@@ -847,9 +884,8 @@ mod tests {
                 format!(
                     "{}",
                     block_on(
-                        Expr::Call(FunctionCallSpan {
-                            fref: VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto),
-                            args: vec![],
+                        Expr::Symbol(SymbolSpan {
+                            vref: VarRef::new("TYPE_CHECK".to_owned(), VarType::Auto),
                             pos: lc(9, 2),
                         })
                         .eval(&mut syms)

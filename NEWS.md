@@ -95,6 +95,10 @@ for the time being.**
     like to address somehow in the future.  On this topic, also removed line
     numbers from the output of `LIST`.
 
+*   Changed the syntax to call argument-less functions, such as `INKEY` and
+    `PI`, so that they do not accept `()`.  This matches traditional BASIC
+    implementations.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**

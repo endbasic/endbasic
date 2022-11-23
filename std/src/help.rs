@@ -130,16 +130,29 @@ impl Topic for CallableTopic {
                 )?;
             }
         } else {
-            refill_and_print(
-                console,
-                [&format!(
-                    "{}{}({})",
-                    self.metadata.name(),
-                    self.metadata.return_type().annotation(),
-                    self.metadata.syntax(),
-                )],
-                "    ",
-            )?;
+            if self.metadata.is_argless() {
+                debug_assert!(self.metadata.syntax().is_empty());
+                refill_and_print(
+                    console,
+                    [&format!(
+                        "{}{}",
+                        self.metadata.name(),
+                        self.metadata.return_type().annotation(),
+                    )],
+                    "    ",
+                )?;
+            } else {
+                refill_and_print(
+                    console,
+                    [&format!(
+                        "{}{}({})",
+                        self.metadata.name(),
+                        self.metadata.return_type().annotation(),
+                        self.metadata.syntax(),
+                    )],
+                    "    ",
+                )?;
+            }
         }
         if !self.metadata.description().count() > 0 {
             console.print("")?;

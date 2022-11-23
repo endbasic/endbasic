@@ -451,6 +451,7 @@ impl CallableMetadataBuilder {
     /// Sets the syntax specification for this callable.  The `syntax` is provided as a free-form
     /// string that is expected to use whatever representation suits the function best.
     pub fn with_syntax(mut self, syntax: &'static str) -> Self {
+        assert!(syntax != "()", "No arguments should be expressed as an empty syntax definition");
         self.syntax = Some(syntax);
         self
     }
@@ -537,6 +538,11 @@ impl CallableMetadata {
     /// summary of the callable's purpose.
     pub fn description(&self) -> Lines<'static> {
         self.description.lines()
+    }
+
+    /// Returns true if this is a callable that takes no arguments.
+    pub fn is_argless(&self) -> bool {
+        self.syntax.is_empty()
     }
 }
 

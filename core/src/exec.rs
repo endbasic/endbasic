@@ -750,6 +750,7 @@ mod tests {
         machine.add_function(OutfFunction::new(captured_out));
         machine.add_function(RaiseFunction::new());
         machine.add_function(SumFunction::new());
+        machine.add_function(TypeCheckFunction::new(Value::Boolean(true)));
         block_on(machine.exec(&mut input.as_bytes()))
     }
 
@@ -1212,9 +1213,18 @@ mod tests {
     }
 
     #[test]
+    fn test_function_call_argless() {
+        do_ok_test("x = FALSE: OUT x: x = TYPE_CHECK: OUT x", &[], &["FALSE", "TRUE"]);
+    }
+
+    #[test]
     fn test_function_call_errors() {
         do_simple_error_test("OUT OUT()", "1:5: OUT is not an array or a function");
         do_simple_error_test("OUT SUM?()", "1:5: Incompatible types in SUM? reference");
+        do_simple_error_test(
+            "OUT TYPE_CHECK()",
+            "1:5: In call to TYPE_CHECK: expected no arguments nor parenthesis",
+        );
     }
 
     #[test]
