@@ -36,8 +36,13 @@ fn main() {
 
     // Execute the sample script.  All this script can do is modify the state of the machine itself.
     // In other words: the script can set variables in the machine's environment, but that's it.
-    let result = block_on(machine.exec(&mut INPUT.as_bytes())).expect("Execution error");
-    assert!(result == StopReason::Eof, "We did not register an EXIT command");
+    loop {
+        match block_on(machine.exec(&mut INPUT.as_bytes())).expect("Execution error") {
+            StopReason::Eof => break,
+            StopReason::Exited(i) => println!("Script explicitly exited with code {}", i),
+            StopReason::Break => (), // Ignore signals.
+        }
+    }
 
     // Now that our script has run, inspect the variables it set on the machine.
     match machine.get_var_as_int("foo_value") {

@@ -142,7 +142,7 @@ pub enum StopReason {
     /// Execution terminates because the machine reached the end of the input.
     Eof,
 
-    /// Execution terminated because the machine was asked to terminate with `exit()`.
+    /// Execution terminated because the machine was asked to terminate with `END`.
     Exited(u8),
 
     /// Execution terminated because the machine received a break signal.
@@ -266,14 +266,6 @@ impl Machine {
             clearable.reset_state(&mut self.symbols);
         }
         self.symbols.clear();
-    }
-
-    /// Tells the machine to stop execution at the next statement boundary.
-    ///
-    /// The `exec()` call that's stopped by this invocation will return the `code` given to this
-    /// call.
-    pub fn exit(&mut self, code: u8) {
-        self.stop_reason = Some(StopReason::Exited(code));
     }
 
     /// Obtains immutable access to the data values available during the *current* execution.
@@ -447,6 +439,31 @@ impl Machine {
         }
     }
 
+    /// Tells the machine to stop execution at the next statement boundary.
+    async fn end(&mut self, span: &EndSpan) -> Result<()> {
+        let code = match &span.code {
+            None => 0,
+            Some(expr) => match expr.eval(&mut self.symbols).await?.as_i32() {
+                Ok(n) if n < 0 => {
+                    return new_syntax_error(
+                        expr.start_pos(),
+                        "Exit code must be a positive integer".to_owned(),
+                    );
+                }
+                Ok(n) if n >= 128 => {
+                    return new_syntax_error(
+                        expr.start_pos(),
+                        "Exit code cannot be larger than 127".to_owned(),
+                    );
+                }
+                Ok(n) => n as u8,
+                Err(e) => return Err(Error::from_value_error(e, expr.start_pos())),
+            },
+        };
+        self.stop_reason = Some(StopReason::Exited(code));
+        Ok(())
+    }
+
     /// Helper for `exec` that only worries about execution.  Errors are handled on the caller side
     /// depending on the `ON ERROR` handling policy that is currently configured.
     async fn exec_safe(&mut self, context: &mut Context, instrs: &[Instruction]) -> Result<()> {
@@ -487,6 +504,10 @@ impl Machine {
                 Instruction::DimArray(span) => {
                     self.dim_array(span).await?;
                     context.pc += 1;
+                }
+
+                Instruction::End(span) => {
+                    self.end(span).await?;
                 }
 
                 Instruction::Jump(span) => {
@@ -744,7 +765,6 @@ mod tests {
         captured_out: Rc<RefCell<Vec<String>>>,
     ) -> Result<StopReason> {
         let mut machine = Machine::default();
-        machine.add_command(ExitCommand::new());
         machine.add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))));
         machine.add_command(OutCommand::new(captured_out.clone()));
         machine.add_function(OutfFunction::new(captured_out));
@@ -912,33 +932,56 @@ mod tests {
     }
 
     #[test]
-    fn test_exit_simple() {
+    fn test_end_no_code() {
         let captured_out = Rc::from(RefCell::from(vec![]));
         assert_eq!(
             StopReason::Exited(5),
-            run("OUT 1\nEXIT 5\nOUT 2", &[], captured_out.clone()).expect("Execution failed")
+            run("OUT 1\nEND 5\nOUT 2", &[], captured_out.clone()).expect("Execution failed")
+        );
+        assert_eq!(&["1"], captured_out.borrow().as_slice());
+    }
+
+    fn do_end_with_code_test(code: u8) {
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        assert_eq!(
+            StopReason::Exited(code),
+            run(&format!("OUT 1: END {}: OUT 2", code), &[], captured_out.clone())
+                .expect("Execution failed")
+        );
+        assert_eq!(&["1"], captured_out.borrow().as_slice());
+
+        let captured_out = Rc::from(RefCell::from(vec![]));
+        assert_eq!(
+            StopReason::Exited(code),
+            run(&format!("OUT 1: END {}.2: OUT 2", code), &[], captured_out.clone())
+                .expect("Execution failed")
         );
         assert_eq!(&["1"], captured_out.borrow().as_slice());
     }
 
     #[test]
-    fn test_exit_zero_is_not_special() {
-        let captured_out = Rc::from(RefCell::from(vec![]));
-        assert_eq!(
-            StopReason::Exited(0),
-            run("OUT 1\nOUT 2\nEXIT 0\nOUT 3", &[], captured_out.clone())
-                .expect("Execution failed")
-        );
-        assert_eq!(&["1", "2"], captured_out.borrow().as_slice());
+    fn text_end_with_code() {
+        do_end_with_code_test(0);
+        do_end_with_code_test(1);
+        do_end_with_code_test(42);
+        do_end_with_code_test(127);
     }
 
     #[test]
-    fn test_exit_if() {
+    fn test_end_errors() {
+        do_simple_error_test("END 1, 2", "1:6: Expected newline but found ,");
+        do_simple_error_test("END \"b\"", "1:5: \"b\" is not a number");
+        do_simple_error_test("END -3", "1:5: Exit code must be a positive integer");
+        do_simple_error_test("END 128", "1:5: Exit code cannot be larger than 127");
+    }
+
+    #[test]
+    fn test_end_if() {
         let captured_out = Rc::from(RefCell::from(vec![]));
         let input = r#"
             IF TRUE THEN
                 OUT OUTF(1, 100)
-                EXIT 0
+                END
                 OUT OUTF(2, 200)
             ELSEIF OUTF(3, 300) THEN
                 OUT OUTF(4, 400)
@@ -951,28 +994,28 @@ mod tests {
     }
 
     #[test]
-    fn test_exit_for() {
+    fn test_end_for() {
         let captured_out = Rc::from(RefCell::from(vec![]));
-        let input = r#"FOR i = 1 TO OUTF(10, i * 100): IF i = 3 THEN: EXIT 0: END IF: OUT i: NEXT"#;
+        let input = r#"FOR i = 1 TO OUTF(10, i * 100): IF i = 3 THEN: END: END IF: OUT i: NEXT"#;
         assert_eq!(StopReason::Exited(0), run(input, &[], captured_out.clone()).unwrap());
         assert_eq!(&["100", "1", "200", "2", "300"], captured_out.borrow().as_slice());
     }
 
     #[test]
-    fn test_exit_while() {
+    fn test_end_while() {
         let captured_out = Rc::from(RefCell::from(vec![]));
-        let input = r#"i = 1: WHILE i < OUTF(10, i * 100): IF i = 4 THEN: EXIT 0: END IF: OUT i: i = i + 1: WEND"#;
+        let input = r#"i = 1: WHILE i < OUTF(10, i * 100): IF i = 4 THEN: END: END IF: OUT i: i = i + 1: WEND"#;
         assert_eq!(StopReason::Exited(0), run(input, &[], captured_out.clone()).unwrap());
         assert_eq!(&["100", "1", "200", "2", "300", "3", "400"], captured_out.borrow().as_slice());
     }
 
     #[test]
-    fn test_exit_nested() {
+    fn test_end_nested() {
         let captured_out = Rc::from(RefCell::from(vec![]));
         assert_eq!(
             StopReason::Exited(42),
             run(
-                "FOR a = 0 TO 10\nOUT a\nIF a = 3 THEN\nEXIT 42\nOUT \"no\"\nEND IF\nNEXT",
+                "FOR a = 0 TO 10\nOUT a\nIF a = 3 THEN\nEND 42\nOUT \"no\"\nEND IF\nNEXT",
                 &[],
                 captured_out.clone()
             )
@@ -982,16 +1025,15 @@ mod tests {
     }
 
     #[test]
-    fn test_exit_can_resume() {
+    fn test_end_can_resume() {
         let captured_out = Rc::from(RefCell::from(vec![]));
         let mut machine = Machine::default();
-        machine.add_command(ExitCommand::new());
         machine.add_command(OutCommand::new(captured_out.clone()));
         machine.add_function(SumFunction::new());
 
         assert_eq!(
             StopReason::Exited(10),
-            block_on(machine.exec(&mut "OUT 1\nEXIT 10\nOUT 2".as_bytes()))
+            block_on(machine.exec(&mut "OUT 1\nEND 10\nOUT 2".as_bytes()))
                 .expect("Execution failed")
         );
         assert_eq!(&["1"], captured_out.borrow().as_slice());
@@ -999,7 +1041,7 @@ mod tests {
         captured_out.borrow_mut().clear();
         assert_eq!(
             StopReason::Exited(11),
-            block_on(machine.exec(&mut "OUT 2\nEXIT 11\nOUT 3".as_bytes()))
+            block_on(machine.exec(&mut "OUT 2\nEND 11\nOUT 3".as_bytes()))
                 .expect("Execution failed")
         );
         assert_eq!(&["2"], captured_out.borrow().as_slice());
@@ -1186,7 +1228,7 @@ mod tests {
     #[test]
     fn test_for_errors() {
         do_simple_error_test("FOR\nNEXT", "1:4: No iterator name in FOR statement");
-        do_simple_error_test("FOR a = 1 TO 10\nEND IF", "2:1: Unexpected END in statement");
+        do_simple_error_test("FOR a = 1 TO 10\nEND IF", "2:1: END IF without IF");
 
         do_simple_error_test(
             "FOR i = \"a\" TO 3\nNEXT",
@@ -1329,7 +1371,7 @@ mod tests {
         assert_eq!(
             StopReason::Exited(5),
             run(
-                "i = 0: @a: IF i = 5 THEN: EXIT i: END IF: i = i + 1: GOTO @a",
+                "i = 0: @a: IF i = 5 THEN: END i: END IF: i = i + 1: GOTO @a",
                 &[],
                 captured_out.clone()
             )

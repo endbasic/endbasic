@@ -27,7 +27,7 @@ sanity_check() {
     local bin="${1}"; shift
 
     local ret=0
-    echo "EXIT 123" | "${bin}" || ret="${?}"
+    echo "END 123" | "${bin}" || ret="${?}"
     [ "${ret}" -eq 123 ] || err "Packaged endbasic doesn't seem to work"
 }
 

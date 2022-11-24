@@ -23,14 +23,14 @@ EDIT ' Insert stored program until an escape character.
 PRINT "Still here!"
 
 
-EXIT ' Asks for confirmation before exiting.
+END ' Asks for confirmation before exiting.
 no
 RUN
 
-EXIT 123 ' Asks for confirmation before exiting.
+END 123 ' Asks for confirmation before exiting.
 no
 RUN
 
-EXIT ' Asks for confirmation before exiting.
+END ' Asks for confirmation before exiting.
 yes
 PRINT "Should not be reached"

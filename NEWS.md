@@ -99,6 +99,8 @@ for the time being.**
     `PI`, so that they do not accept `()`.  This matches traditional BASIC
     implementations.
 
+*   Replaced the `EXIT` command with the `END` keyword.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**

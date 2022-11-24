@@ -240,13 +240,12 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    /// Reads statements until one of the `delims` keywords is found.  The delimiter is not
-    /// consumed.
-    fn parse_until(&mut self, delims: &[Token]) -> Result<Vec<Statement>> {
+    /// Reads statements until the `delim` keyword is found.  The delimiter is not consumed.
+    fn parse_until(&mut self, delim: Token) -> Result<Vec<Statement>> {
         let mut stmts = vec![];
         loop {
             let peeked = self.lexer.peek()?;
-            if delims.contains(&peeked.token) {
+            if peeked.token == delim {
                 break;
             } else if peeked.token == Token::Eol {
                 self.lexer.consume_peeked();
@@ -508,6 +507,26 @@ impl<'a> Parser<'a> {
                 let (vtype, vtype_pos) = self.parse_dim_as()?;
                 Ok(Statement::Dim(DimSpan { name, name_pos, vtype, vtype_pos }))
             }
+        }
+    }
+
+    /// Parses a potential `END` statement but returns `None` if this corresponds to a statement
+    /// terminator such as `END IF`.
+    fn maybe_parse_end(&mut self) -> Result<Option<Statement>> {
+        match self.lexer.peek()?.token {
+            Token::If => Ok(None),
+            _ => {
+                let code = self.parse_expr(None)?;
+                Ok(Some(Statement::End(EndSpan { code })))
+            }
+        }
+    }
+
+    /// Parses an `END` statement.
+    fn parse_end(&mut self, pos: LineCol) -> Result<Statement> {
+        match self.maybe_parse_end()? {
+            Some(stmt) => Ok(stmt),
+            None => Err(Error::Bad(pos, "END IF without IF".to_owned())),
         }
     }
 
@@ -820,47 +839,70 @@ impl<'a> Parser<'a> {
         self.expect_and_consume(Token::Then, "No THEN in IF statement")?;
         self.expect_and_consume(Token::Eol, "Expecting newline after THEN")?;
 
-        let mut branches = vec![IfBranchSpan {
-            guard: expr,
-            body: self.parse_until(&[Token::Elseif, Token::Else, Token::End])?,
-        }];
+        let mut branches = vec![IfBranchSpan { guard: expr, body: vec![] }];
+        let mut i = 0;
+        let mut last = false;
         loop {
             let peeked = self.lexer.peek()?;
             match peeked.token {
+                Token::Eol => {
+                    self.lexer.consume_peeked();
+                }
+
                 Token::Elseif => {
+                    if last {
+                        return Err(Error::Bad(
+                            peeked.pos,
+                            "Unexpected ELSEIF after ELSE".to_owned(),
+                        ));
+                    }
+
                     self.lexer.consume_peeked();
                     let expr = self.parse_required_expr("No expression in ELSEIF statement")?;
                     self.expect_and_consume(Token::Then, "No THEN in ELSEIF statement")?;
                     self.expect_and_consume(Token::Eol, "Expecting newline after THEN")?;
-                    let stmts2 = self.parse_until(&[Token::Elseif, Token::Else, Token::End])?;
-                    branches.push(IfBranchSpan { guard: expr, body: stmts2 });
+                    branches.push(IfBranchSpan { guard: expr, body: vec![] });
+                    i += 1;
                 }
-                _ => break,
-            }
-        }
 
-        let peeked = self.lexer.peek()?;
-        if peeked.token == Token::Else {
-            let else_span = self.lexer.consume_peeked();
-            self.expect_and_consume(Token::Eol, "Expecting newline after ELSE")?;
-            let stmts2 = self.parse_until(&[Token::Elseif, Token::Else, Token::End])?;
-            let peeked = self.lexer.peek()?;
-            match peeked.token {
-                Token::Elseif => {
-                    return Err(Error::Bad(peeked.pos, "Unexpected ELSEIF after ELSE".to_owned()))
-                }
                 Token::Else => {
-                    return Err(Error::Bad(peeked.pos, "Duplicate ELSE after ELSE".to_owned()))
+                    if last {
+                        return Err(Error::Bad(peeked.pos, "Duplicate ELSE after ELSE".to_owned()));
+                    }
+
+                    let else_span = self.lexer.consume_peeked();
+                    self.expect_and_consume(Token::Eol, "Expecting newline after ELSE")?;
+
+                    let expr = Expr::Boolean(BooleanSpan { value: true, pos: else_span.pos });
+                    branches.push(IfBranchSpan { guard: expr, body: vec![] });
+                    i += 1;
+
+                    last = true;
                 }
-                _ => (),
+
+                Token::End => {
+                    self.lexer.consume_peeked();
+                    match self.maybe_parse_end()? {
+                        Some(stmt) => {
+                            branches[i].body.push(stmt);
+                        }
+                        None => {
+                            break;
+                        }
+                    }
+                }
+
+                _ => match self.parse_one_safe()? {
+                    Some(stmt) => {
+                        branches[i].body.push(stmt);
+                    }
+                    None => {
+                        break;
+                    }
+                },
             }
-            branches.push(IfBranchSpan {
-                guard: Expr::Boolean(BooleanSpan { value: true, pos: else_span.pos }),
-                body: stmts2,
-            });
         }
 
-        self.expect_and_consume_with_pos(Token::End, if_pos, "IF without END IF")?;
         self.expect_and_consume_with_pos(Token::If, if_pos, "IF without END IF")?;
 
         Ok(Statement::If(IfSpan { branches }))
@@ -995,7 +1037,7 @@ impl<'a> Parser<'a> {
 
         self.expect_and_consume(Token::Eol, "Expecting newline after FOR")?;
 
-        let stmts = self.parse_until(&[Token::Next])?;
+        let stmts = self.parse_until(Token::Next)?;
         self.expect_and_consume_with_pos(Token::Next, for_pos, "FOR without NEXT")?;
 
         Ok(Statement::For(ForSpan {
@@ -1065,7 +1107,7 @@ impl<'a> Parser<'a> {
         let expr = self.parse_required_expr("No expression in WHILE statement")?;
         self.expect_and_consume(Token::Eol, "Expecting newline after WHILE")?;
 
-        let stmts = self.parse_until(&[Token::Wend])?;
+        let stmts = self.parse_until(Token::Wend)?;
         self.expect_and_consume_with_pos(Token::Wend, while_pos, "WHILE without WEND")?;
 
         Ok(Statement::While(WhileSpan { expr, body: stmts }))
@@ -1110,9 +1152,10 @@ impl<'a> Parser<'a> {
         let token_span = self.lexer.read()?;
         let res = match token_span.token {
             Token::Data => Ok(Some(self.parse_data()?)),
+            Token::Dim => Ok(Some(self.parse_dim()?)),
+            Token::End => Ok(Some(self.parse_end(token_span.pos)?)),
             Token::Eof => return Ok(None),
             Token::Eol => Ok(None),
-            Token::Dim => Ok(Some(self.parse_dim()?)),
             Token::If => {
                 let result = self.parse_if(token_span.pos);
                 if result.is_err() {
@@ -2533,6 +2576,75 @@ mod tests {
     }
 
     #[test]
+    fn test_if_with_interleaved_end_complex() {
+        let code = r#"
+            IF 1 THEN 'First branch
+                A
+                END
+                B
+            ELSEIF 2 THEN 'Second branch
+                C
+                END 8
+                D
+            ELSEIF 3 THEN 'Third branch
+                E
+                END
+                F
+            ELSE 'Last branch
+                G
+                END 5
+                H
+            END IF
+        "#;
+        do_ok_test(
+            code,
+            &[Statement::If(IfSpan {
+                branches: vec![
+                    IfBranchSpan {
+                        guard: expr_integer(1, 2, 16),
+                        body: vec![
+                            make_bare_builtin_call("A", 3, 17),
+                            Statement::End(EndSpan { code: None }),
+                            make_bare_builtin_call("B", 5, 17),
+                        ],
+                    },
+                    IfBranchSpan {
+                        guard: expr_integer(2, 6, 20),
+                        body: vec![
+                            make_bare_builtin_call("C", 7, 17),
+                            Statement::End(EndSpan {
+                                code: Some(Expr::Integer(IntegerSpan { value: 8, pos: lc(8, 21) })),
+                            }),
+                            make_bare_builtin_call("D", 9, 17),
+                        ],
+                    },
+                    IfBranchSpan {
+                        guard: expr_integer(3, 10, 20),
+                        body: vec![
+                            make_bare_builtin_call("E", 11, 17),
+                            Statement::End(EndSpan { code: None }),
+                            make_bare_builtin_call("F", 13, 17),
+                        ],
+                    },
+                    IfBranchSpan {
+                        guard: expr_boolean(true, 14, 13),
+                        body: vec![
+                            make_bare_builtin_call("G", 15, 17),
+                            Statement::End(EndSpan {
+                                code: Some(Expr::Integer(IntegerSpan {
+                                    value: 5,
+                                    pos: lc(16, 21),
+                                })),
+                            }),
+                            make_bare_builtin_call("H", 17, 17),
+                        ],
+                    },
+                ],
+            })],
+        );
+    }
+
+    #[test]
     fn test_if_nested() {
         let code = r#"
             IF 1 THEN
@@ -2604,6 +2716,10 @@ mod tests {
 
         do_error_test_no_reset("ELSEIF 1 THEN\nEND IF", "1:1: Unexpected ELSEIF in statement");
         do_error_test_no_reset("ELSE 1\nEND IF", "1:1: Unexpected ELSE in statement");
+
+        do_error_test("IF 1 THEN\nEND 3 IF", "2:7: Unexpected keyword in expression");
+        do_error_test("END 3 IF", "1:7: Unexpected keyword in expression");
+        do_error_test("END IF", "1:1: END IF without IF");
     }
 
     #[test]
@@ -2986,9 +3102,9 @@ mod tests {
         do_error_test("WHILE\n", "1:6: No expression in WHILE statement");
         do_error_test("WHILE TRUE", "1:11: Expecting newline after WHILE");
         do_error_test("\n\nWHILE TRUE\n", "3:1: WHILE without WEND");
-        do_error_test("WHILE TRUE\nEND", "2:1: Unexpected END in statement");
-        do_error_test("WHILE TRUE\nEND\n", "2:1: Unexpected END in statement");
-        do_error_test("WHILE TRUE\nEND WHILE\n", "2:1: Unexpected END in statement");
+        do_error_test("WHILE TRUE\nEND", "1:1: WHILE without WEND");
+        do_error_test("WHILE TRUE\nEND\n", "1:1: WHILE without WEND");
+        do_error_test("WHILE TRUE\nEND WHILE\n", "2:5: Unexpected keyword in expression");
 
         do_error_test("WHILE ,\nWEND", "1:7: No expression in WHILE statement");
     }

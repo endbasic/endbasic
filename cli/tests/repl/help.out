@@ -29,6 +29,7 @@ Output from HELP:
     Type HELP followed by the name of a topic for details.
     Type HELP "HELP" for details on how to specify topic names.
     Type LOAD "DEMOS:/TOUR.BAS": RUN for a guided tour.
+    Type END or press CTRL+D to exit.
 
 Output from HELP "ARRAY":
 
@@ -196,7 +197,6 @@ Output from HELP "INTERPRETER":
     Interpreter
 
     >> CLEAR    Restores initial machine state but keeps the stored program.
-    >> EXIT     Exits the interpreter.
     >> HELP     Prints interactive help.
     >> SLEEP    Suspends program execution.
 
@@ -237,6 +237,7 @@ Output from HELP "LANG":
 
     Misc:
         st1: st2     Separates statements (same as a newline).
+        END [code%]  Terminates the program.
         REM text     Comment until end of line.
         ' text       Comment until end of line.
         ,            Long separator for arguments to builtin call.
@@ -369,14 +370,6 @@ Output from HELP "EDIT":
     EDIT
 
     Interactively edits the stored program.
-
-Output from HELP "EXIT":
-
-    EXIT [code%]
-
-    Exits the interpreter.
-
-    The optional code indicates the return value to return to the system.
 
 Output from HELP "GFX_LINE":
 

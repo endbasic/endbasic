@@ -202,17 +202,12 @@ impl Expr {
                         Ok(self.eval_function_call(syms, &span, f).await?)
                     }
                     Some(_) => {
-                        return Err(Error::new(
-                            span.pos,
-                            format!("{} is not a variable", span.vref.name()),
-                        ))
+                        Err(Error::new(span.pos, format!("{} is not a variable", span.vref.name())))
                     }
-                    None => {
-                        return Err(Error::new(
-                            span.pos,
-                            format!("Undefined variable {}", span.vref.name()),
-                        ))
-                    }
+                    None => Err(Error::new(
+                        span.pos,
+                        format!("Undefined variable {}", span.vref.name()),
+                    )),
                 }
             }
 
@@ -339,6 +334,7 @@ mod tests {
     use crate::reader::LineCol;
     use crate::testutils::*;
     use futures_lite::future::block_on;
+    use std::cell::RefCell;
 
     /// Syntactic sugar to instantiate a `LineCol` for testing.
     fn lc(line: usize, col: usize) -> LineCol {
@@ -994,7 +990,7 @@ mod tests {
     fn test_expr_call_non_function() {
         let mut syms = SymbolsBuilder::default()
             .add_var("SOMEVAR", Value::Integer(0))
-            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .build();
 
         assert_eq!(
@@ -1014,12 +1010,12 @@ mod tests {
         );
 
         assert_eq!(
-            "3:7: EXIT is not an array or a function",
+            "3:7: OUT is not an array or a function",
             format!(
                 "{}",
                 block_on(
                     Expr::Call(FunctionCallSpan {
-                        fref: VarRef::new("EXIT".to_owned(), VarType::Auto),
+                        fref: VarRef::new("OUT".to_owned(), VarType::Auto),
                         args: vec![],
                         pos: lc(3, 7),
                     })

@@ -15,5 +15,5 @@
 
 ' Exits cleanly.
 
-EXIT 0: PRINT "Should not be executed"
+END 0: PRINT "Should not be executed"
 PRINT "Should not be executed either"

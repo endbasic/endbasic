@@ -15,7 +15,7 @@
 
 //! Test utilities.
 
-use crate::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarType};
+use crate::ast::{ArgSep, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarType};
 use crate::eval::{self, eval_all, Error};
 use crate::exec::Machine;
 use crate::syms::{
@@ -70,46 +70,6 @@ impl Function for RaiseFunction {
             }
             _ => panic!("Invalid arguments"),
         }
-    }
-}
-
-/// Simplified version of `EXIT` to test the machine's `exit()` method.
-pub struct ExitCommand {
-    metadata: CallableMetadata,
-}
-
-impl ExitCommand {
-    /// Creates a new command that terminates execution once called.
-    pub fn new() -> Rc<Self> {
-        Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("EXIT", VarType::Void)
-                .with_syntax("code%")
-                .test_build(),
-        })
-    }
-}
-
-#[async_trait(?Send)]
-impl Command for ExitCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
-    }
-
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        let arg = match span.args.as_slice() {
-            [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
-                match expr.eval(machine.get_mut_symbols()).await? {
-                    Value::Integer(n) => {
-                        assert!((0..128).contains(&n), "Exit code out of range");
-                        n as u8
-                    }
-                    _ => panic!("Exit code must be a positive integer"),
-                }
-            }
-            _ => panic!("EXIT takes one argument"),
-        };
-        machine.exit(arg);
-        Ok(())
     }
 }
 
