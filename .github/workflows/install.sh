@@ -20,7 +20,7 @@ set -eux
 # and ensure that the resulting binary is minimally functional.
 rm -f "${HOME}/.cargo/bin/endbasic"
 cargo install --path cli "${@}"
-ret=0; echo "EXIT 123" | "${HOME}/.cargo/bin/endbasic" || ret="$?"
+ret=0; echo "END 123" | "${HOME}/.cargo/bin/endbasic" || ret="$?"
 if [ "${ret}" -ne 123 ]; then
     echo "Installed endbasic binary doesn't seem to work" 1>&2
     exit 1

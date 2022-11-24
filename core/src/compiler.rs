@@ -243,6 +243,10 @@ impl Compiler {
                 self.emit(Instruction::DimArray(span));
             }
 
+            Statement::End(span) => {
+                self.emit(Instruction::End(span));
+            }
+
             Statement::For(span) => {
                 self.compile_for(span)?;
             }
@@ -549,6 +553,15 @@ mod tests {
                     subtype_pos: lc(1, 15),
                 }),
             )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_end() {
+        Tester::default()
+            .parse("END")
+            .compile()
+            .expect_instr(0, Instruction::End(EndSpan { code: None }))
             .check();
     }
 

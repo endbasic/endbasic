@@ -65,6 +65,7 @@ const LANG_REFERENCE: &str = r"
 
     Misc:
         st1: st2     Separates statements (same as a newline).
+        END [code%]  Terminates the program.
         REM text     Comment until end of line.
         ' text       Comment until end of line.
         ,            Long separator for arguments to builtin call.
@@ -388,6 +389,7 @@ equivalent: HELP \"CON\", HELP \"console\", HELP \"Console manipulation\".",
             [r#"Type LOAD "DEMOS:/TOUR.BAS": RUN for a guided tour."#],
             "    ",
         )?;
+        refill_and_print(&mut *console, [r#"Type END or press CTRL+D to exit."#], "    ")?;
         console.print("")?;
 
         Ok(())
@@ -544,6 +546,7 @@ mod tests {
                 "    Type HELP followed by the name of a topic for details.",
                 "    Type HELP \"HELP\" for details on how to specify topic names.",
                 "    Type LOAD \"DEMOS:/TOUR.BAS\": RUN for a guided tour.",
+                "    Type END or press CTRL+D to exit.",
                 "",
             ])
             .check();

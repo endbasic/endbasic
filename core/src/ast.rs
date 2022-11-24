@@ -491,6 +491,13 @@ pub struct DimArraySpan {
     pub subtype_pos: LineCol,
 }
 
+/// Components of an `END` statement.
+#[derive(Debug, PartialEq)]
+pub struct EndSpan {
+    /// Integer expression to compute the return code.
+    pub code: Option<Expr>,
+}
+
 /// Components of a branch of an `IF` statement.
 #[derive(Debug, PartialEq)]
 pub struct IfBranchSpan {
@@ -616,6 +623,9 @@ pub enum Statement {
 
     /// Represents an array definition.
     DimArray(DimArraySpan),
+
+    /// Represents an `END` statement.
+    End(EndSpan),
 
     /// Represents a `FOR` statement.
     For(ForSpan),

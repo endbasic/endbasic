@@ -883,7 +883,7 @@ mod tests {
 
     #[test]
     fn test_run_something_that_exits() {
-        let program = "PRINT 5: EXIT 1: PRINT 4";
+        let program = "PRINT 5: END 1: PRINT 4";
         Tester::default()
             .set_program(Some("untouched.bas"), program)
             .run(r#"RUN: PRINT "after""#)

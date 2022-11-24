@@ -603,6 +603,7 @@ mod tests {
     use super::*;
     use crate::ast::VarRef;
     use crate::testutils::*;
+    use std::cell::RefCell;
 
     #[test]
     fn test_array_unidimensional_ok() {
@@ -788,20 +789,20 @@ mod tests {
     fn test_symbols_clear() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .add_var("__SYSTEM_VAR", Value::Integer(42))
             .build();
 
         assert!(syms.get(&VarRef::new("SOMEARRAY", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("EXIT", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("OUT", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SUM", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SOMEVAR", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("__SYSTEM_VAR", VarType::Auto)).unwrap().is_some());
         syms.clear();
         assert!(syms.get(&VarRef::new("SOMEARRAY", VarType::Auto)).unwrap().is_none());
-        assert!(syms.get(&VarRef::new("EXIT", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("OUT", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SUM", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SOMEVAR", VarType::Auto)).unwrap().is_none());
         assert!(syms.get(&VarRef::new("__SYSTEM_VAR", VarType::Auto)).unwrap().is_some());
@@ -840,14 +841,14 @@ mod tests {
     fn test_symbols_dim_name_overlap() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
         assert_eq!(
-            "Cannot DIM already-defined symbol Exit",
-            format!("{}", syms.dim("Exit", VarType::Integer).unwrap_err())
+            "Cannot DIM already-defined symbol Out",
+            format!("{}", syms.dim("Out", VarType::Integer).unwrap_err())
         );
 
         assert_eq!(
@@ -913,14 +914,14 @@ mod tests {
     fn test_symbols_dim_array_name_overlap() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
         assert_eq!(
-            "Cannot DIM already-defined symbol Exit",
-            format!("{}", syms.dim_array("Exit", VarType::Integer, vec![5]).unwrap_err())
+            "Cannot DIM already-defined symbol Out",
+            format!("{}", syms.dim_array("Out", VarType::Integer, vec![5]).unwrap_err())
         );
 
         assert_eq!(
@@ -944,7 +945,7 @@ mod tests {
         // If modifying this test, update the identical test for get_auto() and get_mut().
         let syms = SymbolsBuilder::default()
             .add_array("BOOL_ARRAY", VarType::Boolean)
-            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_function(SumFunction::new())
             .add_var("STRING_VAR", Value::Text("".to_owned()))
             .build();
@@ -960,13 +961,13 @@ mod tests {
             format!("{}", syms.get(&VarRef::new("bool_array", VarType::Text)).unwrap_err())
         );
 
-        match syms.get(&VarRef::new("exit", VarType::Auto)).unwrap().unwrap() {
+        match syms.get(&VarRef::new("out", VarType::Auto)).unwrap().unwrap() {
             Symbol::Command(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
             _ => panic!("Got something that is not the command we asked for"),
         }
         assert_eq!(
-            "Incompatible types in exit# reference",
-            format!("{}", syms.get(&VarRef::new("exit", VarType::Double)).unwrap_err())
+            "Incompatible types in out# reference",
+            format!("{}", syms.get(&VarRef::new("out", VarType::Double)).unwrap_err())
         );
 
         for ref_type in &[VarType::Auto, VarType::Integer] {
@@ -997,7 +998,7 @@ mod tests {
         // If modifying this test, update the identical test for get_auto() and get_mut().
         let syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
@@ -1005,8 +1006,8 @@ mod tests {
         assert!(syms.get(&VarRef::new("somearray", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SomeArray", VarType::Auto)).unwrap().is_some());
 
-        assert!(syms.get(&VarRef::new("exit", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("Exit", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("out", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("Out", VarType::Auto)).unwrap().is_some());
 
         assert!(syms.get(&VarRef::new("sum", VarType::Auto)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("Sum", VarType::Auto)).unwrap().is_some());
@@ -1027,7 +1028,7 @@ mod tests {
         // If modifying this test, update the identical test for get() and get_auto().
         let mut syms = SymbolsBuilder::default()
             .add_array("BOOL_ARRAY", VarType::Boolean)
-            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_function(SumFunction::new())
             .add_var("STRING_VAR", Value::Text("".to_owned()))
             .build();
@@ -1043,13 +1044,13 @@ mod tests {
             format!("{}", syms.get_mut(&VarRef::new("bool_array", VarType::Text)).unwrap_err())
         );
 
-        match syms.get_mut(&VarRef::new("exit", VarType::Auto)).unwrap().unwrap() {
+        match syms.get_mut(&VarRef::new("out", VarType::Auto)).unwrap().unwrap() {
             Symbol::Command(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
             _ => panic!("Got something that is not the command we asked for"),
         }
         assert_eq!(
-            "Incompatible types in exit# reference",
-            format!("{}", syms.get_mut(&VarRef::new("exit", VarType::Double)).unwrap_err())
+            "Incompatible types in out# reference",
+            format!("{}", syms.get_mut(&VarRef::new("out", VarType::Double)).unwrap_err())
         );
 
         for ref_type in &[VarType::Auto, VarType::Integer] {
@@ -1080,7 +1081,7 @@ mod tests {
         // If modifying this test, update the identical test for get() and get_auto().
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
@@ -1088,8 +1089,8 @@ mod tests {
         assert!(syms.get_mut(&VarRef::new("somearray", VarType::Auto)).unwrap().is_some());
         assert!(syms.get_mut(&VarRef::new("SomeArray", VarType::Auto)).unwrap().is_some());
 
-        assert!(syms.get_mut(&VarRef::new("exit", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get_mut(&VarRef::new("Exit", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("out", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("Out", VarType::Auto)).unwrap().is_some());
 
         assert!(syms.get_mut(&VarRef::new("sum", VarType::Auto)).unwrap().is_some());
         assert!(syms.get_mut(&VarRef::new("Sum", VarType::Auto)).unwrap().is_some());
@@ -1110,7 +1111,7 @@ mod tests {
         // If modifying this test, update the identical test for get() and get_mut().
         let syms = SymbolsBuilder::default()
             .add_array("BOOL_ARRAY", VarType::Boolean)
-            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_function(SumFunction::new())
             .add_var("STRING_VAR", Value::Text("".to_owned()))
             .build();
@@ -1120,7 +1121,7 @@ mod tests {
             _ => panic!("Got something that is not the array we asked for"),
         }
 
-        match syms.get_auto("exit").unwrap() {
+        match syms.get_auto("out").unwrap() {
             Symbol::Command(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
             _ => panic!("Got something that is not the command we asked for"),
         }
@@ -1141,7 +1142,7 @@ mod tests {
         // If modifying this test, update the identical test for get() and get_mut().
         let syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
@@ -1149,8 +1150,8 @@ mod tests {
         assert!(syms.get_auto("somearray").is_some());
         assert!(syms.get_auto("SomeArray").is_some());
 
-        assert!(syms.get_auto("exit").is_some());
-        assert!(syms.get_auto("Exit").is_some());
+        assert!(syms.get_auto("out").is_some());
+        assert!(syms.get_auto("Out").is_some());
 
         assert!(syms.get_auto("sum").is_some());
         assert!(syms.get_auto("Sum").is_some());
@@ -1307,16 +1308,16 @@ mod tests {
     fn test_symbols_set_var_name_overlap() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
         assert_eq!(
-            "Cannot redefine Exit as a variable",
+            "Cannot redefine Out as a variable",
             format!(
                 "{}",
-                syms.set_var(&VarRef::new("Exit", VarType::Auto), Value::Integer(1)).unwrap_err()
+                syms.set_var(&VarRef::new("Out", VarType::Auto), Value::Integer(1)).unwrap_err()
             )
         );
 
@@ -1385,13 +1386,13 @@ mod tests {
     fn test_symbols_unset_ok() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(ExitCommand::new())
+            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_function(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
         let mut count = 4;
-        for name in ["SOMEARRAY", "EXIT", "SUM", "SOMEVAR"] {
+        for name in ["SOMEARRAY", "OUT", "SUM", "SOMEVAR"] {
             syms.unset(name).unwrap();
             count -= 1;
             assert_eq!(count, syms.as_hashmap().len());

@@ -85,6 +85,9 @@ pub enum Instruction {
     /// Represents an array definition.
     DimArray(DimArraySpan),
 
+    /// Represents a request to terminate the program.
+    End(EndSpan),
+
     /// Represents an unconditional jump.
     Jump(JumpSpan),
 

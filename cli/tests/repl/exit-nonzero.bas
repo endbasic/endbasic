@@ -15,5 +15,5 @@
 
 ' Exits with an error code.
 
-EXIT 78: PRINT "Should not be executed"
+END 78: PRINT "Should not be executed"
 PRINT "Should not be executed either"

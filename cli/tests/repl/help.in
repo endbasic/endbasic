@@ -88,9 +88,6 @@ HELP "DIR"
 PRINT "Output from HELP \"EDIT\":"
 HELP "EDIT"
 
-PRINT "Output from HELP \"EXIT\":"
-HELP "EXIT"
-
 PRINT "Output from HELP \"GFX_LINE\":"
 HELP "GFX_LINE"
 

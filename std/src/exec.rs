@@ -70,62 +70,6 @@ impl Command for ClearCommand {
     }
 }
 
-/// The `EXIT` command.
-pub struct ExitCommand {
-    metadata: CallableMetadata,
-}
-
-impl ExitCommand {
-    /// Creates a new command that terminates execution once called.
-    pub fn new() -> Rc<Self> {
-        Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("EXIT", VarType::Void)
-                .with_syntax("[code%]")
-                .with_category(CATEGORY)
-                .with_description(
-                    "Exits the interpreter.
-The optional code indicates the return value to return to the system.",
-                )
-                .build(),
-        })
-    }
-}
-
-#[async_trait(?Send)]
-impl Command for ExitCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
-    }
-
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        let arg = match span.args.as_slice() {
-            [] => 0,
-            [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
-                let value = expr.eval(machine.get_mut_symbols()).await?;
-                let n = value
-                    .as_i32()
-                    .map_err(|e| CallError::ArgumentError(expr.start_pos(), format!("{}", e)))?;
-                if n < 0 {
-                    return Err(CallError::ArgumentError(
-                        expr.start_pos(),
-                        "Exit code must be a positive integer".to_owned(),
-                    ));
-                }
-                if n >= 128 {
-                    return Err(CallError::ArgumentError(
-                        expr.start_pos(),
-                        "Exit code cannot be larger than 127".to_owned(),
-                    ));
-                }
-                n as u8
-            }
-            _ => return Err(CallError::SyntaxError),
-        };
-        machine.exit(arg);
-        Ok(())
-    }
-}
-
 /// Type of the sleep function used by the `SLEEP` command to actually suspend execution.
 pub type SleepFn = Box<dyn Fn(Duration, LineCol) -> BoxedLocal<CommandResult>>;
 
@@ -195,7 +139,6 @@ impl Command for SleepCommand {
 /// uses the `std::thread::sleep` function.
 pub fn add_all(machine: &mut Machine, sleep_fn: Option<SleepFn>) {
     machine.add_command(ClearCommand::new());
-    machine.add_command(ExitCommand::new());
     machine.add_command(SleepCommand::new(sleep_fn.unwrap_or_else(|| Box::from(system_sleep))));
 }
 
@@ -203,7 +146,6 @@ pub fn add_all(machine: &mut Machine, sleep_fn: Option<SleepFn>) {
 mod tests {
     use super::*;
     use crate::testutils::*;
-    use endbasic_core::exec::StopReason;
     use std::time::Instant;
 
     #[test]
@@ -219,51 +161,6 @@ mod tests {
     #[test]
     fn test_clear_errors() {
         check_stmt_err("1:1: In call to CLEAR: expected no arguments", "CLEAR 123");
-    }
-
-    #[test]
-    fn test_exit_no_code() {
-        Tester::default()
-            .run("a = 3: EXIT: a = 4")
-            .expect_ok(StopReason::Exited(0))
-            .expect_var("a", 3)
-            .check();
-    }
-
-    fn do_exit_with_code_test(code: u8) {
-        Tester::default()
-            .run(format!("a = 3: EXIT {}: a = 4", code))
-            .expect_ok(StopReason::Exited(code))
-            .expect_var("a", 3)
-            .check();
-
-        Tester::default()
-            .run(format!("a = 3: EXIT {}.2: a = 4", code))
-            .expect_ok(StopReason::Exited(code))
-            .expect_var("a", 3)
-            .check();
-    }
-
-    #[test]
-    fn text_exit_with_code() {
-        do_exit_with_code_test(0);
-        do_exit_with_code_test(1);
-        do_exit_with_code_test(42);
-        do_exit_with_code_test(127);
-    }
-
-    #[test]
-    fn test_exit_errors() {
-        check_stmt_err("1:1: In call to EXIT: expected [code%]", "EXIT 1, 2");
-        check_stmt_err("1:1: In call to EXIT: 1:6: \"b\" is not a number", "EXIT \"b\"");
-        check_stmt_err(
-            "1:1: In call to EXIT: 1:6: Exit code must be a positive integer",
-            "EXIT -3",
-        );
-        check_stmt_err(
-            "1:1: In call to EXIT: 1:6: Exit code cannot be larger than 127",
-            "EXIT 128",
-        );
     }
 
     #[test]
