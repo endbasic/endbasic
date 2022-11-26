@@ -1114,17 +1114,12 @@ impl<'a> Parser<'a> {
     }
 
     /// Advances until the next statement after failing to parse a `WHILE` statement.
-    fn reset_while(&mut self, while_pos: LineCol) -> Result<()> {
+    fn reset_while(&mut self) -> Result<()> {
         loop {
             match self.lexer.peek()?.token {
                 Token::Eof => break,
-                Token::End => {
+                Token::Wend => {
                     self.lexer.consume_peeked();
-                    self.expect_and_consume_with_pos(
-                        Token::While,
-                        while_pos,
-                        "WHILE without WEND",
-                    )?;
                     break;
                 }
                 _ => {
@@ -1203,7 +1198,7 @@ impl<'a> Parser<'a> {
             Token::While => {
                 let result = self.parse_while(token_span.pos);
                 if result.is_err() {
-                    self.reset_while(token_span.pos)?;
+                    self.reset_while()?;
                 }
                 Ok(Some(result?))
             }
@@ -3107,5 +3102,6 @@ mod tests {
         do_error_test("WHILE TRUE\nEND WHILE\n", "2:5: Unexpected keyword in expression");
 
         do_error_test("WHILE ,\nWEND", "1:7: No expression in WHILE statement");
+        do_error_test("WHILE ,\nEND", "1:7: No expression in WHILE statement");
     }
 }

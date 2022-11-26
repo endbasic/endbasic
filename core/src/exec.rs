@@ -1562,9 +1562,11 @@ mod tests {
     #[test]
     fn test_while_errors() {
         do_simple_error_test("WHILE\nWEND", "1:6: No expression in WHILE statement");
-        do_simple_error_test("WHILE\nEND IF", "1:1: WHILE without WEND");
+        do_simple_error_test("WHILE\nEND IF", "1:6: No expression in WHILE statement");
 
         do_simple_error_test("\n\n\nWHILE 2\n", "4:1: WHILE without WEND");
+        do_simple_error_test("WHILE 3\nEND", "1:1: WHILE without WEND");
+        do_simple_error_test("WHILE 3\nEND IF", "2:1: END IF without IF");
         do_simple_error_test("WHILE 2\nWEND", "1:7: WHILE requires a boolean condition");
     }
 
