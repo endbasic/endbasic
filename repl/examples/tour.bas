@@ -103,6 +103,7 @@ PRINT "    END IF"
 PRINT
 PRINT "Do loops look like this:"
 PRINT
+PRINT "    DO: PRINT \"Infinite loop with early exit\": EXIT DO: LOOP"
 PRINT "    DO UNTIL a% = 10: a% = a% + 1: LOOP"
 PRINT "    DO WHILE a% < 10: a% = a% + 1: LOOP"
 PRINT

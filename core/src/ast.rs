@@ -491,6 +491,16 @@ pub struct DimArraySpan {
     pub subtype_pos: LineCol,
 }
 
+/// Type of the `DO` loop.
+#[derive(Debug, PartialEq)]
+pub enum DoGuard {
+    /// Represents an infinite loop without guards.
+    Infinite,
+
+    /// Represents a loop with a guard in the `DO` clause.
+    Pre(Expr),
+}
+
 /// Components of a `DO` statement.
 #[derive(Debug, PartialEq)]
 pub struct DoSpan {
@@ -498,7 +508,7 @@ pub struct DoSpan {
     ///
     /// Whether this corresponds to a `DO WHILE` or a `DO UNTIL` loop is encoded in the expression
     /// itself.
-    pub expr: Expr,
+    pub guard: DoGuard,
 
     /// Statements within the loop's body.
     pub body: Vec<Statement>,

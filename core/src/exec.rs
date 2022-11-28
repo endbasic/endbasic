@@ -1073,6 +1073,20 @@ mod tests {
     }
 
     #[test]
+    fn test_do_infinite_ok() {
+        let code = r#"
+            IN n
+            DO
+                IF n = 0 THEN: EXIT DO: END IF
+                OUT "n is"; n
+                n = n - 1
+            LOOP
+        "#;
+        do_ok_test(code, &["0"], &[]);
+        do_ok_test(code, &["3"], &["n is 3", "n is 2", "n is 1"]);
+    }
+
+    #[test]
     fn test_do_until_ok() {
         let code = r#"
             IN n
