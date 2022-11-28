@@ -499,6 +499,9 @@ pub enum DoGuard {
 
     /// Represents a loop with a guard in the `DO` clause.
     Pre(Expr),
+
+    /// Represents a loop with a guard in the `LOOP` clause.
+    Post(Expr),
 }
 
 /// Components of a `DO` statement.

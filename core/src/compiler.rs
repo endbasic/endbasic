@@ -138,11 +138,23 @@ impl Compiler {
 
                 end_pc = self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
 
-                self.instrs[start_pc] = Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                self.instrs[start_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: guard,
                     addr: self.next_pc,
                     error_msg: "DO requires a boolean condition",
                 });
+            }
+
+            DoGuard::Post(guard) => {
+                let start_pc = self.next_pc;
+
+                self.compile_many(span.body)?;
+
+                end_pc = self.emit(Instruction::JumpIfTrue(JumpIfBoolSpan {
+                    cond: guard,
+                    addr: start_pc,
+                    error_msg: "LOOP requires a boolean condition",
+                }));
             }
         }
 
@@ -194,7 +206,7 @@ impl Compiler {
 
         self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
 
-        self.instrs[start_pc] = Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+        self.instrs[start_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
             cond: span.end,
             addr: self.next_pc,
             error_msg: "FOR supports numeric iteration only",
@@ -220,7 +232,7 @@ impl Compiler {
                 self.emit(Instruction::Nop);
             }
 
-            self.instrs[guard_pc] = Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+            self.instrs[guard_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                 cond: branch.guard,
                 addr: self.next_pc,
                 error_msg: "IF/ELSEIF require a boolean condition",
@@ -260,7 +272,7 @@ impl Compiler {
 
         self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
 
-        self.instrs[start_pc] = Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+        self.instrs[start_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
             cond: span.expr,
             addr: self.next_pc,
             error_msg: "WHILE requires a boolean condition",
@@ -648,7 +660,7 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
                     addr: 3,
                     error_msg: "DO requires a boolean condition",
@@ -663,6 +675,30 @@ mod tests {
                 }),
             )
             .expect_instr(2, Instruction::Jump(JumpSpan { addr: 0 }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_do_post_guard() {
+        Tester::default()
+            .parse("DO\nFOO\nLOOP WHILE TRUE")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "FOO".to_owned(),
+                    name_pos: lc(2, 1),
+                    args: vec![],
+                }),
+            )
+            .expect_instr(
+                1,
+                Instruction::JumpIfTrue(JumpIfBoolSpan {
+                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(3, 12) }),
+                    addr: 0,
+                    error_msg: "LOOP requires a boolean condition",
+                }),
+            )
             .check();
     }
 
@@ -692,7 +728,7 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
                     addr: 3,
                     error_msg: "DO requires a boolean condition",
@@ -710,7 +746,7 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
                     addr: 6,
                     error_msg: "DO requires a boolean condition",
@@ -719,7 +755,7 @@ mod tests {
             .expect_instr(1, Instruction::Jump(JumpSpan { addr: 6 }))
             .expect_instr(
                 2,
-                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Not(Box::from(UnaryOpSpan {
                         expr: Expr::Boolean(BooleanSpan { value: false, pos: lc(3, 10) }),
                         pos: lc(3, 10),
@@ -741,7 +777,7 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
                     addr: 6,
                     error_msg: "DO requires a boolean condition",
@@ -750,7 +786,7 @@ mod tests {
             .expect_instr(1, Instruction::Jump(JumpSpan { addr: 6 }))
             .expect_instr(
                 2,
-                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Boolean(BooleanSpan { value: false, pos: lc(3, 7) }),
                     addr: 5,
                     error_msg: "WHILE requires a boolean condition",
@@ -792,7 +828,7 @@ mod tests {
             )
             .expect_instr(
                 1,
-                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::LessEqual(Box::from(BinaryOpSpan {
                         lhs: Expr::Symbol(SymbolSpan {
                             vref: VarRef::new("iter", VarType::Auto),
@@ -860,7 +896,7 @@ mod tests {
             )
             .expect_instr(
                 3,
-                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::LessEqual(Box::from(BinaryOpSpan {
                         lhs: Expr::Symbol(SymbolSpan {
                             vref: VarRef::new("iter", VarType::Auto),
@@ -937,7 +973,7 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Boolean(BooleanSpan { value: false, pos: lc(1, 4) }),
                     addr: 2,
                     error_msg: "IF/ELSEIF require a boolean condition",
@@ -961,7 +997,7 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Boolean(BooleanSpan { value: false, pos: lc(1, 4) }),
                     addr: 3,
                     error_msg: "IF/ELSEIF require a boolean condition",
@@ -978,7 +1014,7 @@ mod tests {
             .expect_instr(2, Instruction::Jump(JumpSpan { addr: 8 }))
             .expect_instr(
                 3,
-                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(3, 8) }),
                     addr: 6,
                     error_msg: "IF/ELSEIF require a boolean condition",
@@ -995,7 +1031,7 @@ mod tests {
             .expect_instr(5, Instruction::Jump(JumpSpan { addr: 8 }))
             .expect_instr(
                 6,
-                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(5, 1) }),
                     addr: 8,
                     error_msg: "IF/ELSEIF require a boolean condition",
@@ -1055,7 +1091,7 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 7) }),
                     addr: 3,
                     error_msg: "WHILE requires a boolean condition",

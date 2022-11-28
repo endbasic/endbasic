@@ -41,8 +41,8 @@ currently supports:
 *   Strong typing with optional variable type annotations.
 *   `DATA` statements for literal primitive values.  Booleans, numbers, and
     strings are supported, but strings must be double-quoted.
-*   `DO` / `LOOP` statements with optional `UNTIL` / `WHILE` pre-guards
-    and optional `EXIT DO` early terminations.
+*   `DO` / `LOOP` statements with optional `UNTIL` / `WHILE` pre- and
+    post-guards and optional `EXIT DO` early terminations.
 *   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` statements.
 *   `FOR x = ... TO ... [STEP ...]` / `NEXT` loops.
 *   `GOSUB line` / `GOSUB @label` / `RETURN` for procedure execution.

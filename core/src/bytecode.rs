@@ -37,9 +37,9 @@ pub struct JumpIfDefinedSpan {
     pub addr: Address,
 }
 
-/// Components of a conditional jump that depends on whether an expression is not true.
+/// Components of a conditional jump that depends on a boolean expression.
 #[cfg_attr(test, derive(Debug, PartialEq))]
-pub struct JumpIfNotTrueSpan {
+pub struct JumpIfBoolSpan {
     /// The condition to check for falseness.
     pub cond: Expr,
 
@@ -94,8 +94,11 @@ pub enum Instruction {
     /// Represents an conditional jump that jumps if the variable is defined.
     JumpIfDefined(JumpIfDefinedSpan),
 
+    /// Represents an conditional jump that jumps if the condition is met.
+    JumpIfTrue(JumpIfBoolSpan),
+
     /// Represents an conditional jump that jumps if the condition is not met.
-    JumpIfNotTrue(JumpIfNotTrueSpan),
+    JumpIfNotTrue(JumpIfBoolSpan),
 
     /// Represents an instruction that does nothing.
     Nop,
