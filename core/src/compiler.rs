@@ -125,19 +125,25 @@ impl Compiler {
         match span.guard {
             DoGuard::Infinite => {
                 let start_pc = self.next_pc;
-
                 self.compile_many(span.body)?;
-
                 end_pc = self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
             }
 
-            DoGuard::Pre(guard) => {
+            DoGuard::PreUntil(guard) => {
                 let start_pc = self.emit(Instruction::Nop);
-
                 self.compile_many(span.body)?;
-
                 end_pc = self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
+                self.instrs[start_pc] = Instruction::JumpIfTrue(JumpIfBoolSpan {
+                    cond: guard,
+                    addr: self.next_pc,
+                    error_msg: "DO requires a boolean condition",
+                });
+            }
 
+            DoGuard::PreWhile(guard) => {
+                let start_pc = self.emit(Instruction::Nop);
+                self.compile_many(span.body)?;
+                end_pc = self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
                 self.instrs[start_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: guard,
                     addr: self.next_pc,
@@ -145,11 +151,19 @@ impl Compiler {
                 });
             }
 
-            DoGuard::Post(guard) => {
+            DoGuard::PostUntil(guard) => {
                 let start_pc = self.next_pc;
-
                 self.compile_many(span.body)?;
+                end_pc = self.emit(Instruction::JumpIfNotTrue(JumpIfBoolSpan {
+                    cond: guard,
+                    addr: start_pc,
+                    error_msg: "LOOP requires a boolean condition",
+                }));
+            }
 
+            DoGuard::PostWhile(guard) => {
+                let start_pc = self.next_pc;
+                self.compile_many(span.body)?;
                 end_pc = self.emit(Instruction::JumpIfTrue(JumpIfBoolSpan {
                     cond: guard,
                     addr: start_pc,
@@ -755,11 +769,8 @@ mod tests {
             .expect_instr(1, Instruction::Jump(JumpSpan { addr: 6 }))
             .expect_instr(
                 2,
-                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Not(Box::from(UnaryOpSpan {
-                        expr: Expr::Boolean(BooleanSpan { value: false, pos: lc(3, 10) }),
-                        pos: lc(3, 10),
-                    })),
+                Instruction::JumpIfTrue(JumpIfBoolSpan {
+                    cond: Expr::Boolean(BooleanSpan { value: false, pos: lc(3, 10) }),
                     addr: 5,
                     error_msg: "DO requires a boolean condition",
                 }),
