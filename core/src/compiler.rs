@@ -121,17 +121,30 @@ impl Compiler {
     fn compile_do(&mut self, span: DoSpan) -> Result<()> {
         self.exit_do_level += 1;
 
-        let start_pc = self.emit(Instruction::Nop);
+        let end_pc;
+        match span.guard {
+            DoGuard::Infinite => {
+                let start_pc = self.next_pc;
 
-        self.compile_many(span.body)?;
+                self.compile_many(span.body)?;
 
-        let end_pc = self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
+                end_pc = self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
+            }
 
-        self.instrs[start_pc] = Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
-            cond: span.expr,
-            addr: self.next_pc,
-            error_msg: "DO requires a boolean condition",
-        });
+            DoGuard::Pre(guard) => {
+                let start_pc = self.emit(Instruction::Nop);
+
+                self.compile_many(span.body)?;
+
+                end_pc = self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
+
+                self.instrs[start_pc] = Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                    cond: guard,
+                    addr: self.next_pc,
+                    error_msg: "DO requires a boolean condition",
+                });
+            }
+        }
 
         self.labels.insert(Compiler::do_label(self.exit_do_level), end_pc + 1);
         self.exit_do_level -= 1;
@@ -612,7 +625,24 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_do() {
+    fn test_compile_do_infinite() {
+        Tester::default()
+            .parse("DO\nFOO\nLOOP")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "FOO".to_owned(),
+                    name_pos: lc(2, 1),
+                    args: vec![],
+                }),
+            )
+            .expect_instr(1, Instruction::Jump(JumpSpan { addr: 0 }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_do_pre_guard() {
         Tester::default()
             .parse("DO WHILE TRUE\nFOO\nLOOP")
             .compile()
@@ -646,7 +676,17 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_exit_do_simple() {
+    fn test_compile_exit_do_infinite_simple() {
+        Tester::default()
+            .parse("DO\nEXIT DO\nLOOP")
+            .compile()
+            .expect_instr(0, Instruction::Jump(JumpSpan { addr: 2 }))
+            .expect_instr(1, Instruction::Jump(JumpSpan { addr: 0 }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_exit_do_pre_simple() {
         Tester::default()
             .parse("DO WHILE TRUE\nEXIT DO\nLOOP")
             .compile()

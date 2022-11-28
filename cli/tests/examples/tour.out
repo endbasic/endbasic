@@ -66,6 +66,7 @@ Fully-specified if statements look like this:
 
 Do loops look like this:
 
+    DO: PRINT "Infinite loop with early exit": EXIT DO: LOOP
     DO UNTIL a% = 10: a% = a% + 1: LOOP
     DO WHILE a% < 10: a% = a% + 1: LOOP
 

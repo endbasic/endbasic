@@ -215,10 +215,10 @@ impl<'a> Parser<'a> {
 
     /// Expects the peeked token to be `t` and consumes it.  Otherwise, leaves the token in the
     /// stream and fails with error `err`.
-    fn expect_and_consume(&mut self, t: Token, err: &'static str) -> Result<TokenSpan> {
+    fn expect_and_consume<E: Into<String>>(&mut self, t: Token, err: E) -> Result<TokenSpan> {
         let peeked = self.lexer.peek()?;
         if peeked.token != t {
-            return Err(Error::Bad(peeked.pos, err.to_owned()));
+            return Err(Error::Bad(peeked.pos, err.into()));
         }
         Ok(self.lexer.consume_peeked())
     }
@@ -226,15 +226,15 @@ impl<'a> Parser<'a> {
     /// Expects the peeked token to be `t` and consumes it.  Otherwise, leaves the token in the
     /// stream and fails with error `err`, pointing at `pos` as the original location of the
     /// problem.
-    fn expect_and_consume_with_pos(
+    fn expect_and_consume_with_pos<E: Into<String>>(
         &mut self,
         t: Token,
         pos: LineCol,
-        err: &'static str,
+        err: E,
     ) -> Result<()> {
         let peeked = self.lexer.peek()?;
         if peeked.token != t {
-            return Err(Error::Bad(pos, err.to_owned()));
+            return Err(Error::Bad(pos, err.into()));
         }
         self.lexer.consume_peeked();
         Ok(())
@@ -510,31 +510,46 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parses the `UNTIL` or `WHILE` clause of a `DO` loop.
+    ///
+    /// `part` is a string indicating where the clause is expected (either after `DO` or after
+    /// `LOOP`).
+    fn parse_do_guard(&mut self, part: &str) -> Result<Option<Expr>> {
+        let token_span = self.lexer.read()?;
+        match token_span.token {
+            Token::Until => {
+                let expr = self.parse_required_expr("No expression in UNTIL clause")?;
+                self.expect_and_consume(Token::Eol, format!("Expecting newline after {}", part))?;
+
+                let pos = expr.start_pos();
+                Ok(Some(Expr::Not(Box::from(UnaryOpSpan { expr, pos }))))
+            }
+            Token::While => {
+                let expr = self.parse_required_expr("No expression in WHILE clause")?;
+                self.expect_and_consume(Token::Eol, format!("Expecting newline after {}", part))?;
+                Ok(Some(expr))
+            }
+            Token::Eol => Ok(None),
+            _ => Err(Error::Bad(
+                token_span.pos,
+                format!("Expecting newline, UNTIL or WHILE after {}", part),
+            )),
+        }
+    }
+
     /// Parses a `DO` statement.
     fn parse_do(&mut self, do_pos: LineCol) -> Result<Statement> {
-        let token_span = self.lexer.read()?;
-        let is_until = match token_span.token {
-            Token::Until => true,
-            Token::While => false,
-            _ => {
-                return Err(Error::Bad(
-                    token_span.pos,
-                    "Expecting UNTIL or WHILE after DO".to_owned(),
-                ))
-            }
-        };
-
-        let mut expr = self.parse_required_expr("No expression in DO statement")?;
-        self.expect_and_consume(Token::Eol, "Expecting newline after DO")?;
+        let pre_guard = self.parse_do_guard("DO")?;
 
         let stmts = self.parse_until(Token::Loop)?;
         self.expect_and_consume_with_pos(Token::Loop, do_pos, "DO without LOOP")?;
 
-        if is_until {
-            let pos = expr.start_pos();
-            expr = Expr::Not(Box::from(UnaryOpSpan { expr, pos }));
-        }
-        Ok(Statement::Do(DoSpan { expr, body: stmts }))
+        let guard = match pre_guard {
+            None => DoGuard::Infinite,
+            Some(guard) => DoGuard::Pre(guard),
+        };
+
+        Ok(Statement::Do(DoSpan { guard, body: stmts }))
     }
 
     /// Advances until the next statement after failing to parse a `DO` statement.
@@ -1926,10 +1941,10 @@ mod tests {
         do_ok_test(
             "DO UNTIL TRUE\nLOOP",
             &[Statement::Do(DoSpan {
-                expr: Expr::Not(Box::from(UnaryOpSpan {
+                guard: DoGuard::Pre(Expr::Not(Box::from(UnaryOpSpan {
                     expr: expr_boolean(true, 1, 10),
                     pos: lc(1, 10),
-                })),
+                }))),
                 body: vec![],
             })],
         );
@@ -1937,26 +1952,18 @@ mod tests {
         do_ok_test(
             "DO UNTIL FALSE\nREM foo\nLOOP",
             &[Statement::Do(DoSpan {
-                expr: Expr::Not(Box::from(UnaryOpSpan {
+                guard: DoGuard::Pre(Expr::Not(Box::from(UnaryOpSpan {
                     expr: expr_boolean(false, 1, 10),
                     pos: lc(1, 10),
-                })),
+                }))),
                 body: vec![],
             })],
         );
     }
 
     #[test]
-    fn test_do_while_empty() {
-        do_ok_test(
-            "DO WHILE TRUE\nLOOP",
-            &[Statement::Do(DoSpan { expr: expr_boolean(true, 1, 10), body: vec![] })],
-        );
-
-        do_ok_test(
-            "DO WHILE FALSE\nREM foo\nLOOP",
-            &[Statement::Do(DoSpan { expr: expr_boolean(false, 1, 10), body: vec![] })],
-        );
+    fn test_do_infinite_empty() {
+        do_ok_test("DO\nLOOP", &[Statement::Do(DoSpan { guard: DoGuard::Infinite, body: vec![] })]);
     }
 
     #[test]
@@ -1964,10 +1971,10 @@ mod tests {
         do_ok_test(
             "DO UNTIL TRUE\nA\nB\nLOOP",
             &[Statement::Do(DoSpan {
-                expr: Expr::Not(Box::from(UnaryOpSpan {
+                guard: DoGuard::Pre(Expr::Not(Box::from(UnaryOpSpan {
                     expr: expr_boolean(true, 1, 10),
                     pos: lc(1, 10),
-                })),
+                }))),
                 body: vec![make_bare_builtin_call("A", 2, 1), make_bare_builtin_call("B", 3, 1)],
             })],
         );
@@ -1978,7 +1985,7 @@ mod tests {
         do_ok_test(
             "DO WHILE TRUE\nA\nB\nLOOP",
             &[Statement::Do(DoSpan {
-                expr: expr_boolean(true, 1, 10),
+                guard: DoGuard::Pre(expr_boolean(true, 1, 10)),
                 body: vec![make_bare_builtin_call("A", 2, 1), make_bare_builtin_call("B", 3, 1)],
             })],
         );
@@ -1998,14 +2005,14 @@ mod tests {
         do_ok_test(
             code,
             &[Statement::Do(DoSpan {
-                expr: expr_boolean(true, 2, 22),
+                guard: DoGuard::Pre(expr_boolean(true, 2, 22)),
                 body: vec![
                     make_bare_builtin_call("A", 3, 17),
                     Statement::Do(DoSpan {
-                        expr: Expr::Not(Box::from(UnaryOpSpan {
+                        guard: DoGuard::Pre(Expr::Not(Box::from(UnaryOpSpan {
                             expr: expr_boolean(false, 4, 26),
                             pos: lc(4, 26),
-                        })),
+                        }))),
                         body: vec![make_bare_builtin_call("B", 5, 21)],
                     }),
                     make_bare_builtin_call("C", 7, 17),
@@ -2016,11 +2023,11 @@ mod tests {
 
     #[test]
     fn test_do_until_while_errors() {
-        do_error_test("DO\n", "1:3: Expecting UNTIL or WHILE after DO");
-        do_error_test("DO FOR\n", "1:4: Expecting UNTIL or WHILE after DO");
+        do_error_test("DO\n", "1:1: DO without LOOP");
+        do_error_test("DO FOR\n", "1:4: Expecting newline, UNTIL or WHILE after DO");
 
-        do_error_test("DO UNTIL\n", "1:9: No expression in DO statement");
-        do_error_test("DO WHILE\n", "1:9: No expression in DO statement");
+        do_error_test("DO UNTIL\n", "1:9: No expression in UNTIL clause");
+        do_error_test("DO WHILE\n", "1:9: No expression in WHILE clause");
         do_error_test("DO UNTIL TRUE", "1:14: Expecting newline after DO");
         do_error_test("DO WHILE TRUE", "1:14: Expecting newline after DO");
         do_error_test("\n\nDO UNTIL TRUE\n", "3:1: DO without LOOP");
@@ -2032,8 +2039,8 @@ mod tests {
         do_error_test("DO UNTIL TRUE\nEND WHILE\n", "2:5: Unexpected keyword in expression");
         do_error_test("DO WHILE TRUE\nEND WHILE\n", "2:5: Unexpected keyword in expression");
 
-        do_error_test("DO UNTIL ,\nLOOP", "1:10: No expression in DO statement");
-        do_error_test("DO WHILE ,\nLOOP", "1:10: No expression in DO statement");
+        do_error_test("DO UNTIL ,\nLOOP", "1:10: No expression in UNTIL clause");
+        do_error_test("DO WHILE ,\nLOOP", "1:10: No expression in WHILE clause");
     }
 
     #[test]
