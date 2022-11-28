@@ -64,6 +64,10 @@ Fully-specified if statements look like this:
         PRINT "a is something else"
     END IF
 
+If statements can also be collapsed into a single line like this:
+
+   IF a% = 1 THEN PRINT "a is 1" ELSE PRINT "a is something else"
+
 Do loops look like this:
 
     DO: PRINT "Infinite loop with early exit": EXIT DO: LOOP

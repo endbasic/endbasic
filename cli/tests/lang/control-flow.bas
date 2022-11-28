@@ -24,9 +24,8 @@ WHILE i < 5
     i = i + 1
 WEND
 
-IF i = 5 THEN
-    PRINT "Done!"
-END IF
+IF i = 5 THEN PRINT "Done!"
+IF i <> 5 THEN PRINT "Oops!" ELSE PRINT "Done!"
 
 FOR i = 0 TO 3
     FOR j = 15 TO 10 STEP -2

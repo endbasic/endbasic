@@ -43,7 +43,9 @@ currently supports:
     strings are supported, but strings must be double-quoted.
 *   `DO` / `LOOP` statements with optional `UNTIL` / `WHILE` pre- and
     post-guards and optional `EXIT DO` early terminations.
-*   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` statements.
+*   `IF ... THEN ... [ELSE ...]` uniline statements.
+*   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` multiline
+    statements.
 *   `FOR x = ... TO ... [STEP ...]` / `NEXT` loops.
 *   `GOSUB line` / `GOSUB @label` / `RETURN` for procedure execution.
 *   `GOTO line` / `GOTO @label` statements and `@label` annotations.

@@ -265,7 +265,7 @@ impl<'a> Parser<'a> {
 
         let next = self.lexer.peek()?;
         match &next.token {
-            Token::Eof | Token::Eol => (),
+            Token::Eof | Token::Eol | Token::Else => (),
             t => return Err(Error::Bad(next.pos, format!("Unexpected {} in assignment", t))),
         }
         Ok(Statement::Assignment(AssignmentSpan { vref, vref_pos, expr }))
@@ -283,7 +283,7 @@ impl<'a> Parser<'a> {
 
         let next = self.lexer.peek()?;
         match &next.token {
-            Token::Eof | Token::Eol => (),
+            Token::Eof | Token::Eol | Token::Else => (),
             t => return Err(Error::Bad(next.pos, format!("Unexpected {} in array assignment", t))),
         }
         Ok(Statement::ArrayAssignment(ArrayAssignmentSpan { vref, vref_pos, subscripts, expr }))
@@ -305,7 +305,7 @@ impl<'a> Parser<'a> {
 
             let peeked = self.lexer.peek()?;
             match peeked.token {
-                Token::Eof | Token::Eol => {
+                Token::Eof | Token::Eol | Token::Else => {
                     if expr.is_some() || !args.is_empty() {
                         args.push(ArgSpan { expr, sep: ArgSep::End, sep_pos: peeked.pos });
                     }
@@ -371,7 +371,7 @@ impl<'a> Parser<'a> {
         loop {
             let peeked = self.lexer.peek()?;
             match peeked.token {
-                Token::Eof | Token::Eol => {
+                Token::Eof | Token::Eol | Token::Else => {
                     values.push(None);
                     break;
                 }
@@ -399,7 +399,9 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-                Token::Eof | Token::Eol => panic!("Should not be consumed here; handled above"),
+                Token::Eof | Token::Eol | Token::Else => {
+                    panic!("Should not be consumed here; handled above")
+                }
 
                 Token::Comma => {
                     values.push(None);
@@ -416,7 +418,7 @@ impl<'a> Parser<'a> {
 
             let peeked = self.lexer.peek()?;
             match &peeked.token {
-                Token::Eof | Token::Eol => {
+                Token::Eof | Token::Eol | Token::Else => {
                     break;
                 }
 
@@ -690,6 +692,7 @@ impl<'a> Parser<'a> {
                 | Token::Eol
                 | Token::As
                 | Token::Comma
+                | Token::Else
                 | Token::Semicolon
                 | Token::Then
                 | Token::To
@@ -832,6 +835,7 @@ impl<'a> Parser<'a> {
                 | Token::Eol
                 | Token::As
                 | Token::Comma
+                | Token::Else
                 | Token::Semicolon
                 | Token::Then
                 | Token::To
@@ -844,7 +848,6 @@ impl<'a> Parser<'a> {
                 | Token::Do
                 | Token::Dim
                 | Token::DoubleName
-                | Token::Else
                 | Token::Elseif
                 | Token::End
                 | Token::Error
@@ -925,13 +928,45 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parses an `IF` statement.
-    fn parse_if(&mut self, if_pos: LineCol) -> Result<Statement> {
-        let expr = self.parse_required_expr("No expression in IF statement")?;
-        self.expect_and_consume(Token::Then, "No THEN in IF statement")?;
-        self.expect_and_consume(Token::Eol, "Expecting newline after THEN")?;
+    /// Parses the branches of a uniline `IF` statement.
+    fn parse_if_uniline(&mut self, branches: &mut Vec<IfBranchSpan>) -> Result<()> {
+        debug_assert!(!branches.is_empty(), "Caller must populate the guard of the first branch");
 
-        let mut branches = vec![IfBranchSpan { guard: expr, body: vec![] }];
+        let mut has_else = false;
+        let peeked = self.lexer.peek()?;
+        match peeked.token {
+            Token::Else => has_else = true,
+            _ => {
+                let stmt = self
+                    .parse_uniline()?
+                    .expect("The caller already checked for a non-empty token");
+                branches[0].body.push(stmt);
+            }
+        }
+
+        let peeked = self.lexer.peek()?;
+        has_else |= peeked.token == Token::Else;
+
+        if has_else {
+            let else_span = self.lexer.consume_peeked();
+            let expr = Expr::Boolean(BooleanSpan { value: true, pos: else_span.pos });
+            branches.push(IfBranchSpan { guard: expr, body: vec![] });
+            if let Some(stmt) = self.parse_uniline()? {
+                branches[1].body.push(stmt);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Parses the branches of a multiline `IF` statement.
+    fn parse_if_multiline(
+        &mut self,
+        if_pos: LineCol,
+        branches: &mut Vec<IfBranchSpan>,
+    ) -> Result<()> {
+        debug_assert!(!branches.is_empty(), "Caller must populate the guard of the first branch");
+
         let mut i = 0;
         let mut last = false;
         loop {
@@ -995,7 +1030,21 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.expect_and_consume_with_pos(Token::If, if_pos, "IF without END IF")?;
+        self.expect_and_consume_with_pos(Token::If, if_pos, "IF without END IF")
+    }
+
+    /// Parses an `IF` statement.
+    fn parse_if(&mut self, if_pos: LineCol) -> Result<Statement> {
+        let expr = self.parse_required_expr("No expression in IF statement")?;
+        self.expect_and_consume(Token::Then, "No THEN in IF statement")?;
+
+        let mut branches = vec![IfBranchSpan { guard: expr, body: vec![] }];
+
+        let peeked = self.lexer.peek()?;
+        match peeked.token {
+            Token::Eol | Token::Eof => self.parse_if_multiline(if_pos, &mut branches)?,
+            _ => self.parse_if_uniline(&mut branches)?,
+        }
 
         Ok(Statement::If(IfSpan { branches }))
     }
@@ -1220,6 +1269,39 @@ impl<'a> Parser<'a> {
             }
         }
         self.reset()
+    }
+
+    /// Extracts the next available uniline statement from the input stream, or `None` if none is
+    /// available.
+    ///
+    /// The statement must be specifiable in a single line as part of a uniline `IF` statement, and
+    /// we currently expect this to only be used while parsing an `IF`.
+    ///
+    /// On success, the stream is left in a position where the next statement can be extracted.
+    /// On failure, the caller must advance the stream to the next statement by calling `reset`.
+    fn parse_uniline(&mut self) -> Result<Option<Statement>> {
+        let token_span = self.lexer.read()?;
+        match token_span.token {
+            Token::Data => Ok(Some(self.parse_data()?)),
+            Token::End => Ok(Some(self.parse_end(token_span.pos)?)),
+            Token::Eof | Token::Eol => Ok(None),
+            Token::Exit => Ok(Some(self.parse_exit_do(token_span.pos)?)),
+            Token::Gosub => Ok(Some(self.parse_gosub()?)),
+            Token::Goto => Ok(Some(self.parse_goto()?)),
+            Token::On => Ok(Some(self.parse_on()?)),
+            Token::Return => Ok(Some(Statement::Return(ReturnSpan { pos: token_span.pos }))),
+            Token::Symbol(vref) => {
+                let peeked = self.lexer.peek()?;
+                if peeked.token == Token::Equal {
+                    self.lexer.consume_peeked();
+                    Ok(Some(self.parse_assignment(vref, token_span.pos)?))
+                } else {
+                    Ok(Some(self.parse_array_or_builtin_call(vref, token_span.pos)?))
+                }
+            }
+            Token::Bad(msg) => Err(Error::Bad(token_span.pos, msg)),
+            t => Err(Error::Bad(token_span.pos, format!("Unexpected {} in uniline IF branch", t))),
+        }
     }
 
     /// Extracts the next available statement from the input stream, or `None` if none is available.
@@ -2644,9 +2726,9 @@ mod tests {
     #[test]
     fn test_expr_errors_due_to_keywords() {
         for kw in &[
-            "BOOLEAN", "DATA", "DIM", "DOUBLE", "ELSE", "ELSEIF", "END", "ERROR", "EXIT", "FOR",
-            "GOSUB", "GOTO", "IF", "INTEGER", "LOOP", "NEXT", "ON", "RESUME", "RETURN", "STRING",
-            "UNTIL", "WEND", "WHILE",
+            "BOOLEAN", "DATA", "DIM", "DOUBLE", "ELSEIF", "END", "ERROR", "EXIT", "FOR", "GOSUB",
+            "GOTO", "IF", "INTEGER", "LOOP", "NEXT", "ON", "RESUME", "RETURN", "STRING", "UNTIL",
+            "WEND", "WHILE",
         ] {
             do_expr_error_test(
                 &format!("2 + {} - 1", kw),
@@ -2921,7 +3003,7 @@ mod tests {
         do_error_test("IF 3 + 1\n", "1:9: No THEN in IF statement");
         do_error_test("IF 3 + 1 PRINT foo\n", "1:10: Unexpected value in expression");
         do_error_test("IF 3 + 1\nPRINT foo\n", "1:9: No THEN in IF statement");
-        do_error_test("IF 3 + 1 THEN", "1:14: Expecting newline after THEN");
+        do_error_test("IF 3 + 1 THEN", "1:1: IF without END IF");
 
         do_error_test("IF 1 THEN\n", "1:1: IF without END IF");
         do_error_test("IF 1 THEN\nELSEIF 1 THEN\n", "1:1: IF without END IF");
@@ -2957,6 +3039,208 @@ mod tests {
         do_error_test("IF 1 THEN\nEND 3 IF", "2:7: Unexpected keyword in expression");
         do_error_test("END 3 IF", "1:7: Unexpected keyword in expression");
         do_error_test("END IF", "1:1: END IF without IF");
+
+        do_error_test("IF TRUE THEN PRINT ELSE ELSE", "1:25: Unexpected ELSE in uniline IF branch");
+    }
+
+    #[test]
+    fn test_if_uniline_then() {
+        do_ok_test(
+            "IF 1 THEN A",
+            &[Statement::If(IfSpan {
+                branches: vec![IfBranchSpan {
+                    guard: expr_integer(1, 1, 4),
+                    body: vec![make_bare_builtin_call("A", 1, 11)],
+                }],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_if_uniline_then_else() {
+        do_ok_test(
+            "IF 1 THEN A ELSE B",
+            &[Statement::If(IfSpan {
+                branches: vec![
+                    IfBranchSpan {
+                        guard: expr_integer(1, 1, 4),
+                        body: vec![make_bare_builtin_call("A", 1, 11)],
+                    },
+                    IfBranchSpan {
+                        guard: expr_boolean(true, 1, 13),
+                        body: vec![make_bare_builtin_call("B", 1, 18)],
+                    },
+                ],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_if_uniline_empty_then_else() {
+        do_ok_test(
+            "IF 1 THEN ELSE B",
+            &[Statement::If(IfSpan {
+                branches: vec![
+                    IfBranchSpan { guard: expr_integer(1, 1, 4), body: vec![] },
+                    IfBranchSpan {
+                        guard: expr_boolean(true, 1, 11),
+                        body: vec![make_bare_builtin_call("B", 1, 16)],
+                    },
+                ],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_if_uniline_then_empty_else() {
+        do_ok_test(
+            "IF 1 THEN A ELSE",
+            &[Statement::If(IfSpan {
+                branches: vec![
+                    IfBranchSpan {
+                        guard: expr_integer(1, 1, 4),
+                        body: vec![make_bare_builtin_call("A", 1, 11)],
+                    },
+                    IfBranchSpan { guard: expr_boolean(true, 1, 13), body: vec![] },
+                ],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_if_uniline_empty_then_empty_else() {
+        do_ok_test(
+            "IF 1 THEN ELSE",
+            &[Statement::If(IfSpan {
+                branches: vec![
+                    IfBranchSpan { guard: expr_integer(1, 1, 4), body: vec![] },
+                    IfBranchSpan { guard: expr_boolean(true, 1, 11), body: vec![] },
+                ],
+            })],
+        );
+    }
+
+    /// Performs a test of a uniline if statement followed by a specific allowed statement type.
+    ///
+    /// `text` is the literal statement to append to the if statement, and `stmt` contains the
+    /// expected parsed statement.  The expected positions for the parsed statement are line 1 and
+    /// columns offset by 11 characters.
+    fn do_if_uniline_allowed_test(text: &str, stmt: Statement) {
+        do_ok_test(
+            &format!("IF 1 THEN {}\nZ", text),
+            &[
+                Statement::If(IfSpan {
+                    branches: vec![IfBranchSpan { guard: expr_integer(1, 1, 4), body: vec![stmt] }],
+                }),
+                make_bare_builtin_call("Z", 2, 1),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_if_uniline_allowed_data() {
+        do_if_uniline_allowed_test("DATA", Statement::Data(DataSpan { values: vec![None] }));
+    }
+
+    #[test]
+    fn test_if_uniline_allowed_end() {
+        do_if_uniline_allowed_test(
+            "END 8",
+            Statement::End(EndSpan { code: Some(expr_integer(8, 1, 15)) }),
+        );
+    }
+
+    #[test]
+    fn test_if_uniline_allowed_exit() {
+        do_if_uniline_allowed_test("EXIT DO", Statement::ExitDo(ExitDoSpan { pos: lc(1, 11) }));
+
+        do_error_test("IF 1 THEN EXIT", "1:15: Expecting DO after EXIT");
+    }
+
+    #[test]
+    fn test_if_uniline_allowed_gosub() {
+        do_if_uniline_allowed_test(
+            "GOSUB 10",
+            Statement::Gosub(GotoSpan { target: "10".to_owned(), target_pos: lc(1, 17) }),
+        );
+
+        do_error_test("IF 1 THEN GOSUB", "1:16: Expected label name after GOSUB");
+    }
+
+    #[test]
+    fn test_if_uniline_allowed_goto() {
+        do_if_uniline_allowed_test(
+            "GOTO 10",
+            Statement::Goto(GotoSpan { target: "10".to_owned(), target_pos: lc(1, 16) }),
+        );
+
+        do_error_test("IF 1 THEN GOTO", "1:15: Expected label name after GOTO");
+    }
+
+    #[test]
+    fn test_if_uniline_allowed_on_error() {
+        do_if_uniline_allowed_test(
+            "ON ERROR RESUME NEXT",
+            Statement::OnError(OnErrorSpan::ResumeNext),
+        );
+
+        do_error_test("IF 1 THEN ON", "1:13: Expected ERROR after ON");
+    }
+
+    #[test]
+    fn test_if_uniline_allowed_return() {
+        do_if_uniline_allowed_test("RETURN", Statement::Return(ReturnSpan { pos: lc(1, 11) }));
+    }
+
+    #[test]
+    fn test_if_uniline_allowed_assignment() {
+        do_if_uniline_allowed_test(
+            "a = 3",
+            Statement::Assignment(AssignmentSpan {
+                vref: VarRef::new("a", VarType::Auto),
+                vref_pos: lc(1, 11),
+                expr: expr_integer(3, 1, 15),
+            }),
+        );
+    }
+
+    #[test]
+    fn test_if_uniline_allowed_array_assignment() {
+        do_if_uniline_allowed_test(
+            "a(3) = 5",
+            Statement::ArrayAssignment(ArrayAssignmentSpan {
+                vref: VarRef::new("a", VarType::Auto),
+                vref_pos: lc(1, 11),
+                subscripts: vec![expr_integer(3, 1, 13)],
+                expr: expr_integer(5, 1, 18),
+            }),
+        );
+    }
+
+    #[test]
+    fn test_if_uniline_allowed_builtin_call() {
+        do_if_uniline_allowed_test(
+            "a 0",
+            Statement::BuiltinCall(BuiltinCallSpan {
+                name: "A".to_owned(),
+                name_pos: lc(1, 11),
+                args: vec![ArgSpan {
+                    expr: Some(expr_integer(0, 1, 13)),
+                    sep: ArgSep::End,
+                    sep_pos: lc(1, 14),
+                }],
+            }),
+        );
+    }
+
+    #[test]
+    fn test_if_uniline_unallowed_statements() {
+        for t in ["DIM", "DO", "IF", "FOR", "10", "@label", "WHILE"] {
+            do_error_test(
+                &format!("IF 1 THEN {}", t),
+                &format!("1:11: Unexpected {} in uniline IF branch", t),
+            );
+        }
     }
 
     #[test]
