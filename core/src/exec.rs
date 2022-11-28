@@ -1228,7 +1228,7 @@ mod tests {
 
     #[test]
     fn test_if_errors() {
-        do_simple_error_test("IF TRUE THEN END IF", "1:14: Expecting newline after THEN");
+        do_simple_error_test("IF TRUE THEN END IF", "1:14: END IF without IF");
         do_simple_error_test(
             "IF TRUE THEN\nELSE IF TRUE THEN\nEND IF",
             "2:6: Expecting newline after ELSE",

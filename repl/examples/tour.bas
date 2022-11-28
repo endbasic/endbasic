@@ -101,6 +101,10 @@ PRINT "    ELSE"
 PRINT "        PRINT \"a is something else\""
 PRINT "    END IF"
 PRINT
+PRINT "If statements can also be collapsed into a single line like this:"
+PRINT
+PRINT "   IF a% = 1 THEN PRINT \"a is 1\" ELSE PRINT \"a is something else\""
+PRINT
 PRINT "Do loops look like this:"
 PRINT
 PRINT "    DO: PRINT \"Infinite loop with early exit\": EXIT DO: LOOP"

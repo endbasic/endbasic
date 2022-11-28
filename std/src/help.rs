@@ -56,6 +56,7 @@ const LANG_REFERENCE: &str = r"
         DO [UNTIL|WHILE expr?]: ...: [EXIT DO]: ...: LOOP
         DO: ...: [EXIT DO]: ...: LOOP [UNTIL|WHILE expr?]
         FOR varref = expr<%|#> TO expr<%|#> [STEP num]: ...: NEXT
+        IF expr? THEN ... [ELSE ...]
         IF expr? THEN: ...: ELSEIF expr? THEN: ...: ELSE: ...: END IF
         WHILE expr?: ...: WEND
 

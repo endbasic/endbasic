@@ -104,6 +104,8 @@ for the time being.**
 *   Added support for `DO` loops with optional `UNTIL`/`WHILE` pre- and
     post-guards and `EXIT DO` early terminations.
 
+*   Added support for uniline `IF` statements.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
