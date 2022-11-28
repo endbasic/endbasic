@@ -54,6 +54,7 @@ const LANG_REFERENCE: &str = r"
         10 GOTO 10: @label GOTO @label
         10 RETURN: GOSUB 10: @label RETURN: GOSUB @label
         DO [UNTIL|WHILE expr?]: ...: [EXIT DO]: ...: LOOP
+        DO: ...: [EXIT DO]: ...: LOOP [UNTIL|WHILE expr?]
         FOR varref = expr<%|#> TO expr<%|#> [STEP num]: ...: NEXT
         IF expr? THEN: ...: ELSEIF expr? THEN: ...: ELSE: ...: END IF
         WHILE expr?: ...: WEND

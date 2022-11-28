@@ -522,6 +522,14 @@ impl Machine {
                     }
                 }
 
+                Instruction::JumpIfTrue(span) => match span.cond.eval(&mut self.symbols).await? {
+                    Value::Boolean(false) => context.pc += 1,
+                    Value::Boolean(true) => context.pc = span.addr,
+                    _ => {
+                        return new_syntax_error(span.cond.start_pos(), span.error_msg);
+                    }
+                },
+
                 Instruction::JumpIfNotTrue(span) => {
                     match span.cond.eval(&mut self.symbols).await? {
                         Value::Boolean(true) => context.pc += 1,
@@ -1087,7 +1095,7 @@ mod tests {
     }
 
     #[test]
-    fn test_do_until_ok() {
+    fn test_do_pre_until_ok() {
         let code = r#"
             IN n
             DO UNTIL n = 0
@@ -1102,7 +1110,7 @@ mod tests {
     }
 
     #[test]
-    fn test_do_while_ok() {
+    fn test_do_pre_while_ok() {
         let code = r#"
             IN n
             DO WHILE n > 0
@@ -1114,6 +1122,36 @@ mod tests {
         do_ok_test(code, &["3"], &["n is 3", "n is 2", "n is 1"]);
 
         do_ok_test("DO WHILE FALSE\nOUT 1\nLOOP", &[], &[]);
+    }
+
+    #[test]
+    fn test_do_post_until_ok() {
+        let code = r#"
+            IN n
+            DO
+                OUT "n is"; n
+                n = n - 1
+            LOOP UNTIL n = 0
+        "#;
+        do_ok_test(code, &["1"], &["n is 1"]);
+        do_ok_test(code, &["3"], &["n is 3", "n is 2", "n is 1"]);
+
+        do_ok_test("DO\nOUT 1\nLOOP UNTIL TRUE", &[], &["1"]);
+    }
+
+    #[test]
+    fn test_do_post_while_ok() {
+        let code = r#"
+            IN n
+            DO
+                OUT "n is"; n
+                n = n - 1
+            LOOP WHILE n > 0
+        "#;
+        do_ok_test(code, &["1"], &["n is 1"]);
+        do_ok_test(code, &["3"], &["n is 3", "n is 2", "n is 1"]);
+
+        do_ok_test("DO\nOUT 1\nLOOP WHILE FALSE", &[], &["1"]);
     }
 
     #[test]

@@ -101,8 +101,8 @@ for the time being.**
 
 *   Replaced the `EXIT` command with the `END` keyword.
 
-*   Added support for `DO` loops with optional `UNTIL`/`WHILE` pre-guards
-    and `EXIT DO` early terminations.
+*   Added support for `DO` loops with optional `UNTIL`/`WHILE` pre- and
+    post-guards and `EXIT DO` early terminations.
 
 ## Changes in version 0.9.0
 

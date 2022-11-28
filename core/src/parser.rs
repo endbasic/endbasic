@@ -515,38 +515,51 @@ impl<'a> Parser<'a> {
     /// `part` is a string indicating where the clause is expected (either after `DO` or after
     /// `LOOP`).
     fn parse_do_guard(&mut self, part: &str) -> Result<Option<Expr>> {
-        let token_span = self.lexer.read()?;
-        match token_span.token {
+        let peeked = self.lexer.peek()?;
+        match peeked.token {
             Token::Until => {
+                self.lexer.consume_peeked();
                 let expr = self.parse_required_expr("No expression in UNTIL clause")?;
-                self.expect_and_consume(Token::Eol, format!("Expecting newline after {}", part))?;
 
                 let pos = expr.start_pos();
                 Ok(Some(Expr::Not(Box::from(UnaryOpSpan { expr, pos }))))
             }
             Token::While => {
+                self.lexer.consume_peeked();
                 let expr = self.parse_required_expr("No expression in WHILE clause")?;
-                self.expect_and_consume(Token::Eol, format!("Expecting newline after {}", part))?;
                 Ok(Some(expr))
             }
-            Token::Eol => Ok(None),
-            _ => Err(Error::Bad(
-                token_span.pos,
-                format!("Expecting newline, UNTIL or WHILE after {}", part),
-            )),
+            Token::Eof | Token::Eol => Ok(None),
+            _ => {
+                let token_span = self.lexer.consume_peeked();
+                Err(Error::Bad(
+                    token_span.pos,
+                    format!("Expecting newline, UNTIL or WHILE after {}", part),
+                ))
+            }
         }
     }
 
     /// Parses a `DO` statement.
     fn parse_do(&mut self, do_pos: LineCol) -> Result<Statement> {
         let pre_guard = self.parse_do_guard("DO")?;
+        self.expect_and_consume(Token::Eol, "Expecting newline after DO")?;
 
         let stmts = self.parse_until(Token::Loop)?;
         self.expect_and_consume_with_pos(Token::Loop, do_pos, "DO without LOOP")?;
 
-        let guard = match pre_guard {
-            None => DoGuard::Infinite,
-            Some(guard) => DoGuard::Pre(guard),
+        let post_guard = self.parse_do_guard("LOOP")?;
+
+        let guard = match (pre_guard, post_guard) {
+            (None, None) => DoGuard::Infinite,
+            (Some(guard), None) => DoGuard::Pre(guard),
+            (None, Some(guard)) => DoGuard::Post(guard),
+            (Some(_), Some(_)) => {
+                return Err(Error::Bad(
+                    do_pos,
+                    "DO loop cannot have pre and post guards at the same time".to_owned(),
+                ))
+            }
         };
 
         Ok(Statement::Do(DoSpan { guard, body: stmts }))
@@ -559,6 +572,14 @@ impl<'a> Parser<'a> {
                 Token::Eof => break,
                 Token::Loop => {
                     self.lexer.consume_peeked();
+                    loop {
+                        match self.lexer.peek()?.token {
+                            Token::Eof | Token::Eol => break,
+                            _ => {
+                                self.lexer.consume_peeked();
+                            }
+                        }
+                    }
                     break;
                 }
                 _ => {
@@ -1967,7 +1988,7 @@ mod tests {
     }
 
     #[test]
-    fn test_do_until_loops() {
+    fn test_do_pre_until_loops() {
         do_ok_test(
             "DO UNTIL TRUE\nA\nB\nLOOP",
             &[Statement::Do(DoSpan {
@@ -1981,7 +2002,7 @@ mod tests {
     }
 
     #[test]
-    fn test_do_while_loops() {
+    fn test_do_pre_while_loops() {
         do_ok_test(
             "DO WHILE TRUE\nA\nB\nLOOP",
             &[Statement::Do(DoSpan {
@@ -1992,13 +2013,38 @@ mod tests {
     }
 
     #[test]
-    fn test_do_until_while_nested() {
+    fn test_do_post_until_loops() {
+        do_ok_test(
+            "DO\nA\nB\nLOOP UNTIL TRUE",
+            &[Statement::Do(DoSpan {
+                guard: DoGuard::Post(Expr::Not(Box::from(UnaryOpSpan {
+                    expr: expr_boolean(true, 4, 12),
+                    pos: lc(4, 12),
+                }))),
+                body: vec![make_bare_builtin_call("A", 2, 1), make_bare_builtin_call("B", 3, 1)],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_do_post_while_loops() {
+        do_ok_test(
+            "DO\nA\nB\nLOOP WHILE FALSE",
+            &[Statement::Do(DoSpan {
+                guard: DoGuard::Post(expr_boolean(false, 4, 12)),
+                body: vec![make_bare_builtin_call("A", 2, 1), make_bare_builtin_call("B", 3, 1)],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_do_nested() {
         let code = r#"
             DO WHILE TRUE
                 A
-                DO UNTIL FALSE
+                DO
                     B
-                LOOP
+                LOOP UNTIL FALSE
                 C
             LOOP
         "#;
@@ -2009,9 +2055,9 @@ mod tests {
                 body: vec![
                     make_bare_builtin_call("A", 3, 17),
                     Statement::Do(DoSpan {
-                        guard: DoGuard::Pre(Expr::Not(Box::from(UnaryOpSpan {
-                            expr: expr_boolean(false, 4, 26),
-                            pos: lc(4, 26),
+                        guard: DoGuard::Post(Expr::Not(Box::from(UnaryOpSpan {
+                            expr: expr_boolean(false, 6, 28),
+                            pos: lc(6, 28),
                         }))),
                         body: vec![make_bare_builtin_call("B", 5, 21)],
                     }),
@@ -2022,14 +2068,10 @@ mod tests {
     }
 
     #[test]
-    fn test_do_until_while_errors() {
+    fn test_do_errors() {
         do_error_test("DO\n", "1:1: DO without LOOP");
         do_error_test("DO FOR\n", "1:4: Expecting newline, UNTIL or WHILE after DO");
 
-        do_error_test("DO UNTIL\n", "1:9: No expression in UNTIL clause");
-        do_error_test("DO WHILE\n", "1:9: No expression in WHILE clause");
-        do_error_test("DO UNTIL TRUE", "1:14: Expecting newline after DO");
-        do_error_test("DO WHILE TRUE", "1:14: Expecting newline after DO");
         do_error_test("\n\nDO UNTIL TRUE\n", "3:1: DO without LOOP");
         do_error_test("\n\nDO WHILE TRUE\n", "3:1: DO without LOOP");
         do_error_test("DO UNTIL TRUE\nEND", "1:1: DO without LOOP");
@@ -2039,8 +2081,24 @@ mod tests {
         do_error_test("DO UNTIL TRUE\nEND WHILE\n", "2:5: Unexpected keyword in expression");
         do_error_test("DO WHILE TRUE\nEND WHILE\n", "2:5: Unexpected keyword in expression");
 
+        do_error_test("DO UNTIL\n", "1:9: No expression in UNTIL clause");
+        do_error_test("DO WHILE\n", "1:9: No expression in WHILE clause");
+        do_error_test("DO UNTIL TRUE", "1:14: Expecting newline after DO");
+        do_error_test("DO WHILE TRUE", "1:14: Expecting newline after DO");
+
+        do_error_test("DO\nLOOP UNTIL", "2:11: No expression in UNTIL clause");
+        do_error_test("DO\nLOOP WHILE\n", "2:11: No expression in WHILE clause");
+
         do_error_test("DO UNTIL ,\nLOOP", "1:10: No expression in UNTIL clause");
         do_error_test("DO WHILE ,\nLOOP", "1:10: No expression in WHILE clause");
+
+        do_error_test("DO\nLOOP UNTIL ,\n", "2:12: No expression in UNTIL clause");
+        do_error_test("DO\nLOOP WHILE ,\n", "2:12: No expression in WHILE clause");
+
+        do_error_test(
+            "DO WHILE TRUE\nLOOP UNTIL FALSE",
+            "1:1: DO loop cannot have pre and post guards at the same time",
+        );
     }
 
     #[test]
