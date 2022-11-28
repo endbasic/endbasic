@@ -497,20 +497,24 @@ pub enum DoGuard {
     /// Represents an infinite loop without guards.
     Infinite,
 
-    /// Represents a loop with a guard in the `DO` clause.
-    Pre(Expr),
+    /// Represents a loop with an `UNTIL` guard in the `DO` clause.
+    PreUntil(Expr),
 
-    /// Represents a loop with a guard in the `LOOP` clause.
-    Post(Expr),
+    /// Represents a loop with a `WHILE` guard in the `DO` clause.
+    PreWhile(Expr),
+
+    /// Represents a loop with an `UNTIL` guard in the `LOOP` clause.
+    PostUntil(Expr),
+
+    /// Represents a loop with a `WHILE` guard in the `LOOP` clause.
+    PostWhile(Expr),
 }
 
 /// Components of a `DO` statement.
 #[derive(Debug, PartialEq)]
 pub struct DoSpan {
-    /// Expression to compute whether to execute the loop's body or not.
-    ///
-    /// Whether this corresponds to a `DO WHILE` or a `DO UNTIL` loop is encoded in the expression
-    /// itself.
+    /// Expression to compute whether to execute the loop's body or not and where this appears in
+    /// the `DO` statement.
     pub guard: DoGuard,
 
     /// Statements within the loop's body.

@@ -514,20 +514,20 @@ impl<'a> Parser<'a> {
     ///
     /// `part` is a string indicating where the clause is expected (either after `DO` or after
     /// `LOOP`).
-    fn parse_do_guard(&mut self, part: &str) -> Result<Option<Expr>> {
+    ///
+    /// Returns the guard expression and a boolean indicating if this is an `UNTIL` clause.
+    fn parse_do_guard(&mut self, part: &str) -> Result<Option<(Expr, bool)>> {
         let peeked = self.lexer.peek()?;
         match peeked.token {
             Token::Until => {
                 self.lexer.consume_peeked();
                 let expr = self.parse_required_expr("No expression in UNTIL clause")?;
-
-                let pos = expr.start_pos();
-                Ok(Some(Expr::Not(Box::from(UnaryOpSpan { expr, pos }))))
+                Ok(Some((expr, true)))
             }
             Token::While => {
                 self.lexer.consume_peeked();
                 let expr = self.parse_required_expr("No expression in WHILE clause")?;
-                Ok(Some(expr))
+                Ok(Some((expr, false)))
             }
             Token::Eof | Token::Eol => Ok(None),
             _ => {
@@ -552,8 +552,10 @@ impl<'a> Parser<'a> {
 
         let guard = match (pre_guard, post_guard) {
             (None, None) => DoGuard::Infinite,
-            (Some(guard), None) => DoGuard::Pre(guard),
-            (None, Some(guard)) => DoGuard::Post(guard),
+            (Some((guard, true)), None) => DoGuard::PreUntil(guard),
+            (Some((guard, false)), None) => DoGuard::PreWhile(guard),
+            (None, Some((guard, true))) => DoGuard::PostUntil(guard),
+            (None, Some((guard, false))) => DoGuard::PostWhile(guard),
             (Some(_), Some(_)) => {
                 return Err(Error::Bad(
                     do_pos,
@@ -1962,10 +1964,7 @@ mod tests {
         do_ok_test(
             "DO UNTIL TRUE\nLOOP",
             &[Statement::Do(DoSpan {
-                guard: DoGuard::Pre(Expr::Not(Box::from(UnaryOpSpan {
-                    expr: expr_boolean(true, 1, 10),
-                    pos: lc(1, 10),
-                }))),
+                guard: DoGuard::PreUntil(expr_boolean(true, 1, 10)),
                 body: vec![],
             })],
         );
@@ -1973,10 +1972,7 @@ mod tests {
         do_ok_test(
             "DO UNTIL FALSE\nREM foo\nLOOP",
             &[Statement::Do(DoSpan {
-                guard: DoGuard::Pre(Expr::Not(Box::from(UnaryOpSpan {
-                    expr: expr_boolean(false, 1, 10),
-                    pos: lc(1, 10),
-                }))),
+                guard: DoGuard::PreUntil(expr_boolean(false, 1, 10)),
                 body: vec![],
             })],
         );
@@ -1992,10 +1988,7 @@ mod tests {
         do_ok_test(
             "DO UNTIL TRUE\nA\nB\nLOOP",
             &[Statement::Do(DoSpan {
-                guard: DoGuard::Pre(Expr::Not(Box::from(UnaryOpSpan {
-                    expr: expr_boolean(true, 1, 10),
-                    pos: lc(1, 10),
-                }))),
+                guard: DoGuard::PreUntil(expr_boolean(true, 1, 10)),
                 body: vec![make_bare_builtin_call("A", 2, 1), make_bare_builtin_call("B", 3, 1)],
             })],
         );
@@ -2006,7 +1999,7 @@ mod tests {
         do_ok_test(
             "DO WHILE TRUE\nA\nB\nLOOP",
             &[Statement::Do(DoSpan {
-                guard: DoGuard::Pre(expr_boolean(true, 1, 10)),
+                guard: DoGuard::PreWhile(expr_boolean(true, 1, 10)),
                 body: vec![make_bare_builtin_call("A", 2, 1), make_bare_builtin_call("B", 3, 1)],
             })],
         );
@@ -2017,10 +2010,8 @@ mod tests {
         do_ok_test(
             "DO\nA\nB\nLOOP UNTIL TRUE",
             &[Statement::Do(DoSpan {
-                guard: DoGuard::Post(Expr::Not(Box::from(UnaryOpSpan {
-                    expr: expr_boolean(true, 4, 12),
-                    pos: lc(4, 12),
-                }))),
+                guard: DoGuard::PostUntil(expr_boolean(true, 4, 12)),
+
                 body: vec![make_bare_builtin_call("A", 2, 1), make_bare_builtin_call("B", 3, 1)],
             })],
         );
@@ -2031,7 +2022,7 @@ mod tests {
         do_ok_test(
             "DO\nA\nB\nLOOP WHILE FALSE",
             &[Statement::Do(DoSpan {
-                guard: DoGuard::Post(expr_boolean(false, 4, 12)),
+                guard: DoGuard::PostWhile(expr_boolean(false, 4, 12)),
                 body: vec![make_bare_builtin_call("A", 2, 1), make_bare_builtin_call("B", 3, 1)],
             })],
         );
@@ -2051,14 +2042,11 @@ mod tests {
         do_ok_test(
             code,
             &[Statement::Do(DoSpan {
-                guard: DoGuard::Pre(expr_boolean(true, 2, 22)),
+                guard: DoGuard::PreWhile(expr_boolean(true, 2, 22)),
                 body: vec![
                     make_bare_builtin_call("A", 3, 17),
                     Statement::Do(DoSpan {
-                        guard: DoGuard::Post(Expr::Not(Box::from(UnaryOpSpan {
-                            expr: expr_boolean(false, 6, 28),
-                            pos: lc(6, 28),
-                        }))),
+                        guard: DoGuard::PostUntil(expr_boolean(false, 6, 28)),
                         body: vec![make_bare_builtin_call("B", 5, 21)],
                     }),
                     make_bare_builtin_call("C", 7, 17),
