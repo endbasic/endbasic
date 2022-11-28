@@ -101,6 +101,9 @@ for the time being.**
 
 *   Replaced the `EXIT` command with the `END` keyword.
 
+*   Added support for `DO UNTIL` and `DO WHILE` loops with optional
+    `EXIT DO` early terminations.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**

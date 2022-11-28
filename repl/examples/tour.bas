@@ -101,17 +101,18 @@ PRINT "    ELSE"
 PRINT "        PRINT \"a is something else\""
 PRINT "    END IF"
 PRINT
+PRINT "Do loops look like this:"
+PRINT
+PRINT "    DO UNTIL a% = 10: a% = a% + 1: LOOP"
+PRINT "    DO WHILE a% < 10: a% = a% + 1: LOOP"
+PRINT
 PRINT "While loops look like this:"
 PRINT
-PRINT "    WHILE a% < 10"
-PRINT "        a% = a% + 1"
-PRINT "    WEND"
+PRINT "    WHILE a% < 10: a% = a% + 1: WEND"
 PRINT
 PRINT "For loops look like this:"
 PRINT
-PRINT "    FOR a = 1 TO 10 STEP 2"
-PRINT "        PRINT a"
-PRINT "    NEXT"
+PRINT "    FOR a = 1 TO 10 STEP 2: PRINT a: NEXT"
 GOSUB @wait
 
 title = "Unstructured control flow": GOSUB @banner

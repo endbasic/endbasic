@@ -225,9 +225,10 @@ Output from HELP "LANG":
     Flow control:
         10 GOTO 10: @label GOTO @label
         10 RETURN: GOSUB 10: @label RETURN: GOSUB @label
-        IF expr THEN: ...: ELSEIF expr THEN: ...: ELSE: ...: END IF
-        FOR varref = expr TO expr [STEP int]: ...: NEXT
-        WHILE expr: ...: WEND
+        DO UNTIL|WHILE expr?: ...: [EXIT DO]: ...: LOOP
+        FOR varref = expr<%|#> TO expr<%|#> [STEP num]: ...: NEXT
+        IF expr? THEN: ...: ELSEIF expr? THEN: ...: ELSE: ...: END IF
+        WHILE expr?: ...: WEND
 
     Error handling:
         ON ERROR GOTO 0         Terminate program execution on error.
