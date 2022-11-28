@@ -491,11 +491,31 @@ pub struct DimArraySpan {
     pub subtype_pos: LineCol,
 }
 
+/// Components of a `DO` statement.
+#[derive(Debug, PartialEq)]
+pub struct DoSpan {
+    /// Expression to compute whether to execute the loop's body or not.
+    ///
+    /// Whether this corresponds to a `DO WHILE` or a `DO UNTIL` loop is encoded in the expression
+    /// itself.
+    pub expr: Expr,
+
+    /// Statements within the loop's body.
+    pub body: Vec<Statement>,
+}
+
 /// Components of an `END` statement.
 #[derive(Debug, PartialEq)]
 pub struct EndSpan {
     /// Integer expression to compute the return code.
     pub code: Option<Expr>,
+}
+
+/// Components of an `EXIT DO` statement.
+#[derive(Debug, Eq, PartialEq)]
+pub struct ExitDoSpan {
+    /// Position of the statement.
+    pub pos: LineCol,
 }
 
 /// Components of a branch of an `IF` statement.
@@ -624,8 +644,14 @@ pub enum Statement {
     /// Represents an array definition.
     DimArray(DimArraySpan),
 
+    /// Represents a `DO` statement.
+    Do(DoSpan),
+
     /// Represents an `END` statement.
     End(EndSpan),
+
+    /// Represents an `EXIT DO` statement.
+    ExitDo(ExitDoSpan),
 
     /// Represents a `FOR` statement.
     For(ForSpan),

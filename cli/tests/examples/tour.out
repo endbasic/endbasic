@@ -64,17 +64,18 @@ Fully-specified if statements look like this:
         PRINT "a is something else"
     END IF
 
+Do loops look like this:
+
+    DO UNTIL a% = 10: a% = a% + 1: LOOP
+    DO WHILE a% < 10: a% = a% + 1: LOOP
+
 While loops look like this:
 
-    WHILE a% < 10
-        a% = a% + 1
-    WEND
+    WHILE a% < 10: a% = a% + 1: WEND
 
 For loops look like this:
 
-    FOR a = 1 TO 10 STEP 2
-        PRINT a
-    NEXT
+    FOR a = 1 TO 10 STEP 2: PRINT a: NEXT
 
 [38;5;11m[2J[1;1H
  EndBASIC tour: Unstructured control flow

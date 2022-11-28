@@ -510,6 +510,50 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parses a `DO` statement.
+    fn parse_do(&mut self, do_pos: LineCol) -> Result<Statement> {
+        let token_span = self.lexer.read()?;
+        let is_until = match token_span.token {
+            Token::Until => true,
+            Token::While => false,
+            _ => {
+                return Err(Error::Bad(
+                    token_span.pos,
+                    "Expecting UNTIL or WHILE after DO".to_owned(),
+                ))
+            }
+        };
+
+        let mut expr = self.parse_required_expr("No expression in DO statement")?;
+        self.expect_and_consume(Token::Eol, "Expecting newline after DO")?;
+
+        let stmts = self.parse_until(Token::Loop)?;
+        self.expect_and_consume_with_pos(Token::Loop, do_pos, "DO without LOOP")?;
+
+        if is_until {
+            let pos = expr.start_pos();
+            expr = Expr::Not(Box::from(UnaryOpSpan { expr, pos }));
+        }
+        Ok(Statement::Do(DoSpan { expr, body: stmts }))
+    }
+
+    /// Advances until the next statement after failing to parse a `DO` statement.
+    fn reset_do(&mut self) -> Result<()> {
+        loop {
+            match self.lexer.peek()?.token {
+                Token::Eof => break,
+                Token::Loop => {
+                    self.lexer.consume_peeked();
+                    break;
+                }
+                _ => {
+                    self.lexer.consume_peeked();
+                }
+            }
+        }
+        self.reset()
+    }
+
     /// Parses a potential `END` statement but returns `None` if this corresponds to a statement
     /// terminator such as `END IF`.
     fn maybe_parse_end(&mut self) -> Result<Option<Statement>> {
@@ -528,6 +572,12 @@ impl<'a> Parser<'a> {
             Some(stmt) => Ok(stmt),
             None => Err(Error::Bad(pos, "END IF without IF".to_owned())),
         }
+    }
+
+    /// Parses an `EXIT DO` statement.
+    fn parse_exit_do(&mut self, pos: LineCol) -> Result<Statement> {
+        self.expect_and_consume(Token::Do, "Expecting DO after EXIT")?;
+        Ok(Statement::ExitDo(ExitDoSpan { pos }))
     }
 
     /// Parses a variable list of comma-separated expressions.  The caller must have consumed the
@@ -753,23 +803,27 @@ impl<'a> Parser<'a> {
 
                 Token::BooleanName
                 | Token::Data
+                | Token::Do
                 | Token::Dim
                 | Token::DoubleName
                 | Token::Else
                 | Token::Elseif
                 | Token::End
                 | Token::Error
+                | Token::Exit
                 | Token::For
                 | Token::Gosub
                 | Token::Goto
                 | Token::If
                 | Token::IntegerName
                 | Token::Label(_)
+                | Token::Loop
                 | Token::Next
                 | Token::On
                 | Token::Resume
                 | Token::Return
                 | Token::TextName
+                | Token::Until
                 | Token::Wend
                 | Token::While => {
                     return Err(Error::Bad(ts.pos, "Unexpected keyword in expression".to_owned()));
@@ -1148,9 +1202,17 @@ impl<'a> Parser<'a> {
         let res = match token_span.token {
             Token::Data => Ok(Some(self.parse_data()?)),
             Token::Dim => Ok(Some(self.parse_dim()?)),
+            Token::Do => {
+                let result = self.parse_do(token_span.pos);
+                if result.is_err() {
+                    self.reset_do()?;
+                }
+                Ok(Some(result?))
+            }
             Token::End => Ok(Some(self.parse_end(token_span.pos)?)),
             Token::Eof => return Ok(None),
             Token::Eol => Ok(None),
+            Token::Exit => Ok(Some(self.parse_exit_do(token_span.pos)?)),
             Token::If => {
                 let result = self.parse_if(token_span.pos);
                 if result.is_err() {
@@ -1859,6 +1921,132 @@ mod tests {
         do_error_test("DIM a(1) AS INTEGER 3", "1:21: Unexpected 3 in DIM statement");
     }
 
+    #[test]
+    fn test_do_until_empty() {
+        do_ok_test(
+            "DO UNTIL TRUE\nLOOP",
+            &[Statement::Do(DoSpan {
+                expr: Expr::Not(Box::from(UnaryOpSpan {
+                    expr: expr_boolean(true, 1, 10),
+                    pos: lc(1, 10),
+                })),
+                body: vec![],
+            })],
+        );
+
+        do_ok_test(
+            "DO UNTIL FALSE\nREM foo\nLOOP",
+            &[Statement::Do(DoSpan {
+                expr: Expr::Not(Box::from(UnaryOpSpan {
+                    expr: expr_boolean(false, 1, 10),
+                    pos: lc(1, 10),
+                })),
+                body: vec![],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_do_while_empty() {
+        do_ok_test(
+            "DO WHILE TRUE\nLOOP",
+            &[Statement::Do(DoSpan { expr: expr_boolean(true, 1, 10), body: vec![] })],
+        );
+
+        do_ok_test(
+            "DO WHILE FALSE\nREM foo\nLOOP",
+            &[Statement::Do(DoSpan { expr: expr_boolean(false, 1, 10), body: vec![] })],
+        );
+    }
+
+    #[test]
+    fn test_do_until_loops() {
+        do_ok_test(
+            "DO UNTIL TRUE\nA\nB\nLOOP",
+            &[Statement::Do(DoSpan {
+                expr: Expr::Not(Box::from(UnaryOpSpan {
+                    expr: expr_boolean(true, 1, 10),
+                    pos: lc(1, 10),
+                })),
+                body: vec![make_bare_builtin_call("A", 2, 1), make_bare_builtin_call("B", 3, 1)],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_do_while_loops() {
+        do_ok_test(
+            "DO WHILE TRUE\nA\nB\nLOOP",
+            &[Statement::Do(DoSpan {
+                expr: expr_boolean(true, 1, 10),
+                body: vec![make_bare_builtin_call("A", 2, 1), make_bare_builtin_call("B", 3, 1)],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_do_until_while_nested() {
+        let code = r#"
+            DO WHILE TRUE
+                A
+                DO UNTIL FALSE
+                    B
+                LOOP
+                C
+            LOOP
+        "#;
+        do_ok_test(
+            code,
+            &[Statement::Do(DoSpan {
+                expr: expr_boolean(true, 2, 22),
+                body: vec![
+                    make_bare_builtin_call("A", 3, 17),
+                    Statement::Do(DoSpan {
+                        expr: Expr::Not(Box::from(UnaryOpSpan {
+                            expr: expr_boolean(false, 4, 26),
+                            pos: lc(4, 26),
+                        })),
+                        body: vec![make_bare_builtin_call("B", 5, 21)],
+                    }),
+                    make_bare_builtin_call("C", 7, 17),
+                ],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_do_until_while_errors() {
+        do_error_test("DO\n", "1:3: Expecting UNTIL or WHILE after DO");
+        do_error_test("DO FOR\n", "1:4: Expecting UNTIL or WHILE after DO");
+
+        do_error_test("DO UNTIL\n", "1:9: No expression in DO statement");
+        do_error_test("DO WHILE\n", "1:9: No expression in DO statement");
+        do_error_test("DO UNTIL TRUE", "1:14: Expecting newline after DO");
+        do_error_test("DO WHILE TRUE", "1:14: Expecting newline after DO");
+        do_error_test("\n\nDO UNTIL TRUE\n", "3:1: DO without LOOP");
+        do_error_test("\n\nDO WHILE TRUE\n", "3:1: DO without LOOP");
+        do_error_test("DO UNTIL TRUE\nEND", "1:1: DO without LOOP");
+        do_error_test("DO WHILE TRUE\nEND", "1:1: DO without LOOP");
+        do_error_test("DO UNTIL TRUE\nEND\n", "1:1: DO without LOOP");
+        do_error_test("DO WHILE TRUE\nEND\n", "1:1: DO without LOOP");
+        do_error_test("DO UNTIL TRUE\nEND WHILE\n", "2:5: Unexpected keyword in expression");
+        do_error_test("DO WHILE TRUE\nEND WHILE\n", "2:5: Unexpected keyword in expression");
+
+        do_error_test("DO UNTIL ,\nLOOP", "1:10: No expression in DO statement");
+        do_error_test("DO WHILE ,\nLOOP", "1:10: No expression in DO statement");
+    }
+
+    #[test]
+    fn test_exit_do() {
+        do_ok_test("  EXIT DO", &[Statement::ExitDo(ExitDoSpan { pos: lc(1, 3) })]);
+    }
+
+    #[test]
+    fn test_exit_do_errors() {
+        do_error_test("EXIT", "1:5: Expecting DO after EXIT");
+        do_error_test("EXIT 5", "1:6: Expecting DO after EXIT");
+    }
+
     /// Wrapper around `do_ok_test` to parse an expression.  Given that expressions alone are not
     /// valid statements, we have to put them in a statement to parse them.  In doing so, we can
     /// also put an extra statement after them to ensure we detect their end properly.
@@ -2403,8 +2591,9 @@ mod tests {
     #[test]
     fn test_expr_errors_due_to_keywords() {
         for kw in &[
-            "BOOLEAN", "DATA", "DIM", "DOUBLE", "ELSE", "ELSEIF", "END", "ERROR", "FOR", "GOSUB",
-            "GOTO", "IF", "INTEGER", "NEXT", "ON", "RESUME", "RETURN", "STRING", "WHILE",
+            "BOOLEAN", "DATA", "DIM", "DOUBLE", "ELSE", "ELSEIF", "END", "ERROR", "EXIT", "FOR",
+            "GOSUB", "GOTO", "IF", "INTEGER", "LOOP", "NEXT", "ON", "RESUME", "RETURN", "STRING",
+            "UNTIL", "WEND", "WHILE",
         ] {
             do_expr_error_test(
                 &format!("2 + {} - 1", kw),

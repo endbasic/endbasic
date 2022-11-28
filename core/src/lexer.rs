@@ -68,14 +68,17 @@ pub enum Token {
     Xor,
 
     Data,
+    Do,
     Else,
     Elseif,
     End,
     Error,
+    Exit,
     For,
     Gosub,
     Goto,
     If,
+    Loop,
     Next,
     On,
     Resume,
@@ -83,6 +86,7 @@ pub enum Token {
     Step,
     Then,
     To,
+    Until,
     Wend,
     While,
 
@@ -139,14 +143,17 @@ impl fmt::Display for Token {
             Token::Xor => write!(f, "XOR"),
 
             Token::Data => write!(f, "DATA"),
+            Token::Do => write!(f, "DO"),
             Token::Else => write!(f, "ELSE"),
             Token::Elseif => write!(f, "ELSEIF"),
             Token::End => write!(f, "END"),
             Token::Error => write!(f, "ERROR"),
+            Token::Exit => write!(f, "EXIT"),
             Token::For => write!(f, "FOR"),
             Token::Gosub => write!(f, "GOSUB"),
             Token::Goto => write!(f, "GOTO"),
             Token::If => write!(f, "IF"),
+            Token::Loop => write!(f, "LOOP"),
             Token::Next => write!(f, "NEXT"),
             Token::On => write!(f, "ON"),
             Token::Resume => write!(f, "RESUME"),
@@ -154,6 +161,7 @@ impl fmt::Display for Token {
             Token::Step => write!(f, "STEP"),
             Token::Then => write!(f, "THEN"),
             Token::To => write!(f, "TO"),
+            Token::Until => write!(f, "UNTIL"),
             Token::Wend => write!(f, "WEND"),
             Token::While => write!(f, "WHILE"),
 
@@ -401,17 +409,20 @@ impl<'a> Lexer<'a> {
             "BOOLEAN" => Token::BooleanName,
             "DATA" => Token::Data,
             "DIM" => Token::Dim,
+            "DO" => Token::Do,
             "DOUBLE" => Token::DoubleName,
             "ELSE" => Token::Else,
             "ELSEIF" => Token::Elseif,
             "END" => Token::End,
             "ERROR" => Token::Error,
+            "EXIT" => Token::Exit,
             "FALSE" => Token::Boolean(false),
             "FOR" => Token::For,
             "GOSUB" => Token::Gosub,
             "GOTO" => Token::Goto,
             "IF" => Token::If,
             "INTEGER" => Token::IntegerName,
+            "LOOP" => Token::Loop,
             "MOD" => Token::Modulo,
             "NEXT" => Token::Next,
             "NOT" => Token::Not,
@@ -425,6 +436,7 @@ impl<'a> Lexer<'a> {
             "THEN" => Token::Then,
             "TO" => Token::To,
             "TRUE" => Token::Boolean(true),
+            "UNTIL" => Token::Until,
             "WEND" => Token::Wend,
             "WHILE" => Token::While,
             "XOR" => Token::Xor,
@@ -898,6 +910,33 @@ mod tests {
                 ts(Token::IntegerName, 1, 16, 7),
                 ts(Token::TextName, 1, 24, 6),
                 ts(Token::Eof, 1, 30, 0),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_do() {
+        do_ok_test(
+            "DO UNTIL WHILE EXIT LOOP",
+            &[
+                ts(Token::Do, 1, 1, 2),
+                ts(Token::Until, 1, 4, 5),
+                ts(Token::While, 1, 10, 5),
+                ts(Token::Exit, 1, 16, 4),
+                ts(Token::Loop, 1, 21, 4),
+                ts(Token::Eof, 1, 25, 0),
+            ],
+        );
+
+        do_ok_test(
+            "do until while exit loop",
+            &[
+                ts(Token::Do, 1, 1, 2),
+                ts(Token::Until, 1, 4, 5),
+                ts(Token::While, 1, 10, 5),
+                ts(Token::Exit, 1, 16, 4),
+                ts(Token::Loop, 1, 21, 4),
+                ts(Token::Eof, 1, 25, 0),
             ],
         );
     }

@@ -55,6 +55,11 @@ struct Fixup {
 }
 
 impl Fixup {
+    /// Constructs a `Fixup` for an `EXIT DO` instruction.
+    fn from_exit_do(target: String, span: ExitDoSpan) -> Self {
+        Self { target, target_pos: span.pos, ftype: FixupType::Goto }
+    }
+
     /// Constructs a `Fixup` for a `GOSUB` instruction.
     fn from_gosub(span: GotoSpan) -> Self {
         Self { target: span.target, target_pos: span.target_pos, ftype: FixupType::Gosub }
@@ -77,6 +82,9 @@ struct Compiler {
     /// Address of the next instruction to be emitted.
     next_pc: Address,
 
+    /// Current nesting of `DO` loops, needed to assign targets for `EXIT DO` statements.
+    exit_do_level: usize,
+
     /// Mapping of discovered labels to the addresses where they are.
     labels: HashMap<String, Address>,
 
@@ -97,6 +105,38 @@ impl Compiler {
         self.instrs.push(instr);
         self.next_pc += 1;
         pc
+    }
+
+    /// Generates a fake label for the end of a `DO` loop based on the current nesting `level`.
+    ///
+    /// This is a little hack to reuse the same machinery that handles `GOTO`s to handle early exits
+    /// in `DO` loops.  We can do this because we know that users cannot specify custom labels that
+    /// start with a digit and all user-provided labels that do start with a digit are also fully
+    /// numeric.
+    fn do_label(level: usize) -> String {
+        format!("0do{}", level)
+    }
+
+    /// Compiles a `DO` loop and appends its instructions to the compilation context.
+    fn compile_do(&mut self, span: DoSpan) -> Result<()> {
+        self.exit_do_level += 1;
+
+        let start_pc = self.emit(Instruction::Nop);
+
+        self.compile_many(span.body)?;
+
+        let end_pc = self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
+
+        self.instrs[start_pc] = Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+            cond: span.expr,
+            addr: self.next_pc,
+            error_msg: "DO requires a boolean condition",
+        });
+
+        self.labels.insert(Compiler::do_label(self.exit_do_level), end_pc + 1);
+        self.exit_do_level -= 1;
+
+        Ok(())
     }
 
     /// Compiles a `FOR` loop and appends its instructions to the compilation context.
@@ -243,8 +283,23 @@ impl Compiler {
                 self.emit(Instruction::DimArray(span));
             }
 
+            Statement::Do(span) => {
+                self.compile_do(span)?;
+            }
+
             Statement::End(span) => {
                 self.emit(Instruction::End(span));
+            }
+
+            Statement::ExitDo(span) => {
+                if self.exit_do_level == 0 {
+                    return Err(Error::new(span.pos, "EXIT DO outside of DO loop".to_owned()));
+                }
+                let exit_do_pc = self.emit(Instruction::Nop);
+                self.fixups.insert(
+                    exit_do_pc,
+                    Fixup::from_exit_do(Compiler::do_label(self.exit_do_level), span),
+                );
             }
 
             Statement::For(span) => {
@@ -557,11 +612,128 @@ mod tests {
     }
 
     #[test]
+    fn test_compile_do() {
+        Tester::default()
+            .parse("DO WHILE TRUE\nFOO\nLOOP")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
+                    addr: 3,
+                    error_msg: "DO requires a boolean condition",
+                }),
+            )
+            .expect_instr(
+                1,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "FOO".to_owned(),
+                    name_pos: lc(2, 1),
+                    args: vec![],
+                }),
+            )
+            .expect_instr(2, Instruction::Jump(JumpSpan { addr: 0 }))
+            .check();
+    }
+
+    #[test]
     fn test_compile_end() {
         Tester::default()
             .parse("END")
             .compile()
             .expect_instr(0, Instruction::End(EndSpan { code: None }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_exit_do_simple() {
+        Tester::default()
+            .parse("DO WHILE TRUE\nEXIT DO\nLOOP")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
+                    addr: 3,
+                    error_msg: "DO requires a boolean condition",
+                }),
+            )
+            .expect_instr(1, Instruction::Jump(JumpSpan { addr: 3 }))
+            .expect_instr(2, Instruction::Jump(JumpSpan { addr: 0 }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_exit_do_nested() {
+        Tester::default()
+            .parse("DO WHILE TRUE\nEXIT DO\nDO UNTIL FALSE\nEXIT DO\nLOOP\nLOOP")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
+                    addr: 6,
+                    error_msg: "DO requires a boolean condition",
+                }),
+            )
+            .expect_instr(1, Instruction::Jump(JumpSpan { addr: 6 }))
+            .expect_instr(
+                2,
+                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                    cond: Expr::Not(Box::from(UnaryOpSpan {
+                        expr: Expr::Boolean(BooleanSpan { value: false, pos: lc(3, 10) }),
+                        pos: lc(3, 10),
+                    })),
+                    addr: 5,
+                    error_msg: "DO requires a boolean condition",
+                }),
+            )
+            .expect_instr(3, Instruction::Jump(JumpSpan { addr: 5 }))
+            .expect_instr(4, Instruction::Jump(JumpSpan { addr: 2 }))
+            .expect_instr(5, Instruction::Jump(JumpSpan { addr: 0 }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_exit_do_from_nested_while() {
+        Tester::default()
+            .parse("DO WHILE TRUE\nEXIT DO\nWHILE FALSE\nEXIT DO\nWEND\nLOOP")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
+                    addr: 6,
+                    error_msg: "DO requires a boolean condition",
+                }),
+            )
+            .expect_instr(1, Instruction::Jump(JumpSpan { addr: 6 }))
+            .expect_instr(
+                2,
+                Instruction::JumpIfNotTrue(JumpIfNotTrueSpan {
+                    cond: Expr::Boolean(BooleanSpan { value: false, pos: lc(3, 7) }),
+                    addr: 5,
+                    error_msg: "WHILE requires a boolean condition",
+                }),
+            )
+            .expect_instr(3, Instruction::Jump(JumpSpan { addr: 6 }))
+            .expect_instr(4, Instruction::Jump(JumpSpan { addr: 2 }))
+            .expect_instr(5, Instruction::Jump(JumpSpan { addr: 0 }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_exit_do_outside_of_loop() {
+        Tester::default()
+            .parse("EXIT DO")
+            .compile()
+            .expect_err("1:1: EXIT DO outside of DO loop")
+            .check();
+
+        Tester::default()
+            .parse("WHILE TRUE: EXIT DO: WEND")
+            .compile()
+            .expect_err("1:13: EXIT DO outside of DO loop")
             .check();
     }
 

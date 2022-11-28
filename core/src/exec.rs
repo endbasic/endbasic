@@ -1073,6 +1073,62 @@ mod tests {
     }
 
     #[test]
+    fn test_do_until_ok() {
+        let code = r#"
+            IN n
+            DO UNTIL n = 0
+                OUT "n is"; n
+                n = n - 1
+            LOOP
+        "#;
+        do_ok_test(code, &["0"], &[]);
+        do_ok_test(code, &["3"], &["n is 3", "n is 2", "n is 1"]);
+
+        do_ok_test("DO UNTIL TRUE\nOUT 1\nLOOP", &[], &[]);
+    }
+
+    #[test]
+    fn test_do_while_ok() {
+        let code = r#"
+            IN n
+            DO WHILE n > 0
+                OUT "n is"; n
+                n = n - 1
+            LOOP
+        "#;
+        do_ok_test(code, &["0"], &[]);
+        do_ok_test(code, &["3"], &["n is 3", "n is 2", "n is 1"]);
+
+        do_ok_test("DO WHILE FALSE\nOUT 1\nLOOP", &[], &[]);
+    }
+
+    #[test]
+    fn test_do_errors() {
+        do_simple_error_test("DO WHILE 2\nLOOP", "1:10: DO requires a boolean condition");
+    }
+
+    #[test]
+    fn test_exit_do() {
+        do_ok_test(
+            r#"
+            i = 5
+            DO WHILE i > 0
+                j = 2
+                DO UNTIL j = 0
+                    OUT i; j
+                    IF i = 3 AND j = 2 THEN: EXIT DO: END IF
+                    j = j - 1
+                LOOP
+                IF i = 2 THEN: EXIT DO: END IF
+                i = i - 1
+            LOOP
+        "#,
+            &[],
+            &["5 2", "5 1", "4 2", "4 1", "3 2", "2 2", "2 1"],
+        );
+    }
+
+    #[test]
     fn test_if_ok() {
         let code = r#"
             IN n
