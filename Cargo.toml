@@ -16,6 +16,3 @@ default-members = [
     "repl",
     "std",
 ]
-
-[profile.dev]
-split-debuginfo = "unpacked"
