@@ -106,6 +106,8 @@ for the time being.**
 
 *   Added support for uniline `IF` statements.
 
+*   Added support for `SELECT CASE`.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**

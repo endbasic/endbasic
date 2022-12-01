@@ -49,6 +49,8 @@ currently supports:
 *   `FOR x = ... TO ... [STEP ...]` / `NEXT` loops.
 *   `GOSUB line` / `GOSUB @label` / `RETURN` for procedure execution.
 *   `GOTO line` / `GOTO @label` statements and `@label` annotations.
+*   `SELECT CASE` / `CASE ...` / `CASE IS ...` / `CASE ... TO ...` /
+    `END SELECT` statements.
 *   `WHILE ...` / `WEND` loops.
 *   Error handling via `ON ERROR GOTO` and `ON ERROR RESUME NEXT`.
 *   UTF-8 everywhere (I think).

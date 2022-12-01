@@ -775,6 +775,7 @@ mod tests {
         let mut machine = Machine::default();
         machine.add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))));
         machine.add_command(OutCommand::new(captured_out.clone()));
+        machine.add_function(CountFunction::new());
         machine.add_function(OutfFunction::new(captured_out));
         machine.add_function(RaiseFunction::new());
         machine.add_function(SumFunction::new());
@@ -1649,6 +1650,134 @@ mod tests {
             "#,
             &[],
             &["3", "5:17: In call to RAISE: expected arg1$"],
+        );
+    }
+
+    #[test]
+    fn test_select_ok() {
+        let code = r#"
+            IN n
+            SELECT CASE n
+                CASE 1, 3, 5, 7, 9: OUT "Odd"
+                CASE 0, 2, 4, 6, 8: OUT "Even"
+                CASE 10 TO 20: OUT "Large"
+                CASE IS < 0: OUT "Negative"
+                CASE ELSE: OUT "Too large"
+            END SELECT
+        "#;
+        do_ok_test(code, &["3"], &["Odd"]);
+        do_ok_test(code, &["5"], &["Odd"]);
+        do_ok_test(code, &["0"], &["Even"]);
+        do_ok_test(code, &["8"], &["Even"]);
+        do_ok_test(code, &["10"], &["Large"]);
+        do_ok_test(code, &["15"], &["Large"]);
+        do_ok_test(code, &["20"], &["Large"]);
+        do_ok_test(code, &["-1"], &["Negative"]);
+        do_ok_test(code, &["21"], &["Too large"]);
+        do_ok_test(code, &["10000"], &["Too large"]);
+    }
+
+    #[test]
+    fn test_select_test_expression_evaluated_only_once() {
+        let code = r#"
+            SELECT CASE COUNT
+                CASE 100: OUT "Not hit"
+                CASE 200: OUT "Not hit"
+                CASE ELSE: OUT "Giving up"
+            END SELECT
+            OUT COUNT
+        "#;
+        do_ok_test(code, &[], &["Giving up", "2"]);
+    }
+
+    #[test]
+    fn test_select_test_expression_evaluated_once_even_if_no_cases() {
+        let code = r#"
+            SELECT CASE COUNT
+            END SELECT
+            OUT COUNT
+        "#;
+        do_ok_test(code, &[], &["2"]);
+    }
+
+    #[test]
+    fn test_select_test_expression_evaluated_once_even_if_no_matches() {
+        let code = r#"
+            SELECT CASE COUNT
+                CASE 0: OUT "Not hit"
+                CASE 3
+            END SELECT
+            OUT COUNT
+        "#;
+        do_ok_test(code, &[], &["2"]);
+    }
+
+    #[test]
+    fn test_select_strings() {
+        let code = r#"
+            IN s$
+            SELECT CASE s$
+                CASE "exact": OUT "Exact match"
+                CASE IS > "ZZZ": OUT "IS match"
+                CASE "B" TO "Y": OUT "TO match"
+            END SELECT
+        "#;
+        do_ok_test(code, &["exact"], &["Exact match"]);
+        do_ok_test(code, &["ZZZ"], &[]);
+        do_ok_test(code, &["ZZZa"], &["IS match"]);
+        do_ok_test(code, &["A"], &[]);
+        do_ok_test(code, &["B"], &["TO match"]);
+        do_ok_test(code, &["M"], &["TO match"]);
+        do_ok_test(code, &["Y"], &["TO match"]);
+        do_ok_test(code, &["Z"], &[]);
+    }
+
+    #[test]
+    fn test_select_double_to_integer() {
+        let code = r#"
+            IN n#
+            SELECT CASE n#
+                CASE 2: OUT "OK 1"
+                CASE IS > 5: OUT "OK 2"
+            END SELECT
+        "#;
+        do_ok_test(code, &["1.9"], &[]);
+        do_ok_test(code, &["2.0"], &["OK 1"]);
+        do_ok_test(code, &["2.1"], &[]);
+        do_ok_test(code, &["5.0"], &[]);
+        do_ok_test(code, &["5.1"], &["OK 2"]);
+    }
+
+    #[test]
+    fn test_select_integer_to_double() {
+        let code = r#"
+            IN n%
+            SELECT CASE n%
+                CASE 2.0: OUT "OK 1"
+                CASE 5.0, -1.0: OUT "OK 2"
+                CASE 10.2 TO 11.8: OUT "OK 3"
+            END SELECT
+        "#;
+        do_ok_test(code, &["2"], &["OK 1"]);
+        do_ok_test(code, &["5"], &["OK 2"]);
+        do_ok_test(code, &["-1"], &["OK 2"]);
+        do_ok_test(code, &["10"], &[]);
+        do_ok_test(code, &["11"], &["OK 3"]);
+        do_ok_test(code, &["12"], &[]);
+    }
+
+    #[test]
+    fn test_select_errors() {
+        do_simple_error_test(
+            "SELECT CASE\nEND SELECT",
+            "1:12: No expression in SELECT CASE statement",
+        );
+        do_simple_error_test("SELECT CASE\nEND IF", "1:1: SELECT without END SELECT");
+        do_simple_error_test("\n\n\nSELECT CASE 2\n", "4:1: SELECT without END SELECT");
+
+        do_simple_error_test(
+            "SELECT CASE 2\nCASE FALSE\nEND SELECT",
+            "2:6: Cannot compare 2 and FALSE with =",
         );
     }
 

@@ -90,7 +90,7 @@ PRINT "rules.  Expressions can take function calls too, but I'll let you find wh
 PRINT "those are via HELP."
 GOSUB @wait
 
-title = "Structured control flow": GOSUB @banner
+title = "Structured conditionals": GOSUB @banner
 PRINT "Fully-specified if statements look like this:"
 PRINT
 PRINT "    IF a% = 1 THEN"
@@ -103,8 +103,23 @@ PRINT "    END IF"
 PRINT
 PRINT "If statements can also be collapsed into a single line like this:"
 PRINT
-PRINT "   IF a% = 1 THEN PRINT \"a is 1\" ELSE PRINT \"a is something else\""
+PRINT "    IF a% = 1 THEN PRINT \"a is 1\" ELSE PRINT \"a is something else\""
 PRINT
+PRINT "Select statements look like this:"
+PRINT
+PRINT "    SELECT CASE a%"
+PRINT "        CASE 1, 3, 5, 7, 9"
+PRINT "            PRINT \"Odd\""
+PRINT "        CASE 0, 2, 5, 6, 8"
+PRINT "            PRINT \"Even\""
+PRINT "        CASE IS < 0, 10 TO 100"
+PRINT "            PRINT \"Other cases\""
+PRINT "        CASE ELSE"
+PRINT "            PRINT \"Fallback\""
+PRINT "    END SELECT"
+GOSUB @wait
+
+title = "Structured loops": GOSUB @banner
 PRINT "Do loops look like this:"
 PRINT
 PRINT "    DO: PRINT \"Infinite loop with early exit\": EXIT DO: LOOP"

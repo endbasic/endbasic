@@ -278,6 +278,110 @@ impl Compiler {
         }
     }
 
+    /// Generates the expression to evaluate a list of `guards`, which are compared against the
+    /// test expression stored in `test_vref`.
+    fn compile_case_guards(test_vref: &VarRef, guards: Vec<CaseGuardSpan>) -> Option<Expr> {
+        let mut expr = None;
+        for guard in guards {
+            let one_expr = match guard {
+                CaseGuardSpan::Is(relop, expr) => {
+                    let pos = expr.start_pos();
+                    let test_expr = Expr::Symbol(SymbolSpan { vref: test_vref.clone(), pos });
+                    let binop = Box::from(BinaryOpSpan { lhs: test_expr, rhs: expr, pos });
+                    match relop {
+                        CaseRelOp::Equal => Expr::Equal(binop),
+                        CaseRelOp::NotEqual => Expr::NotEqual(binop),
+                        CaseRelOp::Less => Expr::Less(binop),
+                        CaseRelOp::LessEqual => Expr::LessEqual(binop),
+                        CaseRelOp::Greater => Expr::Greater(binop),
+                        CaseRelOp::GreaterEqual => Expr::GreaterEqual(binop),
+                    }
+                }
+
+                CaseGuardSpan::To(from_expr, to_expr) => {
+                    let from_pos = from_expr.start_pos();
+                    let to_pos = to_expr.start_pos();
+                    let test_expr =
+                        Expr::Symbol(SymbolSpan { vref: test_vref.clone(), pos: from_pos });
+                    Expr::And(Box::from(BinaryOpSpan {
+                        lhs: Expr::GreaterEqual(Box::from(BinaryOpSpan {
+                            lhs: test_expr.clone(),
+                            rhs: from_expr,
+                            pos: from_pos,
+                        })),
+                        rhs: Expr::LessEqual(Box::from(BinaryOpSpan {
+                            lhs: test_expr,
+                            rhs: to_expr,
+                            pos: to_pos,
+                        })),
+                        pos: from_pos,
+                    }))
+                }
+            };
+
+            expr = match expr {
+                None => Some(one_expr),
+                Some(expr) => {
+                    let pos = expr.start_pos();
+                    Some(Expr::Or(Box::from(BinaryOpSpan { lhs: expr, rhs: one_expr, pos })))
+                }
+            };
+        }
+        expr
+    }
+
+    /// Compiles a `SELECT` statement and appends its instructions to the compilation context.
+    fn compile_select(&mut self, span: SelectSpan) -> Result<()> {
+        let mut end_pcs = vec![];
+
+        // TODO(jmmv): The test variable must have a different name every time to support SELECT
+        // nesting.
+        let test_vref = VarRef::new("0select", VarType::Auto);
+        self.emit(Instruction::Assignment(AssignmentSpan {
+            vref: test_vref.clone(),
+            vref_pos: span.expr.start_pos(),
+            expr: span.expr,
+        }));
+
+        let mut iter = span.cases.into_iter();
+        let mut next = iter.next();
+        while let Some(case) = next {
+            let next2 = iter.next();
+
+            match Compiler::compile_case_guards(&test_vref, case.guards) {
+                None => {
+                    self.compile_many(case.body)?;
+                }
+                Some(guard) => {
+                    let guard_pc = self.emit(Instruction::Nop);
+                    self.compile_many(case.body)?;
+
+                    if next2.is_some() {
+                        end_pcs.push(self.next_pc);
+                        self.emit(Instruction::Nop);
+                    }
+
+                    self.instrs[guard_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
+                        cond: guard,
+                        addr: self.next_pc,
+                        error_msg: "SELECT requires a boolean condition",
+                    });
+                }
+            }
+
+            next = next2;
+        }
+
+        // TODO(jmmv): Undefine the test variable so that consecutive SELECT statements don't get
+        // confused (if we reuse test variables above).  Need one extra instruction type.
+
+        for end_pc in end_pcs {
+            self.instrs[end_pc] = Instruction::Jump(JumpSpan { addr: self.next_pc });
+        }
+
+        Ok(())
+    }
+
     /// Compiles a `WHILE` loop and appends its instructions to the compilation context.
     fn compile_while(&mut self, span: WhileSpan) -> Result<()> {
         let start_pc = self.emit(Instruction::Nop);
@@ -374,6 +478,10 @@ impl Compiler {
 
             Statement::Return(span) => {
                 self.emit(Instruction::Return(span));
+            }
+
+            Statement::Select(span) => {
+                self.compile_select(span)?;
             }
 
             Statement::While(span) => {
@@ -1092,6 +1200,385 @@ mod tests {
             .parse("ON ERROR RESUME NEXT")
             .compile()
             .expect_instr(0, Instruction::SetErrorHandler(ErrorHandlerSpan::ResumeNext))
+            .check();
+    }
+
+    /// Tests that parsing one or more `guards` as supplied after `CASE` yields the expected
+    /// expression in `exp_expr`.
+    ///
+    /// `exp_expr` must assume that its position starts at `(2, 6)`.
+    fn do_compile_case_guard_test(guards: &str, exp_expr: Expr) {
+        Tester::default()
+            .parse(&format!("SELECT CASE 5\nCASE {}\nFOO\nEND SELECT", guards))
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::Assignment(AssignmentSpan {
+                    vref: VarRef::new("0select", VarType::Auto),
+                    vref_pos: lc(1, 13),
+                    expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
+                }),
+            )
+            .expect_instr(
+                1,
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
+                    cond: exp_expr,
+                    addr: 3,
+                    error_msg: "SELECT requires a boolean condition",
+                }),
+            )
+            .expect_instr(
+                2,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "FOO".to_owned(),
+                    name_pos: lc(3, 1),
+                    args: vec![],
+                }),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_case_guards_equals() {
+        do_compile_case_guard_test(
+            "1 + 2",
+            Expr::Equal(Box::from(BinaryOpSpan {
+                lhs: Expr::Symbol(SymbolSpan {
+                    vref: VarRef::new("0select", VarType::Auto),
+                    pos: lc(2, 6),
+                }),
+                rhs: Expr::Add(Box::from(BinaryOpSpan {
+                    lhs: Expr::Integer(IntegerSpan { value: 1, pos: lc(2, 6) }),
+                    rhs: Expr::Integer(IntegerSpan { value: 2, pos: lc(2, 10) }),
+                    pos: lc(2, 8),
+                })),
+                pos: lc(2, 6),
+            })),
+        );
+    }
+
+    #[test]
+    fn test_compile_case_guards_is() {
+        do_compile_case_guard_test(
+            "IS = 9 + 8",
+            Expr::Equal(Box::from(BinaryOpSpan {
+                lhs: Expr::Symbol(SymbolSpan {
+                    vref: VarRef::new("0select", VarType::Auto),
+                    pos: lc(2, 11),
+                }),
+                rhs: Expr::Add(Box::from(BinaryOpSpan {
+                    lhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 11) }),
+                    rhs: Expr::Integer(IntegerSpan { value: 8, pos: lc(2, 15) }),
+                    pos: lc(2, 13),
+                })),
+                pos: lc(2, 11),
+            })),
+        );
+
+        do_compile_case_guard_test(
+            "IS <> 9",
+            Expr::NotEqual(Box::from(BinaryOpSpan {
+                lhs: Expr::Symbol(SymbolSpan {
+                    vref: VarRef::new("0select", VarType::Auto),
+                    pos: lc(2, 12),
+                }),
+                rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 12) }),
+                pos: lc(2, 12),
+            })),
+        );
+
+        do_compile_case_guard_test(
+            "IS < 9",
+            Expr::Less(Box::from(BinaryOpSpan {
+                lhs: Expr::Symbol(SymbolSpan {
+                    vref: VarRef::new("0select", VarType::Auto),
+                    pos: lc(2, 11),
+                }),
+                rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 11) }),
+                pos: lc(2, 11),
+            })),
+        );
+
+        do_compile_case_guard_test(
+            "IS <= 9",
+            Expr::LessEqual(Box::from(BinaryOpSpan {
+                lhs: Expr::Symbol(SymbolSpan {
+                    vref: VarRef::new("0select", VarType::Auto),
+                    pos: lc(2, 12),
+                }),
+                rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 12) }),
+                pos: lc(2, 12),
+            })),
+        );
+
+        do_compile_case_guard_test(
+            "IS > 9",
+            Expr::Greater(Box::from(BinaryOpSpan {
+                lhs: Expr::Symbol(SymbolSpan {
+                    vref: VarRef::new("0select", VarType::Auto),
+                    pos: lc(2, 11),
+                }),
+                rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 11) }),
+                pos: lc(2, 11),
+            })),
+        );
+
+        do_compile_case_guard_test(
+            "IS >= 9",
+            Expr::GreaterEqual(Box::from(BinaryOpSpan {
+                lhs: Expr::Symbol(SymbolSpan {
+                    vref: VarRef::new("0select", VarType::Auto),
+                    pos: lc(2, 12),
+                }),
+                rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 12) }),
+                pos: lc(2, 12),
+            })),
+        );
+    }
+
+    #[test]
+    fn test_compile_case_guards_to() {
+        do_compile_case_guard_test(
+            "1 TO 2",
+            Expr::And(Box::from(BinaryOpSpan {
+                lhs: Expr::GreaterEqual(Box::from(BinaryOpSpan {
+                    lhs: Expr::Symbol(SymbolSpan {
+                        vref: VarRef::new("0select", VarType::Auto),
+                        pos: lc(2, 6),
+                    }),
+                    rhs: Expr::Integer(IntegerSpan { value: 1, pos: lc(2, 6) }),
+                    pos: lc(2, 6),
+                })),
+                rhs: Expr::LessEqual(Box::from(BinaryOpSpan {
+                    lhs: Expr::Symbol(SymbolSpan {
+                        vref: VarRef::new("0select", VarType::Auto),
+                        pos: lc(2, 6),
+                    }),
+                    rhs: Expr::Integer(IntegerSpan { value: 2, pos: lc(2, 11) }),
+                    pos: lc(2, 11),
+                })),
+                pos: lc(2, 6),
+            })),
+        );
+    }
+
+    #[test]
+    fn test_compile_case_guards_many() {
+        do_compile_case_guard_test(
+            "IS <> 9, 8",
+            Expr::Or(Box::from(BinaryOpSpan {
+                lhs: Expr::NotEqual(Box::from(BinaryOpSpan {
+                    lhs: Expr::Symbol(SymbolSpan {
+                        vref: VarRef::new("0select", VarType::Auto),
+                        pos: lc(2, 12),
+                    }),
+                    rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 12) }),
+                    pos: lc(2, 12),
+                })),
+                rhs: Expr::Equal(Box::from(BinaryOpSpan {
+                    lhs: Expr::Symbol(SymbolSpan {
+                        vref: VarRef::new("0select", VarType::Auto),
+                        pos: lc(2, 15),
+                    }),
+                    rhs: Expr::Integer(IntegerSpan { value: 8, pos: lc(2, 15) }),
+                    pos: lc(2, 15),
+                })),
+                pos: lc(2, 12),
+            })),
+        );
+    }
+
+    #[test]
+    fn test_compile_select_no_cases() {
+        Tester::default()
+            .parse("SELECT CASE 5 + 3: END SELECT")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::Assignment(AssignmentSpan {
+                    vref: VarRef::new("0select", VarType::Auto),
+                    vref_pos: lc(1, 13),
+                    expr: Expr::Add(Box::from(BinaryOpSpan {
+                        lhs: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
+                        rhs: Expr::Integer(IntegerSpan { value: 3, pos: lc(1, 17) }),
+                        pos: lc(1, 15),
+                    })),
+                }),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_select_one_case() {
+        Tester::default()
+            .parse("SELECT CASE 5\nCASE 7\nFOO\nEND SELECT")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::Assignment(AssignmentSpan {
+                    vref: VarRef::new("0select", VarType::Auto),
+                    vref_pos: lc(1, 13),
+                    expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
+                }),
+            )
+            .expect_instr(
+                1,
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
+                    cond: Expr::Equal(Box::from(BinaryOpSpan {
+                        lhs: Expr::Symbol(SymbolSpan {
+                            vref: VarRef::new("0select", VarType::Auto),
+                            pos: lc(2, 6),
+                        }),
+                        rhs: Expr::Integer(IntegerSpan { value: 7, pos: lc(2, 6) }),
+                        pos: lc(2, 6),
+                    })),
+                    addr: 3,
+                    error_msg: "SELECT requires a boolean condition",
+                }),
+            )
+            .expect_instr(
+                2,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "FOO".to_owned(),
+                    name_pos: lc(3, 1),
+                    args: vec![],
+                }),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_select_only_case_else() {
+        Tester::default()
+            .parse("SELECT CASE 5\nCASE ELSE\nFOO\nEND SELECT")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::Assignment(AssignmentSpan {
+                    vref: VarRef::new("0select", VarType::Auto),
+                    vref_pos: lc(1, 13),
+                    expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
+                }),
+            )
+            .expect_instr(
+                1,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "FOO".to_owned(),
+                    name_pos: lc(3, 1),
+                    args: vec![],
+                }),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_select_many_cases_without_else() {
+        Tester::default()
+            .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE IS <> 8\nBAR\nEND SELECT")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::Assignment(AssignmentSpan {
+                    vref: VarRef::new("0select", VarType::Auto),
+                    vref_pos: lc(1, 13),
+                    expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
+                }),
+            )
+            .expect_instr(
+                1,
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
+                    cond: Expr::Equal(Box::from(BinaryOpSpan {
+                        lhs: Expr::Symbol(SymbolSpan {
+                            vref: VarRef::new("0select", VarType::Auto),
+                            pos: lc(2, 6),
+                        }),
+                        rhs: Expr::Integer(IntegerSpan { value: 7, pos: lc(2, 6) }),
+                        pos: lc(2, 6),
+                    })),
+                    addr: 4,
+                    error_msg: "SELECT requires a boolean condition",
+                }),
+            )
+            .expect_instr(
+                2,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "FOO".to_owned(),
+                    name_pos: lc(3, 1),
+                    args: vec![],
+                }),
+            )
+            .expect_instr(3, Instruction::Jump(JumpSpan { addr: 6 }))
+            .expect_instr(
+                4,
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
+                    cond: Expr::NotEqual(Box::from(BinaryOpSpan {
+                        lhs: Expr::Symbol(SymbolSpan {
+                            vref: VarRef::new("0select", VarType::Auto),
+                            pos: lc(4, 12),
+                        }),
+                        rhs: Expr::Integer(IntegerSpan { value: 8, pos: lc(4, 12) }),
+                        pos: lc(4, 12),
+                    })),
+                    addr: 6,
+                    error_msg: "SELECT requires a boolean condition",
+                }),
+            )
+            .expect_instr(
+                5,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "BAR".to_owned(),
+                    name_pos: lc(5, 1),
+                    args: vec![],
+                }),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_select_many_cases_with_else() {
+        Tester::default()
+            .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE ELSE\nBAR\nEND SELECT")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::Assignment(AssignmentSpan {
+                    vref: VarRef::new("0select", VarType::Auto),
+                    vref_pos: lc(1, 13),
+                    expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
+                }),
+            )
+            .expect_instr(
+                1,
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
+                    cond: Expr::Equal(Box::from(BinaryOpSpan {
+                        lhs: Expr::Symbol(SymbolSpan {
+                            vref: VarRef::new("0select", VarType::Auto),
+                            pos: lc(2, 6),
+                        }),
+                        rhs: Expr::Integer(IntegerSpan { value: 7, pos: lc(2, 6) }),
+                        pos: lc(2, 6),
+                    })),
+                    addr: 4,
+                    error_msg: "SELECT requires a boolean condition",
+                }),
+            )
+            .expect_instr(
+                2,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "FOO".to_owned(),
+                    name_pos: lc(3, 1),
+                    args: vec![],
+                }),
+            )
+            .expect_instr(3, Instruction::Jump(JumpSpan { addr: 5 }))
+            .expect_instr(
+                4,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "BAR".to_owned(),
+                    name_pos: lc(5, 1),
+                    args: vec![],
+                }),
+            )
             .check();
     }
 

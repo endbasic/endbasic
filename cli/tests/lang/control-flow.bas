@@ -37,6 +37,14 @@ IF i = 4 AND j = 9 THEN
     PRINT "Also done!"
 END IF
 
+FOR i = 0 TO 10
+    SELECT CASE i
+        CASE IS < 3, IS > 7: PRINT "Edges"
+        CASE 5: PRINT "Center"
+        CASE ELSE: PRINT "Middle"
+    END SELECT
+NEXT
+
 WHILE TRUE
     i = 0
     @start
