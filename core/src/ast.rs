@@ -630,6 +630,59 @@ pub struct ReturnSpan {
     pub pos: LineCol,
 }
 
+/// Collection of relational operators that can appear in a `CASE IS` guard..
+#[derive(Debug, Eq, PartialEq)]
+pub enum CaseRelOp {
+    /// Relational operator for `CASE IS =`.
+    Equal,
+
+    /// Relational operator for `CASE IS <>`.
+    NotEqual,
+
+    /// Relational operator for `CASE IS <`.
+    Less,
+
+    /// Relational operator for `CASE IS <=`.
+    LessEqual,
+
+    /// Relational operator for `CASE IS >`.
+    Greater,
+
+    /// Relational operator for `CASE IS >=`.
+    GreaterEqual,
+}
+
+/// Components of a `CASE` guard.
+#[derive(Debug, PartialEq)]
+pub enum CaseGuardSpan {
+    /// Represents an `IS <op> <expr>` guard or a simpler `<expr>` guard.
+    Is(CaseRelOp, Expr),
+
+    /// Represents an `<expr> TO <expr>` guard.
+    To(Expr, Expr),
+}
+
+/// Components of a branch of a `SELECT` statement.
+#[derive(Debug, PartialEq)]
+pub struct CaseSpan {
+    /// Expressions that guard execution of this case.
+    pub guards: Vec<CaseGuardSpan>,
+
+    /// Statements within the case block.
+    pub body: Vec<Statement>,
+}
+
+/// Components of a `SELECT` statement.
+#[derive(Debug, PartialEq)]
+pub struct SelectSpan {
+    /// Expression to test for.
+    pub expr: Expr,
+
+    /// Representation of the cases to select from.  The final `CASE ELSE`, if present, is also
+    /// included here without any guards.
+    pub cases: Vec<CaseSpan>,
+}
+
 /// Components of a `WHILE` statement.
 #[derive(Debug, PartialEq)]
 pub struct WhileSpan {
@@ -690,6 +743,9 @@ pub enum Statement {
 
     /// Represents a `RETURN` statement.
     Return(ReturnSpan),
+
+    /// Represents a `SELECT` statement.
+    Select(SelectSpan),
 
     /// Represents a `WHILE` statement.
     While(WhileSpan),

@@ -51,7 +51,7 @@ rules.  Expressions can take function calls too, but I'll let you find what
 those are via HELP.
 
 [38;5;11m[2J[1;1H
- EndBASIC tour: Structured control flow
+ EndBASIC tour: Structured conditionals
 ========================================
 [39m
 Fully-specified if statements look like this:
@@ -66,8 +66,25 @@ Fully-specified if statements look like this:
 
 If statements can also be collapsed into a single line like this:
 
-   IF a% = 1 THEN PRINT "a is 1" ELSE PRINT "a is something else"
+    IF a% = 1 THEN PRINT "a is 1" ELSE PRINT "a is something else"
 
+Select statements look like this:
+
+    SELECT CASE a%
+        CASE 1, 3, 5, 7, 9
+            PRINT "Odd"
+        CASE 0, 2, 5, 6, 8
+            PRINT "Even"
+        CASE IS < 0, 10 TO 100
+            PRINT "Other cases"
+        CASE ELSE
+            PRINT "Fallback"
+    END SELECT
+
+[38;5;11m[2J[1;1H
+ EndBASIC tour: Structured loops
+=================================
+[39m
 Do loops look like this:
 
     DO: PRINT "Infinite loop with early exit": EXIT DO: LOOP

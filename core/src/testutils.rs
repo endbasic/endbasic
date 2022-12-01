@@ -28,6 +28,38 @@ use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
 
+/// Counts and returns the number of times this has been evaluated.
+pub(crate) struct CountFunction {
+    metadata: CallableMetadata,
+    counter: Rc<RefCell<i32>>,
+}
+
+impl CountFunction {
+    pub(crate) fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("COUNT", VarType::Integer).test_build(),
+            counter: Rc::from(RefCell::from(0)),
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for CountFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
+        if !span.args.is_empty() {
+            return Err(CallError::SyntaxError);
+        }
+        let mut counter = self.counter.borrow_mut();
+        *counter += 1;
+        debug_assert!(*counter >= 0);
+        Ok(Value::Integer(*counter))
+    }
+}
+
 /// Returns the error type asked for in an argument.
 pub struct RaiseFunction {
     metadata: CallableMetadata,

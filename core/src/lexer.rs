@@ -67,6 +67,7 @@ pub enum Token {
     Or,
     Xor,
 
+    Case,
     Data,
     Do,
     Else,
@@ -78,11 +79,13 @@ pub enum Token {
     Gosub,
     Goto,
     If,
+    Is,
     Loop,
     Next,
     On,
     Resume,
     Return,
+    Select,
     Step,
     Then,
     To,
@@ -142,6 +145,7 @@ impl fmt::Display for Token {
             Token::Or => write!(f, "OR"),
             Token::Xor => write!(f, "XOR"),
 
+            Token::Case => write!(f, "CASE"),
             Token::Data => write!(f, "DATA"),
             Token::Do => write!(f, "DO"),
             Token::Else => write!(f, "ELSE"),
@@ -153,11 +157,13 @@ impl fmt::Display for Token {
             Token::Gosub => write!(f, "GOSUB"),
             Token::Goto => write!(f, "GOTO"),
             Token::If => write!(f, "IF"),
+            Token::Is => write!(f, "IS"),
             Token::Loop => write!(f, "LOOP"),
             Token::Next => write!(f, "NEXT"),
             Token::On => write!(f, "ON"),
             Token::Resume => write!(f, "RESUME"),
             Token::Return => write!(f, "RETURN"),
+            Token::Select => write!(f, "SELECT"),
             Token::Step => write!(f, "STEP"),
             Token::Then => write!(f, "THEN"),
             Token::To => write!(f, "TO"),
@@ -407,6 +413,7 @@ impl<'a> Lexer<'a> {
             "AND" => Token::And,
             "AS" => Token::As,
             "BOOLEAN" => Token::BooleanName,
+            "CASE" => Token::Case,
             "DATA" => Token::Data,
             "DIM" => Token::Dim,
             "DO" => Token::Do,
@@ -421,6 +428,7 @@ impl<'a> Lexer<'a> {
             "GOSUB" => Token::Gosub,
             "GOTO" => Token::Goto,
             "IF" => Token::If,
+            "IS" => Token::Is,
             "INTEGER" => Token::IntegerName,
             "LOOP" => Token::Loop,
             "MOD" => Token::Modulo,
@@ -431,6 +439,7 @@ impl<'a> Lexer<'a> {
             "REM" => return self.consume_rest_of_line(),
             "RESUME" => Token::Resume,
             "RETURN" => Token::Return,
+            "SELECT" => Token::Select,
             "STEP" => Token::Step,
             "STRING" => Token::TextName,
             "THEN" => Token::Then,
@@ -1057,6 +1066,33 @@ mod tests {
         do_ok_test("RETURN", &[ts(Token::Return, 1, 1, 6), ts(Token::Eof, 1, 7, 0)]);
 
         do_ok_test("return", &[ts(Token::Return, 1, 1, 6), ts(Token::Eof, 1, 7, 0)]);
+    }
+
+    #[test]
+    fn test_select() {
+        do_ok_test(
+            "SELECT CASE IS ELSE END",
+            &[
+                ts(Token::Select, 1, 1, 6),
+                ts(Token::Case, 1, 8, 4),
+                ts(Token::Is, 1, 13, 2),
+                ts(Token::Else, 1, 16, 4),
+                ts(Token::End, 1, 21, 3),
+                ts(Token::Eof, 1, 24, 0),
+            ],
+        );
+
+        do_ok_test(
+            "select case is else end",
+            &[
+                ts(Token::Select, 1, 1, 6),
+                ts(Token::Case, 1, 8, 4),
+                ts(Token::Is, 1, 13, 2),
+                ts(Token::Else, 1, 16, 4),
+                ts(Token::End, 1, 21, 3),
+                ts(Token::Eof, 1, 24, 0),
+            ],
+        );
     }
 
     #[test]

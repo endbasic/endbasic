@@ -58,6 +58,9 @@ const LANG_REFERENCE: &str = r"
         FOR varref = expr<%|#> TO expr<%|#> [STEP num]: ...: NEXT
         IF expr? THEN ... [ELSE ...]
         IF expr? THEN: ...: ELSEIF expr? THEN: ...: ELSE: ...: END IF
+        SELECT CASE expr:
+            [CASE <expr|IS =|<>|<|<=|>|>= expr|expr TO expr>[, ...]: ...:]*
+            [CASE ELSE: ...:] END SELECT
         WHILE expr?: ...: WEND
 
     Error handling:

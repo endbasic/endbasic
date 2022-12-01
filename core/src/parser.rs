@@ -594,14 +594,15 @@ impl<'a> Parser<'a> {
         self.reset()
     }
 
-    /// Parses a potential `END` statement but returns `None` if this corresponds to a statement
-    /// terminator such as `END IF`.
-    fn maybe_parse_end(&mut self) -> Result<Option<Statement>> {
+    /// Parses a potential `END` statement but, if this corresponds to a statement terminator such
+    /// as `END IF`, returns the token that followed `END`.
+    fn maybe_parse_end(&mut self) -> Result<std::result::Result<Statement, Token>> {
         match self.lexer.peek()?.token {
-            Token::If => Ok(None),
+            Token::If => Ok(Err(Token::If)),
+            Token::Select => Ok(Err(Token::Select)),
             _ => {
                 let code = self.parse_expr(None)?;
-                Ok(Some(Statement::End(EndSpan { code })))
+                Ok(Ok(Statement::End(EndSpan { code })))
             }
         }
     }
@@ -609,8 +610,8 @@ impl<'a> Parser<'a> {
     /// Parses an `END` statement.
     fn parse_end(&mut self, pos: LineCol) -> Result<Statement> {
         match self.maybe_parse_end()? {
-            Some(stmt) => Ok(stmt),
-            None => Err(Error::Bad(pos, "END IF without IF".to_owned())),
+            Ok(stmt) => Ok(stmt),
+            Err(token) => Err(Error::Bad(pos, format!("END {} without {}", token, token))),
         }
     }
 
@@ -844,6 +845,7 @@ impl<'a> Parser<'a> {
                 }
 
                 Token::BooleanName
+                | Token::Case
                 | Token::Data
                 | Token::Do
                 | Token::Dim
@@ -856,6 +858,7 @@ impl<'a> Parser<'a> {
                 | Token::Gosub
                 | Token::Goto
                 | Token::If
+                | Token::Is
                 | Token::IntegerName
                 | Token::Label(_)
                 | Token::Loop
@@ -863,6 +866,7 @@ impl<'a> Parser<'a> {
                 | Token::On
                 | Token::Resume
                 | Token::Return
+                | Token::Select
                 | Token::TextName
                 | Token::Until
                 | Token::Wend
@@ -1008,13 +1012,19 @@ impl<'a> Parser<'a> {
                 }
 
                 Token::End => {
-                    self.lexer.consume_peeked();
+                    let token_span = self.lexer.consume_peeked();
                     match self.maybe_parse_end()? {
-                        Some(stmt) => {
+                        Ok(stmt) => {
                             branches[i].body.push(stmt);
                         }
-                        None => {
+                        Err(Token::If) => {
                             break;
+                        }
+                        Err(token) => {
+                            return Err(Error::Bad(
+                                token_span.pos,
+                                format!("END {} without {}", token, token),
+                            ));
                         }
                     }
                 }
@@ -1243,6 +1253,229 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parses the guards after a `CASE` keyword.
+    fn parse_case_guards(&mut self) -> Result<Vec<CaseGuardSpan>> {
+        let mut guards = vec![];
+
+        loop {
+            let peeked = self.lexer.peek()?;
+            match peeked.token {
+                Token::Else => {
+                    let token_span = self.lexer.consume_peeked();
+
+                    if !guards.is_empty() {
+                        return Err(Error::Bad(
+                            token_span.pos,
+                            "CASE ELSE must be on its own".to_owned(),
+                        ));
+                    }
+
+                    let peeked = self.lexer.peek()?;
+                    if peeked.token != Token::Eol && peeked.token != Token::Eof {
+                        return Err(Error::Bad(
+                            peeked.pos,
+                            "Expected newline after CASE ELSE".to_owned(),
+                        ));
+                    }
+
+                    break;
+                }
+
+                Token::Is => {
+                    self.lexer.consume_peeked();
+
+                    let token_span = self.lexer.read()?;
+                    let rel_op = match token_span.token {
+                        Token::Equal => CaseRelOp::Equal,
+                        Token::NotEqual => CaseRelOp::NotEqual,
+                        Token::Less => CaseRelOp::Less,
+                        Token::LessEqual => CaseRelOp::LessEqual,
+                        Token::Greater => CaseRelOp::Greater,
+                        Token::GreaterEqual => CaseRelOp::GreaterEqual,
+                        _ => {
+                            return Err(Error::Bad(
+                                token_span.pos,
+                                "Expected relational operator".to_owned(),
+                            ));
+                        }
+                    };
+
+                    let expr =
+                        self.parse_required_expr("Missing expression after relational operator")?;
+                    guards.push(CaseGuardSpan::Is(rel_op, expr));
+                }
+
+                _ => {
+                    let from_expr = self.parse_required_expr("Missing expression in CASE guard")?;
+
+                    let peeked = self.lexer.peek()?;
+                    match peeked.token {
+                        Token::Eol | Token::Comma => {
+                            guards.push(CaseGuardSpan::Is(CaseRelOp::Equal, from_expr));
+                        }
+                        Token::To => {
+                            self.lexer.consume_peeked();
+                            let to_expr = self
+                                .parse_required_expr("Missing expression after TO in CASE guard")?;
+                            guards.push(CaseGuardSpan::To(from_expr, to_expr));
+                        }
+                        _ => {
+                            return Err(Error::Bad(
+                                peeked.pos,
+                                "Expected comma, newline, or TO after expression".to_owned(),
+                            ));
+                        }
+                    }
+                }
+            }
+
+            let peeked = self.lexer.peek()?;
+            match peeked.token {
+                Token::Eol => {
+                    break;
+                }
+                Token::Comma => {
+                    self.lexer.consume_peeked();
+                }
+                _ => {
+                    return Err(Error::Bad(
+                        peeked.pos,
+                        "Expected comma, newline, or TO after expression".to_owned(),
+                    ));
+                }
+            }
+        }
+
+        Ok(guards)
+    }
+
+    /// Parses a `SELECT` statement.
+    fn parse_select(&mut self, select_pos: LineCol) -> Result<Statement> {
+        self.expect_and_consume(Token::Case, "Expecting CASE after SELECT")?;
+
+        let expr = self.parse_required_expr("No expression in SELECT CASE statement")?;
+        self.expect_and_consume(Token::Eol, "Expecting newline after SELECT CASE")?;
+
+        let mut cases = vec![];
+
+        let mut i = 0;
+        let mut last = false;
+        loop {
+            let peeked = self.lexer.peek()?;
+            match peeked.token {
+                Token::Eof => {
+                    break;
+                }
+
+                Token::Eol => {
+                    self.lexer.consume_peeked();
+                }
+
+                Token::Case => {
+                    let peeked = self.lexer.consume_peeked();
+                    let guards = self.parse_case_guards()?;
+                    self.expect_and_consume(Token::Eol, "Expecting newline after CASE")?;
+
+                    let is_last = guards.is_empty();
+                    if last {
+                        if is_last {
+                            return Err(Error::Bad(
+                                peeked.pos,
+                                "CASE ELSE must be unique".to_owned(),
+                            ));
+                        } else {
+                            return Err(Error::Bad(peeked.pos, "CASE ELSE is not last".to_owned()));
+                        }
+                    }
+                    last |= is_last;
+
+                    cases.push(CaseSpan { guards, body: vec![] });
+                    if cases.len() > 1 {
+                        i += 1;
+                    }
+                }
+
+                Token::End => {
+                    let token_span = self.lexer.consume_peeked();
+                    match self.maybe_parse_end()? {
+                        Ok(stmt) => {
+                            if cases.is_empty() {
+                                return Err(Error::Bad(
+                                    token_span.pos,
+                                    "Expected CASE after SELECT CASE before any statement"
+                                        .to_owned(),
+                                ));
+                            }
+
+                            cases[i].body.push(stmt);
+                        }
+                        Err(Token::Select) => {
+                            break;
+                        }
+                        Err(token) => {
+                            if cases.is_empty() {
+                                return Err(Error::Bad(
+                                    token_span.pos,
+                                    "Expected CASE after SELECT CASE before any statement"
+                                        .to_owned(),
+                                ));
+                            } else {
+                                return Err(Error::Bad(
+                                    token_span.pos,
+                                    format!("END {} without {}", token, token),
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                _ => {
+                    if cases.is_empty() {
+                        return Err(Error::Bad(
+                            peeked.pos,
+                            "Expected CASE after SELECT CASE before any statement".to_owned(),
+                        ));
+                    }
+
+                    match self.parse_one_safe()? {
+                        Some(stmt) => {
+                            cases[i].body.push(stmt);
+                        }
+                        None => {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        self.expect_and_consume_with_pos(Token::Select, select_pos, "SELECT without END SELECT")?;
+
+        Ok(Statement::Select(SelectSpan { expr, cases }))
+    }
+
+    /// Advances until the next statement after failing to parse a `SELECT` statement.
+    fn reset_select(&mut self, select_pos: LineCol) -> Result<()> {
+        loop {
+            match self.lexer.peek()?.token {
+                Token::Eof => break,
+                Token::End => {
+                    self.lexer.consume_peeked();
+                    self.expect_and_consume_with_pos(
+                        Token::Select,
+                        select_pos,
+                        "SELECT without END SELECT",
+                    )?;
+                    break;
+                }
+                _ => {
+                    self.lexer.consume_peeked();
+                }
+            }
+        }
+        self.reset()
+    }
+
     /// Parses a `WHILE` statement.
     fn parse_while(&mut self, while_pos: LineCol) -> Result<Statement> {
         let expr = self.parse_required_expr("No expression in WHILE statement")?;
@@ -1368,6 +1601,13 @@ impl<'a> Parser<'a> {
             }
             Token::On => Ok(Some(self.parse_on()?)),
             Token::Return => Ok(Some(Statement::Return(ReturnSpan { pos: token_span.pos }))),
+            Token::Select => {
+                let result = self.parse_select(token_span.pos);
+                if result.is_err() {
+                    self.reset_select(token_span.pos)?;
+                }
+                Ok(Some(result?))
+            }
             Token::Symbol(vref) => {
                 let peeked = self.lexer.peek()?;
                 if peeked.token == Token::Equal {
@@ -2726,9 +2966,9 @@ mod tests {
     #[test]
     fn test_expr_errors_due_to_keywords() {
         for kw in &[
-            "BOOLEAN", "DATA", "DIM", "DOUBLE", "ELSEIF", "END", "ERROR", "EXIT", "FOR", "GOSUB",
-            "GOTO", "IF", "INTEGER", "LOOP", "NEXT", "ON", "RESUME", "RETURN", "STRING", "UNTIL",
-            "WEND", "WHILE",
+            "BOOLEAN", "CASE", "DATA", "DIM", "DOUBLE", "ELSEIF", "END", "ERROR", "EXIT", "FOR",
+            "GOSUB", "GOTO", "IF", "IS", "INTEGER", "LOOP", "NEXT", "ON", "RESUME", "RETURN",
+            "SELECT", "STRING", "UNTIL", "WEND", "WHILE",
         ] {
             do_expr_error_test(
                 &format!("2 + {} - 1", kw),
@@ -3026,6 +3266,8 @@ mod tests {
         do_error_test("IF 1 THEN\nEND", "1:1: IF without END IF");
         do_error_test("IF 1 THEN\nEND\n", "1:1: IF without END IF");
         do_error_test("IF 1 THEN\nEND IF foo", "2:8: Expected newline but found foo");
+        do_error_test("IF 1 THEN\nEND SELECT\n", "2:1: END SELECT without SELECT");
+        do_error_test("IF 1 THEN\nEND SELECT\nEND IF\n", "2:1: END SELECT without SELECT");
 
         do_error_test(
             "IF 1 THEN\nELSE\nELSEIF 2 THEN\nEND IF",
@@ -3235,7 +3477,7 @@ mod tests {
 
     #[test]
     fn test_if_uniline_unallowed_statements() {
-        for t in ["DIM", "DO", "IF", "FOR", "10", "@label", "WHILE"] {
+        for t in ["DIM", "DO", "IF", "FOR", "10", "@label", "SELECT", "WHILE"] {
             do_error_test(
                 &format!("IF 1 THEN {}", t),
                 &format!("1:11: Unexpected {} in uniline IF branch", t),
@@ -3559,6 +3801,274 @@ mod tests {
         do_error_test("ON ERROR GOTO", "1:14: Expected label name or 0 after ON ERROR GOTO");
         do_error_test("ON ERROR GOTO NEXT", "1:15: Expected label name or 0 after ON ERROR GOTO");
         do_error_test("ON ERROR GOTO 0 @a", "1:17: Expected newline but found @a");
+    }
+
+    #[test]
+    fn test_select_empty() {
+        do_ok_test(
+            "SELECT CASE 7\nEND SELECT",
+            &[Statement::Select(SelectSpan { expr: expr_integer(7, 1, 13), cases: vec![] })],
+        );
+
+        do_ok_test(
+            "SELECT CASE 5 - TRUE\n    \nEND SELECT",
+            &[Statement::Select(SelectSpan {
+                expr: Expr::Subtract(Box::from(BinaryOpSpan {
+                    lhs: expr_integer(5, 1, 13),
+                    rhs: expr_boolean(true, 1, 17),
+                    pos: lc(1, 15),
+                })),
+                cases: vec![],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_select_case_else_only() {
+        do_ok_test(
+            "SELECT CASE 7\nCASE ELSE\nA\nEND SELECT",
+            &[Statement::Select(SelectSpan {
+                expr: expr_integer(7, 1, 13),
+                cases: vec![CaseSpan {
+                    guards: vec![],
+                    body: vec![make_bare_builtin_call("A", 3, 1)],
+                }],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_select_multiple_cases_without_else() {
+        do_ok_test(
+            "SELECT CASE 7\nCASE 1\nA\nCASE 2\nB\nEND SELECT",
+            &[Statement::Select(SelectSpan {
+                expr: expr_integer(7, 1, 13),
+                cases: vec![
+                    CaseSpan {
+                        guards: vec![CaseGuardSpan::Is(CaseRelOp::Equal, expr_integer(1, 2, 6))],
+                        body: vec![make_bare_builtin_call("A", 3, 1)],
+                    },
+                    CaseSpan {
+                        guards: vec![CaseGuardSpan::Is(CaseRelOp::Equal, expr_integer(2, 4, 6))],
+                        body: vec![make_bare_builtin_call("B", 5, 1)],
+                    },
+                ],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_select_multiple_cases_with_else() {
+        do_ok_test(
+            "SELECT CASE 7\nCASE 1\nA\nCASE 2\nB\nCASE ELSE\nC\nEND SELECT",
+            &[Statement::Select(SelectSpan {
+                expr: expr_integer(7, 1, 13),
+                cases: vec![
+                    CaseSpan {
+                        guards: vec![CaseGuardSpan::Is(CaseRelOp::Equal, expr_integer(1, 2, 6))],
+                        body: vec![make_bare_builtin_call("A", 3, 1)],
+                    },
+                    CaseSpan {
+                        guards: vec![CaseGuardSpan::Is(CaseRelOp::Equal, expr_integer(2, 4, 6))],
+                        body: vec![make_bare_builtin_call("B", 5, 1)],
+                    },
+                    CaseSpan { guards: vec![], body: vec![make_bare_builtin_call("C", 7, 1)] },
+                ],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_select_multiple_cases_empty_bodies() {
+        do_ok_test(
+            "SELECT CASE 7\nCASE 1\n\nCASE 2\n\nCASE ELSE\n\nEND SELECT",
+            &[Statement::Select(SelectSpan {
+                expr: expr_integer(7, 1, 13),
+                cases: vec![
+                    CaseSpan {
+                        guards: vec![CaseGuardSpan::Is(CaseRelOp::Equal, expr_integer(1, 2, 6))],
+                        body: vec![],
+                    },
+                    CaseSpan {
+                        guards: vec![CaseGuardSpan::Is(CaseRelOp::Equal, expr_integer(2, 4, 6))],
+                        body: vec![],
+                    },
+                    CaseSpan { guards: vec![], body: vec![] },
+                ],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_select_multiple_cases_with_interleaved_end() {
+        let code = r#"
+            SELECT CASE 7
+                CASE 1
+                    A
+                    END
+                    B
+                CASE 2 ' Second case.
+                    C
+                    END 8
+                    D
+                CASE ELSE
+                    E
+                    END
+                    F
+            END SELECT
+        "#;
+        do_ok_test(
+            code,
+            &[Statement::Select(SelectSpan {
+                expr: expr_integer(7, 2, 25),
+                cases: vec![
+                    CaseSpan {
+                        guards: vec![CaseGuardSpan::Is(CaseRelOp::Equal, expr_integer(1, 3, 22))],
+                        body: vec![
+                            make_bare_builtin_call("A", 4, 21),
+                            Statement::End(EndSpan { code: None }),
+                            make_bare_builtin_call("B", 6, 21),
+                        ],
+                    },
+                    CaseSpan {
+                        guards: vec![CaseGuardSpan::Is(CaseRelOp::Equal, expr_integer(2, 7, 22))],
+                        body: vec![
+                            make_bare_builtin_call("C", 8, 21),
+                            Statement::End(EndSpan {
+                                code: Some(Expr::Integer(IntegerSpan { value: 8, pos: lc(9, 25) })),
+                            }),
+                            make_bare_builtin_call("D", 10, 21),
+                        ],
+                    },
+                    CaseSpan {
+                        guards: vec![],
+                        body: vec![
+                            make_bare_builtin_call("E", 12, 21),
+                            Statement::End(EndSpan { code: None }),
+                            make_bare_builtin_call("F", 14, 21),
+                        ],
+                    },
+                ],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_select_case_guards_equals() {
+        do_ok_test(
+            "SELECT CASE 7: CASE 9, 10, FALSE: END SELECT",
+            &[Statement::Select(SelectSpan {
+                expr: expr_integer(7, 1, 13),
+                cases: vec![CaseSpan {
+                    guards: vec![
+                        CaseGuardSpan::Is(CaseRelOp::Equal, expr_integer(9, 1, 21)),
+                        CaseGuardSpan::Is(CaseRelOp::Equal, expr_integer(10, 1, 24)),
+                        CaseGuardSpan::Is(CaseRelOp::Equal, expr_boolean(false, 1, 28)),
+                    ],
+                    body: vec![],
+                }],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_select_case_guards_is() {
+        do_ok_test(
+            "SELECT CASE 7: CASE IS = 1, IS <> 2, IS < 3, IS <= 4, IS > 5, IS >= 6: END SELECT",
+            &[Statement::Select(SelectSpan {
+                expr: expr_integer(7, 1, 13),
+                cases: vec![CaseSpan {
+                    guards: vec![
+                        CaseGuardSpan::Is(CaseRelOp::Equal, expr_integer(1, 1, 26)),
+                        CaseGuardSpan::Is(CaseRelOp::NotEqual, expr_integer(2, 1, 35)),
+                        CaseGuardSpan::Is(CaseRelOp::Less, expr_integer(3, 1, 43)),
+                        CaseGuardSpan::Is(CaseRelOp::LessEqual, expr_integer(4, 1, 52)),
+                        CaseGuardSpan::Is(CaseRelOp::Greater, expr_integer(5, 1, 60)),
+                        CaseGuardSpan::Is(CaseRelOp::GreaterEqual, expr_integer(6, 1, 69)),
+                    ],
+                    body: vec![],
+                }],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_select_case_guards_to() {
+        do_ok_test(
+            "SELECT CASE 7: CASE 1 TO 20, 10 TO 1: END SELECT",
+            &[Statement::Select(SelectSpan {
+                expr: expr_integer(7, 1, 13),
+                cases: vec![CaseSpan {
+                    guards: vec![
+                        CaseGuardSpan::To(expr_integer(1, 1, 21), expr_integer(20, 1, 26)),
+                        CaseGuardSpan::To(expr_integer(10, 1, 30), expr_integer(1, 1, 36)),
+                    ],
+                    body: vec![],
+                }],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_select_errors() {
+        do_error_test("SELECT\n", "1:7: Expecting CASE after SELECT");
+        do_error_test("SELECT CASE\n", "1:12: No expression in SELECT CASE statement");
+        do_error_test("SELECT CASE 3 + 7", "1:18: Expecting newline after SELECT CASE");
+        do_error_test("SELECT CASE 3 + 7 ,", "1:19: Expecting newline after SELECT CASE");
+        do_error_test("SELECT CASE 3 + 7 IF", "1:19: Unexpected keyword in expression");
+
+        do_error_test("SELECT CASE 1\n", "1:1: SELECT without END SELECT");
+
+        do_error_test(
+            "SELECT CASE 1\nEND",
+            "2:1: Expected CASE after SELECT CASE before any statement",
+        );
+        do_error_test(
+            "SELECT CASE 1\nEND IF",
+            "2:1: Expected CASE after SELECT CASE before any statement",
+        );
+        do_error_test(
+            "SELECT CASE 1\na = 1",
+            "2:1: Expected CASE after SELECT CASE before any statement",
+        );
+
+        do_error_test(
+            "SELECT CASE 1\nCASE 1",
+            "2:7: Expected comma, newline, or TO after expression",
+        );
+        do_error_test("SELECT CASE 1\nCASE ELSE", "2:10: Expecting newline after CASE");
+
+        do_error_test("SELECT CASE 1\nCASE ELSE\nEND", "1:1: SELECT without END SELECT");
+        do_error_test("SELECT CASE 1\nCASE ELSE\nEND IF", "3:1: END IF without IF");
+
+        do_error_test("SELECT CASE 1\nCASE ELSE\nCASE ELSE\n", "3:1: CASE ELSE must be unique");
+        do_error_test("SELECT CASE 1\nCASE ELSE\nCASE 1\n", "3:1: CASE ELSE is not last");
+    }
+
+    #[test]
+    fn test_select_case_errors() {
+        fn do_case_error_test(cases: &str, exp_error: &str) {
+            do_error_test(&format!("SELECT CASE 1\nCASE {}\n", cases), exp_error);
+        }
+
+        do_case_error_test("ELSE, ELSE", "2:10: Expected newline after CASE ELSE");
+        do_case_error_test("ELSE, 7", "2:10: Expected newline after CASE ELSE");
+        do_case_error_test("7, ELSE", "2:9: CASE ELSE must be on its own");
+
+        do_case_error_test("IS 7", "2:9: Expected relational operator");
+        do_case_error_test("IS AND", "2:9: Expected relational operator");
+        do_case_error_test("IS END", "2:9: Expected relational operator");
+
+        do_case_error_test("IS <>", "2:11: Missing expression after relational operator");
+        do_case_error_test("IS <> IF", "2:12: Unexpected keyword in expression");
+
+        do_case_error_test("", "2:6: Missing expression in CASE guard");
+        do_case_error_test("2 + 5 TO", "2:14: Missing expression after TO in CASE guard");
+        do_case_error_test("2 + 5 TO AS", "2:15: Missing expression after TO in CASE guard");
+        do_case_error_test(
+            "2 + 5 TO 8 AS",
+            "2:17: Expected comma, newline, or TO after expression",
+        );
     }
 
     #[test]
