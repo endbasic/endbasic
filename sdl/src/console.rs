@@ -552,7 +552,7 @@ mod tests {
         assert_poll_is_none(test.console());
 
         test.push_event(key_down(Keycode::C, Mod::LCTRLMOD));
-        assert_poll_is_none(test.console());
+        assert_poll_is_key(test.console(), Key::Interrupt);
         assert_eq!(Signal::Break, test.wait_one_signal());
         assert_poll_is_none(test.console());
 
@@ -574,7 +574,7 @@ mod tests {
         });
         test.push_event(Event::JoyButtonUp { timestamp: 0, which: 0, button_idx: 0 });
         test.push_event(key_down(Keycode::C, Mod::LCTRLMOD));
-        assert_poll_is_none(test.console());
+        assert_poll_is_key(test.console(), Key::Interrupt);
         assert_eq!(Signal::Break, test.wait_one_signal());
         assert_poll_is_none(test.console());
 
@@ -590,8 +590,10 @@ mod tests {
         assert_eq!(Key::Eof, block_on(test.console().read_key()).unwrap());
 
         test.push_event(key_down(Keycode::C, Mod::LCTRLMOD));
+        assert_eq!(Key::Interrupt, block_on(test.console().read_key()).unwrap());
         assert_eq!(Signal::Break, test.wait_one_signal());
         test.push_event(key_down(Keycode::C, Mod::RCTRLMOD));
+        assert_eq!(Key::Interrupt, block_on(test.console().read_key()).unwrap());
         assert_eq!(Signal::Break, test.wait_one_signal());
 
         test.push_event(key_down(Keycode::D, Mod::LCTRLMOD));
