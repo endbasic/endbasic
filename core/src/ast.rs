@@ -681,6 +681,9 @@ pub struct SelectSpan {
     /// Representation of the cases to select from.  The final `CASE ELSE`, if present, is also
     /// included here without any guards.
     pub cases: Vec<CaseSpan>,
+
+    /// Position of the `END SELECT` statement.
+    pub end_pos: LineCol,
 }
 
 /// Components of a `WHILE` statement.

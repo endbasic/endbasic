@@ -420,7 +420,8 @@ impl Symbols {
 
     /// Unsets the symbol `name` irrespective of its type.
     pub fn unset(&mut self, name: &str) -> Result<()> {
-        match self.by_name.remove(name) {
+        let key = name.to_ascii_uppercase();
+        match self.by_name.remove(&key) {
             Some(_) => Ok(()),
             None => Err(Error::new(format!("{} is not defined", name))),
         }
@@ -1392,7 +1393,7 @@ mod tests {
             .build();
 
         let mut count = 4;
-        for name in ["SOMEARRAY", "OUT", "SUM", "SOMEVAR"] {
+        for name in ["SomeArray", "Out", "Sum", "SomeVar"] {
             syms.unset(name).unwrap();
             count -= 1;
             assert_eq!(count, syms.as_hashmap().len());

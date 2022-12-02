@@ -16,6 +16,7 @@
 //! Low-level representation of an EndBASIC program for execution.
 
 use crate::ast::*;
+use crate::reader::LineCol;
 
 /// Convenience type to represent a program address.
 pub type Address = usize;
@@ -64,6 +65,16 @@ pub enum ErrorHandlerSpan {
     ResumeNext,
 }
 
+/// Components of a request to unset a variable.
+#[cfg_attr(test, derive(Debug, Eq, PartialEq))]
+pub struct UnsetSpan {
+    /// Name of the variable to unset.
+    pub name: String,
+
+    /// Position of where this instruction was requested.
+    pub pos: LineCol,
+}
+
 /// Representation of all possible instructions in the bytecode.
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub enum Instruction {
@@ -108,6 +119,9 @@ pub enum Instruction {
 
     /// Represents a change in the error handler state.
     SetErrorHandler(ErrorHandlerSpan),
+
+    /// Represents a request to unset a variable.
+    Unset(UnsetSpan),
 }
 
 /// Representation of a compiled program.

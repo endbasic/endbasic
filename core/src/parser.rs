@@ -1360,10 +1360,12 @@ impl<'a> Parser<'a> {
 
         let mut i = 0;
         let mut last = false;
+        let end_pos;
         loop {
             let peeked = self.lexer.peek()?;
             match peeked.token {
                 Token::Eof => {
+                    end_pos = peeked.pos;
                     break;
                 }
 
@@ -1396,12 +1398,12 @@ impl<'a> Parser<'a> {
                 }
 
                 Token::End => {
-                    let token_span = self.lexer.consume_peeked();
+                    let end_span = self.lexer.consume_peeked();
                     match self.maybe_parse_end()? {
                         Ok(stmt) => {
                             if cases.is_empty() {
                                 return Err(Error::Bad(
-                                    token_span.pos,
+                                    end_span.pos,
                                     "Expected CASE after SELECT CASE before any statement"
                                         .to_owned(),
                                 ));
@@ -1410,18 +1412,19 @@ impl<'a> Parser<'a> {
                             cases[i].body.push(stmt);
                         }
                         Err(Token::Select) => {
+                            end_pos = end_span.pos;
                             break;
                         }
                         Err(token) => {
                             if cases.is_empty() {
                                 return Err(Error::Bad(
-                                    token_span.pos,
+                                    end_span.pos,
                                     "Expected CASE after SELECT CASE before any statement"
                                         .to_owned(),
                                 ));
                             } else {
                                 return Err(Error::Bad(
-                                    token_span.pos,
+                                    end_span.pos,
                                     format!("END {} without {}", token, token),
                                 ));
                             }
@@ -1437,13 +1440,8 @@ impl<'a> Parser<'a> {
                         ));
                     }
 
-                    match self.parse_one_safe()? {
-                        Some(stmt) => {
-                            cases[i].body.push(stmt);
-                        }
-                        None => {
-                            break;
-                        }
+                    if let Some(stmt) = self.parse_one_safe()? {
+                        cases[i].body.push(stmt);
                     }
                 }
             }
@@ -1451,7 +1449,7 @@ impl<'a> Parser<'a> {
 
         self.expect_and_consume_with_pos(Token::Select, select_pos, "SELECT without END SELECT")?;
 
-        Ok(Statement::Select(SelectSpan { expr, cases }))
+        Ok(Statement::Select(SelectSpan { expr, cases, end_pos }))
     }
 
     /// Advances until the next statement after failing to parse a `SELECT` statement.
@@ -3807,7 +3805,11 @@ mod tests {
     fn test_select_empty() {
         do_ok_test(
             "SELECT CASE 7\nEND SELECT",
-            &[Statement::Select(SelectSpan { expr: expr_integer(7, 1, 13), cases: vec![] })],
+            &[Statement::Select(SelectSpan {
+                expr: expr_integer(7, 1, 13),
+                cases: vec![],
+                end_pos: lc(2, 1),
+            })],
         );
 
         do_ok_test(
@@ -3819,6 +3821,7 @@ mod tests {
                     pos: lc(1, 15),
                 })),
                 cases: vec![],
+                end_pos: lc(3, 1),
             })],
         );
     }
@@ -3833,6 +3836,7 @@ mod tests {
                     guards: vec![],
                     body: vec![make_bare_builtin_call("A", 3, 1)],
                 }],
+                end_pos: lc(4, 1),
             })],
         );
     }
@@ -3853,6 +3857,7 @@ mod tests {
                         body: vec![make_bare_builtin_call("B", 5, 1)],
                     },
                 ],
+                end_pos: lc(6, 1),
             })],
         );
     }
@@ -3874,6 +3879,7 @@ mod tests {
                     },
                     CaseSpan { guards: vec![], body: vec![make_bare_builtin_call("C", 7, 1)] },
                 ],
+                end_pos: lc(8, 1),
             })],
         );
     }
@@ -3895,6 +3901,7 @@ mod tests {
                     },
                     CaseSpan { guards: vec![], body: vec![] },
                 ],
+                end_pos: lc(8, 1),
             })],
         );
     }
@@ -3949,6 +3956,7 @@ mod tests {
                         ],
                     },
                 ],
+                end_pos: lc(15, 13),
             })],
         );
     }
@@ -3967,6 +3975,7 @@ mod tests {
                     ],
                     body: vec![],
                 }],
+                end_pos: lc(1, 35),
             })],
         );
     }
@@ -3988,6 +3997,7 @@ mod tests {
                     ],
                     body: vec![],
                 }],
+                end_pos: lc(1, 72),
             })],
         );
     }
@@ -4005,6 +4015,7 @@ mod tests {
                     ],
                     body: vec![],
                 }],
+                end_pos: lc(1, 39),
             })],
         );
     }
