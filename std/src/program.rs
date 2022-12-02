@@ -43,6 +43,9 @@ have forgotten to do so, but it's better to get in the habit of saving often.
 See the \"File system\" help topic for information on where the programs can be saved and loaded \
 from.";
 
+/// Message to print on the console when receiving a break signal.
+pub const BREAK_MSG: &str = "**** BREAK ****";
+
 /// Representation of the single program that we can keep in memory.
 #[async_trait(?Send)]
 pub trait Program {
@@ -451,7 +454,7 @@ impl Command for RunCommand {
             Err(e) => return Err(CallError::NestedError(format!("{}", e))),
         };
         match stop_reason {
-            StopReason::Break => self.console.borrow_mut().print("**** BREAK ****")?,
+            StopReason::Break => self.console.borrow_mut().print(BREAK_MSG)?,
             stop_reason => {
                 if stop_reason.as_exit_code() != 0 {
                     self.console.borrow_mut().print(&format!(

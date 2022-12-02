@@ -24,7 +24,7 @@
 
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_std::console::{self, refill_and_print, Console};
-use endbasic_std::program::{continue_if_modified, Program};
+use endbasic_std::program::{continue_if_modified, Program, BREAK_MSG};
 use endbasic_std::storage::Storage;
 use std::cell::RefCell;
 use std::io;
@@ -186,9 +186,10 @@ pub async fn run_repl_loop(
             Err(e) => {
                 if e.kind() == io::ErrorKind::Interrupted {
                     let mut console = console.borrow_mut();
-                    console.print("Interrupted by CTRL-C")?;
-                    // TODO(jmmv): This should cause the interpreter to exit with a signal.
-                    stop_reason = StopReason::Exited(1);
+                    console.print(BREAK_MSG)?;
+                    // Do not exit the interpreter.  Other REPLs, such as Python's, do not do so,
+                    // and it is actually pretty annoying to exit the REPL when one may be furiously
+                    // pressing CTRL+C to stop a program inside of it.
                 } else if e.kind() == io::ErrorKind::UnexpectedEof {
                     let mut console = console.borrow_mut();
                     console.print("End of input by CTRL-D")?;
