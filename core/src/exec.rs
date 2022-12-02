@@ -1807,7 +1807,50 @@ mod tests {
         // the test expression and a `clear()` can unset this variable.  We could try to be better
         // here, but I'd say that if a program is issuing a `clear()` halfway through its execution,
         // it is bound to suffer from issues anyway so it's not worth improving this.
-        assert_eq!("4:13: 0select is not defined", format!("{}", e));
+        assert_eq!("4:13: 0select1 is not defined", format!("{}", e));
+    }
+
+    #[test]
+    fn test_select_nested() {
+        let code = r#"
+            i = 5
+            SELECT CASE i
+                CASE 5
+                    OUT "OK 1"
+                    i = 6
+                    SELECT CASE i
+                        CASE 6
+                            OUT "OK 2"
+                    END SELECT
+                CASE 6
+                    OUT "Not OK"
+            END SELECT
+        "#;
+        do_ok_test(code, &[], &["OK 1", "OK 2"]);
+    }
+
+    #[test]
+    fn test_select_nested_indirectly() {
+        let code = r#"
+            i = 5
+            SELECT CASE i
+                CASE 5
+                    OUT "OK 1"
+                    GOSUB @another
+                CASE 6
+                    OUT "Not OK"
+            END SELECT
+            GOTO @end
+            @another
+            i = 6
+            SELECT CASE i
+                CASE 6
+                    OUT "OK 2"
+            END SELECT
+            RETURN
+            @end
+        "#;
+        do_ok_test(code, &[], &["OK 1", "OK 2"]);
     }
 
     #[test]

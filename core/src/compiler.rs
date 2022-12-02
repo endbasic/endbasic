@@ -85,6 +85,9 @@ struct Compiler {
     /// Current nesting of `DO` loops, needed to assign targets for `EXIT DO` statements.
     exit_do_level: usize,
 
+    /// Current number of `SELECT` statements, needed to assign internal variable names.
+    selects: usize,
+
     /// Mapping of discovered labels to the addresses where they are.
     labels: HashMap<String, Address>,
 
@@ -115,6 +118,15 @@ impl Compiler {
     /// numeric.
     fn do_label(level: usize) -> String {
         format!("0do{}", level)
+    }
+
+    /// Generates an internal variable name to hold the result of a `SELECT` test evaluation.
+    ///
+    /// This is a little hack needed because we don't yet have a value stack nor registers.  We can
+    /// do this because we know that users cannot specify custom variable names that start with a
+    /// digit.
+    fn select_test_var_name(selects: usize) -> String {
+        format!("0select{}", selects)
     }
 
     /// Compiles a `DO` loop and appends its instructions to the compilation context.
@@ -334,9 +346,8 @@ impl Compiler {
     fn compile_select(&mut self, span: SelectSpan) -> Result<()> {
         let mut end_pcs = vec![];
 
-        // TODO(jmmv): The test variable must have a different name every time to support SELECT
-        // nesting.
-        let test_vref = VarRef::new("0select", VarType::Auto);
+        self.selects += 1;
+        let test_vref = VarRef::new(Compiler::select_test_var_name(self.selects), VarType::Auto);
         self.emit(Instruction::Assignment(AssignmentSpan {
             vref: test_vref.clone(),
             vref_pos: span.expr.start_pos(),
@@ -1213,7 +1224,7 @@ mod tests {
             .expect_instr(
                 0,
                 Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select", VarType::Auto),
+                    vref: VarRef::new("0select1", VarType::Auto),
                     vref_pos: lc(1, 13),
                     expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
                 }),
@@ -1236,7 +1247,7 @@ mod tests {
             )
             .expect_instr(
                 3,
-                Instruction::Unset(UnsetSpan { name: "0select".to_owned(), pos: lc(4, 1) }),
+                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
             )
             .check();
     }
@@ -1247,7 +1258,7 @@ mod tests {
             "1 + 2",
             Expr::Equal(Box::from(BinaryOpSpan {
                 lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select", VarType::Auto),
+                    vref: VarRef::new("0select1", VarType::Auto),
                     pos: lc(2, 6),
                 }),
                 rhs: Expr::Add(Box::from(BinaryOpSpan {
@@ -1266,7 +1277,7 @@ mod tests {
             "IS = 9 + 8",
             Expr::Equal(Box::from(BinaryOpSpan {
                 lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select", VarType::Auto),
+                    vref: VarRef::new("0select1", VarType::Auto),
                     pos: lc(2, 11),
                 }),
                 rhs: Expr::Add(Box::from(BinaryOpSpan {
@@ -1282,7 +1293,7 @@ mod tests {
             "IS <> 9",
             Expr::NotEqual(Box::from(BinaryOpSpan {
                 lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select", VarType::Auto),
+                    vref: VarRef::new("0select1", VarType::Auto),
                     pos: lc(2, 12),
                 }),
                 rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 12) }),
@@ -1294,7 +1305,7 @@ mod tests {
             "IS < 9",
             Expr::Less(Box::from(BinaryOpSpan {
                 lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select", VarType::Auto),
+                    vref: VarRef::new("0select1", VarType::Auto),
                     pos: lc(2, 11),
                 }),
                 rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 11) }),
@@ -1306,7 +1317,7 @@ mod tests {
             "IS <= 9",
             Expr::LessEqual(Box::from(BinaryOpSpan {
                 lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select", VarType::Auto),
+                    vref: VarRef::new("0select1", VarType::Auto),
                     pos: lc(2, 12),
                 }),
                 rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 12) }),
@@ -1318,7 +1329,7 @@ mod tests {
             "IS > 9",
             Expr::Greater(Box::from(BinaryOpSpan {
                 lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select", VarType::Auto),
+                    vref: VarRef::new("0select1", VarType::Auto),
                     pos: lc(2, 11),
                 }),
                 rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 11) }),
@@ -1330,7 +1341,7 @@ mod tests {
             "IS >= 9",
             Expr::GreaterEqual(Box::from(BinaryOpSpan {
                 lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select", VarType::Auto),
+                    vref: VarRef::new("0select1", VarType::Auto),
                     pos: lc(2, 12),
                 }),
                 rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 12) }),
@@ -1346,7 +1357,7 @@ mod tests {
             Expr::And(Box::from(BinaryOpSpan {
                 lhs: Expr::GreaterEqual(Box::from(BinaryOpSpan {
                     lhs: Expr::Symbol(SymbolSpan {
-                        vref: VarRef::new("0select", VarType::Auto),
+                        vref: VarRef::new("0select1", VarType::Auto),
                         pos: lc(2, 6),
                     }),
                     rhs: Expr::Integer(IntegerSpan { value: 1, pos: lc(2, 6) }),
@@ -1354,7 +1365,7 @@ mod tests {
                 })),
                 rhs: Expr::LessEqual(Box::from(BinaryOpSpan {
                     lhs: Expr::Symbol(SymbolSpan {
-                        vref: VarRef::new("0select", VarType::Auto),
+                        vref: VarRef::new("0select1", VarType::Auto),
                         pos: lc(2, 6),
                     }),
                     rhs: Expr::Integer(IntegerSpan { value: 2, pos: lc(2, 11) }),
@@ -1372,7 +1383,7 @@ mod tests {
             Expr::Or(Box::from(BinaryOpSpan {
                 lhs: Expr::NotEqual(Box::from(BinaryOpSpan {
                     lhs: Expr::Symbol(SymbolSpan {
-                        vref: VarRef::new("0select", VarType::Auto),
+                        vref: VarRef::new("0select1", VarType::Auto),
                         pos: lc(2, 12),
                     }),
                     rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 12) }),
@@ -1380,7 +1391,7 @@ mod tests {
                 })),
                 rhs: Expr::Equal(Box::from(BinaryOpSpan {
                     lhs: Expr::Symbol(SymbolSpan {
-                        vref: VarRef::new("0select", VarType::Auto),
+                        vref: VarRef::new("0select1", VarType::Auto),
                         pos: lc(2, 15),
                     }),
                     rhs: Expr::Integer(IntegerSpan { value: 8, pos: lc(2, 15) }),
@@ -1399,7 +1410,7 @@ mod tests {
             .expect_instr(
                 0,
                 Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select", VarType::Auto),
+                    vref: VarRef::new("0select1", VarType::Auto),
                     vref_pos: lc(1, 13),
                     expr: Expr::Add(Box::from(BinaryOpSpan {
                         lhs: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
@@ -1410,7 +1421,7 @@ mod tests {
             )
             .expect_instr(
                 1,
-                Instruction::Unset(UnsetSpan { name: "0select".to_owned(), pos: lc(1, 20) }),
+                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(1, 20) }),
             )
             .check();
     }
@@ -1423,7 +1434,7 @@ mod tests {
             .expect_instr(
                 0,
                 Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select", VarType::Auto),
+                    vref: VarRef::new("0select1", VarType::Auto),
                     vref_pos: lc(1, 13),
                     expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
                 }),
@@ -1433,7 +1444,7 @@ mod tests {
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Equal(Box::from(BinaryOpSpan {
                         lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("0select", VarType::Auto),
+                            vref: VarRef::new("0select1", VarType::Auto),
                             pos: lc(2, 6),
                         }),
                         rhs: Expr::Integer(IntegerSpan { value: 7, pos: lc(2, 6) }),
@@ -1453,7 +1464,7 @@ mod tests {
             )
             .expect_instr(
                 3,
-                Instruction::Unset(UnsetSpan { name: "0select".to_owned(), pos: lc(4, 1) }),
+                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
             )
             .check();
     }
@@ -1466,7 +1477,7 @@ mod tests {
             .expect_instr(
                 0,
                 Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select", VarType::Auto),
+                    vref: VarRef::new("0select1", VarType::Auto),
                     vref_pos: lc(1, 13),
                     expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
                 }),
@@ -1481,7 +1492,7 @@ mod tests {
             )
             .expect_instr(
                 2,
-                Instruction::Unset(UnsetSpan { name: "0select".to_owned(), pos: lc(4, 1) }),
+                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
             )
             .check();
     }
@@ -1494,7 +1505,7 @@ mod tests {
             .expect_instr(
                 0,
                 Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select", VarType::Auto),
+                    vref: VarRef::new("0select1", VarType::Auto),
                     vref_pos: lc(1, 13),
                     expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
                 }),
@@ -1504,7 +1515,7 @@ mod tests {
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Equal(Box::from(BinaryOpSpan {
                         lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("0select", VarType::Auto),
+                            vref: VarRef::new("0select1", VarType::Auto),
                             pos: lc(2, 6),
                         }),
                         rhs: Expr::Integer(IntegerSpan { value: 7, pos: lc(2, 6) }),
@@ -1528,7 +1539,7 @@ mod tests {
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::NotEqual(Box::from(BinaryOpSpan {
                         lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("0select", VarType::Auto),
+                            vref: VarRef::new("0select1", VarType::Auto),
                             pos: lc(4, 12),
                         }),
                         rhs: Expr::Integer(IntegerSpan { value: 8, pos: lc(4, 12) }),
@@ -1548,7 +1559,7 @@ mod tests {
             )
             .expect_instr(
                 6,
-                Instruction::Unset(UnsetSpan { name: "0select".to_owned(), pos: lc(6, 1) }),
+                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(6, 1) }),
             )
             .check();
     }
@@ -1561,7 +1572,7 @@ mod tests {
             .expect_instr(
                 0,
                 Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select", VarType::Auto),
+                    vref: VarRef::new("0select1", VarType::Auto),
                     vref_pos: lc(1, 13),
                     expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
                 }),
@@ -1571,7 +1582,7 @@ mod tests {
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Equal(Box::from(BinaryOpSpan {
                         lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("0select", VarType::Auto),
+                            vref: VarRef::new("0select1", VarType::Auto),
                             pos: lc(2, 6),
                         }),
                         rhs: Expr::Integer(IntegerSpan { value: 7, pos: lc(2, 6) }),
@@ -1600,7 +1611,39 @@ mod tests {
             )
             .expect_instr(
                 5,
-                Instruction::Unset(UnsetSpan { name: "0select".to_owned(), pos: lc(6, 1) }),
+                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(6, 1) }),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_select_internal_var_names() {
+        Tester::default()
+            .parse("SELECT CASE 0: END SELECT\nSELECT CASE 0: END SELECT")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::Assignment(AssignmentSpan {
+                    vref: VarRef::new("0select1", VarType::Auto),
+                    vref_pos: lc(1, 13),
+                    expr: Expr::Integer(IntegerSpan { value: 0, pos: lc(1, 13) }),
+                }),
+            )
+            .expect_instr(
+                1,
+                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(1, 16) }),
+            )
+            .expect_instr(
+                2,
+                Instruction::Assignment(AssignmentSpan {
+                    vref: VarRef::new("0select2", VarType::Auto),
+                    vref_pos: lc(2, 13),
+                    expr: Expr::Integer(IntegerSpan { value: 0, pos: lc(2, 13) }),
+                }),
+            )
+            .expect_instr(
+                3,
+                Instruction::Unset(UnsetSpan { name: "0select2".to_owned(), pos: lc(2, 16) }),
             )
             .check();
     }
