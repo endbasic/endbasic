@@ -240,7 +240,7 @@ impl InputCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("INPUT", VarType::Void)
-                .with_syntax("[\"prompt\"] <;|,> variableref")
+                .with_syntax("[\"prompt\" <;|,>] variableref")
                 .with_category(CATEGORY)
                 .with_description(
                     "Obtains user input from the console.
@@ -263,27 +263,34 @@ impl Command for InputCommand {
     }
 
     async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if span.args.len() != 2 {
+        if span.args.is_empty() || span.args.len() > 2 {
             return Err(CallError::SyntaxError);
         }
+        let mut iter = span.args.iter();
 
-        let mut prompt = match &span.args[0].expr {
-            Some(e) => match e.eval(machine.get_mut_symbols()).await? {
-                Value::Text(t) => t,
-                _ => {
-                    return Err(CallError::ArgumentError(
-                        e.start_pos(),
-                        "INPUT prompt must be a string".to_owned(),
-                    ))
-                }
-            },
-            None => "".to_owned(),
+        let prompt = if span.args.len() == 2 {
+            let arg = iter.next().expect("Number of arguments validated above");
+            let mut prompt = match &arg.expr {
+                Some(e) => match e.eval(machine.get_mut_symbols()).await? {
+                    Value::Text(t) => t,
+                    _ => {
+                        return Err(CallError::ArgumentError(
+                            e.start_pos(),
+                            "INPUT prompt must be a string".to_owned(),
+                        ))
+                    }
+                },
+                None => "".to_owned(),
+            };
+            if let ArgSep::Short = span.args[0].sep {
+                prompt += "? ";
+            }
+            prompt
+        } else {
+            "? ".to_owned()
         };
-        if let ArgSep::Short = span.args[0].sep {
-            prompt += "? ";
-        }
 
-        let (vref, pos) = match &span.args[1].expr {
+        let (vref, pos) = match &iter.next().expect("Number of arguments validated above").expr {
             Some(Expr::Symbol(span)) => (&span.vref, span.pos),
             Some(expr) => {
                 return Err(CallError::ArgumentError(
@@ -297,6 +304,8 @@ impl Command for InputCommand {
             .get_symbols()
             .qualify_varref(vref)
             .map_err(|e| eval::Error::from_value_error(e, pos))?;
+
+        assert!(iter.next().is_none(), "Number of arguments validated above");
 
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
@@ -564,6 +573,7 @@ mod tests {
                 .check();
         }
 
+        t("INPUT foo\nPRINT foo", "9\n", "9", "foo", 9);
         t("INPUT ; foo\nPRINT foo", "9\n", "9", "foo", 9);
         t("INPUT ; foo\nPRINT foo", "-9\n", "-9", "foo", -9);
         t("INPUT , bar?\nPRINT bar", "true\n", "TRUE", "bar", true);
@@ -640,12 +650,12 @@ mod tests {
 
     #[test]
     fn test_input_errors() {
-        check_stmt_err("1:1: In call to INPUT: expected [\"prompt\"] <;|,> variableref", "INPUT");
+        check_stmt_err("1:1: In call to INPUT: expected [\"prompt\" <;|,>] variableref", "INPUT");
         check_stmt_err(
-            "1:1: In call to INPUT: expected [\"prompt\"] <;|,> variableref",
+            "1:1: In call to INPUT: expected [\"prompt\" <;|,>] variableref",
             "INPUT ; ,",
         );
-        check_stmt_err("1:1: In call to INPUT: expected [\"prompt\"] <;|,> variableref", "INPUT ;");
+        check_stmt_err("1:1: In call to INPUT: expected [\"prompt\" <;|,>] variableref", "INPUT ;");
         check_stmt_err("1:1: In call to INPUT: 1:7: INPUT prompt must be a string", "INPUT 3 ; a");
         check_stmt_err(
             "1:1: In call to INPUT: 1:9: INPUT requires a variable reference",

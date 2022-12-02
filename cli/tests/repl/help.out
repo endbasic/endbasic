@@ -497,7 +497,7 @@ Output from HELP "HELP":
 
 Output from HELP "INPUT":
 
-    INPUT ["prompt"] <;|,> variableref
+    INPUT ["prompt" <;|,>] variableref
 
     Obtains user input from the console.
 

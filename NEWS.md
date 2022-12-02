@@ -108,6 +108,9 @@ for the time being.**
 
 *   Added support for `SELECT CASE`.
 
+*   Fixed `INPUT` so that the prompt is optional and thus things like
+    `INPUT var` work as expected from traditional BASIC implementations.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
