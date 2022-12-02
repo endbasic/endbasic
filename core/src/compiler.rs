@@ -83,7 +83,11 @@ struct Compiler {
     next_pc: Address,
 
     /// Current nesting of `DO` loops, needed to assign targets for `EXIT DO` statements.
-    exit_do_level: usize,
+    ///
+    /// The first component of this pair indicates which block of `EXIT DO`s we are dealing with and
+    /// the second component indicates their nesting.  Every time the second component reaches zero,
+    /// the first component has to be incremented.
+    exit_do_level: (usize, usize),
 
     /// Current number of `SELECT` statements, needed to assign internal variable names.
     selects: usize,
@@ -116,8 +120,8 @@ impl Compiler {
     /// in `DO` loops.  We can do this because we know that users cannot specify custom labels that
     /// start with a digit and all user-provided labels that do start with a digit are also fully
     /// numeric.
-    fn do_label(level: usize) -> String {
-        format!("0do{}", level)
+    fn do_label(level: (usize, usize)) -> String {
+        format!("0do{}_{}", level.0, level.1)
     }
 
     /// Generates an internal variable name to hold the result of a `SELECT` test evaluation.
@@ -131,7 +135,7 @@ impl Compiler {
 
     /// Compiles a `DO` loop and appends its instructions to the compilation context.
     fn compile_do(&mut self, span: DoSpan) -> Result<()> {
-        self.exit_do_level += 1;
+        self.exit_do_level.1 += 1;
 
         let end_pc;
         match span.guard {
@@ -184,8 +188,12 @@ impl Compiler {
             }
         }
 
-        self.labels.insert(Compiler::do_label(self.exit_do_level), end_pc + 1);
-        self.exit_do_level -= 1;
+        let existing = self.labels.insert(Compiler::do_label(self.exit_do_level), end_pc + 1);
+        assert!(existing.is_none(), "Auto-generated label must be unique");
+        self.exit_do_level.1 -= 1;
+        if self.exit_do_level.1 == 0 {
+            self.exit_do_level.0 += 1;
+        }
 
         Ok(())
     }
@@ -445,7 +453,7 @@ impl Compiler {
             }
 
             Statement::ExitDo(span) => {
-                if self.exit_do_level == 0 {
+                if self.exit_do_level.1 == 0 {
                     return Err(Error::new(span.pos, "EXIT DO outside of DO loop".to_owned()));
                 }
                 let exit_do_pc = self.emit(Instruction::Nop);
@@ -896,6 +904,34 @@ mod tests {
             .expect_instr(3, Instruction::Jump(JumpSpan { addr: 5 }))
             .expect_instr(4, Instruction::Jump(JumpSpan { addr: 2 }))
             .expect_instr(5, Instruction::Jump(JumpSpan { addr: 0 }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_exit_do_sequential() {
+        Tester::default()
+            .parse("DO WHILE TRUE\nEXIT DO\nLOOP\nDO WHILE TRUE\nEXIT DO\nLOOP")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
+                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
+                    addr: 3,
+                    error_msg: "DO requires a boolean condition",
+                }),
+            )
+            .expect_instr(1, Instruction::Jump(JumpSpan { addr: 3 }))
+            .expect_instr(2, Instruction::Jump(JumpSpan { addr: 0 }))
+            .expect_instr(
+                3,
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
+                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(4, 10) }),
+                    addr: 6,
+                    error_msg: "DO requires a boolean condition",
+                }),
+            )
+            .expect_instr(4, Instruction::Jump(JumpSpan { addr: 6 }))
+            .expect_instr(5, Instruction::Jump(JumpSpan { addr: 3 }))
             .check();
     }
 

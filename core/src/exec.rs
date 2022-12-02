@@ -1182,7 +1182,53 @@ mod tests {
                 IF i = 2 THEN: EXIT DO: END IF
                 i = i - 1
             LOOP
-        "#,
+            "#,
+            &[],
+            &["5 2", "5 1", "4 2", "4 1", "3 2", "2 2", "2 1"],
+        );
+    }
+
+    #[test]
+    fn test_exit_do_sequential() {
+        do_ok_test(
+            r#"
+            i = 2
+            DO WHILE i > 0
+                OUT "First"; i
+                i = i - 1
+            LOOP
+            i = 2
+            DO WHILE i > 0
+                OUT "Second"; i
+                i = i - 1
+            LOOP
+            "#,
+            &[],
+            &["First 2", "First 1", "Second 2", "Second 1"],
+        );
+    }
+
+    #[test]
+    fn test_exit_do_nested_indirectly() {
+        do_ok_test(
+            r#"
+            i = 5
+            DO WHILE i > 0
+                GOSUB @another
+                IF i = 2 THEN: EXIT DO: END IF
+                i = i - 1
+            LOOP
+            GOTO @end
+            @another
+            j = 2
+            DO UNTIL j = 0
+                OUT i; j
+                IF i = 3 AND j = 2 THEN: EXIT DO: END IF
+                j = j - 1
+            LOOP
+            RETURN
+            @end
+            "#,
             &[],
             &["5 2", "5 1", "4 2", "4 1", "3 2", "2 2", "2 1"],
         );
