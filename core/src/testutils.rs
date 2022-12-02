@@ -28,6 +28,34 @@ use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
 
+/// Clears the machine state.
+pub(crate) struct ClearCommand {
+    metadata: CallableMetadata,
+}
+
+impl ClearCommand {
+    pub(crate) fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void).test_build(),
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for ClearCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if !span.args.is_empty() {
+            return Err(CallError::SyntaxError);
+        }
+        machine.clear();
+        Ok(())
+    }
+}
+
 /// Counts and returns the number of times this has been evaluated.
 pub(crate) struct CountFunction {
     metadata: CallableMetadata,

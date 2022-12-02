@@ -555,6 +555,13 @@ impl Machine {
                     context.err_handler = *span;
                     context.pc += 1;
                 }
+
+                Instruction::Unset(span) => {
+                    self.symbols
+                        .unset(&span.name)
+                        .map_err(|e| Error::from_value_error(e, span.pos))?;
+                    context.pc += 1;
+                }
             }
         }
 
@@ -1764,6 +1771,43 @@ mod tests {
         do_ok_test(code, &["10"], &[]);
         do_ok_test(code, &["11"], &["OK 3"]);
         do_ok_test(code, &["12"], &[]);
+    }
+
+    #[test]
+    fn test_select_no_test_var_leaks() {
+        let code = r#"
+            i = 0
+            SELECT CASE 5 + 1
+                CASE 6: i = i + 3
+            END SELECT
+
+            SELECT CASE TRUE
+                CASE TRUE: i = i + 1
+            END SELECT
+        "#;
+
+        let mut machine = Machine::default();
+        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut code.as_bytes())).unwrap());
+        assert_eq!(1, machine.get_symbols().as_hashmap().len());
+        assert_eq!(4, machine.get_var_as_int("I").unwrap());
+    }
+
+    #[test]
+    fn test_select_clear_causes_internal_error() {
+        let code = r#"
+            SELECT CASE 4
+                CASE 4: CLEAR
+            END SELECT
+        "#;
+
+        let mut machine = Machine::default();
+        machine.add_command(ClearCommand::new());
+        let e = block_on(machine.exec(&mut code.as_bytes())).unwrap_err();
+        // This is a corner case of how the current implementation uses "hidden" variables to hold
+        // the test expression and a `clear()` can unset this variable.  We could try to be better
+        // here, but I'd say that if a program is issuing a `clear()` halfway through its execution,
+        // it is bound to suffer from issues anyway so it's not worth improving this.
+        assert_eq!("4:13: 0select is not defined", format!("{}", e));
     }
 
     #[test]

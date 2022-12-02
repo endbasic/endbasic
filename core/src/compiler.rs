@@ -372,12 +372,11 @@ impl Compiler {
             next = next2;
         }
 
-        // TODO(jmmv): Undefine the test variable so that consecutive SELECT statements don't get
-        // confused (if we reuse test variables above).  Need one extra instruction type.
-
         for end_pc in end_pcs {
             self.instrs[end_pc] = Instruction::Jump(JumpSpan { addr: self.next_pc });
         }
+
+        self.emit(Instruction::Unset(UnsetSpan { name: test_vref.take_name(), pos: span.end_pos }));
 
         Ok(())
     }
@@ -1235,6 +1234,10 @@ mod tests {
                     args: vec![],
                 }),
             )
+            .expect_instr(
+                3,
+                Instruction::Unset(UnsetSpan { name: "0select".to_owned(), pos: lc(4, 1) }),
+            )
             .check();
     }
 
@@ -1405,6 +1408,10 @@ mod tests {
                     })),
                 }),
             )
+            .expect_instr(
+                1,
+                Instruction::Unset(UnsetSpan { name: "0select".to_owned(), pos: lc(1, 20) }),
+            )
             .check();
     }
 
@@ -1444,6 +1451,10 @@ mod tests {
                     args: vec![],
                 }),
             )
+            .expect_instr(
+                3,
+                Instruction::Unset(UnsetSpan { name: "0select".to_owned(), pos: lc(4, 1) }),
+            )
             .check();
     }
 
@@ -1467,6 +1478,10 @@ mod tests {
                     name_pos: lc(3, 1),
                     args: vec![],
                 }),
+            )
+            .expect_instr(
+                2,
+                Instruction::Unset(UnsetSpan { name: "0select".to_owned(), pos: lc(4, 1) }),
             )
             .check();
     }
@@ -1531,6 +1546,10 @@ mod tests {
                     args: vec![],
                 }),
             )
+            .expect_instr(
+                6,
+                Instruction::Unset(UnsetSpan { name: "0select".to_owned(), pos: lc(6, 1) }),
+            )
             .check();
     }
 
@@ -1578,6 +1597,10 @@ mod tests {
                     name_pos: lc(5, 1),
                     args: vec![],
                 }),
+            )
+            .expect_instr(
+                5,
+                Instruction::Unset(UnsetSpan { name: "0select".to_owned(), pos: lc(6, 1) }),
             )
             .check();
     }
