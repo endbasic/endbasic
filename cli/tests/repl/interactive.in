@@ -15,7 +15,7 @@
 
 ' Tests the interactive interface.
 
-INPUT ; num
+INPUT num
 123
 PRINT "Got"; num; "from stdin"
 FOOBAR ' Call an unknown command.
