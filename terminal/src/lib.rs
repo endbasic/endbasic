@@ -162,12 +162,12 @@ impl TerminalConsole {
                     .send(Signal::Break)
                     .await
                     .expect("Send to unbounded channel should not have failed")
-            } else {
-                // This should never fail but can if the receiver outruns the console because we
-                // don't await for the handler to terminate (which we cannot do safely because
-                // `Drop` is not async).
-                let _ = on_key_tx.send(key).await;
             }
+
+            // This should never fail but can if the receiver outruns the console because we
+            // don't await for the handler to terminate (which we cannot do safely because
+            // `Drop` is not async).
+            let _ = on_key_tx.send(key).await;
         }
 
         signals_tx.close();

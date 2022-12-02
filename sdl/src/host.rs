@@ -1003,19 +1003,16 @@ pub(crate) fn run(
 
         if let Some(event) = ctx.event_pump.poll_event() {
             if let Some(key) = parse_event(event) {
-                match key {
-                    Key::Interrupt => {
-                        // signals_tx is an async channel because that's what the execution engine
-                        // needs.  This means that we cannot use a regular "send" here because we
-                        // would need to await for it, which is a no-no because we are not in an
-                        // async context.  Using "try_send" should be sufficient though given that
-                        // the channel we use is not bounded.
-                        signals_tx
-                            .try_send(Signal::Break)
-                            .expect("Channel must be alive and not full")
-                    }
-                    key => on_key_tx.send(key).expect("Channel must be alive"),
+                if key == Key::Interrupt {
+                    // signals_tx is an async channel because that's what the execution engine
+                    // needs.  This means that we cannot use a regular "send" here because we
+                    // would need to await for it, which is a no-no because we are not in an
+                    // async context.  Using "try_send" should be sufficient though given that
+                    // the channel we use is not bounded.
+                    signals_tx.try_send(Signal::Break).expect("Channel must be alive and not full")
                 }
+
+                on_key_tx.send(key).expect("Channel must be alive");
             }
 
             did_something = true;

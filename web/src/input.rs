@@ -105,9 +105,9 @@ impl OnScreenKeyboard {
             if let Err(e) = self.signals_tx.try_send(Signal::Break) {
                 log_and_panic!("Send to unbounded channel must succeed: {}", e);
             }
-        } else {
-            self.safe_try_send(key)
         }
+
+        self.safe_try_send(key)
     }
 
     /// Generates a fake Escape key press.
