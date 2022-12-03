@@ -426,10 +426,16 @@ impl PrintCommand {
                 .with_syntax("[expr1 [<;|,> [.. exprN]]]")
                 .with_category(CATEGORY)
                 .with_description(
-                    "Prints a message to the console.
-The expressions given as arguments are all evaluated and converted to strings.  Arguments \
-separated by the short `;` separator are concatenated with a single space, while arguments \
-separated by the long `,` separator are concatenated with a tab character.
+                    "Prints one or more values to the console.
+The expressions given as arguments are all evaluated and converted to strings before they are \
+printed.  The way this is done depends on the expression's type: boolean expressions are printed \
+as TRUE or FALSE; numbers are printed with a leading space if they do not have a negative sign; \
+and strings are printed \"as is\" .
+Using a `;` separator between arguments causes the two adjacent values to be displayed together.  \
+For strings, this means that no space is added between them; for all other types, a space is added \
+after the value on the left side.
+Using a `,` separator between arguments works the same as `;` except that the fields are \
+left-aligned to 14-character wide fields on the screen.
 If the last expression is empty (i.e. if the statement ends in a semicolon or a comma), then \
 the cursor position remains on the same line of the message right after what was printed.",
                 )
@@ -449,18 +455,30 @@ impl Command for PrintCommand {
         let mut text = String::new();
         let mut nl = true;
         for arg in span.args.iter() {
+            let add_space;
             if let Some(expr) = arg.expr.as_ref() {
-                text += &expr.eval(machine.get_mut_symbols()).await?.to_output();
+                let value = expr.eval(machine.get_mut_symbols()).await?;
+                if let Value::Text(_) = value {
+                    add_space = false;
+                } else {
+                    add_space = true;
+                }
+                text += &value.to_text();
                 nl = true;
             } else {
+                add_space = false;
                 nl = false;
             }
             match arg.sep {
                 ArgSep::End => break,
-                ArgSep::Short => text += " ",
+                ArgSep::Short => {
+                    if add_space {
+                        text += " ";
+                    }
+                }
                 ArgSep::Long => {
                     text += " ";
-                    while text.len() % 8 != 0 {
+                    while text.len() % 14 != 0 {
                         text += " ";
                     }
                 }
@@ -573,8 +591,8 @@ mod tests {
                 .check();
         }
 
-        t("INPUT foo\nPRINT foo", "9\n", "9", "foo", 9);
-        t("INPUT ; foo\nPRINT foo", "9\n", "9", "foo", 9);
+        t("INPUT foo\nPRINT foo", "9\n", " 9", "foo", 9);
+        t("INPUT ; foo\nPRINT foo", "9\n", " 9", "foo", 9);
         t("INPUT ; foo\nPRINT foo", "-9\n", "-9", "foo", -9);
         t("INPUT , bar?\nPRINT bar", "true\n", "TRUE", "bar", true);
         t("INPUT ; foo$\nPRINT foo", "\n", "", "foo", "");
@@ -589,7 +607,7 @@ mod tests {
         Tester::default()
             .add_input_chars("42\n")
             .run("prompt$ = \"Indirectly without question mark\"\nINPUT prompt$, b\nPRINT b * 2")
-            .expect_prints(["84"])
+            .expect_prints([" 84"])
             .expect_var("prompt", "Indirectly without question mark")
             .expect_var("b", 42)
             .check();
@@ -698,40 +716,62 @@ mod tests {
     #[test]
     fn test_print_ok() {
         Tester::default().run("PRINT").expect_prints([""]).check();
-        Tester::default()
-            .run("PRINT ;")
-            .expect_output([CapturedOut::Write(" ".to_owned())])
-            .check();
+        Tester::default().run("PRINT ;").expect_output([CapturedOut::Write("".to_owned())]).check();
         Tester::default()
             .run("PRINT ,")
-            .expect_output([CapturedOut::Write("        ".to_owned())])
+            .expect_output([CapturedOut::Write("              ".to_owned())])
             .check();
         Tester::default()
             .run("PRINT ;,;,")
-            .expect_output([CapturedOut::Write("                ".to_owned())])
+            .expect_output([CapturedOut::Write("                            ".to_owned())])
             .check();
-        Tester::default().run("PRINT \"abcdefg\", 1").expect_prints(["abcdefg 1"]).check();
-        Tester::default().run("PRINT \"abcdefgh\", 1").expect_prints(["abcdefgh        1"]).check();
 
-        Tester::default().run("PRINT 3").expect_prints(["3"]).check();
+        Tester::default()
+            .run("PRINT \"1234567890123\", \"4\"")
+            .expect_prints(["1234567890123 4"])
+            .check();
+        Tester::default()
+            .run("PRINT \"12345678901234\", \"5\"")
+            .expect_prints(["12345678901234              5"])
+            .check();
+
+        Tester::default().run("PRINT \"abcdefg\", 1").expect_prints(["abcdefg        1"]).check();
+        Tester::default().run("PRINT \"abcdefgh\", 1").expect_prints(["abcdefgh       1"]).check();
+
+        Tester::default().run("PRINT 3").expect_prints([" 3"]).check();
+        Tester::default().run("PRINT -3").expect_prints(["-3"]).check();
         Tester::default().run("PRINT 3 = 5").expect_prints(["FALSE"]).check();
+
+        Tester::default().run("PRINT 3; -1; 4").expect_prints([" 3 -1  4"]).check();
+        Tester::default().run("PRINT \"foo\"; \"bar\"").expect_prints(["foobar"]).check();
+        Tester::default()
+            .run(r#"PRINT "foo";: PRINT "bar""#)
+            .expect_output([
+                CapturedOut::Write("foo".to_owned()),
+                CapturedOut::Print("bar".to_owned()),
+            ])
+            .check();
         Tester::default()
             .run("PRINT true;123;\"foo bar\"")
-            .expect_prints(["TRUE 123 foo bar"])
+            .expect_prints(["TRUE  123 foo bar"])
             .check();
-        Tester::default().run("PRINT 6,1;3,5").expect_prints(["6       1 3     5"]).check();
+
+        Tester::default()
+            .run("PRINT 6,1;3,5")
+            .expect_prints([" 6             1  3          5"])
+            .check();
 
         Tester::default()
             .run(r#"word = "foo": PRINT word, word: PRINT word + "s""#)
-            .expect_prints(["foo     foo", "foos"])
+            .expect_prints(["foo           foo", "foos"])
             .expect_var("word", "foo")
             .check();
 
         Tester::default()
             .run(r#"word = "foo": PRINT word,: PRINT word;: PRINT word + "s""#)
             .expect_output([
-                CapturedOut::Write("foo     ".to_owned()),
-                CapturedOut::Write("foo ".to_owned()),
+                CapturedOut::Write("foo           ".to_owned()),
+                CapturedOut::Write("foo".to_owned()),
                 CapturedOut::Print("foos".to_owned()),
             ])
             .expect_var("word", "foo")

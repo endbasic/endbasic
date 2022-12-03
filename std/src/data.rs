@@ -192,12 +192,12 @@ mod tests {
                 r#"
             READ i: PRINT i
             READ i: PRINT i
-            DATA 3, 5, 7
+            DATA 3, 5, -7
             READ i: PRINT i
             "#,
             )
-            .expect_prints(["3", "5", "7"])
-            .expect_var("I", Value::Integer(7))
+            .expect_prints([" 3", " 5", "-7"])
+            .expect_var("I", Value::Integer(-7))
             .check();
     }
 
@@ -285,9 +285,9 @@ mod tests {
             .set_program(None, "DATA 1: READ i: PRINT i")
             .run(r#"RUN: RUN"#)
             .expect_clear()
-            .expect_prints(["1"])
+            .expect_prints([" 1"])
             .expect_clear()
-            .expect_prints(["1"])
+            .expect_prints([" 1"])
             .expect_var("I", Value::Integer(1))
             .expect_program(None as Option<String>, "DATA 1: READ i: PRINT i")
             .check();
@@ -348,7 +348,7 @@ mod tests {
             READ i: PRINT i
             "#,
             )
-            .expect_prints(["3", "5"])
+            .expect_prints([" 3", " 5"])
             .expect_var("I", Value::Integer(5))
             .check();
     }
@@ -358,14 +358,14 @@ mod tests {
         Tester::default()
             .run(
                 r#"
-            DATA 3, 5, 7
+            DATA 3, -5, 7
             READ i: PRINT i
             READ i: PRINT i
             RESTORE
             READ i: PRINT i
             "#,
             )
-            .expect_prints(["3", "5", "3"])
+            .expect_prints([" 3", "-5", " 3"])
             .expect_var("I", Value::Integer(3))
             .check();
     }

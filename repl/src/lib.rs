@@ -381,6 +381,6 @@ mod tests {
             console.add_input_keys(&[Key::NewLine, Key::Eof]);
         }
         block_on(run_repl_loop(tester.get_machine(), console, program)).unwrap();
-        tester.run("").expect_prints(["123", "End of input by CTRL-D"]).check();
+        tester.run("").expect_prints([" 123", "End of input by CTRL-D"]).check();
     }
 }
