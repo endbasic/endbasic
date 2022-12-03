@@ -17,4 +17,4 @@
 ' user for their name and then perform string manipulation.
 
 INPUT "이름이 뭐에요"; 이름$
-PRINT "안녕하세요,"; 이름$ + "!"
+PRINT "안녕하세요, "; 이름$ + "!"

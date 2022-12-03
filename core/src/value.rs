@@ -521,18 +521,18 @@ mod tests {
     }
 
     #[test]
-    fn test_value_to_output_and_parse() {
+    fn test_value_to_text_and_parse() {
         let v = Boolean(false);
-        assert_eq!(v.clone(), Value::parse_as(VarType::Boolean, &v.to_output()).unwrap());
+        assert_eq!(v.clone(), Value::parse_as(VarType::Boolean, &v.to_text()).unwrap());
 
-        let v = Double(10.1);
-        assert_eq!(v.clone(), Value::parse_as(VarType::Double, &v.to_output()).unwrap());
+        let v = Double(-10.1);
+        assert_eq!(v.clone(), Value::parse_as(VarType::Double, &v.to_text()).unwrap());
 
-        let v = Integer(9);
-        assert_eq!(v.clone(), Value::parse_as(VarType::Integer, &v.to_output()).unwrap());
+        let v = Integer(-9);
+        assert_eq!(v.clone(), Value::parse_as(VarType::Integer, &v.to_text()).unwrap());
 
         let v = Text("Some long text".to_owned());
-        assert_eq!(v.clone(), Value::parse_as(VarType::Text, &v.to_output()).unwrap());
+        assert_eq!(v.clone(), Value::parse_as(VarType::Text, &v.to_text()).unwrap());
     }
 
     #[test]

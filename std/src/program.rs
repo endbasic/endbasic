@@ -891,7 +891,7 @@ mod tests {
             .set_program(Some("untouched.bas"), program)
             .run(r#"RUN: PRINT "after""#)
             .expect_clear()
-            .expect_prints(["5", "Program exited with code 1", "after"])
+            .expect_prints([" 5", "Program exited with code 1", "after"])
             .expect_program(Some("untouched.bas"), program)
             .check();
     }

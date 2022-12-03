@@ -350,14 +350,22 @@ impl Value {
         }
     }
 
-    /// Consumes the value and generates a string to be used as the output of `PRINT`.  This is
-    /// slightly different from the `Display` implementation because strings aren't double-quoted.
-    pub fn to_output(self) -> String {
+    /// Consumes the value and converts it to a string value.  This is slightly different from the
+    /// `Display` implementation because strings aren't double-quoted.
+    ///
+    /// The output of this function is used anything a value is converted to a string, say as the
+    /// output of `PRINT`.
+    ///
+    /// This is *not* named `to_string` to prevent confusion with the behavior of a traditional
+    /// method named like that, and to avoid conflicts with the `Display` implementation.
+    pub fn to_text(self) -> String {
         match self {
             Value::Boolean(true) => "TRUE".to_owned(),
             Value::Boolean(false) => "FALSE".to_owned(),
-            Value::Double(d) => format!("{}", d),
-            Value::Integer(i) => format!("{}", i),
+            Value::Double(d) if d.is_sign_negative() => format!("{}", d),
+            Value::Double(d) => format!(" {}", d),
+            Value::Integer(i) if i.is_negative() => format!("{}", i),
+            Value::Integer(i) => format!(" {}", i),
             Value::Text(s) => s,
         }
     }

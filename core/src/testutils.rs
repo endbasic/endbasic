@@ -28,6 +28,17 @@ use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
 
+/// Formats a value `v` as text and appends it to a string `o`.
+fn format_value(v: Value, o: &mut String) {
+    match v {
+        Value::Boolean(true) => o.push_str("TRUE"),
+        Value::Boolean(false) => o.push_str("FALSE"),
+        Value::Double(d) => o.push_str(&format!("{}", d)),
+        Value::Integer(i) => o.push_str(&format!("{}", i)),
+        Value::Text(s) => o.push_str(&s),
+    }
+}
+
 /// Clears the machine state.
 pub(crate) struct ClearCommand {
     metadata: CallableMetadata,
@@ -244,7 +255,7 @@ impl Command for OutCommand {
         let mut text = String::new();
         for arg in span.args.iter() {
             if let Some(expr) = arg.expr.as_ref() {
-                text += &expr.eval(machine.get_mut_symbols()).await?.to_output();
+                format_value(expr.eval(machine.get_mut_symbols()).await?, &mut text);
             }
             match arg.sep {
                 ArgSep::End => break,
@@ -302,7 +313,7 @@ impl Function for OutfFunction {
             }
             first = false;
 
-            text += &arg.to_output();
+            format_value(arg, &mut text);
         }
         self.data.borrow_mut().push(text);
         Ok(result)
