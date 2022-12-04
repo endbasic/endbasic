@@ -77,6 +77,7 @@ const LANG_REFERENCE: &str = r"
         ,            Long separator for arguments to builtin call.
         ;            Short separator for arguments to builtin call.
         DATA a, b    Registers literal primitive values for later reads.
+        &x_5fd1      Integer literals in base syntax (can be b, d, o, x).
 ";
 
 /// Returns the header for the help summary.

@@ -333,6 +333,92 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Consumes the integer at the current position, whose first digit is `first` and which is
+    /// expected to be expressed in the given `base`.  `prefix_len` indicates how many characters
+    /// were already consumed for this token, without counting `first`.
+    fn consume_integer(
+        &mut self,
+        base: u8,
+        pos: LineCol,
+        prefix_len: usize,
+    ) -> io::Result<TokenSpan> {
+        let mut s = String::new();
+        loop {
+            match self.input.peek() {
+                Some(Ok(ch_span)) => match ch_span.ch {
+                    '.' => {
+                        self.input.next().unwrap()?;
+                        return self
+                            .handle_bad_read("Numbers in base syntax must be integers", pos);
+                    }
+                    ch if ch.is_ascii_digit() => s.push(self.input.next().unwrap()?.ch),
+                    'a'..='f' | 'A'..='F' => s.push(self.input.next().unwrap()?.ch),
+                    ch if ch.is_separator() => break,
+                    ch => {
+                        self.input.next().unwrap()?;
+                        let msg = format!("Unexpected character in numeric literal: {}", ch);
+                        return self.handle_bad_read(msg, pos);
+                    }
+                },
+                Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
+                None => break,
+            }
+        }
+        if s.is_empty() {
+            return self.handle_bad_read("No digits in integer literal", pos);
+        }
+
+        match i32::from_str_radix(&s, u32::from(base)) {
+            Ok(i) => Ok(TokenSpan::new(Token::Integer(i), pos, s.len() + prefix_len)),
+            Err(e) => self.handle_bad_read(format!("Bad integer {}: {}", s, e), pos),
+        }
+    }
+
+    /// Consumes the integer at the current position `pos`.
+    fn consume_integer_with_base(&mut self, pos: LineCol) -> io::Result<TokenSpan> {
+        let mut prefix_len = 1; // Count '&'.
+
+        let base = match self.input.peek() {
+            Some(Ok(ch_span)) => {
+                let base = match ch_span.ch {
+                    'b' | 'B' => 2,
+                    'd' | 'D' => 10,
+                    'o' | 'O' => 8,
+                    'x' | 'X' => 16,
+                    ch if ch.is_separator() => {
+                        return self.handle_bad_read("Missing base in integer literal", pos);
+                    }
+                    _ => {
+                        let ch_span = self.input.next().unwrap()?;
+                        return self.handle_bad_read(
+                            format!("Unknown base {} in integer literal", ch_span.ch),
+                            pos,
+                        );
+                    }
+                };
+                self.input.next().unwrap()?;
+                base
+            }
+            Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
+            None => {
+                return self.handle_bad_read("Incomplete integer due to EOF", pos);
+            }
+        };
+        prefix_len += 1; // Count the base.
+
+        match self.input.peek() {
+            Some(Ok(ch_span)) if ch_span.ch == '_' => {
+                self.input.next().unwrap().unwrap();
+                prefix_len += 1; // Count the '_'.
+            }
+            Some(Ok(_ch_span)) => (),
+            Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
+            None => return self.handle_bad_read("Incomplete integer due to EOF", pos),
+        }
+
+        self.consume_integer(base, pos, prefix_len)
+    }
+
     /// Consumes the operator at the current position, whose first character is `first`.
     fn consume_operator(&mut self, first: CharSpan) -> io::Result<TokenSpan> {
         match (first.ch, self.input.peek()) {
@@ -590,6 +676,8 @@ impl<'a> Lexer<'a> {
 
             '@' => self.consume_label(ch_span),
 
+            '&' => self.consume_integer_with_base(ch_span.pos),
+
             ch if ch.is_ascii_digit() => self.consume_number(ch_span),
             ch if ch.is_word() => self.consume_symbol(ch_span),
             ch => self.handle_bad_read(format!("Unknown character: {}", ch), ch_span.pos),
@@ -665,7 +753,7 @@ mod tests {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(
                 f,
-                "ts(Token::{:?}, {}, {}, {}]",
+                "ts(Token::{:?}, {}, {}, {})",
                 self.token, self.pos.line, self.pos.col, self.length
             )
         }
@@ -776,6 +864,80 @@ mod tests {
                 ts(new_auto_symbol("NO"), 1, 36, 2),
                 ts(new_auto_symbol("n"), 1, 39, 1),
                 ts(Token::Eof, 1, 40, 0),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_integer_literals() {
+        do_ok_test(
+            "&b10 &B_10 &D10 &d_10 &o_10 &O_10 &X10 &x_10 &xabcdef &x0ABCDEF0 &x7a1",
+            &[
+                ts(Token::Integer(2), 1, 1, 4),
+                ts(Token::Integer(2), 1, 6, 5),
+                ts(Token::Integer(10), 1, 12, 4),
+                ts(Token::Integer(10), 1, 17, 5),
+                ts(Token::Integer(8), 1, 23, 5),
+                ts(Token::Integer(8), 1, 29, 5),
+                ts(Token::Integer(16), 1, 35, 4),
+                ts(Token::Integer(16), 1, 40, 5),
+                ts(Token::Integer(11259375), 1, 46, 8),
+                ts(Token::Integer(180150000), 1, 55, 10),
+                ts(Token::Integer(1953), 1, 66, 5),
+                ts(Token::Eof, 1, 71, 0),
+            ],
+        );
+
+        do_ok_test(
+            "& &_ &__ &i10 &i_10 &d &d10.1 &b2 &da &o8 &xg",
+            &[
+                ts(Token::Bad("Missing base in integer literal".to_owned()), 1, 1, 1),
+                ts(Token::Bad("Unknown base _ in integer literal".to_owned()), 1, 3, 1),
+                ts(Token::Bad("Unknown base _ in integer literal".to_owned()), 1, 6, 2),
+                ts(Token::Bad("Unknown base i in integer literal".to_owned()), 1, 10, 3),
+                ts(Token::Bad("Unknown base i in integer literal".to_owned()), 1, 15, 4),
+                ts(Token::Bad("No digits in integer literal".to_owned()), 1, 21, 1),
+                ts(Token::Bad("Numbers in base syntax must be integers".to_owned()), 1, 24, 2),
+                ts(Token::Bad("Bad integer 2: invalid digit found in string".to_owned()), 1, 31, 1),
+                ts(Token::Bad("Bad integer a: invalid digit found in string".to_owned()), 1, 35, 1),
+                ts(Token::Bad("Bad integer 8: invalid digit found in string".to_owned()), 1, 39, 1),
+                ts(Token::Bad("Unexpected character in numeric literal: g".to_owned()), 1, 43, 1),
+                ts(Token::Eof, 1, 46, 0),
+            ],
+        );
+
+        do_ok_test(
+            ">&< >&_< >&__< >&i10< >&i_10< >&d< >&d10.1<",
+            &[
+                ts(Token::Greater, 1, 1, 1),
+                ts(Token::Bad("Missing base in integer literal".to_owned()), 1, 2, 1),
+                ts(Token::Less, 1, 3, 1),
+                // -
+                ts(Token::Greater, 1, 5, 1),
+                ts(Token::Bad("Unknown base _ in integer literal".to_owned()), 1, 6, 1),
+                ts(Token::Less, 1, 8, 1),
+                // -
+                ts(Token::Greater, 1, 10, 1),
+                ts(Token::Bad("Unknown base _ in integer literal".to_owned()), 1, 11, 2),
+                ts(Token::Less, 1, 14, 1),
+                // -
+                ts(Token::Greater, 1, 16, 1),
+                ts(Token::Bad("Unknown base i in integer literal".to_owned()), 1, 17, 3),
+                ts(Token::Less, 1, 21, 1),
+                // -
+                ts(Token::Greater, 1, 23, 1),
+                ts(Token::Bad("Unknown base i in integer literal".to_owned()), 1, 24, 4),
+                ts(Token::Less, 1, 29, 1),
+                // -
+                ts(Token::Greater, 1, 31, 1),
+                ts(Token::Bad("No digits in integer literal".to_owned()), 1, 32, 1),
+                ts(Token::Less, 1, 34, 1),
+                // -
+                ts(Token::Greater, 1, 36, 1),
+                ts(Token::Bad("Numbers in base syntax must be integers".to_owned()), 1, 37, 2),
+                ts(Token::Less, 1, 43, 1),
+                // -
+                ts(Token::Eof, 1, 44, 0),
             ],
         );
     }
