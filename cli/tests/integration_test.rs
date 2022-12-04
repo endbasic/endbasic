@@ -389,6 +389,18 @@ fn test_example_tour() {
 }
 
 #[test]
+fn test_lang_bitwise() {
+    check(
+        bin_path("endbasic"),
+        &["--local-drive=memory://", &src_str("cli/tests/lang/bitwise.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/lang/bitwise.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_lang_control_flow() {
     check(
         bin_path("endbasic"),
