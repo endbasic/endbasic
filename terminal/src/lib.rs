@@ -325,14 +325,10 @@ impl Console for TerminalConsole {
     }
 
     async fn poll_key(&mut self) -> io::Result<Option<Key>> {
-        if self.is_tty {
-            match self.on_key_rx.try_recv() {
-                Ok(k) => Ok(Some(k)),
-                Err(TryRecvError::Empty) => Ok(None),
-                Err(TryRecvError::Closed) => Ok(Some(Key::Eof)),
-            }
-        } else {
-            Err(io::Error::new(io::ErrorKind::Other, "Cannot poll keys from stdin"))
+        match self.on_key_rx.try_recv() {
+            Ok(k) => Ok(Some(k)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Closed) => Ok(Some(Key::Eof)),
         }
     }
 
