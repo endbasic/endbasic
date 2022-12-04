@@ -314,6 +314,7 @@ Output from HELP "STRING":
     >> MID$      Returns a portion of a string.
     >> RIGHT$    Returns a given number of characters from the right side of a string.
     >> RTRIM$    Returns a copy of a string with trailing whitespace removed.
+    >> STR$      Formats a scalar value as a string.
 
     Type HELP followed by the name of a symbol for details.
 
@@ -613,10 +614,8 @@ Output from HELP "PRINT":
     Prints one or more values to the console.
 
     The expressions given as arguments are all evaluated and converted to
-    strings before they are printed.  The way this is done depends on the
-    expression's type: boolean expressions are printed as TRUE or FALSE;
-    numbers are printed with a leading space if they do not have a negative
-    sign; and strings are printed "as is" .
+    strings before they are printed.  See the documentation of STR$() for
+    the conversion rules.
 
     Using a `;` separator between arguments causes the two adjacent values
     to be displayed together.  For strings, this means that no space is
@@ -967,6 +966,23 @@ Output from HELP "SQR":
     SQR#(num<%|#>)
 
     Computes the square root of the given number.
+
+Output from HELP "STR$":
+
+    STR$(expr)
+
+    Formats a scalar value as a string.
+
+    If expr evaluates to a string, this returns the string unmodified.
+
+    If expr evaluates to a boolean, this returns the strings FALSE or TRUE.
+
+    If expr evaluates to a number, this returns a string with the textual
+    representation of the number.  If the number does NOT have a negative
+    sign, the resulting string has a single space in front of it.
+
+    To obtain a clean representation of expr as a string without any
+    artificial whitespace characters in it, do LTRIM$(STR$(expr)).
 
 Output from HELP "TAN":
 

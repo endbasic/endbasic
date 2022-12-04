@@ -245,6 +245,9 @@ HELP "SIN"
 PRINT "Output from HELP \"SQR\":"
 HELP "SQR"
 
+PRINT "Output from HELP \"STR$\":"
+HELP "STR$"
+
 PRINT "Output from HELP \"TAN\":"
 HELP "TAN"
 

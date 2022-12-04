@@ -48,7 +48,7 @@ not intend to be fully compatible with them.  The library currently contains:
     `RANDOMIZE`, `RND`, `SIN`, `SQR`, `TAN`.
 *   Program manipulation: `EDIT`, `KILL`, `LIST`, `LOAD`,`NEW`, `RUN`, `SAVE`.
 *   Strings and characters: `ASC`, `CHR`, `LEFT`, `LEN`, `LTRIM`, `MID`,
-    `RIGHT`, `RTRIM`.
+    `RIGHT`, `RTRIM`, `STR`.
 
 ## Design principles
 

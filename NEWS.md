@@ -59,7 +59,7 @@ for the time being.**
     strings must be double-quoted (as opposed to other BASIC implementations
     where the double-quoting is optional).
 
-*   Added the `ASC` and `CHR` functions.
+*   Added the `ASC`, `CHR`, and `STR` functions.
 
 *   Modified the `HELP` command to only accept a string as its argument,
     instead of also recognizing a bare word.  The latter was only approximate

@@ -428,9 +428,7 @@ impl PrintCommand {
                 .with_description(
                     "Prints one or more values to the console.
 The expressions given as arguments are all evaluated and converted to strings before they are \
-printed.  The way this is done depends on the expression's type: boolean expressions are printed \
-as TRUE or FALSE; numbers are printed with a leading space if they do not have a negative sign; \
-and strings are printed \"as is\" .
+printed.  See the documentation of STR$() for the conversion rules.
 Using a `;` separator between arguments causes the two adjacent values to be displayed together.  \
 For strings, this means that no space is added between them; for all other types, a space is added \
 after the value on the left side.

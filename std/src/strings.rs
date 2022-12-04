@@ -410,6 +410,53 @@ impl Function for RtrimFunction {
     }
 }
 
+/// The `STR` function.
+pub struct StrFunction {
+    metadata: CallableMetadata,
+}
+
+impl StrFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("STR", VarType::Text)
+                .with_syntax("expr")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Formats a scalar value as a string.
+If expr evaluates to a string, this returns the string unmodified.
+If expr evaluates to a boolean, this returns the strings FALSE or TRUE.
+If expr evaluates to a number, this returns a string with the textual representation of the \
+number.  If the number does NOT have a negative sign, the resulting string has a single space \
+in front of it.
+To obtain a clean representation of expr as a string without any artificial whitespace characters \
+in it, do LTRIM$(STR$(expr)).",
+                )
+                .build(),
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for StrFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let args = eval_all(&span.args, symbols).await?;
+        let mut iter = args.into_iter();
+        let value = match iter.next() {
+            Some(v) => v,
+            None => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+        Ok(Value::Text(value.to_text()))
+    }
+}
+
 /// Adds all symbols provided by this module to the given `machine`.
 pub fn add_all(machine: &mut Machine) {
     machine.add_function(AscFunction::new());
@@ -420,6 +467,7 @@ pub fn add_all(machine: &mut Machine) {
     machine.add_function(MidFunction::new());
     machine.add_function(RightFunction::new());
     machine.add_function(RtrimFunction::new());
+    machine.add_function(StrFunction::new());
 }
 
 #[cfg(test)]
@@ -576,5 +624,33 @@ mod tests {
         check_expr_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM()"#);
         check_expr_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM(3)"#);
         check_expr_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM(" ", 1)"#);
+    }
+
+    #[test]
+    fn test_str() {
+        check_expr_ok("FALSE", r#"STR(FALSE)"#);
+        check_expr_ok("TRUE", r#"STR(true)"#);
+
+        check_expr_ok(" 0", r#"STR(0)"#);
+        check_expr_ok(" 1", r#"STR(1)"#);
+        check_expr_ok("-1", r#"STR(-1)"#);
+
+        check_expr_ok(" 0.5", r#"STR(0.5)"#);
+        check_expr_ok(" 1.5", r#"STR(1.5)"#);
+        check_expr_ok("-1.5", r#"STR(-1.5)"#);
+
+        check_expr_ok("", r#"STR("")"#);
+        check_expr_ok(" \t ", "STR(\" \t \")");
+        check_expr_ok("foo bar", r#"STR("foo bar")"#);
+
+        check_expr_error("1:10: In call to STR: expected expr", r#"STR()"#);
+        check_expr_error("1:10: In call to STR: expected expr", r#"STR(" ", 1)"#);
+    }
+
+    #[test]
+    fn test_str_with_ltrim() {
+        check_expr_ok("0", r#"LTRIM(STR(0))"#);
+        check_expr_ok("-1", r#"LTRIM(STR(-1))"#);
+        check_expr_ok("100", r#"LTRIM$(STR$(100))"#);
     }
 }
