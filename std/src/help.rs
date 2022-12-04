@@ -45,7 +45,7 @@ const LANG_REFERENCE: &str = r"
 
     Expressions:
         a + b      a - b       a * b     a / b      a MOD b    a ^ b     -a
-        a AND b    NOT a       a OR b    a XOR b
+        a AND b    NOT a       a OR b    a XOR b    (logical and bitwise)
         a = b      a <> b      a < b     a <= b     a > b      a >= b
         (a)        varref
         arrayref(s1[, ..., sN])          funcref(a1[, ..., aN])

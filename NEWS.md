@@ -111,6 +111,9 @@ for the time being.**
 *   Fixed `INPUT` so that the prompt is optional and thus things like
     `INPUT var` work as expected from traditional BASIC implementations.
 
+*   Extended `AND`, `NOT`, `OR`, and `XOR` to perform bitwise operations when
+    operating on an integer context.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
