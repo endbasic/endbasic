@@ -18,7 +18,7 @@
 use crate::console::{refill_and_print, Console};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Symbols,
@@ -415,10 +415,16 @@ impl Command for HelpCommand {
             [] => {
                 self.summary(&topics)?;
             }
-            [ArgSpan { expr: Some(Expr::Text(span)), sep: ArgSep::End, .. }] => {
-                let topic = topics.find(&span.value, span.pos)?;
-                let mut console = self.console.borrow_mut();
-                topic.describe(&mut *console)?;
+            [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
+                let pos = expr.start_pos();
+                match expr.eval(machine.get_mut_symbols()).await? {
+                    Value::Text(t) => {
+                        let topic = topics.find(&t, pos)?;
+                        let mut console = self.console.borrow_mut();
+                        topic.describe(&mut *console)?;
+                    }
+                    _ => return Err(CallError::SyntaxError),
+                }
             }
             _ => return Err(CallError::SyntaxError),
         }
@@ -638,6 +644,16 @@ mod tests {
     }
 
     #[test]
+    fn test_help_eval_arg() {
+        tester()
+            .run("topic = \"lang\"\nHELP topic")
+            .expect_prints(LANG_REFERENCE.lines().collect::<Vec<&str>>())
+            .expect_prints([""])
+            .expect_var("topic", "lang")
+            .check();
+    }
+
+    #[test]
     fn test_help_prefix_search() {
         fn exp_output(name: &str, is_function: bool) -> Vec<String> {
             let spec = if is_function {
@@ -703,8 +719,9 @@ mod tests {
         t.run(r#"HELP foo bar"#)
             .expect_uncatchable_err("1:10: Unexpected value in expression")
             .check();
+        t.run(r#"HELP foo"#).expect_err("1:6: Undefined variable foo").check();
+
         t.run(r#"HELP "foo", bar"#).expect_err("1:1: In call to HELP: expected [topic$]").check();
-        t.run(r#"HELP foo"#).expect_err("1:1: In call to HELP: expected [topic$]").check();
         t.run(r#"HELP 3"#).expect_err("1:1: In call to HELP: expected [topic$]").check();
 
         t.run(r#"HELP "lang%""#)
@@ -723,6 +740,11 @@ mod tests {
             .check();
         t.run(r#"HELP "empty?""#)
             .expect_err("1:1: In call to HELP: 1:6: Unknown help topic empty?")
+            .check();
+
+        t.run(r#"topic = "foo$": HELP topic$"#)
+            .expect_err("1:17: In call to HELP: 1:22: Unknown help topic foo$")
+            .expect_var("topic", "foo$")
             .check();
 
         let mut t = tester();
