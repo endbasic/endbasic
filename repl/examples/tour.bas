@@ -35,7 +35,14 @@ RETURN
 @wait
 PRINT
 COLOR 11
-INPUT "Press ENTER to continue or CTRL+C to exit the demo...", dummy$
+PRINT "Press ENTER to continue or ESC to exit the demo...";
+DO
+    SELECT CASE INKEY
+    CASE "ENTER": EXIT DO
+    CASE "ESC": GOTO @end
+    CASE ELSE: SLEEP 0.01
+    END SELECT
+LOOP
 RETURN
 
 @main
@@ -286,5 +293,7 @@ PRINT "Thank you! :-)"
 PRINT
 COLOR 10
 PRINT "-- Brought to you by Julio Merino <jmmv@>"
+
+@end
 COLOR
 PRINT
