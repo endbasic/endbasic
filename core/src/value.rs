@@ -113,34 +113,38 @@ impl Value {
         }
     }
 
-    /// Performs a logical "and" operation.
+    /// Performs a logical or bitwise "and" operation.
     pub fn and(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs && *rhs)),
+            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs & *rhs)),
             (_, _) => Err(Error::new(format!("Cannot AND {} and {}", self, other))),
         }
     }
 
-    /// Performs a logical "or" operation.
+    /// Performs a logical or bitwise "or" operation.
     pub fn or(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs || *rhs)),
+            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs | *rhs)),
             (_, _) => Err(Error::new(format!("Cannot OR {} and {}", self, other))),
         }
     }
 
-    /// Performs a logical "xor" operation.
+    /// Performs a logical or bitwise "xor" operation.
     pub fn xor(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs ^ *rhs)),
+            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs ^ *rhs)),
             (_, _) => Err(Error::new(format!("Cannot XOR {} and {}", self, other))),
         }
     }
 
-    /// Performs a logical "not" operation.
+    /// Performs a logical or bitwise "not" operation.
     pub fn not(&self) -> Result<Self> {
         match self {
             Value::Boolean(b) => Ok(Value::Boolean(!b)),
+            Value::Integer(b) => Ok(Value::Integer(!b)),
             _ => Err(Error::new(format!("Cannot apply NOT to {}", self))),
         }
     }
@@ -556,7 +560,7 @@ mod tests {
     }
 
     #[test]
-    fn test_value_and() {
+    fn test_value_logical_and() {
         assert_eq!(Boolean(false), Boolean(false).and(&Boolean(false)).unwrap());
         assert_eq!(Boolean(false), Boolean(false).and(&Boolean(true)).unwrap());
         assert_eq!(Boolean(false), Boolean(true).and(&Boolean(false)).unwrap());
@@ -569,7 +573,7 @@ mod tests {
     }
 
     #[test]
-    fn test_value_or() {
+    fn test_value_logical_or() {
         assert_eq!(Boolean(false), Boolean(false).or(&Boolean(false)).unwrap());
         assert_eq!(Boolean(true), Boolean(false).or(&Boolean(true)).unwrap());
         assert_eq!(Boolean(true), Boolean(true).or(&Boolean(false)).unwrap());
@@ -582,7 +586,7 @@ mod tests {
     }
 
     #[test]
-    fn test_value_xor() {
+    fn test_value_logical_xor() {
         assert_eq!(Boolean(false), Boolean(false).xor(&Boolean(false)).unwrap());
         assert_eq!(Boolean(true), Boolean(false).xor(&Boolean(true)).unwrap());
         assert_eq!(Boolean(true), Boolean(true).xor(&Boolean(false)).unwrap());
@@ -595,11 +599,52 @@ mod tests {
     }
 
     #[test]
-    fn test_value_not() {
+    fn test_value_logical_not() {
         assert_eq!(Boolean(true), Boolean(false).not().unwrap());
         assert_eq!(Boolean(false), Boolean(true).not().unwrap());
+    }
 
-        assert_eq!("Cannot apply NOT to 5", format!("{}", Integer(5).not().unwrap_err()));
+    #[test]
+    fn test_value_bitwise_and() {
+        assert_eq!(Integer(5), Integer(7).and(&Integer(5)).unwrap());
+        assert_eq!(Integer(0), Integer(2).and(&Integer(4)).unwrap());
+        assert_eq!(Integer(1234), Integer(-1).and(&Integer(1234)).unwrap());
+
+        assert_eq!(
+            "Cannot AND 3.0 and 4.0",
+            format!("{}", Double(3.0).and(&Double(4.0)).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_value_bitwise_or() {
+        assert_eq!(Integer(7), Integer(7).or(&Integer(5)).unwrap());
+        assert_eq!(Integer(6), Integer(2).or(&Integer(4)).unwrap());
+        assert_eq!(Integer(-1), Integer(-1).or(&Integer(1234)).unwrap());
+
+        assert_eq!(
+            "Cannot OR 3.0 and 4.0",
+            format!("{}", Double(3.0).or(&Double(4.0)).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_value_bitwise_xor() {
+        assert_eq!(Integer(2), Integer(7).xor(&Integer(5)).unwrap());
+        assert_eq!(Integer(6), Integer(2).xor(&Integer(4)).unwrap());
+        assert_eq!(Integer(-1235), Integer(-1).xor(&Integer(1234)).unwrap());
+
+        assert_eq!(
+            "Cannot XOR 3.0 and 4.0",
+            format!("{}", Double(3.0).xor(&Double(4.0)).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_value_bitwise_not() {
+        assert_eq!(Integer(-1), Integer(0).not().unwrap());
+
+        assert_eq!("Cannot apply NOT to 3.0", format!("{}", Double(3.0).not().unwrap_err()));
     }
 
     #[test]

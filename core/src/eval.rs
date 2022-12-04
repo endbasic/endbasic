@@ -435,7 +435,7 @@ mod tests {
             rhs: expr_integer(0),
             pos: lc(3, 2),
         });
-        let unary_args = Box::from(UnaryOpSpan { expr: expr_integer(0), pos: lc(7, 4) });
+        let unary_args = Box::from(UnaryOpSpan { expr: expr_double(0.0), pos: lc(7, 4) });
 
         // These tests just make sure that we delegate to the `Value` operations for each
         // expression operator to essentially avoid duplicating all those tests.  We do this by
@@ -455,7 +455,7 @@ mod tests {
             format!("{}", block_on(Expr::Xor(binary_args).eval(&mut syms)).unwrap_err())
         );
         assert_eq!(
-            "7:4: Cannot apply NOT to 0",
+            "7:4: Cannot apply NOT to 0.0",
             format!("{}", block_on(Expr::Not(unary_args).eval(&mut syms)).unwrap_err())
         );
     }
