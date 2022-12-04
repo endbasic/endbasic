@@ -628,9 +628,9 @@ fn test_repl_exit_zero() {
 fn test_repl_help() {
     check(
         bin_path("endbasic"),
-        &["--local-drive=memory://"],
+        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/repl/help.bas")],
         0,
-        Behavior::File(src_path("cli/tests/repl/help.in")),
+        Behavior::Null,
         Behavior::File(src_path("cli/tests/repl/help.out")),
         Behavior::Null,
     );
