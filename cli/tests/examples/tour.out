@@ -23,7 +23,7 @@ system.
 [39m
 Without further ado, let's get started!
 
-[38;5;11m[2J[1;1H
+[38;5;11mPress ENTER to continue or ESC to exit the demo...[2J[1;1H
  EndBASIC tour: The basics
 ===========================
 [39m
@@ -50,7 +50,7 @@ Expressions work as you would expect, with the usual operator precedence
 rules.  Expressions can take function calls too, but I'll let you find what
 those are via HELP.
 
-[38;5;11m[2J[1;1H
+[38;5;11mPress ENTER to continue or ESC to exit the demo...[2J[1;1H
  EndBASIC tour: Structured conditionals
 ========================================
 [39m
@@ -81,7 +81,7 @@ Select statements look like this:
             PRINT "Fallback"
     END SELECT
 
-[38;5;11m[2J[1;1H
+[38;5;11mPress ENTER to continue or ESC to exit the demo...[2J[1;1H
  EndBASIC tour: Structured loops
 =================================
 [39m
@@ -101,7 +101,7 @@ For loops look like this:
 
     FOR a = 1 TO 10 STEP 2: PRINT a: NEXT
 
-[38;5;11m[2J[1;1H
+[38;5;11mPress ENTER to continue or ESC to exit the demo...[2J[1;1H
  EndBASIC tour: Unstructured control flow
 ==========================================
 [39m
@@ -126,7 +126,7 @@ GOSUB-style subroutines look like this:
 Note that GOTO and GOSUB targets can be both @-labels and explicitly assigned
 line numbers.
 
-[38;5;11m[2J[1;1H
+[38;5;11mPress ENTER to continue or ESC to exit the demo...[2J[1;1H
  EndBASIC tour: Error handling
 ===============================
 [39m
@@ -149,7 +149,7 @@ on an error:
 The ERRMSG variable is set to the string that describes the error that was
 caught.
 
-[38;5;11m[2J[1;1H
+[38;5;11mPress ENTER to continue or ESC to exit the demo...[2J[1;1H
  EndBASIC tour: File manipulation
 ==================================
 [39m
@@ -172,7 +172,7 @@ a different name.
 If you are in the browser, rest assured that all programs are stored in
 your browser's local storage.  Nothing goes to the cloud.
 
-[38;5;11m[2J[1;1H
+[38;5;11mPress ENTER to continue or ESC to exit the demo...[2J[1;1H
  EndBASIC tour: The file system
 ================================
 [39m
@@ -199,7 +199,7 @@ Pay attention to the double quotes surrounding these arguments: these are
 EndBASIC commands and thus you must provide the arguments as strings.  You
 are bound to trip over this a few times due to muscle memory...
 
-[38;5;11m[2J[1;1H
+[38;5;11mPress ENTER to continue or ESC to exit the demo...[2J[1;1H
  EndBASIC tour: Screen manipulation
 ====================================
 [39m
@@ -227,7 +227,7 @@ the "COLOR" command and positioning the cursor with "LOCATE":
 [18;24H[38;5;14mThis is color 14
 [19;24H[38;5;15mThis is color 15
 [39m
-[38;5;11m[2J[1;1H
+[38;5;11mPress ENTER to continue or ESC to exit the demo...[2J[1;1H
  EndBASIC tour: Hardware access
 ================================
 [39m
@@ -238,7 +238,7 @@ to the GPIO lines.  See the "DEMOS:/GPIO.BAS" demo for an example.
 Please note that you have to be running on a Raspberry Pi *AND* you must
 have compiled EndBASIC with --features=rpi for this to work.
 
-[38;5;11m[2J[1;1H
+[38;5;11mPress ENTER to continue or ESC to exit the demo...[2J[1;1H
  EndBASIC tour: Enjoy
 ======================
 [39m
