@@ -114,6 +114,9 @@ for the time being.**
 *   Extended `AND`, `NOT`, `OR`, and `XOR` to perform bitwise operations when
     operating on an integer context.
 
+*   Added syntax to specify integers in different bases, using forms like:
+    `&b_1010`, `&d_1234`, `&o_750`, and `&x_12f`.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
