@@ -149,6 +149,16 @@ impl PixelsXY {
     }
 }
 
+/// Represents a rectangular size in pixels.
+#[derive(Clone, Copy, Debug)]
+pub struct SizeInPixels {
+    /// The width in pixels.
+    pub width: u16,
+
+    /// The height in pixels.
+    pub height: u16,
+}
+
 /// Hooks to implement the commands that manipulate the console.
 #[async_trait(?Send)]
 pub trait Console {
@@ -201,6 +211,11 @@ pub trait Console {
     ///
     /// The returned position represents the first row and column that lay *outside* of the console.
     fn size_chars(&self) -> io::Result<CharsXY>;
+
+    /// Queries the size of the graphical console.
+    fn size_pixels(&self) -> io::Result<SizeInPixels> {
+        Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
+    }
 
     /// Writes the text into the console at the position of the cursor.
     ///

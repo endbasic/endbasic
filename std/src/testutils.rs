@@ -15,7 +15,9 @@
 
 //! Test utilities for consumers of the EndBASIC interpreter.
 
-use crate::console::{self, remove_control_chars, CharsXY, ClearType, Console, Key, PixelsXY};
+use crate::console::{
+    self, remove_control_chars, CharsXY, ClearType, Console, Key, PixelsXY, SizeInPixels,
+};
 use crate::gpio;
 use crate::program::Program;
 use crate::storage::Storage;
@@ -94,6 +96,9 @@ pub struct MockConsole {
     /// The size of the mock text console.
     size_chars: CharsXY,
 
+    /// The size of the mock graphical console.
+    size_pixels: Option<SizeInPixels>,
+
     /// Whether the console is interactive or not.
     interactive: bool,
 }
@@ -104,6 +109,7 @@ impl Default for MockConsole {
             golden_in: VecDeque::new(),
             captured_out: vec![],
             size_chars: CharsXY::new(u16::MAX, u16::MAX),
+            size_pixels: None,
             interactive: false,
         }
     }
@@ -145,6 +151,11 @@ impl MockConsole {
     /// Sets the size of the mock text console.
     pub fn set_size_chars(&mut self, size: CharsXY) {
         self.size_chars = size;
+    }
+
+    /// Sets the size of the mock graphical console.
+    pub fn set_size_pixels(&mut self, size: SizeInPixels) {
+        self.size_pixels = Some(size);
     }
 
     /// Sets whether the mock console is interactive or not.
@@ -231,6 +242,13 @@ impl Console for MockConsole {
 
     fn size_chars(&self) -> io::Result<CharsXY> {
         Ok(self.size_chars)
+    }
+
+    fn size_pixels(&self) -> io::Result<SizeInPixels> {
+        match self.size_pixels {
+            Some(size) => Ok(size),
+            None => Err(io::Error::new(io::ErrorKind::Other, "Graphical console size not yet set")),
+        }
     }
 
     fn write(&mut self, text: &str) -> io::Result<()> {

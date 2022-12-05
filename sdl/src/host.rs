@@ -20,9 +20,11 @@
 
 use crate::font::{font_error_to_io_error, MonospacedFont};
 use crate::spec::Resolution;
-use crate::{string_error_to_io_error, SizeInPixels};
+use crate::string_error_to_io_error;
 use endbasic_core::exec::Signal;
-use endbasic_std::console::{ansi_color_to_rgb, CharsXY, ClearType, Key, LineBuffer, PixelsXY};
+use endbasic_std::console::{
+    ansi_color_to_rgb, CharsXY, ClearType, Key, LineBuffer, PixelsXY, SizeInPixels,
+};
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
 use sdl2::pixels::{Color, PixelFormatEnum};
@@ -898,6 +900,7 @@ pub(crate) enum Request {
     Print(String),
     ShowCursor,
     SizeChars,
+    SizePixels,
     Write(String),
     DrawLine(PixelsXY, PixelsXY),
     DrawPixel(PixelsXY),
@@ -921,6 +924,7 @@ pub(crate) enum Request {
 pub(crate) enum Response {
     Empty(io::Result<()>),
     SizeChars(CharsXY),
+    SizePixels(SizeInPixels),
 
     #[cfg(test)]
     Pixels(io::Result<(Vec<u8>, PixelFormatEnum)>),
@@ -964,6 +968,7 @@ pub(crate) fn run(
                     Request::Print(text) => Response::Empty(ctx.print(&text)),
                     Request::ShowCursor => Response::Empty(ctx.show_cursor()),
                     Request::SizeChars => Response::SizeChars(ctx.size_chars),
+                    Request::SizePixels => Response::SizePixels(ctx.size_pixels),
                     Request::Write(text) => Response::Empty(ctx.write(&text)),
                     Request::DrawLine(x1y1, x2y2) => Response::Empty(ctx.draw_line(x1y1, x2y2)),
                     Request::DrawPixel(xy) => Response::Empty(ctx.draw_pixel(xy)),

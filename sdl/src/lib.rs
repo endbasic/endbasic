@@ -39,16 +39,6 @@ fn string_error_to_io_error(e: String) -> io::Error {
     io::Error::new(io::ErrorKind::Other, e)
 }
 
-/// Represents a rectangular size in pixels.
-#[derive(Clone, Copy)]
-struct SizeInPixels {
-    /// The width in pixels.
-    width: u16,
-
-    /// The height in pixels.
-    height: u16,
-}
-
 /// Creates the graphical console based on the given `spec`.
 pub fn setup(spec: &str, signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
     let spec = spec::parse_graphics_spec(spec)?;

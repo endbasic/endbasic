@@ -15,8 +15,8 @@
 
 //! SDL font manipulation helpers.
 
-use crate::{string_error_to_io_error, SizeInPixels};
-use endbasic_std::console::CharsXY;
+use crate::string_error_to_io_error;
+use endbasic_std::console::{CharsXY, SizeInPixels};
 use once_cell::sync::Lazy;
 use sdl2::ttf::{Font, FontError, InitError, Sdl2TtfContext};
 use std::convert::TryFrom;
