@@ -43,7 +43,7 @@ not intend to be fully compatible with them.  The library currently contains:
 *   Graphics: `GFX_LINE`, `GFX_RECT`, `GFX_RECTF`.
 *   Hardware interaction: `GPIO_CLEAR`, `GPIO_READ`, `GPIO_SETUP`, `GPIO_WRITE`.
 *   File system interaction: `CD`, `DIR`, `MOUNT`, `PWD`, `UNMOUNT`.
-*   Interpreter interaction: `CLEAR`, `HELP`.
+*   Interpreter interaction: `CLEAR`, `ERRMSG`, `HELP`.
 *   Numerics: `ATN`, `CINT`, `COS`, `DEG`, `INT`, `MAX`, `MIN`, `PI`, `RAD`,
     `RANDOMIZE`, `RND`, `SIN`, `SQR`, `TAN`.
 *   Program manipulation: `EDIT`, `KILL`, `LIST`, `LOAD`,`NEW`, `RUN`, `SAVE`.

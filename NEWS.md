@@ -85,8 +85,8 @@ for the time being.**
 *   Added support for `GOSUB` and `RETURN`.
 
 *   Issue #121: Added support for catching errors via `ON ERROR GOTO` and `ON
-    ERROR RESUME NEXT`, both of which set a new `ERRMSG` variable with the
-    details of the error that was caught.
+    ERROR RESUME NEXT`, both of which are returned by a new `ERRMSG` function
+    with the details of the error that was caught.
 
 *   Issue #155: Added support for "line numbers as labels", just like
     QuickBASIC does, which permits running the traditional `10 GOTO 10`

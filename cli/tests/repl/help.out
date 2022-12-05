@@ -190,9 +190,10 @@ Output from HELP "INTERPRETER":
 
     Interpreter
 
-    >> CLEAR    Restores initial machine state but keeps the stored program.
-    >> HELP     Prints interactive help.
-    >> SLEEP    Suspends program execution.
+    >> CLEAR      Restores initial machine state but keeps the stored program.
+    >> ERRMSG$    Returns the last captured error message.
+    >> HELP       Prints interactive help.
+    >> SLEEP      Suspends program execution.
 
     Type HELP followed by the name of a symbol for details.
 
@@ -801,6 +802,17 @@ Output from HELP "COS":
 
     The input angle% or angle# is measured in degrees or radians depending
     on the angle mode as selected by the DEG and RAD commands.
+
+Output from HELP "ERRMSG":
+
+    ERRMSG$
+
+    Returns the last captured error message.
+
+    When used in combination of ON ERROR to set an error handler, this
+    function returns the string representation of the last captured error.
+    If this is called before any error is captured, returns the empty
+    string.
 
 Output from HELP "GPIO_READ":
 

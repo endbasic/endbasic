@@ -253,7 +253,7 @@ mod tests {
             .run("after = 5")
             .expect_var("a", 1)
             .expect_var("after", 5)
-            .expect_var("ERRMSG", "2:5: Undefined variable undef")
+            .expect_var("0ERRMSG", "2:5: Undefined variable undef")
             .expect_prints([
                 "Loading AUTOEXEC.BAS...",
                 "AUTOEXEC.BAS failed: 2:5: Undefined variable undef",

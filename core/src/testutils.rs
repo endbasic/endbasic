@@ -15,7 +15,7 @@
 
 //! Test utilities.
 
-use crate::ast::{ArgSep, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarType};
+use crate::ast::{ArgSep, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarRef, VarType};
 use crate::eval::{self, eval_all, Error};
 use crate::exec::Machine;
 use crate::syms::{
@@ -140,6 +140,46 @@ impl Function for RaiseFunction {
                 }
             }
             _ => panic!("Invalid arguments"),
+        }
+    }
+}
+
+/// Grabs the value of a hidden variable.
+pub(crate) struct GetHiddenFunction {
+    metadata: CallableMetadata,
+}
+
+impl GetHiddenFunction {
+    /// Creates a new command that sets aside all data values.
+    pub(crate) fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GETHIDDEN", VarType::Text)
+                .with_syntax("varname$")
+                .test_build(),
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for GetHiddenFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        let mut args = eval_all(&span.args, symbols).await?;
+        if args.len() != 1 {
+            return Err(CallError::SyntaxError);
+        }
+        match args.pop().unwrap() {
+            Value::Text(name) => match symbols.get_var(&VarRef::new(name, VarType::Text)) {
+                Ok(t) => Ok(t.clone()),
+                Err(e) => Err(CallError::EvalError(eval::Error::from_value_error(
+                    e,
+                    span.args[0].start_pos(),
+                ))),
+            },
+            _ => Err(CallError::SyntaxError),
         }
     }
 }
