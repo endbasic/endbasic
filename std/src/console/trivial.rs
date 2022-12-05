@@ -105,7 +105,7 @@ impl Console for TrivialConsole {
         Ok(())
     }
 
-    fn size(&self) -> io::Result<CharsXY> {
+    fn size_chars(&self) -> io::Result<CharsXY> {
         let lines = get_env_var_as_u16("LINES").unwrap_or(DEFAULT_LINES);
         let columns = get_env_var_as_u16("COLUMNS").unwrap_or(DEFAULT_COLUMNS);
         Ok(CharsXY::new(columns, lines))

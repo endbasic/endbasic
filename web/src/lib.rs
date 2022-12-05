@@ -177,7 +177,7 @@ impl WebTerminal {
     /// Returns a textual description of the size of the console.
     pub fn size_description(&self) -> String {
         let pixels = self.console.size_pixels();
-        let chars = match self.console.size() {
+        let chars = match self.console.size_chars() {
             Ok(size) => size,
             Err(e) => panic!("Failed to get console size in chars: {}", e),
         };

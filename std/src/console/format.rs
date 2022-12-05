@@ -82,7 +82,7 @@ pub fn refill_and_print<S: AsRef<str>, P: IntoIterator<Item = S>>(
 
         // TODO(jmmv): This queries the size on every print, which is not very efficient.  Should
         // reuse this across calls, maybe by having a wrapper over Console and using it throughout.
-        let size = console.size()?;
+        let size = console.size_chars()?;
         let lines = refill(paragraph.as_ref(), usize::from(size.x) - 4 - indent.len());
         for line in lines {
             if line.is_empty() {

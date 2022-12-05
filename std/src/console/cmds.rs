@@ -525,7 +525,7 @@ impl Function for ScrColsFunction {
         if !span.args.is_empty() {
             return Err(CallError::SyntaxError);
         }
-        let size = self.console.borrow().size()?;
+        let size = self.console.borrow().size_chars()?;
         Ok(Value::Integer(i32::from(size.x)))
     }
 }
@@ -563,7 +563,7 @@ impl Function for ScrRowsFunction {
         if !span.args.is_empty() {
             return Err(CallError::SyntaxError);
         }
-        let size = self.console.borrow().size()?;
+        let size = self.console.borrow().size_chars()?;
         Ok(Value::Integer(i32::from(size.y)))
     }
 }
@@ -894,7 +894,7 @@ mod tests {
     #[test]
     fn test_scrcols() {
         let mut t = Tester::default();
-        t.get_console().borrow_mut().set_size(CharsXY { x: 12345, y: 0 });
+        t.get_console().borrow_mut().set_size_chars(CharsXY { x: 12345, y: 0 });
         t.run("result = SCRCOLS").expect_var("result", 12345i32).check();
 
         check_expr_error(
@@ -910,7 +910,7 @@ mod tests {
     #[test]
     fn test_scrrows() {
         let mut t = Tester::default();
-        t.get_console().borrow_mut().set_size(CharsXY { x: 0, y: 768 });
+        t.get_console().borrow_mut().set_size_chars(CharsXY { x: 0, y: 768 });
         t.run("result = SCRROWS").expect_var("result", 768i32).check();
 
         check_expr_error(

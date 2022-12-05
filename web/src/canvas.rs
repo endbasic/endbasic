@@ -618,7 +618,7 @@ impl Console for CanvasConsole {
         Ok(())
     }
 
-    fn size(&self) -> io::Result<CharsXY> {
+    fn size_chars(&self) -> io::Result<CharsXY> {
         Ok(self.size_chars)
     }
 

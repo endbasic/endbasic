@@ -202,7 +202,7 @@ impl Editor {
 
     /// Internal implementation of the interactive editor, which interacts with the `console`.
     async fn edit_interactively(&mut self, console: &mut dyn Console) -> io::Result<()> {
-        let console_size = console.size()?;
+        let console_size = console.size_chars()?;
 
         if self.content.is_empty() {
             self.content.push(LineBuffer::default());
@@ -588,7 +588,7 @@ mod tests {
         assert!(!editor.is_dirty());
 
         let mut console = MockConsole::default();
-        console.set_size(yx(10, 40));
+        console.set_size_chars(yx(10, 40));
         block_on(editor.edit(&mut console)).unwrap();
         assert!(!editor.is_dirty());
 
@@ -624,7 +624,7 @@ mod tests {
     #[test]
     fn test_editing_with_previous_content_starts_on_top_left() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &["previous content"], yx(0, 0));
 
@@ -634,7 +634,7 @@ mod tests {
     #[test]
     fn test_insert_in_empty_file() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
@@ -667,7 +667,7 @@ mod tests {
     #[test]
     fn test_insert_before_previous_content() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &["previous content"], yx(0, 0));
 
@@ -690,7 +690,7 @@ mod tests {
     #[test]
     fn test_insert_before_last_character() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
@@ -715,7 +715,7 @@ mod tests {
     #[test]
     fn test_insert_newline_in_middle() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
@@ -750,7 +750,7 @@ mod tests {
     #[test]
     fn test_split_last_line() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
@@ -783,7 +783,7 @@ mod tests {
     #[test]
     fn test_move_in_empty_file() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
@@ -805,7 +805,7 @@ mod tests {
     #[test]
     fn test_move_end() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &["text"], yx(0, 0));
 
@@ -823,7 +823,7 @@ mod tests {
     #[test]
     fn test_move_home_no_indent() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &["text"], yx(0, 0));
 
@@ -852,7 +852,7 @@ mod tests {
     #[test]
     fn test_move_home_with_indent() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &["  text"], yx(0, 0));
 
@@ -884,7 +884,7 @@ mod tests {
     #[test]
     fn test_move_page_down_up() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &["1", "2", "3", "4", "5", "6", "7", "8", "9"], yx(0, 0));
 
@@ -931,7 +931,7 @@ mod tests {
     #[test]
     fn test_tab_append() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
 
@@ -954,7 +954,7 @@ mod tests {
     #[test]
     fn test_tab_existing_content() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &["."], yx(0, 0));
 
@@ -971,7 +971,7 @@ mod tests {
     #[test]
     fn test_tab_remove_empty_line() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &["          "], yx(0, 0));
 
@@ -1013,7 +1013,7 @@ mod tests {
     #[test]
     fn test_tab_remove_before_some_text() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &["          aligned"], yx(0, 0));
 
@@ -1041,7 +1041,7 @@ mod tests {
     #[test]
     fn test_move_preserves_insertion_column() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &["longer", "a", "longer", "b"], yx(0, 0));
 
@@ -1080,7 +1080,7 @@ mod tests {
     #[test]
     fn test_move_down_preserves_insertion_column_with_horizontal_scrolling() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(
             linecol(0, 0),
@@ -1184,7 +1184,7 @@ mod tests {
     #[test]
     fn test_move_up_preserves_insertion_column_with_horizontal_scrolling() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(
             linecol(0, 0),
@@ -1294,7 +1294,7 @@ mod tests {
     #[test]
     fn test_horizontal_scrolling() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(10, 40));
+        cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
         ob = ob.refresh(linecol(0, 0), &["ab", "", "xyz"], yx(0, 0));
 
@@ -1402,7 +1402,7 @@ mod tests {
     #[test]
     fn test_vertical_scrolling() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(5, 40));
+        cb.set_size_chars(yx(5, 40));
         let mut ob = OutputBuilder::new(yx(5, 40));
         ob = ob.refresh(linecol(0, 0), &["abc", "", "d", "e"], yx(0, 0));
 
@@ -1448,7 +1448,7 @@ mod tests {
     #[test]
     fn test_vertical_scrolling_when_splitting_last_visible_line() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(4, 40));
+        cb.set_size_chars(yx(4, 40));
         let mut ob = OutputBuilder::new(yx(4, 40));
         ob = ob.refresh(linecol(0, 0), &["first", "second", "thirdfourth"], yx(0, 0));
 
@@ -1478,7 +1478,7 @@ mod tests {
     #[test]
     fn test_horizontal_and_vertical_scrolling_when_splitting_last_visible_line() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(4, 40));
+        cb.set_size_chars(yx(4, 40));
         let mut ob = OutputBuilder::new(yx(4, 40));
         ob = ob.refresh(
             linecol(0, 0),
@@ -1522,7 +1522,7 @@ mod tests {
     #[test]
     fn test_vertical_scrolling_when_joining_first_visible_line() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(4, 40));
+        cb.set_size_chars(yx(4, 40));
         let mut ob = OutputBuilder::new(yx(4, 40));
         ob = ob.refresh(linecol(0, 0), &["first", "second", "third"], yx(0, 0));
 
@@ -1558,7 +1558,7 @@ mod tests {
     #[test]
     fn test_horizontal_and_vertical_scrolling_when_joining_first_visible_line() {
         let mut cb = MockConsole::default();
-        cb.set_size(yx(4, 40));
+        cb.set_size_chars(yx(4, 40));
         let mut ob = OutputBuilder::new(yx(4, 40));
         ob = ob.refresh(
             linecol(0, 0),

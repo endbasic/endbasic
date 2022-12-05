@@ -197,10 +197,10 @@ pub trait Console {
     /// Shows the cursor.
     fn show_cursor(&mut self) -> io::Result<()>;
 
-    /// Queries the size of the console.
+    /// Queries the size of the text console.
     ///
     /// The returned position represents the first row and column that lay *outside* of the console.
-    fn size(&self) -> io::Result<CharsXY>;
+    fn size_chars(&self) -> io::Result<CharsXY>;
 
     /// Writes the text into the console at the position of the cursor.
     ///
