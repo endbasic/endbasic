@@ -347,7 +347,7 @@ impl Console for TerminalConsole {
         Ok(())
     }
 
-    fn size(&self) -> io::Result<CharsXY> {
+    fn size_chars(&self) -> io::Result<CharsXY> {
         // Must be careful to not query the terminal size if both LINES and COLUMNS are set, because
         // the query fails when we don't have a PTY and we still need to run under these conditions
         // for testing purposes.

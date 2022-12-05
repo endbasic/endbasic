@@ -897,7 +897,7 @@ pub(crate) enum Request {
     MoveWithinLine(i16),
     Print(String),
     ShowCursor,
-    Size,
+    SizeChars,
     Write(String),
     DrawLine(PixelsXY, PixelsXY),
     DrawPixel(PixelsXY),
@@ -920,7 +920,7 @@ pub(crate) enum Request {
 #[derive(Debug)]
 pub(crate) enum Response {
     Empty(io::Result<()>),
-    Size(CharsXY),
+    SizeChars(CharsXY),
 
     #[cfg(test)]
     Pixels(io::Result<(Vec<u8>, PixelFormatEnum)>),
@@ -963,7 +963,7 @@ pub(crate) fn run(
                     Request::MoveWithinLine(off) => Response::Empty(ctx.move_within_line(off)),
                     Request::Print(text) => Response::Empty(ctx.print(&text)),
                     Request::ShowCursor => Response::Empty(ctx.show_cursor()),
-                    Request::Size => Response::Size(ctx.size_chars),
+                    Request::SizeChars => Response::SizeChars(ctx.size_chars),
                     Request::Write(text) => Response::Empty(ctx.write(&text)),
                     Request::DrawLine(x1y1, x2y2) => Response::Empty(ctx.draw_line(x1y1, x2y2)),
                     Request::DrawPixel(xy) => Response::Empty(ctx.draw_pixel(xy)),

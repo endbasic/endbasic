@@ -69,7 +69,7 @@ async fn read_line_interactive(
     let width = {
         // Assumes that the prompt was printed at column 0.  If that was not the case, line length
         // calculation does not work.
-        let console_size = console.size()?;
+        let console_size = console.size_chars()?;
         usize::from(console_size.x) - prompt.len()
     };
 
@@ -424,7 +424,7 @@ mod tests {
 
             let mut console = MockConsole::default();
             console.add_input_keys(&self.keys);
-            console.set_size(CharsXY::new(15, 5));
+            console.set_size_chars(CharsXY::new(15, 5));
             let line = match self.history.as_mut() {
                 Some(history) => block_on(read_line_interactive(
                     &mut console,
@@ -1084,7 +1084,7 @@ mod tests {
         let mut console = MockConsole::default();
         console.set_interactive(true);
         console.add_input_keys(&[Key::Char('1'), Key::Char('5'), Key::NewLine]);
-        console.set_size(CharsXY::new(15, 5));
+        console.set_size_chars(CharsXY::new(15, 5));
         let line = block_on(read_line_secure(&mut console, "> ")).unwrap();
         assert_eq!("15", &line);
         assert_eq!(

@@ -155,10 +155,10 @@ impl Console for SdlConsole {
         self.call(Request::ShowCursor)
     }
 
-    fn size(&self) -> io::Result<CharsXY> {
-        self.request_tx.send(Request::Size).expect("Channel must be alive");
+    fn size_chars(&self) -> io::Result<CharsXY> {
+        self.request_tx.send(Request::SizeChars).expect("Channel must be alive");
         match self.response_rx.recv().expect("Channel must be alive") {
-            Response::Size(size) => Ok(size),
+            Response::SizeChars(size) => Ok(size),
             _ => panic!("Unexpected response type"),
         }
     }

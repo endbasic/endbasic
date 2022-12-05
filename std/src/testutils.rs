@@ -91,8 +91,8 @@ pub struct MockConsole {
     /// Sequence of all messages printed.
     captured_out: Vec<CapturedOut>,
 
-    /// The size of the mock console.
-    size: CharsXY,
+    /// The size of the mock text console.
+    size_chars: CharsXY,
 
     /// Whether the console is interactive or not.
     interactive: bool,
@@ -103,7 +103,7 @@ impl Default for MockConsole {
         Self {
             golden_in: VecDeque::new(),
             captured_out: vec![],
-            size: CharsXY::new(u16::MAX, u16::MAX),
+            size_chars: CharsXY::new(u16::MAX, u16::MAX),
             interactive: false,
         }
     }
@@ -142,9 +142,9 @@ impl MockConsole {
         copy
     }
 
-    /// Sets the size of the mock console.
-    pub fn set_size(&mut self, size: CharsXY) {
-        self.size = size;
+    /// Sets the size of the mock text console.
+    pub fn set_size_chars(&mut self, size: CharsXY) {
+        self.size_chars = size;
     }
 
     /// Sets whether the mock console is interactive or not.
@@ -229,8 +229,8 @@ impl Console for MockConsole {
         Ok(())
     }
 
-    fn size(&self) -> io::Result<CharsXY> {
-        Ok(self.size)
+    fn size_chars(&self) -> io::Result<CharsXY> {
+        Ok(self.size_chars)
     }
 
     fn write(&mut self, text: &str) -> io::Result<()> {
