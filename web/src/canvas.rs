@@ -25,7 +25,7 @@ use crate::log_and_panic;
 use async_trait::async_trait;
 use endbasic_std::console::{
     ansi_color_to_rgb, remove_control_chars, CharsXY, ClearType, Console, Key, LineBuffer,
-    PixelsXY, RGB,
+    PixelsXY, SizeInPixels, RGB,
 };
 use js_sys::Map;
 use std::convert::TryFrom;
@@ -84,16 +84,6 @@ impl ClampedMul<u16, u16> for u16 {
             None => u16::MAX,
         }
     }
-}
-
-/// Represents a rectangular size in pixels.
-#[derive(Clone, Copy)]
-pub(crate) struct SizeInPixels {
-    /// The width in pixels.
-    pub(crate) width: u16,
-
-    /// The height in pixels.
-    pub(crate) height: u16,
 }
 
 impl ClampedMul<SizeInPixels, PixelsXY> for CharsXY {
@@ -620,6 +610,10 @@ impl Console for CanvasConsole {
 
     fn size_chars(&self) -> io::Result<CharsXY> {
         Ok(self.size_chars)
+    }
+
+    fn size_pixels(&self) -> io::Result<SizeInPixels> {
+        Ok(self.size_pixels)
     }
 
     fn write(&mut self, text: &str) -> io::Result<()> {

@@ -20,7 +20,9 @@ use crate::spec::Resolution;
 use async_channel::Sender;
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
-use endbasic_std::console::{remove_control_chars, CharsXY, ClearType, Console, Key, PixelsXY};
+use endbasic_std::console::{
+    remove_control_chars, CharsXY, ClearType, Console, Key, PixelsXY, SizeInPixels,
+};
 use std::io;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError};
@@ -159,6 +161,14 @@ impl Console for SdlConsole {
         self.request_tx.send(Request::SizeChars).expect("Channel must be alive");
         match self.response_rx.recv().expect("Channel must be alive") {
             Response::SizeChars(size) => Ok(size),
+            _ => panic!("Unexpected response type"),
+        }
+    }
+
+    fn size_pixels(&self) -> io::Result<SizeInPixels> {
+        self.request_tx.send(Request::SizePixels).expect("Channel must be alive");
+        match self.response_rx.recv().expect("Channel must be alive") {
+            Response::SizePixels(size) => Ok(size),
             _ => panic!("Unexpected response type"),
         }
     }
