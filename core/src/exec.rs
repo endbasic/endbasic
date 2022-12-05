@@ -590,13 +590,12 @@ impl Machine {
             match result.as_ref() {
                 Ok(()) => break,
                 Err(e) if e.is_catchable() => {
-                    let _ignore = self.symbols.unset("ERRMSG");
                     self.symbols
                         .set_var(
-                            &VarRef::new("ERRMSG", VarType::Text),
+                            &VarRef::new("0errmsg", VarType::Text),
                             Value::Text(format!("{}", e)),
                         )
-                        .expect("Cannot fail; we have previously unset the variable.");
+                        .expect("Internal symbol must be of a specific type");
 
                     match context.err_handler {
                         ErrorHandlerSpan::Jump(addr) => context.pc = addr,
@@ -783,6 +782,7 @@ mod tests {
         machine.add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))));
         machine.add_command(OutCommand::new(captured_out.clone()));
         machine.add_function(CountFunction::new());
+        machine.add_function(GetHiddenFunction::new());
         machine.add_function(OutfFunction::new(captured_out));
         machine.add_function(RaiseFunction::new());
         machine.add_function(SumFunction::new());
@@ -1603,7 +1603,7 @@ mod tests {
             OUT 1
             OUT RAISE("syntax")
             OUT 2
-            100 OUT ERRMSG
+            100 OUT GETHIDDEN("0ERRMSG")
             "#,
             &[],
             &["1", "4:17: In call to RAISE: expected arg1$"],
@@ -1619,7 +1619,7 @@ mod tests {
             OUT RAISE("syntax")
             OUT 2
             @foo
-            OUT ERRMSG
+            OUT GETHIDDEN("0ERRMSG")
             "#,
             &[],
             &["1", "4:17: In call to RAISE: expected arg1$"],
@@ -1651,7 +1651,7 @@ mod tests {
             ON ERROR RESUME NEXT
             OUT 1
             OUT RAISE("syntax")
-            OUT ERRMSG
+            OUT GETHIDDEN("0ERRMSG")
             "#,
             &[],
             &["1", "4:17: In call to RAISE: expected arg1$"],
@@ -1661,48 +1661,33 @@ mod tests {
     #[test]
     fn test_on_error_types() {
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISE("argument"): OUT ERRMSG"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISE("argument"): OUT GETHIDDEN("0ERRMSG")"#,
             &[],
             &["1:27: In call to RAISE: 1:33: Bad argument"],
         );
 
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISE("eval"): OUT ERRMSG"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISE("eval"): OUT GETHIDDEN("0ERRMSG")"#,
             &[],
             &["1:27: In call to RAISE: 1:33: Some eval error"],
         );
 
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISE("internal"): OUT ERRMSG"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISE("internal"): OUT GETHIDDEN("0ERRMSG")"#,
             &[],
             &["1:27: In call to RAISE: 1:33: Some internal error"],
         );
 
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISE("io"): OUT ERRMSG"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISE("io"): OUT GETHIDDEN("0ERRMSG")"#,
             &[],
             &["1:27: In call to RAISE: Some I/O error"],
         );
 
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISE("syntax"): OUT ERRMSG"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISE("syntax"): OUT GETHIDDEN("0ERRMSG")"#,
             &[],
             &["1:27: In call to RAISE: expected arg1$"],
-        );
-    }
-
-    #[test]
-    fn test_on_error_unset_incompatible_errmsg() {
-        do_ok_test(
-            r#"
-            ERRMSG = 3 ' This should be a string and not cause trouble.
-            ON ERROR RESUME NEXT
-            OUT ERRMSG
-            OUT RAISE("syntax")
-            OUT ERRMSG
-            "#,
-            &[],
-            &["3", "5:17: In call to RAISE: expected arg1$"],
         );
     }
 

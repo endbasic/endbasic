@@ -16,10 +16,11 @@
 //! Commands that manipulate the machine's state or the program's execution.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, FunctionCallSpan, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
+    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
+    FunctionResult, Symbol, Symbols,
 };
 use endbasic_core::LineCol;
 use futures_lite::future::{BoxedLocal, FutureExt};
@@ -67,6 +68,51 @@ impl Command for ClearCommand {
         }
         machine.clear();
         Ok(())
+    }
+}
+
+/// The `ERRMSG` function.
+pub struct ErrmsgFunction {
+    metadata: CallableMetadata,
+}
+
+impl ErrmsgFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("ERRMSG", VarType::Text)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns the last captured error message.
+When used in combination of ON ERROR to set an error handler, this function returns the string \
+representation of the last captured error.  If this is called before any error is captured, \
+returns the empty string.",
+                )
+                .build(),
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for ErrmsgFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+        if !span.args.is_empty() {
+            return Err(CallError::SyntaxError);
+        }
+        // TODO(jmmv): Instead of abusing a private variable to propagate the error message from
+        // the machine to here, we should query the last error message from the machine itself via
+        // a method, but this is difficult (from a refactoring perspective) because a function's
+        // exec() does not have access to the Machine.
+        match symbols.get_auto("0errmsg") {
+            Some(Symbol::Variable(v @ Value::Text(_))) => Ok(v.clone()),
+            Some(_) => panic!("Internal symbol must be of a specific type"),
+            None => Ok(Value::Text("".to_owned())),
+        }
     }
 }
 
@@ -139,6 +185,7 @@ impl Command for SleepCommand {
 /// uses the `std::thread::sleep` function.
 pub fn add_all(machine: &mut Machine, sleep_fn: Option<SleepFn>) {
     machine.add_command(ClearCommand::new());
+    machine.add_function(ErrmsgFunction::new());
     machine.add_command(SleepCommand::new(sleep_fn.unwrap_or_else(|| Box::from(system_sleep))));
 }
 
@@ -161,6 +208,32 @@ mod tests {
     #[test]
     fn test_clear_errors() {
         check_stmt_err("1:1: In call to CLEAR: expected no arguments", "CLEAR 123");
+    }
+
+    #[test]
+    fn test_errmsg_before_error() {
+        check_expr_ok("", r#"ERRMSG"#);
+    }
+
+    #[test]
+    fn test_errmsg_after_error() {
+        Tester::default()
+            .run("ON ERROR RESUME NEXT: PRINT a: PRINT \"Captured: \"; ERRMSG")
+            .expect_var("0ERRMSG", "1:29: Undefined variable a")
+            .expect_prints(["Captured: 1:29: Undefined variable a"])
+            .check();
+    }
+
+    #[test]
+    fn test_errmsg_errors() {
+        check_expr_error(
+            "1:10: In call to ERRMSG: expected no arguments nor parenthesis",
+            r#"ERRMSG()"#,
+        );
+        check_expr_error(
+            "1:10: In call to ERRMSG: expected no arguments nor parenthesis",
+            r#"ERRMSG(3)"#,
+        );
     }
 
     #[test]

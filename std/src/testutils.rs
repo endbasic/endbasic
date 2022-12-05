@@ -518,7 +518,7 @@ impl<'a> Checker<'a> {
         let message = message.into();
         assert_eq!(Ok(StopReason::Eof), self.exp_result);
         self.exp_result = Err(message.clone());
-        self.exp_vars.insert("ERRMSG".to_string(), Value::Text(message));
+        self.exp_vars.insert("0ERRMSG".to_string(), Value::Text(message));
         self
     }
 
