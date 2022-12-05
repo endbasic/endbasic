@@ -117,6 +117,9 @@ for the time being.**
 *   Added syntax to specify integers in different bases, using forms like:
     `&b_1010`, `&d_1234`, `&o_750`, and `&x_12f`.
 
+*   Issue #108: Added the `SCRROWS` and `SCRCOLS` functions to query the size
+    of the textual console.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
