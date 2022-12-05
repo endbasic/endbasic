@@ -41,7 +41,8 @@ not intend to be fully compatible with them.  The library currently contains:
     `SCRCOLS`, `SCRROWS`.
 *   Data manipulation: `READ`, `RESTORE`.
 *   Date and time manipulation: `SLEEP`.
-*   Graphics: `GFX_LINE`, `GFX_RECT`, `GFX_RECTF`.
+*   Graphics: `GFX_HEIGHT`, `GFX_LINE`, `GFX_PIXEL`, `GFX_RECT`, `GFX_RECTF`,
+    `GFX_SYNC`, `GFX_WIDTH`.
 *   Hardware interaction: `GPIO_CLEAR`, `GPIO_READ`, `GPIO_SETUP`, `GPIO_WRITE`.
 *   File system interaction: `CD`, `DIR`, `MOUNT`, `PWD`, `UNMOUNT`.
 *   Interpreter interaction: `CLEAR`, `ERRMSG`, `HELP`.

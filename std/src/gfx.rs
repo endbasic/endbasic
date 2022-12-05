@@ -17,10 +17,13 @@
 
 use crate::console::{Console, PixelsXY};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
+use endbasic_core::ast::{
+    ArgSep, ArgSpan, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarType,
+};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
+    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
+    FunctionResult, Symbols,
 };
 use std::cell::RefCell;
 use std::convert::TryFrom;
@@ -57,6 +60,44 @@ async fn parse_coordinates(
         x: parse_coordinate(xexpr, machine).await?,
         y: parse_coordinate(yexpr, machine).await?,
     })
+}
+
+/// The `GFX_HEIGHT` function.
+pub struct GfxHeightFunction {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxHeightFunction {
+    /// Creates a new instance of the function.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_HEIGHT", VarType::Integer)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns the height in pixels of the graphical console.
+See GFX_WIDTH to query the other dimension.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for GfxHeightFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
+        if !span.args.is_empty() {
+            return Err(CallError::SyntaxError);
+        }
+        let size = self.console.borrow().size_pixels()?;
+        Ok(Value::Integer(i32::from(size.height)))
+    }
 }
 
 /// The `GFX_LINE` command.
@@ -307,18 +348,59 @@ impl Command for GfxSyncCommand {
     }
 }
 
+/// The `GFX_WIDTH` function.
+pub struct GfxWidthFunction {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxWidthFunction {
+    /// Creates a new instance of the function.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_WIDTH", VarType::Integer)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns the width in pixels of the graphical console.
+See GFX_HEIGHT to query the other dimension.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for GfxWidthFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
+        if !span.args.is_empty() {
+            return Err(CallError::SyntaxError);
+        }
+        let size = self.console.borrow().size_pixels()?;
+        Ok(Value::Integer(i32::from(size.width)))
+    }
+}
+
 /// Adds all console-related commands for the given `console` to the `machine`.
 pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
+    machine.add_function(GfxHeightFunction::new(console.clone()));
     machine.add_command(GfxLineCommand::new(console.clone()));
     machine.add_command(GfxPixelCommand::new(console.clone()));
     machine.add_command(GfxRectCommand::new(console.clone()));
     machine.add_command(GfxRectfCommand::new(console.clone()));
-    machine.add_command(GfxSyncCommand::new(console));
+    machine.add_command(GfxSyncCommand::new(console.clone()));
+    machine.add_function(GfxWidthFunction::new(console));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::console::SizeInPixels;
     use crate::testutils::*;
 
     /// Verifies error conditions for a command named `name` that takes to X/Y pairs.
@@ -354,6 +436,27 @@ mod tests {
                 stmt,
             );
         }
+    }
+
+    #[test]
+    fn test_gfx_height() {
+        let mut t = Tester::default();
+        t.get_console().borrow_mut().set_size_pixels(SizeInPixels { width: 0, height: 768 });
+        t.run("result = GFX_HEIGHT").expect_var("result", 768i32).check();
+
+        check_expr_error(
+            "1:10: In call to GFX_HEIGHT: Graphical console size not yet set",
+            "GFX_HEIGHT",
+        );
+
+        check_expr_error(
+            "1:10: In call to GFX_HEIGHT: expected no arguments nor parenthesis",
+            "GFX_HEIGHT()",
+        );
+        check_expr_error(
+            "1:10: In call to GFX_HEIGHT: expected no arguments nor parenthesis",
+            "GFX_HEIGHT(1)",
+        );
     }
 
     #[test]
@@ -490,6 +593,27 @@ mod tests {
         check_stmt_err(
             "1:1: In call to GFX_SYNC: 1:10: Argument to GFX_SYNC must be a boolean",
             "GFX_SYNC 2",
+        );
+    }
+
+    #[test]
+    fn test_gfx_width() {
+        let mut t = Tester::default();
+        t.get_console().borrow_mut().set_size_pixels(SizeInPixels { width: 12345, height: 0 });
+        t.run("result = GFX_WIDTH").expect_var("result", 12345i32).check();
+
+        check_expr_error(
+            "1:10: In call to GFX_WIDTH: Graphical console size not yet set",
+            "GFX_WIDTH",
+        );
+
+        check_expr_error(
+            "1:10: In call to GFX_WIDTH: expected no arguments nor parenthesis",
+            "GFX_WIDTH()",
+        );
+        check_expr_error(
+            "1:10: In call to GFX_WIDTH: expected no arguments nor parenthesis",
+            "GFX_WIDTH(1)",
         );
     }
 }

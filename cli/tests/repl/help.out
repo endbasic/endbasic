@@ -163,11 +163,13 @@ Output from HELP "GRAPHICS":
     the commands described in HELP "CONSOLE", and the pixel-based system,
     used by the commands described in this section.
 
-    >> GFX_LINE     Draws a line from (x1,y1) to (x2,y2).
-    >> GFX_PIXEL    Draws a pixel at (x,y).
-    >> GFX_RECT     Draws a rectangle from (x1,y1) to (x2,y2).
-    >> GFX_RECTF    Draws a filled rectangle from (x1,y1) to (x2,y2).
-    >> GFX_SYNC     Controls the video syncing flag and/or forces a sync.
+    >> GFX_HEIGHT%    Returns the height in pixels of the graphical console.
+    >> GFX_LINE       Draws a line from (x1,y1) to (x2,y2).
+    >> GFX_PIXEL      Draws a pixel at (x,y).
+    >> GFX_RECT       Draws a rectangle from (x1,y1) to (x2,y2).
+    >> GFX_RECTF      Draws a filled rectangle from (x1,y1) to (x2,y2).
+    >> GFX_SYNC       Controls the video syncing flag and/or forces a sync.
+    >> GFX_WIDTH%     Returns the width in pixels of the graphical console.
 
     Type HELP followed by the name of a symbol for details.
 
@@ -815,6 +817,22 @@ Output from HELP "ERRMSG":
     function returns the string representation of the last captured error.
     If this is called before any error is captured, returns the empty
     string.
+
+Output from HELP "GFX_HEIGHT":
+
+    GFX_HEIGHT%
+
+    Returns the height in pixels of the graphical console.
+
+    See GFX_WIDTH to query the other dimension.
+
+Output from HELP "GFX_WIDTH":
+
+    GFX_WIDTH%
+
+    Returns the width in pixels of the graphical console.
+
+    See GFX_HEIGHT to query the other dimension.
 
 Output from HELP "GPIO_READ":
 
