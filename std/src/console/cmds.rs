@@ -492,6 +492,82 @@ impl Command for PrintCommand {
     }
 }
 
+/// The `SCRCOLS` function.
+pub struct ScrColsFunction {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl ScrColsFunction {
+    /// Creates a new instance of the function.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("SCRCOLS", VarType::Integer)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns the number of columns in the text console.
+See SCRROWS to query the other dimension.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for ScrColsFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
+        if !span.args.is_empty() {
+            return Err(CallError::SyntaxError);
+        }
+        let size = self.console.borrow().size()?;
+        Ok(Value::Integer(i32::from(size.x)))
+    }
+}
+
+/// The `SCRROWS` function.
+pub struct ScrRowsFunction {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl ScrRowsFunction {
+    /// Creates a new instance of the function.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("SCRROWS", VarType::Integer)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns the number of rows in the text console.
+See SCRCOLS to query the other dimension.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for ScrRowsFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
+        if !span.args.is_empty() {
+            return Err(CallError::SyntaxError);
+        }
+        let size = self.console.borrow().size()?;
+        Ok(Value::Integer(i32::from(size.y)))
+    }
+}
+
 /// Adds all console-related commands for the given `console` to the `machine`.
 pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
     machine.add_clearable(ConsoleClearable::new(console.clone()));
@@ -500,7 +576,9 @@ pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
     machine.add_function(InKeyFunction::new(console.clone()));
     machine.add_command(InputCommand::new(console.clone()));
     machine.add_command(LocateCommand::new(console.clone()));
-    machine.add_command(PrintCommand::new(console));
+    machine.add_command(PrintCommand::new(console.clone()));
+    machine.add_function(ScrColsFunction::new(console.clone()));
+    machine.add_function(ScrRowsFunction::new(console));
 }
 
 #[cfg(test)]
@@ -811,5 +889,37 @@ mod tests {
         // Ensure type errors from `Expr` and `Value` bubble up.
         check_stmt_uncatchable_err("1:9: Unexpected value in expression", "PRINT a b");
         check_stmt_err("1:9: Cannot add 3 and TRUE", "PRINT 3 + TRUE");
+    }
+
+    #[test]
+    fn test_scrcols() {
+        let mut t = Tester::default();
+        t.get_console().borrow_mut().set_size(CharsXY { x: 12345, y: 0 });
+        t.run("result = SCRCOLS").expect_var("result", 12345i32).check();
+
+        check_expr_error(
+            "1:10: In call to SCRCOLS: expected no arguments nor parenthesis",
+            "SCRCOLS()",
+        );
+        check_expr_error(
+            "1:10: In call to SCRCOLS: expected no arguments nor parenthesis",
+            "SCRCOLS(1)",
+        );
+    }
+
+    #[test]
+    fn test_scrrows() {
+        let mut t = Tester::default();
+        t.get_console().borrow_mut().set_size(CharsXY { x: 0, y: 768 });
+        t.run("result = SCRROWS").expect_var("result", 768i32).check();
+
+        check_expr_error(
+            "1:10: In call to SCRROWS: expected no arguments nor parenthesis",
+            "SCRROWS()",
+        );
+        check_expr_error(
+            "1:10: In call to SCRROWS: expected no arguments nor parenthesis",
+            "SCRROWS(1)",
+        );
     }
 }

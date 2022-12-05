@@ -93,12 +93,14 @@ Output from HELP "CONSOLE":
     Avoid resizing your terminal or web browser.  If you do resize them,
     however, restart the interpreter.
 
-    >> CLS       Clears the screen.
-    >> COLOR     Sets the foreground and background colors.
-    >> INKEY$    Checks for an available key press and returns it.
-    >> INPUT     Obtains user input from the console.
-    >> LOCATE    Moves the cursor to the given position.
-    >> PRINT     Prints one or more values to the console.
+    >> CLS         Clears the screen.
+    >> COLOR       Sets the foreground and background colors.
+    >> INKEY$      Checks for an available key press and returns it.
+    >> INPUT       Obtains user input from the console.
+    >> LOCATE      Moves the cursor to the given position.
+    >> PRINT       Prints one or more values to the console.
+    >> SCRCOLS%    Returns the number of columns in the text console.
+    >> SCRROWS%    Returns the number of rows in the text console.
 
     Type HELP followed by the name of a symbol for details.
 
@@ -958,6 +960,22 @@ Output from HELP "RTRIM":
     RTRIM$(expr$)
 
     Returns a copy of a string with trailing whitespace removed.
+
+Output from HELP "SCRCOLS":
+
+    SCRCOLS%
+
+    Returns the number of columns in the text console.
+
+    See SCRROWS to query the other dimension.
+
+Output from HELP "SCRROWS":
+
+    SCRROWS%
+
+    Returns the number of rows in the text console.
+
+    See SCRCOLS to query the other dimension.
 
 Output from HELP "SIN":
 
