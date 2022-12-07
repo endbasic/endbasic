@@ -643,11 +643,23 @@ mod tests {
             PixelsXY { x, y }
         }
 
+        // ----
         // Draw some stuff that is completely visible.
+        // ----
+
         console.color(Some(15), None).unwrap();
         console.draw_line(xy(10, 50), xy(110, 60)).unwrap();
         console.color(Some(12), Some(1)).unwrap();
         console.draw_line(xy(120, 70), xy(20, 60)).unwrap();
+
+        console.color(Some(12), Some(1)).unwrap();
+        // A line with start and end at the same spot should be invisible.
+        console.draw_line(xy(200, 200), xy(200, 200)).unwrap();
+        // But with a slight variation it should be a pixel.
+        console.draw_line(xy(190, 190), xy(190, 191)).unwrap();
+        console.draw_line(xy(190, 190), xy(191, 190)).unwrap();
+        console.draw_line(xy(190, 191), xy(190, 190)).unwrap();
+        console.draw_line(xy(191, 190), xy(190, 190)).unwrap();
 
         console.color(Some(15), None).unwrap();
         console.draw_rect_filled(xy(380, 180), xy(220, 120)).unwrap();
@@ -660,8 +672,10 @@ mod tests {
         console.draw_circle(xy(650, 400), 80).unwrap();
 
         console.color(Some(12), None).unwrap();
+        // A circle of radius 1 should be a single pixel.
         console.draw_circle_filled(xy(650, 210), 1).unwrap();
         console.draw_circle(xy(650, 200), 1).unwrap();
+        // A circle of radius 0 should be invisible.
         console.draw_circle_filled(xy(650, 215), 0).unwrap();
         console.draw_circle(xy(650, 205), 0).unwrap();
 
@@ -670,7 +684,10 @@ mod tests {
             console.draw_pixel(xy(i * 100, 300)).unwrap();
         }
 
+        // ----
         // Draw some stuff that is completely off screen.
+        // ----
+
         console.color(Some(15), None).unwrap();
         console.draw_pixel(xy(-1, 1)).unwrap();
         console.draw_pixel(xy(801, 601)).unwrap();
@@ -686,7 +703,10 @@ mod tests {
         console.draw_circle_filled(xy(-100, -100), 10).unwrap();
         console.draw_circle_filled(xy(1000, 1000), 10).unwrap();
 
+        // ----
         // Draw some stuff that is partially visible.
+        // ----
+
         console.color(Some(15), None).unwrap();
         console.draw_line(xy(-1000, 500), xy(100, 520)).unwrap();
         console.draw_rect(xy(-10, 400), xy(10, 450)).unwrap();

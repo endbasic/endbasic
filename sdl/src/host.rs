@@ -911,6 +911,13 @@ impl Context {
                 .map_err(string_error_to_io_error)
         }
 
+        if radius == 1 {
+            // Paper over differences between platforms that arise from the behavior of
+            // canvas.draw_line.  See Self::draw_line for details.
+            self.canvas.set_draw_color(self.fg_color);
+            return self.canvas.draw_point(point_xy(center)).map_err(string_error_to_io_error);
+        }
+
         let (diameter, radius): (i16, i16) = match radius.checked_mul(2) {
             Some(d) => match i16::try_from(d) {
                 Ok(d) => (d, radius as i16),
@@ -952,6 +959,13 @@ impl Context {
 
     /// Handler for a `Request::DrawLine`.
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
+        if x1y1 == x2y2 {
+            // Paper over differences between platforms.  On Linux, this would paint a single dot,
+            // but on Windows, it paints nothing.  For consistency with drawing a circle of radius
+            // 0, and for consistency with the web interface, avoid painting anything here.
+            return Ok(());
+        }
+
         self.canvas.set_draw_color(self.fg_color);
         self.canvas.draw_line(point_xy(x1y1), point_xy(x2y2)).map_err(string_error_to_io_error)?;
         self.present_canvas()
