@@ -163,6 +163,8 @@ Output from HELP "GRAPHICS":
     the commands described in HELP "CONSOLE", and the pixel-based system,
     used by the commands described in this section.
 
+    >> GFX_CIRCLE     Draws a circle of radius r centered at (x,y).
+    >> GFX_CIRCLEF    Draws a filled circle of radius r centered at (x,y).
     >> GFX_HEIGHT%    Returns the height in pixels of the graphical console.
     >> GFX_LINE       Draws a line from (x1,y1) to (x2,y2).
     >> GFX_PIXEL      Draws a pixel at (x,y).
@@ -377,6 +379,24 @@ Output from HELP "EDIT":
     EDIT
 
     Interactively edits the stored program.
+
+Output from HELP "GFX_CIRCLE":
+
+    GFX_CIRCLE x%, y%, r%
+
+    Draws a circle of radius r centered at (x,y).
+
+    The outline of the circle is drawn using the foreground color as
+    selected by COLOR and the area of the circle is left untouched.
+
+Output from HELP "GFX_CIRCLEF":
+
+    GFX_CIRCLEF x%, y%, r%
+
+    Draws a filled circle of radius r centered at (x,y).
+
+    The outline and area of the circle are drawn using the foreground color
+    as selected by COLOR.
 
 Output from HELP "GFX_LINE":
 

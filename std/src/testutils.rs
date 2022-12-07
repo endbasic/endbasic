@@ -66,6 +66,12 @@ pub enum CapturedOut {
     /// Represents a call to `Console::write`.
     Write(String),
 
+    /// Represents a call to `Console::draw_circle`.
+    DrawCircle(PixelsXY, u16),
+
+    /// Represents a call to `Console::draw_circle_filled`.
+    DrawCircleFilled(PixelsXY, u16),
+
     /// Represents a call to `Console::draw_line`.
     DrawLine(PixelsXY, PixelsXY),
 
@@ -255,6 +261,16 @@ impl Console for MockConsole {
         let text = remove_control_chars(text.to_owned());
 
         self.captured_out.push(CapturedOut::Write(text));
+        Ok(())
+    }
+
+    fn draw_circle(&mut self, xy: PixelsXY, r: u16) -> io::Result<()> {
+        self.captured_out.push(CapturedOut::DrawCircle(xy, r));
+        Ok(())
+    }
+
+    fn draw_circle_filled(&mut self, xy: PixelsXY, r: u16) -> io::Result<()> {
+        self.captured_out.push(CapturedOut::DrawCircleFilled(xy, r));
         Ok(())
     }
 

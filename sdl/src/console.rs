@@ -178,6 +178,14 @@ impl Console for SdlConsole {
         self.call(Request::Write(text))
     }
 
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        self.call(Request::DrawCircle(center, radius))
+    }
+
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        self.call(Request::DrawCircleFilled(center, radius))
+    }
+
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         self.call(Request::DrawLine(x1y1, x2y2))
     }
@@ -647,6 +655,17 @@ mod tests {
         console.draw_rect(xy(200, 100), xy(400, 200)).unwrap();
 
         console.color(Some(14), None).unwrap();
+        console.draw_circle_filled(xy(650, 400), 50).unwrap();
+        console.color(Some(9), None).unwrap();
+        console.draw_circle(xy(650, 400), 80).unwrap();
+
+        console.color(Some(12), None).unwrap();
+        console.draw_circle_filled(xy(650, 210), 1).unwrap();
+        console.draw_circle(xy(650, 200), 1).unwrap();
+        console.draw_circle_filled(xy(650, 215), 0).unwrap();
+        console.draw_circle(xy(650, 205), 0).unwrap();
+
+        console.color(Some(14), None).unwrap();
         for i in 0..8 {
             console.draw_pixel(xy(i * 100, 300)).unwrap();
         }
@@ -661,6 +680,11 @@ mod tests {
         console.draw_rect(xy(-10, -10), xy(-5, -5)).unwrap();
         console.draw_rect(xy(-10, -10), xy(810, 610)).unwrap();
         console.draw_rect(xy(810, 610), xy(815, 615)).unwrap();
+        console.draw_circle(xy(-100, -100), 10).unwrap();
+        console.draw_circle(xy(1000, 1000), 10).unwrap();
+        console.draw_circle(xy(400, 300), 1000).unwrap();
+        console.draw_circle_filled(xy(-100, -100), 10).unwrap();
+        console.draw_circle_filled(xy(1000, 1000), 10).unwrap();
 
         // Draw some stuff that is partially visible.
         console.color(Some(15), None).unwrap();
@@ -668,6 +692,8 @@ mod tests {
         console.draw_rect(xy(-10, 400), xy(10, 450)).unwrap();
         console.draw_rect(xy(790, 410), xy(810, 440)).unwrap();
         console.draw_rect_filled(xy(500, -10), xy(510, 610)).unwrap();
+        console.draw_circle(xy(800, 300), 50).unwrap();
+        console.draw_circle_filled(xy(800, 300), 40).unwrap();
 
         console.color(None, None).unwrap();
         console.locate(CharsXY { x: 4, y: 22 }).unwrap();

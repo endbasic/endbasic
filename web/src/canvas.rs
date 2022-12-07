@@ -29,6 +29,7 @@ use endbasic_std::console::{
 };
 use js_sys::Map;
 use std::convert::TryFrom;
+use std::f64::consts::PI;
 use std::io;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -626,6 +627,26 @@ impl Console for CanvasConsole {
         self.clear_cursor()?;
         self.raw_write_wrapped(text)?;
         self.draw_cursor()
+    }
+
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        self.set_stroke_style_rgb(self.fg_color);
+        self.context.begin_path();
+        self.context
+            .arc(f64::from(center.x), f64::from(center.y), f64::from(radius), 0.0, 2.0 * PI)
+            .map_err(js_value_to_io_error)?;
+        self.context.stroke();
+        Ok(())
+    }
+
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        self.set_fill_style_rgb(self.fg_color);
+        self.context.begin_path();
+        self.context
+            .arc(f64::from(center.x), f64::from(center.y), f64::from(radius), 0.0, 2.0 * PI)
+            .map_err(js_value_to_io_error)?;
+        self.context.fill();
+        Ok(())
     }
 
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
