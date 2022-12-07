@@ -62,6 +62,108 @@ async fn parse_coordinates(
     })
 }
 
+/// Parses an expression that represents a radius.
+async fn parse_radius(expr: &Expr, machine: &mut Machine) -> Result<u16, CallError> {
+    let value = expr.eval(machine.get_mut_symbols()).await?;
+    let i =
+        value.as_i32().map_err(|e| CallError::ArgumentError(expr.start_pos(), format!("{}", e)))?;
+    match u16::try_from(i) {
+        Ok(i) => Ok(i),
+        Err(_) if i < 0 => Err(CallError::ArgumentError(
+            expr.start_pos(),
+            format!("Radius {} must be positive", i),
+        )),
+        Err(_) => {
+            Err(CallError::ArgumentError(expr.start_pos(), format!("Radius {} out of range", i)))
+        }
+    }
+}
+
+/// The `GFX_CIRCLE` command.
+pub struct GfxCircleCommand {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxCircleCommand {
+    /// Creates a new `GFX_CIRCLE` command that draws an empty circle on `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_CIRCLE", VarType::Void)
+                .with_syntax("x%, y%, r%")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Draws a circle of radius r centered at (x,y).
+The outline of the circle is drawn using the foreground color as selected by COLOR and the \
+area of the circle is left untouched.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for GfxCircleCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        let (xy, r) = match span.args.as_slice() {
+            [ArgSpan { expr: Some(x), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(r), sep: ArgSep::End, .. }] => {
+                (parse_coordinates(x, y, machine).await?, parse_radius(r, machine).await?)
+            }
+            _ => return Err(CallError::SyntaxError),
+        };
+
+        self.console.borrow_mut().draw_circle(xy, r)?;
+        Ok(())
+    }
+}
+
+/// The `GFX_CIRCLEF` command.
+pub struct GfxCirclefCommand {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxCirclefCommand {
+    /// Creates a new `GFX_CIRCLEF` command that draws a filled circle on `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_CIRCLEF", VarType::Void)
+                .with_syntax("x%, y%, r%")
+                .with_category(CATEGORY)
+                .with_description(
+                    "Draws a filled circle of radius r centered at (x,y).
+The outline and area of the circle are drawn using the foreground color as selected by COLOR.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for GfxCirclefCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        let (xy, r) = match span.args.as_slice() {
+            [ArgSpan { expr: Some(x), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(r), sep: ArgSep::End, .. }] => {
+                (parse_coordinates(x, y, machine).await?, parse_radius(r, machine).await?)
+            }
+            _ => return Err(CallError::SyntaxError),
+        };
+
+        self.console.borrow_mut().draw_circle_filled(xy, r)?;
+        Ok(())
+    }
+}
+
 /// The `GFX_HEIGHT` function.
 pub struct GfxHeightFunction {
     metadata: CallableMetadata,
@@ -388,6 +490,8 @@ impl Function for GfxWidthFunction {
 
 /// Adds all console-related commands for the given `console` to the `machine`.
 pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
+    machine.add_command(GfxCircleCommand::new(console.clone()));
+    machine.add_command(GfxCirclefCommand::new(console.clone()));
     machine.add_function(GfxHeightFunction::new(console.clone()));
     machine.add_command(GfxLineCommand::new(console.clone()));
     machine.add_command(GfxPixelCommand::new(console.clone()));
@@ -436,6 +540,107 @@ mod tests {
                 stmt,
             );
         }
+    }
+
+    /// Verifies error conditions for a command named `name` that takes an X/Y pair and a radius.
+    fn check_errors_xy_radius(name: &'static str) {
+        for args in &["1, , 3", "1, 2", "1, 2, 3, 4", "2; 3, 4"] {
+            check_stmt_err(
+                format!("1:1: In call to {}: expected x%, y%, r%", name),
+                &format!("{} {}", name, args),
+            );
+        }
+
+        for args in &["-40000, 1, 1", "1, -40000, 1"] {
+            let pos = name.len() + 1 + args.find('-').unwrap() + 1;
+            check_stmt_err(
+                format!("1:1: In call to {}: 1:{}: Coordinate -40000 out of range", name, pos),
+                &format!("{} {}", name, args),
+            );
+        }
+        check_stmt_err(
+            format!(
+                "1:1: In call to {}: 1:{}: Radius -40000 must be positive",
+                name,
+                name.len() + 8
+            ),
+            &format!("{} 1, 1, -40000", name),
+        );
+
+        for args in &["40000, 1, 1", "1, 40000, 1"] {
+            let pos = name.len() + 1 + args.find('4').unwrap() + 1;
+            check_stmt_err(
+                format!("1:1: In call to {}: 1:{}: Coordinate 40000 out of range", name, pos),
+                &format!("{} {}", name, args),
+            );
+        }
+        check_stmt_err(
+            format!("1:1: In call to {}: 1:{}: Radius 80000 out of range", name, name.len() + 8),
+            &format!("{} 1, 1, 80000", name),
+        );
+
+        for args in &["\"a\", 1, 1", "1, \"a\", 1", "1, 1, \"a\""] {
+            let stmt = &format!("{} {}", name, args);
+            let pos = stmt.find('"').unwrap() + 1;
+            check_stmt_err(
+                format!("1:1: In call to {}: 1:{}: \"a\" is not a number", name, pos),
+                stmt,
+            );
+        }
+
+        check_stmt_err(
+            format!("1:1: In call to {}: 1:{}: Radius -1 must be positive", name, name.len() + 8),
+            &format!("{} 1, 1, -1", name),
+        );
+    }
+
+    #[test]
+    fn test_gfx_circle_ok() {
+        Tester::default()
+            .run("GFX_CIRCLE 0, 0, 0")
+            .expect_output([CapturedOut::DrawCircle(PixelsXY { x: 0, y: 0 }, 0)])
+            .check();
+
+        Tester::default()
+            .run("GFX_CIRCLE 1.1, 2.3, 2.5")
+            .expect_output([CapturedOut::DrawCircle(PixelsXY { x: 1, y: 2 }, 3)])
+            .check();
+
+        Tester::default()
+            .run("GFX_CIRCLE -31000, -32000, 31000")
+            .expect_output([CapturedOut::DrawCircle(PixelsXY { x: -31000, y: -32000 }, 31000)])
+            .check();
+    }
+
+    #[test]
+    fn test_gfx_circle_errors() {
+        check_errors_xy_radius("GFX_CIRCLE");
+    }
+
+    #[test]
+    fn test_gfx_circlef_ok() {
+        Tester::default()
+            .run("GFX_CIRCLEF 0, 0, 0")
+            .expect_output([CapturedOut::DrawCircleFilled(PixelsXY { x: 0, y: 0 }, 0)])
+            .check();
+
+        Tester::default()
+            .run("GFX_CIRCLEF 1.1, 2.3, 2.5")
+            .expect_output([CapturedOut::DrawCircleFilled(PixelsXY { x: 1, y: 2 }, 3)])
+            .check();
+
+        Tester::default()
+            .run("GFX_CIRCLEF -31000, -32000, 31000")
+            .expect_output([CapturedOut::DrawCircleFilled(
+                PixelsXY { x: -31000, y: -32000 },
+                31000,
+            )])
+            .check();
+    }
+
+    #[test]
+    fn test_gfx_circlef_errors() {
+        check_errors_xy_radius("GFX_CIRCLEF");
     }
 
     #[test]

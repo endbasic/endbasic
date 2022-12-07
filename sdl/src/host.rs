@@ -837,6 +837,119 @@ impl Context {
         self.present_canvas()
     }
 
+    /// Handler for a `Request::DrawCircle`.
+    ///
+    /// This implements the [Midpoint circle
+    /// algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        fn point(canvas: &mut SurfaceCanvas<'static>, x: i16, y: i16) -> io::Result<()> {
+            canvas
+                .draw_point(Point::new(i32::from(x), i32::from(y)))
+                .map_err(string_error_to_io_error)
+        }
+
+        let (diameter, radius): (i16, i16) = match radius.checked_mul(2) {
+            Some(d) => match i16::try_from(d) {
+                Ok(d) => (d, radius as i16),
+                Err(_) => {
+                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big"))
+                }
+            },
+            None => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big")),
+        };
+
+        let mut x: i16 = radius - 1;
+        let mut y: i16 = 0;
+        let mut tx: i16 = 1;
+        let mut ty: i16 = 1;
+        let mut e: i16 = tx - diameter;
+
+        self.canvas.set_draw_color(self.fg_color);
+        while x >= y {
+            point(&mut self.canvas, center.x + x, center.y - y)?;
+            point(&mut self.canvas, center.x + x, center.y + y)?;
+            point(&mut self.canvas, center.x - x, center.y - y)?;
+            point(&mut self.canvas, center.x - x, center.y + y)?;
+            point(&mut self.canvas, center.x + y, center.y - x)?;
+            point(&mut self.canvas, center.x + y, center.y + x)?;
+            point(&mut self.canvas, center.x - y, center.y - x)?;
+            point(&mut self.canvas, center.x - y, center.y + x)?;
+
+            if e <= 0 {
+                y += 1;
+                e += ty;
+                ty += 2;
+            }
+
+            if e > 0 {
+                x -= 1;
+                tx += 2;
+                e += tx - diameter;
+            }
+        }
+
+        self.present_canvas()
+    }
+
+    /// Handler for a `Request::DrawCircleFilled`.
+    ///
+    /// This implements the [Midpoint circle
+    /// algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        fn line(
+            canvas: &mut SurfaceCanvas<'static>,
+            x1: i16,
+            y1: i16,
+            x2: i16,
+            y2: i16,
+        ) -> io::Result<()> {
+            canvas
+                .draw_line(
+                    Point::new(i32::from(x1), i32::from(y1)),
+                    Point::new(i32::from(x2), i32::from(y2)),
+                )
+                .map_err(string_error_to_io_error)
+        }
+
+        let (diameter, radius): (i16, i16) = match radius.checked_mul(2) {
+            Some(d) => match i16::try_from(d) {
+                Ok(d) => (d, radius as i16),
+                Err(_) => {
+                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big"))
+                }
+            },
+            None => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big")),
+        };
+
+        let mut x: i16 = radius - 1;
+        let mut y: i16 = 0;
+        let mut tx: i16 = 1;
+        let mut ty: i16 = 1;
+        let mut e: i16 = tx - diameter;
+
+        self.canvas.set_draw_color(self.fg_color);
+        while x >= y {
+            line(&mut self.canvas, center.x + x, center.y - y, center.x + x, center.y + y)?;
+            line(&mut self.canvas, center.x - x, center.y - y, center.x - x, center.y + y)?;
+            line(&mut self.canvas, center.x + y, center.y - x, center.x + y, center.y + x)?;
+            line(&mut self.canvas, center.x - y, center.y - x, center.x - y, center.y + x)?;
+
+            if e <= 0 {
+                y += 1;
+                e += ty;
+                ty += 2;
+            }
+
+            if e > 0 {
+                x -= 1;
+                tx += 2;
+                e += tx - diameter;
+            }
+        }
+
+        self.present_canvas()
+    }
+
     /// Handler for a `Request::DrawLine`.
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         self.canvas.set_draw_color(self.fg_color);
@@ -902,6 +1015,8 @@ pub(crate) enum Request {
     SizeChars,
     SizePixels,
     Write(String),
+    DrawCircle(PixelsXY, u16),
+    DrawCircleFilled(PixelsXY, u16),
     DrawLine(PixelsXY, PixelsXY),
     DrawPixel(PixelsXY),
     DrawRect(PixelsXY, PixelsXY),
@@ -970,6 +1085,12 @@ pub(crate) fn run(
                     Request::SizeChars => Response::SizeChars(ctx.size_chars),
                     Request::SizePixels => Response::SizePixels(ctx.size_pixels),
                     Request::Write(text) => Response::Empty(ctx.write(&text)),
+                    Request::DrawCircle(center, radius) => {
+                        Response::Empty(ctx.draw_circle(center, radius))
+                    }
+                    Request::DrawCircleFilled(center, radius) => {
+                        Response::Empty(ctx.draw_circle_filled(center, radius))
+                    }
                     Request::DrawLine(x1y1, x2y2) => Response::Empty(ctx.draw_line(x1y1, x2y2)),
                     Request::DrawPixel(xy) => Response::Empty(ctx.draw_pixel(xy)),
                     Request::DrawRect(x1y1, x2y2) => Response::Empty(ctx.draw_rect(x1y1, x2y2)),

@@ -121,6 +121,8 @@ for the time being.**
     of the textual console and the `GFX_HEIGHT` and `GFX_WIDTH` for the
     graphical console.
 
+*   Added the `GFX_CIRCLE` and `GFX_CIRCLEF` commands to draw circles.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
