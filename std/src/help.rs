@@ -171,10 +171,30 @@ impl Topic for CallableTopic {
     }
 }
 
+/// Generates the index for a collection of `CallableMetadata`s to use in a `CategoryTopic`.
+fn callables_to_index(metadatas: &[CallableMetadata]) -> BTreeMap<String, &'static str> {
+    let category = metadatas.get(0).expect("Must have at least one symbol").category();
+
+    let mut index = BTreeMap::default();
+    for metadata in metadatas {
+        debug_assert_eq!(
+            category,
+            metadata.category(),
+            "All commands registered in this category must be equivalent"
+        );
+        let name = format!("{}{}", metadata.name(), metadata.return_type().annotation());
+        let blurb = metadata.description().next().unwrap();
+        let previous = index.insert(name, blurb);
+        assert!(previous.is_none(), "Names should have been unique");
+    }
+    index
+}
+
 /// A help topic to describe a category of callables.
 struct CategoryTopic {
     name: &'static str,
-    metadatas: Vec<CallableMetadata>,
+    description: &'static str,
+    index: BTreeMap<String, &'static str>,
 }
 
 impl Topic for CategoryTopic {
@@ -191,29 +211,17 @@ impl Topic for CategoryTopic {
     }
 
     fn describe(&self, console: &mut dyn Console) -> io::Result<()> {
-        let description = self.metadatas.get(0).expect("Must have at least one symbol").category();
-
-        let mut index = BTreeMap::default();
-        let mut max_length = 0;
-        for metadata in &self.metadatas {
-            debug_assert_eq!(
-                description,
-                metadata.category(),
-                "All commands registered in this category must be equivalent"
-            );
-            let name = format!("{}{}", metadata.name(), metadata.return_type().annotation());
-            if name.len() > max_length {
-                max_length = name.len();
-            }
-            let blurb = metadata.description().next().unwrap();
-            let previous = index.insert(name, blurb);
-            assert!(previous.is_none(), "Names should have been unique");
-        }
+        let max_length = self
+            .index
+            .keys()
+            .map(|k| k.len())
+            .reduce(|a, k| if a > k { a } else { k })
+            .expect("Must have at least one item in the index");
 
         console.print("")?;
-        refill_and_print(console, description.lines(), "    ")?;
+        refill_and_print(console, self.description.lines(), "    ")?;
         console.print("")?;
-        for (name, blurb) in index.iter() {
+        for (name, blurb) in self.index.iter() {
             let filler = " ".repeat(max_length - name.len());
             // TODO(jmmv): Should use refill_and_print but continuation lines need special handling
             // to be indented properly.
@@ -290,7 +298,9 @@ impl Topics {
             }
         }
         for (name, metadatas) in categories.into_iter() {
-            insert(&mut topics, Box::from(CategoryTopic { name, metadatas }));
+            let description = metadatas.get(0).expect("Must have at least one symbol").category();
+            let index = callables_to_index(&metadatas);
+            insert(&mut topics, Box::from(CategoryTopic { name, description, index }));
         }
 
         Self(topics)
