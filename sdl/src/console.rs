@@ -37,6 +37,8 @@ pub(crate) struct SdlConsole {
     request_tx: SyncSender<Request>,
     response_rx: Receiver<Response>,
     on_key_rx: Receiver<Key>,
+    fg_color: Option<u8>,
+    bg_color: Option<u8>,
 }
 
 impl SdlConsole {
@@ -71,9 +73,14 @@ impl SdlConsole {
         // Wait for the console to be up and running.  We must do this for error propagation but
         // also to ensure that the caller can free up the local temporary font resources, if any.
         match response_rx.recv().expect("Channel must be alive") {
-            Response::Empty(Ok(())) => {
-                Ok(Self { handle: Some(handle), request_tx, response_rx, on_key_rx })
-            }
+            Response::Empty(Ok(())) => Ok(Self {
+                handle: Some(handle),
+                request_tx,
+                response_rx,
+                on_key_rx,
+                fg_color: None,
+                bg_color: None,
+            }),
             Response::Empty(Err(e)) => Err(e),
             r => panic!("Unexpected response {:?}", r),
         }
@@ -108,8 +115,15 @@ impl Console for SdlConsole {
         self.call(Request::Clear(how))
     }
 
+    fn color(&self) -> (Option<u8>, Option<u8>) {
+        (self.fg_color, self.bg_color)
+    }
+
     fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
-        self.call(Request::SetColor(fg, bg))
+        self.call(Request::SetColor(fg, bg))?;
+        self.fg_color = fg;
+        self.bg_color = bg;
+        Ok(())
     }
 
     fn enter_alt(&mut self) -> io::Result<()> {

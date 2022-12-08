@@ -186,6 +186,15 @@ impl Console for MockConsole {
         Ok(())
     }
 
+    fn color(&self) -> (Option<u8>, Option<u8>) {
+        for o in self.captured_out.iter().rev() {
+            if let CapturedOut::SetColor(fg, bg) = o {
+                return (*fg, *bg);
+            }
+        }
+        (None, None)
+    }
+
     fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
         self.captured_out.push(CapturedOut::SetColor(fg, bg));
         Ok(())

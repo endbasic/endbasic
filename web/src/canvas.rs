@@ -152,6 +152,12 @@ pub(crate) struct CanvasConsole {
     /// contents when the cursor moves.
     cursor_backup: Option<ImageData>,
 
+    /// Current foreground color as exposed via `color` and `set_color`.
+    ansi_fg_color: Option<u8>,
+
+    /// Current background color as exposed via `color` and `set_color`.
+    ansi_bg_color: Option<u8>,
+
     /// Current foreground color.  Used for text and graphical rendering.
     fg_color: RGB,
 
@@ -233,6 +239,8 @@ impl CanvasConsole {
             cursor_pos: CharsXY::new(0, 0),
             cursor_visible: true,
             cursor_backup: None,
+            ansi_fg_color: None,
+            ansi_bg_color: None,
             fg_color: ansi_color_to_rgb(DEFAULT_FG_COLOR),
             bg_color: ansi_color_to_rgb(DEFAULT_BG_COLOR),
             alt_backup: None,
@@ -495,8 +503,14 @@ impl Console for CanvasConsole {
         Ok(())
     }
 
+    fn color(&self) -> (Option<u8>, Option<u8>) {
+        (self.ansi_fg_color, self.ansi_bg_color)
+    }
+
     fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
+        self.ansi_fg_color = fg;
         self.fg_color = ansi_color_to_rgb(fg.unwrap_or(DEFAULT_FG_COLOR));
+        self.ansi_bg_color = bg;
         self.bg_color = ansi_color_to_rgb(bg.unwrap_or(DEFAULT_BG_COLOR));
         Ok(())
     }

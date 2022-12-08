@@ -165,6 +165,9 @@ pub trait Console {
     /// Clears the part of the console given by `how`.
     fn clear(&mut self, how: ClearType) -> io::Result<()>;
 
+    /// Gets the console's current foreground and background colors.
+    fn color(&self) -> (Option<u8>, Option<u8>);
+
     /// Sets the console's foreground and background colors to `fg` and `bg`.
     ///
     /// If any of the colors is `None`, the color is left unchanged.
