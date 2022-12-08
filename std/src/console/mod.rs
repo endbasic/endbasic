@@ -168,7 +168,7 @@ pub trait Console {
     /// Sets the console's foreground and background colors to `fg` and `bg`.
     ///
     /// If any of the colors is `None`, the color is left unchanged.
-    fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()>;
+    fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()>;
 
     /// Enters the alternate console.
     // TODO(jmmv): This API leads to misuse as callers can forget to leave the alternate console.
@@ -283,7 +283,7 @@ impl Clearable for ConsoleClearable {
     fn reset_state(&self, _syms: &mut Symbols) {
         let mut console = self.console.borrow_mut();
         let _ = console.leave_alt();
-        let _ = console.color(None, None);
+        let _ = console.set_color(None, None);
         let _ = console.show_cursor();
         let _ = console.set_sync(true);
     }

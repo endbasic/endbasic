@@ -655,8 +655,8 @@ impl Context {
         self.present_canvas()
     }
 
-    /// Handler for a `Request::Color`.
-    fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
+    /// Handler for a `Request::SetColor`.
+    fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
         self.fg_color = match fg {
             Some(fg) => {
                 let rgb = ansi_color_to_rgb(fg);
@@ -1018,7 +1018,7 @@ pub(crate) enum Request {
     Exit,
 
     Clear(ClearType),
-    Color(Option<u8>, Option<u8>),
+    SetColor(Option<u8>, Option<u8>),
     EnterAlt,
     HideCursor,
     LeaveAlt,
@@ -1088,7 +1088,7 @@ pub(crate) fn run(
                     Request::Exit => break,
 
                     Request::Clear(how) => Response::Empty(ctx.clear(how)),
-                    Request::Color(fg, bg) => Response::Empty(ctx.color(fg, bg)),
+                    Request::SetColor(fg, bg) => Response::Empty(ctx.set_color(fg, bg)),
                     Request::EnterAlt => Response::Empty(ctx.enter_alt()),
                     Request::HideCursor => Response::Empty(ctx.hide_cursor()),
                     Request::LeaveAlt => Response::Empty(ctx.leave_alt()),

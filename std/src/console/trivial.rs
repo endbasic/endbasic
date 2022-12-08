@@ -55,7 +55,7 @@ impl Console for TrivialConsole {
         Ok(())
     }
 
-    fn color(&mut self, _fg: Option<u8>, _bg: Option<u8>) -> io::Result<()> {
+    fn set_color(&mut self, _fg: Option<u8>, _bg: Option<u8>) -> io::Result<()> {
         Ok(())
     }
 

@@ -39,8 +39,8 @@ pub enum CapturedOut {
     /// Represents a call to `Console::clear`.
     Clear(ClearType),
 
-    /// Represents a call to `Console::color`.
-    Color(Option<u8>, Option<u8>),
+    /// Represents a call to `Console::set_color`.
+    SetColor(Option<u8>, Option<u8>),
 
     /// Represents a call to `Console::enter_alt`.
     EnterAlt,
@@ -186,8 +186,8 @@ impl Console for MockConsole {
         Ok(())
     }
 
-    fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
-        self.captured_out.push(CapturedOut::Color(fg, bg));
+    fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
+        self.captured_out.push(CapturedOut::SetColor(fg, bg));
         Ok(())
     }
 
@@ -611,7 +611,7 @@ impl<'a> Checker<'a> {
     pub fn expect_clear(mut self) -> Self {
         self.exp_output.append(&mut vec![
             CapturedOut::LeaveAlt,
-            CapturedOut::Color(None, None),
+            CapturedOut::SetColor(None, None),
             CapturedOut::ShowCursor,
             CapturedOut::SetSync(true),
         ]);

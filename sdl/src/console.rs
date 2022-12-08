@@ -108,8 +108,8 @@ impl Console for SdlConsole {
         self.call(Request::Clear(how))
     }
 
-    fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
-        self.call(Request::Color(fg, bg))
+    fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
+        self.call(Request::SetColor(fg, bg))
     }
 
     fn enter_alt(&mut self) -> io::Result<()> {
@@ -396,13 +396,13 @@ mod tests {
 
         test.console().print("Default colors").unwrap();
         test.console().print("").unwrap();
-        test.console().color(Some(14), Some(4)).unwrap();
+        test.console().set_color(Some(14), Some(4)).unwrap();
         test.console().print("Cyan on blue").unwrap();
-        test.console().color(None, Some(1)).unwrap();
+        test.console().set_color(None, Some(1)).unwrap();
         test.console().print("Default on red").unwrap();
-        test.console().color(Some(11), None).unwrap();
+        test.console().set_color(Some(11), None).unwrap();
         test.console().print("Yellow on default").unwrap();
-        test.console().color(None, None).unwrap();
+        test.console().set_color(None, None).unwrap();
         test.console().print("").unwrap();
         test.console().print("Back to default colors").unwrap();
 
@@ -438,7 +438,7 @@ mod tests {
         let mut test = SdlTest::new();
 
         test.console().print("Before clearing the console").unwrap();
-        test.console().color(None, Some(4)).unwrap();
+        test.console().set_color(None, Some(4)).unwrap();
         test.console().clear(ClearType::All).unwrap();
         test.console().print("After clearing the console in blue").unwrap();
 
@@ -647,12 +647,12 @@ mod tests {
         // Draw some stuff that is completely visible.
         // ----
 
-        console.color(Some(15), None).unwrap();
+        console.set_color(Some(15), None).unwrap();
         console.draw_line(xy(10, 50), xy(110, 60)).unwrap();
-        console.color(Some(12), Some(1)).unwrap();
+        console.set_color(Some(12), Some(1)).unwrap();
         console.draw_line(xy(120, 70), xy(20, 60)).unwrap();
 
-        console.color(Some(12), Some(1)).unwrap();
+        console.set_color(Some(12), Some(1)).unwrap();
         // A line with start and end at the same spot should be invisible.
         console.draw_line(xy(200, 200), xy(200, 200)).unwrap();
         // But with a slight variation it should be a pixel.
@@ -661,17 +661,17 @@ mod tests {
         console.draw_line(xy(190, 191), xy(190, 190)).unwrap();
         console.draw_line(xy(191, 190), xy(190, 190)).unwrap();
 
-        console.color(Some(15), None).unwrap();
+        console.set_color(Some(15), None).unwrap();
         console.draw_rect_filled(xy(380, 180), xy(220, 120)).unwrap();
-        console.color(Some(10), None).unwrap();
+        console.set_color(Some(10), None).unwrap();
         console.draw_rect(xy(200, 100), xy(400, 200)).unwrap();
 
-        console.color(Some(14), None).unwrap();
+        console.set_color(Some(14), None).unwrap();
         console.draw_circle_filled(xy(650, 400), 50).unwrap();
-        console.color(Some(9), None).unwrap();
+        console.set_color(Some(9), None).unwrap();
         console.draw_circle(xy(650, 400), 80).unwrap();
 
-        console.color(Some(12), None).unwrap();
+        console.set_color(Some(12), None).unwrap();
         // A circle of radius 1 should be a single pixel.
         console.draw_circle_filled(xy(650, 210), 1).unwrap();
         console.draw_circle(xy(650, 200), 1).unwrap();
@@ -679,7 +679,7 @@ mod tests {
         console.draw_circle_filled(xy(650, 215), 0).unwrap();
         console.draw_circle(xy(650, 205), 0).unwrap();
 
-        console.color(Some(14), None).unwrap();
+        console.set_color(Some(14), None).unwrap();
         for i in 0..8 {
             console.draw_pixel(xy(i * 100, 300)).unwrap();
         }
@@ -688,7 +688,7 @@ mod tests {
         // Draw some stuff that is completely off screen.
         // ----
 
-        console.color(Some(15), None).unwrap();
+        console.set_color(Some(15), None).unwrap();
         console.draw_pixel(xy(-1, 1)).unwrap();
         console.draw_pixel(xy(801, 601)).unwrap();
         console.draw_pixel(xy(-1, 0)).unwrap();
@@ -707,7 +707,7 @@ mod tests {
         // Draw some stuff that is partially visible.
         // ----
 
-        console.color(Some(15), None).unwrap();
+        console.set_color(Some(15), None).unwrap();
         console.draw_line(xy(-1000, 500), xy(100, 520)).unwrap();
         console.draw_rect(xy(-10, 400), xy(10, 450)).unwrap();
         console.draw_rect(xy(790, 410), xy(810, 440)).unwrap();
@@ -715,7 +715,7 @@ mod tests {
         console.draw_circle(xy(800, 300), 50).unwrap();
         console.draw_circle_filled(xy(800, 300), 40).unwrap();
 
-        console.color(None, None).unwrap();
+        console.set_color(None, None).unwrap();
         console.locate(CharsXY { x: 4, y: 22 }).unwrap();
         console.write("Done!").unwrap();
 
