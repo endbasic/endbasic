@@ -1,6 +1,6 @@
 
-    RUN
-
+[38;5;11m    RUN
+[39m
     Runs the stored program.
 
     This issues a CLEAR operation before starting the program to prevent

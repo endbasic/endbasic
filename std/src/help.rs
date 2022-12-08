@@ -15,7 +15,7 @@
 
 //! Interactive help support.
 
-use crate::console::{refill_and_print, Console};
+use crate::console::{refill_and_print, AnsiColor, Console};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
@@ -32,6 +32,12 @@ use std::rc::Rc;
 
 /// Raw text for the language reference.
 const LANG_MD: &str = include_str!("lang.md");
+
+/// Color for titles.
+const TITLE_COLOR: u8 = AnsiColor::BrightYellow as u8;
+
+/// Color for references to other topics.
+const LINK_COLOR: u8 = AnsiColor::BrightCyan as u8;
 
 /// Returns the header for the help summary.
 fn header() -> Vec<String> {
@@ -80,6 +86,8 @@ impl Topic for CallableTopic {
 
     fn describe(&self, console: &mut dyn Console) -> io::Result<()> {
         console.print("")?;
+        let previous = console.color();
+        console.set_color(Some(TITLE_COLOR), previous.1)?;
         if self.metadata.return_type() == VarType::Void {
             if self.metadata.syntax().is_empty() {
                 refill_and_print(console, [self.metadata.name()], "    ")?;
@@ -115,6 +123,7 @@ impl Topic for CallableTopic {
                 )?;
             }
         }
+        console.set_color(previous.0, previous.1)?;
         if !self.metadata.description().count() > 0 {
             console.print("")?;
             refill_and_print(console, self.metadata.description(), "    ")?;
@@ -171,14 +180,28 @@ impl Topic for CategoryTopic {
             .reduce(|a, k| if a > k { a } else { k })
             .expect("Must have at least one item in the index");
 
+        let previous = console.color();
+
+        let mut lines = self.description.lines().peekable();
         console.print("")?;
-        refill_and_print(console, self.description.lines(), "    ")?;
+        console.set_color(Some(TITLE_COLOR), previous.1)?;
+        refill_and_print(console, lines.next(), "    ")?;
+        console.set_color(previous.0, previous.1)?;
+        if lines.peek().is_some() {
+            console.print("")?;
+        }
+        refill_and_print(console, lines, "    ")?;
         console.print("")?;
+
         for (name, blurb) in self.index.iter() {
             let filler = " ".repeat(max_length - name.len());
             // TODO(jmmv): Should use refill_and_print but continuation lines need special handling
             // to be indented properly.
-            console.print(&format!("    >> {}{}    {}", name, filler, blurb))?;
+            console.write("    >> ")?;
+            console.set_color(Some(LINK_COLOR), previous.1)?;
+            console.write(&format!("{}{}", name, filler))?;
+            console.set_color(previous.0, previous.1)?;
+            console.print(&format!("    {}", blurb))?;
         }
         console.print("")?;
         refill_and_print(
@@ -211,8 +234,15 @@ impl Topic for LanguageTopic {
     }
 
     fn describe(&self, console: &mut dyn Console) -> io::Result<()> {
+        let previous = console.color();
+
+        let mut lines = self.text.lines();
+
         console.print("")?;
-        for line in self.text.lines() {
+        console.set_color(Some(TITLE_COLOR), previous.1)?;
+        console.print(&format!("    {}", lines.next().expect("Must have at least one line")))?;
+        console.set_color(previous.0, previous.1)?;
+        for line in lines {
             // TODO(jmmv): Should use refill_and_print but continuation lines need special
             // handling to be indented properly.
             if line.is_empty() {
@@ -405,14 +435,21 @@ equivalent: HELP \"CON\", HELP \"console\", HELP \"Console manipulation\".",
             refill_and_print(&mut *console, [&line], "    ")?;
         }
 
+        let previous = console.color();
+
         console.print("")?;
-        refill_and_print(&mut *console, ["Top-level help topics:"], "    ")?;
+        console.set_color(Some(TITLE_COLOR), previous.1)?;
+        refill_and_print(&mut *console, ["Top-level help topics"], "    ")?;
+        console.set_color(previous.0, previous.1)?;
         console.print("")?;
         for topic in topics.values() {
             if topic.show_in_summary() {
                 // TODO(jmmv): Should use refill_and_print but continuation lines need special
                 // handling to be indented properly.
-                console.print(&format!("    >> {}", topic.title()))?;
+                console.write("    >> ")?;
+                console.set_color(Some(LINK_COLOR), previous.1)?;
+                console.print(topic.title())?;
+                console.set_color(previous.0, previous.1)?;
             }
         }
         console.print("")?;
@@ -652,18 +689,38 @@ This is the first and only topic with just one line.
 
     #[test]
     fn test_help_summarize_symbols() {
-        tester()
-            .add_command(DoNothingCommand::new())
-            .add_function(EmptyFunction::new())
-            .run("HELP")
+        let mut t =
+            tester().add_command(DoNothingCommand::new()).add_function(EmptyFunction::new());
+        t.get_console().borrow_mut().set_color(Some(100), Some(200)).unwrap();
+        t.run("HELP")
+            .expect_output([CapturedOut::SetColor(Some(100), Some(200))])
             .expect_prints(header())
+            .expect_prints([""])
+            .expect_output([
+                CapturedOut::SetColor(Some(TITLE_COLOR), Some(200)),
+                CapturedOut::Print("    Top-level help topics".to_owned()),
+                CapturedOut::SetColor(Some(100), Some(200)),
+            ])
+            .expect_prints([""])
+            .expect_output([
+                CapturedOut::Write("    >> ".to_owned()),
+                CapturedOut::SetColor(Some(LINK_COLOR), Some(200)),
+                CapturedOut::Print("Interpreter".to_owned()),
+                CapturedOut::SetColor(Some(100), Some(200)),
+            ])
+            .expect_output([
+                CapturedOut::Write("    >> ".to_owned()),
+                CapturedOut::SetColor(Some(LINK_COLOR), Some(200)),
+                CapturedOut::Print("Language reference".to_owned()),
+                CapturedOut::SetColor(Some(100), Some(200)),
+            ])
+            .expect_output([
+                CapturedOut::Write("    >> ".to_owned()),
+                CapturedOut::SetColor(Some(LINK_COLOR), Some(200)),
+                CapturedOut::Print("Testing".to_owned()),
+                CapturedOut::SetColor(Some(100), Some(200)),
+            ])
             .expect_prints([
-                "",
-                "    Top-level help topics:",
-                "",
-                "    >> Interpreter",
-                "    >> Language reference",
-                "    >> Testing",
                 "",
                 "    Type HELP followed by the name of a topic for details.",
                 "    Type HELP \"HELP\" for details on how to specify topic names.",
@@ -676,33 +733,51 @@ This is the first and only topic with just one line.
 
     #[test]
     fn test_help_describe_callables_topic() {
-        tester()
-            .add_command(DoNothingCommand::new())
-            .add_function(EmptyFunction::new())
-            .run(r#"help "testing""#)
-            .expect_prints([
-                "",
-                "    Testing",
-                "",
-                "    This is a sample category for testing.",
-                "",
-                "    >> DO_NOTHING    This is the blurb.",
-                "    >> EMPTY$        This is the blurb.",
-                "",
-                "    Type HELP followed by the name of a topic for details.",
-                "",
+        let mut t =
+            tester().add_command(DoNothingCommand::new()).add_function(EmptyFunction::new());
+        t.get_console().borrow_mut().set_color(Some(70), Some(50)).unwrap();
+        t.run(r#"help "testing""#)
+            .expect_output([CapturedOut::SetColor(Some(70), Some(50))])
+            .expect_prints([""])
+            .expect_output([
+                CapturedOut::SetColor(Some(TITLE_COLOR), Some(50)),
+                CapturedOut::Print("    Testing".to_owned()),
+                CapturedOut::SetColor(Some(70), Some(50)),
             ])
+            .expect_prints(["", "    This is a sample category for testing.", ""])
+            .expect_output([
+                CapturedOut::Write("    >> ".to_owned()),
+                CapturedOut::SetColor(Some(LINK_COLOR), Some(50)),
+                CapturedOut::Write("DO_NOTHING".to_owned()),
+                CapturedOut::SetColor(Some(70), Some(50)),
+                CapturedOut::Print("    This is the blurb.".to_owned()),
+            ])
+            .expect_output([
+                CapturedOut::Write("    >> ".to_owned()),
+                CapturedOut::SetColor(Some(LINK_COLOR), Some(50)),
+                CapturedOut::Write("EMPTY$    ".to_owned()),
+                CapturedOut::SetColor(Some(70), Some(50)),
+                CapturedOut::Print("    This is the blurb.".to_owned()),
+            ])
+            .expect_prints(["", "    Type HELP followed by the name of a topic for details.", ""])
             .check();
     }
 
     #[test]
     fn test_help_describe_command() {
-        tester()
-            .add_command(DoNothingCommand::new())
-            .run(r#"help "Do_Nothing""#)
+        let mut t = tester().add_command(DoNothingCommand::new());
+        t.get_console().borrow_mut().set_color(Some(20), Some(21)).unwrap();
+        t.run(r#"help "Do_Nothing""#)
+            .expect_output([CapturedOut::SetColor(Some(20), Some(21))])
+            .expect_prints([""])
+            .expect_output([
+                CapturedOut::SetColor(Some(TITLE_COLOR), Some(21)),
+                CapturedOut::Print(
+                    "    DO_NOTHING this [would] <be|the> syntax \"specification\"".to_owned(),
+                ),
+                CapturedOut::SetColor(Some(20), Some(21)),
+            ])
             .expect_prints([
-                "",
-                "    DO_NOTHING this [would] <be|the> syntax \"specification\"",
                 "",
                 "    This is the blurb.",
                 "",
@@ -715,12 +790,19 @@ This is the first and only topic with just one line.
     }
 
     fn do_help_describe_function_test(name: &str) {
-        tester()
-            .add_function(EmptyFunction::new())
-            .run(format!(r#"help "{}""#, name))
+        let mut t = tester().add_function(EmptyFunction::new());
+        t.get_console().borrow_mut().set_color(Some(30), Some(26)).unwrap();
+        t.run(format!(r#"help "{}""#, name))
+            .expect_output([CapturedOut::SetColor(Some(30), Some(26))])
+            .expect_prints([""])
+            .expect_output([
+                CapturedOut::SetColor(Some(TITLE_COLOR), Some(26)),
+                CapturedOut::Print(
+                    "    EMPTY$(this [would] <be|the> syntax \"specification\")".to_owned(),
+                ),
+                CapturedOut::SetColor(Some(30), Some(26)),
+            ])
             .expect_prints([
-                "",
-                "    EMPTY$(this [would] <be|the> syntax \"specification\")",
                 "",
                 "    This is the blurb.",
                 "",
@@ -747,9 +829,15 @@ This is the first and only topic with just one line.
         tester()
             .add_command(DoNothingCommand::new())
             .run(r#"topic = "Do_Nothing": HELP topic"#)
+            .expect_prints([""])
+            .expect_output([
+                CapturedOut::SetColor(Some(TITLE_COLOR), None),
+                CapturedOut::Print(
+                    "    DO_NOTHING this [would] <be|the> syntax \"specification\"".to_owned(),
+                ),
+                CapturedOut::SetColor(None, None),
+            ])
             .expect_prints([
-                "",
-                "    DO_NOTHING this [would] <be|the> syntax \"specification\"",
                 "",
                 "    This is the blurb.",
                 "",
@@ -764,22 +852,24 @@ This is the first and only topic with just one line.
 
     #[test]
     fn test_help_prefix_search() {
-        fn exp_output(name: &str, is_function: bool) -> Vec<String> {
+        fn exp_output(name: &str, is_function: bool) -> Vec<CapturedOut> {
             let spec = if is_function {
                 format!("    {}(this [would] <be|the> syntax \"specification\")", name)
             } else {
                 format!("    {} this [would] <be|the> syntax \"specification\"", name)
             };
             vec![
-                "".to_owned(),
-                spec,
-                "".to_owned(),
-                "    This is the blurb.".to_owned(),
-                "".to_owned(),
-                "    First paragraph of the extended description.".to_owned(),
-                "".to_owned(),
-                "    Second paragraph of the extended description.".to_owned(),
-                "".to_owned(),
+                CapturedOut::Print("".to_owned()),
+                CapturedOut::SetColor(Some(TITLE_COLOR), None),
+                CapturedOut::Print(spec),
+                CapturedOut::SetColor(None, None),
+                CapturedOut::Print("".to_owned()),
+                CapturedOut::Print("    This is the blurb.".to_owned()),
+                CapturedOut::Print("".to_owned()),
+                CapturedOut::Print("    First paragraph of the extended description.".to_owned()),
+                CapturedOut::Print("".to_owned()),
+                CapturedOut::Print("    Second paragraph of the extended description.".to_owned()),
+                CapturedOut::Print("".to_owned()),
             ]
         }
 
@@ -789,7 +879,7 @@ This is the first and only topic with just one line.
                 .add_function(EmptyFunction::new_with_name("ABC"))
                 .add_function(EmptyFunction::new_with_name("BC"))
                 .run(*cmd)
-                .expect_prints(exp_output("AABC$", true))
+                .expect_output(exp_output("AABC$", true))
                 .check();
         }
 
@@ -799,7 +889,7 @@ This is the first and only topic with just one line.
                 .add_function(EmptyFunction::new_with_name("ABC"))
                 .add_function(EmptyFunction::new_with_name("BC"))
                 .run(*cmd)
-                .expect_prints(exp_output("BC$", true))
+                .expect_output(exp_output("BC$", true))
                 .check();
         }
 
@@ -808,7 +898,7 @@ This is the first and only topic with just one line.
             .add_command(DoNothingCommand::new_with_name("AAAA"))
             .add_command(DoNothingCommand::new_with_name("AAAAA"))
             .run(r#"help "aaaa""#)
-            .expect_prints(exp_output("AAAA", false))
+            .expect_output(exp_output("AAAA", false))
             .check();
 
         tester()

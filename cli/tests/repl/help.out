@@ -5,21 +5,21 @@ Output from HELP:
     Project page at <https://www.endbasic.dev/>
     License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>
 
-    Top-level help topics:
-
-    >> Array functions
-    >> Cloud access
-    >> Console
-    >> Data management
-    >> File system
-    >> Graphics
-    >> Hardware interface
-    >> Interpreter
-    >> Language reference
-    >> Numerical functions
-    >> Stored program
-    >> String and character functions
-
+[38;5;11m    Top-level help topics
+[39m
+    >> [38;5;14mArray functions
+[39m    >> [38;5;14mCloud access
+[39m    >> [38;5;14mConsole
+[39m    >> [38;5;14mData management
+[39m    >> [38;5;14mFile system
+[39m    >> [38;5;14mGraphics
+[39m    >> [38;5;14mHardware interface
+[39m    >> [38;5;14mInterpreter
+[39m    >> [38;5;14mLanguage reference
+[39m    >> [38;5;14mNumerical functions
+[39m    >> [38;5;14mStored program
+[39m    >> [38;5;14mString and character functions
+[39m
     Type HELP followed by the name of a topic for details.
     Type HELP "HELP" for details on how to specify topic names.
     Type LOAD "DEMOS:/TOUR.BAS": RUN for a guided tour.
@@ -27,17 +27,17 @@ Output from HELP:
 
 Output from HELP "ARRAY":
 
-    Array functions
-
-    >> LBOUND%    Returns the lower bound for the given dimension of the array.
-    >> UBOUND%    Returns the upper bound for the given dimension of the array.
+[38;5;11m    Array functions
+[39m
+    >> [38;5;14mLBOUND%[39m    Returns the lower bound for the given dimension of the array.
+    >> [38;5;14mUBOUND%[39m    Returns the upper bound for the given dimension of the array.
 
     Type HELP followed by the name of a topic for details.
 
 Output from HELP "CLOUD":
 
-    Cloud access
-
+[38;5;11m    Cloud access
+[39m
     The EndBASIC service is a cloud service that provides online file
     sharing across users of EndBASIC and the public.
 
@@ -57,17 +57,17 @@ Output from HELP "CLOUD":
     If you have any questions or experience any problems while interacting
     with the cloud service, please contact support@endbasic.dev.
 
-    >> LOGIN     Logs into the user's account.
-    >> LOGOUT    Logs the user out of their account.
-    >> SHARE     Displays or modifies the ACLs of a file.
-    >> SIGNUP    Creates a new user account interactively.
+    >> [38;5;14mLOGIN [39m    Logs into the user's account.
+    >> [38;5;14mLOGOUT[39m    Logs the user out of their account.
+    >> [38;5;14mSHARE [39m    Displays or modifies the ACLs of a file.
+    >> [38;5;14mSIGNUP[39m    Creates a new user account interactively.
 
     Type HELP followed by the name of a topic for details.
 
 Output from HELP "CONSOLE":
 
-    Console
-
+[38;5;11m    Console
+[39m
     The EndBASIC console is the display you are seeing: both the
     interpreter and the effects of all commands happen within the same
     console.  There is no separate output window as other didactical
@@ -93,30 +93,30 @@ Output from HELP "CONSOLE":
     Avoid resizing your terminal or web browser.  If you do resize them,
     however, restart the interpreter.
 
-    >> CLS         Clears the screen.
-    >> COLOR       Sets the foreground and background colors.
-    >> INKEY$      Checks for an available key press and returns it.
-    >> INPUT       Obtains user input from the console.
-    >> LOCATE      Moves the cursor to the given position.
-    >> PRINT       Prints one or more values to the console.
-    >> SCRCOLS%    Returns the number of columns in the text console.
-    >> SCRROWS%    Returns the number of rows in the text console.
+    >> [38;5;14mCLS     [39m    Clears the screen.
+    >> [38;5;14mCOLOR   [39m    Sets the foreground and background colors.
+    >> [38;5;14mINKEY$  [39m    Checks for an available key press and returns it.
+    >> [38;5;14mINPUT   [39m    Obtains user input from the console.
+    >> [38;5;14mLOCATE  [39m    Moves the cursor to the given position.
+    >> [38;5;14mPRINT   [39m    Prints one or more values to the console.
+    >> [38;5;14mSCRCOLS%[39m    Returns the number of columns in the text console.
+    >> [38;5;14mSCRROWS%[39m    Returns the number of rows in the text console.
 
     Type HELP followed by the name of a topic for details.
 
 Output from HELP "DATA":
 
-    Data management
-
-    >> READ       Extracts data values from DATA statements.
-    >> RESTORE    Resets the index of the data element to be returned.
+[38;5;11m    Data management
+[39m
+    >> [38;5;14mREAD   [39m    Extracts data values from DATA statements.
+    >> [38;5;14mRESTORE[39m    Resets the index of the data element to be returned.
 
     Type HELP followed by the name of a topic for details.
 
 Output from HELP "FILE SYSTEM":
 
-    File system
-
+[38;5;11m    File system
+[39m
     The EndBASIC storage subsystem is organized as a collection of drives,
     each identified by a case-insensitive name.  Drives can be backed by a
     multitude of file systems with different behaviors, and their targets
@@ -144,18 +144,18 @@ Output from HELP "FILE SYSTEM":
     See the "Stored program" help topic for information on how to load,
     modify, and save programs.
 
-    >> CD         Changes the current path.
-    >> DIR        Displays the list of files on the current or given path.
-    >> MOUNT      Lists the mounted drives or mounts a new drive.
-    >> PWD        Prints the current working location.
-    >> UNMOUNT    Unmounts the given drive.
+    >> [38;5;14mCD     [39m    Changes the current path.
+    >> [38;5;14mDIR    [39m    Displays the list of files on the current or given path.
+    >> [38;5;14mMOUNT  [39m    Lists the mounted drives or mounts a new drive.
+    >> [38;5;14mPWD    [39m    Prints the current working location.
+    >> [38;5;14mUNMOUNT[39m    Unmounts the given drive.
 
     Type HELP followed by the name of a topic for details.
 
 Output from HELP "GRAPHICS":
 
-    Graphics
-
+[38;5;11m    Graphics
+[39m
     The EndBASIC console overlays text and graphics in the same canvas.
     The consequence of this design choice is that the console has two
     coordinate systems: the character-based system, used by
@@ -163,84 +163,84 @@ Output from HELP "GRAPHICS":
     the commands described in HELP "CONSOLE", and the pixel-based system,
     used by the commands described in this section.
 
-    >> GFX_CIRCLE     Draws a circle of radius r centered at (x,y).
-    >> GFX_CIRCLEF    Draws a filled circle of radius r centered at (x,y).
-    >> GFX_HEIGHT%    Returns the height in pixels of the graphical console.
-    >> GFX_LINE       Draws a line from (x1,y1) to (x2,y2).
-    >> GFX_PIXEL      Draws a pixel at (x,y).
-    >> GFX_RECT       Draws a rectangle from (x1,y1) to (x2,y2).
-    >> GFX_RECTF      Draws a filled rectangle from (x1,y1) to (x2,y2).
-    >> GFX_SYNC       Controls the video syncing flag and/or forces a sync.
-    >> GFX_WIDTH%     Returns the width in pixels of the graphical console.
+    >> [38;5;14mGFX_CIRCLE [39m    Draws a circle of radius r centered at (x,y).
+    >> [38;5;14mGFX_CIRCLEF[39m    Draws a filled circle of radius r centered at (x,y).
+    >> [38;5;14mGFX_HEIGHT%[39m    Returns the height in pixels of the graphical console.
+    >> [38;5;14mGFX_LINE   [39m    Draws a line from (x1,y1) to (x2,y2).
+    >> [38;5;14mGFX_PIXEL  [39m    Draws a pixel at (x,y).
+    >> [38;5;14mGFX_RECT   [39m    Draws a rectangle from (x1,y1) to (x2,y2).
+    >> [38;5;14mGFX_RECTF  [39m    Draws a filled rectangle from (x1,y1) to (x2,y2).
+    >> [38;5;14mGFX_SYNC   [39m    Controls the video syncing flag and/or forces a sync.
+    >> [38;5;14mGFX_WIDTH% [39m    Returns the width in pixels of the graphical console.
 
     Type HELP followed by the name of a topic for details.
 
 Output from HELP "HARDWARE":
 
-    Hardware interface
-
+[38;5;11m    Hardware interface
+[39m
     EndBASIC provides features to manipulate external hardware.  These
     features are currently limited to GPIO interaction on a Raspberry Pi
     and are only available when EndBASIC has explicitly been built with the
     --features=rpi option.  Support for other busses and platforms may come
     later.
 
-    >> GPIO_CLEAR    Resets the GPIO chip or a specific pin.
-    >> GPIO_READ?    Reads the state of a GPIO pin.
-    >> GPIO_SETUP    Configures a GPIO pin for input or output.
-    >> GPIO_WRITE    Sets the state of a GPIO pin.
+    >> [38;5;14mGPIO_CLEAR[39m    Resets the GPIO chip or a specific pin.
+    >> [38;5;14mGPIO_READ?[39m    Reads the state of a GPIO pin.
+    >> [38;5;14mGPIO_SETUP[39m    Configures a GPIO pin for input or output.
+    >> [38;5;14mGPIO_WRITE[39m    Sets the state of a GPIO pin.
 
     Type HELP followed by the name of a topic for details.
 
 Output from HELP "INTERPRETER":
 
-    Interpreter
-
-    >> CLEAR      Restores initial machine state but keeps the stored program.
-    >> ERRMSG$    Returns the last captured error message.
-    >> HELP       Prints interactive help.
-    >> SLEEP      Suspends program execution.
+[38;5;11m    Interpreter
+[39m
+    >> [38;5;14mCLEAR  [39m    Restores initial machine state but keeps the stored program.
+    >> [38;5;14mERRMSG$[39m    Returns the last captured error message.
+    >> [38;5;14mHELP   [39m    Prints interactive help.
+    >> [38;5;14mSLEEP  [39m    Suspends program execution.
 
     Type HELP followed by the name of a topic for details.
 
 Output from HELP "LANG":
 
-    General language topics
-
-    >> Assignments       Assignments and declarations
-    >> Error handling    Error guards
-    >> Expressions       Expressions and operators
-    >> Flow control      Jumps, conditionals, and loops
-    >> Miscellaneous     Things that don't fit anywhere else
-    >> Symbols           Variable, array and function references
+[38;5;11m    General language topics
+[39m
+    >> [38;5;14mAssignments   [39m    Assignments and declarations
+    >> [38;5;14mError handling[39m    Error guards
+    >> [38;5;14mExpressions   [39m    Expressions and operators
+    >> [38;5;14mFlow control  [39m    Jumps, conditionals, and loops
+    >> [38;5;14mMiscellaneous [39m    Things that don't fit anywhere else
+    >> [38;5;14mSymbols       [39m    Variable, array and function references
 
     Type HELP followed by the name of a topic for details.
 
 Output from HELP "NUMERICAL":
 
-    Numerical functions
-
-    >> ATN#         Computes the arc-tangent of a number.
-    >> CINT%        Casts the given numeric expression to an integer (with rounding).
-    >> COS#         Computes the cosine of an angle.
-    >> DEG          Sets degrees mode of calculation.
-    >> INT%         Casts the given numeric expression to an integer (with truncation).
-    >> MAX#         Returns the maximum number out of a set of numbers.
-    >> MIN#         Returns the minimum number out of a set of numbers.
-    >> PI#          Returns the Archimedes' constant.
-    >> RAD          Sets radians mode of calculation.
-    >> RANDOMIZE    Reinitializes the pseudo-random number generator.
-    >> RND#         Returns a random number in the [0..1] range.
-    >> SIN#         Computes the sine of an angle.
-    >> SQR#         Computes the square root of the given number.
-    >> TAN#         Computes the tangent of an angle.
+[38;5;11m    Numerical functions
+[39m
+    >> [38;5;14mATN#     [39m    Computes the arc-tangent of a number.
+    >> [38;5;14mCINT%    [39m    Casts the given numeric expression to an integer (with rounding).
+    >> [38;5;14mCOS#     [39m    Computes the cosine of an angle.
+    >> [38;5;14mDEG      [39m    Sets degrees mode of calculation.
+    >> [38;5;14mINT%     [39m    Casts the given numeric expression to an integer (with truncation).
+    >> [38;5;14mMAX#     [39m    Returns the maximum number out of a set of numbers.
+    >> [38;5;14mMIN#     [39m    Returns the minimum number out of a set of numbers.
+    >> [38;5;14mPI#      [39m    Returns the Archimedes' constant.
+    >> [38;5;14mRAD      [39m    Sets radians mode of calculation.
+    >> [38;5;14mRANDOMIZE[39m    Reinitializes the pseudo-random number generator.
+    >> [38;5;14mRND#     [39m    Returns a random number in the [0..1] range.
+    >> [38;5;14mSIN#     [39m    Computes the sine of an angle.
+    >> [38;5;14mSQR#     [39m    Computes the square root of the given number.
+    >> [38;5;14mTAN#     [39m    Computes the tangent of an angle.
 
     Type HELP followed by the name of a topic for details.
 
 Output from HELP "STORED":
 
-    Stored program
-
+[38;5;11m    Stored program
+[39m
     The EndBASIC interpreter has a piece of read/write memory called the
     "stored program".  This memory serves to maintain the code of a program
     you edit and manipulate right from the interpreter.
@@ -258,43 +258,43 @@ Output from HELP "STORED":
     See the "File system" help topic for information on where the programs
     can be saved and loaded from.
 
-    >> EDIT    Interactively edits the stored program.
-    >> KILL    Deletes the given program.
-    >> LIST    Prints the currently-loaded program.
-    >> LOAD    Loads the given program.
-    >> NEW     Restores initial machine state and creates a new program.
-    >> RUN     Runs the stored program.
-    >> SAVE    Saves the current program in memory to the given filename.
+    >> [38;5;14mEDIT[39m    Interactively edits the stored program.
+    >> [38;5;14mKILL[39m    Deletes the given program.
+    >> [38;5;14mLIST[39m    Prints the currently-loaded program.
+    >> [38;5;14mLOAD[39m    Loads the given program.
+    >> [38;5;14mNEW [39m    Restores initial machine state and creates a new program.
+    >> [38;5;14mRUN [39m    Runs the stored program.
+    >> [38;5;14mSAVE[39m    Saves the current program in memory to the given filename.
 
     Type HELP followed by the name of a topic for details.
 
 Output from HELP "STRING":
 
-    String and character functions
-
-    >> ASC%      Returns the UTF character code of the input character.
-    >> CHR$      Returns the UTF character that corresponds to the given code.
-    >> LEFT$     Returns a given number of characters from the left side of a string.
-    >> LEN%      Returns the length of the string in expr$.
-    >> LTRIM$    Returns a copy of a string with leading whitespace removed.
-    >> MID$      Returns a portion of a string.
-    >> RIGHT$    Returns a given number of characters from the right side of a string.
-    >> RTRIM$    Returns a copy of a string with trailing whitespace removed.
-    >> STR$      Formats a scalar value as a string.
+[38;5;11m    String and character functions
+[39m
+    >> [38;5;14mASC%  [39m    Returns the UTF character code of the input character.
+    >> [38;5;14mCHR$  [39m    Returns the UTF character that corresponds to the given code.
+    >> [38;5;14mLEFT$ [39m    Returns a given number of characters from the left side of a string.
+    >> [38;5;14mLEN%  [39m    Returns the length of the string in expr$.
+    >> [38;5;14mLTRIM$[39m    Returns a copy of a string with leading whitespace removed.
+    >> [38;5;14mMID$  [39m    Returns a portion of a string.
+    >> [38;5;14mRIGHT$[39m    Returns a given number of characters from the right side of a string.
+    >> [38;5;14mRTRIM$[39m    Returns a copy of a string with trailing whitespace removed.
+    >> [38;5;14mSTR$  [39m    Formats a scalar value as a string.
 
     Type HELP followed by the name of a topic for details.
 
 Output from HELP "ASSIGNMENTS":
 
-    Assignments and declarations
-
+[38;5;11m    Assignments and declarations
+[39m
     varref[(dim1[, ..., dimN])] = expr
     DIM varname[(dim1[, ..., dimN])] [AS BOOLEAN|DOUBLE|INTEGER|STRING]
 
 Output from HELP "ERROR HANDLING":
 
-    Error guards
-
+[38;5;11m    Error guards
+[39m
     ON ERROR GOTO 0         Terminate program execution on error.
     ON ERROR GOTO 100       Jump to line 100 on error.
     ON ERROR GOTO @label    Jump to @label on error.
@@ -302,8 +302,8 @@ Output from HELP "ERROR HANDLING":
 
 Output from HELP "EXPRESSIONS":
 
-    Expressions and operators
-
+[38;5;11m    Expressions and operators
+[39m
     a + b      a - b       a * b     a / b      a MOD b    a ^ b     -a
     a AND b    NOT a       a OR b    a XOR b    (logical and bitwise)
     a = b      a <> b      a < b     a <= b     a > b      a >= b
@@ -312,8 +312,8 @@ Output from HELP "EXPRESSIONS":
 
 Output from HELP "FLOW CONTROL":
 
-    Jumps, conditionals, and loops
-
+[38;5;11m    Jumps, conditionals, and loops
+[39m
     10 GOTO 10: @label GOTO @label
     10 RETURN: GOSUB 10: @label RETURN: GOSUB @label
     DO [UNTIL|WHILE expr?]: ...: [EXIT DO]: ...: LOOP
@@ -328,8 +328,8 @@ Output from HELP "FLOW CONTROL":
 
 Output from HELP "MISCELLANEOUS":
 
-    Things that don't fit anywhere else
-
+[38;5;11m    Things that don't fit anywhere else
+[39m
     st1: st2     Separates statements (same as a newline).
     END [code%]  Terminates the program.
     REM text     Comment until end of line.
@@ -341,8 +341,8 @@ Output from HELP "MISCELLANEOUS":
 
 Output from HELP "SYMBOLS":
 
-    Variable, array and function references
-
+[38;5;11m    Variable, array and function references
+[39m
     name?    Boolean (TRUE and FALSE).
     name#    Floating point (double).
     name%    Integer (32 bits).
@@ -351,14 +351,14 @@ Output from HELP "SYMBOLS":
 
 Output from HELP "CD":
 
-    CD path$
-
+[38;5;11m    CD path$
+[39m
     Changes the current path.
 
 Output from HELP "CLEAR":
 
-    CLEAR
-
+[38;5;11m    CLEAR
+[39m
     Restores initial machine state but keeps the stored program.
 
     This command resets the machine to a semi-pristine state by clearing
@@ -371,14 +371,14 @@ Output from HELP "CLEAR":
 
 Output from HELP "CLS":
 
-    CLS
-
+[38;5;11m    CLS
+[39m
     Clears the screen.
 
 Output from HELP "COLOR":
 
-    COLOR [fg%][, [bg%]]
-
+[38;5;11m    COLOR [fg%][, [bg%]]
+[39m
     Sets the foreground and background colors.
 
     Color numbers are given as ANSI numbers and can be between 0 and 255.
@@ -389,8 +389,8 @@ Output from HELP "COLOR":
 
 Output from HELP "DEG":
 
-    DEG
-
+[38;5;11m    DEG
+[39m
     Sets degrees mode of calculation.
 
     The default condition for the trigonometric functions is to use
@@ -399,20 +399,20 @@ Output from HELP "DEG":
 
 Output from HELP "DIR":
 
-    DIR [path$]
-
+[38;5;11m    DIR [path$]
+[39m
     Displays the list of files on the current or given path.
 
 Output from HELP "EDIT":
 
-    EDIT
-
+[38;5;11m    EDIT
+[39m
     Interactively edits the stored program.
 
 Output from HELP "GFX_CIRCLE":
 
-    GFX_CIRCLE x%, y%, r%
-
+[38;5;11m    GFX_CIRCLE x%, y%, r%
+[39m
     Draws a circle of radius r centered at (x,y).
 
     The outline of the circle is drawn using the foreground color as
@@ -420,8 +420,8 @@ Output from HELP "GFX_CIRCLE":
 
 Output from HELP "GFX_CIRCLEF":
 
-    GFX_CIRCLEF x%, y%, r%
-
+[38;5;11m    GFX_CIRCLEF x%, y%, r%
+[39m
     Draws a filled circle of radius r centered at (x,y).
 
     The outline and area of the circle are drawn using the foreground color
@@ -429,24 +429,24 @@ Output from HELP "GFX_CIRCLEF":
 
 Output from HELP "GFX_LINE":
 
-    GFX_LINE x1%, y1%, x2%, y2%
-
+[38;5;11m    GFX_LINE x1%, y1%, x2%, y2%
+[39m
     Draws a line from (x1,y1) to (x2,y2).
 
     The line is drawn using the foreground color as selected by COLOR.
 
 Output from HELP "GFX_PIXEL":
 
-    GFX_PIXEL x%, y%
-
+[38;5;11m    GFX_PIXEL x%, y%
+[39m
     Draws a pixel at (x,y).
 
     The pixel is drawn using the foreground color as selected by COLOR.
 
 Output from HELP "GFX_RECT":
 
-    GFX_RECT x1%, y1%, x2%, y2%
-
+[38;5;11m    GFX_RECT x1%, y1%, x2%, y2%
+[39m
     Draws a rectangle from (x1,y1) to (x2,y2).
 
     The outline of the rectangle is drawn using the foreground color as
@@ -454,8 +454,8 @@ Output from HELP "GFX_RECT":
 
 Output from HELP "GFX_RECTF":
 
-    GFX_RECTF x1%, y1%, x2%, y2%
-
+[38;5;11m    GFX_RECTF x1%, y1%, x2%, y2%
+[39m
     Draws a filled rectangle from (x1,y1) to (x2,y2).
 
     The outline and area of the rectangle are drawn using the foreground
@@ -463,8 +463,8 @@ Output from HELP "GFX_RECTF":
 
 Output from HELP "GFX_SYNC":
 
-    GFX_SYNC [enabled?]
-
+[38;5;11m    GFX_SYNC [enabled?]
+[39m
     Controls the video syncing flag and/or forces a sync.
 
     With no arguments, this command triggers a video sync without updating
@@ -491,8 +491,8 @@ Output from HELP "GFX_SYNC":
 
 Output from HELP "GPIO_CLEAR":
 
-    GPIO_CLEAR [pin%]
-
+[38;5;11m    GPIO_CLEAR [pin%]
+[39m
     Resets the GPIO chip or a specific pin.
 
     If no pin% is specified, resets the state of all GPIO pins.  If a pin%
@@ -501,8 +501,8 @@ Output from HELP "GPIO_CLEAR":
 
 Output from HELP "GPIO_SETUP":
 
-    GPIO_SETUP pin%, mode$
-
+[38;5;11m    GPIO_SETUP pin%, mode$
+[39m
     Configures a GPIO pin for input or output.
 
     Before a GPIO pin can be used for reads or writes, it must be
@@ -521,8 +521,8 @@ Output from HELP "GPIO_SETUP":
 
 Output from HELP "GPIO_WRITE":
 
-    GPIO_WRITE pin%, value?
-
+[38;5;11m    GPIO_WRITE pin%, value?
+[39m
     Sets the state of a GPIO pin.
 
     A FALSE value? sets the pin to low, and a TRUE value? sets the pin to
@@ -530,8 +530,8 @@ Output from HELP "GPIO_WRITE":
 
 Output from HELP "HELP":
 
-    HELP [topic$]
-
+[38;5;11m    HELP [topic$]
+[39m
     Prints interactive help.
 
     Without arguments, shows a summary of all available top-level help
@@ -547,8 +547,8 @@ Output from HELP "HELP":
 
 Output from HELP "INPUT":
 
-    INPUT ["prompt" <;|,>] variableref
-
+[38;5;11m    INPUT ["prompt" <;|,>] variableref
+[39m
     Obtains user input from the console.
 
     The first expression to this function must be empty or evaluate to a
@@ -561,8 +561,8 @@ Output from HELP "INPUT":
 
 Output from HELP "KILL":
 
-    KILL filename$
-
+[38;5;11m    KILL filename$
+[39m
     Deletes the given program.
 
     The filename must be a string and must be a valid EndBASIC path.  The
@@ -572,14 +572,14 @@ Output from HELP "KILL":
 
 Output from HELP "LIST":
 
-    LIST
-
+[38;5;11m    LIST
+[39m
     Prints the currently-loaded program.
 
 Output from HELP "LOAD":
 
-    LOAD filename$
-
+[38;5;11m    LOAD filename$
+[39m
     Loads the given program.
 
     The filename must be a string and must be a valid EndBASIC path.  The
@@ -592,14 +592,14 @@ Output from HELP "LOAD":
 
 Output from HELP "LOCATE":
 
-    LOCATE column%, row%
-
+[38;5;11m    LOCATE column%, row%
+[39m
     Moves the cursor to the given position.
 
 Output from HELP "LOGIN":
 
-    LOGIN username$[, password$]
-
+[38;5;11m    LOGIN username$[, password$]
+[39m
     Logs into the user's account.
 
     On a successful login, this mounts your personal drive under the
@@ -611,8 +611,8 @@ Output from HELP "LOGIN":
 
 Output from HELP "LOGOUT":
 
-    LOGOUT
-
+[38;5;11m    LOGOUT
+[39m
     Logs the user out of their account.
 
     Unmounts the CLOUD drive that was mounted by the LOGIN command.  As a
@@ -621,8 +621,8 @@ Output from HELP "LOGOUT":
 
 Output from HELP "MOUNT":
 
-    MOUNT [target$ AS drive_name$]
-
+[38;5;11m    MOUNT [target$ AS drive_name$]
+[39m
     Lists the mounted drives or mounts a new drive.
 
     With no arguments, prints a list of mounted drives and their targets.
@@ -633,8 +633,8 @@ Output from HELP "MOUNT":
 
 Output from HELP "NEW":
 
-    NEW
-
+[38;5;11m    NEW
+[39m
     Restores initial machine state and creates a new program.
 
     This command resets the machine to a pristine state by clearing all
@@ -648,8 +648,8 @@ Output from HELP "NEW":
 
 Output from HELP "PRINT":
 
-    PRINT [expr1 [<;|,> [.. exprN]]]
-
+[38;5;11m    PRINT [expr1 [<;|,> [.. exprN]]]
+[39m
     Prints one or more values to the console.
 
     The expressions given as arguments are all evaluated and converted to
@@ -671,8 +671,8 @@ Output from HELP "PRINT":
 
 Output from HELP "PWD":
 
-    PWD
-
+[38;5;11m    PWD
+[39m
     Prints the current working location.
 
     If the EndBASIC path representing the current location is backed by a
@@ -681,8 +681,8 @@ Output from HELP "PWD":
 
 Output from HELP "RAD":
 
-    RAD
-
+[38;5;11m    RAD
+[39m
     Sets radians mode of calculation.
 
     The default condition for the trigonometric functions is to use radians
@@ -691,8 +691,8 @@ Output from HELP "RAD":
 
 Output from HELP "RANDOMIZE":
 
-    RANDOMIZE [seed%]
-
+[38;5;11m    RANDOMIZE [seed%]
+[39m
     Reinitializes the pseudo-random number generator.
 
     If no seed is given, uses system entropy to create a new sequence of
@@ -702,8 +702,8 @@ Output from HELP "RANDOMIZE":
 
 Output from HELP "READ":
 
-    READ vref1 [, .., vrefN]
-
+[38;5;11m    READ vref1 [, .., vrefN]
+[39m
     Extracts data values from DATA statements.
 
     DATA statements can appear anywhere in the program and they register
@@ -727,8 +727,8 @@ Output from HELP "READ":
 
 Output from HELP "RESTORE":
 
-    RESTORE
-
+[38;5;11m    RESTORE
+[39m
     Resets the index of the data element to be returned.
 
     This allows READ to re-return the same elements that were previously
@@ -736,8 +736,8 @@ Output from HELP "RESTORE":
 
 Output from HELP "RUN":
 
-    RUN
-
+[38;5;11m    RUN
+[39m
     Runs the stored program.
 
     This issues a CLEAR operation before starting the program to prevent
@@ -745,8 +745,8 @@ Output from HELP "RUN":
 
 Output from HELP "SAVE":
 
-    SAVE [filename$]
-
+[38;5;11m    SAVE [filename$]
+[39m
     Saves the current program in memory to the given filename.
 
     The filename must be a string and must be a valid EndBASIC path.  The
@@ -759,8 +759,8 @@ Output from HELP "SAVE":
 
 Output from HELP "SHARE":
 
-    SHARE filename$[, acl1$, .., aclN$]
-
+[38;5;11m    SHARE filename$[, acl1$, .., aclN$]
+[39m
     Displays or modifies the ACLs of a file.
 
     If given only a filename$, this command prints out the ACLs of the
@@ -781,8 +781,8 @@ Output from HELP "SHARE":
 
 Output from HELP "SIGNUP":
 
-    SIGNUP
-
+[38;5;11m    SIGNUP
+[39m
     Creates a new user account interactively.
 
     This command will ask you for your personal information to create an
@@ -791,8 +791,8 @@ Output from HELP "SIGNUP":
 
 Output from HELP "SLEEP":
 
-    SLEEP seconds<%|#>
-
+[38;5;11m    SLEEP seconds<%|#>
+[39m
     Suspends program execution.
 
     Pauses program execution for the given number of seconds, which can be
@@ -801,16 +801,16 @@ Output from HELP "SLEEP":
 
 Output from HELP "UNMOUNT":
 
-    UNMOUNT drive_name$
-
+[38;5;11m    UNMOUNT drive_name$
+[39m
     Unmounts the given drive.
 
     Drive names are specified without a colon at the end.
 
 Output from HELP "ASC":
 
-    ASC%(char$)
-
+[38;5;11m    ASC%(char$)
+[39m
     Returns the UTF character code of the input character.
 
     The input char$ argument is a string that must be 1-character long.
@@ -822,8 +822,8 @@ Output from HELP "ASC":
 
 Output from HELP "ATN":
 
-    ATN#(n<%|#>)
-
+[38;5;11m    ATN#(n<%|#>)
+[39m
     Computes the arc-tangent of a number.
 
     The resulting angle is measured in degrees or radians depending on the
@@ -831,16 +831,16 @@ Output from HELP "ATN":
 
 Output from HELP "CHR":
 
-    CHR$(code%)
-
+[38;5;11m    CHR$(code%)
+[39m
     Returns the UTF character that corresponds to the given code.
 
     See ASC%() for the inverse of this function.
 
 Output from HELP "CINT":
 
-    CINT%(expr<%|#>)
-
+[38;5;11m    CINT%(expr<%|#>)
+[39m
     Casts the given numeric expression to an integer (with rounding).
 
     When casting a double value to an integer, the double value is first
@@ -849,8 +849,8 @@ Output from HELP "CINT":
 
 Output from HELP "COS":
 
-    COS#(angle<%|#>)
-
+[38;5;11m    COS#(angle<%|#>)
+[39m
     Computes the cosine of an angle.
 
     The input angle% or angle# is measured in degrees or radians depending
@@ -858,8 +858,8 @@ Output from HELP "COS":
 
 Output from HELP "ERRMSG":
 
-    ERRMSG$
-
+[38;5;11m    ERRMSG$
+[39m
     Returns the last captured error message.
 
     When used in combination of ON ERROR to set an error handler, this
@@ -869,24 +869,24 @@ Output from HELP "ERRMSG":
 
 Output from HELP "GFX_HEIGHT":
 
-    GFX_HEIGHT%
-
+[38;5;11m    GFX_HEIGHT%
+[39m
     Returns the height in pixels of the graphical console.
 
     See GFX_WIDTH to query the other dimension.
 
 Output from HELP "GFX_WIDTH":
 
-    GFX_WIDTH%
-
+[38;5;11m    GFX_WIDTH%
+[39m
     Returns the width in pixels of the graphical console.
 
     See GFX_HEIGHT to query the other dimension.
 
 Output from HELP "GPIO_READ":
 
-    GPIO_READ?(pin%)
-
+[38;5;11m    GPIO_READ?(pin%)
+[39m
     Reads the state of a GPIO pin.
 
     Returns FALSE to represent a low value, and TRUE to represent a high
@@ -894,8 +894,8 @@ Output from HELP "GPIO_READ":
 
 Output from HELP "INKEY":
 
-    INKEY$
-
+[38;5;11m    INKEY$
+[39m
     Checks for an available key press and returns it.
 
     If a key press is available to be read, returns its name.  Otherwise,
@@ -919,8 +919,8 @@ Output from HELP "INKEY":
 
 Output from HELP "INT%":
 
-    INT%(expr<%|#>)
-
+[38;5;11m    INT%(expr<%|#>)
+[39m
     Casts the given numeric expression to an integer (with truncation).
 
     When casting a double value to an integer, the double value is first
@@ -931,8 +931,8 @@ Output from HELP "INT%":
 
 Output from HELP "LBOUND":
 
-    LBOUND%(array[, dimension%])
-
+[38;5;11m    LBOUND%(array[, dimension%])
+[39m
     Returns the lower bound for the given dimension of the array.
 
     The lower bound is the smallest available subscript that can be
@@ -943,8 +943,8 @@ Output from HELP "LBOUND":
 
 Output from HELP "LEFT":
 
-    LEFT$(expr$, n%)
-
+[38;5;11m    LEFT$(expr$, n%)
+[39m
     Returns a given number of characters from the left side of a string.
 
     If n% is 0, returns an empty string.
@@ -954,26 +954,26 @@ Output from HELP "LEFT":
 
 Output from HELP "LEN":
 
-    LEN%(expr$)
-
+[38;5;11m    LEN%(expr$)
+[39m
     Returns the length of the string in expr$.
 
 Output from HELP "LTRIM":
 
-    LTRIM$(expr$)
-
+[38;5;11m    LTRIM$(expr$)
+[39m
     Returns a copy of a string with leading whitespace removed.
 
 Output from HELP "MAX":
 
-    MAX#(expr<%|#>[, .., expr<%|#>])
-
+[38;5;11m    MAX#(expr<%|#>[, .., expr<%|#>])
+[39m
     Returns the maximum number out of a set of numbers.
 
 Output from HELP "MID":
 
-    MID$(expr$, start%[, length%])
-
+[38;5;11m    MID$(expr$, start%[, length%])
+[39m
     Returns a portion of a string.
 
     start% indicates the starting position of the substring to extract and
@@ -986,20 +986,20 @@ Output from HELP "MID":
 
 Output from HELP "MIN":
 
-    MIN#(expr<%|#>[, .., expr<%|#>])
-
+[38;5;11m    MIN#(expr<%|#>[, .., expr<%|#>])
+[39m
     Returns the minimum number out of a set of numbers.
 
 Output from HELP "PI":
 
-    PI#
-
+[38;5;11m    PI#
+[39m
     Returns the Archimedes' constant.
 
 Output from HELP "RIGHT":
 
-    RIGHT$(expr$, n%)
-
+[38;5;11m    RIGHT$(expr$, n%)
+[39m
     Returns a given number of characters from the right side of a string.
 
     If n% is 0, returns an empty string.
@@ -1009,8 +1009,8 @@ Output from HELP "RIGHT":
 
 Output from HELP "RND":
 
-    RND#(n%)
-
+[38;5;11m    RND#(n%)
+[39m
     Returns a random number in the [0..1] range.
 
     If n% is zero, returns the previously generated random number.  If n%
@@ -1024,30 +1024,30 @@ Output from HELP "RND":
 
 Output from HELP "RTRIM":
 
-    RTRIM$(expr$)
-
+[38;5;11m    RTRIM$(expr$)
+[39m
     Returns a copy of a string with trailing whitespace removed.
 
 Output from HELP "SCRCOLS":
 
-    SCRCOLS%
-
+[38;5;11m    SCRCOLS%
+[39m
     Returns the number of columns in the text console.
 
     See SCRROWS to query the other dimension.
 
 Output from HELP "SCRROWS":
 
-    SCRROWS%
-
+[38;5;11m    SCRROWS%
+[39m
     Returns the number of rows in the text console.
 
     See SCRCOLS to query the other dimension.
 
 Output from HELP "SIN":
 
-    SIN#(angle<%|#>)
-
+[38;5;11m    SIN#(angle<%|#>)
+[39m
     Computes the sine of an angle.
 
     The input angle% or angle# is measured in degrees or radians depending
@@ -1055,14 +1055,14 @@ Output from HELP "SIN":
 
 Output from HELP "SQR":
 
-    SQR#(num<%|#>)
-
+[38;5;11m    SQR#(num<%|#>)
+[39m
     Computes the square root of the given number.
 
 Output from HELP "STR$":
 
-    STR$(expr)
-
+[38;5;11m    STR$(expr)
+[39m
     Formats a scalar value as a string.
 
     If expr evaluates to a string, this returns the string unmodified.
@@ -1078,8 +1078,8 @@ Output from HELP "STR$":
 
 Output from HELP "TAN":
 
-    TAN#(angle<%|#>)
-
+[38;5;11m    TAN#(angle<%|#>)
+[39m
     Computes the tangent of an angle.
 
     The input angle% or angle# is measured in degrees or radians depending
@@ -1087,8 +1087,8 @@ Output from HELP "TAN":
 
 Output from HELP "UBOUND":
 
-    UBOUND%(array[, dimension%])
-
+[38;5;11m    UBOUND%(array[, dimension%])
+[39m
     Returns the upper bound for the given dimension of the array.
 
     The upper bound is the largest available subscript that can be provided
