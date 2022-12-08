@@ -494,7 +494,7 @@ impl Console for CanvasConsole {
         Ok(())
     }
 
-    fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
+    fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
         self.fg_color = match fg {
             Some(fg) => ansi_color_to_rgb(fg),
             None => DEFAULT_FG_COLOR,

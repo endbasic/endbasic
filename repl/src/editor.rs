@@ -138,7 +138,7 @@ impl Editor {
         status.truncate(width);
 
         console.locate(CharsXY::new(0, console_size.y - 1))?;
-        console.color(STATUS_COLOR.0, STATUS_COLOR.1)?;
+        console.set_color(STATUS_COLOR.0, STATUS_COLOR.1)?;
         console.write(&status)?;
         Ok(())
     }
@@ -149,10 +149,10 @@ impl Editor {
     /// after calling this function, and the caller should also hide the cursor before calling this
     /// function.
     fn refresh(&self, console: &mut dyn Console, console_size: CharsXY) -> io::Result<()> {
-        console.color(TEXT_COLOR.0, TEXT_COLOR.1)?;
+        console.set_color(TEXT_COLOR.0, TEXT_COLOR.1)?;
         console.clear(ClearType::All)?;
         self.refresh_status(console, console_size)?;
-        console.color(TEXT_COLOR.0, TEXT_COLOR.1)?;
+        console.set_color(TEXT_COLOR.0, TEXT_COLOR.1)?;
         console.locate(CharsXY::default())?;
 
         let mut row = self.viewport_pos.line;
@@ -240,7 +240,7 @@ impl Editor {
                 need_refresh = false;
             } else {
                 self.refresh_status(console, console_size)?;
-                console.color(TEXT_COLOR.0, TEXT_COLOR.1)?;
+                console.set_color(TEXT_COLOR.0, TEXT_COLOR.1)?;
             }
             let cursor_pos = {
                 let x = u16::try_from(self.file_pos.col - self.viewport_pos.col)
@@ -502,7 +502,7 @@ mod tests {
             let column = file_pos.col + 1;
 
             self.output.push(CapturedOut::Locate(yx(self.console_size.y - 1, 0)));
-            self.output.push(CapturedOut::Color(STATUS_COLOR.0, STATUS_COLOR.1));
+            self.output.push(CapturedOut::SetColor(STATUS_COLOR.0, STATUS_COLOR.1));
             let dirty_marker = if self.dirty { "*" } else { "" };
             let details =
                 &format!("| {}{} | Ln {}, Col {} ", TEST_FILENAME, dirty_marker, row, column);
@@ -520,7 +520,7 @@ mod tests {
         fn quick_refresh(mut self, file_pos: FilePos, cursor: CharsXY) -> Self {
             self.output.push(CapturedOut::HideCursor);
             self = self.refresh_status(file_pos);
-            self.output.push(CapturedOut::Color(TEXT_COLOR.0, TEXT_COLOR.1));
+            self.output.push(CapturedOut::SetColor(TEXT_COLOR.0, TEXT_COLOR.1));
             self.output.push(CapturedOut::Locate(cursor));
             self.output.push(CapturedOut::ShowCursor);
             self
@@ -531,10 +531,10 @@ mod tests {
         /// in `previous`; and the `cursor` is placed at the given location.
         fn refresh(mut self, file_pos: FilePos, previous: &[&str], cursor: CharsXY) -> Self {
             self.output.push(CapturedOut::HideCursor);
-            self.output.push(CapturedOut::Color(TEXT_COLOR.0, TEXT_COLOR.1));
+            self.output.push(CapturedOut::SetColor(TEXT_COLOR.0, TEXT_COLOR.1));
             self.output.push(CapturedOut::Clear(ClearType::All));
             self = self.refresh_status(file_pos);
-            self.output.push(CapturedOut::Color(TEXT_COLOR.0, TEXT_COLOR.1));
+            self.output.push(CapturedOut::SetColor(TEXT_COLOR.0, TEXT_COLOR.1));
             self.output.push(CapturedOut::Locate(yx(0, 0)));
             for line in previous {
                 self.output.push(CapturedOut::Print(line.to_string()));

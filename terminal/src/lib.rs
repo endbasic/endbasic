@@ -241,7 +241,7 @@ impl Console for TerminalConsole {
         self.maybe_flush(stdout)
     }
 
-    fn color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
+    fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
         if fg == self.fg_color && bg == self.bg_color {
             return Ok(());
         }

@@ -154,7 +154,7 @@ impl Command for ColorCommand {
         let fg = get_color(fg_expr, machine).await?;
         let bg = get_color(bg_expr, machine).await?;
 
-        self.console.borrow_mut().color(fg, bg)?;
+        self.console.borrow_mut().set_color(fg, bg)?;
         Ok(())
     }
 }
@@ -601,14 +601,16 @@ mod tests {
         fn t() -> Tester {
             Tester::default()
         }
-        t().run("COLOR").expect_output([CapturedOut::Color(None, None)]).check();
-        t().run("COLOR ,").expect_output([CapturedOut::Color(None, None)]).check();
-        t().run("COLOR 1").expect_output([CapturedOut::Color(Some(1), None)]).check();
-        t().run("COLOR 1,").expect_output([CapturedOut::Color(Some(1), None)]).check();
-        t().run("COLOR , 1").expect_output([CapturedOut::Color(None, Some(1))]).check();
-        t().run("COLOR 10, 5").expect_output([CapturedOut::Color(Some(10), Some(5))]).check();
-        t().run("COLOR 0, 0").expect_output([CapturedOut::Color(Some(0), Some(0))]).check();
-        t().run("COLOR 255, 255").expect_output([CapturedOut::Color(Some(255), Some(255))]).check();
+        t().run("COLOR").expect_output([CapturedOut::SetColor(None, None)]).check();
+        t().run("COLOR ,").expect_output([CapturedOut::SetColor(None, None)]).check();
+        t().run("COLOR 1").expect_output([CapturedOut::SetColor(Some(1), None)]).check();
+        t().run("COLOR 1,").expect_output([CapturedOut::SetColor(Some(1), None)]).check();
+        t().run("COLOR , 1").expect_output([CapturedOut::SetColor(None, Some(1))]).check();
+        t().run("COLOR 10, 5").expect_output([CapturedOut::SetColor(Some(10), Some(5))]).check();
+        t().run("COLOR 0, 0").expect_output([CapturedOut::SetColor(Some(0), Some(0))]).check();
+        t().run("COLOR 255, 255")
+            .expect_output([CapturedOut::SetColor(Some(255), Some(255))])
+            .check();
     }
 
     #[test]
