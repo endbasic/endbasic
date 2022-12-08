@@ -30,55 +30,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::rc::Rc;
 
-/// Cheat-sheet for the language syntax.
-const LANG_REFERENCE: &str = r"
-    Symbols (variable, array and function references):
-        name?    Boolean (TRUE and FALSE).
-        name#    Floating point (double).
-        name%    Integer (32 bits).
-        name$    String.
-        name     Type determined by value or definition.
-
-    Assignments and declarations:
-        varref[(dim1[, ..., dimN])] = expr
-        DIM varname[(dim1[, ..., dimN])] [AS BOOLEAN|DOUBLE|INTEGER|STRING]
-
-    Expressions:
-        a + b      a - b       a * b     a / b      a MOD b    a ^ b     -a
-        a AND b    NOT a       a OR b    a XOR b    (logical and bitwise)
-        a = b      a <> b      a < b     a <= b     a > b      a >= b
-        (a)        varref
-        arrayref(s1[, ..., sN])          funcref(a1[, ..., aN])
-
-    Flow control:
-        10 GOTO 10: @label GOTO @label
-        10 RETURN: GOSUB 10: @label RETURN: GOSUB @label
-        DO [UNTIL|WHILE expr?]: ...: [EXIT DO]: ...: LOOP
-        DO: ...: [EXIT DO]: ...: LOOP [UNTIL|WHILE expr?]
-        FOR varref = expr<%|#> TO expr<%|#> [STEP num]: ...: NEXT
-        IF expr? THEN ... [ELSE ...]
-        IF expr? THEN: ...: ELSEIF expr? THEN: ...: ELSE: ...: END IF
-        SELECT CASE expr:
-            [CASE <expr|IS =|<>|<|<=|>|>= expr|expr TO expr>[, ...]: ...:]*
-            [CASE ELSE: ...:] END SELECT
-        WHILE expr?: ...: WEND
-
-    Error handling:
-        ON ERROR GOTO 0         Terminate program execution on error.
-        ON ERROR GOTO 100       Jump to line 100 on error.
-        ON ERROR GOTO @label    Jump to @label on error.
-        ON ERROR RESUME NEXT    Skip to the next statement on error.
-
-    Misc:
-        st1: st2     Separates statements (same as a newline).
-        END [code%]  Terminates the program.
-        REM text     Comment until end of line.
-        ' text       Comment until end of line.
-        ,            Long separator for arguments to builtin call.
-        ;            Short separator for arguments to builtin call.
-        DATA a, b    Registers literal primitive values for later reads.
-        &x_5fd1      Integer literals in base syntax (can be b, d, o, x).
-";
+/// Raw text for the language reference.
+const LANG_MD: &str = include_str!("lang.md");
 
 /// Returns the header for the help summary.
 fn header() -> Vec<String> {
@@ -230,7 +183,7 @@ impl Topic for CategoryTopic {
         console.print("")?;
         refill_and_print(
             console,
-            ["Type HELP followed by the name of a symbol for details."],
+            ["Type HELP followed by the name of a topic for details."],
             "    ",
         )?;
         console.print("")?;
@@ -238,30 +191,85 @@ impl Topic for CategoryTopic {
     }
 }
 
-/// A help topic to describe the language's grammar.
-struct LanguageTopic {}
+/// A help topic to describe a non-callable help topic.
+struct LanguageTopic {
+    name: &'static str,
+    text: &'static str,
+}
 
 impl Topic for LanguageTopic {
     fn name(&self) -> &str {
-        "Language reference"
+        self.name
     }
 
     fn title(&self) -> &str {
-        "Language reference"
+        self.text.lines().next().unwrap()
     }
 
     fn show_in_summary(&self) -> bool {
-        true
+        false
     }
 
     fn describe(&self, console: &mut dyn Console) -> io::Result<()> {
-        for line in LANG_REFERENCE.lines() {
-            // Print line by line to honor any possible differences in line feeds.
-            console.print(line)?;
+        console.print("")?;
+        for line in self.text.lines() {
+            // TODO(jmmv): Should use refill_and_print but continuation lines need special
+            // handling to be indented properly.
+            if line.is_empty() {
+                console.print("")?;
+            } else {
+                console.print(&format!("    {}", line))?;
+            }
         }
         console.print("")?;
         Ok(())
     }
+}
+
+/// Parses the `lang.md` file and extracts a mapping of language reference topics to their
+/// descriptions.
+///
+/// Note that, even if the input looks like Markdown, we do *not* implement a Markdown parser here.
+/// The structure of the file is strict and well-known in advance, so this will panic if there are
+/// problems in the input data.
+fn parse_lang_reference(lang_md: &'static str) -> Vec<(&'static str, &'static str)> {
+    let mut topics = vec![];
+
+    // Cope with Windows checkouts.  It's tempting to make this a build-time conditional on the OS
+    // name, but we don't know how the files are checked out.  Assume CRLF delimiters if we see at
+    // least one of them.
+    let line_end;
+    let section_start;
+    let body_start;
+    if lang_md.contains("\r\n") {
+        line_end = "\r\n";
+        section_start = "\r\n\r\n# ";
+        body_start = "\r\n\r\n";
+    } else {
+        line_end = "\n";
+        section_start = "\n\n# ";
+        body_start = "\n\n";
+    }
+
+    for (start, _match) in lang_md.match_indices(section_start) {
+        let section = &lang_md[start + section_start.len()..];
+
+        let title_end = section.find(body_start).expect("Hardcoded text must be valid");
+        let title = &section[..title_end];
+        let section = &section[title_end + body_start.len()..];
+
+        let end = section.find(section_start).unwrap_or_else(|| {
+            if section.ends_with(line_end) {
+                section.len() - line_end.len()
+            } else {
+                section.len()
+            }
+        });
+        let content = &section[..end];
+        topics.push((title, content));
+    }
+
+    topics
 }
 
 /// Maintains the collection of topics as a trie indexed by their name.
@@ -277,7 +285,24 @@ impl Topics {
 
         let mut topics = Trie::default();
 
-        insert(&mut topics, Box::from(LanguageTopic {}));
+        {
+            let mut index = BTreeMap::default();
+
+            for (title, content) in parse_lang_reference(LANG_MD) {
+                let topic = LanguageTopic { name: title, text: content };
+                index.insert(topic.name.to_owned(), topic.text.lines().next().unwrap());
+                insert(&mut topics, Box::from(topic));
+            }
+
+            insert(
+                &mut topics,
+                Box::from(CategoryTopic {
+                    name: "Language reference",
+                    description: "General language topics",
+                    index,
+                }),
+            );
+        }
 
         let mut categories = HashMap::new();
         for (name, symbol) in symbols.as_hashmap().iter() {
@@ -545,6 +570,80 @@ mod tests {
     use super::*;
     use crate::testutils::*;
 
+    #[test]
+    fn test_parse_lang_reference_empty() {
+        let content = parse_lang_reference("");
+        assert!(content.is_empty());
+    }
+
+    #[test]
+    fn test_parse_lang_reference_junk_only() {
+        let content = parse_lang_reference(
+            "# foo
+# bar
+baz",
+        );
+        assert!(content.is_empty());
+    }
+
+    #[test]
+    fn test_parse_lang_reference_one() {
+        let content = parse_lang_reference(
+            "
+
+# First
+
+This is the first and only topic with
+a couple of lines.
+",
+        );
+        let exp_content =
+            vec![("First", "This is the first and only topic with\na couple of lines.")];
+        assert_eq!(exp_content, content);
+    }
+
+    #[test]
+    fn test_parse_lang_reference_many() {
+        let content = parse_lang_reference(
+            "
+
+# First
+
+This is the first topic with
+a couple of lines.
+
+# Second
+
+This is the second topic with just one line.
+
+# Third
+
+And this is the last one without EOF.",
+        );
+        let exp_content = vec![
+            ("First", "This is the first topic with\na couple of lines."),
+            ("Second", "This is the second topic with just one line."),
+            ("Third", "And this is the last one without EOF."),
+        ];
+        assert_eq!(exp_content, content);
+    }
+
+    #[test]
+    fn test_parse_lang_reference_ignore_header() {
+        let content = parse_lang_reference(
+            "This should be ignored.
+And this.
+#And also this.
+
+# First
+
+This is the first and only topic with just one line.
+",
+        );
+        let exp_content = vec![("First", "This is the first and only topic with just one line.")];
+        assert_eq!(exp_content, content);
+    }
+
     fn tester() -> Tester {
         let tester = Tester::empty();
         let console = tester.get_console();
@@ -590,7 +689,7 @@ mod tests {
                 "    >> DO_NOTHING    This is the blurb.",
                 "    >> EMPTY$        This is the blurb.",
                 "",
-                "    Type HELP followed by the name of a symbol for details.",
+                "    Type HELP followed by the name of a topic for details.",
                 "",
             ])
             .check();
@@ -644,23 +743,22 @@ mod tests {
     }
 
     #[test]
-    fn test_help_lang() {
-        for cmd in &[r#"help "lang""#, r#"help "language""#, r#"help "Language Reference""#] {
-            tester()
-                .run(*cmd)
-                .expect_prints(LANG_REFERENCE.lines().collect::<Vec<&str>>())
-                .expect_prints([""])
-                .check();
-        }
-    }
-
-    #[test]
     fn test_help_eval_arg() {
         tester()
-            .run("topic = \"lang\"\nHELP topic")
-            .expect_prints(LANG_REFERENCE.lines().collect::<Vec<&str>>())
-            .expect_prints([""])
-            .expect_var("topic", "lang")
+            .add_command(DoNothingCommand::new())
+            .run(r#"topic = "Do_Nothing": HELP topic"#)
+            .expect_prints([
+                "",
+                "    DO_NOTHING this [would] <be|the> syntax \"specification\"",
+                "",
+                "    This is the blurb.",
+                "",
+                "    First paragraph of the extended description.",
+                "",
+                "    Second paragraph of the extended description.",
+                "",
+            ])
+            .expect_var("TOPIC", "Do_Nothing")
             .check();
     }
 
@@ -714,11 +812,11 @@ mod tests {
             .check();
 
         tester()
-            .add_command(DoNothingCommand::new_with_name("AB"))
-            .add_function(EmptyFunction::new_with_name("ABC"))
-            .add_function(EmptyFunction::new_with_name("AABC"))
-            .run(r#"help "a""#)
-            .expect_err("1:1: In call to HELP: 1:6: Ambiguous help topic a; candidates are: AABC$, AB, ABC$")
+            .add_command(DoNothingCommand::new_with_name("ZAB"))
+            .add_function(EmptyFunction::new_with_name("ZABC"))
+            .add_function(EmptyFunction::new_with_name("ZAABC"))
+            .run(r#"help "za""#)
+            .expect_err("1:1: In call to HELP: 1:6: Ambiguous help topic za; candidates are: ZAABC$, ZAB, ZABC$")
             .check();
     }
 
