@@ -182,7 +182,7 @@ end or CTRL+E (END), enter (ENTER), CTRL+D (EOF), escape (ESC), home or CTRL+A (
 CTRL+C (INT), page up (PGUP), page down (PGDOWN), and tab (TAB).
 This function never blocks.  To wait for a key press, you need to explicitly poll the keyboard.  \
 For example, to wait until the escape key is pressed, you could do:
-k$ = \"\": WHILE k$ <> \"ESC\": k = INKEY$: SLEEP 0.01: WEND
+    k$ = \"\": WHILE k$ <> \"ESC\": k = INKEY$: SLEEP 0.01: WEND
 This non-blocking design lets you to combine the reception of multiple evens, such as from \
 GPIO_INPUT?, within the same loop.",
                 )

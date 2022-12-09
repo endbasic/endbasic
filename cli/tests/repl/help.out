@@ -46,7 +46,7 @@ Output from HELP "CLOUD":
     user's cloud drive and then access the files as you would with your
     own.  For example:
 
-    MOUNT "X", "cloud://user-123": DIR "X:"
+        MOUNT "X", "cloud://user-123": DIR "X:"
 
     To upload files and share them, you need to create an account.  During
     account creation time, you are assigned a unique, persistent drive in
@@ -295,20 +295,20 @@ Output from HELP "ERROR HANDLING":
 
 [38;5;11m    Error guards
 [39m
-    ON ERROR GOTO 0         Terminate program execution on error.
-    ON ERROR GOTO 100       Jump to line 100 on error.
-    ON ERROR GOTO @label    Jump to @label on error.
-    ON ERROR RESUME NEXT    Skip to the next statement on error.
+    ON ERROR GOTO 0 Terminate program execution on error.
+    ON ERROR GOTO 100 Jump to line 100 on error.
+    ON ERROR GOTO @label Jump to @label on error.
+    ON ERROR RESUME NEXT Skip to the next statement on error.
 
 Output from HELP "EXPRESSIONS":
 
 [38;5;11m    Expressions and operators
 [39m
-    a + b      a - b       a * b     a / b      a MOD b    a ^ b     -a
-    a AND b    NOT a       a OR b    a XOR b    (logical and bitwise)
-    a = b      a <> b      a < b     a <= b     a > b      a >= b
-    (a)        varref
-    arrayref(s1[, ..., sN])          funcref(a1[, ..., aN])
+    a + b a - b a * b a / b a MOD b a ^ b -a
+    a AND b NOT a a OR b a XOR b (logical and bitwise)
+    a = b a <> b a < b a <= b a > b a >= b
+    (a) varref
+    arrayref(s1[, ..., sN]) funcref(a1[, ..., aN])
 
 Output from HELP "FLOW CONTROL":
 
@@ -319,7 +319,7 @@ Output from HELP "FLOW CONTROL":
     DO [UNTIL|WHILE expr?]: ...: [EXIT DO]: ...: LOOP
     DO: ...: [EXIT DO]: ...: LOOP [UNTIL|WHILE expr?]
     FOR varref = expr<%|#> TO expr<%|#> [STEP num]: ...: NEXT
-    IF expr? THEN ... [ELSE ...]
+    IF expr? THEN ...  [ELSE ...]
     IF expr? THEN: ...: ELSEIF expr? THEN: ...: ELSE: ...: END IF
     SELECT CASE expr:
         [CASE <expr|IS =|<>|<|<=|>|>= expr|expr TO expr>[, ...]: ...:]*
@@ -330,24 +330,24 @@ Output from HELP "MISCELLANEOUS":
 
 [38;5;11m    Things that don't fit anywhere else
 [39m
-    st1: st2     Separates statements (same as a newline).
-    END [code%]  Terminates the program.
-    REM text     Comment until end of line.
-    ' text       Comment until end of line.
-    ,            Long separator for arguments to builtin call.
-    ;            Short separator for arguments to builtin call.
-    DATA a, b    Registers literal primitive values for later reads.
-    &x_5fd1      Integer literals in base syntax (can be b, d, o, x).
+    st1: st2 Separates statements (same as a newline).
+    END [code%] Terminates the program.
+    REM text Comment until end of line.
+    ' text Comment until end of line.
+    , Long separator for arguments to builtin call.
+    ; Short separator for arguments to builtin call.
+    DATA a, b Registers literal primitive values for later reads.
+    &x_5fd1 Integer literals in base syntax (can be b, d, o, x).
 
 Output from HELP "SYMBOLS":
 
 [38;5;11m    Variable, array and function references
 [39m
-    name?    Boolean (TRUE and FALSE).
-    name#    Floating point (double).
-    name%    Integer (32 bits).
-    name$    String.
-    name     Type determined by value or definition.
+    name? Boolean (TRUE and FALSE).
+    name# Floating point (double).
+    name% Integer (32 bits).
+    name$ String.
+    name Type determined by value or definition.
 
 Output from HELP "CD":
 
@@ -912,7 +912,7 @@ Output from HELP "INKEY":
     explicitly poll the keyboard.  For example, to wait until the escape
     key is pressed, you could do:
 
-    k$ = "": WHILE k$ <> "ESC": k = INKEY$: SLEEP 0.01: WEND
+        k$ = "": WHILE k$ <> "ESC": k = INKEY$: SLEEP 0.01: WEND
 
     This non-blocking design lets you to combine the reception of multiple
     evens, such as from GPIO_INPUT?, within the same loop.

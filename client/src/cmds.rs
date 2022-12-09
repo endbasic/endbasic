@@ -36,7 +36,7 @@ EndBASIC and the public.
 Files that have been shared publicly can be accessed without an account via the cloud:// file \
 system scheme.  All you have to do is mount a user's cloud drive and then access the files as you \
 would with your own.  For example:
-MOUNT \"X\", \"cloud://user-123\": DIR \"X:\"
+    MOUNT \"X\", \"cloud://user-123\": DIR \"X:\"
 To upload files and share them, you need to create an account.  During account creation time, you \
 are assigned a unique, persistent drive in which you can store files privately.  You can later \
 choose to share individual files with the public or with specific individuals, at which point \

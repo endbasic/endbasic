@@ -240,15 +240,13 @@ impl Topic for LanguageTopic {
 
         console.print("")?;
         console.set_color(Some(TITLE_COLOR), previous.1)?;
-        console.print(&format!("    {}", lines.next().expect("Must have at least one line")))?;
+        refill_and_print(console, [lines.next().expect("Must have at least one line")], "    ")?;
         console.set_color(previous.0, previous.1)?;
         for line in lines {
-            // TODO(jmmv): Should use refill_and_print but continuation lines need special
-            // handling to be indented properly.
             if line.is_empty() {
                 console.print("")?;
             } else {
-                console.print(&format!("    {}", line))?;
+                refill_and_print(console, [line], "    ")?;
             }
         }
         console.print("")?;
@@ -432,7 +430,7 @@ equivalent: HELP \"CON\", HELP \"console\", HELP \"Console manipulation\".",
     fn summary(&self, topics: &Topics) -> io::Result<()> {
         let mut console = self.console.borrow_mut();
         for line in header() {
-            refill_and_print(&mut *console, [&line], "    ")?;
+            refill_and_print(&mut *console, [&line], "")?;
         }
 
         let previous = console.color();

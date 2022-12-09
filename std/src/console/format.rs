@@ -75,20 +75,33 @@ pub fn refill_and_print<S: AsRef<str>, P: IntoIterator<Item = S>>(
 ) -> io::Result<()> {
     let mut first = true;
     for paragraph in paragraphs {
+        let paragraph = paragraph.as_ref();
+
         if !first {
             console.print("")?;
         }
         first = false;
 
+        let mut extra_indent = String::new();
+        for ch in paragraph.chars() {
+            // TODO(jmmv): It'd be nice to recognize '*' prefixes so that continuation lines in
+            // lists look nicer.
+            if ch.is_whitespace() {
+                extra_indent.push(' ');
+            } else {
+                break;
+            }
+        }
+
         // TODO(jmmv): This queries the size on every print, which is not very efficient.  Should
         // reuse this across calls, maybe by having a wrapper over Console and using it throughout.
         let size = console.size_chars()?;
-        let lines = refill(paragraph.as_ref(), usize::from(size.x) - 4 - indent.len());
+        let lines = refill(paragraph, usize::from(size.x) - 4 - indent.len() - extra_indent.len());
         for line in lines {
             if line.is_empty() {
                 console.print("")?;
             } else {
-                console.print(&format!("{}{}", indent, line))?;
+                console.print(&format!("{}{}{}", indent, extra_indent, line))?;
             }
         }
     }
@@ -98,6 +111,7 @@ pub fn refill_and_print<S: AsRef<str>, P: IntoIterator<Item = S>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::console::CharsXY;
     use crate::testutils::{CapturedOut, MockConsole};
 
     #[test]
@@ -147,13 +161,38 @@ mod tests {
     #[test]
     fn test_refill_and_print_multiple() {
         let mut console = MockConsole::default();
-        let paragraphs = &["First    paragraph", "  Second", "Third. The. end."];
+        let paragraphs = &["First    paragraph", "Second", "Third. The. end."];
         refill_and_print(&mut console, paragraphs, "    ").unwrap();
         assert_eq!(
             &[
                 CapturedOut::Print("    First paragraph".to_owned()),
                 CapturedOut::Print("".to_owned()),
                 CapturedOut::Print("    Second".to_owned()),
+                CapturedOut::Print("".to_owned()),
+                CapturedOut::Print("    Third.  The. end.".to_owned()),
+            ],
+            console.captured_out()
+        );
+    }
+
+    #[test]
+    fn test_refill_and_print_multiple_with_extra_indent() {
+        let mut console = MockConsole::default();
+        console.set_size_chars(CharsXY { x: 30, y: 30 });
+        let paragraphs = &[
+            "First    paragraph that is somewhat long",
+            "  The second paragraph contains an extra indent",
+            "Third. The. end.",
+        ];
+        refill_and_print(&mut console, paragraphs, "    ").unwrap();
+        assert_eq!(
+            &[
+                CapturedOut::Print("    First paragraph that".to_owned()),
+                CapturedOut::Print("    is somewhat long".to_owned()),
+                CapturedOut::Print("".to_owned()),
+                CapturedOut::Print("      The second".to_owned()),
+                CapturedOut::Print("      paragraph contains".to_owned()),
+                CapturedOut::Print("      an extra indent".to_owned()),
                 CapturedOut::Print("".to_owned()),
                 CapturedOut::Print("    Third.  The. end.".to_owned()),
             ],
