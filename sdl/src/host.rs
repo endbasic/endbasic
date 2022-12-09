@@ -23,7 +23,7 @@ use crate::spec::Resolution;
 use crate::string_error_to_io_error;
 use endbasic_core::exec::Signal;
 use endbasic_std::console::{
-    ansi_color_to_rgb, CharsXY, ClearType, Key, LineBuffer, PixelsXY, SizeInPixels,
+    ansi_color_to_rgb, AnsiColor, CharsXY, ClearType, Key, LineBuffer, PixelsXY, SizeInPixels, RGB,
 };
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
@@ -45,11 +45,11 @@ use std::time::Duration;
 
 /// Default foreground color, used at console creation time and when requesting the default color
 /// via the `COLOR` command.
-const DEFAULT_FG_COLOR: Color = Color::WHITE;
+const DEFAULT_FG_COLOR: u8 = AnsiColor::BrightWhite as u8;
 
 /// Default background color, used at console creation time and when requesting the default color
 /// via the `COLOR` command.
-const DEFAULT_BG_COLOR: Color = Color::BLACK;
+const DEFAULT_BG_COLOR: u8 = AnsiColor::Black as u8;
 
 /// Number of loop iterations to poll for requests or events before sleeping.
 ///
@@ -193,6 +193,11 @@ fn rect_points(x1y1: PixelsXY, x2y2: PixelsXY) -> Rect {
     let y1 = i32::from(y1);
 
     Rect::new(x1, y1, width, height)
+}
+
+/// Converts our own `RGB` type to an SDL `Color`.
+fn rgb_to_color(rgb: RGB) -> Color {
+    Color::RGB(rgb.0, rgb.1, rgb.2)
 }
 
 /// Given an SDL `event`, converts it to a `Key` event if it is a key press; otherwise, returns
@@ -396,8 +401,8 @@ impl Context {
             cursor_pos: CharsXY::default(),
             cursor_visible: true,
             cursor_backup: vec![],
-            bg_color: DEFAULT_BG_COLOR,
-            fg_color: DEFAULT_FG_COLOR,
+            bg_color: rgb_to_color(ansi_color_to_rgb(DEFAULT_BG_COLOR)),
+            fg_color: rgb_to_color(ansi_color_to_rgb(DEFAULT_FG_COLOR)),
             alt_backup: None,
             sync_enabled: true,
         };
@@ -657,22 +662,8 @@ impl Context {
 
     /// Handler for a `Request::SetColor`.
     fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
-        self.fg_color = match fg {
-            Some(fg) => {
-                let rgb = ansi_color_to_rgb(fg);
-                Color::RGB(rgb.0, rgb.1, rgb.2)
-            }
-            None => DEFAULT_FG_COLOR,
-        };
-
-        self.bg_color = match bg {
-            Some(bg) => {
-                let rgb = ansi_color_to_rgb(bg);
-                Color::RGB(rgb.0, rgb.1, rgb.2)
-            }
-            None => DEFAULT_BG_COLOR,
-        };
-
+        self.fg_color = rgb_to_color(ansi_color_to_rgb(fg.unwrap_or(DEFAULT_FG_COLOR)));
+        self.bg_color = rgb_to_color(ansi_color_to_rgb(bg.unwrap_or(DEFAULT_BG_COLOR)));
         Ok(())
     }
 

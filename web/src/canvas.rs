@@ -23,6 +23,7 @@
 use crate::input::WebInput;
 use crate::log_and_panic;
 use async_trait::async_trait;
+use endbasic_std::console::AnsiColor;
 use endbasic_std::console::{
     ansi_color_to_rgb, remove_control_chars, CharsXY, ClearType, Console, Key, LineBuffer,
     PixelsXY, SizeInPixels, RGB,
@@ -39,11 +40,11 @@ use web_sys::ImageData;
 
 /// Default foreground color, used at console creation time and when requesting the default color
 /// via the `COLOR` command.
-const DEFAULT_FG_COLOR: RGB = (255, 255, 255);
+const DEFAULT_FG_COLOR: u8 = AnsiColor::BrightWhite as u8;
 
 /// Default background color, used at console creation time and when requesting the default color
 /// via the `COLOR` command.
-const DEFAULT_BG_COLOR: RGB = (0, 0, 0);
+const DEFAULT_BG_COLOR: u8 = AnsiColor::Black as u8;
 
 /// Default fonts to use.  The first font in the list should match whichever font is loaded in
 /// `style.css`.  The rest are only provided as fallbacks.
@@ -232,8 +233,8 @@ impl CanvasConsole {
             cursor_pos: CharsXY::new(0, 0),
             cursor_visible: true,
             cursor_backup: None,
-            fg_color: DEFAULT_FG_COLOR,
-            bg_color: DEFAULT_BG_COLOR,
+            fg_color: ansi_color_to_rgb(DEFAULT_FG_COLOR),
+            bg_color: ansi_color_to_rgb(DEFAULT_BG_COLOR),
             alt_backup: None,
             sync_enabled: true,
         };
@@ -495,15 +496,8 @@ impl Console for CanvasConsole {
     }
 
     fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
-        self.fg_color = match fg {
-            Some(fg) => ansi_color_to_rgb(fg),
-            None => DEFAULT_FG_COLOR,
-        };
-
-        self.bg_color = match bg {
-            Some(bg) => ansi_color_to_rgb(bg),
-            None => DEFAULT_BG_COLOR,
-        };
+        self.fg_color = ansi_color_to_rgb(fg.unwrap_or(DEFAULT_FG_COLOR));
+        self.bg_color = ansi_color_to_rgb(bg.unwrap_or(DEFAULT_BG_COLOR));
         Ok(())
     }
 

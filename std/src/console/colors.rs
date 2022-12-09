@@ -13,12 +13,35 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-//! Color palette for terminals with precise color support.
+//! Color constants.
+
+/// Identifiers for the basic ANSI colors.
+#[allow(missing_docs)]
+#[repr(u8)]
+pub enum AnsiColor {
+    Black = 0,
+    Red = 1,
+    Green = 2,
+    Yellow = 3,
+    Blue = 4,
+    Magenta = 5,
+    Cyan = 6,
+    White = 7,
+    BrightBlack = 8,
+    BrightRed = 9,
+    BrightGreen = 10,
+    BrightYellow = 11,
+    BrightBlue = 12,
+    BrightMagenta = 13,
+    BrightCyan = 14,
+    BrightWhite = 15,
+}
 
 /// Represents an RGB color in `[0,255]` quantities.
 #[allow(clippy::upper_case_acronyms)]
 pub type RGB = (u8, u8, u8);
 
+/// Color palette for terminals with precise color support.
 static COLORS: &[RGB] = &[
     (0, 0, 0),       // Black.
     (128, 0, 0),     // Maroon.
