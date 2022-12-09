@@ -17,17 +17,18 @@
 
 use crate::console::{CharsXY, ClearType, Console, Key};
 use async_trait::async_trait;
-use endbasic_std::console::LineBuffer;
+use endbasic_std::console::{AnsiColor, LineBuffer};
 use endbasic_std::program::Program;
 use std::cmp;
 use std::convert::TryFrom;
 use std::io;
 
 /// The color of the main editor window.
-const TEXT_COLOR: (Option<u8>, Option<u8>) = (Some(15), None);
+const TEXT_COLOR: (Option<u8>, Option<u8>) = (Some(AnsiColor::BrightWhite as u8), None);
 
 /// The color of the editor status bar.
-const STATUS_COLOR: (Option<u8>, Option<u8>) = (Some(15), Some(4));
+const STATUS_COLOR: (Option<u8>, Option<u8>) =
+    (Some(AnsiColor::BrightWhite as u8), Some(AnsiColor::Blue as u8));
 
 /// Default indentation with.
 const INDENT_WIDTH: usize = 4;

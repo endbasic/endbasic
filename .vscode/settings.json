@@ -90,6 +90,7 @@
         "peekable",
         "readline",
         "renum",
+        "repr",
         "rustyline",
         "stmt",
         "stmts",
