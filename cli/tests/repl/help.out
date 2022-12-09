@@ -207,12 +207,17 @@ Output from HELP "LANG":
 
 [38;5;11m    General language topics
 [39m
-    >> [38;5;14mAssignments   [39m    Assignments and declarations
-    >> [38;5;14mError handling[39m    Error guards
-    >> [38;5;14mExpressions   [39m    Expressions and operators
-    >> [38;5;14mFlow control  [39m    Jumps, conditionals, and loops
-    >> [38;5;14mMiscellaneous [39m    Things that don't fit anywhere else
-    >> [38;5;14mSymbols       [39m    Variable, array and function references
+    >> [38;5;14mDO         [39m    Do loops
+    >> [38;5;14mExpressions[39m    Expressions and operators
+    >> [38;5;14mFOR        [39m    For loops
+    >> [38;5;14mIF         [39m    Multiline and uniline IF statements
+    >> [38;5;14mJumps      [39m    GOTO, GOSUB, END, and labels
+    >> [38;5;14mON ERROR   [39m    Error handling
+    >> [38;5;14mSELECT CASE[39m    Conditional statement to choose among values
+    >> [38;5;14mStyle      [39m    Spacing, comments, and general style
+    >> [38;5;14mTypes      [39m    Primitive types and arrays
+    >> [38;5;14mVariables  [39m    Variable references, assignments, and the DIM keyword
+    >> [38;5;14mWHILE      [39m    While loops
 
     Type HELP followed by the name of a topic for details.
 
@@ -284,70 +289,290 @@ Output from HELP "STRING":
 
     Type HELP followed by the name of a topic for details.
 
-Output from HELP "ASSIGNMENTS":
+Output from HELP "DO":
 
-[38;5;11m    Assignments and declarations
+[38;5;11m    Do loops
 [39m
-    varref[(dim1[, ..., dimN])] = expr
-    DIM varname[(dim1[, ..., dimN])] [AS BOOLEAN|DOUBLE|INTEGER|STRING]
+    `DO` loops are a generalized form of `WHILE` loops.  `DO` loops allow
+    testing a condition before or after every iteration, and the condition
+    can be tested until it is true or false.  Take a look at the following
+    examples:
 
-Output from HELP "ERROR HANDLING":
+        DO
+            PRINT "Infinite loop"
+        LOOP
 
-[38;5;11m    Error guards
-[39m
-    ON ERROR GOTO 0 Terminate program execution on error.
-    ON ERROR GOTO 100 Jump to line 100 on error.
-    ON ERROR GOTO @label Jump to @label on error.
-    ON ERROR RESUME NEXT Skip to the next statement on error.
+        DO
+            a = a + 1
+        LOOP UNTIL a = 10
+
+        DO
+            a = a + 1
+        LOOP WHILE a < 10
+
+        a = 0
+        DO UNTIL a = 10
+            a = a + 1
+        LOOP
+
+        a = 0
+        DO WHILE a < 10
+            a = a + 1
+        LOOP
+
+    `DO` loops can be exited an any point via the `EXIT DO` statement.
 
 Output from HELP "EXPRESSIONS":
 
 [38;5;11m    Expressions and operators
 [39m
-    a + b a - b a * b a / b a MOD b a ^ b -a
-    a AND b NOT a a OR b a XOR b (logical and bitwise)
-    a = b a <> b a < b a <= b a > b a >= b
-    (a) varref
-    arrayref(s1[, ..., sN]) funcref(a1[, ..., aN])
+    EndBASIC provides the following operators:
 
-Output from HELP "FLOW CONTROL":
+    * Numeric operators:
+        * Binary infix: +, -, *, /, MOD, ^
+        * Unary prefix: -
 
-[38;5;11m    Jumps, conditionals, and loops
+    * Logical and bitwise operators:
+        * Binary infix: AND, OR, XOR
+        * Unary prefix: NOT
+        * Whether these perform a logical or bitwise operation depends on
+        the expression context.
+
+    * Relational operators:
+        * Binary infix: =, <>, <, <=, >, >=
+
+    Expressions can also contain variable references, function calls, and
+    array element references.  For example, the following defines an array
+    of doubles, sets one of them, and then reads the value in an expression
+    and rounds it to an integer via the `CINT` builtin function:
+
+        DIM floats(5) AS DOUBLE
+        floats(2) = 5.6
+        PRINT 3 + 9 - CINT(floats(2))
+
+Output from HELP "FOR":
+
+[38;5;11m    For loops
 [39m
-    10 GOTO 10: @label GOTO @label
-    10 RETURN: GOSUB 10: @label RETURN: GOSUB @label
-    DO [UNTIL|WHILE expr?]: ...: [EXIT DO]: ...: LOOP
-    DO: ...: [EXIT DO]: ...: LOOP [UNTIL|WHILE expr?]
-    FOR varref = expr<%|#> TO expr<%|#> [STEP num]: ...: NEXT
-    IF expr? THEN ...  [ELSE ...]
-    IF expr? THEN: ...: ELSEIF expr? THEN: ...: ELSE: ...: END IF
-    SELECT CASE expr:
-        [CASE <expr|IS =|<>|<|<=|>|>= expr|expr TO expr>[, ...]: ...:]*
-        [CASE ELSE: ...:] END SELECT
-    WHILE expr?: ...: WEND
+    `FOR` loops provide iteration through a numeric range.  Their most
+    basic form looks like this:
 
-Output from HELP "MISCELLANEOUS":
+        FOR a = 1 to 10
+            PRINT a
+        NEXT
 
-[38;5;11m    Things that don't fit anywhere else
+    You can optionally specify a positive or negative `STEP` to change how
+    the iterator changes in each loop body execution:
+
+        FOR a = 10 to 1 STEP -2
+            PRINT a
+        NEXT
+
+Output from HELP "IF":
+
+[38;5;11m    Multiline and uniline IF statements
 [39m
-    st1: st2 Separates statements (same as a newline).
-    END [code%] Terminates the program.
-    REM text Comment until end of line.
-    ' text Comment until end of line.
-    , Long separator for arguments to builtin call.
-    ; Short separator for arguments to builtin call.
-    DATA a, b Registers literal primitive values for later reads.
-    &x_5fd1 Integer literals in base syntax (can be b, d, o, x).
+    Multiline IF statements look like the following.  Note that the
+    `ELSEIF` and `ELSE` clauses are all optional, but if `ELSE` is present,
+    it must appear last and only once:
 
-Output from HELP "SYMBOLS":
+        IF a = 1 THEN
+            PRINT "a is 1"
+        ELSEIF a <> 2 THEN
+            PRINT "a is not 2"
+        ELSE
+            PRINT "a is something else"
+        END IF
 
-[38;5;11m    Variable, array and function references
+    IF statements can be collapsed into a single line and look like the
+    following.  Similarly to the previous, the `ELSE` clause is optional
+    and can only appear once:
+
+        IF a = 1 THEN PRINT "a is 1" ELSE PRINT "a is something else"
+
+    Note that, in the uniline form, only a subset of statements can be
+    specified.
+
+Output from HELP "JUMPS":
+
+[38;5;11m    GOTO, GOSUB, END, and labels
 [39m
-    name? Boolean (TRUE and FALSE).
-    name# Floating point (double).
-    name% Integer (32 bits).
-    name$ String.
-    name Type determined by value or definition.
+    EndBASIC statements can be labeled via explicitly-assigned line numbers
+    or textual identifiers.  These labels can be used as the target of the
+    unstructured control flow statements `GOTO` and `GOSUB`.  For example:
+
+        i = 1
+        20 PRINT i ' Statement with a numeric label.
+        IF i = 10 THEN GOTO @out
+        i = i + 1
+        GOTO 20
+        @out ' Statement with a textual label.
+
+    When using `GOSUB` to temporarily jump to a subroutine, use the
+    `RETURN` keyword when done:
+
+        GOTO @main
+
+        @add
+        result = a + b
+        RETURN
+
+        @main
+        a = 3: b = 5: GOSUB @add
+        PRINT result
+
+    Program execution can be terminated at any point via the `END`
+    statement, which optionally takes an exit code to return to the calling
+    program.
+
+Output from HELP "ON ERROR":
+
+[38;5;11m    Error handling
+[39m
+    Certain types of errors can be caught for inspection and program
+    recovery.
+
+    To jump to a line number or label when a recoverable error is caught:
+
+        ON ERROR GOTO 100
+        ON ERROR GOTO @label
+
+    To continue execution at the next statement after an error is caught:
+
+        ON ERROR RESUME NEXT
+
+    To reset the error handler to its default, which terminates program
+    execution on an error:
+
+        ON ERROR GOTO 0
+
+    The ERRMSG function can be used to fetch the textual description of the
+    string that was caught.
+
+Output from HELP "SELECT CASE":
+
+[38;5;11m    Conditional statement to choose among values
+[39m
+    The SELECT CASE statement allows evaluating an expression and comparing
+    it to multiple different values or ranges.
+
+        INPUT "Enter a number"; a
+        SELECT CASE a
+            CASE 1, 3, 5, 7, 9
+                PRINT "Odd"
+            CASE 0, 2, 5, 6, 8
+                PRINT "Even"
+            CASE IS < 0, 10 TO 100
+                PRINT "Other cases"
+            CASE ELSE
+                PRINT "Fallback"
+        END SELECT
+
+    The expression given to `SELECT CASE` is evaluated exactly once.
+    Similarly to `IF` statements, the `CASE ELSE`, if present, must appear
+    only once at as the last case guard.
+
+    When using the `IS` guard, all relational operators can be specified.
+
+Output from HELP "STYLE":
+
+[38;5;11m    Spacing, comments, and general style
+[39m
+    Every statement in EndBASIC must appear in its own line.  Lines can be
+    separated by natural newline characters, but also via the `:`
+    character.  The following are equivalent:
+
+        PRINT 3
+        PRINT 4
+
+        PRINT 3: PRINT 4
+
+    Comments can be introduced via `REM` or an apostrophe character and run
+    throughout the end of a line:
+
+        ' This is a comment.
+        REM This is another comment.
+        a = 3 ' Comment after statement.
+
+    The common EndBASIC style in documentation and sample programs is to:
+
+    * Write all language keywords in uppercase.
+    * Write all variable identifiers in lowercase.
+    * Suffix all variable references and function calls with a type
+    identifier.
+
+    These are just style guidelines and they are neither required nor
+    enforced in your own code.  For a more modern look, you can type all
+    code in lowercase letters and avoid type identifiers.
+
+Output from HELP "TYPES":
+
+[38;5;11m    Primitive types and arrays
+[39m
+    EndBASIC supports the following primitive types:
+
+    * `?`: BOOLEAN
+        * Literal values are `TRUE` and `FALSE`.
+
+    * `#`: DOUBLE
+        * 64-bit double floating point.
+        * Literal values have the form 123.4.
+
+    * `%`: INTEGER
+        * 32-bit signed integers.
+        * Literal values can be specified in binary (`b`), decimal (`d`),
+        octal (`o`) and hexadecimal (`h`) bases.
+        * Literal values have the form 123, &d123, or &d_123, where `d`
+        specifies the base.
+
+    * `$`: STRING
+        * Literal values are UTF-8 double-quoted strings.
+        * Nested double-quotes can be escaped with a `\` character.
+
+    Multidimensional arrays are supported as well, although all the
+    dimensions in an array must have the same type.
+
+    Integers are automatically promoted to floats when they appear in a
+    float expression, and floats are demoted to integers via rounding (3.4
+    becomes 3, 3.5 becomes 4) when they appear in an integer expression.
+
+Output from HELP "VARIABLES":
+
+[38;5;11m    Variable references, assignments, and the DIM keyword
+[39m
+    Variable identifiers are alphanumeric words that start with a letter or
+    special character such as _.  Variable references can optionally be
+    suffixed by a type identifier to force them to be of a specific type,
+    but note that EndBASIC is strictly typed and variables cannot change
+    type after they have been assigned.
+
+    Variables can be first defined either via an assignment or via the
+    `DIM` keyword, the latter of which sets the variable to its zero value.
+    The following are all equivalent:
+
+        DIM foo AS BOOLEAN
+        DIM foo? AS BOOLEAN
+        foo? = FALSE
+
+    Arrays must be defined with the `DIM` keyword before they can be used.
+    The following example defines a matrix and sets the value of a single
+    element within it:
+
+        DIM matrix%(10, 100) AS INTEGER
+        matrix%(5, 15) = 1234
+
+Output from HELP "WHILE":
+
+[38;5;11m    While loops
+[39m
+    The `WHILE` keyword is used to define a loop that executes a collection
+    of statements until a guard condition is false.  They look like this:
+
+        a = 0
+        WHILE a < 10
+            PRINT a
+            a = a + 1
+        WEND
 
 Output from HELP "CD":
 

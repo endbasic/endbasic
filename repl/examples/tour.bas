@@ -72,120 +72,20 @@ PRINT
 PRINT "Without further ado, let's get started!"
 GOSUB @wait
 
-title = "The basics": GOSUB @banner
-PRINT "There are four primitive types:"
+title = "Language basics": GOSUB @banner
+PRINT "There are four primitive types: booleans (?), double-precision floating"
+PRINT "point numbers (#), 32-bit signed integers (%), and strings ($)."
 PRINT
-PRINT "* Booleans (?): Literals TRUE and FALSE."
-PRINT "* Double-precision floating point (#): Literals must contain a period."
-PRINT "* 32-bit integers (%): Literals must not contain a period."
-PRINT "* Strings ($): Literals are double-quoted."
-PRINT
-PRINT "Type annotations are optional when the type can be deduced.  The only time"
-PRINT "when they are required is when defining new variables via INPUT."
-PRINT
-PRINT "Integer values are automatically promoted to doubles when they appear in a"
-PRINT "double expression, and doubles are rounded when assigned to an integer"
-PRINT "variable."
+PRINT "The common IF and SELECT CASE conditional structures, the DO, FOR, and WHILE"
+PRINT "loops, as well as GOSUB and GOTO are supported."
 PRINT
 PRINT "A trivial program to ask a question and print an answer would look like:"
 PRINT
-PRINT "    INPUT \"What is your name\"; name$"
-PRINT "    PRINT \"Hello,\"; name$"
+PRINT "    @retry: INPUT \"Enter a number greater than 10: \", n"
+PRINT "    IF n <= 10 THEN GOTO @retry"
+PRINT "    PRINT \"Good job!\""
 PRINT
-PRINT "Expressions work as you would expect, with the usual operator precedence"
-PRINT "rules.  Expressions can take function calls too, but I'll let you find what"
-PRINT "those are via HELP."
-GOSUB @wait
-
-title = "Structured conditionals": GOSUB @banner
-PRINT "Fully-specified if statements look like this:"
-PRINT
-PRINT "    IF a% = 1 THEN"
-PRINT "        PRINT \"a is 1\""
-PRINT "    ELSEIF a% <> 2 THEN"
-PRINT "        PRINT \"a is not 2\""
-PRINT "    ELSE"
-PRINT "        PRINT \"a is something else\""
-PRINT "    END IF"
-PRINT
-PRINT "If statements can also be collapsed into a single line like this:"
-PRINT
-PRINT "    IF a% = 1 THEN PRINT \"a is 1\" ELSE PRINT \"a is something else\""
-PRINT
-PRINT "Select statements look like this:"
-PRINT
-PRINT "    SELECT CASE a%"
-PRINT "        CASE 1, 3, 5, 7, 9"
-PRINT "            PRINT \"Odd\""
-PRINT "        CASE 0, 2, 5, 6, 8"
-PRINT "            PRINT \"Even\""
-PRINT "        CASE IS < 0, 10 TO 100"
-PRINT "            PRINT \"Other cases\""
-PRINT "        CASE ELSE"
-PRINT "            PRINT \"Fallback\""
-PRINT "    END SELECT"
-GOSUB @wait
-
-title = "Structured loops": GOSUB @banner
-PRINT "Do loops look like this:"
-PRINT
-PRINT "    DO: PRINT \"Infinite loop with early exit\": EXIT DO: LOOP"
-PRINT "    DO: a% = a% + 1: LOOP UNTIL a% = 10"
-PRINT "    DO: a% = a% + 1: LOOP WHILE a% < 10"
-PRINT "    DO UNTIL a% = 10: a% = a% + 1: LOOP"
-PRINT "    DO WHILE a% < 10: a% = a% + 1: LOOP"
-PRINT
-PRINT "While loops look like this:"
-PRINT
-PRINT "    WHILE a% < 10: a% = a% + 1: WEND"
-PRINT
-PRINT "For loops look like this:"
-PRINT
-PRINT "    FOR a = 1 TO 10 STEP 2: PRINT a: NEXT"
-GOSUB @wait
-
-title = "Unstructured control flow": GOSUB @banner
-PRINT "Labels and jumps look like this:"
-PRINT
-PRINT "    i% = 1"
-PRINT "    20 PRINT i%"
-PRINT "    IF i% = 10 THEN: GOTO @out: END IF"
-PRINT "    i% = i% + 1"
-PRINT "    GOTO 20"
-PRINT "    @out"
-PRINT
-PRINT "GOSUB-style subroutines look like this:"
-PRINT
-PRINT "    GOTO @main"
-PRINT "    100"
-PRINT "    PRINT \"Hello from subroutine!\""
-PRINT "    RETURN"
-PRINT "    @main"
-PRINT "    GOSUB 100"
-PRINT
-PRINT "Note that GOTO and GOSUB targets can be both @-labels and explicitly assigned"
-PRINT "line numbers."
-GOSUB @wait
-
-title = "Error handling": GOSUB @banner
-PRINT "Certain types of errors can be caught for inspection and program recovery."
-PRINT
-PRINT "To jump to a line number or label when a recoverable error is caught:"
-PRINT
-PRINT "    ON ERROR GOTO 100"
-PRINT "    ON ERROR GOTO @label"
-PRINT
-PRINT "To continue execution at the next statement after an error is caught:"
-PRINT
-PRINT "    ON ERROR RESUME NEXT"
-PRINT
-PRINT "To reset the error handler to its default, which terminates program execution"
-PRINT "on an error:"
-PRINT
-PRINT "    ON ERROR GOTO 0"
-PRINT
-PRINT "The ERRMSG variable is set to the string that describes the error that was"
-PRINT "caught."
+PRINT "Type HELP \"LANG\" for specific details about the language constructs."
 GOSUB @wait
 
 title = "File manipulation": GOSUB @banner

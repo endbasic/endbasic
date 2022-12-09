@@ -123,6 +123,10 @@ for the time being.**
 
 *   Added the `GFX_CIRCLE` and `GFX_CIRCLEF` commands to draw circles.
 
+*   Extended the builtin language documentation to explain in detail every
+    statement type.  `HELP "LANG"` now displays a collection of topics to
+    choose from, instead of a one-page cheat sheet.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**
