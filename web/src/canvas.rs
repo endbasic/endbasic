@@ -40,7 +40,7 @@ use web_sys::ImageData;
 
 /// Default foreground color, used at console creation time and when requesting the default color
 /// via the `COLOR` command.
-const DEFAULT_FG_COLOR: u8 = AnsiColor::BrightWhite as u8;
+const DEFAULT_FG_COLOR: u8 = AnsiColor::White as u8;
 
 /// Default background color, used at console creation time and when requesting the default color
 /// via the `COLOR` command.

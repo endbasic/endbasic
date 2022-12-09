@@ -24,7 +24,7 @@ use std::convert::TryFrom;
 use std::io;
 
 /// The color of the main editor window.
-const TEXT_COLOR: (Option<u8>, Option<u8>) = (Some(AnsiColor::BrightWhite as u8), None);
+const TEXT_COLOR: (Option<u8>, Option<u8>) = (Some(AnsiColor::White as u8), None);
 
 /// The color of the editor status bar.
 const STATUS_COLOR: (Option<u8>, Option<u8>) =
