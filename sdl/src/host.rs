@@ -438,7 +438,7 @@ impl Context {
     ///
     /// Does not present the canvas.
     fn draw_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible || !self.sync_enabled {
+        if !self.cursor_visible {
             return Ok(());
         }
 
@@ -461,7 +461,7 @@ impl Context {
     ///
     /// Does not present the canvas.
     fn clear_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible || !self.sync_enabled || self.cursor_backup.is_empty() {
+        if !self.cursor_visible || self.cursor_backup.is_empty() {
             return Ok(());
         }
 
@@ -605,10 +605,6 @@ impl Context {
                 self.canvas.clear();
                 self.cursor_pos.y = 0;
                 self.cursor_pos.x = 0;
-
-                // We intentionally do not draw the cursor here and wait until the first time we
-                // write text to the console.  This allows the user to clear the screen and render
-                // graphics if they want to without interference.
                 self.cursor_backup.clear();
             }
             ClearType::CurrentLine => {
@@ -622,7 +618,6 @@ impl Context {
                     ))
                     .map_err(string_error_to_io_error)?;
                 self.cursor_pos.x = 0;
-                self.draw_cursor()?;
             }
             ClearType::PreviousChar => {
                 if self.cursor_pos.x > 0 {
@@ -635,7 +630,6 @@ impl Context {
                         ))
                         .map_err(string_error_to_io_error)?;
                     self.cursor_pos = previous_pos;
-                    self.draw_cursor()?;
                 }
             }
             ClearType::UntilNewLine => {
@@ -653,10 +647,10 @@ impl Context {
                         u32::from(height),
                     ))
                     .map_err(string_error_to_io_error)?;
-                self.draw_cursor()?;
             }
         }
 
+        self.draw_cursor()?;
         self.present_canvas()
     }
 

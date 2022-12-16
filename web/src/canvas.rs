@@ -278,7 +278,7 @@ impl CanvasConsole {
     /// Draws the cursor at the current position and saves the previous contents of the screen so
     /// that `clear_cursor` can restore them.
     fn draw_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible || !self.sync_enabled {
+        if !self.cursor_visible {
             return Ok(());
         }
 
@@ -309,7 +309,7 @@ impl CanvasConsole {
     /// Clears the cursor at the current position by restoring the contents of the screen saved by
     /// an earlier call to `draw_cursor`.
     fn clear_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible || !self.sync_enabled || self.cursor_backup.is_none() {
+        if !self.cursor_visible || self.cursor_backup.is_none() {
             return Ok(());
         }
 
@@ -452,10 +452,6 @@ impl Console for CanvasConsole {
                 );
                 self.cursor_pos.y = 0;
                 self.cursor_pos.x = 0;
-
-                // We intentionally do not draw the cursor here and wait until the first time we
-                // write text to the console.  This allows the user to clear the screen and render
-                // graphics if they want to without interference.
                 self.cursor_backup = None;
             }
             ClearType::CurrentLine => {
@@ -470,7 +466,6 @@ impl Console for CanvasConsole {
                     f64::from(self.glyph_size.height),
                 );
                 self.cursor_pos.x = 0;
-                self.draw_cursor()?;
             }
             ClearType::PreviousChar => {
                 if self.cursor_pos.x > 0 {
@@ -484,7 +479,6 @@ impl Console for CanvasConsole {
                         f64::from(self.glyph_size.height),
                     );
                     self.cursor_pos = previous_pos;
-                    self.draw_cursor()?;
                 }
             }
             ClearType::UntilNewLine => {
@@ -499,9 +493,9 @@ impl Console for CanvasConsole {
                     f64::from(i32::from(self.size_pixels.width) - i32::from(pos.x)),
                     f64::from(height),
                 );
-                self.draw_cursor()?;
             }
         }
+        self.draw_cursor()?;
         Ok(())
     }
 
