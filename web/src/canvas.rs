@@ -406,8 +406,6 @@ impl CanvasConsole {
     /// Renders the given text at the current cursor position, with wrapping and
     /// scrolling if necessary.
     fn raw_write_wrapped(&mut self, text: String) -> io::Result<()> {
-        debug_assert!(!text.is_empty(), "It doesn't make sense to render an empty string");
-
         let mut line_buffer = LineBuffer::from(text);
 
         loop {
@@ -415,14 +413,18 @@ impl CanvasConsole {
 
             let remaining = line_buffer.split_off(usize::from(fit_chars));
             let len = line_buffer.len();
-            self.raw_write(
-                &line_buffer.into_inner(),
-                self.cursor_pos.clamped_mul(self.glyph_size),
-            )?;
-            self.cursor_pos.x += match u16::try_from(len) {
-                Ok(len) => len,
-                Err(e) => log_and_panic!("Partial length was computed to fit on the screen: {}", e),
-            };
+            if len > 0 {
+                self.raw_write(
+                    &line_buffer.into_inner(),
+                    self.cursor_pos.clamped_mul(self.glyph_size),
+                )?;
+                self.cursor_pos.x += match u16::try_from(len) {
+                    Ok(len) => len,
+                    Err(e) => {
+                        log_and_panic!("Partial length was computed to fit on the screen: {}", e)
+                    }
+                };
+            }
 
             line_buffer = remaining;
             if line_buffer.is_empty() {
@@ -594,9 +596,7 @@ impl Console for CanvasConsole {
         let text = remove_control_chars(text);
 
         self.clear_cursor()?;
-        if !text.is_empty() {
-            self.raw_write_wrapped(text)?;
-        }
+        self.raw_write_wrapped(text)?;
         self.open_line()?;
         self.draw_cursor()
     }
@@ -629,10 +629,6 @@ impl Console for CanvasConsole {
     }
 
     fn write(&mut self, text: &str) -> io::Result<()> {
-        if text.is_empty() {
-            return Ok(());
-        }
-
         let text = remove_control_chars(text);
 
         self.clear_cursor()?;

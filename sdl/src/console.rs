@@ -769,6 +769,24 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
+    fn test_sdl_console_write_positions() {
+        let mut test = SdlTest::new();
+
+        let cols = test.console().size_chars().unwrap().x;
+        for c in 0..cols {
+            test.console().locate(CharsXY { x: c, y: 0 }).unwrap();
+            test.console().write("").unwrap();
+            test.console().locate(CharsXY { x: c, y: 2 }).unwrap();
+            test.console().write("a").unwrap();
+            test.console().locate(CharsXY { x: c, y: 4 }).unwrap();
+            test.console().write("bc").unwrap();
+        }
+
+        test.verify("sdl-write-positions");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_write_too_long() {
         let mut test = SdlTest::new();
 

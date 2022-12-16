@@ -570,8 +570,6 @@ impl Context {
     ///
     /// Does not present the canvas.
     fn raw_write_wrapped(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(!text.is_empty(), "SDL does not like empty strings");
-
         let mut line_buffer = LineBuffer::from(text);
 
         loop {
@@ -579,12 +577,14 @@ impl Context {
 
             let remaining = line_buffer.split_off(usize::from(fit_chars));
             let len = line_buffer.len();
-            self.raw_write(
-                &line_buffer.into_inner(),
-                self.cursor_pos.clamped_mul(self.font.glyph_size),
-            )?;
-            self.cursor_pos.x +=
-                u16::try_from(len).expect("Partial length was computed to fit on the screen");
+            if len > 0 {
+                self.raw_write(
+                    &line_buffer.into_inner(),
+                    self.cursor_pos.clamped_mul(self.font.glyph_size),
+                )?;
+                self.cursor_pos.x +=
+                    u16::try_from(len).expect("Partial length was computed to fit on the screen");
+            }
 
             line_buffer = remaining;
             if line_buffer.is_empty() {
@@ -774,9 +774,7 @@ impl Context {
         );
 
         self.clear_cursor()?;
-        if !text.is_empty() {
-            self.raw_write_wrapped(text)?;
-        }
+        self.raw_write_wrapped(text)?;
         self.open_line()?;
         self.draw_cursor()?;
         self.present_canvas()
@@ -820,10 +818,6 @@ impl Context {
             !endbasic_std::console::has_control_chars(text),
             "Must have been stripped off by the client"
         );
-
-        if text.is_empty() {
-            return Ok(());
-        }
 
         self.clear_cursor()?;
         self.raw_write_wrapped(text)?;
