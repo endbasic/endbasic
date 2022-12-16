@@ -350,6 +350,10 @@ mod testutils {
                 _ => panic!(),
             };
 
+            // Minimize chances of poisoning the mutex if something else fails, and reduce the size
+            // of the critical section needed to serialize SDL tests..
+            drop(self);
+
             let input = BufReader::new(File::open(golden_bmp_gz).unwrap());
             let mut decoder = GzDecoder::new(input);
             let mut buffer = vec![];
