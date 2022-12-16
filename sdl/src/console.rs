@@ -765,8 +765,6 @@ mod tests {
         test.console().print("After disabling sync").unwrap();
         test.console().sync_now().unwrap();
         test.console().print("With sync disabled").unwrap();
-        // Cursor should not be visible at this point because we have not reenabled video
-        // syncing.
 
         test.verify("sdl-sync");
     }
