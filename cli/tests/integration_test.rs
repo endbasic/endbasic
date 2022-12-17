@@ -186,7 +186,7 @@ fn check<P: AsRef<Path>>(
 #[test]
 fn test_cli_autoexec_is_ignored() {
     let dir = tempfile::tempdir().unwrap();
-    fs::copy(&src_path("cli/tests/repl/autoexec.bas"), &dir.path().join("AUTOEXEC.BAS")).unwrap();
+    fs::copy(src_path("cli/tests/repl/autoexec.bas"), dir.path().join("AUTOEXEC.BAS")).unwrap();
     check(
         bin_path("endbasic"),
         &[
@@ -208,7 +208,7 @@ fn test_cli_help() {
         } else {
             Behavior::File(src_path("cli/tests/cli/help.out"))
         };
-        check(&bin_path("endbasic"), args, 0, Behavior::Null, exp_stdout, Behavior::Null);
+        check(bin_path("endbasic"), args, 0, Behavior::Null, exp_stdout, Behavior::Null);
     }
     check_with_args(&["-h"]);
     check_with_args(&["--help"]);
@@ -297,7 +297,7 @@ fn test_cli_program_name_uses_arg0() {
 #[test]
 fn test_cli_too_many_args() {
     check(
-        &bin_path("endbasic"),
+        bin_path("endbasic"),
         &["foo", "bar"],
         2,
         Behavior::Null,
@@ -312,7 +312,7 @@ fn test_cli_too_many_args() {
 #[test]
 fn test_cli_unknown_option() {
     check(
-        &bin_path("endbasic"),
+        bin_path("endbasic"),
         &["-Z", "some-file"],
         2,
         Behavior::Null,
@@ -328,7 +328,7 @@ fn test_cli_unknown_option() {
 fn test_cli_version() {
     fn check_with_args(args: &[&str]) {
         check(
-            &bin_path("endbasic"),
+            bin_path("endbasic"),
             args,
             0,
             Behavior::Null,
@@ -511,7 +511,7 @@ fn test_lang_yes_no() {
 #[test]
 fn test_repl_autoexec() {
     let dir = tempfile::tempdir().unwrap();
-    fs::copy(&src_path("cli/tests/repl/autoexec.bas"), &dir.path().join("AUTOEXEC.BAS")).unwrap();
+    fs::copy(src_path("cli/tests/repl/autoexec.bas"), dir.path().join("AUTOEXEC.BAS")).unwrap();
     check(
         bin_path("endbasic"),
         &[&format!("--local-drive=file://{}", dir.path().to_str().unwrap())],
@@ -663,7 +663,7 @@ fn test_repl_interactive() {
 #[test]
 fn test_repl_load_save() {
     let dir = tempfile::tempdir().unwrap();
-    fs::copy(&src_path("cli/tests/repl/hello.bas"), &dir.path().join("hello.bas")).unwrap();
+    fs::copy(src_path("cli/tests/repl/hello.bas"), dir.path().join("hello.bas")).unwrap();
     assert!(!dir.path().join("hello2.bas").exists());
     check(
         bin_path("endbasic"),
