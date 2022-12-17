@@ -14,28 +14,28 @@
 # under the License.
 
 Invoke-WebRequest `
-    -Uri https://www.libsdl.org/release/SDL2-devel-2.0.16-VC.zip `
-    -OutFile SDL2-devel-2.0.16-VC.zip
+    -Uri https://www.libsdl.org/release/SDL2-devel-2.26.1-VC.zip `
+    -OutFile SDL2-devel-2.26.1-VC.zip
 Invoke-WebRequest `
     -Uri https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-devel-2.0.15-VC.zip `
     -OutFile SDL2_ttf-devel-2.0.15-VC.zip
 
-unzip SDL2-devel-2.0.16-VC.zip
+unzip SDL2-devel-2.26.1-VC.zip
 unzip SDL2_ttf-devel-2.0.15-VC.zip
 
-New-Item -Type Directory libs
-Copy-Item .\SDL2-2.0.16\lib\x64\*.lib,.\SDL2_ttf-2.0.15\lib\x64\*.lib libs
-New-Item -Type Directory dlls
-Copy-Item .\SDL2-2.0.16\lib\x64\*.dll,.\SDL2_ttf-2.0.15\lib\x64\*.dll dlls
-Copy-Item .\SDL2-2.0.16\lib\x64\*.txt,.\SDL2_ttf-2.0.15\lib\x64\*.txt dlls
+[void](New-Item -Force -Type Directory libs)
+Copy-Item .\SDL2-2.26.1\lib\x64\*.lib,.\SDL2_ttf-2.0.15\lib\x64\*.lib libs
+[void](New-Item -Force -Type Directory dlls)
+Copy-Item .\SDL2-2.26.1\lib\x64\*.dll,.\SDL2_ttf-2.0.15\lib\x64\*.dll dlls
+Copy-Item .\SDL2-2.26.1\lib\x64\*.txt,.\SDL2_ttf-2.0.15\lib\x64\*.txt dlls
 
-Remove-Item -Recurse -Force .\SDL2-2.0.16,.\SDL2_ttf-2.0.15,SDL2*.zip
+Remove-Item -Recurse -Force .\SDL2-2.26.1,.\SDL2_ttf-2.0.15,SDL2*.zip
 
 foreach ($dir in
     "target",
     "target\debug", "target\debug\deps", "target\debug\examples",
     "target\release", "target\release\deps", "target\release\examples") {
-    New-Item -Type Directory $dir
+    [void](New-Item -Force -Type Directory $dir)
     Copy-Item dlls\* $dir
     Copy-Item libs\* $dir
 }
