@@ -26,7 +26,7 @@ version = "0.9.99" # ENDBASIC-VERSION
 path = "../std"
 
 [dependencies.sdl2]
-version = "0.34"
+version = "0.35"
 default-features = false
 features = ["ttf"]
 
