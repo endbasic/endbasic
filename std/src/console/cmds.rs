@@ -369,6 +369,9 @@ impl Command for LocateCommand {
         }
         debug_assert!(row_arg.sep == ArgSep::End);
 
+        let mut console = self.console.borrow_mut();
+        let size = console.size_chars()?;
+
         let column = match &column_arg.expr {
             Some(arg) => {
                 let value = arg.eval(machine.get_mut_symbols()).await?;
@@ -376,6 +379,12 @@ impl Command for LocateCommand {
                     .as_i32()
                     .map_err(|e| CallError::ArgumentError(arg.start_pos(), format!("{}", e)))?;
                 match u16::try_from(i) {
+                    Ok(v) if v >= size.x => {
+                        return Err(CallError::ArgumentError(
+                            arg.start_pos(),
+                            format!("Column {} exceeds visible range of {}", v, size.x - 1),
+                        ))
+                    }
                     Ok(v) => v,
                     Err(_) => {
                         return Err(CallError::ArgumentError(
@@ -395,6 +404,12 @@ impl Command for LocateCommand {
                     .as_i32()
                     .map_err(|e| CallError::ArgumentError(arg.start_pos(), format!("{}", e)))?;
                 match u16::try_from(i) {
+                    Ok(v) if v >= size.y => {
+                        return Err(CallError::ArgumentError(
+                            arg.start_pos(),
+                            format!("Row {} exceeds visible range of {}", v, size.y - 1),
+                        ))
+                    }
                     Ok(v) => v,
                     Err(_) => {
                         return Err(CallError::ArgumentError(
@@ -407,7 +422,7 @@ impl Command for LocateCommand {
             None => return Err(CallError::SyntaxError),
         };
 
-        self.console.borrow_mut().locate(CharsXY::new(column, row))?;
+        console.locate(CharsXY::new(column, row))?;
         Ok(())
     }
 }
@@ -789,6 +804,21 @@ mod tests {
         check_stmt_err("1:1: In call to LOCATE: 1:11: Row out of range", "LOCATE 1, 70000");
         check_stmt_err("1:1: In call to LOCATE: 1:11: TRUE is not a number", "LOCATE 1, TRUE");
         check_stmt_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE 1,");
+
+        let mut t = Tester::default();
+        t.get_console().borrow_mut().set_size_chars(CharsXY { x: 30, y: 20 });
+        t.run("LOCATE 30, 0")
+            .expect_err("1:1: In call to LOCATE: 1:8: Column 30 exceeds visible range of 29")
+            .check();
+        t.run("LOCATE 31, 0")
+            .expect_err("1:1: In call to LOCATE: 1:8: Column 31 exceeds visible range of 29")
+            .check();
+        t.run("LOCATE 0, 20")
+            .expect_err("1:1: In call to LOCATE: 1:11: Row 20 exceeds visible range of 19")
+            .check();
+        t.run("LOCATE 0, 21")
+            .expect_err("1:1: In call to LOCATE: 1:11: Row 21 exceeds visible range of 19")
+            .check();
     }
 
     #[test]

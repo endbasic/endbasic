@@ -738,6 +738,9 @@ impl Context {
 
     /// Handler for a `Request::Locate`.
     fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
+        debug_assert!(pos.x < self.size_chars.x);
+        debug_assert!(pos.y < self.size_chars.y);
+
         self.clear_cursor()?;
         self.cursor_pos = pos;
         self.draw_cursor()?;
