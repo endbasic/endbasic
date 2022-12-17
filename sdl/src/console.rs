@@ -462,7 +462,7 @@ mod tests {
         test.console().write("A line with corrections1.").unwrap();
         test.console().clear(ClearType::PreviousChar).unwrap();
         test.console().clear(ClearType::PreviousChar).unwrap();
-        test.console().print(&"!".to_owned()).unwrap();
+        test.console().print("!").unwrap();
 
         test.console().write("Remove part of this").unwrap();
         test.console().move_within_line(-8).unwrap();

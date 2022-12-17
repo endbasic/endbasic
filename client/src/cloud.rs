@@ -52,14 +52,14 @@ async fn http_response_to_io_error(response: Response) -> io::Error {
         Ok(text) => match serde_json::from_str::<ErrorResponse>(&text) {
             Ok(response) => io::Error::new(
                 kind,
-                format!("{} (server code: {})", remove_control_chars(&response.message), status),
+                format!("{} (server code: {})", remove_control_chars(response.message), status),
             ),
             _ => io::Error::new(
                 kind,
                 format!(
                     "HTTP request returned status {} with text '{}'",
                     status,
-                    remove_control_chars(&text)
+                    remove_control_chars(text)
                 ),
             ),
         },
@@ -68,7 +68,7 @@ async fn http_response_to_io_error(response: Response) -> io::Error {
             format!(
                 "HTTP request returned status {} and failed to get text due to {}",
                 status,
-                remove_control_chars(&e.to_string())
+                remove_control_chars(e.to_string())
             ),
         ),
     }

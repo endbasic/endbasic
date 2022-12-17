@@ -100,7 +100,7 @@ impl Drive for DirectoryDrive {
 
     async fn get(&self, name: &str) -> io::Result<String> {
         let path = self.dir.join(name);
-        let input = File::open(&path)?;
+        let input = File::open(path)?;
         let mut content = String::new();
         io::BufReader::new(input).read_to_string(&mut content)?;
         Ok(content)
@@ -234,7 +234,7 @@ mod tests {
 
         let dir = tempfile::tempdir().unwrap();
         write_file(&dir.path().join("some file.bas"), &["this is not empty"]);
-        unix_fs::symlink(Path::new("some file.bas"), &dir.path().join("a link.bas")).unwrap();
+        unix_fs::symlink(Path::new("some file.bas"), dir.path().join("a link.bas")).unwrap();
 
         let drive = DirectoryDrive::new(dir.path()).unwrap();
         let files = block_on(drive.enumerate()).unwrap();
