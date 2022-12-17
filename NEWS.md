@@ -127,6 +127,9 @@ for the time being.**
     statement type.  `HELP "LANG"` now displays a collection of topics to
     choose from, instead of a one-page cheat sheet.
 
+*   Added the `PALETTE.BAS` demo, which is a little tool that renders the
+    full color palette.
+
 ## Changes in version 0.9.0
 
 **Released on 2022-06-05.**

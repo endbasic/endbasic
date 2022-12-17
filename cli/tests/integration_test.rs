@@ -377,6 +377,18 @@ fn test_example_hello() {
 }
 
 #[test]
+fn test_example_palette() {
+    check(
+        bin_path("endbasic"),
+        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/examples/palette.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/examples/palette.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_example_tour() {
     check(
         bin_path("endbasic"),

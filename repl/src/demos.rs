@@ -72,6 +72,14 @@ impl Default for DemosDrive {
             demos.insert("HELLO.BAS", (metadata, content));
         }
         {
+            let content = process_demo(include_bytes!("../examples/palette.bas"));
+            let metadata = Metadata {
+                date: time::OffsetDateTime::from_unix_timestamp(1671243940),
+                length: content.len() as u64,
+            };
+            demos.insert("PALETTE.BAS", (metadata, content));
+        }
+        {
             let content = process_demo(include_bytes!("../examples/tour.bas"));
             let metadata = Metadata {
                 date: time::OffsetDateTime::from_unix_timestamp(1608774770),
@@ -174,10 +182,11 @@ mod tests {
         assert!(files.dirents().contains_key("GPIO.BAS"));
         assert!(files.dirents().contains_key("GUESS.BAS"));
         assert!(files.dirents().contains_key("HELLO.BAS"));
+        assert!(files.dirents().contains_key("PALETTE.BAS"));
         assert!(files.dirents().contains_key("TOUR.BAS"));
 
         assert!(files.disk_quota().unwrap().bytes() > 0);
-        assert_eq!(4, files.disk_quota().unwrap().files());
+        assert_eq!(5, files.disk_quota().unwrap().files());
         assert_eq!(DiskSpace::new(0, 0), files.disk_free().unwrap());
     }
 
