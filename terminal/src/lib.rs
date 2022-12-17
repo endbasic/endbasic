@@ -302,6 +302,13 @@ impl Console for TerminalConsole {
     }
 
     fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
+        #[cfg(not(release))]
+        {
+            let size = self.size_chars()?;
+            assert!(pos.x < size.x);
+            assert!(pos.y < size.y);
+        }
+
         execute!(io::stdout(), cursor::MoveTo(pos.x, pos.y)).map_err(crossterm_error_to_io_error)
     }
 

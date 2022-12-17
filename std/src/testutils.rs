@@ -220,6 +220,8 @@ impl Console for MockConsole {
     }
 
     fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
+        assert!(pos.x < self.size_chars.x);
+        assert!(pos.y < self.size_chars.y);
         self.captured_out.push(CapturedOut::Locate(pos));
         Ok(())
     }

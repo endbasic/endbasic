@@ -79,7 +79,14 @@ impl Console for TrivialConsole {
         Ok(())
     }
 
-    fn locate(&mut self, _pos: CharsXY) -> io::Result<()> {
+    #[cfg_attr(release, allow(unused))]
+    fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
+        #[cfg(not(release))]
+        {
+            let size = self.size_chars()?;
+            assert!(pos.x < size.x);
+            assert!(pos.y < size.y);
+        }
         Ok(())
     }
 
