@@ -24,7 +24,7 @@
 
 use async_channel::{Receiver, Sender, TryRecvError};
 use async_trait::async_trait;
-use crossterm::{cursor, event, execute, style, terminal, tty::IsTty, QueueableCommand};
+use crossterm::{cursor, event, style, terminal, tty::IsTty, QueueableCommand};
 use endbasic_core::exec::Signal;
 use endbasic_std::console::{
     get_env_var_as_u16, read_key_from_stdin, remove_control_chars, CharsXY, ClearType, Console, Key,
@@ -273,19 +273,26 @@ impl Console for TerminalConsole {
 
     fn enter_alt(&mut self) -> io::Result<()> {
         if !self.alt_active {
-            execute!(io::stdout(), terminal::EnterAlternateScreen)
-                .map_err(crossterm_error_to_io_error)?;
+            let stdout = io::stdout();
+            let mut stdout = stdout.lock();
+            stdout.queue(terminal::EnterAlternateScreen).map_err(crossterm_error_to_io_error)?;
             self.alt_active = true;
+            self.maybe_flush(stdout)
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     fn hide_cursor(&mut self) -> io::Result<()> {
         if self.cursor_visible {
-            execute!(io::stdout(), cursor::Hide).map_err(crossterm_error_to_io_error)?;
+            let stdout = io::stdout();
+            let mut stdout = stdout.lock();
+            stdout.queue(cursor::Hide).map_err(crossterm_error_to_io_error)?;
             self.cursor_visible = false;
+            self.maybe_flush(stdout)
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     fn is_interactive(&self) -> bool {
@@ -294,11 +301,14 @@ impl Console for TerminalConsole {
 
     fn leave_alt(&mut self) -> io::Result<()> {
         if self.alt_active {
-            execute!(io::stdout(), terminal::LeaveAlternateScreen)
-                .map_err(crossterm_error_to_io_error)?;
+            let stdout = io::stdout();
+            let mut stdout = stdout.lock();
+            stdout.queue(terminal::LeaveAlternateScreen).map_err(crossterm_error_to_io_error)?;
             self.alt_active = false;
+            self.maybe_flush(stdout)
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
@@ -309,16 +319,22 @@ impl Console for TerminalConsole {
             assert!(pos.y < size.y);
         }
 
-        execute!(io::stdout(), cursor::MoveTo(pos.x, pos.y)).map_err(crossterm_error_to_io_error)
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
+        stdout.queue(cursor::MoveTo(pos.x, pos.y)).map_err(crossterm_error_to_io_error)?;
+        self.maybe_flush(stdout)
     }
 
     fn move_within_line(&mut self, off: i16) -> io::Result<()> {
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
         match off.cmp(&0) {
-            Ordering::Less => execute!(io::stdout(), cursor::MoveLeft(-off as u16)),
-            Ordering::Equal => Ok(()),
-            Ordering::Greater => execute!(io::stdout(), cursor::MoveRight(off as u16)),
+            Ordering::Less => stdout.queue(cursor::MoveLeft(-off as u16)),
+            Ordering::Equal => return Ok(()),
+            Ordering::Greater => stdout.queue(cursor::MoveRight(off as u16)),
         }
-        .map_err(crossterm_error_to_io_error)
+        .map_err(crossterm_error_to_io_error)?;
+        self.maybe_flush(stdout)
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
@@ -352,10 +368,14 @@ impl Console for TerminalConsole {
 
     fn show_cursor(&mut self) -> io::Result<()> {
         if !self.cursor_visible {
-            execute!(io::stdout(), cursor::Show).map_err(crossterm_error_to_io_error)?;
+            let stdout = io::stdout();
+            let mut stdout = stdout.lock();
+            stdout.queue(cursor::Show).map_err(crossterm_error_to_io_error)?;
             self.cursor_visible = true;
+            self.maybe_flush(stdout)
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     fn size_chars(&self) -> io::Result<CharsXY> {
