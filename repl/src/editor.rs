@@ -235,6 +235,10 @@ impl Editor {
                 need_refresh = true;
             }
 
+            // TODO(jmmv): We must handle the cursor visibility outside of the non-sync block
+            // because the current console implementation forces the cursor to be invisible
+            // when syncing is disabled.  This is suboptimal and should be fixed by decoupling
+            // the two properties...
             console.hide_cursor()?;
             if need_refresh {
                 self.refresh(console, console_size)?;
@@ -252,6 +256,7 @@ impl Editor {
             };
             console.locate(cursor_pos)?;
             console.show_cursor()?;
+            console.sync_now()?;
 
             match console.read_key().await? {
                 Key::Escape | Key::Eof | Key::Interrupt => break,
@@ -421,7 +426,9 @@ impl Program for Editor {
 
     async fn edit(&mut self, console: &mut dyn Console) -> io::Result<()> {
         console.enter_alt()?;
+        let previous = console.set_sync(false)?;
         let result = self.edit_interactively(console).await;
+        console.set_sync(previous)?;
         console.leave_alt()?;
         result
     }
@@ -489,7 +496,11 @@ mod tests {
         /// `console_size` holds the size of the mock console, which is used to determine where to
         /// print the status bar.
         fn new(console_size: CharsXY) -> Self {
-            Self { console_size, output: vec![CapturedOut::EnterAlt], dirty: false }
+            Self {
+                console_size,
+                output: vec![CapturedOut::EnterAlt, CapturedOut::SetSync(false)],
+                dirty: false,
+            }
         }
 
         /// Records the console changes needed to update the status line to reflect a new `file_pos`
@@ -524,6 +535,7 @@ mod tests {
             self.output.push(CapturedOut::SetColor(TEXT_COLOR.0, TEXT_COLOR.1));
             self.output.push(CapturedOut::Locate(cursor));
             self.output.push(CapturedOut::ShowCursor);
+            self.output.push(CapturedOut::SyncNow);
             self
         }
 
@@ -542,6 +554,7 @@ mod tests {
             }
             self.output.push(CapturedOut::Locate(cursor));
             self.output.push(CapturedOut::ShowCursor);
+            self.output.push(CapturedOut::SyncNow);
             self
         }
 
@@ -560,6 +573,7 @@ mod tests {
         /// Finalizes the list of expected side-effects on the console.
         fn build(self) -> Vec<CapturedOut> {
             let mut output = self.output;
+            output.push(CapturedOut::SetSync(true));
             output.push(CapturedOut::LeaveAlt);
             output
         }
