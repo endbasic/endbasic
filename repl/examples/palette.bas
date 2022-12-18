@@ -20,11 +20,12 @@
 CLS
 row = 0
 col = 0
+GFX_SYNC FALSE
 FOR c = 0 TO 255
     LOCATE col, row
 
     SELECT CASE c
-        CASE 0, 16 TO 21, 232 TO 239: COLOR 15, c
+        CASE 0, 4, 12, 16 TO 21, 232 TO 239: COLOR 15, c
         CASE ELSE: COLOR 0, c
     END SELECT
 
@@ -40,6 +41,7 @@ FOR c = 0 TO 255
         row = row + 1
     END IF
 NEXT
+GFX_SYNC TRUE
 
 COLOR
 PRINT

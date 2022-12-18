@@ -18,6 +18,7 @@ GOTO @main
 ' Clears the screen and prints the title in `title$`.
 @banner
 CLS
+GFX_SYNC FALSE
 COLOR 11
 PRINT
 title$ = " EndBASIC tour: " + title$
@@ -36,6 +37,7 @@ RETURN
 PRINT
 COLOR 11
 PRINT "Press ENTER to continue or ESC to exit the demo...";
+GFX_SYNC TRUE
 DO
     SELECT CASE INKEY
     CASE "ENTER": EXIT DO
@@ -195,5 +197,6 @@ COLOR 10
 PRINT "-- Brought to you by Julio Merino <jmmv@>"
 
 @end
+GFX_SYNC TRUE
 COLOR
 PRINT
