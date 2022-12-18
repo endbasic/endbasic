@@ -310,9 +310,16 @@ impl Console for MockConsole {
         Ok(())
     }
 
-    fn set_sync(&mut self, enabled: bool) -> io::Result<()> {
+    fn set_sync(&mut self, enabled: bool) -> io::Result<bool> {
+        let mut previous = true;
+        for o in self.captured_out.iter().rev() {
+            if let CapturedOut::SetSync(e) = o {
+                previous = *e;
+                break;
+            }
+        }
         self.captured_out.push(CapturedOut::SetSync(enabled));
-        Ok(())
+        Ok(previous)
     }
 }
 

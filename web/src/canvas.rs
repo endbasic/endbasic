@@ -697,9 +697,10 @@ impl Console for CanvasConsole {
         Ok(())
     }
 
-    fn set_sync(&mut self, enabled: bool) -> io::Result<()> {
+    fn set_sync(&mut self, enabled: bool) -> io::Result<bool> {
+        let previous = self.sync_enabled;
         self.sync_enabled = enabled;
-        Ok(())
+        Ok(previous)
     }
 }
 

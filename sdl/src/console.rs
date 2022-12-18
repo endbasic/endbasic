@@ -220,8 +220,12 @@ impl Console for SdlConsole {
         self.call(Request::SyncNow)
     }
 
-    fn set_sync(&mut self, enabled: bool) -> io::Result<()> {
-        self.call(Request::SetSync(enabled))
+    fn set_sync(&mut self, enabled: bool) -> io::Result<bool> {
+        self.request_tx.send(Request::SetSync(enabled)).expect("Channel must be alive");
+        match self.response_rx.recv().expect("Channel must be alive") {
+            Response::SetSync(result) => result,
+            _ => panic!("Unexpected response type"),
+        }
     }
 }
 
