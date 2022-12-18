@@ -156,6 +156,11 @@ pub enum Expr {
     /// Logical xor of two expressions.
     Xor(Box<BinaryOpSpan>),
 
+    /// Shift left of a signed integer by a number of bits without rotation.
+    ShiftLeft(Box<BinaryOpSpan>),
+    /// Shift right of a signed integer by a number of bits without rotation.
+    ShiftRight(Box<BinaryOpSpan>),
+
     /// A function call or an array reference.
     Call(FunctionCallSpan),
 }

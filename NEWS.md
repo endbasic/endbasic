@@ -112,7 +112,7 @@ for the time being.**
     `INPUT var` work as expected from traditional BASIC implementations.
 
 *   Extended `AND`, `NOT`, `OR`, and `XOR` to perform bitwise operations when
-    operating on an integer context.
+    operating on an integer context and added the `<<` and `>>` operators.
 
 *   Added syntax to specify integers in different bases, using forms like:
     `&b_1010`, `&d_1234`, `&o_750`, and `&x_12f`.

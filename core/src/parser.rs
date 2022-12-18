@@ -77,6 +77,9 @@ enum ExprOp {
     Not,
     Or,
     Xor,
+
+    ShiftLeft,
+    ShiftRight,
 }
 
 impl ExprOp {
@@ -97,6 +100,8 @@ impl ExprOp {
             Token::And => ExprOp::And,
             Token::Or => ExprOp::Or,
             Token::Xor => ExprOp::Xor,
+            Token::ShiftLeft => ExprOp::ShiftLeft,
+            Token::ShiftRight => ExprOp::ShiftRight,
             Token::Minus => panic!("Ambiguous token; cannot derive ExprOp"),
             _ => panic!("Called on an non-operator"),
         }
@@ -106,18 +111,21 @@ impl ExprOp {
     /// comparing it against other calls to this function.  Higher number imply higher priority.
     fn priority(&self) -> i8 {
         match self {
-            ExprOp::LeftParen => 5,
-            ExprOp::Power => 5,
+            ExprOp::LeftParen => 6,
+            ExprOp::Power => 6,
 
-            ExprOp::Negate => 4,
-            ExprOp::Not => 4,
+            ExprOp::Negate => 5,
+            ExprOp::Not => 5,
 
-            ExprOp::Multiply => 3,
-            ExprOp::Divide => 3,
-            ExprOp::Modulo => 3,
+            ExprOp::Multiply => 4,
+            ExprOp::Divide => 4,
+            ExprOp::Modulo => 4,
 
-            ExprOp::Add => 2,
-            ExprOp::Subtract => 2,
+            ExprOp::Add => 3,
+            ExprOp::Subtract => 3,
+
+            ExprOp::ShiftLeft => 2,
+            ExprOp::ShiftRight => 2,
 
             ExprOp::Equal => 1,
             ExprOp::NotEqual => 1,
@@ -184,15 +192,20 @@ impl ExprOpSpan {
             ExprOp::Divide => apply2(exprs, self.pos, Expr::Divide),
             ExprOp::Modulo => apply2(exprs, self.pos, Expr::Modulo),
             ExprOp::Power => apply2(exprs, self.pos, Expr::Power),
+
             ExprOp::Equal => apply2(exprs, self.pos, Expr::Equal),
             ExprOp::NotEqual => apply2(exprs, self.pos, Expr::NotEqual),
             ExprOp::Less => apply2(exprs, self.pos, Expr::Less),
             ExprOp::LessEqual => apply2(exprs, self.pos, Expr::LessEqual),
             ExprOp::Greater => apply2(exprs, self.pos, Expr::Greater),
             ExprOp::GreaterEqual => apply2(exprs, self.pos, Expr::GreaterEqual),
+
             ExprOp::And => apply2(exprs, self.pos, Expr::And),
             ExprOp::Or => apply2(exprs, self.pos, Expr::Or),
             ExprOp::Xor => apply2(exprs, self.pos, Expr::Xor),
+
+            ExprOp::ShiftLeft => apply2(exprs, self.pos, Expr::ShiftLeft),
+            ExprOp::ShiftRight => apply2(exprs, self.pos, Expr::ShiftRight),
 
             ExprOp::Negate => apply1(exprs, self.pos, Expr::Negate),
             ExprOp::Not => apply1(exprs, self.pos, Expr::Not),
@@ -817,7 +830,9 @@ impl<'a> Parser<'a> {
                 | Token::Exponent
                 | Token::And
                 | Token::Or
-                | Token::Xor => {
+                | Token::Xor
+                | Token::ShiftLeft
+                | Token::ShiftRight => {
                     let op = ExprOp::from(ts.token);
                     while let Some(eos2) = op_spans.last() {
                         if eos2.op == ExprOp::LeftParen || eos2.op.priority() < op.priority() {
@@ -2604,6 +2619,27 @@ mod tests {
     }
 
     #[test]
+    fn test_expr_bitwise_ops() {
+        use Expr::*;
+        do_expr_ok_test(
+            "1 << 2",
+            ShiftLeft(Box::from(BinaryOpSpan {
+                lhs: expr_integer(1, 1, 7),
+                rhs: expr_integer(2, 1, 12),
+                pos: lc(1, 9),
+            })),
+        );
+        do_expr_ok_test(
+            "1 >> 2",
+            ShiftRight(Box::from(BinaryOpSpan {
+                lhs: expr_integer(1, 1, 7),
+                rhs: expr_integer(2, 1, 12),
+                pos: lc(1, 9),
+            })),
+        );
+    }
+
+    #[test]
     fn test_expr_op_priorities() {
         use Expr::*;
         do_expr_ok_test(
@@ -2683,6 +2719,18 @@ mod tests {
                 rhs: Negate(Box::from(UnaryOpSpan {
                     expr: expr_integer(3, 1, 13),
                     pos: lc(1, 12),
+                })),
+                pos: lc(1, 9),
+            })),
+        );
+        do_expr_ok_test(
+            "0 <> 2 >> 1",
+            NotEqual(Box::from(BinaryOpSpan {
+                lhs: expr_integer(0, 1, 7),
+                rhs: ShiftRight(Box::from(BinaryOpSpan {
+                    lhs: expr_integer(2, 1, 12),
+                    rhs: expr_integer(1, 1, 17),
+                    pos: lc(1, 14),
                 })),
                 pos: lc(1, 9),
             })),

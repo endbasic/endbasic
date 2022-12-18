@@ -98,6 +98,9 @@ impl Expr {
             Expr::Xor(span) => span.lhs.start_pos(),
             Expr::Not(span) => span.pos,
 
+            Expr::ShiftLeft(span) => span.lhs.start_pos(),
+            Expr::ShiftRight(span) => span.lhs.start_pos(),
+
             Expr::Equal(span) => span.lhs.start_pos(),
             Expr::NotEqual(span) => span.lhs.start_pos(),
             Expr::Less(span) => span.lhs.start_pos(),
@@ -225,6 +228,15 @@ impl Expr {
             }
             Expr::Not(span) => Ok(Value::not(&span.expr.eval(syms).await?)
                 .map_err(|e| Error::from_value_error(e, span.pos))?),
+
+            Expr::ShiftLeft(span) => {
+                Ok(Value::shl(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
+            }
+            Expr::ShiftRight(span) => {
+                Ok(Value::shr(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)
+                    .map_err(|e| Error::from_value_error(e, span.pos))?)
+            }
 
             Expr::Equal(span) => {
                 Ok(Value::eq(&span.lhs.eval(syms).await?, &span.rhs.eval(syms).await?)

@@ -23,3 +23,6 @@ IF (2 AND mask) <> 0 THEN PRINT "Match 4"
 IF (7 AND mask) <> 0 THEN PRINT "Match 5"
 
 PRINT NOT 123456
+
+PRINT 1 << 20
+PRINT 128 >> 2

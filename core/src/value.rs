@@ -149,6 +149,60 @@ impl Value {
         }
     }
 
+    /// Performs a left shift.
+    pub fn shl(&self, other: &Self) -> Result<Self> {
+        match (self, other) {
+            (Value::Integer(lhs), Value::Integer(rhs)) => {
+                let bits = match u32::try_from(*rhs) {
+                    Ok(n) => n,
+                    Err(_) => {
+                        return Err(Error::new(format!(
+                            "Number of bits to << ({}) must be positive",
+                            other
+                        )))
+                    }
+                };
+                match lhs.checked_shl(bits) {
+                    Some(i) => Ok(Value::Integer(i)),
+                    None => Ok(Value::Integer(0)),
+                }
+            }
+            (Value::Integer(_), _) => {
+                Err(Error::new(format!("Number of bits to << ({}) must be an integer", other)))
+            }
+
+            (_, _) => Err(Error::new(format!("Cannot apply << to non-integer {}", self))),
+        }
+    }
+
+    /// Performs a right shift.
+    pub fn shr(&self, other: &Self) -> Result<Self> {
+        match (self, other) {
+            (Value::Integer(lhs), Value::Integer(rhs)) => {
+                let bits = match u32::try_from(*rhs) {
+                    Ok(n) => n,
+                    Err(_) => {
+                        return Err(Error::new(format!(
+                            "Number of bits to >> ({}) must be positive",
+                            other
+                        )))
+                    }
+                };
+                match lhs.checked_shr(bits) {
+                    Some(i) => Ok(Value::Integer(i)),
+                    None if *lhs < 0 => Ok(Value::Integer(-1)),
+                    None => Ok(Value::Integer(0)),
+                }
+            }
+
+            (Value::Integer(_), _) => {
+                Err(Error::new(format!("Number of bits to >> ({}) must be an integer", other)))
+            }
+
+            (_, _) => Err(Error::new(format!("Cannot apply >> to non-integer {}", self))),
+        }
+    }
+
     /// Performs an equality check.
     pub fn eq(&self, other: &Self) -> Result<Self> {
         match (self, other) {
@@ -645,6 +699,113 @@ mod tests {
         assert_eq!(Integer(-1), Integer(0).not().unwrap());
 
         assert_eq!("Cannot apply NOT to 3.0", format!("{}", Double(3.0).not().unwrap_err()));
+    }
+
+    #[test]
+    fn test_value_shl() {
+        assert_eq!(Integer(12), Integer(3).shl(&Integer(2)).unwrap());
+        assert_eq!(
+            Integer(0xf0000000u32 as i32),
+            Integer(0xf0000000u32 as i32).shl(&Integer(0)).unwrap()
+        );
+        assert_eq!(Integer(0x80000000u32 as i32), Integer(1).shl(&Integer(31)).unwrap());
+        assert_eq!(Integer(0), Integer(0xf0000000u32 as i32).shl(&Integer(31)).unwrap());
+
+        assert_eq!(
+            Integer(0xe0000000u32 as i32),
+            Integer(0xf0000000u32 as i32).shl(&Integer(1)).unwrap()
+        );
+        assert_eq!(Integer(0), Integer(0x80000000u32 as i32).shl(&Integer(1)).unwrap());
+        assert_eq!(Integer(0), Integer(1).shl(&Integer(32)).unwrap());
+        assert_eq!(Integer(0), Integer(1).shl(&Integer(64)).unwrap());
+
+        assert_eq!(
+            "Cannot apply << to non-integer FALSE",
+            format!("{}", Boolean(false).shl(&Boolean(true)).unwrap_err())
+        );
+        assert_eq!(
+            "Cannot apply << to non-integer FALSE",
+            format!("{}", Boolean(false).shl(&Integer(8)).unwrap_err())
+        );
+        assert_eq!(
+            "Cannot apply << to non-integer 3.0",
+            format!("{}", Double(3.0).shl(&Integer(8)).unwrap_err())
+        );
+        assert_eq!(
+            "Cannot apply << to non-integer \"foo\"",
+            format!("{}", Text("foo".to_owned()).shl(&Integer(8)).unwrap_err())
+        );
+
+        assert_eq!(
+            "Number of bits to << (TRUE) must be an integer",
+            format!("{}", Integer(3).shl(&Boolean(true)).unwrap_err())
+        );
+        assert_eq!(
+            "Number of bits to << (4.0) must be an integer",
+            format!("{}", Integer(3).shl(&Double(4.0)).unwrap_err())
+        );
+
+        assert_eq!(
+            "Number of bits to << (-1) must be positive",
+            format!("{}", Integer(3).shl(&Integer(-1)).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_value_shr() {
+        assert_eq!(Integer(3), Integer(12).shr(&Integer(2)).unwrap());
+        assert_eq!(
+            Integer(0xf0000000u32 as i32),
+            Integer(0xf0000000u32 as i32).shr(&Integer(0)).unwrap()
+        );
+        assert_eq!(Integer(-1), Integer(0xf0000000u32 as i32).shr(&Integer(31)).unwrap());
+        assert_eq!(Integer(1), Integer(0x70000000u32 as i32).shr(&Integer(30)).unwrap());
+        assert_eq!(Integer(-2), Integer(-8).shr(&Integer(2)).unwrap());
+
+        assert_eq!(
+            Integer(0xf0000000u32 as i32),
+            Integer(0xe0000000u32 as i32).shr(&Integer(1)).unwrap()
+        );
+        assert_eq!(
+            Integer(0xc0000000u32 as i32),
+            Integer(0x80000000u32 as i32).shr(&Integer(1)).unwrap()
+        );
+        assert_eq!(Integer(0x38000000), Integer(0x70000000).shr(&Integer(1)).unwrap());
+        assert_eq!(Integer(0), Integer(0x70000000u32 as i32).shr(&Integer(32)).unwrap());
+        assert_eq!(Integer(0), Integer(0x70000000u32 as i32).shr(&Integer(32)).unwrap());
+        assert_eq!(Integer(-1), Integer(0x80000000u32 as i32).shr(&Integer(32)).unwrap());
+        assert_eq!(Integer(-1), Integer(0x80000000u32 as i32).shr(&Integer(64)).unwrap());
+
+        assert_eq!(
+            "Cannot apply >> to non-integer FALSE",
+            format!("{}", Boolean(false).shr(&Boolean(true)).unwrap_err())
+        );
+        assert_eq!(
+            "Cannot apply >> to non-integer FALSE",
+            format!("{}", Boolean(false).shr(&Integer(8)).unwrap_err())
+        );
+        assert_eq!(
+            "Cannot apply >> to non-integer 3.0",
+            format!("{}", Double(3.0).shr(&Integer(8)).unwrap_err())
+        );
+        assert_eq!(
+            "Cannot apply >> to non-integer \"foo\"",
+            format!("{}", Text("foo".to_owned()).shr(&Integer(8)).unwrap_err())
+        );
+
+        assert_eq!(
+            "Number of bits to >> (TRUE) must be an integer",
+            format!("{}", Integer(3).shr(&Boolean(true)).unwrap_err())
+        );
+        assert_eq!(
+            "Number of bits to >> (4.0) must be an integer",
+            format!("{}", Integer(3).shr(&Double(4.0)).unwrap_err())
+        );
+
+        assert_eq!(
+            "Number of bits to >> (-1) must be positive",
+            format!("{}", Integer(3).shr(&Integer(-1)).unwrap_err())
+        );
     }
 
     #[test]
