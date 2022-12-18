@@ -81,6 +81,9 @@ EndBASIC provides the following operators:
     *   Unary prefix: NOT
     *   Whether these perform a logical or bitwise operation depends on the expression context.
 
+*   Bitwise operators:
+    *   Binary infix: <<, >> (signed integer shift without rotation)
+
 *   Relational operators:
     *   Binary infix: =, <>, <, <=, >, >=
 

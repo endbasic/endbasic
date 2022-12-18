@@ -338,6 +338,9 @@ Output from HELP "EXPRESSIONS":
         * Whether these perform a logical or bitwise operation depends on
         the expression context.
 
+    * Bitwise operators:
+        * Binary infix: <<, >> (signed integer shift without rotation)
+
     * Relational operators:
         * Binary infix: =, <>, <, <=, >, >=
 

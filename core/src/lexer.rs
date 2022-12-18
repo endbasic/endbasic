@@ -67,6 +67,9 @@ pub enum Token {
     Or,
     Xor,
 
+    ShiftLeft,
+    ShiftRight,
+
     Case,
     Data,
     Do,
@@ -144,6 +147,9 @@ impl fmt::Display for Token {
             Token::Not => write!(f, "NOT"),
             Token::Or => write!(f, "OR"),
             Token::Xor => write!(f, "XOR"),
+
+            Token::ShiftLeft => write!(f, "<<"),
+            Token::ShiftRight => write!(f, ">>"),
 
             Token::Case => write!(f, "CASE"),
             Token::Data => write!(f, "DATA"),
@@ -433,11 +439,19 @@ impl<'a> Lexer<'a> {
                 self.input.next().unwrap()?;
                 Ok(TokenSpan::new(Token::LessEqual, first.pos, 2))
             }
+            ('<', Some(Ok(ch_span))) if ch_span.ch == '<' => {
+                self.input.next().unwrap()?;
+                Ok(TokenSpan::new(Token::ShiftLeft, first.pos, 2))
+            }
             ('<', _) => Ok(TokenSpan::new(Token::Less, first.pos, 1)),
 
             ('>', Some(Ok(ch_span))) if ch_span.ch == '=' => {
                 self.input.next().unwrap()?;
                 Ok(TokenSpan::new(Token::GreaterEqual, first.pos, 2))
+            }
+            ('>', Some(Ok(ch_span))) if ch_span.ch == '>' => {
+                self.input.next().unwrap()?;
+                Ok(TokenSpan::new(Token::ShiftRight, first.pos, 2))
             }
             ('>', _) => Ok(TokenSpan::new(Token::Greater, first.pos, 1)),
 
@@ -1270,8 +1284,8 @@ mod tests {
         );
     }
 
-    /// Syntactic sugar to instantiate a test that verifies the parsing of an operator.
-    fn do_operator_test(op: &str, t: Token) {
+    /// Syntactic sugar to instantiate a test that verifies the parsing of a binary operator.
+    fn do_binary_operator_test(op: &str, t: Token) {
         do_ok_test(
             format!("a {} 2", op).as_ref(),
             &[
@@ -1283,25 +1297,49 @@ mod tests {
         );
     }
 
+    /// Syntactic sugar to instantiate a test that verifies the parsing of a unary operator.
+    fn do_unary_operator_test(op: &str, t: Token) {
+        do_ok_test(
+            format!("{} 2", op).as_ref(),
+            &[
+                ts(t, 1, 1, op.len()),
+                ts(Token::Integer(2), 1, 2 + op.len(), 1),
+                ts(Token::Eof, 1, 3 + op.len(), 0),
+            ],
+        );
+    }
+
     #[test]
     fn test_operator_relational_ops() {
-        do_operator_test("=", Token::Equal);
-        do_operator_test("<>", Token::NotEqual);
-        do_operator_test("<", Token::Less);
-        do_operator_test("<=", Token::LessEqual);
-        do_operator_test(">", Token::Greater);
-        do_operator_test(">=", Token::GreaterEqual);
+        do_binary_operator_test("=", Token::Equal);
+        do_binary_operator_test("<>", Token::NotEqual);
+        do_binary_operator_test("<", Token::Less);
+        do_binary_operator_test("<=", Token::LessEqual);
+        do_binary_operator_test(">", Token::Greater);
+        do_binary_operator_test(">=", Token::GreaterEqual);
     }
 
     #[test]
     fn test_operator_arithmetic_ops() {
-        do_operator_test("+", Token::Plus);
-        do_operator_test("-", Token::Minus);
-        do_operator_test("*", Token::Multiply);
-        do_operator_test("/", Token::Divide);
-        do_operator_test("MOD", Token::Modulo);
-        do_operator_test("mod", Token::Modulo);
-        do_operator_test("^", Token::Exponent);
+        do_binary_operator_test("+", Token::Plus);
+        do_binary_operator_test("-", Token::Minus);
+        do_binary_operator_test("*", Token::Multiply);
+        do_binary_operator_test("/", Token::Divide);
+        do_binary_operator_test("MOD", Token::Modulo);
+        do_binary_operator_test("mod", Token::Modulo);
+        do_binary_operator_test("^", Token::Exponent);
+        do_unary_operator_test("-", Token::Minus);
+    }
+
+    #[test]
+    fn test_operator_logical_bitwise_ops() {
+        do_binary_operator_test("AND", Token::And);
+        do_binary_operator_test("OR", Token::Or);
+        do_binary_operator_test("XOR", Token::Xor);
+        do_unary_operator_test("NOT", Token::Not);
+
+        do_binary_operator_test("<<", Token::ShiftLeft);
+        do_binary_operator_test(">>", Token::ShiftRight);
     }
 
     #[test]
