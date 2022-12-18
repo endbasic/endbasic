@@ -427,8 +427,7 @@ equivalent: HELP \"CON\", HELP \"console\", HELP \"Console manipulation\".",
     }
 
     /// Prints a summary of all available help topics.
-    fn summary(&self, topics: &Topics) -> io::Result<()> {
-        let mut console = self.console.borrow_mut();
+    fn summary(&self, topics: &Topics, console: &mut dyn Console) -> io::Result<()> {
         for line in header() {
             refill_and_print(&mut *console, [&line], "")?;
         }
@@ -484,7 +483,11 @@ impl Command for HelpCommand {
 
         match span.args.as_slice() {
             [] => {
-                self.summary(&topics)?;
+                let mut console = self.console.borrow_mut();
+                let previous = console.set_sync(false)?;
+                let result = self.summary(&topics, &mut *console);
+                console.set_sync(previous)?;
+                result?;
             }
             [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
                 let pos = expr.start_pos();
@@ -492,7 +495,10 @@ impl Command for HelpCommand {
                     Value::Text(t) => {
                         let topic = topics.find(&t, pos)?;
                         let mut console = self.console.borrow_mut();
-                        topic.describe(&mut *console)?;
+                        let previous = console.set_sync(false)?;
+                        let result = topic.describe(&mut *console);
+                        console.set_sync(previous)?;
+                        result?;
                     }
                     _ => return Err(CallError::SyntaxError),
                 }
@@ -691,7 +697,10 @@ This is the first and only topic with just one line.
             tester().add_command(DoNothingCommand::new()).add_function(EmptyFunction::new());
         t.get_console().borrow_mut().set_color(Some(100), Some(200)).unwrap();
         t.run("HELP")
-            .expect_output([CapturedOut::SetColor(Some(100), Some(200))])
+            .expect_output([
+                CapturedOut::SetColor(Some(100), Some(200)),
+                CapturedOut::SetSync(false),
+            ])
             .expect_prints(header())
             .expect_prints([""])
             .expect_output([
@@ -726,6 +735,7 @@ This is the first and only topic with just one line.
                 "    Type END or press CTRL+D to exit.",
                 "",
             ])
+            .expect_output([CapturedOut::SetSync(true)])
             .check();
     }
 
@@ -735,7 +745,7 @@ This is the first and only topic with just one line.
             tester().add_command(DoNothingCommand::new()).add_function(EmptyFunction::new());
         t.get_console().borrow_mut().set_color(Some(70), Some(50)).unwrap();
         t.run(r#"help "testing""#)
-            .expect_output([CapturedOut::SetColor(Some(70), Some(50))])
+            .expect_output([CapturedOut::SetColor(Some(70), Some(50)), CapturedOut::SetSync(false)])
             .expect_prints([""])
             .expect_output([
                 CapturedOut::SetColor(Some(TITLE_COLOR), Some(50)),
@@ -758,6 +768,7 @@ This is the first and only topic with just one line.
                 CapturedOut::Print("    This is the blurb.".to_owned()),
             ])
             .expect_prints(["", "    Type HELP followed by the name of a topic for details.", ""])
+            .expect_output([CapturedOut::SetSync(true)])
             .check();
     }
 
@@ -766,7 +777,7 @@ This is the first and only topic with just one line.
         let mut t = tester().add_command(DoNothingCommand::new());
         t.get_console().borrow_mut().set_color(Some(20), Some(21)).unwrap();
         t.run(r#"help "Do_Nothing""#)
-            .expect_output([CapturedOut::SetColor(Some(20), Some(21))])
+            .expect_output([CapturedOut::SetColor(Some(20), Some(21)), CapturedOut::SetSync(false)])
             .expect_prints([""])
             .expect_output([
                 CapturedOut::SetColor(Some(TITLE_COLOR), Some(21)),
@@ -784,6 +795,7 @@ This is the first and only topic with just one line.
                 "    Second paragraph of the extended description.",
                 "",
             ])
+            .expect_output([CapturedOut::SetSync(true)])
             .check();
     }
 
@@ -791,7 +803,7 @@ This is the first and only topic with just one line.
         let mut t = tester().add_function(EmptyFunction::new());
         t.get_console().borrow_mut().set_color(Some(30), Some(26)).unwrap();
         t.run(format!(r#"help "{}""#, name))
-            .expect_output([CapturedOut::SetColor(Some(30), Some(26))])
+            .expect_output([CapturedOut::SetColor(Some(30), Some(26)), CapturedOut::SetSync(false)])
             .expect_prints([""])
             .expect_output([
                 CapturedOut::SetColor(Some(TITLE_COLOR), Some(26)),
@@ -809,6 +821,7 @@ This is the first and only topic with just one line.
                 "    Second paragraph of the extended description.",
                 "",
             ])
+            .expect_output([CapturedOut::SetSync(true)])
             .check();
     }
 
@@ -827,6 +840,7 @@ This is the first and only topic with just one line.
         tester()
             .add_command(DoNothingCommand::new())
             .run(r#"topic = "Do_Nothing": HELP topic"#)
+            .expect_output([CapturedOut::SetSync(false)])
             .expect_prints([""])
             .expect_output([
                 CapturedOut::SetColor(Some(TITLE_COLOR), None),
@@ -845,6 +859,7 @@ This is the first and only topic with just one line.
                 "",
             ])
             .expect_var("TOPIC", "Do_Nothing")
+            .expect_output([CapturedOut::SetSync(true)])
             .check();
     }
 
@@ -857,6 +872,7 @@ This is the first and only topic with just one line.
                 format!("    {} this [would] <be|the> syntax \"specification\"", name)
             };
             vec![
+                CapturedOut::SetSync(false),
                 CapturedOut::Print("".to_owned()),
                 CapturedOut::SetColor(Some(TITLE_COLOR), None),
                 CapturedOut::Print(spec),
@@ -868,6 +884,7 @@ This is the first and only topic with just one line.
                 CapturedOut::Print("".to_owned()),
                 CapturedOut::Print("    Second paragraph of the extended description.".to_owned()),
                 CapturedOut::Print("".to_owned()),
+                CapturedOut::SetSync(true),
             ]
         }
 
