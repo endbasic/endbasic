@@ -992,12 +992,13 @@ impl Context {
     }
 
     /// Handler for a `Request::SetSync`.
-    fn set_sync(&mut self, enabled: bool) -> io::Result<()> {
+    fn set_sync(&mut self, enabled: bool) -> io::Result<bool> {
         if !self.sync_enabled {
             self.force_present_canvas()?;
         }
+        let previous = self.sync_enabled;
         self.sync_enabled = enabled;
-        Ok(())
+        Ok(previous)
     }
 }
 
@@ -1042,6 +1043,7 @@ pub(crate) enum Response {
     Empty(io::Result<()>),
     SizeChars(CharsXY),
     SizePixels(SizeInPixels),
+    SetSync(io::Result<bool>),
 
     #[cfg(test)]
     Pixels(io::Result<(Vec<u8>, PixelFormatEnum)>),
@@ -1100,7 +1102,7 @@ pub(crate) fn run(
                         Response::Empty(ctx.draw_rect_filled(x1y1, x2y2))
                     }
                     Request::SyncNow => Response::Empty(ctx.sync_now()),
-                    Request::SetSync(enabled) => Response::Empty(ctx.set_sync(enabled)),
+                    Request::SetSync(enabled) => Response::SetSync(ctx.set_sync(enabled)),
 
                     #[cfg(test)]
                     Request::PushEvent(ev) => Response::Empty(ctx.push_event(ev)),

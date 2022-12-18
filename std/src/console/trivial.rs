@@ -139,11 +139,12 @@ impl Console for TrivialConsole {
         }
     }
 
-    fn set_sync(&mut self, enabled: bool) -> io::Result<()> {
+    fn set_sync(&mut self, enabled: bool) -> io::Result<bool> {
         if !self.sync_enabled {
             io::stdout().flush()?;
         }
+        let previous = self.sync_enabled;
         self.sync_enabled = enabled;
-        Ok(())
+        Ok(previous)
     }
 }

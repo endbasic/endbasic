@@ -267,7 +267,9 @@ pub trait Console {
     /// is too slow).
     ///
     /// Flushes any pending updates when enabled.
-    fn set_sync(&mut self, _enabled: bool) -> io::Result<()>;
+    ///
+    /// Returns the previous status of the video syncing flag.
+    fn set_sync(&mut self, _enabled: bool) -> io::Result<bool>;
 }
 
 /// Resets the state of a console in a best-effort manner.
