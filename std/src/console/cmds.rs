@@ -369,9 +369,6 @@ impl Command for LocateCommand {
         }
         debug_assert!(row_arg.sep == ArgSep::End);
 
-        let mut console = self.console.borrow_mut();
-        let size = console.size_chars()?;
-
         let column = match &column_arg.expr {
             Some(arg) => {
                 let value = arg.eval(machine.get_mut_symbols()).await?;
@@ -379,12 +376,6 @@ impl Command for LocateCommand {
                     .as_i32()
                     .map_err(|e| CallError::ArgumentError(arg.start_pos(), format!("{}", e)))?;
                 match u16::try_from(i) {
-                    Ok(v) if v >= size.x => {
-                        return Err(CallError::ArgumentError(
-                            arg.start_pos(),
-                            format!("Column {} exceeds visible range of {}", v, size.x - 1),
-                        ))
-                    }
                     Ok(v) => v,
                     Err(_) => {
                         return Err(CallError::ArgumentError(
@@ -404,12 +395,6 @@ impl Command for LocateCommand {
                     .as_i32()
                     .map_err(|e| CallError::ArgumentError(arg.start_pos(), format!("{}", e)))?;
                 match u16::try_from(i) {
-                    Ok(v) if v >= size.y => {
-                        return Err(CallError::ArgumentError(
-                            arg.start_pos(),
-                            format!("Row {} exceeds visible range of {}", v, size.y - 1),
-                        ))
-                    }
                     Ok(v) => v,
                     Err(_) => {
                         return Err(CallError::ArgumentError(
@@ -421,6 +406,22 @@ impl Command for LocateCommand {
             }
             None => return Err(CallError::SyntaxError),
         };
+
+        let mut console = self.console.borrow_mut();
+        let size = console.size_chars()?;
+
+        if column >= size.x {
+            return Err(CallError::ArgumentError(
+                column_arg.expr.as_ref().expect("Presence checked above").start_pos(),
+                format!("Column {} exceeds visible range of {}", column, size.x - 1),
+            ));
+        }
+        if row >= size.y {
+            return Err(CallError::ArgumentError(
+                row_arg.expr.as_ref().expect("Presence checked above").start_pos(),
+                format!("Row {} exceeds visible range of {}", row, size.y - 1),
+            ));
+        }
 
         console.locate(CharsXY::new(column, row))?;
         Ok(())
