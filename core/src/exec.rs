@@ -464,108 +464,123 @@ impl Machine {
         Ok(())
     }
 
-    /// Helper for `exec` that only worries about execution.  Errors are handled on the caller side
-    /// depending on the `ON ERROR` handling policy that is currently configured.
+    /// Helper for `exec_one` that only worries about execution of a single instruction.
+    ///
+    /// Errors are handled on the caller side depending on the `ON ERROR` handling policy that is
+    /// currently configured.
     async fn exec_safe(&mut self, context: &mut Context, instrs: &[Instruction]) -> Result<()> {
-        while context.pc < instrs.len() {
-            if self.should_stop().await {
-                break;
+        let instr = &instrs[context.pc];
+        match instr {
+            Instruction::ArrayAssignment(span) => {
+                self.assign_array(span).await?;
+                context.pc += 1;
             }
 
-            let instr = &instrs[context.pc];
-            match instr {
-                Instruction::ArrayAssignment(span) => {
-                    self.assign_array(span).await?;
-                    context.pc += 1;
-                }
+            Instruction::Assignment(span) => {
+                self.assign(span).await?;
+                context.pc += 1;
+            }
 
-                Instruction::Assignment(span) => {
-                    self.assign(span).await?;
-                    context.pc += 1;
-                }
+            Instruction::BuiltinCall(span) => {
+                self.call_builtin(span).await?;
+                context.pc += 1;
+            }
 
-                Instruction::BuiltinCall(span) => {
-                    self.call_builtin(span).await?;
-                    context.pc += 1;
-                }
+            Instruction::Call(span) => {
+                context.addr_stack.push(context.pc + 1);
+                context.pc = span.addr;
+            }
 
-                Instruction::Call(span) => {
-                    context.addr_stack.push(context.pc + 1);
+            Instruction::Dim(span) => {
+                self.symbols
+                    .dim(&span.name, span.vtype)
+                    .map_err(|e| Error::from_value_error(e, span.name_pos))?;
+                context.pc += 1;
+            }
+
+            Instruction::DimArray(span) => {
+                self.dim_array(span).await?;
+                context.pc += 1;
+            }
+
+            Instruction::End(span) => {
+                self.end(span).await?;
+            }
+
+            Instruction::Jump(span) => {
+                context.pc = span.addr;
+            }
+
+            Instruction::JumpIfDefined(span) => {
+                if self.symbols.get_auto(&span.var).is_some() {
                     context.pc = span.addr;
-                }
-
-                Instruction::Dim(span) => {
-                    self.symbols
-                        .dim(&span.name, span.vtype)
-                        .map_err(|e| Error::from_value_error(e, span.name_pos))?;
+                } else {
                     context.pc += 1;
                 }
+            }
 
-                Instruction::DimArray(span) => {
-                    self.dim_array(span).await?;
-                    context.pc += 1;
+            Instruction::JumpIfTrue(span) => match span.cond.eval(&mut self.symbols).await? {
+                Value::Boolean(false) => context.pc += 1,
+                Value::Boolean(true) => context.pc = span.addr,
+                _ => {
+                    return new_syntax_error(span.cond.start_pos(), span.error_msg);
                 }
+            },
 
-                Instruction::End(span) => {
-                    self.end(span).await?;
+            Instruction::JumpIfNotTrue(span) => match span.cond.eval(&mut self.symbols).await? {
+                Value::Boolean(true) => context.pc += 1,
+                Value::Boolean(false) => context.pc = span.addr,
+                _ => {
+                    return new_syntax_error(span.cond.start_pos(), span.error_msg);
                 }
+            },
 
-                Instruction::Jump(span) => {
-                    context.pc = span.addr;
-                }
+            Instruction::Nop => {
+                context.pc += 1;
+            }
 
-                Instruction::JumpIfDefined(span) => {
-                    if self.symbols.get_auto(&span.var).is_some() {
-                        context.pc = span.addr;
-                    } else {
-                        context.pc += 1;
-                    }
-                }
+            Instruction::Return(span) => match context.addr_stack.pop() {
+                Some(addr) => context.pc = addr,
+                None => return new_syntax_error(span.pos, "No address to return to".to_owned()),
+            },
 
-                Instruction::JumpIfTrue(span) => match span.cond.eval(&mut self.symbols).await? {
-                    Value::Boolean(false) => context.pc += 1,
-                    Value::Boolean(true) => context.pc = span.addr,
-                    _ => {
-                        return new_syntax_error(span.cond.start_pos(), span.error_msg);
-                    }
-                },
+            Instruction::SetErrorHandler(span) => {
+                context.err_handler = *span;
+                context.pc += 1;
+            }
 
-                Instruction::JumpIfNotTrue(span) => {
-                    match span.cond.eval(&mut self.symbols).await? {
-                        Value::Boolean(true) => context.pc += 1,
-                        Value::Boolean(false) => context.pc = span.addr,
-                        _ => {
-                            return new_syntax_error(span.cond.start_pos(), span.error_msg);
-                        }
-                    }
-                }
-
-                Instruction::Nop => {
-                    context.pc += 1;
-                }
-
-                Instruction::Return(span) => match context.addr_stack.pop() {
-                    Some(addr) => context.pc = addr,
-                    None => {
-                        return new_syntax_error(span.pos, "No address to return to".to_owned())
-                    }
-                },
-
-                Instruction::SetErrorHandler(span) => {
-                    context.err_handler = *span;
-                    context.pc += 1;
-                }
-
-                Instruction::Unset(span) => {
-                    self.symbols
-                        .unset(&span.name)
-                        .map_err(|e| Error::from_value_error(e, span.pos))?;
-                    context.pc += 1;
-                }
+            Instruction::Unset(span) => {
+                self.symbols.unset(&span.name).map_err(|e| Error::from_value_error(e, span.pos))?;
+                context.pc += 1;
             }
         }
 
         Ok(())
+    }
+
+    /// Executes a single instruction in `instrs` as pointed to by the program counter in `context`.
+    async fn exec_one(&mut self, context: &mut Context, instrs: &[Instruction]) -> Result<()> {
+        let mut result = self.exec_safe(context, instrs).await;
+        if let Err(e) = result.as_ref() {
+            if e.is_catchable() {
+                self.symbols
+                    .set_var(&VarRef::new("0errmsg", VarType::Text), Value::Text(format!("{}", e)))
+                    .expect("Internal symbol must be of a specific type");
+
+                match context.err_handler {
+                    ErrorHandlerSpan::Jump(addr) => {
+                        context.pc = addr;
+                        result = Ok(());
+                    }
+                    ErrorHandlerSpan::None => (),
+                    ErrorHandlerSpan::ResumeNext => {
+                        context.pc += 1;
+                        result = Ok(());
+                    }
+                }
+            }
+        }
+        result
     }
 
     /// Executes a program extracted from the `input` readable.
@@ -584,27 +599,9 @@ impl Machine {
         self.data = image.data;
 
         let mut context = Context::default();
-        let mut result;
-        loop {
-            result = self.exec_safe(&mut context, &image.instrs).await;
-            match result.as_ref() {
-                Ok(()) => break,
-                Err(e) if e.is_catchable() => {
-                    self.symbols
-                        .set_var(
-                            &VarRef::new("0errmsg", VarType::Text),
-                            Value::Text(format!("{}", e)),
-                        )
-                        .expect("Internal symbol must be of a specific type");
-
-                    match context.err_handler {
-                        ErrorHandlerSpan::Jump(addr) => context.pc = addr,
-                        ErrorHandlerSpan::None => break,
-                        ErrorHandlerSpan::ResumeNext => context.pc += 1,
-                    }
-                }
-                Err(_) => break,
-            }
+        let mut result = Ok(());
+        while result.is_ok() && context.pc < image.instrs.len() && !self.should_stop().await {
+            result = self.exec_one(&mut context, &image.instrs).await;
         }
 
         self.data.clear();
