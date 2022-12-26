@@ -50,7 +50,7 @@ impl Default for DemosDrive {
         {
             let content = process_demo(include_bytes!("../examples/guess.bas"));
             let metadata = Metadata {
-                date: time::OffsetDateTime::from_unix_timestamp(1608693152),
+                date: time::OffsetDateTime::from_unix_timestamp(1608693152).unwrap(),
                 length: content.len() as u64,
             };
             demos.insert("GUESS.BAS", (metadata, content));
@@ -58,7 +58,7 @@ impl Default for DemosDrive {
         {
             let content = process_demo(include_bytes!("../examples/gpio.bas"));
             let metadata = Metadata {
-                date: time::OffsetDateTime::from_unix_timestamp(1613316558),
+                date: time::OffsetDateTime::from_unix_timestamp(1613316558).unwrap(),
                 length: content.len() as u64,
             };
             demos.insert("GPIO.BAS", (metadata, content));
@@ -66,7 +66,7 @@ impl Default for DemosDrive {
         {
             let content = process_demo(include_bytes!("../examples/hello.bas"));
             let metadata = Metadata {
-                date: time::OffsetDateTime::from_unix_timestamp(1608646800),
+                date: time::OffsetDateTime::from_unix_timestamp(1608646800).unwrap(),
                 length: content.len() as u64,
             };
             demos.insert("HELLO.BAS", (metadata, content));
@@ -74,7 +74,7 @@ impl Default for DemosDrive {
         {
             let content = process_demo(include_bytes!("../examples/palette.bas"));
             let metadata = Metadata {
-                date: time::OffsetDateTime::from_unix_timestamp(1671243940),
+                date: time::OffsetDateTime::from_unix_timestamp(1671243940).unwrap(),
                 length: content.len() as u64,
             };
             demos.insert("PALETTE.BAS", (metadata, content));
@@ -82,7 +82,7 @@ impl Default for DemosDrive {
         {
             let content = process_demo(include_bytes!("../examples/tour.bas"));
             let metadata = Metadata {
-                date: time::OffsetDateTime::from_unix_timestamp(1608774770),
+                date: time::OffsetDateTime::from_unix_timestamp(1608774770).unwrap(),
                 length: content.len() as u64,
             };
             demos.insert("TOUR.BAS", (metadata, content));

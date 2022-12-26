@@ -43,7 +43,7 @@ impl Drive for InMemoryDrive {
     }
 
     async fn enumerate(&self) -> io::Result<DriveFiles> {
-        let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875);
+        let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875).unwrap();
 
         let mut entries = BTreeMap::new();
         for (name, (contents, _readers)) in &self.programs {
