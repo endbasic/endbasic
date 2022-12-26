@@ -21,7 +21,7 @@
 //! as we cannot easily test this implementation.
 
 use crate::input::WebInput;
-use crate::log_and_panic;
+use crate::{log_and_panic, Yielder};
 use async_trait::async_trait;
 use endbasic_std::console::AnsiColor;
 use endbasic_std::console::{
@@ -29,9 +29,11 @@ use endbasic_std::console::{
     PixelsXY, SizeInPixels, RGB,
 };
 use js_sys::Map;
+use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::f64::consts::PI;
 use std::io;
+use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::CanvasRenderingContext2d;
@@ -130,6 +132,8 @@ pub(crate) struct CanvasConsole {
     /// The HTML canvas context on which to render the console.
     context: CanvasRenderingContext2d,
 
+    yielder: Rc<RefCell<Yielder>>,
+
     /// Keyboard input handler for the web.
     input: WebInput,
 
@@ -174,7 +178,11 @@ pub(crate) struct CanvasConsole {
 impl CanvasConsole {
     /// Creates a new canvas console backed by the `canvas` HTML element and that receives input
     /// events from `input`.
-    pub(crate) fn new(canvas: HtmlCanvasElement, input: WebInput) -> io::Result<Self> {
+    pub(crate) fn new(
+        canvas: HtmlCanvasElement,
+        yielder: Rc<RefCell<Yielder>>,
+        input: WebInput,
+    ) -> io::Result<Self> {
         let size_pixels = {
             let width = match u16::try_from(canvas.width()) {
                 Ok(v) => v,
@@ -232,6 +240,7 @@ impl CanvasConsole {
 
         let mut console = Self {
             context,
+            yielder,
             input,
             size_pixels,
             glyph_size,
@@ -277,7 +286,7 @@ impl CanvasConsole {
 
     /// Forces the rendering of the current contents of the canvas onto the output window.
     fn force_present_canvas(&mut self) -> io::Result<()> {
-        // TODO(jmmv): Yield to the JavaScript runtime to give it a chance to render the canvas.
+        self.yielder.borrow_mut().schedule();
         Ok(())
     }
 

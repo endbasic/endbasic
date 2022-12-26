@@ -23,7 +23,7 @@
 #![warn(unsafe_code)]
 
 use async_channel::{Receiver, Sender};
-use endbasic_core::exec::Signal;
+use endbasic_core::exec::{Signal, YieldNowFn};
 use endbasic_core::syms::{self, CommandResult};
 use endbasic_core::LineCol;
 use endbasic_std::console::Console;
@@ -33,6 +33,7 @@ use std::io;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
+use time::OffsetDateTime;
 use url::Url;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -100,7 +101,11 @@ fn do_sleep<T: 'static>(ms: i32, ret: T) -> Pin<Box<dyn Future<Output = T>>> {
 }
 
 /// Implementation of a `SleepFn` using `do_sleep`.
-fn js_sleep(d: Duration, pos: LineCol) -> Pin<Box<dyn Future<Output = CommandResult>>> {
+fn js_sleep(
+    d: Duration,
+    pos: LineCol,
+    yielder: Rc<RefCell<Yielder>>,
+) -> Pin<Box<dyn Future<Output = CommandResult>>> {
     let ms = d.as_millis();
     if ms > std::i32::MAX as u128 {
         // The JavaScript setTimeout function only takes i32s so ensure our value fits.  If it
@@ -112,26 +117,80 @@ fn js_sleep(d: Duration, pos: LineCol) -> Pin<Box<dyn Future<Output = CommandRes
     }
     let ms = ms as i32;
 
+    yielder.borrow_mut().reset();
     do_sleep(ms, Ok(()))
 }
 
-/// Implementation of a `YieldNowFn` that relies on a zero timeout to yield back execution to the
-/// JavaScript interpreter.  Uses `counter` to track how many times this has been called and avoid
-/// yielding too frequently.
+/// Supplier of a `YieldNowFn` that relies on a zero timeout to yield execution back to the
+/// JavaScript interpreter.
+///
+/// Yielding via a timeout in the way we do it is very expensive, so we need to avoid doing it too
+/// frequently.  For this reason, this implementation tries to only yield once every
+/// `MAX_INTERVAL_MILLIS`, only tries to compute this every `GRACE_ITERATIONS` instructions, and
+/// only yields if nothing else (like an explicit sleep) has done it.
 //
 // TODO(jmmv): This is a big hack that we need to support interrupting running programs via CTRL+C
-// and it doesn't work very well: execution of programs, especially if they are doing any
-// rendering, flickers due to this.  We should fix this by converting the `Machine` into a
-// bytecode interpreter so that we can trivially pause execution every n cycles and control the
-// loop from here.
-fn js_yield_now(counter: Rc<RefCell<usize>>) -> Pin<Box<dyn Future<Output = ()>>> {
-    let mut counter = counter.borrow_mut();
-    if *counter < 100000 {
-        *counter += 1;
-        Box::pin(async move {})
-    } else {
-        *counter = 0;
-        do_sleep(0, ())
+// and it doesn't work very well.   We should fix this by extracting the instruction execution loop
+// from the `Machine` and issuing instructions here via a JavaScript interval.  It is unclear if
+// this will fix the performance issues that we have though.
+pub(crate) struct Yielder {
+    counter: usize,
+    last: OffsetDateTime,
+}
+
+impl Yielder {
+    /// Number of iterations during which the yielder does nothing but increment a counter.  We need
+    /// this to be very cheap because this is called on every executed instruction.
+    const GRACE_ITERATIONS: usize = 1000000;
+
+    /// Maximum interval between forced yields.
+    const MAX_INTERVAL_MILLIS: u64 = 1000;
+
+    /// Creates a new yielder.
+    fn new() -> Self {
+        Self { counter: Self::GRACE_ITERATIONS, last: OffsetDateTime::now_utc() }
+    }
+
+    /// Yields execution via a zero timeout if enough instructions have been executed and if enough
+    /// time has passed.
+    fn yield_now(&mut self) -> Pin<Box<dyn Future<Output = ()>>> {
+        if self.counter > 0 {
+            self.counter -= 1;
+
+            Box::pin(async move {})
+        } else {
+            let new_last = OffsetDateTime::now_utc();
+            if (new_last - self.last) >= Duration::from_millis(Self::MAX_INTERVAL_MILLIS) {
+                debug_assert!(self.counter == 0);
+                self.last = new_last;
+
+                do_sleep(0, ())
+            } else {
+                Box::pin(async move {})
+            }
+        }
+    }
+
+    /// Records that a yield just happened for some other reason and needn't happen again until the
+    /// next interval.
+    fn reset(&mut self) {
+        self.counter = Self::GRACE_ITERATIONS;
+        self.last = OffsetDateTime::now_utc();
+    }
+
+    /// Schedules a forced yield on the next round.
+    pub(crate) fn schedule(&mut self) {
+        self.counter = 0;
+        self.last -= Duration::from_millis(Self::MAX_INTERVAL_MILLIS);
+    }
+
+    /// Creates a new `YieldNowFn` that can be passed to the core executor for a given `yielder`.
+    fn new_yield_now_fn(yielder: Rc<RefCell<Yielder>>) -> YieldNowFn {
+        Box::from(move || {
+            let yielder = yielder.clone();
+            let mut yielder = yielder.borrow_mut();
+            yielder.yield_now()
+        })
     }
 }
 
@@ -147,6 +206,7 @@ fn setup_storage(storage: &mut endbasic_std::storage::Storage) {
 /// Connects the EndBASIC interpreter to a web page.
 #[wasm_bindgen]
 pub struct WebTerminal {
+    yielder: Rc<RefCell<Yielder>>,
     console: CanvasConsole,
     on_screen_keyboard: OnScreenKeyboard,
     service_url: String,
@@ -158,15 +218,16 @@ impl WebTerminal {
     /// Creates a new instance of the `WebTerminal`.
     #[wasm_bindgen(constructor)]
     pub fn new(terminal: HtmlCanvasElement, service_url: String) -> Self {
+        let yielder = Rc::from(RefCell::from(Yielder::new()));
         let signals_chan = async_channel::unbounded();
-        let input = WebInput::new(signals_chan.0.clone());
+        let input = WebInput::new(signals_chan.0.clone(), yielder.clone());
         let on_screen_keyboard = input.on_screen_keyboard();
-        let console = match CanvasConsole::new(terminal, input) {
+        let console = match CanvasConsole::new(terminal, yielder.clone(), input) {
             Ok(console) => console,
             Err(e) => log_and_panic!("Console initialization failed: {}", e),
         };
 
-        Self { console, on_screen_keyboard, service_url, signals_chan }
+        Self { yielder, console, on_screen_keyboard, service_url, signals_chan }
     }
 
     /// Generates a new `OnScreenKeyboard` that can inject key events into this terminal.
@@ -197,14 +258,14 @@ impl WebTerminal {
             None => log_and_panic!("Failed to get window"),
         };
 
-        let counter = Rc::from(RefCell::from(0));
+        let yielder = self.yielder.clone();
 
         let console = Rc::from(RefCell::from(self.console));
         let mut builder = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
-            .with_yield_now_fn(Box::from(move || js_yield_now(counter.clone())))
+            .with_yield_now_fn(Yielder::new_yield_now_fn(self.yielder))
             .with_signals_chan(self.signals_chan)
-            .with_sleep_fn(Box::from(js_sleep))
+            .with_sleep_fn(Box::from(move |d, pos| js_sleep(d, pos, yielder.clone())))
             .make_interactive()
             .with_program(Rc::from(RefCell::from(endbasic_repl::editor::Editor::default())));
 
@@ -312,17 +373,23 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn test_js_sleep_ok() {
+        let yielder = Rc::from(RefCell::from(Yielder::new()));
         let before = Date::now();
-        js_sleep(Duration::from_millis(10), LineCol { line: 1, col: 1 }).await.unwrap();
+        js_sleep(Duration::from_millis(10), LineCol { line: 1, col: 1 }, yielder).await.unwrap();
         let elapsed = Date::now() - before;
         assert!(10.0 <= elapsed);
     }
 
     #[wasm_bindgen_test]
     async fn test_js_sleep_too_big() {
-        match js_sleep(Duration::from_millis(std::i32::MAX as u64 + 1), LineCol { line: 1, col: 2 })
-            .await
-            .unwrap_err()
+        let yielder = Rc::from(RefCell::from(Yielder::new()));
+        match js_sleep(
+            Duration::from_millis(std::i32::MAX as u64 + 1),
+            LineCol { line: 1, col: 2 },
+            yielder,
+        )
+        .await
+        .unwrap_err()
         {
             syms::CallError::InternalError(pos, e) => {
                 assert_eq!(LineCol { line: 1, col: 2 }, pos);
