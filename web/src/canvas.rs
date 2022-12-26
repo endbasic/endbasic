@@ -275,6 +275,21 @@ impl CanvasConsole {
             .set_stroke_style(&JsValue::from_str(&format!("rgb({}, {}, {})", rgb.0, rgb.1, rgb.2)));
     }
 
+    /// Forces the rendering of the current contents of the canvas onto the output window.
+    fn force_present_canvas(&mut self) -> io::Result<()> {
+        // TODO(jmmv): Yield to the JavaScript runtime to give it a chance to render the canvas.
+        Ok(())
+    }
+
+    /// Renders the current contents of the canvas onto the output window if necessary.
+    fn present_canvas(&mut self) -> io::Result<()> {
+        if self.sync_enabled {
+            self.force_present_canvas()
+        } else {
+            Ok(())
+        }
+    }
+
     /// Draws the cursor at the current position and saves the previous contents of the screen so
     /// that `clear_cursor` can restore them.
     fn draw_cursor(&mut self) -> io::Result<()> {
@@ -496,7 +511,7 @@ impl Console for CanvasConsole {
             }
         }
         self.draw_cursor()?;
-        Ok(())
+        self.present_canvas()
     }
 
     fn color(&self) -> (Option<u8>, Option<u8>) {
@@ -536,7 +551,7 @@ impl Console for CanvasConsole {
     fn hide_cursor(&mut self) -> io::Result<()> {
         self.clear_cursor()?;
         self.cursor_visible = false;
-        Ok(())
+        self.present_canvas()
     }
 
     fn is_interactive(&self) -> bool {
@@ -562,6 +577,7 @@ impl Console for CanvasConsole {
         self.fg_color = fg_color;
         self.bg_color = bg_color;
         self.draw_cursor()?;
+        self.present_canvas()?;
 
         debug_assert!(self.alt_backup.is_none());
         Ok(())
@@ -573,7 +589,8 @@ impl Console for CanvasConsole {
 
         self.clear_cursor()?;
         self.cursor_pos = pos;
-        self.draw_cursor()
+        self.draw_cursor()?;
+        self.present_canvas()
     }
 
     fn move_within_line(&mut self, off: i16) -> io::Result<()> {
@@ -583,7 +600,8 @@ impl Console for CanvasConsole {
         } else {
             self.cursor_pos.x += off as u16;
         }
-        self.draw_cursor()
+        self.draw_cursor()?;
+        self.present_canvas()
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
@@ -592,7 +610,8 @@ impl Console for CanvasConsole {
         self.clear_cursor()?;
         self.raw_write_wrapped(text)?;
         self.open_line()?;
-        self.draw_cursor()
+        self.draw_cursor()?;
+        self.present_canvas()
     }
 
     async fn poll_key(&mut self) -> io::Result<Option<Key>> {
@@ -611,7 +630,7 @@ impl Console for CanvasConsole {
                 return Err(e);
             }
         }
-        Ok(())
+        self.present_canvas()
     }
 
     fn size_chars(&self) -> io::Result<CharsXY> {
@@ -627,7 +646,8 @@ impl Console for CanvasConsole {
 
         self.clear_cursor()?;
         self.raw_write_wrapped(text)?;
-        self.draw_cursor()
+        self.draw_cursor()?;
+        self.present_canvas()
     }
 
     fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
@@ -637,7 +657,7 @@ impl Console for CanvasConsole {
             .arc(f64::from(center.x), f64::from(center.y), f64::from(radius), 0.0, 2.0 * PI)
             .map_err(js_value_to_io_error)?;
         self.context.stroke();
-        Ok(())
+        self.present_canvas()
     }
 
     fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
@@ -647,7 +667,7 @@ impl Console for CanvasConsole {
             .arc(f64::from(center.x), f64::from(center.y), f64::from(radius), 0.0, 2.0 * PI)
             .map_err(js_value_to_io_error)?;
         self.context.fill();
-        Ok(())
+        self.present_canvas()
     }
 
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
@@ -656,13 +676,13 @@ impl Console for CanvasConsole {
         self.context.move_to(f64::from(x1y1.x), f64::from(x1y1.y));
         self.context.line_to(f64::from(x2y2.x), f64::from(x2y2.y));
         self.context.stroke();
-        Ok(())
+        self.present_canvas()
     }
 
     fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
         self.set_fill_style_rgb(self.fg_color);
         self.context.fill_rect(f64::from(xy.x), f64::from(xy.y), 1.0, 1.0);
-        Ok(())
+        self.present_canvas()
     }
 
     fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
@@ -673,7 +693,7 @@ impl Console for CanvasConsole {
             f64::from(x2y2.x - x1y1.x),
             f64::from(x2y2.y - x1y1.y),
         );
-        Ok(())
+        self.present_canvas()
     }
 
     fn draw_rect_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
@@ -684,14 +704,21 @@ impl Console for CanvasConsole {
             f64::from(x2y2.x - x1y1.x),
             f64::from(x2y2.y - x1y1.y),
         );
-        Ok(())
+        self.present_canvas()
     }
 
     fn sync_now(&mut self) -> io::Result<()> {
-        Ok(())
+        if self.sync_enabled {
+            Ok(())
+        } else {
+            self.force_present_canvas()
+        }
     }
 
     fn set_sync(&mut self, enabled: bool) -> io::Result<bool> {
+        if !self.sync_enabled {
+            self.force_present_canvas()?;
+        }
         let previous = self.sync_enabled;
         self.sync_enabled = enabled;
         Ok(previous)
