@@ -15,11 +15,13 @@
 
 //! Keyboard input tools for the web UI.
 
-use crate::log_and_panic;
+use crate::{log_and_panic, Yielder};
 use async_channel::{self, Receiver, Sender, TryRecvError};
 use endbasic_core::exec::Signal;
 use endbasic_std::console::Key;
+use std::cell::RefCell;
 use std::io;
+use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use web_sys::{InputEvent, KeyboardEvent};
 
@@ -142,13 +144,14 @@ pub struct WebInput {
     on_key_rx: Receiver<Key>,
     on_key_tx: Sender<Key>,
     signals_tx: Sender<Signal>,
+    yielder: Rc<RefCell<Yielder>>,
 }
 
 impl WebInput {
     /// Creates a new `WebInput` that can inject events into the interpreter via `signals_tx`.
-    pub(crate) fn new(signals_tx: Sender<Signal>) -> Self {
+    pub(crate) fn new(signals_tx: Sender<Signal>, yielder: Rc<RefCell<Yielder>>) -> Self {
         let (on_key_tx, on_key_rx) = async_channel::unbounded();
-        Self { on_key_rx, on_key_tx, signals_tx }
+        Self { on_key_rx, on_key_tx, signals_tx, yielder }
     }
 
     /// Generates a new `OnScreenKeyboard` that can inject key events.
@@ -159,7 +162,10 @@ impl WebInput {
     /// Gets the next key event, if one is available.
     pub(crate) async fn try_recv(&mut self) -> io::Result<Option<Key>> {
         match self.on_key_rx.try_recv() {
-            Ok(k) => Ok(Some(k)),
+            Ok(k) => {
+                self.yielder.borrow_mut().reset();
+                Ok(Some(k))
+            }
             Err(TryRecvError::Empty) => Ok(None),
             Err(TryRecvError::Closed) => log_and_panic!("Channel unexpectedly closed"),
         }
@@ -167,6 +173,8 @@ impl WebInput {
 
     /// Gets the next key event, waiting until one is available.
     pub(crate) async fn recv(&mut self) -> io::Result<Key> {
-        Ok(self.on_key_rx.recv().await.unwrap())
+        let key = self.on_key_rx.recv().await.unwrap();
+        self.yielder.borrow_mut().reset();
+        Ok(key)
     }
 }
