@@ -75,7 +75,7 @@ impl Drive for DirectoryDrive {
                     // expect symlinks in the programs directory anyway.  If we want to handle this
                     // better, we'll have to add a way to report file types.
                     let metadata = fs::metadata(de.path())?;
-                    let offset = match time::UtcOffset::try_current_local_offset() {
+                    let offset = match time::UtcOffset::current_local_offset() {
                         Ok(offset) => offset,
                         Err(_) => time::UtcOffset::UTC,
                     };
@@ -207,7 +207,7 @@ mod tests {
         let drive = DirectoryDrive::new(dir.path()).unwrap();
         let files = block_on(drive.enumerate()).unwrap();
         assert_eq!(2, files.dirents().len());
-        let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875);
+        let date = time::OffsetDateTime::from_unix_timestamp(1_588_757_875).unwrap();
         assert_eq!(&Metadata { date, length: 0 }, files.dirents().get("empty.bas").unwrap());
         assert_eq!(&Metadata { date, length: 18 }, files.dirents().get("some file.bas").unwrap());
     }
@@ -239,8 +239,10 @@ mod tests {
         let drive = DirectoryDrive::new(dir.path()).unwrap();
         let files = block_on(drive.enumerate()).unwrap();
         assert_eq!(2, files.dirents().len());
-        let metadata =
-            Metadata { date: time::OffsetDateTime::from_unix_timestamp(1_588_757_875), length: 18 };
+        let metadata = Metadata {
+            date: time::OffsetDateTime::from_unix_timestamp(1_588_757_875).unwrap(),
+            length: 18,
+        };
         assert_eq!(&metadata, files.dirents().get("some file.bas").unwrap());
         assert_eq!(&metadata, files.dirents().get("a link.bas").unwrap());
     }

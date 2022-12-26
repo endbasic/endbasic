@@ -19,11 +19,12 @@ use async_trait::async_trait;
 use endbasic_std::storage::{Drive, DriveFactory, DriveFiles, Metadata};
 use std::collections::BTreeMap;
 use std::io;
+use time::{OffsetDateTime, UtcOffset};
 
 /// Mechanism to obtain the current time to facilitate testing.
 trait Clock {
     /// Obtains the current time.
-    fn now(&self) -> time::OffsetDateTime;
+    fn now(&self) -> io::Result<OffsetDateTime>;
 }
 
 /// Clock that obtains the current time from the Javascript runtime.
@@ -31,8 +32,11 @@ trait Clock {
 struct JsClock {}
 
 impl Clock for JsClock {
-    fn now(&self) -> time::OffsetDateTime {
-        time::OffsetDateTime::from_unix_timestamp((js_sys::Date::now() / 1000.0) as i64)
+    fn now(&self) -> io::Result<OffsetDateTime> {
+        match OffsetDateTime::from_unix_timestamp((js_sys::Date::now() / 1000.0) as i64) {
+            Ok(now) => Ok(now),
+            Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, format!("{}", e))),
+        }
     }
 }
 
@@ -95,7 +99,7 @@ struct Entry {
     content: String,
 
     /// The last modification time of the program, in UTC.
-    mtime: time::OffsetDateTime,
+    mtime: OffsetDateTime,
 }
 
 impl Entry {
@@ -103,15 +107,19 @@ impl Entry {
     const VERSION: u16 = 1;
 
     /// Constructs a new entry with the given `content` and with a last modification of now.
-    fn new<S: Into<String>>(content: S, mtime: time::OffsetDateTime) -> Self {
+    fn new<S: Into<String>>(content: S, mtime: OffsetDateTime) -> Self {
         Self { version: Entry::VERSION, content: content.into(), mtime }
     }
 
     /// Returns the generic `Metadata` object for this entry.
     fn metadata(&self) -> Metadata {
         // I'm sure there is something wrong with this timezone adjustment.
-        let tz_offset =
-            time::UtcOffset::minutes(-js_sys::Date::new_0().get_timezone_offset() as i16);
+        let tz_offset = match UtcOffset::from_whole_seconds(
+            -js_sys::Date::new_0().get_timezone_offset() as i32 * 60,
+        ) {
+            Ok(tz_offset) => tz_offset,
+            Err(_) => UtcOffset::UTC,
+        };
         Metadata { date: self.mtime.to_offset(tz_offset), length: self.content.len() as u64 }
     }
 }
@@ -283,7 +291,7 @@ impl Drive for WebDrive {
 
         // There is no information we care about the old entry so we can replace it all in one go
         // with a new one.
-        let entry = Entry::new(content, self.clock.now());
+        let entry = Entry::new(content, self.clock.now()?);
 
         let key = key.serialized();
         match self.storage.set(key, &serde_json::to_string(&entry)?) {
@@ -323,8 +331,8 @@ mod testutils {
     }
 
     impl Clock for FakeClock {
-        fn now(&self) -> time::OffsetDateTime {
-            time::OffsetDateTime::from_unix_timestamp(self.now)
+        fn now(&self) -> io::Result<OffsetDateTime> {
+            Ok(OffsetDateTime::from_unix_timestamp(self.now).unwrap())
         }
     }
 }
@@ -408,12 +416,12 @@ mod tests {
         let entry1 = Entry {
             version: Entry::VERSION,
             content: "first".to_owned(),
-            mtime: time::OffsetDateTime::from_unix_timestamp(1234),
+            mtime: OffsetDateTime::from_unix_timestamp(1234).unwrap(),
         };
         let entry2 = Entry {
             version: Entry::VERSION,
             content: "second".to_owned(),
-            mtime: time::OffsetDateTime::from_unix_timestamp(987_654_321),
+            mtime: OffsetDateTime::from_unix_timestamp(987_654_321).unwrap(),
         };
 
         let webdrive = WebDrive::from_window();
@@ -440,7 +448,7 @@ mod tests {
         let entry = Entry {
             version: Entry::VERSION,
             content: "second".to_owned(),
-            mtime: time::OffsetDateTime::from_unix_timestamp(1234),
+            mtime: OffsetDateTime::from_unix_timestamp(1234).unwrap(),
         };
 
         let webdrive = WebDrive::from_window();
@@ -461,7 +469,7 @@ mod tests {
         let entry = Entry {
             version: Entry::VERSION,
             content: "this is some content".to_owned(),
-            mtime: time::OffsetDateTime::from_unix_timestamp(1_234_567),
+            mtime: OffsetDateTime::from_unix_timestamp(1_234_567).unwrap(),
         };
 
         let mut webdrive = WebDrive::from_window();

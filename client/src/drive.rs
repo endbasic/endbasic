@@ -48,7 +48,10 @@ impl Drive for CloudDrive {
         let response = self.service.borrow_mut().get_files(&self.username).await?;
         let mut entries = BTreeMap::default();
         for e in response.files {
-            let date = time::OffsetDateTime::from_unix_timestamp(e.mtime as i64);
+            let date = match time::OffsetDateTime::from_unix_timestamp(e.mtime as i64) {
+                Ok(date) => date,
+                Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("{}", e))),
+            };
             entries.insert(e.filename, Metadata { date, length: e.length });
         }
         Ok(DriveFiles::new(
@@ -179,11 +182,17 @@ mod tests {
         let result = drive.enumerate().await.unwrap();
         assert_eq!(2, result.dirents().len());
         assert_eq!(
-            &Metadata { date: time::OffsetDateTime::from_unix_timestamp(9000), length: 15 },
+            &Metadata {
+                date: time::OffsetDateTime::from_unix_timestamp(9000).unwrap(),
+                length: 15
+            },
             result.dirents().get("one").unwrap()
         );
         assert_eq!(
-            &Metadata { date: time::OffsetDateTime::from_unix_timestamp(8000), length: 17 },
+            &Metadata {
+                date: time::OffsetDateTime::from_unix_timestamp(8000).unwrap(),
+                length: 17
+            },
             result.dirents().get("two").unwrap()
         );
         assert_eq!(&DiskSpace::new(10000, 100), result.disk_quota().as_ref().unwrap());

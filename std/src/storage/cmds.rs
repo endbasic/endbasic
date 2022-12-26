@@ -28,6 +28,9 @@ use std::cmp;
 use std::io;
 use std::rc::Rc;
 use std::str;
+use time::format_description;
+
+use super::time_format_error_to_io_error;
 
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "File system
@@ -54,6 +57,9 @@ async fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> i
     let canonical_path = storage.make_canonical(path)?;
     let files = storage.enumerate(path).await?;
 
+    let format = format_description::parse("[year]-[month]-[day] [hour]:[minute]")
+        .expect("Hardcoded format must be valid");
+
     console.print("")?;
     console.print(&format!("    Directory of {}", canonical_path))?;
     console.print("")?;
@@ -63,7 +69,7 @@ async fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> i
     for (name, details) in files.dirents() {
         console.print(&format!(
             "    {}    {:6}    {}",
-            details.date.format("%F %H:%M"),
+            details.date.format(&format).map_err(time_format_error_to_io_error)?,
             details.length,
             name,
         ))?;

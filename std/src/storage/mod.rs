@@ -21,6 +21,7 @@ use std::fmt::{self};
 use std::io;
 use std::path::PathBuf;
 use std::str;
+use time::error::Format;
 
 mod cmds;
 pub use cmds::*;
@@ -28,6 +29,14 @@ mod fs;
 pub use fs::*;
 mod mem;
 pub use mem::*;
+
+/// Converts a time formatting error to an I/O error.
+pub(crate) fn time_format_error_to_io_error(e: Format) -> io::Error {
+    match e {
+        Format::StdIo(e) => e,
+        e => io::Error::new(io::ErrorKind::Other, format!("{}", e)),
+    }
+}
 
 /// Metadata of an entry in a storage medium.
 #[derive(Clone, Debug, Eq, PartialEq)]

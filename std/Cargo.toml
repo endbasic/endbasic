@@ -16,7 +16,7 @@ async-channel = "1.5"
 async-trait = "0.1"
 futures-lite = "1.1"
 radix_trie = "0.2.1"
-time = { version = "0.2", features = ["std"] }
+time = { version = "0.3", features = ["formatting", "local-offset", "std"] }
 
 [dependencies.endbasic-core]
 version = "0.9.99" # ENDBASIC-VERSION
