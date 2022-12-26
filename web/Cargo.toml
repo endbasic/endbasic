@@ -51,6 +51,7 @@ path = "../std"
 version = "0.3"
 features = [
     "CanvasRenderingContext2d",
+    "ContextAttributes2d",
     "EventTarget",
     "HtmlCanvasElement",
     "ImageData",
