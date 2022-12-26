@@ -28,7 +28,6 @@ use endbasic_std::console::{
     ansi_color_to_rgb, remove_control_chars, CharsXY, ClearType, Console, Key, LineBuffer,
     PixelsXY, SizeInPixels, RGB,
 };
-use js_sys::Map;
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::f64::consts::PI;
@@ -36,9 +35,9 @@ use std::io;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::CanvasRenderingContext2d;
 use web_sys::HtmlCanvasElement;
 use web_sys::ImageData;
+use web_sys::{CanvasRenderingContext2d, ContextAttributes2d};
 
 /// Default foreground color, used at console creation time and when requesting the default color
 /// via the `COLOR` command.
@@ -98,11 +97,18 @@ impl ClampedMul<SizeInPixels, PixelsXY> for CharsXY {
 
 /// Returns the 2D rendering context for a given `canvas` element.
 fn html_canvas_to_2d_context(canvas: HtmlCanvasElement) -> io::Result<CanvasRenderingContext2d> {
-    let mut options = Map::new();
-    options = options.set(&JsValue::from("alpha"), &JsValue::from(false));
+    let mut attrs = ContextAttributes2d::new();
+
+    // We don't use transparency for anything, so disable the alpha channel for performance reasons.
+    attrs.alpha(false);
+
+    // Chrome recommends setting this to true because we read from the canvas to move the cursor
+    // and to scroll the console, but these operations needn't be fast.  It seems better to keep
+    // this disabled to optimize for the rendering path of graphical applications.
+    attrs.will_read_frequently(false);
 
     let context = match canvas
-        .get_context_with_context_options("2d", &options)
+        .get_context_with_context_options("2d", &attrs)
         .map_err(js_value_to_io_error)?
     {
         Some(context) => context,
