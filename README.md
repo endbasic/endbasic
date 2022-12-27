@@ -23,7 +23,7 @@ operating systems and platforms, including macOS, Windows, and Linux.
 
 EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 
-**The latest version of EndBASIC is 0.9.0 and was released on 2022-06-05.**
+**The latest version of EndBASIC is 0.10.0 and was released on 2022-12-27.**
 
 ## Quick start on the web
 
@@ -45,7 +45,7 @@ for the cloud service and upload your programs to share them with the world.
 ## Quick start on your machine
 
 Visit the
-[release page](https://github.com/endbasic/endbasic/releases/tag/endbasic-0.9.0)
+[release page](https://github.com/endbasic/endbasic/releases/tag/endbasic-0.10.0)
 to download prebuilt binaries.  Once downloaded, unpack the archive and run the
 `endbasic` binary to get started.
 

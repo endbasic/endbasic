@@ -10,30 +10,64 @@ to talk to the cloud service.  If you use the web interface, this should not be
 a problem, but if you use local builds, please try to stay on the latest release
 for the time being.**
 
-## Changes in version 0.9.99
+## Changes in version 0.10.0
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2022-12-27.**
 
-*   Issue #153: Added support for labels and `GOTO`.  At this point, label
-    names must be prefixed with an `@` sign to resolve parsing ambiguities with
-    the `:` line delimiter.
+This is a huge release that focuses on extending the capabilities of the core
+language so that non-trivial programs can be written in it.
 
-*   Modified the interpreter to parse the full program before executing it,
-    which is a requirement for supporting `GOTO`s and features like `DATA`.
-    As a side-effect of this change, any syntax errors now cause the
-    interpreted program to not run at all, as opposed to before where the
-    program would make progress until it hit the error.
+Language changes for better control flow:
 
-*   Fixed erratic insertion of newlines in existing text in the editor.
+*   Issue #153: Added support for labels (identifiers prefixed by an `@` sign)
+    and `GOTO`.
 
-*   Issue #113: Added line and column tracking to error messages for parsing
-    and execution errors.  Also cleaned up Rust `Debug` impls that leaked
-    into error messages for nicer errors.
+*   Issue #155: Added support for "line numbers as labels", just like
+    QuickBASIC does, which permits running the traditional `10 GOTO 10`
+    program.  Note, however, that these line numbers have nothing to do with
+    the actual line numbers in the file.  To minimize confusion, line numbers
+    have been removed from the output of `LIST`.
+
+*   Added support for `GOSUB` and `RETURN`, which provides a rudimentary
+    mechanism to reuse code within a program.
+
+*   Issue #121: Added support for catching errors via `ON ERROR GOTO` and `ON
+    ERROR RESUME NEXT`.  Captured error messages are exposed to the user via
+    a new `ERRMSG` function.
+
+*   Replaced the `EXIT` command with the `END` keyword.
+
+*   Added support for `DO` loops with optional `UNTIL`/`WHILE` pre- and
+    post-guards and `EXIT DO` early terminations.
+
+*   Added support for uniline `IF` statements.
+
+*   Added support for `SELECT CASE`.
+
+*   Fixed `END` so that it works in the context of `WHILE` loops and so that
+    no further expressions are evaluated in `FOR` and `IF statements.
+
+*   Rewrote the execution interpreter to be bytecode based instead of walking
+    over the AST.
+
+Language changes for better numeric handling:
+
+*   Issue #114: Added transparent promotion from integers to doubles and
+    automatic rounding of doubles as integers.
+
+*   Issue #114: Added support for doubles in `FOR` iteration, both to specify
+    the loop range and the step.
 
 *   Added support for the exponent (`^`) operator and the `SQR` function.
 
-*   Issue #114: Added transparent promotion from integers to doubles, and
-    truncation (via rounding) from doubles to integers.
+*   Added syntax to specify integers in different bases, using forms like
+    `&b_1010`, `&d_1234`, `&o_750`, and `&x_12f`.
+
+*   Extended `AND`, `NOT`, `OR`, and `XOR` to perform bitwise operations when
+    operating on an integer context and added the `<<` and `>>` bit shift
+    operators.
+
+Standard library changes:
 
 *   Issue #114: Removed the `DTOI` and `ITOD` functions now that integers and
     doubles are automatically converted between them, and added the `CINT` and
@@ -42,9 +76,6 @@ for the time being.**
 *   Issue #114: Removed the `MAXD`/`MAXI` and `MIND`/`MINI` duality in favor of
     simpler `MAX` and `MIN` functions that can mix and match integers and
     doubles.
-
-*   Issue #114: Added support for doubles in `FOR` iteration, both to specify
-    the loop range and the step.
 
 *   Changed the syntax of the `MOUNT` command to take advantage of the `AS`
     keyword as an argument separator and thus be of the form
@@ -61,67 +92,25 @@ for the time being.**
 
 *   Added the `ASC`, `CHR`, and `STR` functions.
 
-*   Modified the `HELP` command to only accept a string as its argument,
-    instead of also recognizing a bare word.  The latter was only approximate
-    and would cause confusion when typing something like `HELP DATA`, which
-    would result in a parse error.
-
 *   Renamed `DEL` as `KILL` to match QuickBASIC and avoid confusion with a
     potential future `DELETE` command implementation.
 
-*   Rewrote the SDL console internals to use a separate thread that implements
-    the SDL main loop.  This might fix some rendering issues that have been
-    previously observed with this implementation (or provide an easy way to
-    fix them later if not).
-
-*   Fixed `EXIT` so that it works in the context of `WHILE` loops and so that
-    no further expressions are evaluated in `FOR` and `IF statements.
-
-*   Issue #111: Added support to interrupt running programs via `CTRL+C`.
-
-*   Rewrote the execution interpreter to be based on an iterative loop over
-    a simplified bytecode representation instead of walking over the AST.
-
-*   Added support for `GOSUB` and `RETURN`.
-
-*   Issue #121: Added support for catching errors via `ON ERROR GOTO` and `ON
-    ERROR RESUME NEXT`, both of which are returned by a new `ERRMSG` function
-    with the details of the error that was caught.
-
-*   Issue #155: Added support for "line numbers as labels", just like
-    QuickBASIC does, which permits running the traditional `10 GOTO 10`
-    program.  Note, however, that these line numbers have nothing to do with
-    the actual line numbers in the file and that's something I still would
-    like to address somehow in the future.  On this topic, also removed line
-    numbers from the output of `LIST`.
-
-*   Changed the syntax to call argument-less functions, such as `INKEY` and
-    `PI`, so that they do not accept `()`.  This matches traditional BASIC
-    implementations.
-
-*   Replaced the `EXIT` command with the `END` keyword.
-
-*   Added support for `DO` loops with optional `UNTIL`/`WHILE` pre- and
-    post-guards and `EXIT DO` early terminations.
-
-*   Added support for uniline `IF` statements.
-
-*   Added support for `SELECT CASE`.
-
 *   Fixed `INPUT` so that the prompt is optional and thus things like
-    `INPUT var` work as expected from traditional BASIC implementations.
-
-*   Extended `AND`, `NOT`, `OR`, and `XOR` to perform bitwise operations when
-    operating on an integer context and added the `<<` and `>>` operators.
-
-*   Added syntax to specify integers in different bases, using forms like:
-    `&b_1010`, `&d_1234`, `&o_750`, and `&x_12f`.
+    `INPUT var` work as they do in traditional BASIC implementations.
 
 *   Issue #108: Added the `SCRROWS` and `SCRCOLS` functions to query the size
-    of the textual console and the `GFX_HEIGHT` and `GFX_WIDTH` for the
-    graphical console.
+    of the textual console and the `GFX_HEIGHT` and `GFX_WIDTH` to query the
+    size of the graphical console.
 
 *   Added the `GFX_CIRCLE` and `GFX_CIRCLEF` commands to draw circles.
+
+Usability improvements and fixes:
+
+*   Issue #113: Added line and column tracking to error messages for parsing
+    and execution errors.  Also cleaned up Rust `Debug` impls that leaked
+    into strings to provide nicer error messages.
+
+*   Issue #111: Added support to interrupt running programs via `CTRL+C`.
 
 *   Extended the builtin language documentation to explain in detail every
     statement type.  `HELP "LANG"` now displays a collection of topics to
@@ -129,6 +118,27 @@ for the time being.**
 
 *   Added the `PALETTE.BAS` demo, which is a little tool that renders the
     full color palette.
+
+*   Changed the syntax to call argument-less functions, such as `INKEY` and
+    `PI`, so that they do not accept `()`.  This matches traditional BASIC
+    implementations.
+
+*   Fixed erratic insertion of newlines in existing text in the editor.
+
+*   Modified the `HELP` command to only accept a string as its argument
+    instead of also recognizing a bare word.  The latter was only approximate
+    and would cause confusion when typing something like `HELP DATA`, as this
+    resulted in a parse error.
+
+*   Rewrote the SDL console internals to use a separate thread that implements
+    the SDL main loop.  This fixes some rendering issues and crashes that have
+    been previously observed with this implementation.
+
+*   Modified the interpreter to parse the full program before executing it,
+    which was a requirement for supporting `GOTO`s and features like `DATA`.
+    As a side-effect of this change, any syntax errors now cause the
+    interpreted program to not run at all, as opposed to before when the
+    program would make progress until it hit the error.
 
 ## Changes in version 0.9.0
 
