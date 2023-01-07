@@ -26,6 +26,10 @@ for the time being.**
     ST7735S 1.44in LCD for the console output and the terminal console for input,
     but also recognizes the hat's buttons and injects them as keyboard events.
 
+*   Rewrote the expression evaluator to be bytecode based.  This opens the way
+    towards user-supplied functions and the ability to interrupt functions as
+    they execute.
+
 ## Changes in version 0.10.0
 
 **Released on 2022-12-27.**

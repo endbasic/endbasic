@@ -78,17 +78,77 @@ pub struct UnsetSpan {
 /// Representation of all possible instructions in the bytecode.
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub enum Instruction {
-    /// Represents an assignment to an element of an array.
-    ArrayAssignment(ArrayAssignmentSpan),
+    /// Represents a binary "and" operation.
+    And(LineCol),
 
-    /// Represents a variable assignment.
-    Assignment(AssignmentSpan),
+    /// Represents a binary "or" operation.
+    Or(LineCol),
+
+    /// Represents a binary "xor" operation.
+    Xor(LineCol),
+
+    /// Represents a unary "nor" operation.
+    Not(LineCol),
+
+    /// Represents a left bitshift.
+    ShiftLeft(LineCol),
+
+    /// Represents a right bitshift.
+    ShiftRight(LineCol),
+
+    /// Represents an equality comparison.
+    Equal(LineCol),
+
+    /// Represents an inequality comparison.
+    NotEqual(LineCol),
+
+    /// Represents a less-than comparison.
+    Less(LineCol),
+
+    /// Represents a less-or-equal comparison.
+    LessEqual(LineCol),
+
+    /// Represents a greater-than comparison.
+    Greater(LineCol),
+
+    /// Represents a greater-or-equal comparison.
+    GreaterEqual(LineCol),
+
+    /// Represents an arithmetic addition operation.
+    Add(LineCol),
+
+    /// Represents an arithmetic subtraction operation.
+    Subtract(LineCol),
+
+    /// Represents an arithmetic multiplication operation.
+    Multiply(LineCol),
+
+    /// Represents an arithmetic division operation.
+    Divide(LineCol),
+
+    /// Represents an arithmetic modulo operation.
+    Modulo(LineCol),
+
+    /// Represents an arithmetic power operation.
+    Power(LineCol),
+
+    /// Represents an arithmetic sign flip operation.
+    Negate(LineCol),
+
+    /// Represents an assignment to an element of an array with the given number of subscripts.
+    ArrayAssignment(VarRef, LineCol, usize),
+
+    /// Represents an assignment of a value to a variable.
+    Assign(VarRef, LineCol),
 
     /// Represents a call to a builtin command such as `PRINT`.
     BuiltinCall(BuiltinCallSpan),
 
     /// Represents an unconditional call to a location that will return.
     Call(JumpSpan),
+
+    /// Represents a call to the given function with the given number of arguments.
+    FunctionCall(VarRef, LineCol, usize),
 
     /// Represents a variable definition.
     Dim(DimSpan),
@@ -111,8 +171,17 @@ pub enum Instruction {
     /// Represents an conditional jump that jumps if the condition is not met.
     JumpIfNotTrue(JumpIfBoolSpan),
 
+    /// Represents a load of a variable's value from main memory into the stack.
+    Load(VarRef, LineCol),
+
+    /// Represents a load of a variable's reference into the stack.
+    LoadRef(VarRef, LineCol),
+
     /// Represents an instruction that does nothing.
     Nop,
+
+    /// Represents a load of a literal value into the top of the stack.
+    Push(Value, LineCol),
 
     /// Represents a return after a call.
     Return(ReturnSpan),

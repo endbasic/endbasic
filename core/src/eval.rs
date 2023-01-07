@@ -139,8 +139,7 @@ impl Expr {
 
     /// Evaluates a function call specified by `fref` and arguments `args` on the function `f`.
     #[async_recursion(?Send)]
-    async fn eval_function_call(
-        &self,
+    pub(crate) async fn eval_function_call(
         syms: &mut Symbols,
         span: &FunctionCallSpan,
         f: Rc<dyn Function>,
@@ -202,7 +201,7 @@ impl Expr {
                             args: vec![],
                             pos: span.pos,
                         };
-                        Ok(self.eval_function_call(syms, &span, f).await?)
+                        Ok(Expr::eval_function_call(syms, &span, f).await?)
                     }
                     Some(_) => {
                         Err(Error::new(span.pos, format!("{} is not a variable", span.vref.name())))
@@ -304,7 +303,7 @@ impl Expr {
                             ));
                         }
                         let f = f.clone();
-                        return self.eval_function_call(syms, span, f).await;
+                        return Expr::eval_function_call(syms, span, f).await;
                     }
 
                     Some(_) => {
