@@ -36,6 +36,7 @@ fn format_value(v: Value, o: &mut String) {
         Value::Double(d) => o.push_str(&format!("{}", d)),
         Value::Integer(i) => o.push_str(&format!("{}", i)),
         Value::Text(s) => o.push_str(&s),
+        Value::VarRef(v) => o.push_str(&format!("{}", v)),
     }
 }
 
