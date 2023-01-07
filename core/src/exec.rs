@@ -181,12 +181,13 @@ pub type YieldNowFn = Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()> + 'static>
 struct Context {
     pc: Address,
     addr_stack: Vec<Address>,
+    value_stack: Vec<(Value, LineCol)>,
     err_handler: ErrorHandlerSpan,
 }
 
 impl Default for Context {
     fn default() -> Self {
-        Self { pc: 0, addr_stack: vec![], err_handler: ErrorHandlerSpan::None }
+        Self { pc: 0, addr_stack: vec![], value_stack: vec![], err_handler: ErrorHandlerSpan::None }
     }
 }
 
@@ -337,49 +338,36 @@ impl Machine {
         self.stop_reason.is_some()
     }
 
-    /// Handles a variable assignment.
-    async fn assign(&mut self, span: &AssignmentSpan) -> Result<()> {
-        let value = span.expr.eval(&mut self.symbols).await?;
-        self.symbols
-            .set_var(&span.vref, value)
-            .map_err(|e| Error::from_value_error(e, span.vref_pos))?;
-        Ok(())
-    }
-
     /// Handles an array assignment.
-    async fn assign_array(&mut self, span: &ArrayAssignmentSpan) -> Result<()> {
-        let mut ds = Vec::with_capacity(span.subscripts.len());
-        for ss_expr in &span.subscripts {
-            match ss_expr.eval(&mut self.symbols).await? {
+    async fn assign_array(
+        &mut self,
+        context: &mut Context,
+        vref: &VarRef,
+        vref_pos: LineCol,
+        nargs: usize,
+    ) -> Result<()> {
+        let mut ds = Vec::with_capacity(nargs);
+        for _ in 0..nargs {
+            let (value, pos) = context.value_stack.pop().unwrap();
+            match value {
                 Value::Integer(i) => ds.push(i),
-                v => {
-                    return new_syntax_error(
-                        ss_expr.start_pos(),
-                        format!("Subscript {} must be an integer", v),
-                    )
-                }
+                v => return new_syntax_error(pos, format!("Subscript {} must be an integer", v)),
             }
         }
 
-        let value = span.expr.eval(&mut self.symbols).await?;
+        let (value, _pos) = context.value_stack.pop().unwrap();
 
-        match self
-            .symbols
-            .get_mut(&span.vref)
-            .map_err(|e| Error::from_value_error(e, span.vref_pos))?
-        {
+        match self.symbols.get_mut(vref).map_err(|e| Error::from_value_error(e, vref_pos))? {
             Some(Symbol::Array(array)) => {
-                array.assign(&ds, value).map_err(|e| Error::from_value_error(e, span.vref_pos))?;
+                array.assign(&ds, value).map_err(|e| Error::from_value_error(e, vref_pos))?;
                 Ok(())
             }
-            Some(_) => new_syntax_error(
-                span.vref_pos,
-                format!("Cannot index non-array {}", span.vref.name()),
-            ),
-            None => new_syntax_error(
-                span.vref_pos,
-                format!("Cannot index undefined array {}", span.vref.name()),
-            ),
+            Some(_) => {
+                new_syntax_error(vref_pos, format!("Cannot index non-array {}", vref.name()))
+            }
+            None => {
+                new_syntax_error(vref_pos, format!("Cannot index undefined array {}", vref.name()))
+            }
         }
     }
 
@@ -464,6 +452,31 @@ impl Machine {
         Ok(())
     }
 
+    /// Handles a unary operator that is part of an expression.
+    fn exec_unary_op<F: Fn(&Value) -> value::Result<Value>>(
+        context: &mut Context,
+        op: F,
+        pos: LineCol,
+    ) -> Result<()> {
+        let (value, _pos) = context.value_stack.pop().unwrap();
+        let result = op(&value).map_err(|e| Error::from_value_error(e, pos))?;
+        context.value_stack.push((result, pos));
+        Ok(())
+    }
+
+    /// Handles a binary operator that is part of an expression.
+    fn exec_binary_op<F: Fn(&Value, &Value) -> value::Result<Value>>(
+        context: &mut Context,
+        op: F,
+        pos: LineCol,
+    ) -> Result<()> {
+        let (rhs, _pos) = context.value_stack.pop().unwrap();
+        let (lhs, _pos) = context.value_stack.pop().unwrap();
+        let result = op(&lhs, &rhs).map_err(|e| Error::from_value_error(e, pos))?;
+        context.value_stack.push((result, pos));
+        Ok(())
+    }
+
     /// Helper for `exec_one` that only worries about execution of a single instruction.
     ///
     /// Errors are handled on the caller side depending on the `ON ERROR` handling policy that is
@@ -471,13 +484,111 @@ impl Machine {
     async fn exec_safe(&mut self, context: &mut Context, instrs: &[Instruction]) -> Result<()> {
         let instr = &instrs[context.pc];
         match instr {
-            Instruction::ArrayAssignment(span) => {
-                self.assign_array(span).await?;
+            Instruction::And(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.and(rhs), *pos)?;
                 context.pc += 1;
             }
 
-            Instruction::Assignment(span) => {
-                self.assign(span).await?;
+            Instruction::Or(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.or(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::Xor(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.xor(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::Not(pos) => {
+                Machine::exec_unary_op(context, |value| value.not(), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::ShiftLeft(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.shl(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::ShiftRight(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.shr(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::Equal(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.eq(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::NotEqual(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.ne(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::Less(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.lt(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::LessEqual(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.le(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::Greater(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.gt(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::GreaterEqual(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.ge(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::Add(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.add(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::Subtract(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.sub(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::Multiply(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.mul(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::Divide(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.div(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::Modulo(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.modulo(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::Power(pos) => {
+                Machine::exec_binary_op(context, |lhs, rhs| lhs.pow(rhs), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::Negate(pos) => {
+                Machine::exec_unary_op(context, |value| value.neg(), *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::Assign(vref, vref_pos) => {
+                let (value, _pos) = context.value_stack.pop().unwrap();
+                self.symbols
+                    .set_var(vref, value)
+                    .map_err(|e| Error::from_value_error(e, *vref_pos))?;
+                context.pc += 1;
+            }
+
+            Instruction::ArrayAssignment(vref, vref_pos, nargs) => {
+                self.assign_array(context, vref, *vref_pos, *nargs).await?;
                 context.pc += 1;
             }
 
@@ -489,6 +600,34 @@ impl Machine {
             Instruction::Call(span) => {
                 context.addr_stack.push(context.pc + 1);
                 context.pc = span.addr;
+            }
+
+            Instruction::FunctionCall(fref, pos, nargs) => {
+                // TODO(jmmv): Functions should receive the evaluated arguments, at which point
+                // we can remove this re-marshalling put in place for transitional purposes only.
+                let mut args = Vec::with_capacity(*nargs);
+                for _ in 0..*nargs {
+                    let arg = context.value_stack.pop().unwrap();
+                    match arg {
+                        (Value::Boolean(value), pos) => {
+                            args.push(Expr::Boolean(BooleanSpan { value, pos }))
+                        }
+                        (Value::Double(value), pos) => {
+                            args.push(Expr::Double(DoubleSpan { value, pos }))
+                        }
+                        (Value::Integer(value), pos) => {
+                            args.push(Expr::Integer(IntegerSpan { value, pos }))
+                        }
+                        (Value::Text(value), pos) => args.push(Expr::Text(TextSpan { value, pos })),
+                        (Value::VarRef(vref), pos) => {
+                            args.push(Expr::Symbol(SymbolSpan { vref, pos }))
+                        }
+                    }
+                }
+                let call = Expr::Call(FunctionCallSpan { fref: fref.clone(), args, pos: *pos });
+                let result = call.eval(&mut self.symbols).await?;
+                context.value_stack.push((result, *pos));
+                context.pc += 1;
             }
 
             Instruction::Dim(span) => {
@@ -535,7 +674,49 @@ impl Machine {
                 }
             },
 
+            Instruction::Load(vref, pos) => {
+                let value = match self
+                    .symbols
+                    .get(vref)
+                    .map_err(|e| Error::from_value_error(e, *pos))?
+                {
+                    Some(Symbol::Variable(v)) => v.clone(),
+                    Some(Symbol::Function(f)) => {
+                        if !f.metadata().is_argless() {
+                            return new_syntax_error(
+                                *pos,
+                                format!("{} requires one or more arguments", vref.name()),
+                            );
+                        }
+                        let f = f.clone();
+                        let span = FunctionCallSpan { fref: vref.clone(), args: vec![], pos: *pos };
+                        Expr::eval_function_call(&mut self.symbols, &span, f).await?
+                    }
+                    Some(_) => {
+                        return new_syntax_error(*pos, format!("{} is not a variable", vref.name()))
+                    }
+                    None => {
+                        return new_syntax_error(
+                            *pos,
+                            format!("Undefined variable {}", vref.name()),
+                        )
+                    }
+                };
+                context.value_stack.push((value, *pos));
+                context.pc += 1;
+            }
+
+            Instruction::LoadRef(vref, pos) => {
+                context.value_stack.push((Value::VarRef(vref.clone()), *pos));
+                context.pc += 1;
+            }
+
             Instruction::Nop => {
+                context.pc += 1;
+            }
+
+            Instruction::Push(value, pos) => {
+                context.value_stack.push((value.clone(), *pos));
                 context.pc += 1;
             }
 

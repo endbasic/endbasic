@@ -300,6 +300,9 @@ pub enum Value {
 
     /// A string value.
     Text(String), // Should be `String` but would get confusing with the built-in Rust type.
+
+    /// A reference to a variable.
+    VarRef(VarRef),
 }
 
 impl From<bool> for Value {
@@ -340,6 +343,7 @@ impl fmt::Display for Value {
             }
             Value::Integer(i) => write!(f, "{}", i),
             Value::Text(s) => write!(f, "\"{}\"", s),
+            Value::VarRef(v) => write!(f, "{}", v),
         }
     }
 }
@@ -352,6 +356,7 @@ impl Value {
             Value::Double(_) => VarType::Double,
             Value::Integer(_) => VarType::Integer,
             Value::Text(_) => VarType::Text,
+            Value::VarRef(vref) => vref.ref_type,
         }
     }
 
@@ -372,6 +377,7 @@ impl Value {
             Value::Integer(i) if i.is_negative() => format!("{}", i),
             Value::Integer(i) => format!(" {}", i),
             Value::Text(s) => s,
+            Value::VarRef(v) => format!("{}", v),
         }
     }
 }

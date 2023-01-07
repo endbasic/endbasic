@@ -222,21 +222,15 @@ impl Compiler {
             });
         }
 
-        self.emit(Instruction::Assignment(AssignmentSpan {
-            vref: span.iter.clone(),
-            vref_pos: span.iter_pos,
-            expr: span.start,
-        }));
+        self.compile_expr(span.start, false)?;
+        self.emit(Instruction::Assign(span.iter.clone(), span.iter_pos));
 
         let start_pc = self.emit(Instruction::Nop);
 
         self.compile_many(span.body)?;
 
-        self.emit(Instruction::Assignment(AssignmentSpan {
-            vref: span.iter,
-            vref_pos: span.iter_pos,
-            expr: span.next,
-        }));
+        self.compile_expr(span.next, false)?;
+        self.emit(Instruction::Assign(span.iter.clone(), span.iter_pos));
 
         self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
 
@@ -356,11 +350,9 @@ impl Compiler {
 
         self.selects += 1;
         let test_vref = VarRef::new(Compiler::select_test_var_name(self.selects), VarType::Auto);
-        self.emit(Instruction::Assignment(AssignmentSpan {
-            vref: test_vref.clone(),
-            vref_pos: span.expr.start_pos(),
-            expr: span.expr,
-        }));
+        let expr_pos = span.expr.start_pos();
+        self.compile_expr(span.expr, false)?;
+        self.emit(Instruction::Assign(test_vref.clone(), expr_pos));
 
         let mut iter = span.cases.into_iter();
         let mut next = iter.next();
@@ -417,15 +409,165 @@ impl Compiler {
         Ok(())
     }
 
+    /// Compiles a unary operator and appends its instructions to the compilation context.
+    fn compile_unary_op<F: Fn(LineCol) -> Instruction>(
+        &mut self,
+        make_inst: F,
+        span: UnaryOpSpan,
+    ) -> Result<()> {
+        self.compile_expr(span.expr, false)?;
+        self.emit(make_inst(span.pos));
+        Ok(())
+    }
+
+    /// Compiles a binary operator and appends its instructions to the compilation context.
+    fn compile_binary_op<F: Fn(LineCol) -> Instruction>(
+        &mut self,
+        make_inst: F,
+        span: BinaryOpSpan,
+    ) -> Result<()> {
+        self.compile_expr(span.lhs, false)?;
+        self.compile_expr(span.rhs, false)?;
+        self.emit(make_inst(span.pos));
+        Ok(())
+    }
+
+    /// Compiles the evaluation of an expression and appends its instructions to the
+    /// compilation context.
+    ///
+    /// `allow_varrefs` should be true for top-level expression compilations within
+    /// function arguments.  In that specific case, we must leave bare variable
+    /// references unevaluated because we don't know if the function wants to take
+    /// the reference or the value.
+    fn compile_expr(&mut self, expr: Expr, allow_varrefs: bool) -> Result<()> {
+        match expr {
+            Expr::Boolean(span) => {
+                self.emit(Instruction::Push(Value::Boolean(span.value), span.pos));
+            }
+
+            Expr::Double(span) => {
+                self.emit(Instruction::Push(Value::Double(span.value), span.pos));
+            }
+
+            Expr::Integer(span) => {
+                self.emit(Instruction::Push(Value::Integer(span.value), span.pos));
+            }
+
+            Expr::Text(span) => {
+                self.emit(Instruction::Push(Value::Text(span.value), span.pos));
+            }
+
+            Expr::Symbol(span) => {
+                if allow_varrefs {
+                    self.emit(Instruction::LoadRef(span.vref, span.pos));
+                } else {
+                    self.emit(Instruction::Load(span.vref, span.pos));
+                }
+            }
+
+            Expr::And(span) => {
+                self.compile_binary_op(Instruction::And, *span)?;
+            }
+
+            Expr::Or(span) => {
+                self.compile_binary_op(Instruction::Or, *span)?;
+            }
+
+            Expr::Xor(span) => {
+                self.compile_binary_op(Instruction::Xor, *span)?;
+            }
+
+            Expr::Not(span) => {
+                self.compile_unary_op(Instruction::Not, *span)?;
+            }
+
+            Expr::ShiftLeft(span) => {
+                self.compile_binary_op(Instruction::ShiftLeft, *span)?;
+            }
+
+            Expr::ShiftRight(span) => {
+                self.compile_binary_op(Instruction::ShiftRight, *span)?;
+            }
+
+            Expr::Equal(span) => {
+                self.compile_binary_op(Instruction::Equal, *span)?;
+            }
+
+            Expr::NotEqual(span) => {
+                self.compile_binary_op(Instruction::NotEqual, *span)?;
+            }
+
+            Expr::Less(span) => {
+                self.compile_binary_op(Instruction::Less, *span)?;
+            }
+
+            Expr::LessEqual(span) => {
+                self.compile_binary_op(Instruction::LessEqual, *span)?;
+            }
+
+            Expr::Greater(span) => {
+                self.compile_binary_op(Instruction::Greater, *span)?;
+            }
+
+            Expr::GreaterEqual(span) => {
+                self.compile_binary_op(Instruction::GreaterEqual, *span)?;
+            }
+
+            Expr::Add(span) => {
+                self.compile_binary_op(Instruction::Add, *span)?;
+            }
+
+            Expr::Subtract(span) => {
+                self.compile_binary_op(Instruction::Subtract, *span)?;
+            }
+
+            Expr::Multiply(span) => {
+                self.compile_binary_op(Instruction::Multiply, *span)?;
+            }
+
+            Expr::Divide(span) => {
+                self.compile_binary_op(Instruction::Divide, *span)?;
+            }
+
+            Expr::Modulo(span) => {
+                self.compile_binary_op(Instruction::Modulo, *span)?;
+            }
+
+            Expr::Power(span) => {
+                self.compile_binary_op(Instruction::Power, *span)?;
+            }
+
+            Expr::Negate(span) => {
+                self.compile_unary_op(Instruction::Negate, *span)?;
+            }
+
+            Expr::Call(span) => {
+                let nargs = span.args.len();
+                for arg in span.args.into_iter().rev() {
+                    self.compile_expr(arg, true)?;
+                }
+                self.emit(Instruction::FunctionCall(span.fref, span.pos, nargs));
+            }
+        }
+
+        Ok(())
+    }
+
     /// Compiles one statement and appends its bytecode to the current compilation context.
     fn compile_one(&mut self, stmt: Statement) -> Result<()> {
         match stmt {
             Statement::ArrayAssignment(span) => {
-                self.emit(Instruction::ArrayAssignment(span));
+                self.compile_expr(span.expr, false)?;
+                let nargs = span.subscripts.len();
+                for arg in span.subscripts.into_iter().rev() {
+                    self.compile_expr(arg, false)?;
+                }
+                self.emit(Instruction::ArrayAssignment(span.vref, span.vref_pos, nargs));
             }
 
             Statement::Assignment(span) => {
-                self.emit(Instruction::Assignment(span));
+                self.compile_expr(span.expr, false)?;
+                self.emit(Instruction::Assign(span.vref, span.vref_pos));
             }
 
             Statement::BuiltinCall(span) => {
@@ -668,33 +810,38 @@ mod tests {
     #[test]
     fn test_compile_array_assignment() {
         Tester::default()
-            .parse("foo(3) = 5")
+            .parse("foo(3, 4 + i, i) = 5")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 20)))
+            .expect_instr(1, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 15)))
+            .expect_instr(2, Instruction::Push(Value::Integer(4), lc(1, 8)))
+            .expect_instr(3, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 12)))
+            .expect_instr(4, Instruction::Add(lc(1, 10)))
+            .expect_instr(5, Instruction::Push(Value::Integer(3), lc(1, 5)))
             .expect_instr(
-                0,
-                Instruction::ArrayAssignment(ArrayAssignmentSpan {
-                    vref: VarRef::new("foo", VarType::Auto),
-                    vref_pos: lc(1, 1),
-                    subscripts: vec![Expr::Integer(IntegerSpan { value: 3, pos: lc(1, 5) })],
-                    expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 10) }),
-                }),
+                6,
+                Instruction::ArrayAssignment(VarRef::new("foo", VarType::Auto), lc(1, 1), 3),
             )
             .check();
     }
 
     #[test]
-    fn test_compile_assignment() {
+    fn test_compile_assignment_literal() {
         Tester::default()
             .parse("foo = 5")
             .compile()
-            .expect_instr(
-                0,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("foo", VarType::Auto),
-                    vref_pos: lc(1, 1),
-                    expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 7) }),
-                }),
-            )
+            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 7)))
+            .expect_instr(1, Instruction::Assign(VarRef::new("foo", VarType::Auto), lc(1, 1)))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_assignment_varref_is_evaluated() {
+        Tester::default()
+            .parse("foo = i")
+            .compile()
+            .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 7)))
+            .expect_instr(1, Instruction::Assign(VarRef::new("foo", VarType::Auto), lc(1, 1)))
             .check();
     }
 
@@ -979,20 +1126,134 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_for_simple() {
+    fn test_compile_expr_literals() {
+        Tester::default()
+            .parse("b = TRUE\nd = 2.3\ni = 5\nt = \"foo\"")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 5)))
+            .expect_instr(1, Instruction::Assign(VarRef::new("b", VarType::Auto), lc(1, 1)))
+            .expect_instr(2, Instruction::Push(Value::Double(2.3), lc(2, 5)))
+            .expect_instr(3, Instruction::Assign(VarRef::new("d", VarType::Auto), lc(2, 1)))
+            .expect_instr(4, Instruction::Push(Value::Integer(5), lc(3, 5)))
+            .expect_instr(5, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(3, 1)))
+            .expect_instr(6, Instruction::Push(Value::Text("foo".to_owned()), lc(4, 5)))
+            .expect_instr(7, Instruction::Assign(VarRef::new("t", VarType::Auto), lc(4, 1)))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_varrefs_are_evaluated() {
+        Tester::default()
+            .parse("i = j")
+            .compile()
+            .expect_instr(0, Instruction::Load(VarRef::new("j", VarType::Auto), lc(1, 5)))
+            .expect_instr(1, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(1, 1)))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_logical_ops() {
+        Tester::default()
+            .parse("b = true OR x AND y XOR NOT z")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 5)))
+            .expect_instr(1, Instruction::Load(VarRef::new("x", VarType::Auto), lc(1, 13)))
+            .expect_instr(2, Instruction::Or(lc(1, 10)))
+            .expect_instr(3, Instruction::Load(VarRef::new("y", VarType::Auto), lc(1, 19)))
+            .expect_instr(4, Instruction::And(lc(1, 15)))
+            .expect_instr(5, Instruction::Load(VarRef::new("z", VarType::Auto), lc(1, 29)))
+            .expect_instr(6, Instruction::Not(lc(1, 25)))
+            .expect_instr(7, Instruction::Xor(lc(1, 21)))
+            .expect_instr(8, Instruction::Assign(VarRef::new("b", VarType::Auto), lc(1, 1)))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_bitwise_ops() {
+        Tester::default()
+            .parse("i = a >> 5 << b")
+            .compile()
+            .expect_instr(0, Instruction::Load(VarRef::new("a", VarType::Auto), lc(1, 5)))
+            .expect_instr(1, Instruction::Push(Value::Integer(5), lc(1, 10)))
+            .expect_instr(2, Instruction::ShiftRight(lc(1, 7)))
+            .expect_instr(3, Instruction::Load(VarRef::new("b", VarType::Auto), lc(1, 15)))
+            .expect_instr(4, Instruction::ShiftLeft(lc(1, 12)))
+            .expect_instr(5, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(1, 1)))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_relational_ops() {
+        Tester::default()
+            .parse("b = a = 10 <> 20 < 30 <= 40 > 50 >= 60")
+            .compile()
+            .expect_instr(0, Instruction::Load(VarRef::new("a", VarType::Auto), lc(1, 5)))
+            .expect_instr(1, Instruction::Push(Value::Integer(10), lc(1, 9)))
+            .expect_instr(2, Instruction::Equal(lc(1, 7)))
+            .expect_instr(3, Instruction::Push(Value::Integer(20), lc(1, 15)))
+            .expect_instr(4, Instruction::NotEqual(lc(1, 12)))
+            .expect_instr(5, Instruction::Push(Value::Integer(30), lc(1, 20)))
+            .expect_instr(6, Instruction::Less(lc(1, 18)))
+            .expect_instr(7, Instruction::Push(Value::Integer(40), lc(1, 26)))
+            .expect_instr(8, Instruction::LessEqual(lc(1, 23)))
+            .expect_instr(9, Instruction::Push(Value::Integer(50), lc(1, 31)))
+            .expect_instr(10, Instruction::Greater(lc(1, 29)))
+            .expect_instr(11, Instruction::Push(Value::Integer(60), lc(1, 37)))
+            .expect_instr(12, Instruction::GreaterEqual(lc(1, 34)))
+            .expect_instr(13, Instruction::Assign(VarRef::new("b", VarType::Auto), lc(1, 1)))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_arithmetic_ops() {
+        Tester::default()
+            .parse("i = a + 10 - 20 * 30 / 40 MOD 50 ^ (-60)")
+            .compile()
+            .expect_instr(0, Instruction::Load(VarRef::new("a", VarType::Auto), lc(1, 5)))
+            .expect_instr(1, Instruction::Push(Value::Integer(10), lc(1, 9)))
+            .expect_instr(2, Instruction::Add(lc(1, 7)))
+            .expect_instr(3, Instruction::Push(Value::Integer(20), lc(1, 14)))
+            .expect_instr(4, Instruction::Push(Value::Integer(30), lc(1, 19)))
+            .expect_instr(5, Instruction::Multiply(lc(1, 17)))
+            .expect_instr(6, Instruction::Push(Value::Integer(40), lc(1, 24)))
+            .expect_instr(7, Instruction::Divide(lc(1, 22)))
+            .expect_instr(8, Instruction::Push(Value::Integer(50), lc(1, 31)))
+            .expect_instr(9, Instruction::Push(Value::Integer(60), lc(1, 38)))
+            .expect_instr(10, Instruction::Negate(lc(1, 37)))
+            .expect_instr(11, Instruction::Power(lc(1, 34)))
+            .expect_instr(12, Instruction::Modulo(lc(1, 27)))
+            .expect_instr(13, Instruction::Subtract(lc(1, 12)))
+            .expect_instr(14, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(1, 1)))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_function_call() {
+        Tester::default()
+            .parse("i = FOO(3, j, k + 1)")
+            .compile()
+            .expect_instr(0, Instruction::Load(VarRef::new("k", VarType::Auto), lc(1, 15)))
+            .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 19)))
+            .expect_instr(2, Instruction::Add(lc(1, 17)))
+            .expect_instr(3, Instruction::LoadRef(VarRef::new("j", VarType::Auto), lc(1, 12)))
+            .expect_instr(4, Instruction::Push(Value::Integer(3), lc(1, 9)))
+            .expect_instr(
+                5,
+                Instruction::FunctionCall(VarRef::new("FOO", VarType::Auto), lc(1, 5), 3),
+            )
+            .expect_instr(6, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(1, 1)))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_for_simple_literals() {
         Tester::default()
             .parse("FOR iter = 1 TO 5: a = FALSE: NEXT")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(1), lc(1, 12)))
+            .expect_instr(1, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
             .expect_instr(
-                0,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("iter", VarType::Auto),
-                    vref_pos: lc(1, 5),
-                    expr: Expr::Integer(IntegerSpan { value: 1, pos: lc(1, 12) }),
-                }),
-            )
-            .expect_instr(
-                1,
+                2,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::LessEqual(Box::from(BinaryOpSpan {
                         lhs: Expr::Symbol(SymbolSpan {
@@ -1002,34 +1263,93 @@ mod tests {
                         rhs: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 17) }),
                         pos: lc(1, 14),
                     })),
-                    addr: 5,
+                    addr: 10,
                     error_msg: "FOR supports numeric iteration only",
                 }),
             )
+            .expect_instr(3, Instruction::Push(Value::Boolean(false), lc(1, 24)))
+            .expect_instr(4, Instruction::Assign(VarRef::new("a", VarType::Auto), lc(1, 20)))
+            .expect_instr(5, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(6, Instruction::Push(Value::Integer(1), lc(1, 18)))
+            .expect_instr(7, Instruction::Add(lc(1, 14)))
+            .expect_instr(8, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(9, Instruction::Jump(JumpSpan { addr: 2 }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_for_simple_varrefs_are_evaluated() {
+        Tester::default()
+            .parse("FOR iter = i TO j: a = FALSE: NEXT")
+            .compile()
+            .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 12)))
+            .expect_instr(1, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
             .expect_instr(
                 2,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("a", VarType::Auto),
-                    vref_pos: lc(1, 20),
-                    expr: Expr::Boolean(BooleanSpan { value: false, pos: lc(1, 24) }),
-                }),
-            )
-            .expect_instr(
-                3,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("iter", VarType::Auto),
-                    vref_pos: lc(1, 5),
-                    expr: Expr::Add(Box::from(BinaryOpSpan {
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
+                    cond: Expr::LessEqual(Box::from(BinaryOpSpan {
                         lhs: Expr::Symbol(SymbolSpan {
                             vref: VarRef::new("iter", VarType::Auto),
                             pos: lc(1, 5),
                         }),
-                        rhs: Expr::Integer(IntegerSpan { value: 1, pos: lc(1, 18) }),
+                        rhs: Expr::Symbol(SymbolSpan {
+                            vref: VarRef::new("j", VarType::Auto),
+                            pos: lc(1, 17),
+                        }),
                         pos: lc(1, 14),
                     })),
+                    addr: 10,
+                    error_msg: "FOR supports numeric iteration only",
                 }),
             )
-            .expect_instr(4, Instruction::Jump(JumpSpan { addr: 1 }))
+            .expect_instr(3, Instruction::Push(Value::Boolean(false), lc(1, 24)))
+            .expect_instr(4, Instruction::Assign(VarRef::new("a", VarType::Auto), lc(1, 20)))
+            .expect_instr(5, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(6, Instruction::Push(Value::Integer(1), lc(1, 18)))
+            .expect_instr(7, Instruction::Add(lc(1, 14)))
+            .expect_instr(8, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(9, Instruction::Jump(JumpSpan { addr: 2 }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_for_expressions() {
+        Tester::default()
+            .parse("FOR iter = (i + 1) TO (2 + j): a = FALSE: NEXT")
+            .compile()
+            .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 13)))
+            .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 17)))
+            .expect_instr(2, Instruction::Add(lc(1, 15)))
+            .expect_instr(3, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(
+                4,
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
+                    cond: Expr::LessEqual(Box::from(BinaryOpSpan {
+                        lhs: Expr::Symbol(SymbolSpan {
+                            vref: VarRef::new("iter", VarType::Auto),
+                            pos: lc(1, 5),
+                        }),
+                        rhs: Expr::Add(Box::from(BinaryOpSpan {
+                            lhs: Expr::Integer(IntegerSpan { value: 2, pos: lc(1, 24) }),
+                            rhs: Expr::Symbol(SymbolSpan {
+                                vref: VarRef::new("j", VarType::Auto),
+                                pos: lc(1, 28),
+                            }),
+                            pos: lc(1, 26),
+                        })),
+                        pos: lc(1, 20),
+                    })),
+                    addr: 12,
+                    error_msg: "FOR supports numeric iteration only",
+                }),
+            )
+            .expect_instr(5, Instruction::Push(Value::Boolean(false), lc(1, 36)))
+            .expect_instr(6, Instruction::Assign(VarRef::new("a", VarType::Auto), lc(1, 32)))
+            .expect_instr(7, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(8, Instruction::Push(Value::Integer(1), lc(1, 30)))
+            .expect_instr(9, Instruction::Add(lc(1, 20)))
+            .expect_instr(10, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(11, Instruction::Jump(JumpSpan { addr: 4 }))
             .check();
     }
 
@@ -1051,16 +1371,10 @@ mod tests {
                     vtype_pos: lc(1, 5),
                 }),
             )
+            .expect_instr(2, Instruction::Push(Value::Integer(0), lc(1, 12)))
+            .expect_instr(3, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
             .expect_instr(
-                2,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("iter", VarType::Auto),
-                    vref_pos: lc(1, 5),
-                    expr: Expr::Integer(IntegerSpan { value: 0, pos: lc(1, 12) }),
-                }),
-            )
-            .expect_instr(
-                3,
+                4,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::LessEqual(Box::from(BinaryOpSpan {
                         lhs: Expr::Symbol(SymbolSpan {
@@ -1070,26 +1384,15 @@ mod tests {
                         rhs: Expr::Integer(IntegerSpan { value: 2, pos: lc(1, 17) }),
                         pos: lc(1, 14),
                     })),
-                    addr: 6,
+                    addr: 10,
                     error_msg: "FOR supports numeric iteration only",
                 }),
             )
-            .expect_instr(
-                4,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("iter", VarType::Auto),
-                    vref_pos: lc(1, 5),
-                    expr: Expr::Add(Box::from(BinaryOpSpan {
-                        lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("iter", VarType::Auto),
-                            pos: lc(1, 5),
-                        }),
-                        rhs: Expr::Double(DoubleSpan { value: 0.1, pos: lc(1, 24) }),
-                        pos: lc(1, 14),
-                    })),
-                }),
-            )
-            .expect_instr(5, Instruction::Jump(JumpSpan { addr: 3 }))
+            .expect_instr(5, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(6, Instruction::Push(Value::Double(0.1), lc(1, 24)))
+            .expect_instr(7, Instruction::Add(lc(1, 14)))
+            .expect_instr(8, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(9, Instruction::Jump(JumpSpan { addr: 4 }))
             .check();
     }
 
@@ -1257,24 +1560,18 @@ mod tests {
         Tester::default()
             .parse(&format!("SELECT CASE 5\nCASE {}\nFOO\nEND SELECT", guards))
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
+            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
             .expect_instr(
-                0,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    vref_pos: lc(1, 13),
-                    expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
-                }),
-            )
-            .expect_instr(
-                1,
+                2,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: exp_expr,
-                    addr: 3,
+                    addr: 4,
                     error_msg: "SELECT requires a boolean condition",
                 }),
             )
             .expect_instr(
-                2,
+                3,
                 Instruction::BuiltinCall(BuiltinCallSpan {
                     name: "FOO".to_owned(),
                     name_pos: lc(3, 1),
@@ -1282,7 +1579,7 @@ mod tests {
                 }),
             )
             .expect_instr(
-                3,
+                4,
                 Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
             )
             .check();
@@ -1443,20 +1740,12 @@ mod tests {
         Tester::default()
             .parse("SELECT CASE 5 + 3: END SELECT")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
+            .expect_instr(1, Instruction::Push(Value::Integer(3), lc(1, 17)))
+            .expect_instr(2, Instruction::Add(lc(1, 15)))
+            .expect_instr(3, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
             .expect_instr(
-                0,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    vref_pos: lc(1, 13),
-                    expr: Expr::Add(Box::from(BinaryOpSpan {
-                        lhs: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
-                        rhs: Expr::Integer(IntegerSpan { value: 3, pos: lc(1, 17) }),
-                        pos: lc(1, 15),
-                    })),
-                }),
-            )
-            .expect_instr(
-                1,
+                4,
                 Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(1, 20) }),
             )
             .check();
@@ -1467,16 +1756,10 @@ mod tests {
         Tester::default()
             .parse("SELECT CASE 5\nCASE 7\nFOO\nEND SELECT")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
+            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
             .expect_instr(
-                0,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    vref_pos: lc(1, 13),
-                    expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
-                }),
-            )
-            .expect_instr(
-                1,
+                2,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Equal(Box::from(BinaryOpSpan {
                         lhs: Expr::Symbol(SymbolSpan {
@@ -1486,10 +1769,46 @@ mod tests {
                         rhs: Expr::Integer(IntegerSpan { value: 7, pos: lc(2, 6) }),
                         pos: lc(2, 6),
                     })),
-                    addr: 3,
+                    addr: 4,
                     error_msg: "SELECT requires a boolean condition",
                 }),
             )
+            .expect_instr(
+                3,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "FOO".to_owned(),
+                    name_pos: lc(3, 1),
+                    args: vec![],
+                }),
+            )
+            .expect_instr(
+                4,
+                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_select_one_case_varref_is_evaluated() {
+        Tester::default()
+            .parse("SELECT CASE i: END SELECT")
+            .compile()
+            .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 13)))
+            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
+            .expect_instr(
+                2,
+                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(1, 16) }),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_select_only_case_else() {
+        Tester::default()
+            .parse("SELECT CASE 5\nCASE ELSE\nFOO\nEND SELECT")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
+            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
             .expect_instr(
                 2,
                 Instruction::BuiltinCall(BuiltinCallSpan {
@@ -1506,48 +1825,14 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_select_only_case_else() {
-        Tester::default()
-            .parse("SELECT CASE 5\nCASE ELSE\nFOO\nEND SELECT")
-            .compile()
-            .expect_instr(
-                0,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    vref_pos: lc(1, 13),
-                    expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
-                }),
-            )
-            .expect_instr(
-                1,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(3, 1),
-                    args: vec![],
-                }),
-            )
-            .expect_instr(
-                2,
-                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
-            )
-            .check();
-    }
-
-    #[test]
     fn test_compile_select_many_cases_without_else() {
         Tester::default()
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE IS <> 8\nBAR\nEND SELECT")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
+            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
             .expect_instr(
-                0,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    vref_pos: lc(1, 13),
-                    expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
-                }),
-            )
-            .expect_instr(
-                1,
+                2,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::Equal(Box::from(BinaryOpSpan {
                         lhs: Expr::Symbol(SymbolSpan {
@@ -1557,21 +1842,21 @@ mod tests {
                         rhs: Expr::Integer(IntegerSpan { value: 7, pos: lc(2, 6) }),
                         pos: lc(2, 6),
                     })),
-                    addr: 4,
+                    addr: 5,
                     error_msg: "SELECT requires a boolean condition",
                 }),
             )
             .expect_instr(
-                2,
+                3,
                 Instruction::BuiltinCall(BuiltinCallSpan {
                     name: "FOO".to_owned(),
                     name_pos: lc(3, 1),
                     args: vec![],
                 }),
             )
-            .expect_instr(3, Instruction::Jump(JumpSpan { addr: 6 }))
+            .expect_instr(4, Instruction::Jump(JumpSpan { addr: 7 }))
             .expect_instr(
-                4,
+                5,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     cond: Expr::NotEqual(Box::from(BinaryOpSpan {
                         lhs: Expr::Symbol(SymbolSpan {
@@ -1581,10 +1866,56 @@ mod tests {
                         rhs: Expr::Integer(IntegerSpan { value: 8, pos: lc(4, 12) }),
                         pos: lc(4, 12),
                     })),
-                    addr: 6,
+                    addr: 7,
                     error_msg: "SELECT requires a boolean condition",
                 }),
             )
+            .expect_instr(
+                6,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "BAR".to_owned(),
+                    name_pos: lc(5, 1),
+                    args: vec![],
+                }),
+            )
+            .expect_instr(
+                7,
+                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(6, 1) }),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_select_many_cases_with_else() {
+        Tester::default()
+            .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE ELSE\nBAR\nEND SELECT")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
+            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
+            .expect_instr(
+                2,
+                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
+                    cond: Expr::Equal(Box::from(BinaryOpSpan {
+                        lhs: Expr::Symbol(SymbolSpan {
+                            vref: VarRef::new("0select1", VarType::Auto),
+                            pos: lc(2, 6),
+                        }),
+                        rhs: Expr::Integer(IntegerSpan { value: 7, pos: lc(2, 6) }),
+                        pos: lc(2, 6),
+                    })),
+                    addr: 5,
+                    error_msg: "SELECT requires a boolean condition",
+                }),
+            )
+            .expect_instr(
+                3,
+                Instruction::BuiltinCall(BuiltinCallSpan {
+                    name: "FOO".to_owned(),
+                    name_pos: lc(3, 1),
+                    args: vec![],
+                }),
+            )
+            .expect_instr(4, Instruction::Jump(JumpSpan { addr: 6 }))
             .expect_instr(
                 5,
                 Instruction::BuiltinCall(BuiltinCallSpan {
@@ -1601,84 +1932,20 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_select_many_cases_with_else() {
-        Tester::default()
-            .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE ELSE\nBAR\nEND SELECT")
-            .compile()
-            .expect_instr(
-                0,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    vref_pos: lc(1, 13),
-                    expr: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 13) }),
-                }),
-            )
-            .expect_instr(
-                1,
-                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Equal(Box::from(BinaryOpSpan {
-                        lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("0select1", VarType::Auto),
-                            pos: lc(2, 6),
-                        }),
-                        rhs: Expr::Integer(IntegerSpan { value: 7, pos: lc(2, 6) }),
-                        pos: lc(2, 6),
-                    })),
-                    addr: 4,
-                    error_msg: "SELECT requires a boolean condition",
-                }),
-            )
-            .expect_instr(
-                2,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(3, 1),
-                    args: vec![],
-                }),
-            )
-            .expect_instr(3, Instruction::Jump(JumpSpan { addr: 5 }))
-            .expect_instr(
-                4,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "BAR".to_owned(),
-                    name_pos: lc(5, 1),
-                    args: vec![],
-                }),
-            )
-            .expect_instr(
-                5,
-                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(6, 1) }),
-            )
-            .check();
-    }
-
-    #[test]
     fn test_compile_select_internal_var_names() {
         Tester::default()
             .parse("SELECT CASE 0: END SELECT\nSELECT CASE 0: END SELECT")
             .compile()
-            .expect_instr(
-                0,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    vref_pos: lc(1, 13),
-                    expr: Expr::Integer(IntegerSpan { value: 0, pos: lc(1, 13) }),
-                }),
-            )
-            .expect_instr(
-                1,
-                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(1, 16) }),
-            )
+            .expect_instr(0, Instruction::Push(Value::Integer(0), lc(1, 13)))
+            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
             .expect_instr(
                 2,
-                Instruction::Assignment(AssignmentSpan {
-                    vref: VarRef::new("0select2", VarType::Auto),
-                    vref_pos: lc(2, 13),
-                    expr: Expr::Integer(IntegerSpan { value: 0, pos: lc(2, 13) }),
-                }),
+                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(1, 16) }),
             )
+            .expect_instr(3, Instruction::Push(Value::Integer(0), lc(2, 13)))
+            .expect_instr(4, Instruction::Assign(VarRef::new("0select2", VarType::Auto), lc(2, 13)))
             .expect_instr(
-                3,
+                5,
                 Instruction::Unset(UnsetSpan { name: "0select2".to_owned(), pos: lc(2, 16) }),
             )
             .check();

@@ -22,6 +22,10 @@ for the time being.**
     concise directory summary, made `LOGIN` skip the server's `motd`, and
     fixed handling of line input in prompts.
 
+*   Rewrote the expression evaluator to be bytecode based.  This opens the way
+    towards user-supplied functions and the ability to interrupt functions as
+    they execute.
+
 ## Changes in version 0.10.0
 
 **Released on 2022-12-27.**
