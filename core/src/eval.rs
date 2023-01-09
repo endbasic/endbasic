@@ -82,6 +82,27 @@ pub async fn eval_all(exprs: &[Expr], syms: &mut Symbols) -> Result<Vec<Value>> 
     Ok(values)
 }
 
+#[async_recursion(?Send)]
+pub async fn eval_all_with_types(
+    syntax: &[ArgDesc],
+    exprs: &[Expr],
+    syms: &mut Symbols,
+) -> Result<Vec<Value>> {
+    let mut values = Vec::with_capacity(exprs.len());
+
+    let mut syn_iter = syntax.iter();
+    let mut expr_iter = exprs.iter();
+    while let Some(desc) = syn_iter.next() {
+        let expr = match expr_iter.next() {
+            Some(expr) => expr,
+            None => return Err(Error::SyntaxError),
+        };
+        let value = expr.eval(syms).await?;
+        values.push(value);
+    }
+    Ok(values)
+}
+
 impl Expr {
     /// Returns the start position of the expression.
     pub fn start_pos(&self) -> LineCol {

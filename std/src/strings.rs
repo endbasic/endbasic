@@ -202,7 +202,7 @@ impl LenFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LEN", VarType::Integer)
-                .with_syntax("expr$")
+                .add_required_arg(ArgType::Text, "expr")
                 .with_category(CATEGORY)
                 .with_description("Returns the length of the string in expr$.")
                 .build(),

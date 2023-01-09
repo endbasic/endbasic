@@ -428,11 +428,31 @@ impl Symbols {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum ArgType {
+    Boolean,
+    Double,
+    Integer,
+    Number,
+    Text,
+    Value,
+    VarRef,
+}
+
+#[derive(Clone, Debug)]
+pub enum ArgDesc {
+    Required(ArgType, &'static str),
+    Optional(ArgType, &'static str),
+    RepeatedRequired(ArgType, &'static str),
+    RepeatedOptional(ArgType, &'static str),
+}
+
 /// Builder pattern for a callable's metadata.
 pub struct CallableMetadataBuilder {
     name: &'static str,
     return_type: VarType,
     category: Option<&'static str>,
+    args: Vec<ArgDesc>,
     syntax: Option<&'static str>,
     description: Option<&'static str>,
 }
@@ -446,7 +466,55 @@ impl CallableMetadataBuilder {
     pub fn new(name: &'static str, return_type: VarType) -> Self {
         assert!(name == name.to_ascii_uppercase(), "Callable name must be in uppercase");
 
-        Self { name, return_type, syntax: None, category: None, description: None }
+        Self { name, return_type, args: vec![], syntax: None, category: None, description: None }
+    }
+
+    pub fn add_required_arg(mut self, atype: ArgType, name: &'static str) -> Self {
+        assert!(
+            self.args.iter().any(|a| match a {
+                ArgDesc::RepeatedRequired(..) | ArgDesc::RepeatedOptional(..) => true,
+                _ => false,
+            }),
+            "Cannot register an argument after a repeated one"
+        );
+        self.args.push(ArgDesc::Required(atype, name));
+        self
+    }
+
+    pub fn add_optional_arg(mut self, atype: ArgType, name: &'static str) -> Self {
+        assert!(
+            self.args.iter().any(|a| match a {
+                ArgDesc::RepeatedRequired(..) | ArgDesc::RepeatedOptional(..) => true,
+                _ => false,
+            }),
+            "Cannot register an argument after a repeated one"
+        );
+        self.args.push(ArgDesc::Optional(atype, name));
+        self
+    }
+
+    pub fn add_repeated_required_arg(mut self, atype: ArgType, name: &'static str) -> Self {
+        assert!(
+            self.args.iter().any(|a| match a {
+                ArgDesc::RepeatedRequired(..) | ArgDesc::RepeatedOptional(..) => true,
+                _ => false,
+            }),
+            "Can only register a single repeated argument"
+        );
+        self.args.push(ArgDesc::RepeatedRequired(atype, name));
+        self
+    }
+
+    pub fn add_repeated_optional_arg(mut self, atype: ArgType, name: &'static str) -> Self {
+        assert!(
+            self.args.iter().any(|a| match a {
+                ArgDesc::RepeatedRequired(..) | ArgDesc::RepeatedOptional(..) => true,
+                _ => false,
+            }),
+            "Can only register a single repeated argument"
+        );
+        self.args.push(ArgDesc::RepeatedOptional(atype, name));
+        self
     }
 
     /// Sets the syntax specification for this callable.  The `syntax` is provided as a free-form
@@ -481,6 +549,7 @@ impl CallableMetadataBuilder {
         CallableMetadata {
             name: self.name,
             return_type: self.return_type,
+            args: self.args,
             syntax: self.syntax.expect("All callables must specify a syntax"),
             category: self.category.expect("All callables must specify a category"),
             description: self.description.expect("All callables must specify a description"),
@@ -493,6 +562,7 @@ impl CallableMetadataBuilder {
         CallableMetadata {
             name: self.name,
             return_type: self.return_type,
+            args: self.args,
             syntax: self.syntax.unwrap_or(""),
             category: self.category.unwrap_or(""),
             description: self.description.unwrap_or(""),
@@ -508,6 +578,7 @@ impl CallableMetadataBuilder {
 pub struct CallableMetadata {
     name: &'static str,
     return_type: VarType,
+    args: Vec<ArgDesc>,
     syntax: &'static str,
     category: &'static str,
     description: &'static str,
