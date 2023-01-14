@@ -177,16 +177,21 @@ pub trait Clearable {
 /// Type of the function used by the execution loop to yield execution.
 pub type YieldNowFn = Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()> + 'static>>>;
 
+/// Types for stack values.
+enum StackValue {
+    Address(Address),
+}
+
 /// Machine state for the execution of an individual chunk of code.
 struct Context {
     pc: Address,
-    addr_stack: Vec<Address>,
+    stack: Vec<StackValue>,
     err_handler: ErrorHandlerSpan,
 }
 
 impl Default for Context {
     fn default() -> Self {
-        Self { pc: 0, addr_stack: vec![], err_handler: ErrorHandlerSpan::None }
+        Self { pc: 0, stack: vec![], err_handler: ErrorHandlerSpan::None }
     }
 }
 
@@ -487,7 +492,7 @@ impl Machine {
             }
 
             Instruction::Call(span) => {
-                context.addr_stack.push(context.pc + 1);
+                context.stack.push(StackValue::Address(context.pc + 1));
                 context.pc = span.addr;
             }
 
@@ -539,8 +544,8 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::Return(span) => match context.addr_stack.pop() {
-                Some(addr) => context.pc = addr,
+            Instruction::Return(span) => match context.stack.pop() {
+                Some(StackValue::Address(addr)) => context.pc = addr,
                 None => return new_syntax_error(span.pos, "No address to return to".to_owned()),
             },
 
