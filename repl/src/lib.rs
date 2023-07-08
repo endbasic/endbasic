@@ -38,7 +38,7 @@ pub fn print_welcome(console: Rc<RefCell<dyn Console>>) -> io::Result<()> {
     let mut console = console.borrow_mut();
     console.print("")?;
     console.print(&format!("    EndBASIC {}", env!("CARGO_PKG_VERSION")))?;
-    console.print("    Copyright 2020-2022 Julio Merino")?;
+    console.print("    Copyright 2020-2023 Julio Merino")?;
     console.print("")?;
     console.print("    Type HELP for interactive usage information.")?;
     console.print("")?;
