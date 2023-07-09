@@ -1,10 +1,5 @@
 # The EndBASIC programming language - web interface
 
-![Build and test](https://github.com/endbasic/endbasic/workflows/Build%20and%20test/badge.svg)
-![Health checks](https://github.com/endbasic/endbasic/workflows/Health%20checks/badge.svg)
-![Deploy to staging](https://github.com/endbasic/endbasic/workflows/Deploy%20to%20staging/badge.svg)
-![Deploy to release](https://github.com/endbasic/endbasic/workflows/Deploy%20to%20release/badge.svg)
-
 EndBASIC is an interpreter for a BASIC-like language and is inspired by
 Amstrad's Locomotive BASIC 1.1 and Microsoft's QuickBASIC 4.5.  Like the former,
 EndBASIC intends to provide an interactive environment that seamlessly merges

@@ -1,9 +1,5 @@
 # The EndBASIC programming language - core
 
-![Build and test](https://github.com/endbasic/endbasic/workflows/Build%20and%20test/badge.svg)
-![Health checks](https://github.com/endbasic/endbasic/workflows/Health%20checks/badge.svg)
-![Deploy to staging](https://github.com/endbasic/endbasic/workflows/Deploy%20to%20staging/badge.svg)
-![Deploy to release](https://github.com/endbasic/endbasic/workflows/Deploy%20to%20release/badge.svg)
 [![Crates.io](https://img.shields.io/crates/v/endbasic-core.svg)](https://crates.io/crates/endbasic-core/)
 [![Docs.rs](https://docs.rs/endbasic-core/badge.svg)](https://docs.rs/endbasic-core/)
 

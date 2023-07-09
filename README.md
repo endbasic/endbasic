@@ -1,9 +1,10 @@
 # The EndBASIC programming language
 
-![Build and test](https://github.com/endbasic/endbasic/workflows/Build%20and%20test/badge.svg)
-![Health checks](https://github.com/endbasic/endbasic/workflows/Health%20checks/badge.svg)
-![Deploy to staging](https://github.com/endbasic/endbasic/workflows/Deploy%20to%20staging/badge.svg)
-![Deploy to release](https://github.com/endbasic/endbasic/workflows/Deploy%20to%20release/badge.svg)
+![Test](https://github.com/endbasic/endbasic/workflows/Test/badge.svg)
+![Build release](https://github.com/endbasic/endbasic/workflows/Build%20release/badge.svg)
+![Release checks](https://github.com/endbasic/endbasic/workflows/Release%20checks/badge.svg)
+![Deploy to staging](https://github.com/endbasic/endbasic/workflows/Deploy%20to%20repl-staging.endbasic.dev/badge.svg)
+![Deploy to release](https://github.com/endbasic/endbasic/workflows/Deploy%20to%20repl.endbasic.dev/badge.svg)
 
 EndBASIC is an interpreter for a BASIC-like language and is inspired by
 Amstrad's Locomotive BASIC 1.1 and Microsoft's QuickBASIC 4.5.  Like the former,
