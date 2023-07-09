@@ -158,6 +158,7 @@ impl Service for CloudService {
             .client
             .post(self.make_url("api/signup"))
             .headers(self.default_headers())
+            .header("Content-Type", "application/json")
             .body(serde_json::to_vec(&request)?)
             .send()
             .await
@@ -283,6 +284,7 @@ impl Service for CloudService {
             .client
             .patch(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
             .headers(self.default_headers())
+            .header("Content-Type", "application/json")
             .body(serde_json::to_vec(&request)?)
             .bearer_auth(Self::require_auth_data(auth_data.as_ref())?.access_token.as_str())
             .send()

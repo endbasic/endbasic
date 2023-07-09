@@ -14,7 +14,8 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
-*   No changes recorded.
+*   Fixed JSON requests to the service to properly set the correct
+    `Content-Type` header.
 
 ## Changes in version 0.10.0
 
