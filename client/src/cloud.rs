@@ -172,7 +172,8 @@ impl Service for CloudService {
     async fn login(&mut self, username: &str, password: &str) -> io::Result<LoginResponse> {
         // TODO(https://github.com/seanmonstar/reqwest/pull/1096): Replace with a basic_auth()
         // call on the RequestBuilder once it is supported in WASM.
-        let basic_auth = format!("Basic {}", base64::encode(format!("{}:{}", username, password)));
+        let basic_auth =
+            format!("Basic {}", BASE64_STANDARD.encode(format!("{}:{}", username, password)));
 
         let response = self
             .client
