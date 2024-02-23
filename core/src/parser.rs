@@ -1243,7 +1243,7 @@ impl<'a> Parser<'a> {
             Token::Goto => {
                 let token_span = self.lexer.read()?;
                 match token_span.token {
-                    Token::Integer(i) if i == 0 => Ok(Statement::OnError(OnErrorSpan::Reset)),
+                    Token::Integer(0) => Ok(Statement::OnError(OnErrorSpan::Reset)),
                     Token::Integer(i) => Ok(Statement::OnError(OnErrorSpan::Goto(GotoSpan {
                         target: format!("{}", i),
                         target_pos: token_span.pos,

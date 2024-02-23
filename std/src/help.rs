@@ -135,7 +135,7 @@ impl Topic for CallableTopic {
 
 /// Generates the index for a collection of `CallableMetadata`s to use in a `CategoryTopic`.
 fn callables_to_index(metadatas: &[CallableMetadata]) -> BTreeMap<String, &'static str> {
-    let category = metadatas.get(0).expect("Must have at least one symbol").category();
+    let category = metadatas.first().expect("Must have at least one symbol").category();
 
     let mut index = BTreeMap::default();
     for metadata in metadatas {
@@ -351,7 +351,7 @@ impl Topics {
             }
         }
         for (name, metadatas) in categories.into_iter() {
-            let description = metadatas.get(0).expect("Must have at least one symbol").category();
+            let description = metadatas.first().expect("Must have at least one symbol").category();
             let index = callables_to_index(&metadatas);
             insert(&mut topics, Box::from(CategoryTopic { name, description, index }));
         }
