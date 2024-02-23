@@ -33,17 +33,6 @@ use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::io::{self, StdoutLock, Write};
 
-/// Converts a `crossterm::ErrorKind` to an `io::Error`.
-fn crossterm_error_to_io_error(e: crossterm::ErrorKind) -> io::Error {
-    match e {
-        crossterm::ErrorKind::IoError(e) => e,
-        crossterm::ErrorKind::Utf8Error(e) => {
-            io::Error::new(io::ErrorKind::InvalidData, format!("{}", e))
-        }
-        _ => io::Error::new(io::ErrorKind::Other, format!("{}", e)),
-    }
-}
-
 /// Implementation of the EndBASIC console to interact with stdin and stdout.
 pub struct TerminalConsole {
     /// Whether stdin and stdout are attached to a TTY.  When this is true, the console is put in
@@ -88,7 +77,7 @@ impl TerminalConsole {
         let is_tty = io::stdin().is_tty() && io::stdout().is_tty();
 
         if is_tty {
-            terminal::enable_raw_mode().map_err(crossterm_error_to_io_error)?;
+            terminal::enable_raw_mode()?;
             tokio::task::spawn(TerminalConsole::raw_key_handler(on_key_tx, signals_tx));
         } else {
             tokio::task::spawn(TerminalConsole::stdio_key_handler(on_key_tx));
@@ -112,7 +101,7 @@ impl TerminalConsole {
 
         let mut done = false;
         while !done {
-            let key = match event::read().map_err(crossterm_error_to_io_error) {
+            let key = match event::read() {
                 Ok(event::Event::Key(ev)) => match ev.code {
                     KeyCode::Backspace => Key::Backspace,
                     KeyCode::End => Key::End,
@@ -234,9 +223,9 @@ impl Console for TerminalConsole {
         };
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
-        stdout.queue(terminal::Clear(how)).map_err(crossterm_error_to_io_error)?;
+        stdout.queue(terminal::Clear(how))?;
         if how == terminal::ClearType::All {
-            stdout.queue(cursor::MoveTo(0, 0)).map_err(crossterm_error_to_io_error)?;
+            stdout.queue(cursor::MoveTo(0, 0))?;
         }
         self.maybe_flush(stdout)
     }
@@ -257,7 +246,7 @@ impl Console for TerminalConsole {
                 None => style::Color::Reset,
                 Some(color) => style::Color::AnsiValue(color),
             };
-            stdout.queue(style::SetForegroundColor(ct_fg)).map_err(crossterm_error_to_io_error)?;
+            stdout.queue(style::SetForegroundColor(ct_fg))?;
             self.fg_color = fg;
         }
         if bg != self.bg_color {
@@ -265,7 +254,7 @@ impl Console for TerminalConsole {
                 None => style::Color::Reset,
                 Some(color) => style::Color::AnsiValue(color),
             };
-            stdout.queue(style::SetBackgroundColor(ct_bg)).map_err(crossterm_error_to_io_error)?;
+            stdout.queue(style::SetBackgroundColor(ct_bg))?;
             self.bg_color = bg;
         }
         self.maybe_flush(stdout)
@@ -275,7 +264,7 @@ impl Console for TerminalConsole {
         if !self.alt_active {
             let stdout = io::stdout();
             let mut stdout = stdout.lock();
-            stdout.queue(terminal::EnterAlternateScreen).map_err(crossterm_error_to_io_error)?;
+            stdout.queue(terminal::EnterAlternateScreen)?;
             self.alt_active = true;
             self.maybe_flush(stdout)
         } else {
@@ -287,7 +276,7 @@ impl Console for TerminalConsole {
         if self.cursor_visible {
             let stdout = io::stdout();
             let mut stdout = stdout.lock();
-            stdout.queue(cursor::Hide).map_err(crossterm_error_to_io_error)?;
+            stdout.queue(cursor::Hide)?;
             self.cursor_visible = false;
             self.maybe_flush(stdout)
         } else {
@@ -303,7 +292,7 @@ impl Console for TerminalConsole {
         if self.alt_active {
             let stdout = io::stdout();
             let mut stdout = stdout.lock();
-            stdout.queue(terminal::LeaveAlternateScreen).map_err(crossterm_error_to_io_error)?;
+            stdout.queue(terminal::LeaveAlternateScreen)?;
             self.alt_active = false;
             self.maybe_flush(stdout)
         } else {
@@ -321,7 +310,7 @@ impl Console for TerminalConsole {
 
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
-        stdout.queue(cursor::MoveTo(pos.x, pos.y)).map_err(crossterm_error_to_io_error)?;
+        stdout.queue(cursor::MoveTo(pos.x, pos.y))?;
         self.maybe_flush(stdout)
     }
 
@@ -332,8 +321,7 @@ impl Console for TerminalConsole {
             Ordering::Less => stdout.queue(cursor::MoveLeft(-off as u16)),
             Ordering::Equal => return Ok(()),
             Ordering::Greater => stdout.queue(cursor::MoveRight(off as u16)),
-        }
-        .map_err(crossterm_error_to_io_error)?;
+        }?;
         self.maybe_flush(stdout)
     }
 
@@ -370,7 +358,7 @@ impl Console for TerminalConsole {
         if !self.cursor_visible {
             let stdout = io::stdout();
             let mut stdout = stdout.lock();
-            stdout.queue(cursor::Show).map_err(crossterm_error_to_io_error)?;
+            stdout.queue(cursor::Show)?;
             self.cursor_visible = true;
             self.maybe_flush(stdout)
         } else {
@@ -387,8 +375,7 @@ impl Console for TerminalConsole {
         let size = match (lines, columns) {
             (Some(l), Some(c)) => CharsXY::new(c, l),
             (l, c) => {
-                let (actual_columns, actual_lines) =
-                    terminal::size().map_err(crossterm_error_to_io_error)?;
+                let (actual_columns, actual_lines) = terminal::size()?;
                 CharsXY::new(c.unwrap_or(actual_columns), l.unwrap_or(actual_lines))
             }
         };
