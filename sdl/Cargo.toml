@@ -1,6 +1,6 @@
 [package]
 name = "endbasic-sdl"
-version = "0.10.0" # ENDBASIC-VERSION
+version = "0.10.99" # ENDBASIC-VERSION
 license = "Apache-2.0"
 authors = ["Julio Merino <jmmv@endbasic.dev>"]
 categories = ["development-tools", "parser-implementations"]
@@ -18,11 +18,11 @@ once_cell = "1.8"
 tempfile = "3"
 
 [dependencies.endbasic-core]
-version = "0.10.0" # ENDBASIC-VERSION
+version = "0.10.99" # ENDBASIC-VERSION
 path = "../core"
 
 [dependencies.endbasic-std]
-version = "0.10.0" # ENDBASIC-VERSION
+version = "0.10.99" # ENDBASIC-VERSION
 path = "../std"
 
 [dependencies.sdl2]
