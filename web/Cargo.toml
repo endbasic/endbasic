@@ -63,8 +63,9 @@ features = [
     "Window",
 ]
 
-[build-dependencies]
-vergen = "3"
+[build-dependencies.vergen]
+version = "8"
+features = ["build", "git", "gitcl"]
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

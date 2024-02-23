@@ -1,8 +1,9 @@
-use vergen::{generate_cargo_keys, ConstantsFlags};
+use vergen::EmitBuilder;
 
 fn main() {
-    let flags = ConstantsFlags::BUILD_DATE
-        | ConstantsFlags::SHA_SHORT
-        | ConstantsFlags::REBUILD_ON_HEAD_CHANGE;
-    generate_cargo_keys(flags).expect("Unable to generate the cargo keys!");
+    EmitBuilder::builder()
+        .build_date()
+        .git_sha(true)
+        .emit()
+        .expect("Unable to generate the cargo keys!");
 }
