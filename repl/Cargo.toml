@@ -24,4 +24,4 @@ version = "0.10.99" # ENDBASIC-VERSION
 path = "../std"
 
 [dev-dependencies]
-futures-lite = "1.1"
+futures-lite = "2.2"

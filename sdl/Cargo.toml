@@ -12,7 +12,7 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
-async-channel = "1.5"
+async-channel = "2.2"
 async-trait = "0.1"
 once_cell = "1.8"
 tempfile = "3"
@@ -26,10 +26,10 @@ version = "0.10.99" # ENDBASIC-VERSION
 path = "../std"
 
 [dependencies.sdl2]
-version = "0.35"
+version = "0.36"
 default-features = false
 features = ["ttf"]
 
 [dev-dependencies]
 flate2 = "1.0"
-futures-lite = "1.1"
+futures-lite = "2.2"
