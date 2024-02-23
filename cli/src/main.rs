@@ -89,7 +89,7 @@ fn help(name: &str, opts: &Options) {
 /// Prints version information following the GNU Standards format.
 fn version() {
     println!("EndBASIC {}", env!("CARGO_PKG_VERSION"));
-    println!("Copyright 2020-2023 Julio Merino");
+    println!("Copyright 2020-2024 Julio Merino");
     println!("License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>");
 }
 
