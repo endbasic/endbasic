@@ -23,6 +23,7 @@
 #![warn(unsafe_code)]
 
 use async_trait::async_trait;
+use base64::prelude::*;
 use endbasic_std::storage::DiskSpace;
 use serde::{Deserialize, Serialize};
 use std::io;
@@ -147,7 +148,7 @@ impl GetFileResponse {
     /// Processes the content of the response, ensuring it is valid base64.
     fn decoded_content(&self) -> io::Result<Option<Vec<u8>>> {
         match self.content.as_ref() {
-            Some(content) => match base64::decode(content) {
+            Some(content) => match BASE64_STANDARD.decode(content) {
                 Ok(content) => Ok(Some(content)),
                 Err(e) => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -173,7 +174,7 @@ pub struct PatchFileRequest {
 impl PatchFileRequest {
     /// Updates the file's content with `content`.  The content is automatically base64-encoded.
     fn with_content<C: AsRef<[u8]>>(mut self, content: C) -> Self {
-        self.content = Some(base64::encode(content));
+        self.content = Some(BASE64_STANDARD.encode(content));
         self
     }
 

@@ -208,8 +208,10 @@ mod tests {
         let drive = CloudDrive::new(service.clone(), "the-user");
 
         let request = GetFileRequest::default().with_get_content();
-        let response =
-            GetFileResponse { content: Some(base64::encode("some content")), ..Default::default() };
+        let response = GetFileResponse {
+            content: Some(BASE64_STANDARD.encode("some content")),
+            ..Default::default()
+        };
         service.borrow_mut().add_mock_get_file("the-user", "the-filename", request, Ok(response));
         let result = drive.get("the-filename").await.unwrap();
         assert_eq!("some content", result);
@@ -241,7 +243,7 @@ mod tests {
 
         let request = GetFileRequest::default().with_get_content();
         let response = GetFileResponse {
-            content: Some(base64::encode([0x00, 0xc3, 0x28])),
+            content: Some(BASE64_STANDARD.encode([0x00, 0xc3, 0x28])),
             ..Default::default()
         };
         service.borrow_mut().add_mock_get_file("the-user", "the-filename", request, Ok(response));
