@@ -12,7 +12,7 @@
         "start:prod": "NODE_ENV=prod npm run _start",
         "start:staging": "NODE_ENV=staging npm run _start",
         "start:local": "NODE_ENV=local npm run _start",
-        "test": "cargo test && wasm-pack test --headless --chrome",
+        "test": "cargo test && wasm-pack test --headless --firefox",
         "clean": "rimraf dist pkg"
     },
     "repository": {
