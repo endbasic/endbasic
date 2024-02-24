@@ -26,7 +26,7 @@ use async_channel::{Receiver, Sender};
 use endbasic_core::exec::{Signal, YieldNowFn};
 use endbasic_core::syms::{self, CommandResult};
 use endbasic_core::LineCol;
-use endbasic_std::console::Console;
+use endbasic_std::console::{Console, GraphicsConsole};
 use std::cell::RefCell;
 use std::future::Future;
 use std::io;
@@ -45,9 +45,9 @@ use web_sys::HtmlCanvasElement;
 wasm_bindgen_test_configure!(run_in_browser);
 
 mod canvas;
-use canvas::CanvasConsole;
+use canvas::CanvasRasterOps;
 mod input;
-use input::{OnScreenKeyboard, WebInput};
+use input::{OnScreenKeyboard, WebInput, WebInputOps};
 mod store;
 use store::WebDriveFactory;
 
@@ -207,7 +207,7 @@ fn setup_storage(storage: &mut endbasic_std::storage::Storage) {
 #[wasm_bindgen]
 pub struct WebTerminal {
     yielder: Rc<RefCell<Yielder>>,
-    console: CanvasConsole,
+    console: GraphicsConsole<WebInputOps, CanvasRasterOps>,
     on_screen_keyboard: OnScreenKeyboard,
     service_url: String,
     signals_chan: (Sender<Signal>, Receiver<Signal>),
@@ -222,10 +222,12 @@ impl WebTerminal {
         let signals_chan = async_channel::unbounded();
         let input = WebInput::new(signals_chan.0.clone(), yielder.clone());
         let on_screen_keyboard = input.on_screen_keyboard();
-        let console = match CanvasConsole::new(terminal, yielder.clone(), input) {
-            Ok(console) => console,
+        let raster_ops = match CanvasRasterOps::new(terminal, yielder.clone()) {
+            Ok(raster_ops) => raster_ops,
             Err(e) => log_and_panic!("Console initialization failed: {}", e),
         };
+        let input_ops = WebInputOps(input);
+        let console = GraphicsConsole::new(input_ops, raster_ops).unwrap();
 
         Self { yielder, console, on_screen_keyboard, service_url, signals_chan }
     }
@@ -237,7 +239,10 @@ impl WebTerminal {
 
     /// Returns a textual description of the size of the console.
     pub fn size_description(&self) -> String {
-        let pixels = self.console.size_pixels();
+        let pixels = match self.console.size_pixels() {
+            Ok(size) => size,
+            Err(e) => panic!("Failed to get console size in pixels: {}", e),
+        };
         let chars = match self.console.size_chars() {
             Ok(size) => size,
             Err(e) => panic!("Failed to get console size in chars: {}", e),

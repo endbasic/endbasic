@@ -21,9 +21,11 @@
 use crate::font::{font_error_to_io_error, MonospacedFont};
 use crate::spec::Resolution;
 use crate::string_error_to_io_error;
+use async_trait::async_trait;
 use endbasic_core::exec::Signal;
+use endbasic_std::console::graphics::{ClampedInto, ClampedMul, InputOps, RasterInfo, RasterOps};
 use endbasic_std::console::{
-    ansi_color_to_rgb, AnsiColor, CharsXY, ClearType, Key, LineBuffer, PixelsXY, SizeInPixels, RGB,
+    CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, SizeInPixels, RGB,
 };
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
@@ -33,23 +35,17 @@ use sdl2::render::{SurfaceCanvas, TextureCreator, TextureValueError, UpdateTextu
 use sdl2::surface::{Surface, SurfaceContext};
 use sdl2::video::{Window, WindowBuildError};
 use sdl2::{EventPump, Sdl};
+use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::fmt::{self, Write};
 use std::io;
 #[cfg(test)]
 use std::path::Path;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError};
 use std::thread;
 use std::time::Duration;
-
-/// Default foreground color, used at console creation time and when requesting the default color
-/// via the `COLOR` command.
-const DEFAULT_FG_COLOR: u8 = AnsiColor::White as u8;
-
-/// Default background color, used at console creation time and when requesting the default color
-/// via the `COLOR` command.
-const DEFAULT_BG_COLOR: u8 = AnsiColor::Black as u8;
 
 /// Number of loop iterations to poll for requests or events before sleeping.
 ///
@@ -102,69 +98,6 @@ fn window_build_error_to_io_error(e: WindowBuildError) -> io::Error {
     io::Error::new(kind, e)
 }
 
-/// Conversion between types with silent value clamping.
-trait ClampedInto<T> {
-    /// Converts self into `T` capping values at `T`'s maximum or minimum boundaries.
-    fn clamped_into(self) -> T;
-}
-
-impl ClampedInto<u16> for u32 {
-    fn clamped_into(self) -> u16 {
-        if self > u32::from(u16::MAX) {
-            u16::MAX
-        } else {
-            self as u16
-        }
-    }
-}
-
-/// Multiplication of values into a narrower type with silent value clamping.
-trait ClampedMul<T, O> {
-    /// Multiplies self by `rhs` and clamps the result to fit in `O`.
-    fn clamped_mul(self, rhs: T) -> O;
-}
-
-impl ClampedMul<u16, i16> for u16 {
-    fn clamped_mul(self, rhs: u16) -> i16 {
-        let product = u32::from(self) * u32::from(rhs);
-        if product > i16::MAX as u32 {
-            i16::MAX
-        } else {
-            product as i16
-        }
-    }
-}
-
-impl ClampedMul<u16, i32> for u16 {
-    fn clamped_mul(self, rhs: u16) -> i32 {
-        match i32::from(self).checked_mul(i32::from(rhs)) {
-            Some(v) => v,
-            None => i32::MAX,
-        }
-    }
-}
-
-impl ClampedMul<u16, u32> for u16 {
-    fn clamped_mul(self, rhs: u16) -> u32 {
-        u32::from(self).checked_mul(u32::from(rhs)).expect("Result must have fit")
-    }
-}
-
-impl ClampedMul<usize, usize> for usize {
-    fn clamped_mul(self, rhs: usize) -> usize {
-        match self.checked_mul(rhs) {
-            Some(v) => v,
-            None => usize::MAX,
-        }
-    }
-}
-
-impl ClampedMul<SizeInPixels, PixelsXY> for CharsXY {
-    fn clamped_mul(self, rhs: SizeInPixels) -> PixelsXY {
-        PixelsXY { x: self.x.clamped_mul(rhs.width), y: self.y.clamped_mul(rhs.height) }
-    }
-}
-
 /// Constructs an SDL `Point` from a `PixelsXY`.
 fn point_xy(xy: PixelsXY) -> Point {
     Point::new(i32::from(xy.x), i32::from(xy.y))
@@ -178,21 +111,6 @@ fn rect_origin_size(origin: PixelsXY, size: SizeInPixels) -> Rect {
         u32::from(size.width),
         u32::from(size.height),
     )
-}
-
-/// Constructs an SDL `Rect` from two `PixelsXY` points.
-fn rect_points(x1y1: PixelsXY, x2y2: PixelsXY) -> Rect {
-    let (x1, x2) = if x1y1.x < x2y2.x { (x1y1.x, x2y2.x) } else { (x2y2.x, x1y1.x) };
-    let (y1, y2) = if x1y1.y < x2y2.y { (x1y1.y, x2y2.y) } else { (x2y2.y, x1y1.y) };
-
-    let width =
-        u32::try_from(i32::from(x2) - i32::from(x1)).expect("Width must have been non-negative");
-    let height =
-        u32::try_from(i32::from(y2) - i32::from(y1)).expect("Height must have been non-negative");
-    let x1 = i32::from(x1);
-    let y1 = i32::from(y1);
-
-    Rect::new(x1, y1, width, height)
 }
 
 /// Converts our own `RGB` type to an SDL `Color`.
@@ -305,27 +223,8 @@ struct Context {
     /// metrics.
     size_chars: CharsXY,
 
-    /// Location of the cursor.
-    cursor_pos: CharsXY,
-
-    /// Whether the cursor is visible or not.
-    cursor_visible: bool,
-
-    /// Raw pixels at the cursor position before the cursor was drawn.  Used to restore the previous
-    /// contents when the cursor moves.
-    cursor_backup: Vec<u8>,
-
-    /// Current foreground color.  Used for text and graphical rendering.
-    fg_color: Color,
-
-    /// Current background color.  Used to clear text.
-    bg_color: Color,
-
-    /// State of the console right before entering the "alternate" console.
-    alt_backup: Option<(Vec<u8>, CharsXY, Color, Color)>,
-
-    /// Whether video syncing is enabled or not.
-    sync_enabled: bool,
+    /// Current draw color.  Used only to track if we need to update the context.
+    draw_color: RGB,
 }
 
 impl Context {
@@ -385,10 +284,13 @@ impl Context {
         let surface =
             Surface::new(u32::from(size_pixels.width), u32::from(size_pixels.height), pixel_format)
                 .map_err(string_error_to_io_error)?;
-        let canvas = surface.into_canvas().map_err(string_error_to_io_error)?;
+        let mut canvas = surface.into_canvas().map_err(string_error_to_io_error)?;
         let texture_creator = canvas.texture_creator();
 
-        let mut console = Self {
+        let draw_color = RGB::default();
+        canvas.set_draw_color(rgb_to_color(draw_color));
+
+        Ok(Self {
             sdl,
             font,
             event_pump,
@@ -398,23 +300,52 @@ impl Context {
             texture_creator,
             size_pixels,
             size_chars,
-            cursor_pos: CharsXY::default(),
-            cursor_visible: true,
-            cursor_backup: vec![],
-            bg_color: rgb_to_color(ansi_color_to_rgb(DEFAULT_BG_COLOR)),
-            fg_color: rgb_to_color(ansi_color_to_rgb(DEFAULT_FG_COLOR)),
-            alt_backup: None,
-            sync_enabled: true,
-        };
-
-        console.clear(ClearType::All)?;
-
-        Ok(console)
+            draw_color,
+        })
     }
 
-    /// Renders the current contents of `self.canvas` onto the output window irrespective of the
-    /// status of the sync flag.
-    fn force_present_canvas(&mut self) -> io::Result<()> {
+    /// Sets the draw color to `color` with caching.
+    fn set_draw_color(&mut self, color: RGB) {
+        if self.draw_color != color {
+            self.canvas.set_draw_color(rgb_to_color(color));
+            self.draw_color = color;
+        }
+    }
+
+    /// Reads all visible pixels.  This is different from `real_pixels` in that it does not read
+    /// any changes that haven't been written to the screen yet (such as the changes that happen
+    /// when syncing is off).
+    #[cfg(test)]
+    fn read_visible_pixels(&mut self) -> io::Result<Vec<u8>> {
+        let surface = self.window.surface(&self.event_pump).map_err(string_error_to_io_error)?;
+        let mut copy = Surface::new(surface.width(), surface.height(), self.pixel_format)
+            .map_err(string_error_to_io_error)?;
+        surface.blit(None, &mut copy, None).map_err(string_error_to_io_error)?;
+        copy.into_canvas()
+            .map_err(string_error_to_io_error)?
+            .read_pixels(None, self.pixel_format)
+            .map_err(string_error_to_io_error)
+    }
+}
+
+impl RasterOps for Context {
+    type ID = (Vec<u8>, SizeInPixels);
+
+    fn get_info(&self) -> RasterInfo {
+        RasterInfo {
+            size_chars: self.size_chars,
+            size_pixels: self.size_pixels,
+            glyph_size: self.font.glyph_size,
+        }
+    }
+
+    fn clear(&mut self, color: RGB) -> io::Result<()> {
+        self.set_draw_color(color);
+        self.canvas.clear();
+        Ok(())
+    }
+
+    fn present_canvas(&mut self) -> io::Result<()> {
         let mut window_surface =
             self.window.surface(&self.event_pump).map_err(string_error_to_io_error)?;
         self.canvas
@@ -424,52 +355,15 @@ impl Context {
         window_surface.finish().map_err(string_error_to_io_error)
     }
 
-    /// Renders the current contents of `self.canvas` onto the output window.
-    fn present_canvas(&mut self) -> io::Result<()> {
-        if self.sync_enabled {
-            self.force_present_canvas()
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Draws the cursor at the current position and saves the previous contents of the screen so
-    /// that `clear_cursor` can restore them.
-    ///
-    /// Does not present the canvas.
-    fn draw_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible {
-            return Ok(());
-        }
-
-        let rect = rect_origin_size(
-            self.cursor_pos.clamped_mul(self.font.glyph_size),
-            self.font.glyph_size,
-        );
-
-        assert!(self.cursor_backup.is_empty());
-        self.cursor_backup =
+    fn read_pixels(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<Self::ID> {
+        let rect = rect_origin_size(xy, size);
+        let data =
             self.canvas.read_pixels(rect, self.pixel_format).map_err(string_error_to_io_error)?;
-
-        self.canvas.set_draw_color(self.fg_color);
-        self.canvas.fill_rect(rect).map_err(string_error_to_io_error)?;
-        Ok(())
+        Ok((data, size))
     }
 
-    /// Clears the cursor at the current position by restoring the contents of the screen saved by
-    /// an earlier call to `draw_cursor`.
-    ///
-    /// Does not present the canvas.
-    fn clear_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible || self.cursor_backup.is_empty() {
-            return Ok(());
-        }
-
-        let rect = rect_origin_size(
-            self.cursor_pos.clamped_mul(self.font.glyph_size),
-            self.font.glyph_size,
-        );
-
+    fn put_pixels(&mut self, xy: PixelsXY, (data, size): &Self::ID) -> io::Result<()> {
+        let rect = rect_origin_size(xy, *size);
         let mut texture = self
             .texture_creator
             .create_texture_static(None, rect.width(), rect.height())
@@ -477,65 +371,43 @@ impl Context {
         texture
             .update(
                 None,
-                &self.cursor_backup,
+                data,
                 usize::try_from(rect.width())
                     .expect("Width must fit in usize")
                     .clamped_mul(self.pixel_format.byte_size_per_pixel()),
             )
             .map_err(update_texture_error_to_io_error)?;
-        self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)?;
-        self.cursor_backup.clear();
-        Ok(())
+        self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)
     }
 
-    /// Moves the cursor to beginning of the next line, scrolling the console if necessary.
-    ///
-    /// Does not clear nor draw the cursor, and also does not present the canvas.
-    fn open_line(&mut self) -> io::Result<()> {
-        if self.cursor_pos.y < self.size_chars.y - 1 {
-            self.cursor_pos.x = 0;
-            self.cursor_pos.y += 1;
-            return Ok(());
-        }
-
-        let mut shifted = {
+    fn move_pixels(
+        &mut self,
+        x1y1: PixelsXY,
+        x2y2: PixelsXY,
+        size: SizeInPixels,
+        color: RGB,
+    ) -> io::Result<()> {
+        let shifted = {
             let src = self.canvas.surface();
             let mut temp = Surface::new(src.width(), src.height(), self.pixel_format)
                 .map_err(string_error_to_io_error)?;
-            src.blit(
-                Rect::new(
-                    0,
-                    i32::from(self.font.glyph_size.height),
-                    u32::from(self.size_pixels.width),
-                    u32::from(self.size_pixels.height - self.font.glyph_size.height),
-                ),
-                &mut temp,
-                None,
-            )
-            .map_err(string_error_to_io_error)?;
+            let src_rect = rect_origin_size(x1y1, size);
+            let dst_rect = rect_origin_size(x2y2, SizeInPixels { width: 0, height: 0 });
+            temp.fill_rect(src_rect, rgb_to_color(color)).map_err(string_error_to_io_error)?;
+            src.blit(src_rect, &mut temp, dst_rect).map_err(string_error_to_io_error)?;
             temp
         };
-        shifted
-            .fill_rect(
-                Rect::new(
-                    0,
-                    i32::from(self.size_pixels.height - self.font.glyph_size.height),
-                    u32::from(self.size_pixels.width),
-                    u32::from(self.font.glyph_size.height),
-                ),
-                self.bg_color,
-            )
-            .map_err(string_error_to_io_error)?;
         shifted.blit(None, self.canvas.surface_mut(), None).map_err(string_error_to_io_error)?;
-
-        self.cursor_pos.x = 0;
         Ok(())
     }
 
-    /// Renders the given text at the `start` position.
-    ///
-    /// Does not handle overflow nor scrolling, and also does not present the canvas.
-    fn raw_write(&mut self, text: &str, start: PixelsXY) -> io::Result<()> {
+    fn write_text(
+        &mut self,
+        xy: PixelsXY,
+        text: &str,
+        fg_color: RGB,
+        bg_color: RGB,
+    ) -> io::Result<()> {
         debug_assert!(!text.is_empty(), "SDL does not like empty strings");
 
         let len = match u16::try_from(text.chars().count()) {
@@ -547,7 +419,7 @@ impl Context {
             .font
             .font
             .render(text)
-            .shaded(self.fg_color, self.bg_color)
+            .shaded(fg_color, bg_color)
             .map_err(font_error_to_io_error)?;
         let texture = self
             .texture_creator
@@ -555,275 +427,18 @@ impl Context {
             .map_err(texture_value_error_to_io_error)?;
 
         let rect = Rect::new(
-            i32::from(start.x),
-            i32::from(start.y),
+            i32::from(xy.x),
+            i32::from(xy.y),
             len.clamped_mul(self.font.glyph_size.width),
             u32::from(self.font.glyph_size.height),
         );
-        self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)?;
-
-        Ok(())
+        self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)
     }
 
-    /// Renders the given text at the current cursor position, with wrapping and
-    /// scrolling if necessary.
-    ///
-    /// Does not present the canvas.
-    fn raw_write_wrapped(&mut self, text: &str) -> io::Result<()> {
-        let mut line_buffer = LineBuffer::from(text);
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
+        // This implements the [Midpoint circle
+        // algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
 
-        loop {
-            let fit_chars = self.size_chars.x - self.cursor_pos.x;
-
-            let remaining = line_buffer.split_off(usize::from(fit_chars));
-            let len = line_buffer.len();
-            if len > 0 {
-                self.raw_write(
-                    &line_buffer.into_inner(),
-                    self.cursor_pos.clamped_mul(self.font.glyph_size),
-                )?;
-                self.cursor_pos.x +=
-                    u16::try_from(len).expect("Partial length was computed to fit on the screen");
-            }
-
-            line_buffer = remaining;
-            if line_buffer.is_empty() {
-                break;
-            } else {
-                self.open_line()?;
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Handler for a `Request::Clear`.
-    fn clear(&mut self, how: ClearType) -> io::Result<()> {
-        self.canvas.set_draw_color(self.bg_color);
-        match how {
-            ClearType::All => {
-                self.canvas.clear();
-                self.cursor_pos.y = 0;
-                self.cursor_pos.x = 0;
-                self.cursor_backup.clear();
-            }
-            ClearType::CurrentLine => {
-                self.clear_cursor()?;
-                self.canvas
-                    .fill_rect(Rect::new(
-                        0,
-                        self.cursor_pos.y.clamped_mul(self.font.glyph_size.height),
-                        u32::from(self.size_pixels.width),
-                        u32::from(self.font.glyph_size.height),
-                    ))
-                    .map_err(string_error_to_io_error)?;
-                self.cursor_pos.x = 0;
-            }
-            ClearType::PreviousChar => {
-                if self.cursor_pos.x > 0 {
-                    self.clear_cursor()?;
-                    let previous_pos = CharsXY::new(self.cursor_pos.x - 1, self.cursor_pos.y);
-                    self.canvas
-                        .fill_rect(rect_origin_size(
-                            previous_pos.clamped_mul(self.font.glyph_size),
-                            self.font.glyph_size,
-                        ))
-                        .map_err(string_error_to_io_error)?;
-                    self.cursor_pos = previous_pos;
-                }
-            }
-            ClearType::UntilNewLine => {
-                self.clear_cursor()?;
-                let pos = self.cursor_pos.clamped_mul(self.font.glyph_size);
-                debug_assert!(pos.x >= 0, "Inputs to pos are unsigned");
-                debug_assert!(pos.y >= 0, "Inputs to pos are unsigned");
-                let height = self.font.glyph_size.height;
-                self.canvas
-                    .fill_rect(Rect::new(
-                        i32::from(pos.x),
-                        i32::from(pos.y),
-                        u32::try_from(i32::from(self.size_pixels.width) - i32::from(pos.x))
-                            .expect("pos must have been positive"),
-                        u32::from(height),
-                    ))
-                    .map_err(string_error_to_io_error)?;
-            }
-        }
-
-        self.draw_cursor()?;
-        self.present_canvas()
-    }
-
-    /// Handler for a `Request::SetColor`.
-    fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
-        self.fg_color = rgb_to_color(ansi_color_to_rgb(fg.unwrap_or(DEFAULT_FG_COLOR)));
-        self.bg_color = rgb_to_color(ansi_color_to_rgb(bg.unwrap_or(DEFAULT_BG_COLOR)));
-        Ok(())
-    }
-
-    /// Handler for a `Request::EnterAlt`.
-    fn enter_alt(&mut self) -> io::Result<()> {
-        if self.alt_backup.is_some() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Cannot nest alternate screens",
-            ));
-        }
-
-        let pixels =
-            self.canvas.read_pixels(None, self.pixel_format).map_err(string_error_to_io_error)?;
-        self.alt_backup = Some((pixels, self.cursor_pos, self.fg_color, self.bg_color));
-
-        self.clear(ClearType::All)
-    }
-
-    /// Handler for a `Request::HideCursor`.
-    fn hide_cursor(&mut self) -> io::Result<()> {
-        self.clear_cursor()?;
-        self.cursor_visible = false;
-        self.present_canvas()
-    }
-
-    /// Handler for a `Request::LeaveAlt`.
-    fn leave_alt(&mut self) -> io::Result<()> {
-        let (pixels, cursor_pos, fg_color, bg_color) = match self.alt_backup.take() {
-            Some(t) => t,
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Cannot leave alternate screen; not entered",
-                ))
-            }
-        };
-
-        self.clear_cursor()?;
-
-        {
-            let mut texture = self
-                .texture_creator
-                .create_texture_static(
-                    None,
-                    u32::from(self.size_pixels.width),
-                    u32::from(self.size_pixels.height),
-                )
-                .map_err(texture_value_error_to_io_error)?;
-            texture
-                .update(
-                    None,
-                    &pixels,
-                    usize::from(self.size_pixels.width)
-                        .clamped_mul(self.pixel_format.byte_size_per_pixel()),
-                )
-                .map_err(update_texture_error_to_io_error)?;
-
-            self.canvas.clear();
-            self.canvas.copy(&texture, None, None).map_err(string_error_to_io_error)?;
-        }
-
-        self.cursor_pos = cursor_pos;
-        self.fg_color = fg_color;
-        self.bg_color = bg_color;
-        self.draw_cursor()?;
-        self.present_canvas()?;
-
-        debug_assert!(self.alt_backup.is_none());
-        Ok(())
-    }
-
-    /// Handler for a `Request::Locate`.
-    fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
-        debug_assert!(pos.x < self.size_chars.x);
-        debug_assert!(pos.y < self.size_chars.y);
-
-        self.clear_cursor()?;
-        self.cursor_pos = pos;
-        self.draw_cursor()?;
-        self.present_canvas()
-    }
-
-    /// Handler for a `Request::MoveWithinLine`.
-    fn move_within_line(&mut self, off: i16) -> io::Result<()> {
-        self.clear_cursor()?;
-        if off < 0 {
-            self.cursor_pos.x -= -off as u16;
-        } else {
-            self.cursor_pos.x += off as u16;
-        }
-        self.draw_cursor()?;
-        self.present_canvas()
-    }
-
-    /// Handler for a `Request::PushEvent`.
-    #[cfg(test)]
-    fn push_event(&self, ev: Event) -> io::Result<()> {
-        let event_ss = self.sdl.event().map_err(string_error_to_io_error)?;
-        event_ss.push_event(ev).map_err(string_error_to_io_error)
-    }
-
-    /// Handler for a `Request::Print`.
-    fn print(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(
-            !endbasic_std::console::has_control_chars(text),
-            "Must have been stripped off by the client"
-        );
-
-        self.clear_cursor()?;
-        self.raw_write_wrapped(text)?;
-        self.open_line()?;
-        self.draw_cursor()?;
-        self.present_canvas()
-    }
-
-    /// Handler for a `Request::ReadPixels`.
-    #[cfg(test)]
-    fn read_pixels(&self) -> io::Result<Vec<u8>> {
-        let surface = self.window.surface(&self.event_pump).map_err(string_error_to_io_error)?;
-        let mut copy = Surface::new(surface.width(), surface.height(), self.pixel_format)
-            .map_err(string_error_to_io_error)?;
-        surface.blit(None, &mut copy, None).map_err(string_error_to_io_error)?;
-        copy.into_canvas()
-            .map_err(string_error_to_io_error)?
-            .read_pixels(None, self.pixel_format)
-            .map_err(string_error_to_io_error)
-    }
-
-    /// Handler for a `Request::SaveBmp`.
-    #[cfg(test)]
-    fn save_bmp(&self, path: &Path) -> io::Result<()> {
-        let surface = self.window.surface(&self.event_pump).map_err(string_error_to_io_error)?;
-        surface.save_bmp(path).map_err(string_error_to_io_error)
-    }
-
-    /// Handler for a `Request::ShowCursor`.
-    fn show_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible {
-            self.cursor_visible = true;
-            if let Err(e) = self.draw_cursor() {
-                self.cursor_visible = false;
-                return Err(e);
-            }
-        }
-        self.present_canvas()
-    }
-
-    /// Handler for a `Request::Write`.
-    fn write(&mut self, text: &str) -> io::Result<()> {
-        debug_assert!(
-            !endbasic_std::console::has_control_chars(text),
-            "Must have been stripped off by the client"
-        );
-
-        self.clear_cursor()?;
-        self.raw_write_wrapped(text)?;
-        self.draw_cursor()?;
-        self.present_canvas()
-    }
-
-    /// Handler for a `Request::DrawCircle`.
-    ///
-    /// This implements the [Midpoint circle
-    /// algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
-    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
         fn point(canvas: &mut SurfaceCanvas<'static>, x: i16, y: i16) -> io::Result<()> {
             canvas
                 .draw_point(Point::new(i32::from(x), i32::from(y)))
@@ -846,7 +461,7 @@ impl Context {
         let mut ty: i16 = 1;
         let mut e: i16 = tx - diameter;
 
-        self.canvas.set_draw_color(self.fg_color);
+        self.set_draw_color(color);
         while x >= y {
             point(&mut self.canvas, center.x + x, center.y - y)?;
             point(&mut self.canvas, center.x + x, center.y + y)?;
@@ -870,14 +485,13 @@ impl Context {
             }
         }
 
-        self.present_canvas()
+        Ok(())
     }
 
-    /// Handler for a `Request::DrawCircleFilled`.
-    ///
-    /// This implements the [Midpoint circle
-    /// algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
-    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
+        // This implements the [Midpoint circle
+        // algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
+
         fn line(
             canvas: &mut SurfaceCanvas<'static>,
             x1: i16,
@@ -894,9 +508,7 @@ impl Context {
         }
 
         if radius == 1 {
-            // Paper over differences between platforms that arise from the behavior of
-            // canvas.draw_line.  See Self::draw_line for details.
-            self.canvas.set_draw_color(self.fg_color);
+            self.set_draw_color(color);
             return self.canvas.draw_point(point_xy(center)).map_err(string_error_to_io_error);
         }
 
@@ -916,7 +528,7 @@ impl Context {
         let mut ty: i16 = 1;
         let mut e: i16 = tx - diameter;
 
-        self.canvas.set_draw_color(self.fg_color);
+        self.set_draw_color(color);
         while x >= y {
             line(&mut self.canvas, center.x + x, center.y - y, center.x + x, center.y + y)?;
             line(&mut self.canvas, center.x - x, center.y - y, center.x - x, center.y + y)?;
@@ -936,11 +548,10 @@ impl Context {
             }
         }
 
-        self.present_canvas()
+        Ok(())
     }
 
-    /// Handler for a `Request::DrawLine`.
-    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
+    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, color: RGB) -> io::Result<()> {
         if x1y1 == x2y2 {
             // Paper over differences between platforms.  On Linux, this would paint a single dot,
             // but on Windows, it paints nothing.  For consistency with drawing a circle of radius
@@ -948,51 +559,132 @@ impl Context {
             return Ok(());
         }
 
-        self.canvas.set_draw_color(self.fg_color);
-        self.canvas.draw_line(point_xy(x1y1), point_xy(x2y2)).map_err(string_error_to_io_error)?;
-        self.present_canvas()
+        self.set_draw_color(color);
+        self.canvas.draw_line(point_xy(x1y1), point_xy(x2y2)).map_err(string_error_to_io_error)
     }
 
-    /// Handler for a `Request::DrawPixel`.
-    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
-        self.canvas.set_draw_color(self.fg_color);
-        self.canvas.draw_point(point_xy(xy)).map_err(string_error_to_io_error)?;
-        self.present_canvas()
+    fn draw_pixel(&mut self, xy: PixelsXY, color: RGB) -> io::Result<()> {
+        self.set_draw_color(color);
+        self.canvas.draw_point(point_xy(xy)).map_err(string_error_to_io_error)
     }
 
-    /// Handler for a `Request::DrawRect`.
-    fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        let rect = rect_points(x1y1, x2y2);
-        self.canvas.set_draw_color(self.fg_color);
-        self.canvas.draw_rect(rect).map_err(string_error_to_io_error)?;
-        self.present_canvas()
+    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
+        let rect = rect_origin_size(xy, size);
+        self.set_draw_color(color);
+        self.canvas.draw_rect(rect).map_err(string_error_to_io_error)
     }
 
-    /// Handler for a `Request::DrawRectFilled`.
-    fn draw_rect_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        let rect = rect_points(x1y1, x2y2);
-        self.canvas.set_draw_color(self.fg_color);
-        self.canvas.fill_rect(rect).map_err(string_error_to_io_error)?;
-        self.present_canvas()
+    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
+        let rect = rect_origin_size(xy, size);
+        self.set_draw_color(color);
+        self.canvas.fill_rect(rect).map_err(string_error_to_io_error)
+    }
+}
+
+#[derive(Clone)]
+struct SharedContext(Rc<RefCell<Context>>);
+
+impl SharedContext {
+    fn poll_event(&mut self) -> Option<Event> {
+        (*self.0).borrow_mut().event_pump.poll_event()
     }
 
-    /// Handler for a `Request::SyncNow`.
-    fn sync_now(&mut self) -> io::Result<()> {
-        if self.sync_enabled {
-            Ok(())
-        } else {
-            self.force_present_canvas()
-        }
+    #[cfg(test)]
+    fn push_event(&mut self, ev: Event) -> io::Result<()> {
+        let event_ss = (*self.0).borrow().sdl.event().map_err(string_error_to_io_error)?;
+        event_ss.push_event(ev).map_err(string_error_to_io_error)
     }
 
-    /// Handler for a `Request::SetSync`.
-    fn set_sync(&mut self, enabled: bool) -> io::Result<bool> {
-        if !self.sync_enabled {
-            self.force_present_canvas()?;
-        }
-        let previous = self.sync_enabled;
-        self.sync_enabled = enabled;
-        Ok(previous)
+    #[cfg(test)]
+    fn raw_write(
+        &mut self,
+        text: &str,
+        xy: PixelsXY,
+        fg_color: RGB,
+        bg_color: RGB,
+    ) -> io::Result<()> {
+        (*self.0).borrow_mut().write_text(xy, text, fg_color, bg_color)
+    }
+
+    #[cfg(test)]
+    fn read_visible_pixels(&mut self) -> io::Result<(Vec<u8>, PixelFormatEnum)> {
+        let mut ctx = (*self.0).borrow_mut();
+        ctx.read_visible_pixels().map(|ps| (ps, ctx.pixel_format))
+    }
+
+    #[cfg(test)]
+    fn save_bmp(&self, path: &Path) -> io::Result<()> {
+        let ctx = (*self.0).borrow_mut();
+        let surface = ctx.window.surface(&ctx.event_pump).map_err(string_error_to_io_error)?;
+        surface.save_bmp(path).map_err(string_error_to_io_error)
+    }
+}
+
+impl RasterOps for SharedContext {
+    type ID = (Vec<u8>, SizeInPixels);
+
+    fn get_info(&self) -> RasterInfo {
+        self.0.borrow().get_info()
+    }
+
+    fn clear(&mut self, color: RGB) -> io::Result<()> {
+        (*self.0).borrow_mut().clear(color)
+    }
+
+    fn present_canvas(&mut self) -> io::Result<()> {
+        (*self.0).borrow_mut().present_canvas()
+    }
+
+    fn read_pixels(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<Self::ID> {
+        (*self.0).borrow_mut().read_pixels(xy, size)
+    }
+
+    fn put_pixels(&mut self, xy: PixelsXY, data: &Self::ID) -> io::Result<()> {
+        (*self.0).borrow_mut().put_pixels(xy, data)
+    }
+
+    fn move_pixels(
+        &mut self,
+        x1y1: PixelsXY,
+        x2y2: PixelsXY,
+        size: SizeInPixels,
+        color: RGB,
+    ) -> io::Result<()> {
+        (*self.0).borrow_mut().move_pixels(x1y1, x2y2, size, color)
+    }
+
+    fn write_text(
+        &mut self,
+        xy: PixelsXY,
+        text: &str,
+        fg_color: RGB,
+        bg_color: RGB,
+    ) -> io::Result<()> {
+        (*self.0).borrow_mut().write_text(xy, text, fg_color, bg_color)
+    }
+
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_circle(center, radius, color)
+    }
+
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_circle_filled(center, radius, color)
+    }
+
+    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, color: RGB) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_line(x1y1, x2y2, color)
+    }
+
+    fn draw_pixel(&mut self, xy: PixelsXY, color: RGB) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_pixel(xy, color)
+    }
+
+    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_rect(xy, size, color)
+    }
+
+    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_rect_filled(xy, size, color)
     }
 }
 
@@ -1024,9 +716,9 @@ pub(crate) enum Request {
     #[cfg(test)]
     PushEvent(Event),
     #[cfg(test)]
-    RawWrite(String, PixelsXY),
+    RawWrite(String, PixelsXY, RGB, RGB),
     #[cfg(test)]
-    ReadPixels,
+    ReadVisiblePixels,
     #[cfg(test)]
     SaveBmp(PathBuf),
 }
@@ -1043,6 +735,23 @@ pub(crate) enum Response {
     Pixels(io::Result<(Vec<u8>, PixelFormatEnum)>),
 }
 
+/// Implementation of `InputOps` that should never be used.
+// TODO(jmmv): This is necessary because the host-level console implementation requires these
+// methods to be present but the input operations are handled in the client-side console.  This
+// might mean we need a better design.
+struct NoopInputOps {}
+
+#[async_trait(?Send)]
+impl InputOps for NoopInputOps {
+    async fn poll_key(&mut self) -> io::Result<Option<Key>> {
+        unreachable!();
+    }
+
+    async fn read_key(&mut self) -> io::Result<Key> {
+        unreachable!();
+    }
+}
+
 pub(crate) fn run(
     resolution: Resolution,
     font_path: PathBuf,
@@ -1052,13 +761,20 @@ pub(crate) fn run(
     on_key_tx: Sender<Key>,
     signals_tx: async_channel::Sender<Signal>,
 ) {
-    let mut ctx = match Context::new(resolution, font_path, font_size) {
+    let ctx = match Context::new(resolution, font_path, font_size) {
         Ok(ctx) => ctx,
         Err(e) => {
             response_tx.send(Response::Empty(Err(e))).expect("Channel must be alive");
             return;
         }
     };
+
+    let info = ctx.get_info();
+    let mut ctx = SharedContext(Rc::from(RefCell::from(ctx)));
+
+    let input = NoopInputOps {};
+    let mut console =
+        GraphicsConsole::new(input, ctx.clone()).expect("Console initialization must succeed");
 
     response_tx.send(Response::Empty(Ok(()))).expect("Channel must be alive");
 
@@ -1071,43 +787,43 @@ pub(crate) fn run(
                 let response = match request {
                     Request::Exit => break,
 
-                    Request::Clear(how) => Response::Empty(ctx.clear(how)),
-                    Request::SetColor(fg, bg) => Response::Empty(ctx.set_color(fg, bg)),
-                    Request::EnterAlt => Response::Empty(ctx.enter_alt()),
-                    Request::HideCursor => Response::Empty(ctx.hide_cursor()),
-                    Request::LeaveAlt => Response::Empty(ctx.leave_alt()),
-                    Request::Locate(pos) => Response::Empty(ctx.locate(pos)),
-                    Request::MoveWithinLine(off) => Response::Empty(ctx.move_within_line(off)),
-                    Request::Print(text) => Response::Empty(ctx.print(&text)),
-                    Request::ShowCursor => Response::Empty(ctx.show_cursor()),
-                    Request::SizeChars => Response::SizeChars(ctx.size_chars),
-                    Request::SizePixels => Response::SizePixels(ctx.size_pixels),
-                    Request::Write(text) => Response::Empty(ctx.write(&text)),
+                    Request::Clear(how) => Response::Empty(console.clear(how)),
+                    Request::SetColor(fg, bg) => Response::Empty(console.set_color(fg, bg)),
+                    Request::EnterAlt => Response::Empty(console.enter_alt()),
+                    Request::HideCursor => Response::Empty(console.hide_cursor()),
+                    Request::LeaveAlt => Response::Empty(console.leave_alt()),
+                    Request::Locate(pos) => Response::Empty(console.locate(pos)),
+                    Request::MoveWithinLine(off) => Response::Empty(console.move_within_line(off)),
+                    Request::Print(text) => Response::Empty(console.print(&text)),
+                    Request::ShowCursor => Response::Empty(console.show_cursor()),
+                    Request::SizeChars => Response::SizeChars(info.size_chars),
+                    Request::SizePixels => Response::SizePixels(info.size_pixels),
+                    Request::Write(text) => Response::Empty(console.write(&text)),
                     Request::DrawCircle(center, radius) => {
-                        Response::Empty(ctx.draw_circle(center, radius))
+                        Response::Empty(console.draw_circle(center, radius))
                     }
                     Request::DrawCircleFilled(center, radius) => {
-                        Response::Empty(ctx.draw_circle_filled(center, radius))
+                        Response::Empty(console.draw_circle_filled(center, radius))
                     }
-                    Request::DrawLine(x1y1, x2y2) => Response::Empty(ctx.draw_line(x1y1, x2y2)),
-                    Request::DrawPixel(xy) => Response::Empty(ctx.draw_pixel(xy)),
-                    Request::DrawRect(x1y1, x2y2) => Response::Empty(ctx.draw_rect(x1y1, x2y2)),
+                    Request::DrawLine(x1y1, x2y2) => Response::Empty(console.draw_line(x1y1, x2y2)),
+                    Request::DrawPixel(xy) => Response::Empty(console.draw_pixel(xy)),
+                    Request::DrawRect(x1y1, x2y2) => Response::Empty(console.draw_rect(x1y1, x2y2)),
                     Request::DrawRectFilled(x1y1, x2y2) => {
-                        Response::Empty(ctx.draw_rect_filled(x1y1, x2y2))
+                        Response::Empty(console.draw_rect_filled(x1y1, x2y2))
                     }
-                    Request::SyncNow => Response::Empty(ctx.sync_now()),
-                    Request::SetSync(enabled) => Response::SetSync(ctx.set_sync(enabled)),
+                    Request::SyncNow => Response::Empty(console.sync_now()),
+                    Request::SetSync(enabled) => Response::SetSync(console.set_sync(enabled)),
 
                     #[cfg(test)]
                     Request::PushEvent(ev) => Response::Empty(ctx.push_event(ev)),
 
                     #[cfg(test)]
-                    Request::RawWrite(text, start) => Response::Empty(ctx.raw_write(&text, start)),
+                    Request::RawWrite(text, start, fg_color, bg_color) => {
+                        Response::Empty(ctx.raw_write(&text, start, fg_color, bg_color))
+                    }
 
                     #[cfg(test)]
-                    Request::ReadPixels => {
-                        Response::Pixels(ctx.read_pixels().map(|ps| (ps, ctx.pixel_format)))
-                    }
+                    Request::ReadVisiblePixels => Response::Pixels(ctx.read_visible_pixels()),
 
                     #[cfg(test)]
                     Request::SaveBmp(path) => Response::Empty(ctx.save_bmp(&path)),
@@ -1125,7 +841,7 @@ pub(crate) fn run(
             Err(TryRecvError::Disconnected) => panic!("Channel must be alive"),
         }
 
-        if let Some(event) = ctx.event_pump.poll_event() {
+        if let Some(event) = ctx.poll_event() {
             if let Some(key) = parse_event(event) {
                 if key == Key::Interrupt {
                     // signals_tx is an async channel because that's what the execution engine
@@ -1159,42 +875,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_clamp_into_u32_u16() {
-        assert_eq!(0u16, 0u32.clamped_into());
-        assert_eq!(10u16, 10u32.clamped_into());
-        assert_eq!(u16::MAX, u32::from(u16::MAX).clamped_into());
-        assert_eq!(u16::MAX, u32::MAX.clamped_into());
-    }
-
-    #[test]
-    fn test_clamped_mul_u16_u16_i16() {
-        assert_eq!(0i16, ClampedMul::<u16, i16>::clamped_mul(0u16, 0u16));
-        assert_eq!(55i16, ClampedMul::<u16, i16>::clamped_mul(11u16, 5u16));
-        assert_eq!(i16::MAX, ClampedMul::<u16, i16>::clamped_mul(u16::MAX, u16::MAX));
-    }
-
-    #[test]
-    fn test_clamped_mul_u16_u16_i32() {
-        assert_eq!(0i32, ClampedMul::<u16, i32>::clamped_mul(0u16, 0u16));
-        assert_eq!(55i32, ClampedMul::<u16, i32>::clamped_mul(11u16, 5u16));
-        assert_eq!(i32::MAX, ClampedMul::<u16, i32>::clamped_mul(u16::MAX, u16::MAX));
-    }
-
-    #[test]
-    fn test_clamped_mul_u16_u16_u32() {
-        assert_eq!(0u32, ClampedMul::<u16, u32>::clamped_mul(0u16, 0u16));
-        assert_eq!(55u32, ClampedMul::<u16, u32>::clamped_mul(11u16, 5u16));
-        assert_eq!(4294836225u32, ClampedMul::<u16, u32>::clamped_mul(u16::MAX, u16::MAX));
-    }
-
-    #[test]
-    fn test_clamped_mul_usize_usize_usize() {
-        assert_eq!(0, ClampedMul::<usize, usize>::clamped_mul(0, 0));
-        assert_eq!(55, ClampedMul::<usize, usize>::clamped_mul(11, 5));
-        assert_eq!(usize::MAX, ClampedMul::<usize, usize>::clamped_mul(usize::MAX, usize::MAX));
-    }
-
-    #[test]
     fn test_rect_origin_size() {
         assert_eq!(
             Rect::new(-31000, -32000, 63000, 64000),
@@ -1202,44 +882,6 @@ mod tests {
                 PixelsXY { x: -31000, y: -32000 },
                 SizeInPixels { width: 63000, height: 64000 }
             )
-        );
-    }
-
-    #[test]
-    fn test_rect_points() {
-        assert_eq!(
-            Rect::new(10, 20, 100, 200),
-            rect_points(PixelsXY { x: 10, y: 20 }, PixelsXY { x: 110, y: 220 })
-        );
-        assert_eq!(
-            Rect::new(10, 20, 100, 200),
-            rect_points(PixelsXY { x: 110, y: 20 }, PixelsXY { x: 10, y: 220 })
-        );
-        assert_eq!(
-            Rect::new(10, 20, 100, 200),
-            rect_points(PixelsXY { x: 10, y: 220 }, PixelsXY { x: 110, y: 20 })
-        );
-        assert_eq!(
-            Rect::new(10, 20, 100, 200),
-            rect_points(PixelsXY { x: 110, y: 220 }, PixelsXY { x: 10, y: 20 })
-        );
-
-        assert_eq!(
-            Rect::new(-31000, -32000, 31005, 32010),
-            rect_points(PixelsXY { x: 5, y: -32000 }, PixelsXY { x: -31000, y: 10 })
-        );
-        assert_eq!(
-            Rect::new(10, 5, 30990, 31995),
-            rect_points(PixelsXY { x: 31000, y: 5 }, PixelsXY { x: 10, y: 32000 })
-        );
-
-        assert_eq!(
-            Rect::new(-31000, -32000, 62000, 64000),
-            rect_points(PixelsXY { x: -31000, y: -32000 }, PixelsXY { x: 31000, y: 32000 })
-        );
-        assert_eq!(
-            Rect::new(-31000, -32000, 62000, 64000),
-            rect_points(PixelsXY { x: 31000, y: 32000 }, PixelsXY { x: -31000, y: -32000 })
         );
     }
 }

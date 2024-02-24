@@ -14,20 +14,11 @@
 // under the License.
 
 //! HTML canvas-based console implementation.
-//!
-//! TODO(jmmv): There is a lot of duplication between this module and the SDL console
-//! implementation.  While the specifics to render are different, the logic to implement a
-//! framebuffer-based console is the same -- so we should make it so to minimize bugs here
-//! as we cannot easily test this implementation.
 
-use crate::input::WebInput;
 use crate::{log_and_panic, Yielder};
 use async_trait::async_trait;
-use endbasic_std::console::AnsiColor;
-use endbasic_std::console::{
-    ansi_color_to_rgb, remove_control_chars, CharsXY, ClearType, Console, Key, LineBuffer,
-    PixelsXY, SizeInPixels, RGB,
-};
+use endbasic_std::console::graphics::{RasterInfo, RasterOps};
+use endbasic_std::console::{CharsXY, PixelsXY, SizeInPixels, RGB};
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::f64::consts::PI;
@@ -38,14 +29,6 @@ use wasm_bindgen::JsCast;
 use web_sys::HtmlCanvasElement;
 use web_sys::ImageData;
 use web_sys::{CanvasRenderingContext2d, ContextAttributes2d};
-
-/// Default foreground color, used at console creation time and when requesting the default color
-/// via the `COLOR` command.
-const DEFAULT_FG_COLOR: u8 = AnsiColor::White as u8;
-
-/// Default background color, used at console creation time and when requesting the default color
-/// via the `COLOR` command.
-const DEFAULT_BG_COLOR: u8 = AnsiColor::Black as u8;
 
 /// Default fonts to use.  The first font in the list should match whichever font is loaded in
 /// `style.css`.  The rest are only provided as fallbacks.
@@ -134,14 +117,11 @@ fn html_canvas_to_2d_context(canvas: HtmlCanvasElement) -> io::Result<CanvasRend
 }
 
 /// Implementation of a console that renders on an HTML canvas.
-pub(crate) struct CanvasConsole {
+pub(crate) struct CanvasRasterOps {
     /// The HTML canvas context on which to render the console.
     context: CanvasRenderingContext2d,
 
     yielder: Rc<RefCell<Yielder>>,
-
-    /// Keyboard input handler for the web.
-    input: WebInput,
 
     /// Size of the console in pixels.
     size_pixels: SizeInPixels,
@@ -152,42 +132,19 @@ pub(crate) struct CanvasConsole {
     /// Size of the console in characters.  This is derived from `size_pixels` and `glyph_size`.
     size_chars: CharsXY,
 
-    /// Location of the cursor.
-    cursor_pos: CharsXY,
+    /// Current fill color.  Used only to track if we need to update the canvas.
+    fill_color: RGB,
 
-    /// Whether the cursor is visible or not.
-    cursor_visible: bool,
-
-    /// Raw pixels at the cursor position before the cursor was drawn.  Used to restore the previous
-    /// contents when the cursor moves.
-    cursor_backup: Option<ImageData>,
-
-    /// Current foreground color as exposed via `color` and `set_color`.
-    ansi_fg_color: Option<u8>,
-
-    /// Current background color as exposed via `color` and `set_color`.
-    ansi_bg_color: Option<u8>,
-
-    /// Current foreground color.  Used for text and graphical rendering.
-    fg_color: RGB,
-
-    /// Current background color.  Used to clear text.
-    bg_color: RGB,
-
-    /// State of the console right before entering the "alternate" console.
-    alt_backup: Option<(ImageData, CharsXY, RGB, RGB)>,
-
-    /// Whether video syncing is enabled or not.
-    sync_enabled: bool,
+    /// Current stroke color.  Used only to track if we need to update the canvas.
+    stroke_color: RGB,
 }
 
-impl CanvasConsole {
+impl CanvasRasterOps {
     /// Creates a new canvas console backed by the `canvas` HTML element and that receives input
     /// events from `input`.
     pub(crate) fn new(
         canvas: HtmlCanvasElement,
         yielder: Rc<RefCell<Yielder>>,
-        input: WebInput,
     ) -> io::Result<Self> {
         let size_pixels = {
             let width = match u16::try_from(canvas.width()) {
@@ -244,154 +201,130 @@ impl CanvasConsole {
             CharsXY::new(width, height)
         };
 
-        let mut console = Self {
+        // The actual values are irrelevant but need to be different than the initial values we use
+        // below.
+        let fill_color = (10, 10, 10);
+        let stroke_color = (100, 100, 100);
+
+        let mut raster_ops = Self {
             context,
             yielder,
-            input,
             size_pixels,
             glyph_size,
             size_chars,
-            cursor_pos: CharsXY::new(0, 0),
-            cursor_visible: true,
-            cursor_backup: None,
-            ansi_fg_color: None,
-            ansi_bg_color: None,
-            fg_color: ansi_color_to_rgb(DEFAULT_FG_COLOR),
-            bg_color: ansi_color_to_rgb(DEFAULT_BG_COLOR),
-            alt_backup: None,
-            sync_enabled: true,
+            fill_color,
+            stroke_color,
         };
-        console.clear(ClearType::All)?;
-        Ok(console)
-    }
 
-    /// Returns the size of the console in pixels.
-    pub(crate) fn size_pixels(&self) -> SizeInPixels {
-        self.size_pixels
+        raster_ops.set_fill_style_rgb((0, 0, 0));
+        raster_ops.set_stroke_style_rgb((255, 255, 255));
+
+        Ok(raster_ops)
     }
 
     /// Sets the fill color of the canvas to `rgb`.
     fn set_fill_style_rgb(&mut self, rgb: RGB) {
-        self.context
-            .set_fill_style(&JsValue::from_str(&format!("rgb({}, {}, {})", rgb.0, rgb.1, rgb.2)));
-    }
-
-    /// Sets the fill color of the canvas to `rgb` with an `alpha` value.
-    fn set_fill_style_rgba(&mut self, rgb: RGB, alpha: f64) {
-        self.context.set_fill_style(&JsValue::from_str(&format!(
-            "rgba({}, {}, {}, {})",
-            rgb.0, rgb.1, rgb.2, alpha
-        )));
+        if self.fill_color != rgb {
+            self.context.set_fill_style(&JsValue::from_str(&format!(
+                "rgb({}, {}, {})",
+                rgb.0, rgb.1, rgb.2
+            )));
+            self.fill_color = rgb;
+        }
     }
 
     /// Sets the stroke color of the canvas to `rgb`.
     fn set_stroke_style_rgb(&mut self, rgb: RGB) {
-        self.context
-            .set_stroke_style(&JsValue::from_str(&format!("rgb({}, {}, {})", rgb.0, rgb.1, rgb.2)));
+        if self.stroke_color != rgb {
+            self.context.set_stroke_style(&JsValue::from_str(&format!(
+                "rgb({}, {}, {})",
+                rgb.0, rgb.1, rgb.2
+            )));
+            self.stroke_color = rgb;
+        }
+    }
+}
+
+#[async_trait(?Send)]
+impl RasterOps for CanvasRasterOps {
+    type ID = ImageData;
+
+    fn get_info(&self) -> RasterInfo {
+        RasterInfo {
+            size_pixels: self.size_pixels,
+            glyph_size: self.glyph_size,
+            size_chars: self.size_chars,
+        }
     }
 
-    /// Forces the rendering of the current contents of the canvas onto the output window.
-    fn force_present_canvas(&mut self) -> io::Result<()> {
+    fn clear(&mut self, color: RGB) -> io::Result<()> {
+        self.set_fill_style_rgb(color);
+        self.context.fill_rect(
+            0.0,
+            0.0,
+            f64::from(self.size_pixels.width),
+            f64::from(self.size_pixels.height),
+        );
+        Ok(())
+    }
+
+    fn present_canvas(&mut self) -> io::Result<()> {
         self.yielder.borrow_mut().schedule();
         Ok(())
     }
 
-    /// Renders the current contents of the canvas onto the output window if necessary.
-    fn present_canvas(&mut self) -> io::Result<()> {
-        if self.sync_enabled {
-            self.force_present_canvas()
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Draws the cursor at the current position and saves the previous contents of the screen so
-    /// that `clear_cursor` can restore them.
-    fn draw_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible {
-            return Ok(());
-        }
-
-        let origin = self.cursor_pos.clamped_mul(self.glyph_size);
-
-        assert!(self.cursor_backup.is_none());
-        self.cursor_backup = Some(
-            self.context
-                .get_image_data(
-                    f64::from(origin.x),
-                    f64::from(origin.y),
-                    f64::from(self.glyph_size.width),
-                    f64::from(self.glyph_size.height),
-                )
-                .map_err(js_value_to_io_error)?,
-        );
-
-        self.set_fill_style_rgba(self.fg_color, 0.8);
-        self.context.fill_rect(
-            f64::from(origin.x),
-            f64::from(origin.y),
-            f64::from(self.glyph_size.width),
-            f64::from(self.glyph_size.height),
-        );
-        Ok(())
-    }
-
-    /// Clears the cursor at the current position by restoring the contents of the screen saved by
-    /// an earlier call to `draw_cursor`.
-    fn clear_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible || self.cursor_backup.is_none() {
-            return Ok(());
-        }
-
-        let origin = self.cursor_pos.clamped_mul(self.glyph_size);
+    fn read_pixels(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<ImageData> {
         self.context
-            .put_image_data(
-                self.cursor_backup.as_ref().unwrap(),
-                f64::from(origin.x),
-                f64::from(origin.y),
+            .get_image_data(
+                f64::from(xy.x),
+                f64::from(xy.y),
+                f64::from(size.width),
+                f64::from(size.height),
             )
-            .map_err(js_value_to_io_error)?;
-        self.cursor_backup = None;
-        Ok(())
+            .map_err(js_value_to_io_error)
     }
 
-    /// Moves the cursor to beginning of the next line, scrolling the console if necessary.
-    ///
-    /// Does not clear nor draw the cursor.
-    fn open_line(&mut self) -> io::Result<()> {
-        if self.cursor_pos.y < self.size_chars.y - 1 {
-            self.cursor_pos.x = 0;
-            self.cursor_pos.y += 1;
-            return Ok(());
-        }
+    fn put_pixels(&mut self, xy: PixelsXY, data: &ImageData) -> io::Result<()> {
+        self.context
+            .put_image_data(data, f64::from(xy.x), f64::from(xy.y))
+            .map_err(js_value_to_io_error)
+    }
 
+    fn move_pixels(
+        &mut self,
+        x1y1: PixelsXY,
+        x2y2: PixelsXY,
+        size: SizeInPixels,
+        color: RGB,
+    ) -> io::Result<()> {
         let shifted = self
             .context
             .get_image_data(
-                0.0,
-                f64::from(self.glyph_size.height),
-                f64::from(self.size_pixels.width),
-                f64::from(self.size_pixels.height - self.glyph_size.height),
+                f64::from(x1y1.x),
+                f64::from(x1y1.y),
+                f64::from(size.width),
+                f64::from(size.height),
             )
             .map_err(js_value_to_io_error)?;
-        self.context.put_image_data(&shifted, 0.0, 0.0).map_err(js_value_to_io_error)?;
-
-        self.set_fill_style_rgb(self.bg_color);
+        self.set_fill_style_rgb(color);
         self.context.fill_rect(
-            0.0,
-            f64::from(self.size_pixels.height - self.glyph_size.height),
-            f64::from(self.size_pixels.width),
-            f64::from(self.glyph_size.height),
+            f64::from(x1y1.x),
+            f64::from(x1y1.y),
+            f64::from(size.width),
+            f64::from(size.height),
         );
-
-        self.cursor_pos.x = 0;
-        Ok(())
+        self.context
+            .put_image_data(&shifted, f64::from(x2y2.x), f64::from(x2y2.y))
+            .map_err(js_value_to_io_error)
     }
 
-    /// Renders the given text at the `start` position.
-    ///
-    /// Does not handle overflow nor scrolling.
-    fn raw_write(&mut self, text: &str, start: PixelsXY) -> io::Result<()> {
+    fn write_text(
+        &mut self,
+        xy: PixelsXY,
+        text: &str,
+        fg_color: RGB,
+        bg_color: RGB,
+    ) -> io::Result<()> {
         debug_assert!(!text.is_empty(), "It doesn't make sense to render an empty string");
 
         let len = match u16::try_from(text.chars().count()) {
@@ -399,18 +332,18 @@ impl CanvasConsole {
             Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Text too long")),
         };
 
-        self.set_fill_style_rgb(self.bg_color);
+        self.set_fill_style_rgb(bg_color);
         self.context.fill_rect(
-            f64::from(start.x),
-            f64::from(start.y),
+            f64::from(xy.x),
+            f64::from(xy.y),
             f64::from(ClampedMul::<u16, u16>::clamped_mul(len, self.glyph_size.width)),
             f64::from(self.glyph_size.height),
         );
 
-        self.set_fill_style_rgb(self.fg_color);
+        self.set_fill_style_rgb(fg_color);
         // We must render one character at a time because the glyph width of the original font is
         // not guaranteed to be an integer pixel size.
-        let mut x = start.x;
+        let mut x = xy.x;
         let advance = match i16::try_from(self.glyph_size.width) {
             Ok(width) => width,
             Err(e) => log_and_panic!("Glyph size is too big: {}", e),
@@ -424,7 +357,7 @@ impl CanvasConsole {
             let sb = ch.encode_utf8(&mut buf);
 
             self.context
-                .fill_text(sb, f64::from(x), f64::from(start.y + y_offset))
+                .fill_text(sb, f64::from(x), f64::from(xy.y + y_offset))
                 .map_err(js_value_to_io_error)?;
 
             x += advance;
@@ -433,310 +366,61 @@ impl CanvasConsole {
         Ok(())
     }
 
-    /// Renders the given text at the current cursor position, with wrapping and
-    /// scrolling if necessary.
-    fn raw_write_wrapped(&mut self, text: String) -> io::Result<()> {
-        let mut line_buffer = LineBuffer::from(text);
-
-        loop {
-            let fit_chars = self.size_chars.x - self.cursor_pos.x;
-
-            let remaining = line_buffer.split_off(usize::from(fit_chars));
-            let len = line_buffer.len();
-            if len > 0 {
-                self.raw_write(
-                    &line_buffer.into_inner(),
-                    self.cursor_pos.clamped_mul(self.glyph_size),
-                )?;
-                self.cursor_pos.x += match u16::try_from(len) {
-                    Ok(len) => len,
-                    Err(e) => {
-                        log_and_panic!("Partial length was computed to fit on the screen: {}", e)
-                    }
-                };
-            }
-
-            line_buffer = remaining;
-            if line_buffer.is_empty() {
-                break;
-            } else {
-                self.open_line()?;
-            }
-        }
-
-        Ok(())
-    }
-}
-
-#[async_trait(?Send)]
-impl Console for CanvasConsole {
-    fn clear(&mut self, how: ClearType) -> io::Result<()> {
-        self.set_fill_style_rgb(self.bg_color);
-        match how {
-            ClearType::All => {
-                self.context.fill_rect(
-                    0.0,
-                    0.0,
-                    f64::from(self.size_pixels.width),
-                    f64::from(self.size_pixels.height),
-                );
-                self.cursor_pos.y = 0;
-                self.cursor_pos.x = 0;
-                self.cursor_backup = None;
-            }
-            ClearType::CurrentLine => {
-                self.clear_cursor()?;
-                self.context.fill_rect(
-                    0.0,
-                    f64::from(ClampedMul::<u16, u16>::clamped_mul(
-                        self.cursor_pos.y,
-                        self.glyph_size.height,
-                    )),
-                    f64::from(self.size_pixels.width),
-                    f64::from(self.glyph_size.height),
-                );
-                self.cursor_pos.x = 0;
-            }
-            ClearType::PreviousChar => {
-                if self.cursor_pos.x > 0 {
-                    self.clear_cursor()?;
-                    let previous_pos = CharsXY::new(self.cursor_pos.x - 1, self.cursor_pos.y);
-                    let origin = previous_pos.clamped_mul(self.glyph_size);
-                    self.context.fill_rect(
-                        f64::from(origin.x),
-                        f64::from(origin.y),
-                        f64::from(self.glyph_size.width),
-                        f64::from(self.glyph_size.height),
-                    );
-                    self.cursor_pos = previous_pos;
-                }
-            }
-            ClearType::UntilNewLine => {
-                self.clear_cursor()?;
-                let pos = self.cursor_pos.clamped_mul(self.glyph_size);
-                debug_assert!(pos.x >= 0, "Inputs to pos are unsigned");
-                debug_assert!(pos.y >= 0, "Inputs to pos are unsigned");
-                let height = self.glyph_size.height;
-                self.context.fill_rect(
-                    f64::from(pos.x),
-                    f64::from(pos.y),
-                    f64::from(i32::from(self.size_pixels.width) - i32::from(pos.x)),
-                    f64::from(height),
-                );
-            }
-        }
-        self.draw_cursor()?;
-        self.present_canvas()
-    }
-
-    fn color(&self) -> (Option<u8>, Option<u8>) {
-        (self.ansi_fg_color, self.ansi_bg_color)
-    }
-
-    fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
-        self.ansi_fg_color = fg;
-        self.fg_color = ansi_color_to_rgb(fg.unwrap_or(DEFAULT_FG_COLOR));
-        self.ansi_bg_color = bg;
-        self.bg_color = ansi_color_to_rgb(bg.unwrap_or(DEFAULT_BG_COLOR));
-        Ok(())
-    }
-
-    fn enter_alt(&mut self) -> io::Result<()> {
-        if self.alt_backup.is_some() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Cannot nest alternate screens",
-            ));
-        }
-
-        let pixels = self
-            .context
-            .get_image_data(
-                0.0,
-                0.0,
-                f64::from(self.size_pixels.width),
-                f64::from(self.size_pixels.height),
-            )
-            .map_err(js_value_to_io_error)?;
-        self.alt_backup = Some((pixels, self.cursor_pos, self.fg_color, self.bg_color));
-
-        self.clear(ClearType::All)
-    }
-
-    fn hide_cursor(&mut self) -> io::Result<()> {
-        self.clear_cursor()?;
-        self.cursor_visible = false;
-        self.present_canvas()
-    }
-
-    fn is_interactive(&self) -> bool {
-        true
-    }
-
-    fn leave_alt(&mut self) -> io::Result<()> {
-        let (pixels, cursor_pos, fg_color, bg_color) = match self.alt_backup.take() {
-            Some(t) => t,
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Cannot leave alternate screen; not entered",
-                ))
-            }
-        };
-
-        self.clear_cursor()?;
-
-        self.context.put_image_data(&pixels, 0.0, 0.0).map_err(js_value_to_io_error)?;
-
-        self.cursor_pos = cursor_pos;
-        self.fg_color = fg_color;
-        self.bg_color = bg_color;
-        self.draw_cursor()?;
-        self.present_canvas()?;
-
-        debug_assert!(self.alt_backup.is_none());
-        Ok(())
-    }
-
-    fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
-        debug_assert!(pos.x < self.size_chars.x);
-        debug_assert!(pos.y < self.size_chars.y);
-
-        self.clear_cursor()?;
-        self.cursor_pos = pos;
-        self.draw_cursor()?;
-        self.present_canvas()
-    }
-
-    fn move_within_line(&mut self, off: i16) -> io::Result<()> {
-        self.clear_cursor()?;
-        if off < 0 {
-            self.cursor_pos.x -= -off as u16;
-        } else {
-            self.cursor_pos.x += off as u16;
-        }
-        self.draw_cursor()?;
-        self.present_canvas()
-    }
-
-    fn print(&mut self, text: &str) -> io::Result<()> {
-        let text = remove_control_chars(text);
-
-        self.clear_cursor()?;
-        self.raw_write_wrapped(text)?;
-        self.open_line()?;
-        self.draw_cursor()?;
-        self.present_canvas()
-    }
-
-    async fn poll_key(&mut self) -> io::Result<Option<Key>> {
-        self.input.try_recv().await
-    }
-
-    async fn read_key(&mut self) -> io::Result<Key> {
-        self.input.recv().await
-    }
-
-    fn show_cursor(&mut self) -> io::Result<()> {
-        if !self.cursor_visible {
-            self.cursor_visible = true;
-            if let Err(e) = self.draw_cursor() {
-                self.cursor_visible = false;
-                return Err(e);
-            }
-        }
-        self.present_canvas()
-    }
-
-    fn size_chars(&self) -> io::Result<CharsXY> {
-        Ok(self.size_chars)
-    }
-
-    fn size_pixels(&self) -> io::Result<SizeInPixels> {
-        Ok(self.size_pixels)
-    }
-
-    fn write(&mut self, text: &str) -> io::Result<()> {
-        let text = remove_control_chars(text);
-
-        self.clear_cursor()?;
-        self.raw_write_wrapped(text)?;
-        self.draw_cursor()?;
-        self.present_canvas()
-    }
-
-    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        self.set_stroke_style_rgb(self.fg_color);
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
+        self.set_stroke_style_rgb(color);
         self.context.begin_path();
         self.context
             .arc(f64::from(center.x), f64::from(center.y), f64::from(radius), 0.0, 2.0 * PI)
             .map_err(js_value_to_io_error)?;
         self.context.stroke();
-        self.present_canvas()
+        Ok(())
     }
 
-    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        self.set_fill_style_rgb(self.fg_color);
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
+        self.set_fill_style_rgb(color);
         self.context.begin_path();
         self.context
             .arc(f64::from(center.x), f64::from(center.y), f64::from(radius), 0.0, 2.0 * PI)
             .map_err(js_value_to_io_error)?;
         self.context.fill();
-        self.present_canvas()
+        Ok(())
     }
 
-    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
+    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, color: RGB) -> io::Result<()> {
         self.context.begin_path();
-        self.set_stroke_style_rgb(self.fg_color);
+        self.set_stroke_style_rgb(color);
         self.context.move_to(f64::from(x1y1.x), f64::from(x1y1.y));
         self.context.line_to(f64::from(x2y2.x), f64::from(x2y2.y));
         self.context.stroke();
-        self.present_canvas()
+        Ok(())
     }
 
-    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
-        self.set_fill_style_rgb(self.fg_color);
+    fn draw_pixel(&mut self, xy: PixelsXY, color: RGB) -> io::Result<()> {
+        self.set_fill_style_rgb(color);
         self.context.fill_rect(f64::from(xy.x), f64::from(xy.y), 1.0, 1.0);
-        self.present_canvas()
+        Ok(())
     }
 
-    fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        self.set_stroke_style_rgb(self.fg_color);
+    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
+        self.set_stroke_style_rgb(color);
         self.context.stroke_rect(
-            f64::from(x1y1.x),
-            f64::from(x1y1.y),
-            f64::from(x2y2.x - x1y1.x),
-            f64::from(x2y2.y - x1y1.y),
+            f64::from(xy.x),
+            f64::from(xy.y),
+            f64::from(size.width),
+            f64::from(size.height),
         );
-        self.present_canvas()
+        Ok(())
     }
 
-    fn draw_rect_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        self.set_fill_style_rgb(self.fg_color);
+    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
+        self.set_fill_style_rgb(color);
         self.context.fill_rect(
-            f64::from(x1y1.x),
-            f64::from(x1y1.y),
-            f64::from(x2y2.x - x1y1.x),
-            f64::from(x2y2.y - x1y1.y),
+            f64::from(xy.x),
+            f64::from(xy.y),
+            f64::from(size.width),
+            f64::from(size.height),
         );
-        self.present_canvas()
-    }
-
-    fn sync_now(&mut self) -> io::Result<()> {
-        if self.sync_enabled {
-            Ok(())
-        } else {
-            self.force_present_canvas()
-        }
-    }
-
-    fn set_sync(&mut self, enabled: bool) -> io::Result<bool> {
-        if !self.sync_enabled {
-            self.force_present_canvas()?;
-        }
-        let previous = self.sync_enabled;
-        self.sync_enabled = enabled;
-        Ok(previous)
+        Ok(())
     }
 }
 
