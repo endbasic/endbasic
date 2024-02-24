@@ -348,7 +348,7 @@ mod testutils {
                 panic!("Golden data regenerated; flip REGEN_BMPS back to false");
             }
 
-            self.console.request_tx.send(Request::ReadPixels).unwrap();
+            self.console.request_tx.send(Request::ReadVisiblePixels).unwrap();
             let (actual, pixel_format) = match self.console.response_rx.recv().unwrap() {
                 Response::Pixels(Ok(data)) => data,
                 _ => panic!(),
@@ -802,7 +802,12 @@ mod tests {
         assert_eq!(
             io::ErrorKind::InvalidInput,
             test.console()
-                .call(Request::RawWrite(very_long_string, PixelsXY { x: 0, y: 0 }))
+                .call(Request::RawWrite(
+                    very_long_string,
+                    PixelsXY { x: 0, y: 0 },
+                    (255, 255, 255),
+                    (0, 0, 0)
+                ))
                 .unwrap_err()
                 .kind()
         );

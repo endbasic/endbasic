@@ -31,6 +31,8 @@ mod colors;
 pub use colors::{ansi_color_to_rgb, AnsiColor, RGB};
 mod format;
 pub use format::refill_and_print;
+pub mod graphics;
+pub use graphics::GraphicsConsole;
 mod readline;
 pub use readline::{read_line, read_line_secure};
 mod trivial;
@@ -151,6 +153,7 @@ impl PixelsXY {
 
 /// Represents a rectangular size in pixels.
 #[derive(Clone, Copy, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct SizeInPixels {
     /// The width in pixels.
     pub width: u16,

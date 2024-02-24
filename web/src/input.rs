@@ -17,8 +17,9 @@
 
 use crate::{log_and_panic, Yielder};
 use async_channel::{self, Receiver, Sender, TryRecvError};
+use async_trait::async_trait;
 use endbasic_core::exec::Signal;
-use endbasic_std::console::Key;
+use endbasic_std::console::{graphics::InputOps, Key};
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -176,5 +177,18 @@ impl WebInput {
         let key = self.on_key_rx.recv().await.unwrap();
         self.yielder.borrow_mut().reset();
         Ok(key)
+    }
+}
+
+pub struct WebInputOps(pub WebInput);
+
+#[async_trait(?Send)]
+impl InputOps for WebInputOps {
+    async fn poll_key(&mut self) -> io::Result<Option<Key>> {
+        self.0.try_recv().await
+    }
+
+    async fn read_key(&mut self) -> io::Result<Key> {
+        self.0.recv().await
     }
 }
