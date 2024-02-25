@@ -436,6 +436,8 @@ mod tests {
     fn test_sdl_console_scroll_and_wrap() {
         let mut test = SdlTest::new();
 
+        test.console().set_color(None, Some(4)).unwrap();
+
         let mut long_line = String::new();
         for i in 0..128 {
             long_line.push((b'a' + (i % 26)) as char);
