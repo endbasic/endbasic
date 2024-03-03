@@ -17,6 +17,7 @@
     "rust-analyzer.cargo.extraEnv": {
         "CARGO_TARGET_DIR": "target/vscode",
     },
+    "rust-analyzer.showUnlinkedFileNotification": false,
 
     // Enable this for assistance while developing features that target ARM.
     //"rust.target": "armv7-unknown-linux-gnueabihf",
@@ -78,6 +79,7 @@
         "eval",
         "framebuffer",
         "ftype",
+        "gpio",
         "gosub",
         "gosubs",
         "gotos",
@@ -92,6 +94,7 @@
         "renum",
         "repr",
         "rustyline",
+        "spi",
         "stmt",
         "stmts",
         "symlink",
