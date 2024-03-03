@@ -29,7 +29,7 @@ pub struct RppalPins {
 }
 
 /// Converts a `gpio::Error` to an `io::Error`.
-fn gpio_error_to_io_error(e: gpio::Error) -> io::Error {
+pub(crate) fn gpio_error_to_io_error(e: gpio::Error) -> io::Error {
     match e {
         gpio::Error::Io(e) => e,
         gpio::Error::PermissionDenied(e) => io::Error::new(io::ErrorKind::PermissionDenied, e),
