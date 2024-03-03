@@ -152,8 +152,7 @@ impl PixelsXY {
 }
 
 /// Represents a rectangular size in pixels.
-#[derive(Clone, Copy, Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct SizeInPixels {
     /// The width in pixels.

@@ -37,6 +37,16 @@ pub trait ClampedInto<T> {
     fn clamped_into(self) -> T;
 }
 
+impl ClampedInto<usize> for i16 {
+    fn clamped_into(self) -> usize {
+        if self < 0 {
+            0
+        } else {
+            self as usize
+        }
+    }
+}
+
 impl ClampedInto<i16> for u16 {
     fn clamped_into(self) -> i16 {
         if self > u16::try_from(i16::MAX).unwrap() {
@@ -154,7 +164,17 @@ pub trait RasterOps {
     /// Clears the whole console with the given color.
     fn clear(&mut self, color: RGB) -> io::Result<()>;
 
+    /// Sets whether automatic presentation of the canvas is enabled or not.
+    ///
+    /// Raster backends might need this when the device they talk to is very slow and they want to
+    /// buffer data in main memory first.
+    ///
+    /// Does *NOT* present the canvas.
+    fn set_sync(&mut self, _enabled: bool) {}
+
     /// Displays any buffered changes to the console.
+    ///
+    /// Should ignore any sync values that the backend might have cached via `set_sync`.
     fn present_canvas(&mut self) -> io::Result<()>;
 
     /// Reads the raw pixel data for the rectangular region specified by `xy` and `size`.
@@ -618,6 +638,7 @@ where
         }
         let previous = self.sync_enabled;
         self.sync_enabled = enabled;
+        self.raster_ops.set_sync(enabled);
         Ok(previous)
     }
 }

@@ -12,8 +12,18 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
+async-channel = "2.2"
+async-trait = "0.1"
 rppal = "0.17"
+
+[dependencies.endbasic-core]
+version = "0.10.99" # ENDBASIC-VERSION
+path = "../core"
 
 [dependencies.endbasic-std]
 version = "0.10.99" # ENDBASIC-VERSION
 path = "../std"
+
+[dependencies.endbasic-terminal]
+version = "0.10.99" # ENDBASIC-VERSION
+path = "../terminal"

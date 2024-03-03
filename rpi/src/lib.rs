@@ -20,7 +20,9 @@
 #![allow(clippy::collapsible_else_if)]
 #![warn(anonymous_parameters, bad_style, missing_docs)]
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
-#![warn(unsafe_code)]
 
 mod gpio;
 pub use gpio::RppalPins;
+pub mod lcd;
+mod st7735s;
+pub use st7735s::new_st7735s_console;

@@ -26,4 +26,5 @@ EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 `endbasic-rpi` provides Raspberry Pi support for the following features defined
 in the `endbasic-std` crate:
 
+*   Console support on an ST7735S hat.
 *   GPIO pins support.
