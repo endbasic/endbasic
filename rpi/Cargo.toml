@@ -15,6 +15,7 @@ edition = "2018"
 async-channel = "2.2"
 async-trait = "0.1"
 rppal = "0.17"
+tokio = { version = "1", features = ["full"] }
 
 [dependencies.endbasic-core]
 version = "0.10.99" # ENDBASIC-VERSION

@@ -33,7 +33,7 @@ use endbasic_std::console::{
     CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, SizeInPixels, RGB,
 };
 use endbasic_terminal::TerminalConsole;
-use rppal::gpio::{Gpio, Level, OutputPin};
+use rppal::gpio::{Gpio, InputPin, Level, OutputPin};
 use rppal::spi::{self, Bus, SlaveSelect, Spi};
 use std::io;
 use std::time::Duration;
@@ -55,10 +55,40 @@ struct ST7735SInput {
 }
 
 impl ST7735SInput {
-    fn new(signals_tx: Sender<Signal>) -> io::Result<Self> {
-        let terminal = TerminalConsole::from_stdio(signals_tx)?;
+    fn new(gpio: &mut Gpio, signals_tx: Sender<Signal>) -> io::Result<Self> {
+        let (terminal, on_key_tx) = TerminalConsole::from_stdio_with_injector(signals_tx)?;
 
-        // TODO(jmmv): Set up and handle the physical buttons.
+        let key_up = gpio.get(6).map_err(gpio_error_to_io_error)?.into_input_pullup();
+        let key_down = gpio.get(19).map_err(gpio_error_to_io_error)?.into_input_pullup();
+        let key_left = gpio.get(5).map_err(gpio_error_to_io_error)?.into_input_pullup();
+        let key_right = gpio.get(26).map_err(gpio_error_to_io_error)?.into_input_pullup();
+        let key_press = gpio.get(13).map_err(gpio_error_to_io_error)?.into_input_pullup();
+        let key_1 = gpio.get(21).map_err(gpio_error_to_io_error)?.into_input_pullup();
+        let key_2 = gpio.get(20).map_err(gpio_error_to_io_error)?.into_input_pullup();
+        let key_3 = gpio.get(16).map_err(gpio_error_to_io_error)?.into_input_pullup();
+
+        tokio::task::spawn(async move {
+            async fn read_button(pin: &InputPin, key: Key, tx: &Sender<Key>) {
+                if pin.read() == Level::Low {
+                    if let Err(e) = tx.send(key.clone()).await {
+                        eprintln!("Ignoring button {:?} due to error: {}", key, e);
+                    }
+                }
+            }
+
+            loop {
+                read_button(&key_up, Key::ArrowUp, &on_key_tx).await;
+                read_button(&key_down, Key::ArrowDown, &on_key_tx).await;
+                read_button(&key_left, Key::ArrowLeft, &on_key_tx).await;
+                read_button(&key_right, Key::ArrowRight, &on_key_tx).await;
+                read_button(&key_press, Key::NewLine, &on_key_tx).await;
+                read_button(&key_1, Key::Char('1'), &on_key_tx).await;
+                read_button(&key_2, Key::Char('2'), &on_key_tx).await;
+                read_button(&key_3, Key::Char('3'), &on_key_tx).await;
+
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        });
 
         Ok(Self { terminal })
     }
@@ -410,7 +440,7 @@ pub fn new_st7735s_console(signals_tx: Sender<Signal>) -> io::Result<ST7735SCons
     let mut gpio = Gpio::new().map_err(gpio_error_to_io_error)?;
 
     let lcd = ST7735SLcd::new(&mut gpio)?;
-    let input = ST7735SInput::new(signals_tx)?;
+    let input = ST7735SInput::new(&mut gpio, signals_tx)?;
     let lcd = BufferedLcd::new(lcd);
     let inner = GraphicsConsole::new(input, lcd)?;
     Ok(ST7735SConsole { _gpio: gpio, inner })

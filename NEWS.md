@@ -23,7 +23,8 @@ for the time being.**
     fixed handling of line input in prompts.
 
 *   Added the new console `st7735s` for the Raspberry Pi.  This console uses the
-    ST7735S 1.44in LCD for the console output and the terminal console for input.
+    ST7735S 1.44in LCD for the console output and the terminal console for input,
+    but also recognizes the hat's buttons and injects them as keyboard events.
 
 ## Changes in version 0.10.0
 
