@@ -72,26 +72,41 @@ impl TerminalConsole {
     /// This spawns a background task to handle console input so this must be run in the context of
     /// an Tokio runtime.
     pub fn from_stdio(signals_tx: Sender<Signal>) -> io::Result<Self> {
+        let (terminal, _on_key_tx) = Self::from_stdio_with_injector(signals_tx)?;
+        Ok(terminal)
+    }
+
+    /// Creates a new console based on the properties of stdin/stdout.
+    ///
+    /// This spawns a background task to handle console input so this must be run in the context of
+    /// an Tokio runtime.
+    ///
+    /// Compared to `from_stdio`, this also returns a key sender to inject extra events into the
+    /// queue maintained by the terminal.
+    pub fn from_stdio_with_injector(signals_tx: Sender<Signal>) -> io::Result<(Self, Sender<Key>)> {
         let (on_key_tx, on_key_rx) = async_channel::unbounded();
 
         let is_tty = io::stdin().is_tty() && io::stdout().is_tty();
 
         if is_tty {
             terminal::enable_raw_mode()?;
-            tokio::task::spawn(TerminalConsole::raw_key_handler(on_key_tx, signals_tx));
+            tokio::task::spawn(TerminalConsole::raw_key_handler(on_key_tx.clone(), signals_tx));
         } else {
-            tokio::task::spawn(TerminalConsole::stdio_key_handler(on_key_tx));
+            tokio::task::spawn(TerminalConsole::stdio_key_handler(on_key_tx.clone()));
         }
 
-        Ok(Self {
-            is_tty,
-            fg_color: None,
-            bg_color: None,
-            cursor_visible: true,
-            alt_active: false,
-            sync_enabled: true,
-            on_key_rx,
-        })
+        Ok((
+            Self {
+                is_tty,
+                fg_color: None,
+                bg_color: None,
+                cursor_visible: true,
+                alt_active: false,
+                sync_enabled: true,
+                on_key_rx,
+            },
+            on_key_tx,
+        ))
     }
 
     /// Async task to wait for key events on a raw terminal and translate them into events for the
