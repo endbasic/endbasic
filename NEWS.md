@@ -18,7 +18,7 @@ for the time being.**
     `Content-Type` header.
 
 *   Improved support for narrow consoles: trimmed the width of the welcome
-    banner.
+    banner and fixed the editor's status line handling.
 
 ## Changes in version 0.10.0
 

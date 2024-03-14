@@ -121,7 +121,7 @@ impl Editor {
         // Even though we track file positions as 0-indexed, display them as 1-indexed for a better
         // user experience given that this is what all other editor seem to do.
         let dirty_marker = if self.dirty { "*" } else { "" };
-        let details = format!(
+        let long_details = format!(
             " | {}{} | Ln {}, Col {} ",
             self.name.as_deref().unwrap_or("<NO NAME>"),
             dirty_marker,
@@ -131,11 +131,21 @@ impl Editor {
 
         let width = usize::from(console_size.x);
         let mut status = String::with_capacity(width);
-        status.push_str(KEYS_SUMMARY);
-        while status.len() < width - details.len() {
-            status.push(' ');
+        if KEYS_SUMMARY.len() + long_details.len() >= width {
+            let short_details = format!(" {}:{} ", self.file_pos.line + 1, self.file_pos.col + 1);
+            if short_details.len() < width {
+                while status.len() < width - short_details.len() {
+                    status.push(' ');
+                }
+            }
+            status.push_str(&short_details);
+        } else {
+            status.push_str(KEYS_SUMMARY);
+            while status.len() < width - long_details.len() {
+                status.push(' ');
+            }
+            status.push_str(&long_details);
         }
-        status.push_str(&details);
         status.truncate(width);
 
         console.locate(CharsXY::new(0, console_size.y - 1))?;
@@ -515,15 +525,27 @@ mod tests {
 
             self.output.push(CapturedOut::Locate(yx(self.console_size.y - 1, 0)));
             self.output.push(CapturedOut::SetColor(STATUS_COLOR.0, STATUS_COLOR.1));
-            let dirty_marker = if self.dirty { "*" } else { "" };
-            let details =
-                &format!("| {}{} | Ln {}, Col {} ", TEST_FILENAME, dirty_marker, row, column);
-            let mut status = String::from(KEYS_SUMMARY);
-            while status.len() + details.len() < usize::from(self.console_size.x) {
-                status.push(' ');
+            if self.console_size.x < 30 {
+                // Arbitrary number to define "narrow console" in tests.
+                let details = &format!(" {}:{} ", row, column);
+                let mut status = String::new();
+                while status.len() + details.len() < usize::from(self.console_size.x) {
+                    status.push(' ');
+                }
+                status += details;
+                status.truncate(usize::from(self.console_size.x));
+                self.output.push(CapturedOut::Write(status));
+            } else {
+                let dirty_marker = if self.dirty { "*" } else { "" };
+                let details =
+                    &format!("| {}{} | Ln {}, Col {} ", TEST_FILENAME, dirty_marker, row, column);
+                let mut status = String::from(KEYS_SUMMARY);
+                while status.len() + details.len() < usize::from(self.console_size.x) {
+                    status.push(' ');
+                }
+                status += details;
+                self.output.push(CapturedOut::Write(status));
             }
-            status += details;
-            self.output.push(CapturedOut::Write(status));
             self
         }
 
@@ -1616,5 +1638,29 @@ mod tests {
             cb,
             ob,
         );
+    }
+
+    #[test]
+    fn test_narrow_console() {
+        let mut cb = MockConsole::default();
+        cb.set_size_chars(yx(10, 25));
+        let mut ob = OutputBuilder::new(yx(10, 25));
+        // The key in this test is to verify that writing the status line doesn't trigger invalid
+        // operations (like integer underflows).  See the logic in refresh_status for details.
+        ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
+
+        run_editor("", "\n", cb, ob);
+    }
+
+    #[test]
+    fn test_very_narrow_console() {
+        let mut cb = MockConsole::default();
+        cb.set_size_chars(yx(10, 5));
+        let mut ob = OutputBuilder::new(yx(10, 5));
+        // The key in this test is to verify that writing the status line doesn't trigger invalid
+        // operations (like integer underflows).  See the logic in refresh_status for details.
+        ob = ob.refresh(linecol(0, 0), &[""], yx(0, 0));
+
+        run_editor("", "\n", cb, ob);
     }
 }
