@@ -23,7 +23,7 @@
 #![warn(unsafe_code)]
 
 use endbasic_core::exec::{Machine, StopReason};
-use endbasic_std::console::{self, refill_and_print, Console};
+use endbasic_std::console::{self, is_narrow, refill_and_print, Console};
 use endbasic_std::program::{continue_if_modified, Program, BREAK_MSG};
 use endbasic_std::storage::Storage;
 use std::cell::RefCell;
@@ -36,12 +36,18 @@ pub mod editor;
 /// Prints the EndBASIC welcome message to the given console.
 pub fn print_welcome(console: Rc<RefCell<dyn Console>>) -> io::Result<()> {
     let mut console = console.borrow_mut();
+
+    if is_narrow(&*console) {
+        console.print(&format!("EndBASIC {}", env!("CARGO_PKG_VERSION")))?;
+    } else {
+        console.print("")?;
+        console.print(&format!("    EndBASIC {}", env!("CARGO_PKG_VERSION")))?;
+        console.print("    Copyright 2020-2024 Julio Merino")?;
+        console.print("")?;
+        console.print("    Type HELP for interactive usage information.")?;
+    }
     console.print("")?;
-    console.print(&format!("    EndBASIC {}", env!("CARGO_PKG_VERSION")))?;
-    console.print("    Copyright 2020-2024 Julio Merino")?;
-    console.print("")?;
-    console.print("    Type HELP for interactive usage information.")?;
-    console.print("")?;
+
     Ok(())
 }
 
@@ -221,10 +227,56 @@ pub async fn run_repl_loop(
 mod tests {
     use super::*;
     use endbasic_core::exec::Signal;
-    use endbasic_std::console::Key;
+    use endbasic_std::console::{CharsXY, Key};
     use endbasic_std::storage::{Drive, DriveFactory, InMemoryDrive};
     use endbasic_std::testutils::*;
     use futures_lite::future::block_on;
+    use std::convert::TryFrom;
+
+    /// Runs `print_welcome` against a console that is `console_width` in height and returns
+    /// whether the narrow welcome message was printed or not, and the maximum width of all
+    /// printed messages.
+    fn check_is_narrow_welcome(console_width: u16) -> (bool, usize) {
+        let console = Rc::from(RefCell::from(MockConsole::default()));
+        console.borrow_mut().set_size_chars(CharsXY::new(console_width, 1));
+        print_welcome(console.clone()).unwrap();
+
+        let mut console = console.borrow_mut();
+        let mut found = false;
+        let mut max_length = 0;
+        for output in console.take_captured_out() {
+            match output {
+                CapturedOut::Print(msg) => {
+                    if msg.contains("Type HELP") {
+                        found = true;
+                        max_length = std::cmp::max(max_length, msg.len());
+                    }
+                }
+                _ => panic!("Unexpected console operation: {:?}", output),
+            }
+        }
+        (!found, max_length)
+    }
+
+    #[test]
+    fn test_print_welcome_wide_console() {
+        assert!(!check_is_narrow_welcome(50).0, "Long welcome not found");
+    }
+
+    #[test]
+    fn test_print_welcome_narrow_console() {
+        assert!(check_is_narrow_welcome(10).0, "Long welcome found");
+    }
+
+    #[test]
+    fn test_print_welcome_and_is_narrow_agree() {
+        let (narrow, max_length) = check_is_narrow_welcome(1000);
+        assert!(!narrow, "Long message not found");
+
+        for i in 0..max_length {
+            assert!(check_is_narrow_welcome(u16::try_from(i).unwrap()).0, "Long message found");
+        }
+    }
 
     #[test]
     fn test_autoexec_ok() {
