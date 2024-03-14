@@ -377,6 +377,16 @@ pub fn read_key_from_stdin(buffer: &mut VecDeque<Key>) -> io::Result<Key> {
     }
 }
 
+/// Returns true if the console is too narrow for the standard interface.
+///
+/// A narrow console is defined as one that cannot fit the welcome message.
+pub fn is_narrow(console: &dyn Console) -> bool {
+    match console.size_chars() {
+        Ok(size) => size.x < 50,
+        Err(_) => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

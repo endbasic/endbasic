@@ -17,6 +17,9 @@ for the time being.**
 *   Fixed JSON requests to the service to properly set the correct
     `Content-Type` header.
 
+*   Improved support for narrow consoles: trimmed the width of the welcome
+    banner.
+
 ## Changes in version 0.10.0
 
 **Released on 2022-12-27.**
