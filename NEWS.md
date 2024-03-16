@@ -56,7 +56,7 @@ Language changes for better control flow:
 *   Added support for `DO` loops with optional `UNTIL`/`WHILE` pre- and
     post-guards and `EXIT DO` early terminations.
 
-*   Added support for uniline `IF` statements.
+*   Issue #152: Added support for uniline `IF` statements.
 
 *   Added support for `SELECT CASE`.
 
