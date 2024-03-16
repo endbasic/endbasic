@@ -23,7 +23,7 @@ use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
 };
 use endbasic_core::LineCol;
-use endbasic_std::console::{read_line, read_line_secure, refill_and_print, Console};
+use endbasic_std::console::{is_narrow, read_line, read_line_secure, refill_and_print, Console};
 use endbasic_std::storage::{FileAcls, Storage};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -83,7 +83,7 @@ To create an account, use the SIGNUP command.",
 
         {
             let console = &mut *self.console.borrow_mut();
-            if !response.motd.is_empty() {
+            if !is_narrow(&*console) && !response.motd.is_empty() {
                 console.print("")?;
                 console.print("----- BEGIN SERVER MOTD -----")?;
                 for line in response.motd {
@@ -635,7 +635,7 @@ pub fn add_all<S: Into<String>>(
 mod tests {
     use super::*;
     use crate::testutils::*;
-    use endbasic_std::testutils::*;
+    use endbasic_std::{console::CharsXY, testutils::*};
 
     #[test]
     fn test_cloud_scheme_always_available() {
@@ -688,7 +688,24 @@ mod tests {
     }
 
     #[test]
-    fn test_login_show_motd() {
+    fn test_login_skip_motd_on_narrow_console() {
+        let mut t = ClientTester::default();
+        t.get_console().borrow_mut().set_size_chars(CharsXY::new(10, 0));
+        t.get_service().borrow_mut().add_mock_login(
+            "the-username",
+            "the-password",
+            Ok(LoginResponse {
+                access_token: AccessToken::new("random token"),
+                motd: vec!["first line".to_owned(), "second line".to_owned()],
+            }),
+        );
+        t.run(format!(r#"LOGIN "{}", "{}""#, "the-username", "the-password"))
+            .expect_access_token("random token")
+            .check();
+    }
+
+    #[test]
+    fn test_login_show_motd_on_wide_console() {
         let mut t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_login(
             "the-username",

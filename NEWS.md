@@ -18,8 +18,8 @@ for the time being.**
     `Content-Type` header.
 
 *   Improved support for narrow consoles: trimmed the width of the welcome
-    banner, fixed the editor's status line handling, and made `DIR` print a
-    concise directory summary.
+    banner, fixed the editor's status line handling, made `DIR` print a
+    concise directory summary, and made `LOGIN` skip the server's `motd`.
 
 ## Changes in version 0.10.0
 
