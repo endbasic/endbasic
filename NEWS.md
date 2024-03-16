@@ -18,7 +18,8 @@ for the time being.**
     `Content-Type` header.
 
 *   Improved support for narrow consoles: trimmed the width of the welcome
-    banner and fixed the editor's status line handling.
+    banner, fixed the editor's status line handling, and made `DIR` print a
+    concise directory summary.
 
 ## Changes in version 0.10.0
 

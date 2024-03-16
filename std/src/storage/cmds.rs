@@ -15,7 +15,7 @@
 
 //! File system interaction.
 
-use crate::console::Console;
+use crate::console::{is_narrow, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
@@ -63,25 +63,38 @@ async fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> i
     console.print("")?;
     console.print(&format!("    Directory of {}", canonical_path))?;
     console.print("")?;
-    console.print("    Modified              Size    Name")?;
-    let mut total_files = 0;
-    let mut total_bytes = 0;
-    for (name, details) in files.dirents() {
-        console.print(&format!(
-            "    {}    {:6}    {}",
-            details.date.format(&format).map_err(time_format_error_to_io_error)?,
-            details.length,
-            name,
-        ))?;
-        total_files += 1;
-        total_bytes += details.length;
-    }
-    if total_files > 0 {
-        console.print("")?;
-    }
-    console.print(&format!("    {} file(s), {} bytes", total_files, total_bytes))?;
-    if let (Some(disk_quota), Some(disk_free)) = (files.disk_quota(), files.disk_free()) {
-        console.print(&format!("    {} of {} bytes free", disk_free.bytes, disk_quota.bytes))?;
+    if is_narrow(&*console) {
+        let mut total_files = 0;
+        for name in files.dirents().keys() {
+            console.print(&format!("    {}", name,))?;
+            total_files += 1;
+        }
+        if total_files > 0 {
+            console.print("")?;
+        }
+        console.print(&format!("    {} file(s)", total_files))?;
+    } else {
+        let mut total_files = 0;
+        let mut total_bytes = 0;
+        console.print("    Modified              Size    Name")?;
+        for (name, details) in files.dirents() {
+            console.print(&format!(
+                "    {}    {:6}    {}",
+                details.date.format(&format).map_err(time_format_error_to_io_error)?,
+                details.length,
+                name,
+            ))?;
+            total_files += 1;
+            total_bytes += details.length;
+        }
+        if total_files > 0 {
+            console.print("")?;
+        }
+        console.print(&format!("    {} file(s), {} bytes", total_files, total_bytes))?;
+        if let (Some(disk_quota), Some(disk_free)) = (files.disk_quota(), files.disk_free()) {
+            console
+                .print(&format!("    {} of {} bytes free", disk_free.bytes, disk_quota.bytes))?;
+        }
     }
     console.print("")?;
     Ok(())
@@ -392,6 +405,7 @@ pub fn add_all(
 
 #[cfg(test)]
 mod tests {
+    use crate::console::CharsXY;
     use crate::storage::{DirectoryDriveFactory, DiskSpace, Drive, InMemoryDrive};
     use crate::testutils::*;
     use futures_lite::future::block_on;
@@ -560,6 +574,33 @@ mod tests {
             .expect_prints(prints)
             .expect_file("MEMORY:/empty.bas", "")
             .expect_file("OTHER:/foo.bas", "hello")
+            .check();
+    }
+
+    #[test]
+    fn test_dir_narrow_empty() {
+        let mut t = Tester::default();
+        t.get_console().borrow_mut().set_size_chars(CharsXY::new(10, 1));
+        t.run("DIR")
+            .expect_prints(["", "    Directory of MEMORY:/", "", "    0 file(s)", ""])
+            .check();
+    }
+
+    #[test]
+    fn test_dir_narrow_some() {
+        let mut t = Tester::default().write_file("empty.bas", "");
+        t.get_console().borrow_mut().set_size_chars(CharsXY::new(10, 1));
+        t.run("DIR")
+            .expect_prints([
+                "",
+                "    Directory of MEMORY:/",
+                "",
+                "    empty.bas",
+                "",
+                "    1 file(s)",
+                "",
+            ])
+            .expect_file("MEMORY:/empty.bas", "")
             .check();
     }
 
