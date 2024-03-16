@@ -23,6 +23,7 @@ use crate::spec::Resolution;
 use crate::string_error_to_io_error;
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
+use endbasic_std::console::drawing::{draw_circle, draw_circle_filled};
 use endbasic_std::console::graphics::{ClampedInto, ClampedMul, InputOps, RasterInfo, RasterOps};
 use endbasic_std::console::{
     CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, SizeInPixels, RGB,
@@ -409,116 +410,11 @@ impl RasterOps for Context {
     }
 
     fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        // This implements the [Midpoint circle
-        // algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
-
-        fn point(canvas: &mut SurfaceCanvas<'static>, x: i16, y: i16) -> io::Result<()> {
-            canvas
-                .draw_point(Point::new(i32::from(x), i32::from(y)))
-                .map_err(string_error_to_io_error)
-        }
-
-        let (diameter, radius): (i16, i16) = match radius.checked_mul(2) {
-            Some(d) => match i16::try_from(d) {
-                Ok(d) => (d, radius as i16),
-                Err(_) => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big"))
-                }
-            },
-            None => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big")),
-        };
-
-        let mut x: i16 = radius - 1;
-        let mut y: i16 = 0;
-        let mut tx: i16 = 1;
-        let mut ty: i16 = 1;
-        let mut e: i16 = tx - diameter;
-
-        while x >= y {
-            point(&mut self.canvas, center.x + x, center.y - y)?;
-            point(&mut self.canvas, center.x + x, center.y + y)?;
-            point(&mut self.canvas, center.x - x, center.y - y)?;
-            point(&mut self.canvas, center.x - x, center.y + y)?;
-            point(&mut self.canvas, center.x + y, center.y - x)?;
-            point(&mut self.canvas, center.x + y, center.y + x)?;
-            point(&mut self.canvas, center.x - y, center.y - x)?;
-            point(&mut self.canvas, center.x - y, center.y + x)?;
-
-            if e <= 0 {
-                y += 1;
-                e += ty;
-                ty += 2;
-            }
-
-            if e > 0 {
-                x -= 1;
-                tx += 2;
-                e += tx - diameter;
-            }
-        }
-
-        Ok(())
+        draw_circle(self, center, radius)
     }
 
     fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        // This implements the [Midpoint circle
-        // algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
-
-        fn line(
-            canvas: &mut SurfaceCanvas<'static>,
-            x1: i16,
-            y1: i16,
-            x2: i16,
-            y2: i16,
-        ) -> io::Result<()> {
-            canvas
-                .draw_line(
-                    Point::new(i32::from(x1), i32::from(y1)),
-                    Point::new(i32::from(x2), i32::from(y2)),
-                )
-                .map_err(string_error_to_io_error)
-        }
-
-        if radius == 1 {
-            return self.canvas.draw_point(point_xy(center)).map_err(string_error_to_io_error);
-        }
-
-        let (diameter, radius): (i16, i16) = match radius.checked_mul(2) {
-            Some(d) => match i16::try_from(d) {
-                Ok(d) => (d, radius as i16),
-                Err(_) => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big"))
-                }
-            },
-            None => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big")),
-        };
-
-        let mut x: i16 = radius - 1;
-        let mut y: i16 = 0;
-        let mut tx: i16 = 1;
-        let mut ty: i16 = 1;
-        let mut e: i16 = tx - diameter;
-
-        while x >= y {
-            line(&mut self.canvas, center.x + x, center.y - y, center.x + x, center.y + y)?;
-            line(&mut self.canvas, center.x - x, center.y - y, center.x - x, center.y + y)?;
-            line(&mut self.canvas, center.x + y, center.y - x, center.x + y, center.y + x)?;
-            line(&mut self.canvas, center.x - y, center.y - x, center.x - y, center.y + x)?;
-
-            if e <= 0 {
-                y += 1;
-                e += ty;
-                ty += 2;
-            }
-
-            if e > 0 {
-                x -= 1;
-                tx += 2;
-                e += tx - diameter;
-            }
-        }
-
-        Ok(())
+        draw_circle_filled(self, center, radius)
     }
 
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {

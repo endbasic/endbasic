@@ -474,12 +474,12 @@ where
         })
     }
 
-    fn draw_circle(&mut self, _center: PixelsXY, _radius: u16) -> io::Result<()> {
-        todo!()
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        self.without_sync(|self2| drawing::draw_circle(self2, center, radius))
     }
 
-    fn draw_circle_filled(&mut self, _center: PixelsXY, _radius: u16) -> io::Result<()> {
-        todo!()
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        self.without_sync(|self2| drawing::draw_circle_filled(self2, center, radius))
     }
 
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
