@@ -121,6 +121,119 @@ where
     }
 }
 
+/// Draws a circle via `rasops` with `center` and `radius`.
+///
+/// This implements the [Midpoint circle
+/// algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
+pub fn draw_circle<R>(rasops: &mut R, center: PixelsXY, radius: u16) -> io::Result<()>
+where
+    R: RasterOps,
+{
+    fn point<R: RasterOps>(rasops: &mut R, x: i16, y: i16) -> io::Result<()> {
+        rasops.draw_pixel(PixelsXY { x, y })
+    }
+
+    if radius == 0 {
+        return Ok(());
+    } else if radius == 1 {
+        return rasops.draw_pixel(center);
+    }
+
+    let (diameter, radius): (i16, i16) = match radius.checked_mul(2) {
+        Some(d) => match i16::try_from(d) {
+            Ok(d) => (d, radius as i16),
+            Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big")),
+        },
+        None => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big")),
+    };
+
+    let mut x: i16 = radius - 1;
+    let mut y: i16 = 0;
+    let mut tx: i16 = 1;
+    let mut ty: i16 = 1;
+    let mut e: i16 = tx - diameter;
+
+    while x >= y {
+        point(rasops, center.x + x, center.y - y)?;
+        point(rasops, center.x + x, center.y + y)?;
+        point(rasops, center.x - x, center.y - y)?;
+        point(rasops, center.x - x, center.y + y)?;
+        point(rasops, center.x + y, center.y - x)?;
+        point(rasops, center.x + y, center.y + x)?;
+        point(rasops, center.x - y, center.y - x)?;
+        point(rasops, center.x - y, center.y + x)?;
+
+        if e <= 0 {
+            y += 1;
+            e += ty;
+            ty += 2;
+        }
+
+        if e > 0 {
+            x -= 1;
+            tx += 2;
+            e += tx - diameter;
+        }
+    }
+
+    Ok(())
+}
+
+/// Draws a circle via `rasops` with `center` and `radius`.
+///
+/// This implements the [Midpoint circle
+/// algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
+pub fn draw_circle_filled<R>(rasops: &mut R, center: PixelsXY, radius: u16) -> io::Result<()>
+where
+    R: RasterOps,
+{
+    fn line<R: RasterOps>(rasops: &mut R, x1: i16, y1: i16, x2: i16, y2: i16) -> io::Result<()> {
+        rasops.draw_line(PixelsXY { x: x1, y: y1 }, PixelsXY { x: x2, y: y2 })
+    }
+
+    if radius == 0 {
+        return Ok(());
+    } else if radius == 1 {
+        return rasops.draw_pixel(center);
+    }
+
+    let (diameter, radius): (i16, i16) = match radius.checked_mul(2) {
+        Some(d) => match i16::try_from(d) {
+            Ok(d) => (d, radius as i16),
+
+            Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big")),
+        },
+        None => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big")),
+    };
+
+    let mut x: i16 = radius - 1;
+    let mut y: i16 = 0;
+    let mut tx: i16 = 1;
+    let mut ty: i16 = 1;
+    let mut e: i16 = tx - diameter;
+
+    while x >= y {
+        line(rasops, center.x + x, center.y - y, center.x + x, center.y + y)?;
+        line(rasops, center.x - x, center.y - y, center.x - x, center.y + y)?;
+        line(rasops, center.x + y, center.y - x, center.x + y, center.y + x)?;
+        line(rasops, center.x - y, center.y - x, center.x - y, center.y + x)?;
+
+        if e <= 0 {
+            y += 1;
+            e += ty;
+            ty += 2;
+        }
+
+        if e > 0 {
+            x -= 1;
+            tx += 2;
+            e += tx - diameter;
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod testutils {
     use super::*;
@@ -128,8 +241,9 @@ mod testutils {
     use crate::console::{SizeInPixels, RGB};
 
     /// Representation of captured raster operations.
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
     pub(crate) enum CapturedRasop {
+        DrawLine(i16, i16, i16, i16),
         DrawPixel(i16, i16),
     }
 
@@ -191,8 +305,9 @@ mod testutils {
             unimplemented!();
         }
 
-        fn draw_line(&mut self, _x1y1: PixelsXY, _x2y2: PixelsXY) -> io::Result<()> {
-            unimplemented!();
+        fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
+            self.ops.push(CapturedRasop::DrawLine(x1y1.x, x1y1.y, x2y2.x, x2y2.y));
+            Ok(())
         }
 
         fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
@@ -214,6 +329,116 @@ mod testutils {
 mod tests {
     use super::testutils::*;
     use super::*;
+
+    #[test]
+    fn test_draw_circle_zero() {
+        let mut rasops = RecordingRasops::default();
+        draw_circle(&mut rasops, PixelsXY::new(10, 20), 0).unwrap();
+        assert!(rasops.ops.is_empty());
+    }
+
+    #[test]
+    fn test_draw_circle_dot() {
+        let mut rasops = RecordingRasops::default();
+        draw_circle(&mut rasops, PixelsXY::new(10, 20), 1).unwrap();
+        assert_eq!([CapturedRasop::DrawPixel(10, 20)], rasops.ops.as_slice());
+    }
+
+    #[test]
+    fn test_draw_circle_larger() {
+        let mut rasops = RecordingRasops::default();
+        draw_circle(&mut rasops, PixelsXY::new(10, 20), 4).unwrap();
+        rasops.ops.sort();
+        assert_eq!(
+            [
+                CapturedRasop::DrawPixel(7, 18),
+                CapturedRasop::DrawPixel(7, 19),
+                CapturedRasop::DrawPixel(7, 20),
+                CapturedRasop::DrawPixel(7, 20),
+                CapturedRasop::DrawPixel(7, 21),
+                CapturedRasop::DrawPixel(7, 22),
+                CapturedRasop::DrawPixel(8, 17),
+                CapturedRasop::DrawPixel(8, 23),
+                CapturedRasop::DrawPixel(9, 17),
+                CapturedRasop::DrawPixel(9, 23),
+                CapturedRasop::DrawPixel(10, 17),
+                CapturedRasop::DrawPixel(10, 17),
+                CapturedRasop::DrawPixel(10, 23),
+                CapturedRasop::DrawPixel(10, 23),
+                CapturedRasop::DrawPixel(11, 17),
+                CapturedRasop::DrawPixel(11, 23),
+                CapturedRasop::DrawPixel(12, 17),
+                CapturedRasop::DrawPixel(12, 23),
+                CapturedRasop::DrawPixel(13, 18),
+                CapturedRasop::DrawPixel(13, 19),
+                CapturedRasop::DrawPixel(13, 20),
+                CapturedRasop::DrawPixel(13, 20),
+                CapturedRasop::DrawPixel(13, 21),
+                CapturedRasop::DrawPixel(13, 22),
+            ],
+            rasops.ops.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_draw_circle_corners() {
+        for corner in
+            [PixelsXY::TOP_LEFT, PixelsXY::TOP_RIGHT, PixelsXY::BOTTOM_LEFT, PixelsXY::BOTTOM_RIGHT]
+        {
+            let mut rasops = RecordingRasops::default();
+            draw_circle(&mut rasops, corner, 1).unwrap();
+            assert_eq!([CapturedRasop::DrawPixel(corner.x, corner.y)], rasops.ops.as_slice());
+        }
+    }
+
+    #[test]
+    fn test_draw_circle_filled_zero() {
+        let mut rasops = RecordingRasops::default();
+        draw_circle_filled(&mut rasops, PixelsXY::new(10, 20), 0).unwrap();
+        assert!(rasops.ops.is_empty());
+    }
+
+    #[test]
+    fn test_draw_circle_filled_dot() {
+        let mut rasops = RecordingRasops::default();
+        draw_circle_filled(&mut rasops, PixelsXY::new(10, 20), 1).unwrap();
+        assert_eq!([CapturedRasop::DrawPixel(10, 20)], rasops.ops.as_slice());
+    }
+
+    #[test]
+    fn test_draw_circle_filled_larger() {
+        let mut rasops = RecordingRasops::default();
+        draw_circle_filled(&mut rasops, PixelsXY::new(10, 20), 4).unwrap();
+        rasops.ops.sort();
+        assert_eq!(
+            [
+                CapturedRasop::DrawLine(7, 18, 7, 22),
+                CapturedRasop::DrawLine(7, 19, 7, 21),
+                CapturedRasop::DrawLine(7, 20, 7, 20),
+                CapturedRasop::DrawLine(8, 17, 8, 23),
+                CapturedRasop::DrawLine(9, 17, 9, 23),
+                CapturedRasop::DrawLine(10, 17, 10, 23),
+                CapturedRasop::DrawLine(10, 17, 10, 23),
+                CapturedRasop::DrawLine(11, 17, 11, 23),
+                CapturedRasop::DrawLine(12, 17, 12, 23),
+                CapturedRasop::DrawLine(13, 18, 13, 22),
+                CapturedRasop::DrawLine(13, 19, 13, 21),
+                CapturedRasop::DrawLine(13, 20, 13, 20),
+            ],
+            rasops.ops.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_draw_circle_filled_corners() {
+        for corner in
+            [PixelsXY::TOP_LEFT, PixelsXY::TOP_RIGHT, PixelsXY::BOTTOM_LEFT, PixelsXY::BOTTOM_RIGHT]
+        {
+            let mut rasops = RecordingRasops::default();
+            draw_circle_filled(&mut rasops, corner, 1).unwrap();
+            assert_eq!([CapturedRasop::DrawPixel(corner.x, corner.y)], rasops.ops.as_slice());
+        }
+    }
 
     #[test]
     fn test_draw_line_dot() {
