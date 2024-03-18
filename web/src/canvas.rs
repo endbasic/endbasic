@@ -257,8 +257,12 @@ impl RasterOps for CanvasRasterOps {
         }
     }
 
-    fn clear(&mut self, color: RGB) -> io::Result<()> {
+    fn set_draw_color(&mut self, color: RGB) {
         self.set_fill_style_rgb(color);
+        self.set_stroke_style_rgb(color);
+    }
+
+    fn clear(&mut self) -> io::Result<()> {
         self.context.fill_rect(
             0.0,
             0.0,
@@ -295,7 +299,6 @@ impl RasterOps for CanvasRasterOps {
         x1y1: PixelsXY,
         x2y2: PixelsXY,
         size: SizeInPixels,
-        color: RGB,
     ) -> io::Result<()> {
         let shifted = self
             .context
@@ -306,7 +309,6 @@ impl RasterOps for CanvasRasterOps {
                 f64::from(size.height),
             )
             .map_err(js_value_to_io_error)?;
-        self.set_fill_style_rgb(color);
         self.context.fill_rect(
             f64::from(x1y1.x),
             f64::from(x1y1.y),
@@ -318,29 +320,9 @@ impl RasterOps for CanvasRasterOps {
             .map_err(js_value_to_io_error)
     }
 
-    fn write_text(
-        &mut self,
-        xy: PixelsXY,
-        text: &str,
-        fg_color: RGB,
-        bg_color: RGB,
-    ) -> io::Result<()> {
+    fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()> {
         debug_assert!(!text.is_empty(), "It doesn't make sense to render an empty string");
 
-        let len = match u16::try_from(text.chars().count()) {
-            Ok(v) => v,
-            Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Text too long")),
-        };
-
-        self.set_fill_style_rgb(bg_color);
-        self.context.fill_rect(
-            f64::from(xy.x),
-            f64::from(xy.y),
-            f64::from(ClampedMul::<u16, u16>::clamped_mul(len, self.glyph_size.width)),
-            f64::from(self.glyph_size.height),
-        );
-
-        self.set_fill_style_rgb(fg_color);
         // We must render one character at a time because the glyph width of the original font is
         // not guaranteed to be an integer pixel size.
         let mut x = xy.x;
@@ -366,8 +348,7 @@ impl RasterOps for CanvasRasterOps {
         Ok(())
     }
 
-    fn draw_circle(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
-        self.set_stroke_style_rgb(color);
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
         self.context.begin_path();
         self.context
             .arc(f64::from(center.x), f64::from(center.y), f64::from(radius), 0.0, 2.0 * PI)
@@ -376,8 +357,7 @@ impl RasterOps for CanvasRasterOps {
         Ok(())
     }
 
-    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
-        self.set_fill_style_rgb(color);
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
         self.context.begin_path();
         self.context
             .arc(f64::from(center.x), f64::from(center.y), f64::from(radius), 0.0, 2.0 * PI)
@@ -386,23 +366,20 @@ impl RasterOps for CanvasRasterOps {
         Ok(())
     }
 
-    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, color: RGB) -> io::Result<()> {
+    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         self.context.begin_path();
-        self.set_stroke_style_rgb(color);
         self.context.move_to(f64::from(x1y1.x), f64::from(x1y1.y));
         self.context.line_to(f64::from(x2y2.x), f64::from(x2y2.y));
         self.context.stroke();
         Ok(())
     }
 
-    fn draw_pixel(&mut self, xy: PixelsXY, color: RGB) -> io::Result<()> {
-        self.set_fill_style_rgb(color);
+    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
         self.context.fill_rect(f64::from(xy.x), f64::from(xy.y), 1.0, 1.0);
         Ok(())
     }
 
-    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
-        self.set_stroke_style_rgb(color);
+    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
         self.context.stroke_rect(
             f64::from(xy.x),
             f64::from(xy.y),
@@ -412,8 +389,7 @@ impl RasterOps for CanvasRasterOps {
         Ok(())
     }
 
-    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
-        self.set_fill_style_rgb(color);
+    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
         self.context.fill_rect(
             f64::from(xy.x),
             f64::from(xy.y),
