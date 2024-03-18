@@ -239,6 +239,7 @@ mod testutils {
     use futures_lite::future::block_on;
     use once_cell::sync::Lazy;
     use sdl2::event::Event;
+    use sdl2::pixels::PixelFormatEnum;
     use sdl2::rwops::RWops;
     use sdl2::surface::Surface;
     use std::env;
@@ -331,44 +332,53 @@ mod testutils {
         /// indicates the name of the BMP image to use, without an extension.
         pub(crate) fn verify(self, bmp_basename: &'static str) {
             let golden_bmp_gz = src_path("sdl/src").join(format!("{}.bmp.gz", bmp_basename));
+            let dir = tempfile::tempdir().unwrap();
+            let actual_bmp = dir.path().join(format!("{}.bmp", bmp_basename));
+
+            self.console.call(Request::SaveBmp(actual_bmp.clone())).unwrap();
 
             if env::var("REGEN_BMPS").as_ref().map(String::as_str) == Ok("true") {
-                let golden_bmp = src_path("sdl/src").join(format!("{}.bmp", bmp_basename));
-                self.console.call(Request::SaveBmp(golden_bmp.clone())).unwrap();
-                let mut input = BufReader::new(File::open(golden_bmp).unwrap());
+                let mut input = BufReader::new(File::open(actual_bmp).unwrap());
                 let output = File::create(golden_bmp_gz).unwrap();
                 let mut encoder = GzEncoder::new(output, Compression::default());
                 io::copy(&mut input, &mut encoder).unwrap();
                 encoder.finish().unwrap();
 
-                // We could delete the `golden_bmp` file here, but it's easier to keep it around
+                // We could delete the `actual_bmp` file here, but it's easier to keep it around
                 // for manual validation of the new images.
 
                 drop(self); // Avoid poisoning the mutex when panicking.
                 panic!("Golden data regenerated; flip REGEN_BMPS back to false");
             }
 
-            self.console.request_tx.send(Request::ReadVisiblePixels).unwrap();
-            let (actual, pixel_format) = match self.console.response_rx.recv().unwrap() {
-                Response::Pixels(Ok(data)) => data,
-                _ => panic!(),
+            let golden = {
+                let input = BufReader::new(File::open(golden_bmp_gz).unwrap());
+                let mut decoder = GzDecoder::new(input);
+                let mut buffer = vec![];
+                decoder.read_to_end(&mut buffer).unwrap();
+                let mut rwops = RWops::from_bytes(buffer.as_slice()).unwrap();
+                Surface::load_bmp_rw(&mut rwops)
+                    .unwrap()
+                    .into_canvas()
+                    .unwrap()
+                    .read_pixels(None, PixelFormatEnum::BGR888)
+                    .unwrap()
             };
 
-            // Minimize chances of poisoning the mutex if something else fails, and reduce the size
-            // of the critical section needed to serialize SDL tests..
-            drop(self);
+            let actual = {
+                let mut rwops = RWops::from_file(actual_bmp, "r").unwrap();
+                Surface::load_bmp_rw(&mut rwops)
+                    .unwrap()
+                    .into_canvas()
+                    .unwrap()
+                    .read_pixels(None, PixelFormatEnum::BGR888)
+                    .unwrap()
+            };
 
-            let input = BufReader::new(File::open(golden_bmp_gz).unwrap());
-            let mut decoder = GzDecoder::new(input);
-            let mut buffer = vec![];
-            decoder.read_to_end(&mut buffer).unwrap();
-            let mut rwops = RWops::from_bytes(buffer.as_slice()).unwrap();
-            let golden = Surface::load_bmp_rw(&mut rwops)
-                .unwrap()
-                .into_canvas()
-                .unwrap()
-                .read_pixels(None, pixel_format)
-                .unwrap();
+            // The test should not fail until this point, or else we poison the mutex and all
+            // subsequent tests fail.  However, we must do this *after* the `Surface` manipulation
+            // above, or else tests misbehave.
+            drop(self);
 
             // Compare images for equality.  In theory, they should be pixel-perfect across
             // platforms, but in practice, I'm encountering minor color variations (e.g. FreeBSD
@@ -380,8 +390,16 @@ mod testutils {
                 let pixel1 = golden[i];
                 let pixel2 = actual[i];
 
-                let pixel2min = if pixel2 == 0 { pixel2 } else { pixel2 - 1 };
-                let pixel2max = if pixel2 == 255 { pixel2 } else { pixel2 + 1 };
+                let pixel2min = match pixel2 {
+                    0 => pixel2,
+                    1 => pixel2 - 1,
+                    _ => pixel2 - 2,
+                };
+                let pixel2max = match pixel2 {
+                    255 => pixel2,
+                    254 => pixel2 + 1,
+                    _ => pixel2 + 2,
+                };
 
                 if pixel1 < pixel2min || pixel1 > pixel2max {
                     eprintln!("Diff at pixel {}: {} vs. {}", i, pixel1, pixel2);

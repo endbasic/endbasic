@@ -311,21 +311,6 @@ impl Context {
             self.draw_color = color;
         }
     }
-
-    /// Reads all visible pixels.  This is different from `real_pixels` in that it does not read
-    /// any changes that haven't been written to the screen yet (such as the changes that happen
-    /// when syncing is off).
-    #[cfg(test)]
-    fn read_visible_pixels(&mut self) -> io::Result<Vec<u8>> {
-        let surface = self.window.surface(&self.event_pump).map_err(string_error_to_io_error)?;
-        let mut copy = Surface::new(surface.width(), surface.height(), self.pixel_format)
-            .map_err(string_error_to_io_error)?;
-        surface.blit(None, &mut copy, None).map_err(string_error_to_io_error)?;
-        copy.into_canvas()
-            .map_err(string_error_to_io_error)?
-            .read_pixels(None, self.pixel_format)
-            .map_err(string_error_to_io_error)
-    }
 }
 
 impl RasterOps for Context {
@@ -415,23 +400,22 @@ impl RasterOps for Context {
             Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "String too long")),
         };
 
-        let surface = self
-            .font
-            .font
-            .render(text)
-            .shaded(fg_color, bg_color)
-            .map_err(font_error_to_io_error)?;
-        let texture = self
-            .texture_creator
-            .create_texture_from_surface(&surface)
-            .map_err(texture_value_error_to_io_error)?;
-
         let rect = Rect::new(
             i32::from(xy.x),
             i32::from(xy.y),
             len.clamped_mul(self.font.glyph_size.width),
             u32::from(self.font.glyph_size.height),
         );
+
+        self.set_draw_color(bg_color);
+        self.canvas.fill_rect(rect).map_err(string_error_to_io_error)?;
+
+        let surface =
+            self.font.font.render(text).blended(fg_color).map_err(font_error_to_io_error)?;
+        let texture = self
+            .texture_creator
+            .create_texture_from_surface(&surface)
+            .map_err(texture_value_error_to_io_error)?;
         self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)
     }
 
@@ -607,12 +591,6 @@ impl SharedContext {
     }
 
     #[cfg(test)]
-    fn read_visible_pixels(&mut self) -> io::Result<(Vec<u8>, PixelFormatEnum)> {
-        let mut ctx = (*self.0).borrow_mut();
-        ctx.read_visible_pixels().map(|ps| (ps, ctx.pixel_format))
-    }
-
-    #[cfg(test)]
     fn save_bmp(&self, path: &Path) -> io::Result<()> {
         let ctx = (*self.0).borrow_mut();
         let surface = ctx.window.surface(&ctx.event_pump).map_err(string_error_to_io_error)?;
@@ -718,8 +696,6 @@ pub(crate) enum Request {
     #[cfg(test)]
     RawWrite(String, PixelsXY, RGB, RGB),
     #[cfg(test)]
-    ReadVisiblePixels,
-    #[cfg(test)]
     SaveBmp(PathBuf),
 }
 
@@ -730,9 +706,6 @@ pub(crate) enum Response {
     SizeChars(CharsXY),
     SizePixels(SizeInPixels),
     SetSync(io::Result<bool>),
-
-    #[cfg(test)]
-    Pixels(io::Result<(Vec<u8>, PixelFormatEnum)>),
 }
 
 /// Implementation of `InputOps` that should never be used.
@@ -821,9 +794,6 @@ pub(crate) fn run(
                     Request::RawWrite(text, start, fg_color, bg_color) => {
                         Response::Empty(ctx.raw_write(&text, start, fg_color, bg_color))
                     }
-
-                    #[cfg(test)]
-                    Request::ReadVisiblePixels => Response::Pixels(ctx.read_visible_pixels()),
 
                     #[cfg(test)]
                     Request::SaveBmp(path) => Response::Empty(ctx.save_bmp(&path)),
