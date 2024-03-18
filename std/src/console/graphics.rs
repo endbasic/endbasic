@@ -96,6 +96,17 @@ impl ClampedMul<u16, i16> for u16 {
     }
 }
 
+impl ClampedMul<u16, u16> for u16 {
+    fn clamped_mul(self, rhs: u16) -> u16 {
+        let product = u32::from(self) * u32::from(rhs);
+        if product > u16::MAX as u32 {
+            u16::MAX
+        } else {
+            product as u16
+        }
+    }
+}
+
 impl ClampedMul<u16, i32> for u16 {
     fn clamped_mul(self, rhs: u16) -> i32 {
         match i32::from(self).checked_mul(i32::from(rhs)) {
@@ -161,8 +172,11 @@ pub trait RasterOps {
     /// Queries information about the backend.
     fn get_info(&self) -> RasterInfo;
 
+    /// Sets the drawing color for subsequent operations.
+    fn set_draw_color(&mut self, color: RGB);
+
     /// Clears the whole console with the given color.
-    fn clear(&mut self, color: RGB) -> io::Result<()>;
+    fn clear(&mut self) -> io::Result<()>;
 
     /// Sets whether automatic presentation of the canvas is enabled or not.
     ///
@@ -184,42 +198,30 @@ pub trait RasterOps {
     fn put_pixels(&mut self, xy: PixelsXY, data: &Self::ID) -> io::Result<()>;
 
     /// Moves the rectangular region specified by `x1y1` and `size` to `x2y2`.  The original region
-    /// is erased with `color`.
-    fn move_pixels(
-        &mut self,
-        x1y1: PixelsXY,
-        x2y2: PixelsXY,
-        size: SizeInPixels,
-        color: RGB,
-    ) -> io::Result<()>;
+    /// is erased with the current drawing color.
+    fn move_pixels(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, size: SizeInPixels)
+        -> io::Result<()>;
 
-    /// Writes `text` starting at `xy`.  The font is set to `fg_color` and the background of the
-    /// text is cleared with `bg_color`.
-    fn write_text(
-        &mut self,
-        xy: PixelsXY,
-        text: &str,
-        fg_color: RGB,
-        bg_color: RGB,
-    ) -> io::Result<()>;
+    /// Writes `text` starting at `xy` with the current drawing color.
+    fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()>;
 
-    /// Draws the outline of a circle at `center` with `radius` using the `color`.
-    fn draw_circle(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()>;
+    /// Draws the outline of a circle at `center` with `radius` using the current drawing color.
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()>;
 
-    /// Draws a filled circle at `center` with `radius` using `color`.
-    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()>;
+    /// Draws a filled circle at `center` with `radius` using the current drawing color.
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()>;
 
-    /// Draws a line from `x1y1` to `x2y2` using `color`.
-    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, color: RGB) -> io::Result<()>;
+    /// Draws a line from `x1y1` to `x2y2` using the current drawing color.
+    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()>;
 
-    /// Draws a single pixel at `xy` using `color`.
-    fn draw_pixel(&mut self, xy: PixelsXY, color: RGB) -> io::Result<()>;
+    /// Draws a single pixel at `xy` using the current drawing color.
+    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()>;
 
-    /// Draws the outline of a rectangle from `x1y1` to `x2y2` using `color`.
-    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()>;
+    /// Draws the outline of a rectangle from `x1y1` to `x2y2` using the current drawing color.
+    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()>;
 
-    /// Draws a filled rectangle from `x1y1` to `x2y2` using `color`.
-    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()>;
+    /// Draws a filled rectangle from `x1y1` to `x2y2` using the current drawing color.
+    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()>;
 }
 
 /// Primitive graphical console input operations.
@@ -339,7 +341,8 @@ where
         // under it are visible.  This was done before in the HTML canvas but was lost when I added
         // the GraphicsConsole abstraction.  Maybe all RGB colors should switch to RGBA.  Or maybe
         // we should special-case the cursor drawing.
-        self.raster_ops.draw_rect_filled(x1y1, self.glyph_size, self.fg_color)
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_rect_filled(x1y1, self.glyph_size)
     }
 
     /// Clears the cursor at the current position by restoring the contents of the screen saved by
@@ -375,7 +378,8 @@ where
             self.size_pixels.height - self.glyph_size.height,
         );
 
-        self.raster_ops.move_pixels(x1y1, x2y2, size, self.bg_color)?;
+        self.raster_ops.set_draw_color(self.bg_color);
+        self.raster_ops.move_pixels(x1y1, x2y2, size)?;
 
         self.cursor_pos.x = 0;
         Ok(())
@@ -390,20 +394,24 @@ where
             let fit_chars = self.size_chars.x - self.cursor_pos.x;
 
             let remaining = line_buffer.split_off(usize::from(fit_chars));
-            let len = line_buffer.len();
+            let len = match u16::try_from(line_buffer.len()) {
+                Ok(len) => len,
+                Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Text too long")),
+            };
+
             if len > 0 {
-                self.raster_ops.write_text(
-                    self.cursor_pos.clamped_mul(self.glyph_size),
-                    &line_buffer.into_inner(),
-                    self.fg_color,
-                    self.bg_color,
-                )?;
-                self.cursor_pos.x += match u16::try_from(len) {
-                    Ok(len) => len,
-                    Err(e) => {
-                        panic!("Partial length was computed to fit on the screen: {}", e)
-                    }
-                };
+                let xy = self.cursor_pos.clamped_mul(self.glyph_size);
+                let size = SizeInPixels::new(
+                    len.clamped_mul(self.glyph_size.width),
+                    self.glyph_size.height,
+                );
+
+                self.raster_ops.set_draw_color(self.bg_color);
+                self.raster_ops.draw_rect_filled(xy, size)?;
+
+                self.raster_ops.set_draw_color(self.fg_color);
+                self.raster_ops.write_text(xy, &line_buffer.into_inner())?;
+                self.cursor_pos.x += len;
             }
 
             line_buffer = remaining;
@@ -427,7 +435,8 @@ where
     fn clear(&mut self, how: ClearType) -> io::Result<()> {
         match how {
             ClearType::All => {
-                self.raster_ops.clear(self.bg_color)?;
+                self.raster_ops.set_draw_color(self.bg_color);
+                self.raster_ops.clear()?;
                 self.cursor_pos.y = 0;
                 self.cursor_pos.x = 0;
                 self.cursor_backup = None;
@@ -436,7 +445,8 @@ where
                 self.clear_cursor()?;
                 let xy = PixelsXY::new(0, self.cursor_pos.y.clamped_mul(self.glyph_size.height));
                 let size = SizeInPixels::new(self.size_pixels.width, self.glyph_size.height);
-                self.raster_ops.draw_rect_filled(xy, size, self.bg_color)?;
+                self.raster_ops.set_draw_color(self.bg_color);
+                self.raster_ops.draw_rect_filled(xy, size)?;
                 self.cursor_pos.x = 0;
             }
             ClearType::PreviousChar => {
@@ -444,7 +454,8 @@ where
                     self.clear_cursor()?;
                     let previous_pos = CharsXY::new(self.cursor_pos.x - 1, self.cursor_pos.y);
                     let origin = previous_pos.clamped_mul(self.glyph_size);
-                    self.raster_ops.draw_rect_filled(origin, self.glyph_size, self.bg_color)?;
+                    self.raster_ops.set_draw_color(self.bg_color);
+                    self.raster_ops.draw_rect_filled(origin, self.glyph_size)?;
                     self.cursor_pos = previous_pos;
                 }
             }
@@ -457,7 +468,8 @@ where
                     (i32::from(self.size_pixels.width) - i32::from(pos.x)).clamped_into(),
                     self.glyph_size.height,
                 );
-                self.raster_ops.draw_rect_filled(pos, size, self.bg_color)?;
+                self.raster_ops.set_draw_color(self.bg_color);
+                self.raster_ops.draw_rect_filled(pos, size)?;
             }
         }
         self.draw_cursor()?;
@@ -593,34 +605,40 @@ where
     }
 
     fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        self.raster_ops.draw_circle(center, radius, self.fg_color)?;
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_circle(center, radius)?;
         self.present_canvas()
     }
 
     fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        self.raster_ops.draw_circle_filled(center, radius, self.fg_color)?;
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_circle_filled(center, radius)?;
         self.present_canvas()
     }
 
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        self.raster_ops.draw_line(x1y1, x2y2, self.fg_color)?;
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_line(x1y1, x2y2)?;
         self.present_canvas()
     }
 
     fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
-        self.raster_ops.draw_pixel(xy, self.fg_color)?;
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_pixel(xy)?;
         self.present_canvas()
     }
 
     fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         let (xy, size) = rect_points(x1y1, x2y2);
-        self.raster_ops.draw_rect(xy, size, self.fg_color)?;
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_rect(xy, size)?;
         self.present_canvas()
     }
 
     fn draw_rect_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         let (xy, size) = rect_points(x1y1, x2y2);
-        self.raster_ops.draw_rect_filled(xy, size, self.fg_color)?;
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_rect_filled(xy, size)?;
         self.present_canvas()
     }
 
@@ -680,6 +698,13 @@ mod tests {
         assert_eq!(0i16, ClampedMul::<u16, i16>::clamped_mul(0u16, 0u16));
         assert_eq!(55i16, ClampedMul::<u16, i16>::clamped_mul(11u16, 5u16));
         assert_eq!(i16::MAX, ClampedMul::<u16, i16>::clamped_mul(u16::MAX, u16::MAX));
+    }
+
+    #[test]
+    fn test_clamped_mul_u16_u16_u16() {
+        assert_eq!(0u16, ClampedMul::<u16, u16>::clamped_mul(0u16, 0u16));
+        assert_eq!(55u16, ClampedMul::<u16, u16>::clamped_mul(11u16, 5u16));
+        assert_eq!(u16::MAX, ClampedMul::<u16, u16>::clamped_mul(u16::MAX, u16::MAX));
     }
 
     #[test]

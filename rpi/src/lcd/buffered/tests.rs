@@ -91,8 +91,9 @@ fn test_fb_addr() {
 fn test_damage_extend_right_down() {
     Tester::new(size(10, 12))
         .op(|l| l.set_sync(false))
-        .op(|l| l.fill(xy(2, 1), xy(2, 1), (255, 255, 255)).unwrap())
-        .op(|l| l.fill(xy(4, 2), xy(6, 7), (255, 255, 255)).unwrap())
+        .op(|l| l.set_draw_color((255, 255, 255)))
+        .op(|l| l.fill(xy(2, 1), xy(2, 1)).unwrap())
+        .op(|l| l.fill(xy(4, 2), xy(6, 7)).unwrap())
         .expect_damage(xy(2, 1), xy(6, 7))
         .ignore_pixels()
         .check();
@@ -102,8 +103,9 @@ fn test_damage_extend_right_down() {
 fn test_damage_extend_up_left() {
     Tester::new(size(10, 12))
         .op(|l| l.set_sync(false))
-        .op(|l| l.fill(xy(4, 2), xy(6, 7), (255, 255, 255)).unwrap())
-        .op(|l| l.fill(xy(2, 1), xy(2, 1), (255, 255, 255)).unwrap())
+        .op(|l| l.set_draw_color((255, 255, 255)))
+        .op(|l| l.fill(xy(4, 2), xy(6, 7)).unwrap())
+        .op(|l| l.fill(xy(2, 1), xy(2, 1)).unwrap())
         .expect_damage(xy(2, 1), xy(6, 7))
         .ignore_pixels()
         .check();
@@ -112,7 +114,8 @@ fn test_damage_extend_up_left() {
 #[test]
 fn test_fill_one_pixel_sync() {
     Tester::new(size(8, 4))
-        .op(|l| l.fill(xy(3, 2), xy(3, 2), (100, 200, 50)).unwrap())
+        .op(|l| l.set_draw_color((100, 200, 50)))
+        .op(|l| l.fill(xy(3, 2), xy(3, 2)).unwrap())
         .expect_pixel(xy(3, 2), (100, 200, 50))
         .expect_op("set_data: from=(3, 2), to=(3, 2), data=[100, 200, 50]")
         .check();
@@ -122,7 +125,8 @@ fn test_fill_one_pixel_sync() {
 fn test_fill_one_pixel_no_sync() {
     Tester::new(size(8, 4))
         .op(|l| l.set_sync(false))
-        .op(|l| l.fill(xy(3, 2), xy(3, 2), (100, 200, 50)).unwrap())
+        .op(|l| l.set_draw_color((100, 200, 50)))
+        .op(|l| l.fill(xy(3, 2), xy(3, 2)).unwrap())
         .expect_pixel(xy(3, 2), (100, 200, 50))
         .expect_damage(xy(3, 2), xy(3, 2))
         .check();
@@ -131,7 +135,8 @@ fn test_fill_one_pixel_no_sync() {
 #[test]
 fn test_fill_rect_sync() {
     Tester::new(size(8, 4))
-        .op(|l| l.fill(xy(2, 1), xy(5, 3), (210, 220, 230)).unwrap())
+        .op(|l| l.set_draw_color((210, 220, 230)))
+        .op(|l| l.fill(xy(2, 1), xy(5, 3)).unwrap())
         .expect_pixel(xy(2, 1), (210, 220, 230))
         .expect_pixel(xy(3, 1), (210, 220, 230))
         .expect_pixel(xy(4, 1), (210, 220, 230))
@@ -152,7 +157,8 @@ fn test_fill_rect_sync() {
 fn test_fill_rect_no_sync() {
     Tester::new(size(8, 4))
         .op(|l| l.set_sync(false))
-        .op(|l| l.fill(xy(2, 1), xy(5, 3), (210, 220, 230)).unwrap())
+        .op(|l| l.set_draw_color((210, 220, 230)))
+        .op(|l| l.fill(xy(2, 1), xy(5, 3)).unwrap())
         .expect_pixel(xy(2, 1), (210, 220, 230))
         .expect_pixel(xy(3, 1), (210, 220, 230))
         .expect_pixel(xy(4, 1), (210, 220, 230))
@@ -178,7 +184,8 @@ fn test_force_present_canvas_no_damage() {
 fn test_force_present_canvas_damage() {
     Tester::new(size(10, 12))
         .op(|l| l.set_sync(false))
-        .op(|l| l.fill(xy(2, 3), xy(2, 3), (120, 40, 180)).unwrap())
+        .op(|l| l.set_draw_color((120, 40, 180)))
+        .op(|l| l.fill(xy(2, 3), xy(2, 3)).unwrap())
         .op(|l| l.force_present_canvas().unwrap())
         .expect_pixel(xy(2, 3), (120, 40, 180))
         .expect_op("set_data: from=(2, 3), to=(2, 3), data=[120, 40, 180]")
@@ -197,7 +204,8 @@ fn test_get_info() {
 #[test]
 fn test_clear() {
     Tester::new(size(2, 3))
-        .op(|l| l.clear((10, 20, 30)).unwrap())
+        .op(|l| l.set_draw_color((10, 20, 30)))
+        .op(|l| l.clear().unwrap())
         .ignore_pixels()
         .expect_op("set_data: from=(0, 0), to=(1, 2), data=[10, 20, 30, 10, 20, 30, 10, 20, 30, 10, 20, 30, 10, 20, 30, 10, 20, 30]")
         .check();
@@ -208,9 +216,11 @@ fn test_present_canvas() {
     Tester::new(size(10, 20))
         .op(|l| {
             l.set_sync(false);
-            l.draw_pixel(PixelsXY::new(5, 6), (1, 2, 3)).unwrap();
+            l.set_draw_color((1, 2, 3));
+            l.draw_pixel(PixelsXY::new(5, 6)).unwrap();
             l.present_canvas().unwrap();
-            l.draw_pixel(PixelsXY::new(0, 0), (7, 8, 9)).unwrap();
+            l.set_draw_color((7, 8, 9));
+            l.draw_pixel(PixelsXY::new(0, 0)).unwrap();
         })
         .expect_pixel(xy(5, 6), (1, 2, 3))
         .expect_pixel(xy(0, 0), (7, 8, 9))
@@ -222,7 +232,8 @@ fn test_present_canvas() {
 #[test]
 fn test_read_pixels_sync() {
     Tester::new(size(10, 12))
-        .op(|l| l.fill(xy(4, 2), xy(5, 4), (120, 40, 180)).unwrap())
+        .op(|l| l.set_draw_color((120, 40, 180)))
+        .op(|l| l.fill(xy(4, 2), xy(5, 4)).unwrap())
         .op(|l| {
             let size = SizeInPixels::new(2, 3);
             let data = l.read_pixels(PixelsXY { x: 3, y: 1 }, size).unwrap();
@@ -238,7 +249,8 @@ fn test_read_pixels_sync() {
 fn test_read_pixels_no_sync() {
     Tester::new(size(10, 12))
         .op(|l| l.set_sync(false))
-        .op(|l| l.fill(xy(4, 2), xy(5, 4), (120, 40, 180)).unwrap())
+        .op(|l| l.set_draw_color((120, 40, 180)))
+        .op(|l| l.fill(xy(4, 2), xy(5, 4)).unwrap())
         .op(|l| {
             let size = SizeInPixels::new(2, 3);
             let data = l.read_pixels(PixelsXY { x: 3, y: 1 }, size).unwrap();
@@ -284,48 +296,29 @@ fn test_put_pixels_no_sync() {
 #[test]
 fn test_write_text_sync() {
     Tester::new(size(20, 30))
-        .op(|l| l.write_text(PixelsXY::new(0, 0), "#", (250, 251, 252), (100, 101, 102)).unwrap())
-        .expect_pixel(xy(0, 0), (100, 101, 102))
-        .expect_pixel(xy(1, 0), (100, 101, 102))
+        .op(|l| l.set_draw_color((250, 251, 252)))
+        .op(|l| l.write_text(PixelsXY::new(0, 0), "#").unwrap())
         .expect_pixel(xy(2, 0), (250, 251, 252))
-        .expect_pixel(xy(3, 0), (100, 101, 102))
         .expect_pixel(xy(4, 0), (250, 251, 252))
-        .expect_pixel(xy(0, 1), (100, 101, 102))
         .expect_pixel(xy(1, 1), (250, 251, 252))
-        .expect_pixel(xy(2, 1), (100, 101, 102))
         .expect_pixel(xy(3, 1), (250, 251, 252))
-        .expect_pixel(xy(4, 1), (100, 101, 102))
         .expect_pixel(xy(0, 2), (250, 251, 252))
         .expect_pixel(xy(1, 2), (250, 251, 252))
         .expect_pixel(xy(2, 2), (250, 251, 252))
         .expect_pixel(xy(3, 2), (250, 251, 252))
         .expect_pixel(xy(4, 2), (250, 251, 252))
-        .expect_pixel(xy(0, 3), (100, 101, 102))
         .expect_pixel(xy(1, 3), (250, 251, 252))
-        .expect_pixel(xy(2, 3), (100, 101, 102))
         .expect_pixel(xy(3, 3), (250, 251, 252))
-        .expect_pixel(xy(4, 3), (100, 101, 102))
         .expect_pixel(xy(0, 4), (250, 251, 252))
         .expect_pixel(xy(1, 4), (250, 251, 252))
         .expect_pixel(xy(2, 4), (250, 251, 252))
         .expect_pixel(xy(3, 4), (250, 251, 252))
         .expect_pixel(xy(4, 4), (250, 251, 252))
-        .expect_pixel(xy(0, 5), (100, 101, 102))
         .expect_pixel(xy(1, 5), (250, 251, 252))
-        .expect_pixel(xy(2, 5), (100, 101, 102))
         .expect_pixel(xy(3, 5), (250, 251, 252))
-        .expect_pixel(xy(4, 5), (100, 101, 102))
         .expect_pixel(xy(0, 6), (250, 251, 252))
-        .expect_pixel(xy(1, 6), (100, 101, 102))
         .expect_pixel(xy(2, 6), (250, 251, 252))
-        .expect_pixel(xy(3, 6), (100, 101, 102))
-        .expect_pixel(xy(4, 6), (100, 101, 102))
-        .expect_pixel(xy(0, 7), (100, 101, 102))
-        .expect_pixel(xy(1, 7), (100, 101, 102))
-        .expect_pixel(xy(2, 7), (100, 101, 102))
-        .expect_pixel(xy(3, 7), (100, 101, 102))
-        .expect_pixel(xy(4, 7), (100, 101, 102))
-        .expect_op("set_data: from=(0, 0), to=(4, 7), data=[100, 101, 102, 100, 101, 102, 250, 251, 252, 100, 101, 102, 250, 251, 252, 100, 101, 102, 250, 251, 252, 100, 101, 102, 250, 251, 252, 100, 101, 102, 250, 251, 252, 250, 251, 252, 250, 251, 252, 250, 251, 252, 250, 251, 252, 100, 101, 102, 250, 251, 252, 100, 101, 102, 250, 251, 252, 100, 101, 102, 250, 251, 252, 250, 251, 252, 250, 251, 252, 250, 251, 252, 250, 251, 252, 100, 101, 102, 250, 251, 252, 100, 101, 102, 250, 251, 252, 100, 101, 102, 250, 251, 252, 100, 101, 102, 250, 251, 252, 100, 101, 102, 100, 101, 102, 100, 101, 102, 100, 101, 102, 100, 101, 102, 100, 101, 102, 100, 101, 102]")
+        .expect_op("set_data: from=(0, 0), to=(4, 6), data=[0, 0, 0, 0, 0, 0, 250, 251, 252, 0, 0, 0, 250, 251, 252, 0, 0, 0, 250, 251, 252, 0, 0, 0, 250, 251, 252, 0, 0, 0, 250, 251, 252, 250, 251, 252, 250, 251, 252, 250, 251, 252, 250, 251, 252, 0, 0, 0, 250, 251, 252, 0, 0, 0, 250, 251, 252, 0, 0, 0, 250, 251, 252, 250, 251, 252, 250, 251, 252, 250, 251, 252, 250, 251, 252, 0, 0, 0, 250, 251, 252, 0, 0, 0, 250, 251, 252, 0, 0, 0, 250, 251, 252, 0, 0, 0, 250, 251, 252, 0, 0, 0, 0, 0, 0]")
         .check();
 }
 
@@ -334,89 +327,36 @@ fn test_write_text_no_sync() {
     Tester::new(size(20, 30))
         .op(|l| {
             l.set_sync(false);
-            l.write_text(PixelsXY::new(2, 3), "Hi", (250, 251, 252), (100, 101, 102)).unwrap()
+            l.set_draw_color((250, 251, 252));
+            l.write_text(PixelsXY::new(2, 3), "Hi").unwrap()
         })
-        .expect_damage(xy(2, 3), xy(11, 10))
+        .expect_damage(xy(2, 3), xy(10, 8))
         .expect_pixel(xy(2, 3), (250, 251, 252))
         .expect_pixel(xy(3, 3), (250, 251, 252))
         .expect_pixel(xy(4, 3), (250, 251, 252))
-        .expect_pixel(xy(5, 3), (100, 101, 102))
         .expect_pixel(xy(6, 3), (250, 251, 252))
-        .expect_pixel(xy(7, 3), (100, 101, 102))
-        .expect_pixel(xy(8, 3), (100, 101, 102))
         .expect_pixel(xy(9, 3), (250, 251, 252))
-        .expect_pixel(xy(10, 3), (100, 101, 102))
-        .expect_pixel(xy(11, 3), (100, 101, 102))
-        .expect_pixel(xy(2, 4), (100, 101, 102))
         .expect_pixel(xy(3, 4), (250, 251, 252))
-        .expect_pixel(xy(4, 4), (100, 101, 102))
-        .expect_pixel(xy(5, 4), (100, 101, 102))
         .expect_pixel(xy(6, 4), (250, 251, 252))
-        .expect_pixel(xy(7, 4), (100, 101, 102))
-        .expect_pixel(xy(8, 4), (100, 101, 102))
-        .expect_pixel(xy(9, 4), (100, 101, 102))
-        .expect_pixel(xy(10, 4), (100, 101, 102))
-        .expect_pixel(xy(11, 4), (100, 101, 102))
-        .expect_pixel(xy(2, 5), (100, 101, 102))
         .expect_pixel(xy(3, 5), (250, 251, 252))
         .expect_pixel(xy(4, 5), (250, 251, 252))
         .expect_pixel(xy(5, 5), (250, 251, 252))
         .expect_pixel(xy(6, 5), (250, 251, 252))
-        .expect_pixel(xy(7, 5), (100, 101, 102))
         .expect_pixel(xy(8, 5), (250, 251, 252))
         .expect_pixel(xy(9, 5), (250, 251, 252))
-        .expect_pixel(xy(10, 5), (100, 101, 102))
-        .expect_pixel(xy(11, 5), (100, 101, 102))
-        .expect_pixel(xy(2, 6), (100, 101, 102))
         .expect_pixel(xy(3, 6), (250, 251, 252))
-        .expect_pixel(xy(4, 6), (100, 101, 102))
-        .expect_pixel(xy(5, 6), (100, 101, 102))
         .expect_pixel(xy(6, 6), (250, 251, 252))
-        .expect_pixel(xy(7, 6), (100, 101, 102))
-        .expect_pixel(xy(8, 6), (100, 101, 102))
         .expect_pixel(xy(9, 6), (250, 251, 252))
-        .expect_pixel(xy(10, 6), (100, 101, 102))
-        .expect_pixel(xy(11, 6), (100, 101, 102))
-        .expect_pixel(xy(2, 7), (100, 101, 102))
         .expect_pixel(xy(3, 7), (250, 251, 252))
-        .expect_pixel(xy(4, 7), (100, 101, 102))
-        .expect_pixel(xy(5, 7), (100, 101, 102))
         .expect_pixel(xy(6, 7), (250, 251, 252))
-        .expect_pixel(xy(7, 7), (100, 101, 102))
-        .expect_pixel(xy(8, 7), (100, 101, 102))
         .expect_pixel(xy(9, 7), (250, 251, 252))
-        .expect_pixel(xy(10, 7), (100, 101, 102))
-        .expect_pixel(xy(11, 7), (100, 101, 102))
         .expect_pixel(xy(2, 8), (250, 251, 252))
         .expect_pixel(xy(3, 8), (250, 251, 252))
         .expect_pixel(xy(4, 8), (250, 251, 252))
-        .expect_pixel(xy(5, 8), (100, 101, 102))
         .expect_pixel(xy(6, 8), (250, 251, 252))
-        .expect_pixel(xy(7, 8), (100, 101, 102))
         .expect_pixel(xy(8, 8), (250, 251, 252))
         .expect_pixel(xy(9, 8), (250, 251, 252))
         .expect_pixel(xy(10, 8), (250, 251, 252))
-        .expect_pixel(xy(11, 8), (100, 101, 102))
-        .expect_pixel(xy(2, 9), (100, 101, 102))
-        .expect_pixel(xy(3, 9), (100, 101, 102))
-        .expect_pixel(xy(4, 9), (100, 101, 102))
-        .expect_pixel(xy(5, 9), (100, 101, 102))
-        .expect_pixel(xy(6, 9), (100, 101, 102))
-        .expect_pixel(xy(7, 9), (100, 101, 102))
-        .expect_pixel(xy(8, 9), (100, 101, 102))
-        .expect_pixel(xy(9, 9), (100, 101, 102))
-        .expect_pixel(xy(10, 9), (100, 101, 102))
-        .expect_pixel(xy(11, 9), (100, 101, 102))
-        .expect_pixel(xy(2, 10), (100, 101, 102))
-        .expect_pixel(xy(3, 10), (100, 101, 102))
-        .expect_pixel(xy(4, 10), (100, 101, 102))
-        .expect_pixel(xy(5, 10), (100, 101, 102))
-        .expect_pixel(xy(6, 10), (100, 101, 102))
-        .expect_pixel(xy(7, 10), (100, 101, 102))
-        .expect_pixel(xy(8, 10), (100, 101, 102))
-        .expect_pixel(xy(9, 10), (100, 101, 102))
-        .expect_pixel(xy(10, 10), (100, 101, 102))
-        .expect_pixel(xy(11, 10), (100, 101, 102))
         .check();
 }
 
@@ -425,16 +365,14 @@ fn test_write_text_clip() {
     Tester::new(size(20, 30))
         .op(|l| {
             l.set_sync(false);
-            l.write_text(PixelsXY::new(17, 27), "Hi", (250, 251, 252), (100, 101, 102)).unwrap()
+            l.set_draw_color((250, 251, 252));
+            l.write_text(PixelsXY::new(17, 27), "Hi").unwrap()
         })
         .expect_damage(xy(17, 27), xy(19, 29))
         .expect_pixel(xy(17, 27), (250, 251, 252))
         .expect_pixel(xy(18, 27), (250, 251, 252))
         .expect_pixel(xy(19, 27), (250, 251, 252))
-        .expect_pixel(xy(17, 28), (100, 101, 102))
         .expect_pixel(xy(18, 28), (250, 251, 252))
-        .expect_pixel(xy(19, 28), (100, 101, 102))
-        .expect_pixel(xy(17, 29), (100, 101, 102))
         .expect_pixel(xy(18, 29), (250, 251, 252))
         .expect_pixel(xy(19, 29), (250, 251, 252))
         .check();
@@ -443,7 +381,8 @@ fn test_write_text_clip() {
 #[test]
 fn test_draw_pixel_sync() {
     Tester::new(size(20, 30))
-        .op(|l| l.draw_pixel(PixelsXY::new(4, 5), (50, 51, 52)).unwrap())
+        .op(|l| l.set_draw_color((50, 51, 52)))
+        .op(|l| l.draw_pixel(PixelsXY::new(4, 5)).unwrap())
         .expect_pixel(xy(4, 5), (50, 51, 52))
         .expect_op("set_data: from=(4, 5), to=(4, 5), data=[50, 51, 52]")
         .check();
@@ -452,9 +391,10 @@ fn test_draw_pixel_sync() {
 #[test]
 fn test_draw_pixel_no_sync() {
     Tester::new(size(20, 30))
+        .op(|l| l.set_draw_color((50, 51, 52)))
         .op(|l| {
             l.set_sync(false);
-            l.draw_pixel(PixelsXY::new(4, 5), (50, 51, 52)).unwrap();
+            l.draw_pixel(PixelsXY::new(4, 5)).unwrap();
         })
         .expect_damage(xy(4, 5), xy(4, 5))
         .expect_pixel(xy(4, 5), (50, 51, 52))
@@ -464,13 +404,15 @@ fn test_draw_pixel_no_sync() {
 #[test]
 fn test_draw_pixel_limits() {
     Tester::new(size(20, 30))
-        .op(|l| l.draw_pixel(PixelsXY::new(0, 0), (50, 51, 52)).unwrap())
+        .op(|l| l.set_draw_color((50, 51, 52)))
+        .op(|l| l.draw_pixel(PixelsXY::new(0, 0)).unwrap())
         .expect_pixel(xy(0, 0), (50, 51, 52))
         .expect_op("set_data: from=(0, 0), to=(0, 0), data=[50, 51, 52]")
         .check();
 
     Tester::new(size(20, 30))
-        .op(|l| l.draw_pixel(PixelsXY::new(19, 29), (50, 51, 52)).unwrap())
+        .op(|l| l.set_draw_color((50, 51, 52)))
+        .op(|l| l.draw_pixel(PixelsXY::new(19, 29)).unwrap())
         .expect_pixel(xy(19, 29), (50, 51, 52))
         .expect_op("set_data: from=(19, 29), to=(19, 29), data=[50, 51, 52]")
         .check();
@@ -479,15 +421,18 @@ fn test_draw_pixel_limits() {
 #[test]
 fn test_draw_pixel_out_of_bounds() {
     Tester::new(size(20, 30))
-        .op(|l| l.draw_pixel(PixelsXY::new(-5, 10), (50, 51, 52)).unwrap())
+        .op(|l| l.set_draw_color((50, 51, 52)))
+        .op(|l| l.draw_pixel(PixelsXY::new(-5, 10)).unwrap())
         .check();
 
     Tester::new(size(20, 30))
-        .op(|l| l.draw_pixel(PixelsXY::new(5, -10), (50, 51, 52)).unwrap())
+        .op(|l| l.set_draw_color((50, 51, 52)))
+        .op(|l| l.draw_pixel(PixelsXY::new(5, -10)).unwrap())
         .check();
 
     Tester::new(size(20, 30))
-        .op(|l| l.draw_pixel(PixelsXY::new(20, 30), (50, 51, 52)).unwrap())
+        .op(|l| l.set_draw_color((50, 51, 52)))
+        .op(|l| l.draw_pixel(PixelsXY::new(20, 30)).unwrap())
         .check();
 }
 
@@ -495,10 +440,10 @@ fn test_draw_pixel_out_of_bounds() {
 fn test_draw_rect_filled_sync() {
     Tester::new(size(20, 30))
         .op(|l| {
+            l.set_draw_color((50, 51, 52));
             l.draw_rect_filled(
                 PixelsXY::new(4, 5),
                 SizeInPixels::new(2, 3),
-                (50, 51, 52),
             )
             .unwrap()
         })
@@ -516,8 +461,9 @@ fn test_draw_rect_filled_sync() {
 fn test_draw_rect_filled_no_sync() {
     Tester::new(size(20, 30))
         .op(|l| {
+            l.set_draw_color((50, 51, 52));
             l.set_sync(false);
-            l.draw_rect_filled(PixelsXY::new(4, 5), SizeInPixels::new(2, 3), (50, 51, 52)).unwrap()
+            l.draw_rect_filled(PixelsXY::new(4, 5), SizeInPixels::new(2, 3)).unwrap()
         })
         .expect_pixel(xy(4, 5), (50, 51, 52))
         .expect_pixel(xy(4, 6), (50, 51, 52))
@@ -533,10 +479,10 @@ fn test_draw_rect_filled_no_sync() {
 fn test_draw_rect_filled_limits() {
     Tester::new(size(2, 3))
         .op(|l| {
+            l.set_draw_color((50, 51, 52));
             l.draw_rect_filled(
                 PixelsXY::new(0, 0),
                 SizeInPixels::new(2, 3),
-                (50, 51, 52),
             )
             .unwrap()
         })
@@ -554,8 +500,8 @@ fn test_draw_rect_filled_limits() {
 fn test_draw_rect_filled_clip() {
     Tester::new(size(20, 30))
         .op(|l| {
-            l.draw_rect_filled(PixelsXY::new(-2, 28), SizeInPixels::new(3, 10), (50, 51, 52))
-                .unwrap()
+            l.set_draw_color((50, 51, 52));
+            l.draw_rect_filled(PixelsXY::new(-2, 28), SizeInPixels::new(3, 10)).unwrap()
         })
         .expect_pixel(xy(0, 28), (50, 51, 52))
         .expect_pixel(xy(0, 29), (50, 51, 52))

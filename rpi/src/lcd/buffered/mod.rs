@@ -44,6 +44,8 @@ pub(crate) struct BufferedLcd<L: Lcd> {
     size_pixels: LcdSize,
     glyph_size: LcdSize,
     size_chars: CharsXY,
+
+    draw_color: L::Pixel,
 }
 
 impl<L> BufferedLcd<L>
@@ -65,6 +67,8 @@ where
             u16::try_from(size.height / glyph_size.height).expect("Must fit"),
         );
 
+        let draw_color = lcd.encode((255, 255, 255));
+
         Self {
             lcd,
             fb,
@@ -74,6 +78,7 @@ where
             size_pixels: size,
             glyph_size,
             size_chars,
+            draw_color,
         }
     }
 
@@ -251,19 +256,18 @@ where
         self.damage = Some(damage);
     }
 
-    /// Fills the area contained between `x1y1` and `x2y2` (inclusive) with the `rgb` color.
+    /// Fills the area contained between `x1y1` and `x2y2` (inclusive) with the current drawing
+    /// color.
     ///
     /// If syncing is enabled, this writes directly to the LCD.  Otherwise, this writes to the
     /// framebuffer and records the area as damaged.
-    fn fill(&mut self, x1y1: LcdXY, x2y2: LcdXY, rgb: RGB) -> io::Result<()> {
-        let pixel = self.lcd.encode(rgb);
-
+    fn fill(&mut self, x1y1: LcdXY, x2y2: LcdXY) -> io::Result<()> {
         if self.sync {
             let mut data = LcdSize::between(x1y1, x2y2).new_buffer(self.stride);
             for y in x1y1.y..(x2y2.y + 1) {
                 for x in x1y1.x..(x2y2.x + 1) {
                     let offset = self.fb_addr(x, y);
-                    for (i, byte) in pixel.into_iter().enumerate() {
+                    for (i, byte) in self.draw_color.into_iter().enumerate() {
                         self.fb[offset + i] = byte;
                         data.push(byte);
                     }
@@ -274,7 +278,7 @@ where
             for y in x1y1.y..(x2y2.y + 1) {
                 for x in x1y1.x..(x2y2.x + 1) {
                     let offset = self.fb_addr(x, y);
-                    for (i, byte) in pixel.into_iter().enumerate() {
+                    for (i, byte) in self.draw_color.into_iter().enumerate() {
                         self.fb[offset + i] = byte;
                     }
                 }
@@ -320,7 +324,8 @@ where
     L: Lcd,
 {
     fn drop(&mut self) {
-        self.clear((0, 0, 0)).unwrap();
+        self.set_draw_color((0, 0, 0));
+        self.clear().unwrap();
     }
 }
 
@@ -338,11 +343,14 @@ where
         }
     }
 
-    fn clear(&mut self, color: RGB) -> io::Result<()> {
+    fn set_draw_color(&mut self, color: RGB) {
+        self.draw_color = self.lcd.encode(color);
+    }
+
+    fn clear(&mut self) -> io::Result<()> {
         self.fill(
             LcdXY { x: 0, y: 0 },
             LcdXY { x: self.size_pixels.width - 1, y: self.size_pixels.height - 1 },
-            color,
         )
     }
 
@@ -413,7 +421,6 @@ where
         x1y1: PixelsXY,
         x2y2: PixelsXY,
         size: SizeInPixels,
-        color: RGB,
     ) -> io::Result<()> {
         self.assert_xy_size_in_range(x1y1, size);
         self.assert_xy_size_in_range(x2y2, size);
@@ -421,33 +428,19 @@ where
         let data = self.read_pixels(x1y1, size)?;
 
         self.without_sync(|self2| {
-            self2.draw_rect_filled(x1y1, size, color)?;
+            self2.draw_rect_filled(x1y1, size)?;
             self2.put_pixels(x2y2, &data)
         })?;
 
         Ok(())
     }
 
-    fn write_text(
-        &mut self,
-        xy: PixelsXY,
-        text: &str,
-        fg_color: RGB,
-        bg_color: RGB,
-    ) -> io::Result<()> {
+    fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()> {
         self.assert_xy_in_range(xy);
 
         let x1y1 = self.clip_xy(xy).expect("Internal ops must receive valid coordinates");
-        let size =
-            LcdSize { width: text.len() * self.glyph_size.width, height: self.glyph_size.height };
-        let x2y2 = LcdXY {
-            x: (x1y1.x + size.width - 1).clamp(0, self.size_pixels.width - 1),
-            y: (x1y1.y + size.height - 1).clamp(0, self.size_pixels.height - 1),
-        };
 
         self.without_sync(|self2| {
-            self2.fill(x1y1, x2y2, bg_color)?;
-
             let mut pos = x1y1;
             for ch in text.chars() {
                 let glyph = font8::glyph(ch);
@@ -468,7 +461,7 @@ where
                             }
 
                             let xy = LcdXY { x, y };
-                            self2.fill(xy, xy, fg_color)?;
+                            self2.fill(xy, xy)?;
                         }
                         mask >>= 1;
                     }
@@ -480,40 +473,35 @@ where
         })
     }
 
-    fn draw_circle(&mut self, _center: PixelsXY, _radius: u16, _color: RGB) -> io::Result<()> {
+    fn draw_circle(&mut self, _center: PixelsXY, _radius: u16) -> io::Result<()> {
         todo!()
     }
 
-    fn draw_circle_filled(
-        &mut self,
-        _center: PixelsXY,
-        _radius: u16,
-        _color: RGB,
-    ) -> io::Result<()> {
+    fn draw_circle_filled(&mut self, _center: PixelsXY, _radius: u16) -> io::Result<()> {
         todo!()
     }
 
-    fn draw_line(&mut self, _x1y1: PixelsXY, _x2y2: PixelsXY, _color: RGB) -> io::Result<()> {
+    fn draw_line(&mut self, _x1y1: PixelsXY, _x2y2: PixelsXY) -> io::Result<()> {
         todo!()
     }
 
-    fn draw_pixel(&mut self, xy: PixelsXY, color: RGB) -> io::Result<()> {
+    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
         let xy = self.clip_xy(xy);
         match xy {
-            Some(xy) => self.fill(xy, xy, color),
+            Some(xy) => self.fill(xy, xy),
             None => Ok(()),
         }
     }
 
-    fn draw_rect(&mut self, _xy: PixelsXY, _size: SizeInPixels, _color: RGB) -> io::Result<()> {
+    fn draw_rect(&mut self, _xy: PixelsXY, _size: SizeInPixels) -> io::Result<()> {
         todo!()
     }
 
-    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
+    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
         let x1y1 = self.clamp_xy(xy);
         let x2y2 = self.clip_x2y2(xy, size);
         match x2y2 {
-            Some(x2y2) => self.fill(x1y1, x2y2, color),
+            Some(x2y2) => self.fill(x1y1, x2y2),
             _ => Ok(()),
         }
     }
