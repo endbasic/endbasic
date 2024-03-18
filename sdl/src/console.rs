@@ -820,12 +820,7 @@ mod tests {
         assert_eq!(
             io::ErrorKind::InvalidInput,
             test.console()
-                .call(Request::RawWrite(
-                    very_long_string,
-                    PixelsXY { x: 0, y: 0 },
-                    (255, 255, 255),
-                    (0, 0, 0)
-                ))
+                .call(Request::RawWrite(very_long_string, PixelsXY { x: 0, y: 0 },))
                 .unwrap_err()
                 .kind()
         );

@@ -303,14 +303,6 @@ impl Context {
             draw_color,
         })
     }
-
-    /// Sets the draw color to `color` with caching.
-    fn set_draw_color(&mut self, color: RGB) {
-        if self.draw_color != color {
-            self.canvas.set_draw_color(rgb_to_color(color));
-            self.draw_color = color;
-        }
-    }
 }
 
 impl RasterOps for Context {
@@ -324,8 +316,14 @@ impl RasterOps for Context {
         }
     }
 
-    fn clear(&mut self, color: RGB) -> io::Result<()> {
-        self.set_draw_color(color);
+    fn set_draw_color(&mut self, color: RGB) {
+        if self.draw_color != color {
+            self.canvas.set_draw_color(rgb_to_color(color));
+            self.draw_color = color;
+        }
+    }
+
+    fn clear(&mut self) -> io::Result<()> {
         self.canvas.clear();
         Ok(())
     }
@@ -370,7 +368,6 @@ impl RasterOps for Context {
         x1y1: PixelsXY,
         x2y2: PixelsXY,
         size: SizeInPixels,
-        color: RGB,
     ) -> io::Result<()> {
         let shifted = {
             let src = self.canvas.surface();
@@ -378,7 +375,8 @@ impl RasterOps for Context {
                 .map_err(string_error_to_io_error)?;
             let src_rect = rect_origin_size(x1y1, size);
             let dst_rect = rect_origin_size(x2y2, size);
-            temp.fill_rect(src_rect, rgb_to_color(color)).map_err(string_error_to_io_error)?;
+            temp.fill_rect(src_rect, rgb_to_color(self.draw_color))
+                .map_err(string_error_to_io_error)?;
             src.blit(src_rect, &mut temp, dst_rect).map_err(string_error_to_io_error)?;
             temp
         };
@@ -386,13 +384,7 @@ impl RasterOps for Context {
         Ok(())
     }
 
-    fn write_text(
-        &mut self,
-        xy: PixelsXY,
-        text: &str,
-        fg_color: RGB,
-        bg_color: RGB,
-    ) -> io::Result<()> {
+    fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()> {
         debug_assert!(!text.is_empty(), "SDL does not like empty strings");
 
         let len = match u16::try_from(text.chars().count()) {
@@ -407,11 +399,8 @@ impl RasterOps for Context {
             u32::from(self.font.glyph_size.height),
         );
 
-        self.set_draw_color(bg_color);
-        self.canvas.fill_rect(rect).map_err(string_error_to_io_error)?;
-
         let surface =
-            self.font.font.render(text).blended(fg_color).map_err(font_error_to_io_error)?;
+            self.font.font.render(text).blended(self.draw_color).map_err(font_error_to_io_error)?;
         let texture = self
             .texture_creator
             .create_texture_from_surface(&surface)
@@ -419,7 +408,7 @@ impl RasterOps for Context {
         self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)
     }
 
-    fn draw_circle(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
         // This implements the [Midpoint circle
         // algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
 
@@ -445,7 +434,6 @@ impl RasterOps for Context {
         let mut ty: i16 = 1;
         let mut e: i16 = tx - diameter;
 
-        self.set_draw_color(color);
         while x >= y {
             point(&mut self.canvas, center.x + x, center.y - y)?;
             point(&mut self.canvas, center.x + x, center.y + y)?;
@@ -472,7 +460,7 @@ impl RasterOps for Context {
         Ok(())
     }
 
-    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
         // This implements the [Midpoint circle
         // algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
 
@@ -492,7 +480,6 @@ impl RasterOps for Context {
         }
 
         if radius == 1 {
-            self.set_draw_color(color);
             return self.canvas.draw_point(point_xy(center)).map_err(string_error_to_io_error);
         }
 
@@ -512,7 +499,6 @@ impl RasterOps for Context {
         let mut ty: i16 = 1;
         let mut e: i16 = tx - diameter;
 
-        self.set_draw_color(color);
         while x >= y {
             line(&mut self.canvas, center.x + x, center.y - y, center.x + x, center.y + y)?;
             line(&mut self.canvas, center.x - x, center.y - y, center.x - x, center.y + y)?;
@@ -535,7 +521,7 @@ impl RasterOps for Context {
         Ok(())
     }
 
-    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, color: RGB) -> io::Result<()> {
+    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         if x1y1 == x2y2 {
             // Paper over differences between platforms.  On Linux, this would paint a single dot,
             // but on Windows, it paints nothing.  For consistency with drawing a circle of radius
@@ -543,24 +529,20 @@ impl RasterOps for Context {
             return Ok(());
         }
 
-        self.set_draw_color(color);
         self.canvas.draw_line(point_xy(x1y1), point_xy(x2y2)).map_err(string_error_to_io_error)
     }
 
-    fn draw_pixel(&mut self, xy: PixelsXY, color: RGB) -> io::Result<()> {
-        self.set_draw_color(color);
+    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
         self.canvas.draw_point(point_xy(xy)).map_err(string_error_to_io_error)
     }
 
-    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
+    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
         let rect = rect_origin_size(xy, size);
-        self.set_draw_color(color);
         self.canvas.draw_rect(rect).map_err(string_error_to_io_error)
     }
 
-    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
+    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
         let rect = rect_origin_size(xy, size);
-        self.set_draw_color(color);
         self.canvas.fill_rect(rect).map_err(string_error_to_io_error)
     }
 }
@@ -580,14 +562,8 @@ impl SharedContext {
     }
 
     #[cfg(test)]
-    fn raw_write(
-        &mut self,
-        text: &str,
-        xy: PixelsXY,
-        fg_color: RGB,
-        bg_color: RGB,
-    ) -> io::Result<()> {
-        (*self.0).borrow_mut().write_text(xy, text, fg_color, bg_color)
+    fn raw_write(&mut self, text: &str, xy: PixelsXY) -> io::Result<()> {
+        (*self.0).borrow_mut().write_text(xy, text)
     }
 
     #[cfg(test)]
@@ -605,8 +581,12 @@ impl RasterOps for SharedContext {
         self.0.borrow().get_info()
     }
 
-    fn clear(&mut self, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().clear(color)
+    fn set_draw_color(&mut self, color: RGB) {
+        (*self.0).borrow_mut().set_draw_color(color)
+    }
+
+    fn clear(&mut self) -> io::Result<()> {
+        (*self.0).borrow_mut().clear()
     }
 
     fn present_canvas(&mut self) -> io::Result<()> {
@@ -626,43 +606,36 @@ impl RasterOps for SharedContext {
         x1y1: PixelsXY,
         x2y2: PixelsXY,
         size: SizeInPixels,
-        color: RGB,
     ) -> io::Result<()> {
-        (*self.0).borrow_mut().move_pixels(x1y1, x2y2, size, color)
+        (*self.0).borrow_mut().move_pixels(x1y1, x2y2, size)
     }
 
-    fn write_text(
-        &mut self,
-        xy: PixelsXY,
-        text: &str,
-        fg_color: RGB,
-        bg_color: RGB,
-    ) -> io::Result<()> {
-        (*self.0).borrow_mut().write_text(xy, text, fg_color, bg_color)
+    fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()> {
+        (*self.0).borrow_mut().write_text(xy, text)
     }
 
-    fn draw_circle(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_circle(center, radius, color)
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_circle(center, radius)
     }
 
-    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_circle_filled(center, radius, color)
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_circle_filled(center, radius)
     }
 
-    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_line(x1y1, x2y2, color)
+    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_line(x1y1, x2y2)
     }
 
-    fn draw_pixel(&mut self, xy: PixelsXY, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_pixel(xy, color)
+    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_pixel(xy)
     }
 
-    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_rect(xy, size, color)
+    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_rect(xy, size)
     }
 
-    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_rect_filled(xy, size, color)
+    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_rect_filled(xy, size)
     }
 }
 
@@ -694,7 +667,7 @@ pub(crate) enum Request {
     #[cfg(test)]
     PushEvent(Event),
     #[cfg(test)]
-    RawWrite(String, PixelsXY, RGB, RGB),
+    RawWrite(String, PixelsXY),
     #[cfg(test)]
     SaveBmp(PathBuf),
 }
@@ -791,9 +764,7 @@ pub(crate) fn run(
                     Request::PushEvent(ev) => Response::Empty(ctx.push_event(ev)),
 
                     #[cfg(test)]
-                    Request::RawWrite(text, start, fg_color, bg_color) => {
-                        Response::Empty(ctx.raw_write(&text, start, fg_color, bg_color))
-                    }
+                    Request::RawWrite(text, start) => Response::Empty(ctx.raw_write(&text, start)),
 
                     #[cfg(test)]
                     Request::SaveBmp(path) => Response::Empty(ctx.save_bmp(&path)),
