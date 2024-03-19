@@ -29,6 +29,7 @@ mod cmds;
 pub(crate) use cmds::add_all;
 mod colors;
 pub use colors::{ansi_color_to_rgb, AnsiColor, RGB};
+pub mod drawing;
 mod format;
 pub use format::refill_and_print;
 pub mod graphics;
@@ -149,6 +150,14 @@ impl PixelsXY {
     pub fn new(x: i16, y: i16) -> Self {
         Self { x, y }
     }
+}
+
+#[cfg(test)]
+impl PixelsXY {
+    pub(crate) const TOP_LEFT: Self = Self { x: i16::MIN, y: i16::MIN };
+    pub(crate) const TOP_RIGHT: Self = Self { x: i16::MAX, y: i16::MIN };
+    pub(crate) const BOTTOM_LEFT: Self = Self { x: i16::MIN, y: i16::MAX };
+    pub(crate) const BOTTOM_RIGHT: Self = Self { x: i16::MAX, y: i16::MAX };
 }
 
 /// Represents a rectangular size in pixels.
