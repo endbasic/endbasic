@@ -379,6 +379,51 @@ fn test_write_text_clip() {
 }
 
 #[test]
+fn test_draw_line_sync() {
+    Tester::new(size(20, 30))
+        .op(|l| l.set_draw_color((50, 51, 52)))
+        .op(|l| l.draw_line(PixelsXY::new(4, 5), PixelsXY::new(8, 9)).unwrap())
+        .expect_pixel(xy(4, 5), (50, 51, 52))
+        .expect_pixel(xy(5, 6), (50, 51, 52))
+        .expect_pixel(xy(6, 7), (50, 51, 52))
+        .expect_pixel(xy(7, 8), (50, 51, 52))
+        .expect_pixel(xy(8, 9), (50, 51, 52))
+        .expect_op("set_data: from=(4, 5), to=(8, 9), data=[50, 51, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 51, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 51, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 51, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 51, 52]")
+        .check();
+}
+
+#[test]
+fn test_draw_line_no_sync() {
+    Tester::new(size(20, 30))
+        .op(|l| l.set_draw_color((50, 51, 52)))
+        .op(|l| {
+            l.set_sync(false);
+            l.draw_line(PixelsXY::new(4, 5), PixelsXY::new(8, 9)).unwrap()
+        })
+        .expect_damage(xy(4, 5), xy(8, 9))
+        .expect_pixel(xy(4, 5), (50, 51, 52))
+        .expect_pixel(xy(5, 6), (50, 51, 52))
+        .expect_pixel(xy(6, 7), (50, 51, 52))
+        .expect_pixel(xy(7, 8), (50, 51, 52))
+        .expect_pixel(xy(8, 9), (50, 51, 52))
+        .check();
+}
+
+#[test]
+fn test_draw_line_clip() {
+    Tester::new(size(20, 30))
+        .op(|l| l.set_draw_color((50, 51, 52)))
+        .op(|l| {
+            l.set_sync(false);
+            l.draw_line(PixelsXY::new(-2, 10), PixelsXY::new(1, 10)).unwrap()
+        })
+        .expect_damage(xy(0, 10), xy(1, 10))
+        .expect_pixel(xy(0, 10), (50, 51, 52))
+        .expect_pixel(xy(1, 10), (50, 51, 52))
+        .check();
+}
+
+#[test]
 fn test_draw_pixel_sync() {
     Tester::new(size(20, 30))
         .op(|l| l.set_draw_color((50, 51, 52)))
