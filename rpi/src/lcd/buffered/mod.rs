@@ -17,6 +17,7 @@
 
 use crate::lcd::font8;
 use crate::lcd::{to_xy_size, Lcd, LcdSize, LcdXY};
+use endbasic_std::console::drawing;
 use endbasic_std::console::graphics::{RasterInfo, RasterOps};
 use endbasic_std::console::{CharsXY, PixelsXY, SizeInPixels, RGB};
 use std::convert::TryFrom;
@@ -481,8 +482,8 @@ where
         todo!()
     }
 
-    fn draw_line(&mut self, _x1y1: PixelsXY, _x2y2: PixelsXY) -> io::Result<()> {
-        todo!()
+    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
+        self.without_sync(|self2| drawing::draw_line(self2, x1y1, x2y2))
     }
 
     fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
