@@ -57,6 +57,18 @@ impl ClampedInto<i16> for u16 {
     }
 }
 
+impl ClampedInto<i16> for i32 {
+    fn clamped_into(self) -> i16 {
+        if self > i32::from(i16::MAX) {
+            i16::MAX
+        } else if self < i32::from(i16::MIN) {
+            i16::MIN
+        } else {
+            self as i16
+        }
+    }
+}
+
 impl ClampedInto<u16> for i32 {
     fn clamped_into(self) -> u16 {
         if self > i32::from(u16::MAX) {
@@ -672,6 +684,18 @@ mod tests {
         assert_eq!(i16::MAX - 1, u16::try_from(i16::MAX - 1).unwrap().clamped_into());
         assert_eq!(i16::MAX, u16::try_from(i16::MAX).unwrap().clamped_into());
         assert_eq!(i16::MAX, u16::MAX.clamped_into());
+    }
+
+    #[test]
+    fn test_clamped_into_u16_i32() {
+        assert_eq!(0i16, 0i32.clamped_into());
+        assert_eq!(10i16, 10i32.clamped_into());
+        assert_eq!(i16::MIN + 1, i32::from(i16::MIN + 1).clamped_into());
+        assert_eq!(i16::MIN, i32::from(i16::MIN).clamped_into());
+        assert_eq!(i16::MIN, i32::MIN.clamped_into());
+        assert_eq!(i16::MAX - 1, i32::from(i16::MAX - 1).clamped_into());
+        assert_eq!(i16::MAX, i32::from(i16::MAX).clamped_into());
+        assert_eq!(i16::MAX, i32::MAX.clamped_into());
     }
 
     #[test]

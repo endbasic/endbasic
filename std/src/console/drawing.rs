@@ -15,8 +15,8 @@
 
 //! Drawing algorithms for consoles that don't provide native rendering primitives.
 
-use crate::console::graphics::RasterOps;
-use crate::console::PixelsXY;
+use crate::console::graphics::{ClampedInto, RasterOps};
+use crate::console::{PixelsXY, SizeInPixels};
 use std::convert::TryFrom;
 use std::io;
 
@@ -231,6 +231,22 @@ where
         }
     }
 
+    Ok(())
+}
+
+/// Draws a rectangle via `rasops` starting at `x1y1` with `size`.
+pub fn draw_rect<R>(rasops: &mut R, x1y1: PixelsXY, size: SizeInPixels) -> io::Result<()>
+where
+    R: RasterOps,
+{
+    let x2y2 = PixelsXY {
+        x: (i32::from(x1y1.x) + i32::from(size.width - 1)).clamped_into(),
+        y: (i32::from(x1y1.y) + i32::from(size.height - 1)).clamped_into(),
+    };
+    rasops.draw_line(PixelsXY { x: x1y1.x, y: x1y1.y }, PixelsXY { x: x2y2.x, y: x1y1.y })?;
+    rasops.draw_line(PixelsXY { x: x2y2.x, y: x1y1.y }, PixelsXY { x: x2y2.x, y: x2y2.y })?;
+    rasops.draw_line(PixelsXY { x: x2y2.x, y: x2y2.y }, PixelsXY { x: x1y1.x, y: x2y2.y })?;
+    rasops.draw_line(PixelsXY { x: x1y1.x, y: x2y2.y }, PixelsXY { x: x1y1.x, y: x1y1.y })?;
     Ok(())
 }
 
@@ -620,5 +636,80 @@ mod tests {
             draw_line(&mut rasops, corners.0, corners.1).unwrap();
             assert_eq!(usize::from(u16::MAX) + 1, rasops.ops.len());
         }
+    }
+
+    #[test]
+    fn test_draw_rect_dot() {
+        let mut rasops = RecordingRasops::default();
+        draw_rect(&mut rasops, PixelsXY::new(10, 20), SizeInPixels::new(1, 1)).unwrap();
+        assert_eq!(
+            [
+                CapturedRasop::DrawLine(10, 20, 10, 20),
+                CapturedRasop::DrawLine(10, 20, 10, 20),
+                CapturedRasop::DrawLine(10, 20, 10, 20),
+                CapturedRasop::DrawLine(10, 20, 10, 20),
+            ],
+            rasops.ops.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_draw_rect_horizontal_line() {
+        let mut rasops = RecordingRasops::default();
+        draw_rect(&mut rasops, PixelsXY::new(10, 20), SizeInPixels::new(6, 1)).unwrap();
+        assert_eq!(
+            [
+                CapturedRasop::DrawLine(10, 20, 15, 20),
+                CapturedRasop::DrawLine(15, 20, 15, 20),
+                CapturedRasop::DrawLine(15, 20, 10, 20),
+                CapturedRasop::DrawLine(10, 20, 10, 20),
+            ],
+            rasops.ops.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_draw_rect_vertical_line() {
+        let mut rasops = RecordingRasops::default();
+        draw_rect(&mut rasops, PixelsXY::new(10, 20), SizeInPixels::new(1, 6)).unwrap();
+        assert_eq!(
+            [
+                CapturedRasop::DrawLine(10, 20, 10, 20),
+                CapturedRasop::DrawLine(10, 20, 10, 25),
+                CapturedRasop::DrawLine(10, 25, 10, 25),
+                CapturedRasop::DrawLine(10, 25, 10, 20),
+            ],
+            rasops.ops.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_draw_rect_2d() {
+        let mut rasops = RecordingRasops::default();
+        draw_rect(&mut rasops, PixelsXY::new(10, 20), SizeInPixels::new(6, 7)).unwrap();
+        assert_eq!(
+            [
+                CapturedRasop::DrawLine(10, 20, 15, 20),
+                CapturedRasop::DrawLine(15, 20, 15, 26),
+                CapturedRasop::DrawLine(15, 26, 10, 26),
+                CapturedRasop::DrawLine(10, 26, 10, 20),
+            ],
+            rasops.ops.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_draw_rect_corners() {
+        let mut rasops = RecordingRasops::default();
+        draw_rect(&mut rasops, PixelsXY::TOP_LEFT, SizeInPixels::MAX).unwrap();
+        assert_eq!(
+            [
+                CapturedRasop::DrawLine(i16::MIN, i16::MIN, i16::MAX - 1, i16::MIN),
+                CapturedRasop::DrawLine(i16::MAX - 1, i16::MIN, i16::MAX - 1, i16::MAX - 1),
+                CapturedRasop::DrawLine(i16::MAX - 1, i16::MAX - 1, i16::MIN, i16::MAX - 1),
+                CapturedRasop::DrawLine(i16::MIN, i16::MAX - 1, i16::MIN, i16::MIN),
+            ],
+            rasops.ops.as_slice()
+        );
     }
 }
