@@ -180,6 +180,11 @@ impl SizeInPixels {
     }
 }
 
+#[cfg(test)]
+impl SizeInPixels {
+    pub(crate) const MAX: Self = Self { width: u16::MAX, height: u16::MAX };
+}
+
 /// Hooks to implement the commands that manipulate the console.
 #[async_trait(?Send)]
 pub trait Console {
