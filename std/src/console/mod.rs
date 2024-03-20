@@ -154,12 +154,22 @@ impl PixelsXY {
 /// Represents a rectangular size in pixels.
 #[derive(Clone, Copy, Debug)]
 #[cfg_attr(test, derive(PartialEq))]
+#[non_exhaustive]
 pub struct SizeInPixels {
     /// The width in pixels.
     pub width: u16,
 
     /// The height in pixels.
     pub height: u16,
+}
+
+impl SizeInPixels {
+    /// Construts a new size in pixels, validating that the quantities are non-zero.
+    pub fn new(width: u16, height: u16) -> Self {
+        debug_assert!(width > 0, "Zero widths don't make sense");
+        debug_assert!(height > 0, "Zero heights don't make sense");
+        Self { width, height }
+    }
 }
 
 /// Hooks to implement the commands that manipulate the console.

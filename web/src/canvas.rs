@@ -165,7 +165,7 @@ impl CanvasRasterOps {
                     ))
                 }
             };
-            SizeInPixels { width, height }
+            SizeInPixels::new(width, height)
         };
 
         let context = html_canvas_to_2d_context(canvas)?;
@@ -176,7 +176,7 @@ impl CanvasRasterOps {
             let text_metrics = context.measure_text("X").map_err(js_value_to_io_error)?;
             let width = text_metrics.width().ceil() as u16;
             let height = DEFAULT_FONT_SIZE + 2; // Pad lines a little bit.
-            SizeInPixels { width, height }
+            SizeInPixels::new(width, height)
         };
 
         let size_chars = {
