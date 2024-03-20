@@ -693,6 +693,79 @@ fn test_draw_pixel_out_of_bounds() {
 }
 
 #[test]
+fn test_draw_rect_sync() {
+    Tester::new(size(20, 30))
+        .op(|l| {
+            l.set_draw_color((50, 51, 52));
+            l.draw_rect(
+                PixelsXY::new(4, 5),
+                SizeInPixels::new(2, 3),
+            )
+            .unwrap()
+        })
+        .expect_pixel(xy(4, 5), (50, 51, 52))
+        .expect_pixel(xy(4, 6), (50, 51, 52))
+        .expect_pixel(xy(4, 7), (50, 51, 52))
+        .expect_pixel(xy(5, 5), (50, 51, 52))
+        .expect_pixel(xy(5, 6), (50, 51, 52))
+        .expect_pixel(xy(5, 7), (50, 51, 52))
+        .expect_op("set_data: from=(4, 5), to=(5, 7), data=[50, 51, 52, 50, 51, 52, 50, 51, 52, 50, 51, 52, 50, 51, 52, 50, 51, 52]")
+        .check();
+}
+
+#[test]
+fn test_draw_rect_no_sync() {
+    Tester::new(size(20, 30))
+        .op(|l| {
+            l.set_sync(false);
+            l.set_draw_color((50, 51, 52));
+            l.draw_rect(PixelsXY::new(4, 5), SizeInPixels::new(2, 3)).unwrap()
+        })
+        .expect_pixel(xy(4, 5), (50, 51, 52))
+        .expect_pixel(xy(4, 6), (50, 51, 52))
+        .expect_pixel(xy(4, 7), (50, 51, 52))
+        .expect_pixel(xy(5, 5), (50, 51, 52))
+        .expect_pixel(xy(5, 6), (50, 51, 52))
+        .expect_pixel(xy(5, 7), (50, 51, 52))
+        .expect_damage(xy(4, 5), xy(5, 7))
+        .check();
+}
+
+#[test]
+fn test_draw_rect_limits() {
+    Tester::new(size(2, 3))
+        .op(|l| {
+            l.set_draw_color((50, 51, 52));
+            l.draw_rect(
+                PixelsXY::new(0, 0),
+                SizeInPixels::new(2, 3),
+            )
+            .unwrap()
+        })
+        .expect_pixel(xy(0, 0), (50, 51, 52))
+        .expect_pixel(xy(0, 1), (50, 51, 52))
+        .expect_pixel(xy(0, 2), (50, 51, 52))
+        .expect_pixel(xy(1, 0), (50, 51, 52))
+        .expect_pixel(xy(1, 1), (50, 51, 52))
+        .expect_pixel(xy(1, 2), (50, 51, 52))
+        .expect_op("set_data: from=(0, 0), to=(1, 2), data=[50, 51, 52, 50, 51, 52, 50, 51, 52, 50, 51, 52, 50, 51, 52, 50, 51, 52]")
+        .check();
+}
+
+#[test]
+fn test_draw_rect_clip() {
+    Tester::new(size(20, 30))
+        .op(|l| {
+            l.set_draw_color((50, 51, 52));
+            l.draw_rect(PixelsXY::new(-2, 28), SizeInPixels::new(3, 10)).unwrap()
+        })
+        .expect_pixel(xy(0, 28), (50, 51, 52))
+        .expect_pixel(xy(0, 29), (50, 51, 52))
+        .expect_op("set_data: from=(0, 28), to=(0, 29), data=[50, 51, 52, 50, 51, 52]")
+        .check();
+}
+
+#[test]
 fn test_draw_rect_filled_sync() {
     Tester::new(size(20, 30))
         .op(|l| {

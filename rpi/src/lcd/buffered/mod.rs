@@ -494,8 +494,8 @@ where
         }
     }
 
-    fn draw_rect(&mut self, _xy: PixelsXY, _size: SizeInPixels) -> io::Result<()> {
-        todo!()
+    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
+        self.without_sync(|self2| drawing::draw_rect(self2, xy, size))
     }
 
     fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
