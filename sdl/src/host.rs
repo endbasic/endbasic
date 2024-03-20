@@ -268,7 +268,7 @@ impl Context {
 
         let size_pixels = {
             let (width, height) = window.drawable_size();
-            SizeInPixels { width: width.clamped_into(), height: height.clamped_into() }
+            SizeInPixels::new(width.clamped_into(), height.clamped_into())
         };
         let size_chars = font.chars_in_area(size_pixels);
 
@@ -392,7 +392,7 @@ impl RasterOps for Context {
             let mut temp = Surface::new(src.width(), src.height(), self.pixel_format)
                 .map_err(string_error_to_io_error)?;
             let src_rect = rect_origin_size(x1y1, size);
-            let dst_rect = rect_origin_size(x2y2, SizeInPixels { width: 0, height: 0 });
+            let dst_rect = rect_origin_size(x2y2, size);
             temp.fill_rect(src_rect, rgb_to_color(color)).map_err(string_error_to_io_error)?;
             src.blit(src_rect, &mut temp, dst_rect).map_err(string_error_to_io_error)?;
             temp
@@ -878,10 +878,7 @@ mod tests {
     fn test_rect_origin_size() {
         assert_eq!(
             Rect::new(-31000, -32000, 63000, 64000),
-            rect_origin_size(
-                PixelsXY { x: -31000, y: -32000 },
-                SizeInPixels { width: 63000, height: 64000 }
-            )
+            rect_origin_size(PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(63000, 64000))
         );
     }
 }
