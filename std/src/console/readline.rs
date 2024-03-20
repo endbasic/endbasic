@@ -16,6 +16,7 @@
 //! Interactive line reader.
 
 use crate::console::{Console, Key, LineBuffer};
+use std::borrow::Cow;
 use std::io;
 
 /// Character to print when typing a secure string.
@@ -56,6 +57,22 @@ async fn read_line_interactive(
     mut history: Option<&mut Vec<String>>,
     echo: bool,
 ) -> io::Result<String> {
+    let console_width = {
+        let console_size = console.size_chars()?;
+        usize::from(console_size.x)
+    };
+
+    let mut prompt = Cow::from(prompt);
+    let mut prompt_len = prompt.len();
+    if prompt_len >= console_width {
+        if console_width >= 5 {
+            prompt = Cow::from(format!("{}...", &prompt[0..console_width - 5]));
+        } else {
+            prompt = Cow::from("");
+        }
+        prompt_len = prompt.len();
+    }
+
     let mut line = LineBuffer::from(previous);
     if !prompt.is_empty() || !line.is_empty() {
         if echo {
@@ -69,8 +86,7 @@ async fn read_line_interactive(
     let width = {
         // Assumes that the prompt was printed at column 0.  If that was not the case, line length
         // calculation does not work.
-        let console_size = console.size_chars()?;
-        usize::from(console_size.x) - prompt.len()
+        console_width - prompt_len
     };
 
     // Insertion position *within* the line, without accounting for the prompt.
@@ -323,6 +339,7 @@ mod tests {
     /// Builder pattern to construct a test for `read_line_interactive`.
     #[must_use]
     struct ReadLineInteractiveTest {
+        size_chars: CharsXY,
         keys: Vec<Key>,
         prompt: &'static str,
         previous: &'static str,
@@ -338,6 +355,7 @@ mod tests {
         /// text, and expects an empty return line and no changes to the console.
         fn default() -> Self {
             Self {
+                size_chars: CharsXY::new(15, 5),
                 keys: vec![],
                 prompt: "",
                 previous: "",
@@ -384,6 +402,12 @@ mod tests {
             self
         }
 
+        /// Sets the size of the console.
+        fn set_size_chars(mut self, size: CharsXY) -> Self {
+            self.size_chars = size;
+            self
+        }
+
         /// Sets the expected resulting line for the test.
         fn set_line(mut self, line: &'static str) -> Self {
             self.exp_line = line;
@@ -424,7 +448,7 @@ mod tests {
 
             let mut console = MockConsole::default();
             console.add_input_keys(&self.keys);
-            console.set_size_chars(CharsXY::new(15, 5));
+            console.set_size_chars(self.size_chars);
             let line = match self.history.as_mut() {
                 Some(history) => block_on(read_line_interactive(
                     &mut console,
@@ -476,6 +500,64 @@ mod tests {
             .add_output(CapturedOut::SyncNow)
             // -
             .add_key(Key::Backspace)
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_with_prompt_larger_than_screen() {
+        ReadLineInteractiveTest::default()
+            .set_size_chars(CharsXY::new(15, 5))
+            .set_prompt("This is larger than the screen> ")
+            .add_output(CapturedOut::Write("This is la...".to_string()))
+            .add_output(CapturedOut::SyncNow)
+            // -
+            .add_key_chars("hello")
+            .add_output_bytes("h")
+            // -
+            .set_line("h")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_with_prompt_equal_to_screen() {
+        ReadLineInteractiveTest::default()
+            .set_size_chars(CharsXY::new(10, 5))
+            .set_prompt("0123456789")
+            .add_output(CapturedOut::Write("01234...".to_string()))
+            .add_output(CapturedOut::SyncNow)
+            // -
+            .add_key_chars("hello")
+            .add_output_bytes("h")
+            // -
+            .set_line("h")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_with_prompt_larger_than_tiny_screen() {
+        ReadLineInteractiveTest::default()
+            .set_size_chars(CharsXY::new(3, 5))
+            .set_prompt("This is larger than the screen> ")
+            // -
+            .add_key_chars("hello")
+            .add_output_bytes("he")
+            // -
+            .set_line("he")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_with_prompt_shorter_than_tiny_screen() {
+        ReadLineInteractiveTest::default()
+            .set_size_chars(CharsXY::new(3, 5))
+            .set_prompt("?")
+            .add_output(CapturedOut::Write("?".to_string()))
+            .add_output(CapturedOut::SyncNow)
+            // -
+            .add_key_chars("hello")
+            .add_output_bytes("h")
+            // -
+            .set_line("h")
             .accept();
     }
 
