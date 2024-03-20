@@ -128,7 +128,7 @@ fn rect_points(x1y1: PixelsXY, x2y2: PixelsXY) -> (PixelsXY, SizeInPixels) {
         .expect("Height must have been non-negative")
         .clamped_into();
 
-    (PixelsXY::new(x1, y1), SizeInPixels { width, height })
+    (PixelsXY::new(x1, y1), SizeInPixels::new(width, height))
 }
 
 /// Container for configuration information of the backing surface.
@@ -350,10 +350,10 @@ where
 
         let x1y1 = PixelsXY::new(0, self.glyph_size.height.clamped_into());
         let x2y2 = PixelsXY::new(0, 0);
-        let size = SizeInPixels {
-            width: self.size_pixels.width,
-            height: self.size_pixels.height - self.glyph_size.height,
-        };
+        let size = SizeInPixels::new(
+            self.size_pixels.width,
+            self.size_pixels.height - self.glyph_size.height,
+        );
 
         self.raster_ops.move_pixels(x1y1, x2y2, size, self.bg_color)?;
 
@@ -415,8 +415,7 @@ where
             ClearType::CurrentLine => {
                 self.clear_cursor()?;
                 let xy = PixelsXY::new(0, self.cursor_pos.y.clamped_mul(self.glyph_size.height));
-                let size =
-                    SizeInPixels { width: self.size_pixels.width, height: self.glyph_size.height };
+                let size = SizeInPixels::new(self.size_pixels.width, self.glyph_size.height);
                 self.raster_ops.draw_rect_filled(xy, size, self.bg_color)?;
                 self.cursor_pos.x = 0;
             }
@@ -434,10 +433,10 @@ where
                 let pos = self.cursor_pos.clamped_mul(self.glyph_size);
                 debug_assert!(pos.x >= 0, "Inputs to pos are unsigned");
                 debug_assert!(pos.y >= 0, "Inputs to pos are unsigned");
-                let size = SizeInPixels {
-                    width: (i32::from(self.size_pixels.width) - i32::from(pos.x)).clamped_into(),
-                    height: self.glyph_size.height,
-                };
+                let size = SizeInPixels::new(
+                    (i32::from(self.size_pixels.width) - i32::from(pos.x)).clamped_into(),
+                    self.glyph_size.height,
+                );
                 self.raster_ops.draw_rect_filled(pos, size, self.bg_color)?;
             }
         }
@@ -687,60 +686,60 @@ mod tests {
     fn test_clamped_mul_charsxy_sizeinpixels_pixelsxy() {
         assert_eq!(
             PixelsXY { x: 0, y: 0 },
-            CharsXY { x: 0, y: 0 }.clamped_mul(SizeInPixels { width: 0, height: 0 })
+            CharsXY { x: 0, y: 0 }.clamped_mul(SizeInPixels::new(1, 1))
         );
         assert_eq!(
             PixelsXY { x: 50, y: 120 },
-            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels { width: 5, height: 6 })
+            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels::new(5, 6))
         );
         assert_eq!(
             PixelsXY { x: i16::MAX, y: 120 },
-            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels { width: 50000, height: 6 })
+            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels::new(50000, 6))
         );
         assert_eq!(
             PixelsXY { x: 50, y: i16::MAX },
-            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels { width: 5, height: 60000 })
+            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels::new(5, 60000))
         );
         assert_eq!(
             PixelsXY { x: i16::MAX, y: i16::MAX },
-            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels { width: 50000, height: 60000 })
+            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels::new(50000, 60000))
         );
     }
 
     #[test]
     fn test_rect_points() {
         assert_eq!(
-            (PixelsXY { x: 10, y: 20 }, SizeInPixels { width: 100, height: 200 }),
+            (PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200)),
             rect_points(PixelsXY { x: 10, y: 20 }, PixelsXY { x: 110, y: 220 })
         );
         assert_eq!(
-            (PixelsXY { x: 10, y: 20 }, SizeInPixels { width: 100, height: 200 }),
+            (PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200)),
             rect_points(PixelsXY { x: 110, y: 20 }, PixelsXY { x: 10, y: 220 })
         );
         assert_eq!(
-            (PixelsXY { x: 10, y: 20 }, SizeInPixels { width: 100, height: 200 }),
+            (PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200)),
             rect_points(PixelsXY { x: 10, y: 220 }, PixelsXY { x: 110, y: 20 })
         );
         assert_eq!(
-            (PixelsXY { x: 10, y: 20 }, SizeInPixels { width: 100, height: 200 }),
+            (PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200)),
             rect_points(PixelsXY { x: 110, y: 220 }, PixelsXY { x: 10, y: 20 })
         );
 
         assert_eq!(
-            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels { width: 31005, height: 32010 }),
+            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(31005, 32010)),
             rect_points(PixelsXY { x: 5, y: -32000 }, PixelsXY { x: -31000, y: 10 })
         );
         assert_eq!(
-            (PixelsXY { x: 10, y: 5 }, SizeInPixels { width: 30990, height: 31995 }),
+            (PixelsXY { x: 10, y: 5 }, SizeInPixels::new(30990, 31995)),
             rect_points(PixelsXY { x: 31000, y: 5 }, PixelsXY { x: 10, y: 32000 })
         );
 
         assert_eq!(
-            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels { width: 62000, height: 64000 }),
+            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(62000, 64000)),
             rect_points(PixelsXY { x: -31000, y: -32000 }, PixelsXY { x: 31000, y: 32000 })
         );
         assert_eq!(
-            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels { width: 62000, height: 64000 }),
+            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(62000, 64000)),
             rect_points(PixelsXY { x: 31000, y: 32000 }, PixelsXY { x: -31000, y: -32000 })
         );
     }
