@@ -19,7 +19,8 @@ for the time being.**
 
 *   Improved support for narrow consoles: trimmed the width of the welcome
     banner, fixed the editor's status line handling, made `DIR` print a
-    concise directory summary, and made `LOGIN` skip the server's `motd`.
+    concise directory summary, made `LOGIN` skip the server's `motd`, and
+    fixed handling of line input in prompts.
 
 ## Changes in version 0.10.0
 
