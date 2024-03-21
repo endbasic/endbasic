@@ -41,9 +41,6 @@ pub struct JumpIfDefinedSpan {
 /// Components of a conditional jump that depends on a boolean expression.
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct JumpIfBoolSpan {
-    /// The condition to check for falseness.
-    pub cond: Expr,
-
     /// The address to jump to.
     pub addr: Address,
 
