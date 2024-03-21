@@ -146,22 +146,24 @@ impl Compiler {
             }
 
             DoGuard::PreUntil(guard) => {
-                let start_pc = self.emit(Instruction::Nop);
+                let start_pc = self.next_pc;
+                self.compile_expr(guard, false)?;
+                let jump_pc = self.emit(Instruction::Nop);
                 self.compile_many(span.body)?;
                 end_pc = self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
-                self.instrs[start_pc] = Instruction::JumpIfTrue(JumpIfBoolSpan {
-                    cond: guard,
+                self.instrs[jump_pc] = Instruction::JumpIfTrue(JumpIfBoolSpan {
                     addr: self.next_pc,
                     error_msg: "DO requires a boolean condition",
                 });
             }
 
             DoGuard::PreWhile(guard) => {
-                let start_pc = self.emit(Instruction::Nop);
+                let start_pc = self.next_pc;
+                self.compile_expr(guard, false)?;
+                let jump_pc = self.emit(Instruction::Nop);
                 self.compile_many(span.body)?;
                 end_pc = self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
-                self.instrs[start_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: guard,
+                self.instrs[jump_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                     addr: self.next_pc,
                     error_msg: "DO requires a boolean condition",
                 });
@@ -170,8 +172,8 @@ impl Compiler {
             DoGuard::PostUntil(guard) => {
                 let start_pc = self.next_pc;
                 self.compile_many(span.body)?;
+                self.compile_expr(guard, false)?;
                 end_pc = self.emit(Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: guard,
                     addr: start_pc,
                     error_msg: "LOOP requires a boolean condition",
                 }));
@@ -180,8 +182,8 @@ impl Compiler {
             DoGuard::PostWhile(guard) => {
                 let start_pc = self.next_pc;
                 self.compile_many(span.body)?;
+                self.compile_expr(guard, false)?;
                 end_pc = self.emit(Instruction::JumpIfTrue(JumpIfBoolSpan {
-                    cond: guard,
                     addr: start_pc,
                     error_msg: "LOOP requires a boolean condition",
                 }));
@@ -225,7 +227,9 @@ impl Compiler {
         self.compile_expr(span.start, false)?;
         self.emit(Instruction::Assign(span.iter.clone(), span.iter_pos));
 
-        let start_pc = self.emit(Instruction::Nop);
+        let start_pc = self.next_pc;
+        self.compile_expr(span.end, false)?;
+        let jump_pc = self.emit(Instruction::Nop);
 
         self.compile_many(span.body)?;
 
@@ -234,8 +238,7 @@ impl Compiler {
 
         self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
 
-        self.instrs[start_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-            cond: span.end,
+        self.instrs[jump_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
             addr: self.next_pc,
             error_msg: "FOR supports numeric iteration only",
         });
@@ -252,7 +255,8 @@ impl Compiler {
         while let Some(branch) = next {
             let next2 = iter.next();
 
-            let guard_pc = self.emit(Instruction::Nop);
+            self.compile_expr(branch.guard, false)?;
+            let jump_pc = self.emit(Instruction::Nop);
             self.compile_many(branch.body)?;
 
             if next2.is_some() {
@@ -260,8 +264,7 @@ impl Compiler {
                 self.emit(Instruction::Nop);
             }
 
-            self.instrs[guard_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                cond: branch.guard,
+            self.instrs[jump_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                 addr: self.next_pc,
                 error_msg: "IF/ELSEIF require a boolean condition",
             });
@@ -364,7 +367,8 @@ impl Compiler {
                     self.compile_many(case.body)?;
                 }
                 Some(guard) => {
-                    let guard_pc = self.emit(Instruction::Nop);
+                    self.compile_expr(guard, false)?;
+                    let jump_pc = self.emit(Instruction::Nop);
                     self.compile_many(case.body)?;
 
                     if next2.is_some() {
@@ -372,8 +376,7 @@ impl Compiler {
                         self.emit(Instruction::Nop);
                     }
 
-                    self.instrs[guard_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                        cond: guard,
+                    self.instrs[jump_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
                         addr: self.next_pc,
                         error_msg: "SELECT requires a boolean condition",
                     });
@@ -394,14 +397,15 @@ impl Compiler {
 
     /// Compiles a `WHILE` loop and appends its instructions to the compilation context.
     fn compile_while(&mut self, span: WhileSpan) -> Result<()> {
-        let start_pc = self.emit(Instruction::Nop);
+        let start_pc = self.next_pc;
+        self.compile_expr(span.expr, false)?;
+        let jump_pc = self.emit(Instruction::Nop);
 
         self.compile_many(span.body)?;
 
         self.emit(Instruction::Jump(JumpSpan { addr: start_pc }));
 
-        self.instrs[start_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-            cond: span.expr,
+        self.instrs[jump_pc] = Instruction::JumpIfNotTrue(JumpIfBoolSpan {
             addr: self.next_pc,
             error_msg: "WHILE requires a boolean condition",
         });
@@ -945,23 +949,23 @@ mod tests {
         Tester::default()
             .parse("DO WHILE TRUE\nFOO\nLOOP")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
             .expect_instr(
-                0,
+                1,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
-                    addr: 3,
+                    addr: 4,
                     error_msg: "DO requires a boolean condition",
                 }),
             )
             .expect_instr(
-                1,
+                2,
                 Instruction::BuiltinCall(BuiltinCallSpan {
                     name: "FOO".to_owned(),
                     name_pos: lc(2, 1),
                     args: vec![],
                 }),
             )
-            .expect_instr(2, Instruction::Jump(JumpSpan { addr: 0 }))
+            .expect_instr(3, Instruction::Jump(JumpSpan { addr: 0 }))
             .check();
     }
 
@@ -978,10 +982,10 @@ mod tests {
                     args: vec![],
                 }),
             )
+            .expect_instr(1, Instruction::Push(Value::Boolean(true), lc(3, 12)))
             .expect_instr(
-                1,
+                2,
                 Instruction::JumpIfTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(3, 12) }),
                     addr: 0,
                     error_msg: "LOOP requires a boolean condition",
                 }),
@@ -1013,16 +1017,16 @@ mod tests {
         Tester::default()
             .parse("DO WHILE TRUE\nEXIT DO\nLOOP")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
             .expect_instr(
-                0,
+                1,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
-                    addr: 3,
+                    addr: 4,
                     error_msg: "DO requires a boolean condition",
                 }),
             )
-            .expect_instr(1, Instruction::Jump(JumpSpan { addr: 3 }))
-            .expect_instr(2, Instruction::Jump(JumpSpan { addr: 0 }))
+            .expect_instr(2, Instruction::Jump(JumpSpan { addr: 4 }))
+            .expect_instr(3, Instruction::Jump(JumpSpan { addr: 0 }))
             .check();
     }
 
@@ -1031,26 +1035,26 @@ mod tests {
         Tester::default()
             .parse("DO WHILE TRUE\nEXIT DO\nDO UNTIL FALSE\nEXIT DO\nLOOP\nLOOP")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
             .expect_instr(
-                0,
+                1,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
-                    addr: 6,
+                    addr: 8,
                     error_msg: "DO requires a boolean condition",
                 }),
             )
-            .expect_instr(1, Instruction::Jump(JumpSpan { addr: 6 }))
+            .expect_instr(2, Instruction::Jump(JumpSpan { addr: 8 }))
+            .expect_instr(3, Instruction::Push(Value::Boolean(false), lc(3, 10)))
             .expect_instr(
-                2,
+                4,
                 Instruction::JumpIfTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: false, pos: lc(3, 10) }),
-                    addr: 5,
+                    addr: 7,
                     error_msg: "DO requires a boolean condition",
                 }),
             )
-            .expect_instr(3, Instruction::Jump(JumpSpan { addr: 5 }))
-            .expect_instr(4, Instruction::Jump(JumpSpan { addr: 2 }))
-            .expect_instr(5, Instruction::Jump(JumpSpan { addr: 0 }))
+            .expect_instr(5, Instruction::Jump(JumpSpan { addr: 7 }))
+            .expect_instr(6, Instruction::Jump(JumpSpan { addr: 3 }))
+            .expect_instr(7, Instruction::Jump(JumpSpan { addr: 0 }))
             .check();
     }
 
@@ -1059,26 +1063,26 @@ mod tests {
         Tester::default()
             .parse("DO WHILE TRUE\nEXIT DO\nLOOP\nDO WHILE TRUE\nEXIT DO\nLOOP")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
             .expect_instr(
-                0,
+                1,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
-                    addr: 3,
+                    addr: 4,
                     error_msg: "DO requires a boolean condition",
                 }),
             )
-            .expect_instr(1, Instruction::Jump(JumpSpan { addr: 3 }))
-            .expect_instr(2, Instruction::Jump(JumpSpan { addr: 0 }))
+            .expect_instr(2, Instruction::Jump(JumpSpan { addr: 4 }))
+            .expect_instr(3, Instruction::Jump(JumpSpan { addr: 0 }))
+            .expect_instr(4, Instruction::Push(Value::Boolean(true), lc(4, 10)))
             .expect_instr(
-                3,
+                5,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(4, 10) }),
-                    addr: 6,
+                    addr: 8,
                     error_msg: "DO requires a boolean condition",
                 }),
             )
-            .expect_instr(4, Instruction::Jump(JumpSpan { addr: 6 }))
-            .expect_instr(5, Instruction::Jump(JumpSpan { addr: 3 }))
+            .expect_instr(6, Instruction::Jump(JumpSpan { addr: 8 }))
+            .expect_instr(7, Instruction::Jump(JumpSpan { addr: 4 }))
             .check();
     }
 
@@ -1087,26 +1091,26 @@ mod tests {
         Tester::default()
             .parse("DO WHILE TRUE\nEXIT DO\nWHILE FALSE\nEXIT DO\nWEND\nLOOP")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
             .expect_instr(
-                0,
+                1,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 10) }),
-                    addr: 6,
+                    addr: 8,
                     error_msg: "DO requires a boolean condition",
                 }),
             )
-            .expect_instr(1, Instruction::Jump(JumpSpan { addr: 6 }))
+            .expect_instr(2, Instruction::Jump(JumpSpan { addr: 8 }))
+            .expect_instr(3, Instruction::Push(Value::Boolean(false), lc(3, 7)))
             .expect_instr(
-                2,
+                4,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: false, pos: lc(3, 7) }),
-                    addr: 5,
+                    addr: 7,
                     error_msg: "WHILE requires a boolean condition",
                 }),
             )
-            .expect_instr(3, Instruction::Jump(JumpSpan { addr: 6 }))
-            .expect_instr(4, Instruction::Jump(JumpSpan { addr: 2 }))
-            .expect_instr(5, Instruction::Jump(JumpSpan { addr: 0 }))
+            .expect_instr(5, Instruction::Jump(JumpSpan { addr: 8 }))
+            .expect_instr(6, Instruction::Jump(JumpSpan { addr: 3 }))
+            .expect_instr(7, Instruction::Jump(JumpSpan { addr: 0 }))
             .check();
     }
 
@@ -1252,28 +1256,23 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(1), lc(1, 12)))
             .expect_instr(1, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(2, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(3, Instruction::Push(Value::Integer(5), lc(1, 17)))
+            .expect_instr(4, Instruction::LessEqual(lc(1, 14)))
             .expect_instr(
-                2,
+                5,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::LessEqual(Box::from(BinaryOpSpan {
-                        lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("iter", VarType::Auto),
-                            pos: lc(1, 5),
-                        }),
-                        rhs: Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 17) }),
-                        pos: lc(1, 14),
-                    })),
-                    addr: 10,
+                    addr: 13,
                     error_msg: "FOR supports numeric iteration only",
                 }),
             )
-            .expect_instr(3, Instruction::Push(Value::Boolean(false), lc(1, 24)))
-            .expect_instr(4, Instruction::Assign(VarRef::new("a", VarType::Auto), lc(1, 20)))
-            .expect_instr(5, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
-            .expect_instr(6, Instruction::Push(Value::Integer(1), lc(1, 18)))
-            .expect_instr(7, Instruction::Add(lc(1, 14)))
-            .expect_instr(8, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
-            .expect_instr(9, Instruction::Jump(JumpSpan { addr: 2 }))
+            .expect_instr(6, Instruction::Push(Value::Boolean(false), lc(1, 24)))
+            .expect_instr(7, Instruction::Assign(VarRef::new("a", VarType::Auto), lc(1, 20)))
+            .expect_instr(8, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(9, Instruction::Push(Value::Integer(1), lc(1, 18)))
+            .expect_instr(10, Instruction::Add(lc(1, 14)))
+            .expect_instr(11, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(12, Instruction::Jump(JumpSpan { addr: 2 }))
             .check();
     }
 
@@ -1284,31 +1283,23 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 12)))
             .expect_instr(1, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(2, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(3, Instruction::Load(VarRef::new("j", VarType::Auto), lc(1, 17)))
+            .expect_instr(4, Instruction::LessEqual(lc(1, 14)))
             .expect_instr(
-                2,
+                5,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::LessEqual(Box::from(BinaryOpSpan {
-                        lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("iter", VarType::Auto),
-                            pos: lc(1, 5),
-                        }),
-                        rhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("j", VarType::Auto),
-                            pos: lc(1, 17),
-                        }),
-                        pos: lc(1, 14),
-                    })),
-                    addr: 10,
+                    addr: 13,
                     error_msg: "FOR supports numeric iteration only",
                 }),
             )
-            .expect_instr(3, Instruction::Push(Value::Boolean(false), lc(1, 24)))
-            .expect_instr(4, Instruction::Assign(VarRef::new("a", VarType::Auto), lc(1, 20)))
-            .expect_instr(5, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
-            .expect_instr(6, Instruction::Push(Value::Integer(1), lc(1, 18)))
-            .expect_instr(7, Instruction::Add(lc(1, 14)))
-            .expect_instr(8, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
-            .expect_instr(9, Instruction::Jump(JumpSpan { addr: 2 }))
+            .expect_instr(6, Instruction::Push(Value::Boolean(false), lc(1, 24)))
+            .expect_instr(7, Instruction::Assign(VarRef::new("a", VarType::Auto), lc(1, 20)))
+            .expect_instr(8, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(9, Instruction::Push(Value::Integer(1), lc(1, 18)))
+            .expect_instr(10, Instruction::Add(lc(1, 14)))
+            .expect_instr(11, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(12, Instruction::Jump(JumpSpan { addr: 2 }))
             .check();
     }
 
@@ -1321,35 +1312,25 @@ mod tests {
             .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 17)))
             .expect_instr(2, Instruction::Add(lc(1, 15)))
             .expect_instr(3, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(4, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(5, Instruction::Push(Value::Integer(2), lc(1, 24)))
+            .expect_instr(6, Instruction::Load(VarRef::new("j", VarType::Auto), lc(1, 28)))
+            .expect_instr(7, Instruction::Add(lc(1, 26)))
+            .expect_instr(8, Instruction::LessEqual(lc(1, 20)))
             .expect_instr(
-                4,
+                9,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::LessEqual(Box::from(BinaryOpSpan {
-                        lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("iter", VarType::Auto),
-                            pos: lc(1, 5),
-                        }),
-                        rhs: Expr::Add(Box::from(BinaryOpSpan {
-                            lhs: Expr::Integer(IntegerSpan { value: 2, pos: lc(1, 24) }),
-                            rhs: Expr::Symbol(SymbolSpan {
-                                vref: VarRef::new("j", VarType::Auto),
-                                pos: lc(1, 28),
-                            }),
-                            pos: lc(1, 26),
-                        })),
-                        pos: lc(1, 20),
-                    })),
-                    addr: 12,
+                    addr: 17,
                     error_msg: "FOR supports numeric iteration only",
                 }),
             )
-            .expect_instr(5, Instruction::Push(Value::Boolean(false), lc(1, 36)))
-            .expect_instr(6, Instruction::Assign(VarRef::new("a", VarType::Auto), lc(1, 32)))
-            .expect_instr(7, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
-            .expect_instr(8, Instruction::Push(Value::Integer(1), lc(1, 30)))
-            .expect_instr(9, Instruction::Add(lc(1, 20)))
-            .expect_instr(10, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
-            .expect_instr(11, Instruction::Jump(JumpSpan { addr: 4 }))
+            .expect_instr(10, Instruction::Push(Value::Boolean(false), lc(1, 36)))
+            .expect_instr(11, Instruction::Assign(VarRef::new("a", VarType::Auto), lc(1, 32)))
+            .expect_instr(12, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(13, Instruction::Push(Value::Integer(1), lc(1, 30)))
+            .expect_instr(14, Instruction::Add(lc(1, 20)))
+            .expect_instr(15, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(16, Instruction::Jump(JumpSpan { addr: 4 }))
             .check();
     }
 
@@ -1373,26 +1354,21 @@ mod tests {
             )
             .expect_instr(2, Instruction::Push(Value::Integer(0), lc(1, 12)))
             .expect_instr(3, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(4, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(5, Instruction::Push(Value::Integer(2), lc(1, 17)))
+            .expect_instr(6, Instruction::LessEqual(lc(1, 14)))
             .expect_instr(
-                4,
+                7,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::LessEqual(Box::from(BinaryOpSpan {
-                        lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("iter", VarType::Auto),
-                            pos: lc(1, 5),
-                        }),
-                        rhs: Expr::Integer(IntegerSpan { value: 2, pos: lc(1, 17) }),
-                        pos: lc(1, 14),
-                    })),
-                    addr: 10,
+                    addr: 13,
                     error_msg: "FOR supports numeric iteration only",
                 }),
             )
-            .expect_instr(5, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
-            .expect_instr(6, Instruction::Push(Value::Double(0.1), lc(1, 24)))
-            .expect_instr(7, Instruction::Add(lc(1, 14)))
-            .expect_instr(8, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
-            .expect_instr(9, Instruction::Jump(JumpSpan { addr: 4 }))
+            .expect_instr(8, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(9, Instruction::Push(Value::Double(0.1), lc(1, 24)))
+            .expect_instr(10, Instruction::Add(lc(1, 14)))
+            .expect_instr(11, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(12, Instruction::Jump(JumpSpan { addr: 4 }))
             .check();
     }
 
@@ -1439,16 +1415,16 @@ mod tests {
         Tester::default()
             .parse("IF FALSE THEN: FOO: END IF")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Boolean(false), lc(1, 4)))
             .expect_instr(
-                0,
+                1,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: false, pos: lc(1, 4) }),
-                    addr: 2,
+                    addr: 3,
                     error_msg: "IF/ELSEIF require a boolean condition",
                 }),
             )
             .expect_instr(
-                1,
+                2,
                 Instruction::BuiltinCall(BuiltinCallSpan {
                     name: "FOO".to_owned(),
                     name_pos: lc(1, 16),
@@ -1463,50 +1439,50 @@ mod tests {
         Tester::default()
             .parse("IF FALSE THEN\nFOO\nELSEIF TRUE THEN\nBAR\nELSE\nBAZ\nEND IF")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Boolean(false), lc(1, 4)))
             .expect_instr(
-                0,
+                1,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: false, pos: lc(1, 4) }),
-                    addr: 3,
+                    addr: 4,
                     error_msg: "IF/ELSEIF require a boolean condition",
                 }),
             )
             .expect_instr(
-                1,
+                2,
                 Instruction::BuiltinCall(BuiltinCallSpan {
                     name: "FOO".to_owned(),
                     name_pos: lc(2, 1),
                     args: vec![],
                 }),
             )
-            .expect_instr(2, Instruction::Jump(JumpSpan { addr: 8 }))
+            .expect_instr(3, Instruction::Jump(JumpSpan { addr: 11 }))
+            .expect_instr(4, Instruction::Push(Value::Boolean(true), lc(3, 8)))
             .expect_instr(
-                3,
+                5,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(3, 8) }),
-                    addr: 6,
+                    addr: 8,
                     error_msg: "IF/ELSEIF require a boolean condition",
                 }),
             )
             .expect_instr(
-                4,
+                6,
                 Instruction::BuiltinCall(BuiltinCallSpan {
                     name: "BAR".to_owned(),
                     name_pos: lc(4, 1),
                     args: vec![],
                 }),
             )
-            .expect_instr(5, Instruction::Jump(JumpSpan { addr: 8 }))
+            .expect_instr(7, Instruction::Jump(JumpSpan { addr: 11 }))
+            .expect_instr(8, Instruction::Push(Value::Boolean(true), lc(5, 1)))
             .expect_instr(
-                6,
+                9,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(5, 1) }),
-                    addr: 8,
+                    addr: 11,
                     error_msg: "IF/ELSEIF require a boolean condition",
                 }),
             )
             .expect_instr(
-                7,
+                10,
                 Instruction::BuiltinCall(BuiltinCallSpan {
                     name: "BAZ".to_owned(),
                     name_pos: lc(6, 1),
@@ -1556,51 +1532,53 @@ mod tests {
     /// expression in `exp_expr`.
     ///
     /// `exp_expr` must assume that its position starts at `(2, 6)`.
-    fn do_compile_case_guard_test(guards: &str, exp_expr: Expr) {
-        Tester::default()
+    fn do_compile_case_guard_test(guards: &str, exp_expr_instrs: Vec<Instruction>) {
+        let mut t = Tester::default()
             .parse(&format!("SELECT CASE 5\nCASE {}\nFOO\nEND SELECT", guards))
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
-            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
             .expect_instr(
-                2,
-                Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: exp_expr,
-                    addr: 4,
-                    error_msg: "SELECT requires a boolean condition",
-                }),
-            )
-            .expect_instr(
-                3,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(3, 1),
-                    args: vec![],
-                }),
-            )
-            .expect_instr(
-                4,
-                Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
-            )
-            .check();
+                1,
+                Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)),
+            );
+        let mut n = 2;
+        for instr in exp_expr_instrs {
+            t = t.expect_instr(n, instr);
+            n += 1;
+        }
+        t.expect_instr(
+            n,
+            Instruction::JumpIfNotTrue(JumpIfBoolSpan {
+                addr: n + 2,
+                error_msg: "SELECT requires a boolean condition",
+            }),
+        )
+        .expect_instr(
+            n + 1,
+            Instruction::BuiltinCall(BuiltinCallSpan {
+                name: "FOO".to_owned(),
+                name_pos: lc(3, 1),
+                args: vec![],
+            }),
+        )
+        .expect_instr(
+            n + 2,
+            Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
+        )
+        .check();
     }
 
     #[test]
     fn test_compile_case_guards_equals() {
         do_compile_case_guard_test(
             "1 + 2",
-            Expr::Equal(Box::from(BinaryOpSpan {
-                lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    pos: lc(2, 6),
-                }),
-                rhs: Expr::Add(Box::from(BinaryOpSpan {
-                    lhs: Expr::Integer(IntegerSpan { value: 1, pos: lc(2, 6) }),
-                    rhs: Expr::Integer(IntegerSpan { value: 2, pos: lc(2, 10) }),
-                    pos: lc(2, 8),
-                })),
-                pos: lc(2, 6),
-            })),
+            vec![
+                Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 6)),
+                Instruction::Push(Value::Integer(1), lc(2, 6)),
+                Instruction::Push(Value::Integer(2), lc(2, 10)),
+                Instruction::Add(lc(2, 8)),
+                Instruction::Equal(lc(2, 6)),
+            ],
         );
     }
 
@@ -1608,78 +1586,58 @@ mod tests {
     fn test_compile_case_guards_is() {
         do_compile_case_guard_test(
             "IS = 9 + 8",
-            Expr::Equal(Box::from(BinaryOpSpan {
-                lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    pos: lc(2, 11),
-                }),
-                rhs: Expr::Add(Box::from(BinaryOpSpan {
-                    lhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 11) }),
-                    rhs: Expr::Integer(IntegerSpan { value: 8, pos: lc(2, 15) }),
-                    pos: lc(2, 13),
-                })),
-                pos: lc(2, 11),
-            })),
+            vec![
+                Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 11)),
+                Instruction::Push(Value::Integer(9), lc(2, 11)),
+                Instruction::Push(Value::Integer(8), lc(2, 15)),
+                Instruction::Add(lc(2, 13)),
+                Instruction::Equal(lc(2, 11)),
+            ],
         );
 
         do_compile_case_guard_test(
             "IS <> 9",
-            Expr::NotEqual(Box::from(BinaryOpSpan {
-                lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    pos: lc(2, 12),
-                }),
-                rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 12) }),
-                pos: lc(2, 12),
-            })),
+            vec![
+                Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 12)),
+                Instruction::Push(Value::Integer(9), lc(2, 12)),
+                Instruction::NotEqual(lc(2, 12)),
+            ],
         );
 
         do_compile_case_guard_test(
             "IS < 9",
-            Expr::Less(Box::from(BinaryOpSpan {
-                lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    pos: lc(2, 11),
-                }),
-                rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 11) }),
-                pos: lc(2, 11),
-            })),
+            vec![
+                Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 11)),
+                Instruction::Push(Value::Integer(9), lc(2, 11)),
+                Instruction::Less(lc(2, 11)),
+            ],
         );
 
         do_compile_case_guard_test(
             "IS <= 9",
-            Expr::LessEqual(Box::from(BinaryOpSpan {
-                lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    pos: lc(2, 12),
-                }),
-                rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 12) }),
-                pos: lc(2, 12),
-            })),
+            vec![
+                Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 12)),
+                Instruction::Push(Value::Integer(9), lc(2, 12)),
+                Instruction::LessEqual(lc(2, 12)),
+            ],
         );
 
         do_compile_case_guard_test(
             "IS > 9",
-            Expr::Greater(Box::from(BinaryOpSpan {
-                lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    pos: lc(2, 11),
-                }),
-                rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 11) }),
-                pos: lc(2, 11),
-            })),
+            vec![
+                Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 11)),
+                Instruction::Push(Value::Integer(9), lc(2, 11)),
+                Instruction::Greater(lc(2, 11)),
+            ],
         );
 
         do_compile_case_guard_test(
             "IS >= 9",
-            Expr::GreaterEqual(Box::from(BinaryOpSpan {
-                lhs: Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("0select1", VarType::Auto),
-                    pos: lc(2, 12),
-                }),
-                rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 12) }),
-                pos: lc(2, 12),
-            })),
+            vec![
+                Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 12)),
+                Instruction::Push(Value::Integer(9), lc(2, 12)),
+                Instruction::GreaterEqual(lc(2, 12)),
+            ],
         );
     }
 
@@ -1687,25 +1645,15 @@ mod tests {
     fn test_compile_case_guards_to() {
         do_compile_case_guard_test(
             "1 TO 2",
-            Expr::And(Box::from(BinaryOpSpan {
-                lhs: Expr::GreaterEqual(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(SymbolSpan {
-                        vref: VarRef::new("0select1", VarType::Auto),
-                        pos: lc(2, 6),
-                    }),
-                    rhs: Expr::Integer(IntegerSpan { value: 1, pos: lc(2, 6) }),
-                    pos: lc(2, 6),
-                })),
-                rhs: Expr::LessEqual(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(SymbolSpan {
-                        vref: VarRef::new("0select1", VarType::Auto),
-                        pos: lc(2, 6),
-                    }),
-                    rhs: Expr::Integer(IntegerSpan { value: 2, pos: lc(2, 11) }),
-                    pos: lc(2, 11),
-                })),
-                pos: lc(2, 6),
-            })),
+            vec![
+                Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 6)),
+                Instruction::Push(Value::Integer(1), lc(2, 6)),
+                Instruction::GreaterEqual(lc(2, 6)),
+                Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 6)),
+                Instruction::Push(Value::Integer(2), lc(2, 11)),
+                Instruction::LessEqual(lc(2, 11)),
+                Instruction::And(lc(2, 6)),
+            ],
         );
     }
 
@@ -1713,25 +1661,15 @@ mod tests {
     fn test_compile_case_guards_many() {
         do_compile_case_guard_test(
             "IS <> 9, 8",
-            Expr::Or(Box::from(BinaryOpSpan {
-                lhs: Expr::NotEqual(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(SymbolSpan {
-                        vref: VarRef::new("0select1", VarType::Auto),
-                        pos: lc(2, 12),
-                    }),
-                    rhs: Expr::Integer(IntegerSpan { value: 9, pos: lc(2, 12) }),
-                    pos: lc(2, 12),
-                })),
-                rhs: Expr::Equal(Box::from(BinaryOpSpan {
-                    lhs: Expr::Symbol(SymbolSpan {
-                        vref: VarRef::new("0select1", VarType::Auto),
-                        pos: lc(2, 15),
-                    }),
-                    rhs: Expr::Integer(IntegerSpan { value: 8, pos: lc(2, 15) }),
-                    pos: lc(2, 15),
-                })),
-                pos: lc(2, 12),
-            })),
+            vec![
+                Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 12)),
+                Instruction::Push(Value::Integer(9), lc(2, 12)),
+                Instruction::NotEqual(lc(2, 12)),
+                Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 15)),
+                Instruction::Push(Value::Integer(8), lc(2, 15)),
+                Instruction::Equal(lc(2, 15)),
+                Instruction::Or(lc(2, 12)),
+            ],
         );
     }
 
@@ -1758,23 +1696,18 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
             .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
+            .expect_instr(2, Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 6)))
+            .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
+            .expect_instr(4, Instruction::Equal(lc(2, 6)))
             .expect_instr(
-                2,
+                5,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Equal(Box::from(BinaryOpSpan {
-                        lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("0select1", VarType::Auto),
-                            pos: lc(2, 6),
-                        }),
-                        rhs: Expr::Integer(IntegerSpan { value: 7, pos: lc(2, 6) }),
-                        pos: lc(2, 6),
-                    })),
-                    addr: 4,
+                    addr: 7,
                     error_msg: "SELECT requires a boolean condition",
                 }),
             )
             .expect_instr(
-                3,
+                6,
                 Instruction::BuiltinCall(BuiltinCallSpan {
                     name: "FOO".to_owned(),
                     name_pos: lc(3, 1),
@@ -1782,7 +1715,7 @@ mod tests {
                 }),
             )
             .expect_instr(
-                4,
+                7,
                 Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
             )
             .check();
@@ -1831,47 +1764,37 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
             .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
+            .expect_instr(2, Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 6)))
+            .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
+            .expect_instr(4, Instruction::Equal(lc(2, 6)))
             .expect_instr(
-                2,
+                5,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Equal(Box::from(BinaryOpSpan {
-                        lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("0select1", VarType::Auto),
-                            pos: lc(2, 6),
-                        }),
-                        rhs: Expr::Integer(IntegerSpan { value: 7, pos: lc(2, 6) }),
-                        pos: lc(2, 6),
-                    })),
-                    addr: 5,
+                    addr: 8,
                     error_msg: "SELECT requires a boolean condition",
                 }),
             )
             .expect_instr(
-                3,
+                6,
                 Instruction::BuiltinCall(BuiltinCallSpan {
                     name: "FOO".to_owned(),
                     name_pos: lc(3, 1),
                     args: vec![],
                 }),
             )
-            .expect_instr(4, Instruction::Jump(JumpSpan { addr: 7 }))
+            .expect_instr(7, Instruction::Jump(JumpSpan { addr: 13 }))
+            .expect_instr(8, Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(4, 12)))
+            .expect_instr(9, Instruction::Push(Value::Integer(8), lc(4, 12)))
+            .expect_instr(10, Instruction::NotEqual(lc(4, 12)))
             .expect_instr(
-                5,
+                11,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::NotEqual(Box::from(BinaryOpSpan {
-                        lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("0select1", VarType::Auto),
-                            pos: lc(4, 12),
-                        }),
-                        rhs: Expr::Integer(IntegerSpan { value: 8, pos: lc(4, 12) }),
-                        pos: lc(4, 12),
-                    })),
-                    addr: 7,
+                    addr: 13,
                     error_msg: "SELECT requires a boolean condition",
                 }),
             )
             .expect_instr(
-                6,
+                12,
                 Instruction::BuiltinCall(BuiltinCallSpan {
                     name: "BAR".to_owned(),
                     name_pos: lc(5, 1),
@@ -1879,7 +1802,7 @@ mod tests {
                 }),
             )
             .expect_instr(
-                7,
+                13,
                 Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(6, 1) }),
             )
             .check();
@@ -1892,32 +1815,27 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
             .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
+            .expect_instr(2, Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 6)))
+            .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
+            .expect_instr(4, Instruction::Equal(lc(2, 6)))
             .expect_instr(
-                2,
+                5,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Equal(Box::from(BinaryOpSpan {
-                        lhs: Expr::Symbol(SymbolSpan {
-                            vref: VarRef::new("0select1", VarType::Auto),
-                            pos: lc(2, 6),
-                        }),
-                        rhs: Expr::Integer(IntegerSpan { value: 7, pos: lc(2, 6) }),
-                        pos: lc(2, 6),
-                    })),
-                    addr: 5,
+                    addr: 8,
                     error_msg: "SELECT requires a boolean condition",
                 }),
             )
             .expect_instr(
-                3,
+                6,
                 Instruction::BuiltinCall(BuiltinCallSpan {
                     name: "FOO".to_owned(),
                     name_pos: lc(3, 1),
                     args: vec![],
                 }),
             )
-            .expect_instr(4, Instruction::Jump(JumpSpan { addr: 6 }))
+            .expect_instr(7, Instruction::Jump(JumpSpan { addr: 9 }))
             .expect_instr(
-                5,
+                8,
                 Instruction::BuiltinCall(BuiltinCallSpan {
                     name: "BAR".to_owned(),
                     name_pos: lc(5, 1),
@@ -1925,7 +1843,7 @@ mod tests {
                 }),
             )
             .expect_instr(
-                6,
+                9,
                 Instruction::Unset(UnsetSpan { name: "0select1".to_owned(), pos: lc(6, 1) }),
             )
             .check();
@@ -1956,23 +1874,23 @@ mod tests {
         Tester::default()
             .parse("WHILE TRUE\nFOO\nWEND")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 7)))
             .expect_instr(
-                0,
+                1,
                 Instruction::JumpIfNotTrue(JumpIfBoolSpan {
-                    cond: Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 7) }),
-                    addr: 3,
+                    addr: 4,
                     error_msg: "WHILE requires a boolean condition",
                 }),
             )
             .expect_instr(
-                1,
+                2,
                 Instruction::BuiltinCall(BuiltinCallSpan {
                     name: "FOO".to_owned(),
                     name_pos: lc(2, 1),
                     args: vec![],
                 }),
             )
-            .expect_instr(2, Instruction::Jump(JumpSpan { addr: 0 }))
+            .expect_instr(3, Instruction::Jump(JumpSpan { addr: 0 }))
             .check();
     }
 }
