@@ -154,12 +154,24 @@ fn rect_points(x1y1: PixelsXY, x2y2: PixelsXY) -> (PixelsXY, SizeInPixels) {
     let (x1, x2) = if x1y1.x < x2y2.x { (x1y1.x, x2y2.x) } else { (x2y2.x, x1y1.x) };
     let (y1, y2) = if x1y1.y < x2y2.y { (x1y1.y, x2y2.y) } else { (x2y2.y, x1y1.y) };
 
-    let width = u32::try_from(i32::from(x2) - i32::from(x1))
-        .expect("Width must have been non-negative")
-        .clamped_into();
-    let height = u32::try_from(i32::from(y2) - i32::from(y1))
-        .expect("Height must have been non-negative")
-        .clamped_into();
+    let width = {
+        let width = i32::from(x2) - i32::from(x1);
+        if cfg!(debug_assertions) {
+            u32::try_from(width).expect("Width must have been non-negative")
+        } else {
+            width as u32
+        }
+    }
+    .clamped_into();
+    let height = {
+        let height = i32::from(y2) - i32::from(y1);
+        if cfg!(debug_assertions) {
+            u32::try_from(height).expect("Height must have been non-negative")
+        } else {
+            height as u32
+        }
+    }
+    .clamped_into();
 
     (PixelsXY::new(x1, y1), SizeInPixels::new(width, height))
 }
