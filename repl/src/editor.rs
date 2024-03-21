@@ -258,11 +258,16 @@ impl Editor {
                 console.set_color(TEXT_COLOR.0, TEXT_COLOR.1)?;
             }
             let cursor_pos = {
-                let x = u16::try_from(self.file_pos.col - self.viewport_pos.col)
-                    .expect("Computed x must have fit on screen");
-                let y = u16::try_from(self.file_pos.line - self.viewport_pos.line)
-                    .expect("Computed y must have fit on screen");
-                CharsXY::new(x, y)
+                let x = self.file_pos.col - self.viewport_pos.col;
+                let y = self.file_pos.line - self.viewport_pos.line;
+                if cfg!(debug_assertions) {
+                    CharsXY::new(
+                        u16::try_from(x).expect("Computed x must have fit on screen"),
+                        u16::try_from(y).expect("Computed y must have fit on screen"),
+                    )
+                } else {
+                    CharsXY::new(x as u16, y as u16)
+                }
             };
             console.locate(cursor_pos)?;
             console.show_cursor()?;
