@@ -658,21 +658,27 @@ impl Machine {
                 }
             }
 
-            Instruction::JumpIfTrue(span) => match span.cond.eval(&mut self.symbols).await? {
-                Value::Boolean(false) => context.pc += 1,
-                Value::Boolean(true) => context.pc = span.addr,
-                _ => {
-                    return new_syntax_error(span.cond.start_pos(), span.error_msg);
+            Instruction::JumpIfTrue(span) => {
+                let (arg, pos) = context.value_stack.pop().unwrap();
+                match arg {
+                    Value::Boolean(false) => context.pc += 1,
+                    Value::Boolean(true) => context.pc = span.addr,
+                    _ => {
+                        return new_syntax_error(pos, span.error_msg);
+                    }
                 }
-            },
+            }
 
-            Instruction::JumpIfNotTrue(span) => match span.cond.eval(&mut self.symbols).await? {
-                Value::Boolean(true) => context.pc += 1,
-                Value::Boolean(false) => context.pc = span.addr,
-                _ => {
-                    return new_syntax_error(span.cond.start_pos(), span.error_msg);
+            Instruction::JumpIfNotTrue(span) => {
+                let (arg, pos) = context.value_stack.pop().unwrap();
+                match arg {
+                    Value::Boolean(true) => context.pc += 1,
+                    Value::Boolean(false) => context.pc = span.addr,
+                    _ => {
+                        return new_syntax_error(pos, span.error_msg);
+                    }
                 }
-            },
+            }
 
             Instruction::Load(vref, pos) => {
                 let value = match self
