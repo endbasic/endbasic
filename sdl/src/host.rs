@@ -352,15 +352,13 @@ impl RasterOps for Context {
             .texture_creator
             .create_texture_static(None, rect.width(), rect.height())
             .map_err(texture_value_error_to_io_error)?;
-        texture
-            .update(
-                None,
-                data,
-                usize::try_from(rect.width())
-                    .expect("Width must fit in usize")
-                    .clamped_mul(self.pixel_format.byte_size_per_pixel()),
-            )
-            .map_err(update_texture_error_to_io_error)?;
+        let width = if cfg!(debug_assertions) {
+            usize::try_from(rect.width()).expect("Width must fit in usize")
+        } else {
+            rect.width() as usize
+        }
+        .clamped_mul(self.pixel_format.byte_size_per_pixel());
+        texture.update(None, data, width).map_err(update_texture_error_to_io_error)?;
         self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)
     }
 
