@@ -590,7 +590,17 @@ impl Compiler {
             }
 
             Statement::DimArray(span) => {
-                self.emit(Instruction::DimArray(span));
+                let nargs = span.dimensions.len();
+                for arg in span.dimensions.into_iter().rev() {
+                    self.compile_expr(arg, false)?;
+                }
+                self.emit(Instruction::DimArray(DimArrayISpan {
+                    name: span.name,
+                    name_pos: span.name_pos,
+                    dimensions: nargs,
+                    subtype: span.subtype,
+                    subtype_pos: span.subtype_pos,
+                }));
             }
 
             Statement::Do(span) => {
@@ -913,18 +923,41 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_dim_array() {
+    fn test_compile_dim_array_immediate() {
         Tester::default()
             .parse("DIM var(1) AS INTEGER")
             .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(1), lc(1, 9)))
             .expect_instr(
-                0,
-                Instruction::DimArray(DimArraySpan {
+                1,
+                Instruction::DimArray(DimArrayISpan {
                     name: "var".to_owned(),
                     name_pos: lc(1, 5),
-                    dimensions: vec![Expr::Integer(IntegerSpan { value: 1, pos: lc(1, 9) })],
+                    dimensions: 1,
                     subtype: VarType::Integer,
                     subtype_pos: lc(1, 15),
+                }),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_dim_array_exprs() {
+        Tester::default()
+            .parse("DIM var(i, 3 + 4) AS INTEGER")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(3), lc(1, 12)))
+            .expect_instr(1, Instruction::Push(Value::Integer(4), lc(1, 16)))
+            .expect_instr(2, Instruction::Add(lc(1, 14)))
+            .expect_instr(3, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 9)))
+            .expect_instr(
+                4,
+                Instruction::DimArray(DimArrayISpan {
+                    name: "var".to_owned(),
+                    name_pos: lc(1, 5),
+                    dimensions: 2,
+                    subtype: VarType::Integer,
+                    subtype_pos: lc(1, 22),
                 }),
             )
             .check();

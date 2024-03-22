@@ -398,25 +398,19 @@ impl Machine {
 
     /// Handles an array definition.  The array must not yet exist, and the name may not overlap
     /// function or variable names.
-    pub async fn dim_array(&mut self, span: &DimArraySpan) -> Result<()> {
-        let mut ds = Vec::with_capacity(span.dimensions.len());
-        for dim_expr in &span.dimensions {
-            match dim_expr.eval(&mut self.symbols).await? {
+    fn dim_array(&mut self, context: &mut Context, span: &DimArrayISpan) -> Result<()> {
+        let mut ds = Vec::with_capacity(span.dimensions);
+        for _ in 0..span.dimensions {
+            let (value, pos) = context.value_stack.pop().unwrap();
+            match value {
                 Value::Integer(i) => {
                     if i <= 0 {
-                        return new_syntax_error(
-                            dim_expr.start_pos(),
-                            "Dimensions in DIM array must be positive",
-                        );
+                        return new_syntax_error(pos, "Dimensions in DIM array must be positive");
                     }
                     ds.push(i as usize);
                 }
-                _ => {
-                    return new_syntax_error(
-                        dim_expr.start_pos(),
-                        "Dimensions in DIM array must be integers",
-                    )
-                }
+                Value::VarRef(_) => panic!("Should never get unevaluated varrefs"),
+                _ => return new_syntax_error(pos, "Dimensions in DIM array must be integers"),
             }
         }
         self.symbols
@@ -643,7 +637,7 @@ impl Machine {
             }
 
             Instruction::DimArray(span) => {
-                self.dim_array(span).await?;
+                self.dim_array(context, span)?;
                 context.pc += 1;
             }
 
@@ -1126,6 +1120,11 @@ mod tests {
             &[],
             &["0 FALSE"],
         );
+    }
+
+    #[test]
+    fn test_dim_array_varref_ok() {
+        do_ok_test("i = 3\nDIM foo(i)\nOUT foo%(2)", &[], &["0"]);
     }
 
     #[test]
