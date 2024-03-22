@@ -427,25 +427,26 @@ impl Machine {
     }
 
     /// Tells the machine to stop execution at the next statement boundary.
-    async fn end(&mut self, span: &EndSpan) -> Result<()> {
-        let code = match &span.code {
-            None => 0,
-            Some(expr) => match expr.eval(&mut self.symbols).await?.as_i32() {
-                Ok(n) if n < 0 => {
+    fn end(&mut self, context: &mut Context, has_code: bool) -> Result<()> {
+        let code = if has_code {
+            let (code, code_pos) = context.value_stack.pop().unwrap();
+            match code.as_i32().map_err(|e| Error::from_value_error(e, code_pos))? {
+                n if n < 0 => {
                     return new_syntax_error(
-                        expr.start_pos(),
+                        code_pos,
                         "Exit code must be a positive integer".to_owned(),
                     );
                 }
-                Ok(n) if n >= 128 => {
+                n if n >= 128 => {
                     return new_syntax_error(
-                        expr.start_pos(),
+                        code_pos,
                         "Exit code cannot be larger than 127".to_owned(),
                     );
                 }
-                Ok(n) => n as u8,
-                Err(e) => return Err(Error::from_value_error(e, expr.start_pos())),
-            },
+                n => n as u8,
+            }
+        } else {
+            0
         };
         self.stop_reason = Some(StopReason::Exited(code));
         Ok(())
@@ -641,8 +642,8 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::End(span) => {
-                self.end(span).await?;
+            Instruction::End(has_code) => {
+                self.end(context, *has_code)?;
             }
 
             Instruction::Jump(span) => {

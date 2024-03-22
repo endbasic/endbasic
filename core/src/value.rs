@@ -87,6 +87,7 @@ impl Value {
                 }
             }
             Value::Integer(i) => Ok(*i),
+            Value::VarRef(_) => panic!("Should never get unevaluated varrefs"),
             _ => Err(Error::new(format!("{} is not a number", self))),
         }
     }
