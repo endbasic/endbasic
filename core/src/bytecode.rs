@@ -174,8 +174,9 @@ pub enum Instruction {
     /// Represents an array definition.
     DimArray(DimArrayISpan),
 
-    /// Represents a request to terminate the program.
-    End(EndSpan),
+    /// Represents a request to terminate the program.  If the boolean is true, the exit ode is
+    /// at the top of the stack.
+    End(bool),
 
     /// Represents an unconditional jump.
     Jump(JumpISpan),
