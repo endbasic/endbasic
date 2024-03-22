@@ -607,9 +607,15 @@ impl Compiler {
                 self.compile_do(span)?;
             }
 
-            Statement::End(span) => {
-                self.emit(Instruction::End(span));
-            }
+            Statement::End(span) => match span.code {
+                Some(expr) => {
+                    self.compile_expr(expr, false)?;
+                    self.emit(Instruction::End(true));
+                }
+                None => {
+                    self.emit(Instruction::End(false));
+                }
+            },
 
             Statement::ExitDo(span) => {
                 if self.exit_do_level.1 == 0 {
@@ -1030,11 +1036,29 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_end() {
+    fn test_compile_end_without_exit_code() {
+        Tester::default().parse("END").compile().expect_instr(0, Instruction::End(false)).check();
+    }
+
+    #[test]
+    fn test_compile_end_with_exit_code_expr() {
         Tester::default()
-            .parse("END")
+            .parse("END 2 + i")
             .compile()
-            .expect_instr(0, Instruction::End(EndSpan { code: None }))
+            .expect_instr(0, Instruction::Push(Value::Integer(2), lc(1, 5)))
+            .expect_instr(1, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 9)))
+            .expect_instr(2, Instruction::Add(lc(1, 7)))
+            .expect_instr(3, Instruction::End(true))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_end_with_exit_code_varref() {
+        Tester::default()
+            .parse("END i")
+            .compile()
+            .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 5)))
+            .expect_instr(1, Instruction::End(true))
             .check();
     }
 
