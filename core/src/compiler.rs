@@ -660,7 +660,7 @@ impl Compiler {
             }
 
             Statement::Return(span) => {
-                self.emit(Instruction::Return(span));
+                self.emit(Instruction::Return(span.pos));
             }
 
             Statement::Select(span) => {
@@ -1456,7 +1456,7 @@ mod tests {
                     args: vec![],
                 }),
             )
-            .expect_instr(1, Instruction::Return(ReturnSpan { pos: lc(3, 1) }))
+            .expect_instr(1, Instruction::Return(lc(3, 1)))
             .expect_instr(2, Instruction::Call(JumpISpan { addr: 0 }))
             .check();
     }

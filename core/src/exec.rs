@@ -726,9 +726,9 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::Return(span) => match context.addr_stack.pop() {
+            Instruction::Return(pos) => match context.addr_stack.pop() {
                 Some(addr) => context.pc = addr,
-                None => return new_syntax_error(span.pos, "No address to return to".to_owned()),
+                None => return new_syntax_error(*pos, "No address to return to".to_owned()),
             },
 
             Instruction::SetErrorHandler(span) => {

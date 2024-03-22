@@ -203,7 +203,7 @@ pub enum Instruction {
     Push(Value, LineCol),
 
     /// Represents a return after a call.
-    Return(ReturnSpan),
+    Return(LineCol),
 
     /// Represents a change in the error handler state.
     SetErrorHandler(ErrorHandlerISpan),
