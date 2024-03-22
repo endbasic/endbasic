@@ -21,6 +21,27 @@ use crate::reader::LineCol;
 /// Convenience type to represent a program address.
 pub type Address = usize;
 
+/// Components of an array definition.
+#[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
+pub struct DimArrayISpan {
+    /// Name of the array to define.  Type annotations are not allowed, hence why this is not a
+    /// `VarRef`.
+    pub name: String,
+
+    /// Position of the name.
+    pub name_pos: LineCol,
+
+    /// Number of values in the stack representing the dimensions of the array.
+    pub dimensions: usize,
+
+    /// Type of the array to be defined.
+    pub subtype: VarType,
+
+    /// Position of the subtype.
+    pub subtype_pos: LineCol,
+}
+
 /// Components of an unconditional jump instruction.
 #[derive(Debug, Eq, PartialEq)]
 pub struct JumpISpan {
@@ -151,7 +172,7 @@ pub enum Instruction {
     Dim(DimSpan),
 
     /// Represents an array definition.
-    DimArray(DimArraySpan),
+    DimArray(DimArrayISpan),
 
     /// Represents a request to terminate the program.
     End(EndSpan),
