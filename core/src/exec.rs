@@ -182,12 +182,17 @@ struct Context {
     pc: Address,
     addr_stack: Vec<Address>,
     value_stack: Vec<(Value, LineCol)>,
-    err_handler: ErrorHandlerSpan,
+    err_handler: ErrorHandlerISpan,
 }
 
 impl Default for Context {
     fn default() -> Self {
-        Self { pc: 0, addr_stack: vec![], value_stack: vec![], err_handler: ErrorHandlerSpan::None }
+        Self {
+            pc: 0,
+            addr_stack: vec![],
+            value_stack: vec![],
+            err_handler: ErrorHandlerISpan::None,
+        }
     }
 }
 
@@ -755,12 +760,12 @@ impl Machine {
                     .expect("Internal symbol must be of a specific type");
 
                 match context.err_handler {
-                    ErrorHandlerSpan::Jump(addr) => {
+                    ErrorHandlerISpan::Jump(addr) => {
                         context.pc = addr;
                         result = Ok(());
                     }
-                    ErrorHandlerSpan::None => (),
-                    ErrorHandlerSpan::ResumeNext => {
+                    ErrorHandlerISpan::None => (),
+                    ErrorHandlerISpan::ResumeNext => {
                         context.pc += 1;
                         result = Ok(());
                     }

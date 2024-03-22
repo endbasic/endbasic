@@ -23,14 +23,14 @@ pub type Address = usize;
 
 /// Components of an unconditional jump instruction.
 #[derive(Debug, Eq, PartialEq)]
-pub struct JumpSpan {
+pub struct JumpISpan {
     /// The address to jump to.
     pub addr: Address,
 }
 
 /// Components of a conditional jump that depends on whether a variable is defined.
 #[cfg_attr(test, derive(Debug, Eq, PartialEq))]
-pub struct JumpIfDefinedSpan {
+pub struct JumpIfDefinedISpan {
     /// The variable to check for nonexistence.
     pub var: String,
 
@@ -40,7 +40,7 @@ pub struct JumpIfDefinedSpan {
 
 /// Components of a conditional jump that depends on a boolean expression.
 #[cfg_attr(test, derive(Debug, PartialEq))]
-pub struct JumpIfBoolSpan {
+pub struct JumpIfBoolISpan {
     /// The address to jump to.
     pub addr: Address,
 
@@ -51,7 +51,7 @@ pub struct JumpIfBoolSpan {
 /// Components of a change to the error handler.
 #[derive(Clone, Copy)]
 #[cfg_attr(test, derive(Debug, Eq, PartialEq))]
-pub enum ErrorHandlerSpan {
+pub enum ErrorHandlerISpan {
     /// Jumps to the included address on error.
     Jump(Address),
 
@@ -64,7 +64,7 @@ pub enum ErrorHandlerSpan {
 
 /// Components of a request to unset a variable.
 #[cfg_attr(test, derive(Debug, Eq, PartialEq))]
-pub struct UnsetSpan {
+pub struct UnsetISpan {
     /// Name of the variable to unset.
     pub name: String,
 
@@ -142,7 +142,7 @@ pub enum Instruction {
     BuiltinCall(BuiltinCallSpan),
 
     /// Represents an unconditional call to a location that will return.
-    Call(JumpSpan),
+    Call(JumpISpan),
 
     /// Represents a call to the given function with the given number of arguments.
     FunctionCall(VarRef, LineCol, usize),
@@ -157,16 +157,16 @@ pub enum Instruction {
     End(EndSpan),
 
     /// Represents an unconditional jump.
-    Jump(JumpSpan),
+    Jump(JumpISpan),
 
     /// Represents an conditional jump that jumps if the variable is defined.
-    JumpIfDefined(JumpIfDefinedSpan),
+    JumpIfDefined(JumpIfDefinedISpan),
 
     /// Represents an conditional jump that jumps if the condition is met.
-    JumpIfTrue(JumpIfBoolSpan),
+    JumpIfTrue(JumpIfBoolISpan),
 
     /// Represents an conditional jump that jumps if the condition is not met.
-    JumpIfNotTrue(JumpIfBoolSpan),
+    JumpIfNotTrue(JumpIfBoolISpan),
 
     /// Represents a load of a variable's value from main memory into the stack.
     Load(VarRef, LineCol),
@@ -184,10 +184,10 @@ pub enum Instruction {
     Return(ReturnSpan),
 
     /// Represents a change in the error handler state.
-    SetErrorHandler(ErrorHandlerSpan),
+    SetErrorHandler(ErrorHandlerISpan),
 
     /// Represents a request to unset a variable.
-    Unset(UnsetSpan),
+    Unset(UnsetISpan),
 }
 
 /// Representation of a compiled program.
