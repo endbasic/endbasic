@@ -16,7 +16,7 @@
 //! Commands that manipulate the machine's state or the program's execution.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
+use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -62,8 +62,8 @@ impl Command for ClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         machine.clear();
@@ -158,23 +158,28 @@ impl Command for SleepCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        let (duration, pos) = match span.args.as_slice() {
-            [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
-                let value = expr.eval(machine.get_mut_symbols()).await?;
-                let n = value
-                    .as_f64()
-                    .map_err(|e| CallError::ArgumentError(expr.start_pos(), format!("{}", e)))?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let (duration, pos) = match iter.next() {
+            Some((value, pos)) => {
+                let n =
+                    value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
                 if n < 0.0 {
                     return Err(CallError::ArgumentError(
-                        expr.start_pos(),
+                        pos,
                         "Sleep time must be positive".to_owned(),
                     ));
                 }
-                (Duration::from_secs_f64(n), expr.start_pos())
+                (Duration::from_secs_f64(n), pos)
             }
             _ => return Err(CallError::SyntaxError),
         };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
         (self.sleep_fn)(duration, pos).await
     }
 }
@@ -218,9 +223,14 @@ mod tests {
     #[test]
     fn test_errmsg_after_error() {
         Tester::default()
-            .run("ON ERROR RESUME NEXT: PRINT a: PRINT \"Captured: \"; ERRMSG")
-            .expect_var("0ERRMSG", "1:29: Undefined variable a")
-            .expect_prints(["Captured: 1:29: Undefined variable a"])
+            .run("ON ERROR RESUME NEXT: INPUT 3: PRINT \"Captured: \"; ERRMSG")
+            .expect_var(
+                "0ERRMSG",
+                "1:23: In call to INPUT: 1:29: INPUT requires a variable reference",
+            )
+            .expect_prints([
+                "Captured: 1:23: In call to INPUT: 1:29: INPUT requires a variable reference",
+            ])
             .check();
     }
 

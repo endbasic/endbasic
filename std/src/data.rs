@@ -16,11 +16,12 @@
 //! Commands to interact with the data provided by `DATA` statements.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, BuiltinCallSpan, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
 };
+use endbasic_core::LineCol;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -74,59 +75,65 @@ impl Command for ReadCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        if args.is_empty() {
             return Err(CallError::SyntaxError);
         }
 
+        let mut vrefs = Vec::with_capacity(args.len());
+        let mut iter = args.into_iter();
         let mut index = self.index.borrow_mut();
 
-        for arg in &span.args {
-            match (arg.expr.as_ref(), arg.sep) {
-                (Some(Expr::Symbol(symspan)), sep) if sep == ArgSep::Long || sep == ArgSep::End => {
-                    let datum = {
-                        let data = machine.get_data();
-                        debug_assert!(*index <= data.len());
-                        if *index == data.len() {
-                            return Err(CallError::InternalError(
-                                symspan.pos,
-                                format!("Out of data reading into {}", symspan.vref),
-                            ));
-                        }
-
-                        match (&symspan.vref.ref_type(), &data[*index]) {
-                            (_, Some(datum)) => datum.clone(),
-                            (VarType::Auto, None) => {
-                                match machine
-                                    .get_symbols()
-                                    .get_var(&symspan.vref)
-                                    .map(Value::as_vartype)
-                                {
-                                    Ok(VarType::Auto) => panic!(),
-                                    Ok(VarType::Boolean) => Value::Boolean(false),
-                                    Ok(VarType::Double) => Value::Double(0.0),
-                                    Ok(VarType::Integer) => Value::Integer(0),
-                                    Ok(VarType::Text) => Value::Text("".to_owned()),
-                                    Ok(VarType::Void) => panic!(),
-                                    Err(_) => Value::Integer(0),
-                                }
-                            }
-                            (VarType::Boolean, None) => Value::Boolean(false),
-                            (VarType::Double, None) => Value::Double(0.0),
-                            (VarType::Integer, None) => Value::Integer(0),
-                            (VarType::Text, None) => Value::Text("".to_owned()),
-                            (VarType::Void, None) => panic!(),
-                        }
-                    };
-                    *index += 1;
-
-                    machine
-                        .get_mut_symbols()
-                        .set_var(&symspan.vref, datum)
-                        .map_err(|e| CallError::ArgumentError(symspan.pos, format!("{}", e)))?;
-                }
+        while let Some((value, pos)) = iter.next() {
+            match value {
+                Value::VarRef(vref) => vrefs.push((vref, pos)),
                 _ => return Err(CallError::SyntaxError),
             }
+
+            match iter.next() {
+                None => break,
+                Some((Value::Separator(ArgSep::Long), _pos)) => (),
+                _ => return Err(CallError::SyntaxError),
+            }
+        }
+
+        for (vref, pos) in vrefs {
+            let datum = {
+                let data = machine.get_data();
+                debug_assert!(*index <= data.len());
+                if *index == data.len() {
+                    return Err(CallError::InternalError(
+                        pos,
+                        format!("Out of data reading into {}", vref),
+                    ));
+                }
+
+                match (&vref.ref_type(), &data[*index]) {
+                    (_, Some(datum)) => datum.clone(),
+                    (VarType::Auto, None) => {
+                        match machine.get_symbols().get_var(&vref).map(Value::as_vartype) {
+                            Ok(VarType::Auto) => panic!(),
+                            Ok(VarType::Boolean) => Value::Boolean(false),
+                            Ok(VarType::Double) => Value::Double(0.0),
+                            Ok(VarType::Integer) => Value::Integer(0),
+                            Ok(VarType::Text) => Value::Text("".to_owned()),
+                            Ok(VarType::Void) => panic!(),
+                            Err(_) => Value::Integer(0),
+                        }
+                    }
+                    (VarType::Boolean, None) => Value::Boolean(false),
+                    (VarType::Double, None) => Value::Double(0.0),
+                    (VarType::Integer, None) => Value::Integer(0),
+                    (VarType::Text, None) => Value::Text("".to_owned()),
+                    (VarType::Void, None) => panic!(),
+                }
+            };
+            *index += 1;
+
+            machine
+                .get_mut_symbols()
+                .set_var(&vref, datum)
+                .map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
         }
 
         Ok(())
@@ -163,8 +170,8 @@ impl Command for RestoreCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         *self.index.borrow_mut() = 0;

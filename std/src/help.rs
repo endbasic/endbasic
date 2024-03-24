@@ -18,7 +18,7 @@
 use crate::console::{refill_and_print, AnsiColor, Console};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
+use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Symbols,
@@ -478,33 +478,36 @@ impl Command for HelpCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        // TODO(jmmv): Now that we can "see" unexpanded variable references, it might be interesting
+        // to restore the previous "HELP foo" functionality (without double quotes).
+        let mut iter = machine.load_all(args)?.into_iter();
+
         let topics = Topics::new(machine.get_symbols());
 
-        match span.args.as_slice() {
-            [] => {
+        match iter.next() {
+            None => {
                 let mut console = self.console.borrow_mut();
                 let previous = console.set_sync(false)?;
                 let result = self.summary(&topics, &mut *console);
                 console.set_sync(previous)?;
                 result?;
             }
-            [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
-                let pos = expr.start_pos();
-                match expr.eval(machine.get_mut_symbols()).await? {
-                    Value::Text(t) => {
-                        let topic = topics.find(&t, pos)?;
-                        let mut console = self.console.borrow_mut();
-                        let previous = console.set_sync(false)?;
-                        let result = topic.describe(&mut *console);
-                        console.set_sync(previous)?;
-                        result?;
-                    }
-                    _ => return Err(CallError::SyntaxError),
+            Some((Value::Text(t), pos)) => {
+                if iter.next().is_some() {
+                    return Err(CallError::SyntaxError);
                 }
+
+                let topic = topics.find(&t, pos)?;
+                let mut console = self.console.borrow_mut();
+                let previous = console.set_sync(false)?;
+                let result = topic.describe(&mut *console);
+                console.set_sync(previous)?;
+                result?;
             }
             _ => return Err(CallError::SyntaxError),
         }
+
         Ok(())
     }
 }
@@ -558,7 +561,11 @@ Second paragraph of the extended description.",
             &self.metadata
         }
 
-        async fn exec(&self, _span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
+        async fn exec(
+            &self,
+            _args: Vec<(Value, LineCol)>,
+            _machine: &mut Machine,
+        ) -> CommandResult {
             Ok(())
         }
     }
@@ -937,9 +944,11 @@ This is the first and only topic with just one line.
         t.run(r#"HELP foo bar"#)
             .expect_uncatchable_err("1:10: Unexpected value in expression")
             .check();
-        t.run(r#"HELP foo"#).expect_err("1:6: Undefined variable foo").check();
+        t.run(r#"HELP foo"#)
+            .expect_err("1:1: In call to HELP: 1:6: Undefined variable foo")
+            .check();
 
-        t.run(r#"HELP "foo", bar"#).expect_err("1:1: In call to HELP: expected [topic$]").check();
+        t.run(r#"HELP "foo", 3"#).expect_err("1:1: In call to HELP: expected [topic$]").check();
         t.run(r#"HELP 3"#).expect_err("1:1: In call to HELP: expected [topic$]").check();
 
         t.run(r#"HELP "lang%""#)

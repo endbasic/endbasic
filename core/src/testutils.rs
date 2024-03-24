@@ -15,7 +15,7 @@
 
 //! Test utilities.
 
-use crate::ast::{ArgSep, BuiltinCallSpan, Expr, Value, VarRef, VarType};
+use crate::ast::{ArgSep, Value, VarRef, VarType};
 use crate::eval;
 use crate::exec::Machine;
 use crate::syms::{
@@ -36,6 +36,8 @@ fn format_value(v: Value, o: &mut String) {
         Value::Boolean(false) => o.push_str("FALSE"),
         Value::Double(d) => o.push_str(&format!("{}", d)),
         Value::Integer(i) => o.push_str(&format!("{}", i)),
+        Value::Missing => panic!("Should never try to format missing arguments in tests"),
+        Value::Separator(s) => o.push_str(&format!("{:?}", s)),
         Value::Text(s) => o.push_str(&s),
         Value::VarRef(v) => o.push_str(&format!("{}", v)),
     }
@@ -60,8 +62,8 @@ impl Command for ClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         machine.clear();
@@ -170,22 +172,16 @@ impl Command for RaiseCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if span.args.len() != 1 {
-            return Err(CallError::SyntaxError);
-        }
-        let arg0 = span.args[0].expr.as_ref().expect("Invalid arguments");
-        match arg0.eval(machine.get_mut_symbols()).await? {
-            Value::Text(s) => {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+        let result = match iter.next().expect("Invalid arguments") {
+            (Value::Text(s), pos) => {
                 if s == "argument" {
-                    Err(CallError::ArgumentError(arg0.start_pos(), "Bad argument".to_owned()))
+                    Err(CallError::ArgumentError(pos, "Bad argument".to_owned()))
                 } else if s == "eval" {
-                    Err(CallError::EvalError(arg0.start_pos(), "Some eval error".to_owned()))
+                    Err(CallError::EvalError(pos, "Some eval error".to_owned()))
                 } else if s == "internal" {
-                    Err(CallError::InternalError(
-                        arg0.start_pos(),
-                        "Some internal error".to_owned(),
-                    ))
+                    Err(CallError::InternalError(pos, "Some internal error".to_owned()))
                 } else if s == "io" {
                     Err(io::Error::new(io::ErrorKind::Other, "Some I/O error".to_owned()).into())
                 } else if s == "syntax" {
@@ -195,7 +191,11 @@ impl Command for RaiseCommand {
                 }
             }
             _ => panic!("Invalid arguments"),
+        };
+        if iter.next().is_some() {
+            panic!("Invalid arguments");
         }
+        result
     }
 }
 
@@ -257,8 +257,8 @@ impl Command for GetDataCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         *self.data.borrow_mut() = machine.get_data().to_vec();
@@ -291,17 +291,15 @@ impl Command for InCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if span.args.len() != 1 {
-            return Err(CallError::SyntaxError);
-        }
-        if span.args[0].sep != ArgSep::End {
-            return Err(CallError::SyntaxError);
-        }
-        let (vref, pos) = match &span.args[0].expr {
-            Some(Expr::Symbol(span)) => (&span.vref, span.pos),
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = args.into_iter();
+        let (vref, pos) = match iter.next() {
+            Some((Value::VarRef(vref), pos)) => (vref, pos),
             _ => return Err(CallError::SyntaxError),
         };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
 
         let mut data = self.data.borrow_mut();
         let raw_value = data.next().unwrap().to_owned();
@@ -309,7 +307,7 @@ impl Command for InCommand {
             .map_err(|e| eval::Error::from_value_error(e, pos))?;
         machine
             .get_mut_symbols()
-            .set_var(vref, value)
+            .set_var(&vref, value)
             .map_err(|e| eval::Error::from_value_error(e, pos))?;
         Ok(())
     }
@@ -342,16 +340,20 @@ impl Command for OutCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let mut text = String::new();
-        for arg in span.args.iter() {
-            if let Some(expr) = arg.expr.as_ref() {
-                format_value(expr.eval(machine.get_mut_symbols()).await?, &mut text);
+        loop {
+            match iter.next() {
+                Some((value, _pos)) => {
+                    format_value(value, &mut text);
+                }
+                _ => return Err(CallError::SyntaxError),
             }
-            match arg.sep {
-                ArgSep::End => break,
-                ArgSep::Short => text += " ",
-                ArgSep::Long | ArgSep::As => return Err(CallError::SyntaxError),
+            match iter.next() {
+                None => break,
+                Some((Value::Separator(ArgSep::Short), _pos)) => text += " ",
+                _ => return Err(CallError::SyntaxError),
             }
         }
         self.data.borrow_mut().push(text);

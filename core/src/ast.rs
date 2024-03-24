@@ -298,6 +298,14 @@ pub enum Value {
     /// An integer value.
     Integer(i32),
 
+    /// An empty argument in a command call.  This is not strictly necessary but makes argument
+    /// parsing much simpler in the commands because we can assume each argument is followed by
+    /// a separator.
+    Missing,
+
+    /// A separator for built-in command arguments.
+    Separator(ArgSep),
+
     /// A string value.
     Text(String), // Should be `String` but would get confusing with the built-in Rust type.
 
@@ -323,6 +331,12 @@ impl From<i32> for Value {
     }
 }
 
+impl From<ArgSep> for Value {
+    fn from(s: ArgSep) -> Self {
+        Value::Separator(s)
+    }
+}
+
 impl From<&str> for Value {
     fn from(s: &str) -> Self {
         Value::Text(s.to_owned())
@@ -342,6 +356,8 @@ impl fmt::Display for Value {
                 write!(f, "{}", s)
             }
             Value::Integer(i) => write!(f, "{}", i),
+            Value::Missing => Ok(()),
+            Value::Separator(s) => write!(f, "{}", s),
             Value::Text(s) => write!(f, "\"{}\"", s),
             Value::VarRef(v) => write!(f, "{}", v),
         }
@@ -355,6 +371,8 @@ impl Value {
             Value::Boolean(_) => VarType::Boolean,
             Value::Double(_) => VarType::Double,
             Value::Integer(_) => VarType::Integer,
+            Value::Missing => panic!("Should have never asked for the type of a missing argument"),
+            Value::Separator(_) => VarType::Integer,
             Value::Text(_) => VarType::Text,
             Value::VarRef(vref) => vref.ref_type,
         }
@@ -363,7 +381,7 @@ impl Value {
     /// Consumes the value and converts it to a string value.  This is slightly different from the
     /// `Display` implementation because strings aren't double-quoted.
     ///
-    /// The output of this function is used anything a value is converted to a string, say as the
+    /// The output of this function is used anywhere a value is converted to a string, say as the
     /// output of `PRINT`.
     ///
     /// This is *not* named `to_string` to prevent confusion with the behavior of a traditional
@@ -376,6 +394,8 @@ impl Value {
             Value::Double(d) => format!(" {}", d),
             Value::Integer(i) if i.is_negative() => format!("{}", i),
             Value::Integer(i) => format!(" {}", i),
+            Value::Missing => "".to_owned(),
+            Value::Separator(_s) => panic!("Separators should not be printed"),
             Value::Text(s) => s,
             Value::VarRef(v) => format!("{}", v),
         }
@@ -383,6 +403,7 @@ impl Value {
 }
 
 /// Types of separators between arguments to a `BuiltinCall`.
+#[repr(i32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ArgSep {
     /// Filler for the separator in the last argument.
@@ -396,6 +417,17 @@ pub enum ArgSep {
 
     /// `AS` separator.
     As,
+}
+
+impl fmt::Display for ArgSep {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ArgSep::End => write!(f, "<END OF STATEMENT>"),
+            ArgSep::Short => write!(f, ";"),
+            ArgSep::Long => write!(f, ","),
+            ArgSep::As => write!(f, "AS"),
+        }
+    }
 }
 
 /// Components of an array assignment statement.

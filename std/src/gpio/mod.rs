@@ -16,7 +16,7 @@
 //! GPIO access functions and commands for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -56,13 +56,8 @@ impl Pin {
         Ok(Self(i as u8))
     }
 
-    /// Obtains a pin number from an expression.
-    async fn parse(expr: &Expr, machine: &mut Machine) -> Result<Pin, CallError> {
-        Pin::parse_value(expr.eval(machine.get_mut_symbols()).await?, expr.start_pos())
-    }
-
     /// Obtains a pin number from a value.
-    fn parse_value(value: Value, pos: LineCol) -> Result<Pin, CallError> {
+    fn parse(value: Value, pos: LineCol) -> Result<Pin, CallError> {
         let n = value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
         Pin::from_i32(n, pos)
     }
@@ -85,35 +80,26 @@ pub enum PinMode {
 }
 
 impl PinMode {
-    /// Obtains a `PinMode` from an expression.
-    async fn parse(expr: &Expr, machine: &mut Machine) -> Result<PinMode, CallError> {
-        match expr.eval(machine.get_mut_symbols()).await? {
+    /// Obtains a `PinMode` from a value.
+    fn parse(value: Value, pos: LineCol) -> Result<PinMode, CallError> {
+        match value {
             Value::Text(s) => match s.to_ascii_uppercase().as_ref() {
                 "IN" => Ok(PinMode::In),
                 "IN-PULL-UP" => Ok(PinMode::InPullUp),
                 "IN-PULL-DOWN" => Ok(PinMode::InPullDown),
                 "OUT" => Ok(PinMode::Out),
-                s => Err(CallError::ArgumentError(
-                    expr.start_pos(),
-                    format!("Unknown pin mode {}", s),
-                )),
+                s => Err(CallError::ArgumentError(pos, format!("Unknown pin mode {}", s))),
             },
-            v => Err(CallError::ArgumentError(
-                expr.start_pos(),
-                format!("Pin mode {} must be a string", v),
-            )),
+            v => Err(CallError::ArgumentError(pos, format!("Pin mode {} must be a string", v))),
         }
     }
 }
 
-/// Obtains a pin value from an expression.
-async fn parse_value(expr: &Expr, machine: &mut Machine) -> Result<bool, CallError> {
-    match expr.eval(machine.get_mut_symbols()).await? {
+/// Obtains a pin value from a value.
+fn parse_value(value: Value, pos: LineCol) -> Result<bool, CallError> {
+    match value {
         Value::Boolean(b) => Ok(b),
-        v => Err(CallError::ArgumentError(
-            expr.start_pos(),
-            format!("Pin value {} must be boolean", v),
-        )),
+        v => Err(CallError::ArgumentError(pos, format!("Pin value {} must be boolean", v))),
     }
 }
 
@@ -195,21 +181,38 @@ impl Command for GpioSetupCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        match span.args.as_slice() {
-            [ArgSpan { expr: Some(pin), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(mode), sep: ArgSep::End, .. }] =>
-            {
-                let pin = Pin::parse(pin, machine).await?;
-                let mode = PinMode::parse(mode, machine).await?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
 
-                match MockPins::try_new(machine.get_mut_symbols()) {
-                    Some(mut pins) => pins.setup(pin, mode)?,
-                    None => self.pins.borrow_mut().setup(pin, mode)?,
-                };
-                Ok(())
-            }
-            _ => Err(CallError::SyntaxError),
+        let (pin, pinpos) = match iter.next() {
+            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
+            Some((value, pos)) => (value, pos),
+            None => return Err(CallError::SyntaxError),
+        };
+
+        match iter.next() {
+            Some((Value::Separator(ArgSep::Long), _pos)) => (),
+            _ => return Err(CallError::SyntaxError),
         }
+
+        let (mode, modepos) = match iter.next() {
+            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
+            Some((value, pos)) => (value, pos),
+            None => return Err(CallError::SyntaxError),
+        };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        let pin = Pin::parse(pin, pinpos)?;
+        let mode = PinMode::parse(mode, modepos)?;
+
+        match MockPins::try_new(machine.get_mut_symbols()) {
+            Some(mut pins) => pins.setup(pin, mode)?,
+            None => self.pins.borrow_mut().setup(pin, mode)?,
+        };
+        Ok(())
     }
 }
 
@@ -244,25 +247,32 @@ impl Command for GpioClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        match span.args.as_slice() {
-            [] => {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        match iter.next() {
+            None => {
                 match MockPins::try_new(machine.get_mut_symbols()) {
                     Some(mut pins) => pins.clear_all()?,
                     None => self.pins.borrow_mut().clear_all()?,
                 };
-                Ok(())
             }
-            [ArgSpan { expr: Some(pin), sep: ArgSep::End, .. }] => {
-                let pin = Pin::parse(pin, machine).await?;
+            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
+            Some((value, pos)) => {
+                let pin = Pin::parse(value, pos)?;
+
+                if iter.next().is_some() {
+                    return Err(CallError::SyntaxError);
+                }
+
                 match MockPins::try_new(machine.get_mut_symbols()) {
                     Some(mut pins) => pins.clear(pin)?,
                     None => self.pins.borrow_mut().clear(pin)?,
                 };
-                Ok(())
             }
-            _ => Err(CallError::SyntaxError),
         }
+
+        Ok(())
     }
 }
 
@@ -298,7 +308,8 @@ impl Function for GpioReadFunction {
     async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
         let mut iter = symbols.load_all(args)?.into_iter();
         let pin = match iter.next() {
-            Some((value, pos)) => Pin::parse_value(value, pos)?,
+            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
+            Some((value, pos)) => Pin::parse(value, pos)?,
             _ => return Err(CallError::SyntaxError),
         };
         if iter.next().is_some() {
@@ -342,20 +353,35 @@ impl Command for GpioWriteCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        match span.args.as_slice() {
-            [ArgSpan { expr: Some(pin), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(value), sep: ArgSep::End, .. }] =>
-            {
-                let pin = Pin::parse(pin, machine).await?;
-                let value = parse_value(value, machine).await?;
-                match MockPins::try_new(machine.get_mut_symbols()) {
-                    Some(mut pins) => pins.write(pin, value)?,
-                    None => self.pins.borrow_mut().write(pin, value)?,
-                };
-                Ok(())
-            }
-            _ => Err(CallError::SyntaxError),
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let pin = match iter.next() {
+            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
+            Some((value, pos)) => Pin::parse(value, pos)?,
+            None => return Err(CallError::SyntaxError),
+        };
+
+        match iter.next() {
+            Some((Value::Separator(ArgSep::Long), _pos)) => (),
+            _ => return Err(CallError::SyntaxError),
         }
+
+        let value = match iter.next() {
+            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
+            Some((value, pos)) => parse_value(value, pos)?,
+            None => return Err(CallError::SyntaxError),
+        };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        match MockPins::try_new(machine.get_mut_symbols()) {
+            Some(mut pins) => pins.write(pin, value)?,
+            None => self.pins.borrow_mut().write(pin, value)?,
+        };
+        Ok(())
     }
 }
 
@@ -502,6 +528,7 @@ mod tests {
 
     #[test]
     fn test_gpio_clear_errors() {
+        check_stmt_err("1:1: In call to GPIO_CLEAR: expected [pin%]", r#"GPIO_CLEAR 1,"#);
         check_stmt_err("1:1: In call to GPIO_CLEAR: expected [pin%]", r#"GPIO_CLEAR 1, 2"#);
 
         check_pin_validation("1:1: In call to GPIO_CLEAR: 1:12: ", r#"GPIO_CLEAR _PIN_"#);
@@ -535,6 +562,7 @@ mod tests {
     #[test]
     fn test_gpio_write_errors() {
         check_stmt_err("1:1: In call to GPIO_WRITE: expected pin%, value?", r#"GPIO_WRITE"#);
+        check_stmt_err("1:1: In call to GPIO_WRITE: expected pin%, value?", r#"GPIO_WRITE 2,"#);
         check_stmt_err(
             "1:1: In call to GPIO_WRITE: expected pin%, value?",
             r#"GPIO_WRITE 1, TRUE, 2"#,

@@ -15,7 +15,7 @@
 
 //! Symbol definitions and symbols table representation.
 
-use crate::ast::{BuiltinCallSpan, Value, VarRef, VarType};
+use crate::ast::{Value, VarRef, VarType};
 use crate::eval;
 use crate::exec::Machine;
 use crate::reader::LineCol;
@@ -608,11 +608,14 @@ pub trait Command {
 
     /// Executes the command.
     ///
-    /// `span` contains the details about the command invocation.
+    /// `args` contains the details about the command invocation.  These are represented as a
+    /// sequence of values with details about the separators as values that separate the actual
+    /// arguments.
+    ///
     /// `machine` provides mutable access to the current state of the machine invoking the command.
     ///
     /// Commands cannot return any value except for errors.
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult;
 }
 
 #[cfg(test)]
