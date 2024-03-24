@@ -26,13 +26,13 @@ use std::rc::Rc;
 #[derive(Debug, thiserror::Error)]
 #[error("{}:{}: {}", pos.line, pos.col, message)]
 pub struct Error {
-    pos: LineCol,
-    message: String,
+    pub(crate) pos: LineCol,
+    pub(crate) message: String,
 }
 
 impl Error {
     /// Constructs a new evaluation error from a textual `message` that happened at `pos`.
-    pub(crate) fn new<S: Into<String>>(pos: LineCol, message: S) -> Self {
+    fn new<S: Into<String>>(pos: LineCol, message: S) -> Self {
         Self { pos, message: message.into() }
     }
 
@@ -42,7 +42,9 @@ impl Error {
             CallError::ArgumentError(pos, e) => {
                 format!("In call to {}: {}:{}: {}", md.name(), pos.line, pos.col, e)
             }
-            CallError::EvalError(e) => format!("In call to {}: {}", md.name(), e),
+            CallError::EvalError(pos, e) => {
+                format!("In call to {}: {}:{}: {}", md.name(), pos.line, pos.col, e)
+            }
             CallError::InternalError(pos, e) => {
                 format!("In call to {}: {}:{}: {}", md.name(), pos.line, pos.col, e)
             }
@@ -149,7 +151,17 @@ impl Expr {
             return Err(Error::new(span.pos, "Incompatible type annotation for function call"));
         }
 
-        let result = f.exec(span, syms).await;
+        // TODO(jmmv): This is just a transitional code block until built-in command calls
+        // can receive evaluated arguments, at which point this (and this whole function) can
+        // go away.
+        let mut args = Vec::with_capacity(span.args.len());
+        for arg in &span.args {
+            let value = arg.eval(syms).await?;
+            let pos = arg.start_pos();
+            args.push((value, pos));
+        }
+
+        let result = f.exec(args, syms).await;
         match result {
             Ok(value) => {
                 debug_assert!(metadata.return_type() != VarType::Auto);

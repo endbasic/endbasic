@@ -772,6 +772,30 @@ pub fn check_expr_ok<V: Into<Value>>(exp_value: V, expr: &str) {
         .check();
 }
 
+/// Executes `expr` on a scripting interpreter and ensures that the result is `exp_value`.
+///
+/// Sets all `vars` before evaluating the expression so that the expression can contain variable
+/// references.
+pub fn check_expr_ok_with_vars<V: Into<Value>, VS: Into<Vec<(&'static str, Value)>>>(
+    exp_value: V,
+    expr: &str,
+    vars: VS,
+) {
+    let vars = vars.into();
+
+    let mut t = Tester::default();
+    for var in vars.as_slice() {
+        t = t.set_var(var.0, var.1.clone());
+    }
+
+    let mut c = t.run(format!("result = {}", expr));
+    c = c.expect_var("result", exp_value.into());
+    for var in vars.into_iter() {
+        c = c.expect_var(var.0, var.1.clone());
+    }
+    c.check();
+}
+
 /// Executes `expr` on a scripting interpreter and ensures that evaluation fails with `exp_error`.
 ///
 /// Note that `exp_error` is a literal exact match on the formatted error message returned by the
