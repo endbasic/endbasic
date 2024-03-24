@@ -159,8 +159,11 @@ pub enum Instruction {
     /// Represents an assignment of a value to a variable.
     Assign(VarRef, LineCol),
 
-    /// Represents a call to a builtin command such as `PRINT`.
-    BuiltinCall(BuiltinCallSpan),
+    /// Represents a call to a builtin command such as `PRINT` with the given number of arguments.
+    ///
+    /// The arguments in the stack are interspersed with the separators used to separate them from.
+    /// each other, because those separators have meaning.
+    BuiltinCall(VarRef, LineCol, usize),
 
     /// Represents an unconditional call to a location that will return.
     Call(JumpISpan),
@@ -210,6 +213,52 @@ pub enum Instruction {
 
     /// Represents a request to unset a variable.
     Unset(UnsetISpan),
+}
+
+impl Instruction {
+    pub(crate) fn is_statement(&self) -> bool {
+        match self {
+            Instruction::And(_)
+            | Instruction::Or(_)
+            | Instruction::Xor(_)
+            | Instruction::Not(_)
+            | Instruction::ShiftLeft(_)
+            | Instruction::ShiftRight(_)
+            | Instruction::Equal(_)
+            | Instruction::NotEqual(_)
+            | Instruction::Less(_)
+            | Instruction::LessEqual(_)
+            | Instruction::Greater(_)
+            | Instruction::GreaterEqual(_)
+            | Instruction::Add(_)
+            | Instruction::Subtract(_)
+            | Instruction::Multiply(_)
+            | Instruction::Divide(_)
+            | Instruction::Modulo(_)
+            | Instruction::Power(_)
+            | Instruction::Negate(_)
+            | Instruction::FunctionCall(_, _, _)
+            | Instruction::Load(_, _)
+            | Instruction::LoadRef(_, _)
+            | Instruction::Push(_, _) => false,
+
+            Instruction::ArrayAssignment(_, _, _)
+            | Instruction::Assign(_, _)
+            | Instruction::BuiltinCall(_, _, _)
+            | Instruction::Call(_)
+            | Instruction::Dim(_)
+            | Instruction::DimArray(_)
+            | Instruction::End(_)
+            | Instruction::Jump(_)
+            | Instruction::JumpIfDefined(_)
+            | Instruction::JumpIfTrue(_)
+            | Instruction::JumpIfNotTrue(_)
+            | Instruction::Nop
+            | Instruction::Return(_)
+            | Instruction::SetErrorHandler(_)
+            | Instruction::Unset(_) => true,
+        }
+    }
 }
 
 /// Representation of a compiled program.

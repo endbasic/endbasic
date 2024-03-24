@@ -22,7 +22,7 @@
 //! of the lights, and finally dumps the resulting state to the screen.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{BuiltinCallSpan, Value, VarType};
+use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -112,41 +112,33 @@ impl Command for SwitchLightCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if span.args.len() != 1 {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+        let (i, ipos) = match iter.next() {
+            Some((Value::Integer(i), pos)) => (i, pos),
+            _ => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
             return Err(CallError::SyntaxError);
         }
-        let expr = span.args[0].expr.as_ref().expect("A single argument can never be empty");
-        match expr.eval(machine.get_mut_symbols()).await? {
-            Value::Integer(i) => {
-                let lights = &mut *self.lights.borrow_mut();
-                if i < 1 {
-                    return Err(CallError::ArgumentError(
-                        expr.start_pos(),
-                        "Light id cannot be zero or negative".to_owned(),
-                    ));
-                }
-                let i = i as usize;
-                if i > lights.len() {
-                    return Err(CallError::ArgumentError(
-                        expr.start_pos(),
-                        "Light id out of range".to_owned(),
-                    ));
-                }
-                if lights[i - 1] {
-                    println!("Turning light {} off", i);
-                } else {
-                    println!("Turning light {} on", i);
-                }
-                lights[i - 1] = !lights[i - 1];
-            }
-            _ => {
-                return Err(CallError::ArgumentError(
-                    expr.start_pos(),
-                    "Mismatched expression type".to_owned(),
-                ))
-            }
+
+        let lights = &mut *self.lights.borrow_mut();
+        if i < 1 {
+            return Err(CallError::ArgumentError(
+                ipos,
+                "Light id cannot be zero or negative".to_owned(),
+            ));
         }
+        let i = i as usize;
+        if i > lights.len() {
+            return Err(CallError::ArgumentError(ipos, "Light id out of range".to_owned()));
+        }
+        if lights[i - 1] {
+            println!("Turning light {} off", i);
+        } else {
+            println!("Turning light {} on", i);
+        }
+        lights[i - 1] = !lights[i - 1];
         Ok(())
     }
 }

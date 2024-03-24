@@ -18,11 +18,12 @@
 use crate::console::{read_line, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
+use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
 };
+use endbasic_core::LineCol;
 use std::cell::RefCell;
 use std::io;
 use std::path::PathBuf;
@@ -183,23 +184,27 @@ impl Command for KillCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if span.args.len() != 1 {
-            return Err(CallError::SyntaxError);
-        }
-        let arg0 = span.args[0].expr.as_ref().expect("Single argument must be present");
-        match arg0.eval(machine.get_mut_symbols()).await? {
-            Value::Text(t) => {
-                let name = add_extension(t)?;
-                self.storage.borrow_mut().delete(&name).await?;
-            }
-            _ => {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let name = match iter.next() {
+            Some((Value::Text(t), _pos)) => t,
+            Some((_value, pos)) => {
                 return Err(CallError::ArgumentError(
-                    arg0.start_pos(),
+                    pos,
                     "KILL requires a string as the filename".to_owned(),
                 ))
             }
+            None => return Err(CallError::SyntaxError),
+        };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
         }
+
+        let name = add_extension(name)?;
+        self.storage.borrow_mut().delete(&name).await?;
+
         Ok(())
     }
 }
@@ -232,8 +237,8 @@ impl Command for EditCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
 
@@ -272,8 +277,8 @@ impl Command for ListCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         let mut console = self.console.borrow_mut();
@@ -326,24 +331,27 @@ impl Command for LoadCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if span.args.len() != 1 {
-            return Err(CallError::SyntaxError);
-        }
-        let arg0 = span.args[0].expr.as_ref().expect("Single argument must be present");
-        let name = match arg0.eval(machine.get_mut_symbols()).await? {
-            Value::Text(t) => add_extension(t)?,
-            _ => {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let pathname = match iter.next() {
+            Some((Value::Text(t), _pos)) => t,
+            Some((_value, pos)) => {
                 return Err(CallError::ArgumentError(
-                    arg0.start_pos(),
+                    pos,
                     "LOAD requires a string as the filename".to_owned(),
                 ))
             }
+            None => return Err(CallError::SyntaxError),
         };
 
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
         if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut()).await? {
-            let content = self.storage.borrow().get(&name).await?;
-            let full_name = self.storage.borrow().make_canonical(&name)?;
+            let content = self.storage.borrow().get(&pathname).await?;
+            let full_name = self.storage.borrow().make_canonical(&pathname)?;
             self.program.borrow_mut().load(Some(&full_name), &content);
             machine.clear();
         } else {
@@ -392,8 +400,8 @@ impl Command for NewCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
 
@@ -443,8 +451,8 @@ impl Command for RunCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         machine.clear();
@@ -509,30 +517,31 @@ impl Command for SaveCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        let name = match span.args.as_slice() {
-            [] => match self.program.borrow().name() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let name = match iter.next() {
+            Some((Value::Text(t), _pos)) => t,
+            Some((_value, pos)) => {
+                return Err(CallError::ArgumentError(
+                    pos,
+                    "SAVE requires a string as the filename".to_owned(),
+                ))
+            }
+            None => match self.program.borrow().name() {
                 Some(name) => name.to_owned(),
                 None => {
                     return Err(CallError::ArgumentError(
-                        span.name_pos,
+                        LineCol { line: 0, col: 0 }, // DO NOT SUBMIT
                         "Unnamed program; please provide a filename".to_owned(),
-                    ))
+                    ));
                 }
             },
-            [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
-                match expr.eval(machine.get_mut_symbols()).await? {
-                    Value::Text(t) => add_extension(t)?,
-                    _ => {
-                        return Err(CallError::ArgumentError(
-                            expr.start_pos(),
-                            "SAVE requires a string as the filename".to_owned(),
-                        ))
-                    }
-                }
-            }
-            _ => return Err(CallError::SyntaxError),
         };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
 
         let full_name = self.storage.borrow().make_canonical(&name)?;
         let content = self.program.borrow().text();

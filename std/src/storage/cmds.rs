@@ -18,11 +18,12 @@
 use crate::console::{is_narrow, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
+use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
 };
+use endbasic_core::LineCol;
 use std::cell::RefCell;
 use std::cmp;
 use std::io;
@@ -145,22 +146,26 @@ impl Command for CdCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if span.args.len() != 1 {
-            return Err(CallError::SyntaxError);
-        }
-        let arg0 = span.args[0].expr.as_ref().expect("Single argument must be present");
-        match arg0.eval(machine.get_mut_symbols()).await? {
-            Value::Text(t) => {
-                self.storage.borrow_mut().cd(&t)?;
-            }
-            _ => {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let target = match iter.next() {
+            Some((Value::Text(t), _pos)) => t,
+            Some((_, pos)) => {
                 return Err(CallError::ArgumentError(
-                    arg0.start_pos(),
+                    pos,
                     "CD requires a string as the path".to_owned(),
                 ))
             }
+            None => return Err(CallError::SyntaxError),
+        };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
         }
+
+        self.storage.borrow_mut().cd(&target)?;
+
         Ok(())
     }
 }
@@ -193,29 +198,27 @@ impl Command for DirCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        match span.args.as_slice() {
-            [] => {
-                show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), "").await?;
-                Ok(())
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let path = match iter.next() {
+            None => "".to_owned(),
+            Some((Value::Text(path), _pos)) => path,
+            Some((_, pos)) => {
+                return Err(CallError::ArgumentError(
+                    pos,
+                    "DIR requires a string as the path".to_owned(),
+                ))
             }
-            [ArgSpan { expr: Some(path), sep: ArgSep::End, .. }] => {
-                match path.eval(machine.get_mut_symbols()).await? {
-                    Value::Text(path) => {
-                        show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), &path)
-                            .await?;
-                        Ok(())
-                    }
-                    _ => {
-                        return Err(CallError::ArgumentError(
-                            path.start_pos(),
-                            "DIR requires a string as the path".to_owned(),
-                        ))
-                    }
-                }
-            }
-            _ => Err(CallError::SyntaxError),
+        };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
         }
+
+        show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), &path).await?;
+
+        Ok(())
     }
 }
 
@@ -252,37 +255,46 @@ impl Command for MountCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        match span.args.as_slice() {
-            [] => {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let target = match iter.next() {
+            None => {
                 show_drives(&self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
-                Ok(())
+                return Ok(());
             }
-            [ArgSpan { expr: Some(target), sep: ArgSep::As, .. }, ArgSpan { expr: Some(name), sep: ArgSep::End, .. }] =>
-            {
-                let name = match name.eval(machine.get_mut_symbols()).await? {
-                    Value::Text(t) => t,
-                    _ => {
-                        return Err(CallError::ArgumentError(
-                            name.start_pos(),
-                            "Drive name must be a string".to_owned(),
-                        ))
-                    }
-                };
-                let target = match target.eval(machine.get_mut_symbols()).await? {
-                    Value::Text(t) => t,
-                    _ => {
-                        return Err(CallError::ArgumentError(
-                            target.start_pos(),
-                            "Mount target must be a string".to_owned(),
-                        ))
-                    }
-                };
-                self.storage.borrow_mut().mount(&name, &target)?;
-                Ok(())
+            Some((Value::Text(s), _pos)) => s,
+            Some((_, pos)) => {
+                return Err(CallError::ArgumentError(
+                    pos,
+                    "Mount target must be a string".to_owned(),
+                ));
             }
-            _ => Err(CallError::SyntaxError),
+        };
+
+        match iter.next() {
+            Some((Value::Separator(ArgSep::As), _pos)) => (),
+            _ => return Err(CallError::SyntaxError),
         }
+
+        let name = match iter.next() {
+            Some((Value::Text(s), _pos)) => s,
+            Some((_, pos)) => {
+                return Err(CallError::ArgumentError(
+                    pos,
+                    "Drive name must be a string".to_owned(),
+                ));
+            }
+            _ => return Err(CallError::SyntaxError),
+        };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        self.storage.borrow_mut().mount(&name, &target)?;
+
+        Ok(())
     }
 }
 
@@ -318,8 +330,8 @@ impl Command for PwdCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
 
@@ -369,22 +381,21 @@ impl Command for UnmountCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if span.args.len() != 1 {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+        let drive = match iter.next() {
+            Some((Value::Text(t), _pos)) => t,
+            Some((_, pos)) => {
+                return Err(CallError::ArgumentError(pos, "Drive name must be a string".to_owned()))
+            }
+            None => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
             return Err(CallError::SyntaxError);
         }
-        let arg0 = span.args[0].expr.as_ref().expect("Single argument must be present");
-        match arg0.eval(machine.get_mut_symbols()).await? {
-            Value::Text(t) => {
-                self.storage.borrow_mut().unmount(&t)?;
-            }
-            _ => {
-                return Err(CallError::ArgumentError(
-                    arg0.start_pos(),
-                    "Drive name must be a string".to_owned(),
-                ))
-            }
-        }
+
+        self.storage.borrow_mut().unmount(&drive)?;
+
         Ok(())
     }
 }

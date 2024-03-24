@@ -578,7 +578,23 @@ impl Compiler {
             }
 
             Statement::BuiltinCall(span) => {
-                self.emit(Instruction::BuiltinCall(span));
+                let mut nargs = 0;
+                for argspan in span.args.into_iter().rev() {
+                    if argspan.sep != ArgSep::End {
+                        self.emit(Instruction::Push(
+                            Value::Separator(argspan.sep),
+                            argspan.sep_pos,
+                        ));
+                        nargs += 1;
+                    }
+
+                    if let Some(expr) = argspan.expr {
+                        self.compile_expr(expr, true)?;
+                        nargs += 1;
+                    }
+                }
+                let bref = VarRef::new(span.name, VarType::Auto);
+                self.emit(Instruction::BuiltinCall(bref, span.name_pos, nargs));
             }
 
             Statement::Data(mut span) => {
@@ -869,17 +885,33 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_builtin_call() {
+    fn test_compile_builtin_call_no_args() {
         Tester::default()
             .parse("CMD")
             .compile()
             .expect_instr(
                 0,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "CMD".to_owned(),
-                    name_pos: lc(1, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("CMD", VarType::Auto), lc(1, 1), 0),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_builtin_call_separator_types() {
+        Tester::default()
+            .parse("CMD a;;b,c AS d")
+            .compile()
+            .expect_instr(0, Instruction::LoadRef(VarRef::new("d", VarType::Auto), lc(1, 15)))
+            .expect_instr(1, Instruction::Push(Value::Separator(ArgSep::As), lc(1, 12)))
+            .expect_instr(2, Instruction::LoadRef(VarRef::new("c", VarType::Auto), lc(1, 10)))
+            .expect_instr(3, Instruction::Push(Value::Separator(ArgSep::Long), lc(1, 9)))
+            .expect_instr(4, Instruction::LoadRef(VarRef::new("b", VarType::Auto), lc(1, 8)))
+            .expect_instr(5, Instruction::Push(Value::Separator(ArgSep::Short), lc(1, 7)))
+            .expect_instr(6, Instruction::Push(Value::Separator(ArgSep::Short), lc(1, 6)))
+            .expect_instr(7, Instruction::LoadRef(VarRef::new("a", VarType::Auto), lc(1, 5)))
+            .expect_instr(
+                8,
+                Instruction::BuiltinCall(VarRef::new("CMD", VarType::Auto), lc(1, 1), 8),
             )
             .check();
     }
@@ -976,11 +1008,7 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(2, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(2, 1), 0),
             )
             .expect_instr(1, Instruction::Jump(JumpISpan { addr: 0 }))
             .check();
@@ -1001,11 +1029,7 @@ mod tests {
             )
             .expect_instr(
                 2,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(2, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(2, 1), 0),
             )
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
             .check();
@@ -1018,11 +1042,7 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(2, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(2, 1), 0),
             )
             .expect_instr(1, Instruction::Push(Value::Boolean(true), lc(3, 12)))
             .expect_instr(
@@ -1450,11 +1470,7 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(2, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(2, 1), 0),
             )
             .expect_instr(1, Instruction::Return(lc(3, 1)))
             .expect_instr(2, Instruction::Call(JumpISpan { addr: 0 }))
@@ -1485,11 +1501,7 @@ mod tests {
             )
             .expect_instr(
                 2,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(1, 16),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(1, 16), 0),
             )
             .check();
     }
@@ -1509,11 +1521,7 @@ mod tests {
             )
             .expect_instr(
                 2,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(2, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(2, 1), 0),
             )
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 11 }))
             .expect_instr(4, Instruction::Push(Value::Boolean(true), lc(3, 8)))
@@ -1526,11 +1534,7 @@ mod tests {
             )
             .expect_instr(
                 6,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "BAR".to_owned(),
-                    name_pos: lc(4, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("BAR", VarType::Auto), lc(4, 1), 0),
             )
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 11 }))
             .expect_instr(8, Instruction::Push(Value::Boolean(true), lc(5, 1)))
@@ -1543,11 +1547,7 @@ mod tests {
             )
             .expect_instr(
                 10,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "BAZ".to_owned(),
-                    name_pos: lc(6, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("BAZ", VarType::Auto), lc(6, 1), 0),
             )
             .check();
     }
@@ -1615,11 +1615,7 @@ mod tests {
         )
         .expect_instr(
             n + 1,
-            Instruction::BuiltinCall(BuiltinCallSpan {
-                name: "FOO".to_owned(),
-                name_pos: lc(3, 1),
-                args: vec![],
-            }),
+            Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(3, 1), 0),
         )
         .expect_instr(
             n + 2,
@@ -1768,11 +1764,7 @@ mod tests {
             )
             .expect_instr(
                 6,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(3, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(3, 1), 0),
             )
             .expect_instr(
                 7,
@@ -1804,11 +1796,7 @@ mod tests {
             .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
             .expect_instr(
                 2,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(3, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(3, 1), 0),
             )
             .expect_instr(
                 3,
@@ -1836,11 +1824,7 @@ mod tests {
             )
             .expect_instr(
                 6,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(3, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(3, 1), 0),
             )
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 13 }))
             .expect_instr(8, Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(4, 12)))
@@ -1855,11 +1839,7 @@ mod tests {
             )
             .expect_instr(
                 12,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "BAR".to_owned(),
-                    name_pos: lc(5, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("BAR", VarType::Auto), lc(5, 1), 0),
             )
             .expect_instr(
                 13,
@@ -1887,20 +1867,12 @@ mod tests {
             )
             .expect_instr(
                 6,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(3, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(3, 1), 0),
             )
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 9 }))
             .expect_instr(
                 8,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "BAR".to_owned(),
-                    name_pos: lc(5, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("BAR", VarType::Auto), lc(5, 1), 0),
             )
             .expect_instr(
                 9,
@@ -1944,11 +1916,7 @@ mod tests {
             )
             .expect_instr(
                 2,
-                Instruction::BuiltinCall(BuiltinCallSpan {
-                    name: "FOO".to_owned(),
-                    name_pos: lc(2, 1),
-                    args: vec![],
-                }),
+                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(2, 1), 0),
             )
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
             .check();
