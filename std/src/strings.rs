@@ -16,12 +16,12 @@
 //! String functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{FunctionCallSpan, Value, VarType};
-use endbasic_core::eval::eval_all;
+use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult, Symbols,
 };
+use endbasic_core::LineCol;
 use std::cmp::min;
 use std::convert::TryFrom;
 use std::rc::Rc;
@@ -59,35 +59,39 @@ impl Function for AscFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        match args.as_slice() {
-            [Value::Text(s)] => {
-                let mut chars = s.chars();
-                let ch = match chars.next() {
-                    Some(ch) => ch,
-                    None => {
-                        return Err(CallError::ArgumentError(
-                            span.args[0].start_pos(),
-                            format!("Input string \"{}\" must be 1-character long", s),
-                        ));
-                    }
-                };
-                if chars.next().is_some() {
-                    return Err(CallError::ArgumentError(
-                        span.args[0].start_pos(),
-                        format!("Input string \"{}\" must be 1-character long", s),
-                    ));
-                }
-                let ch = if cfg!(debug_assertions) {
-                    i32::try_from(ch as u32).expect("Unicode code points end at U+10FFFF")
-                } else {
-                    ch as i32
-                };
-                Ok(Value::Integer(ch))
-            }
-            _ => Err(CallError::SyntaxError),
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let (s, spos) = match iter.next() {
+            Some((Value::Text(s), pos)) => (s, pos),
+            _ => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
         }
+
+        let mut chars = s.chars();
+        let ch = match chars.next() {
+            Some(ch) => ch,
+            None => {
+                return Err(CallError::ArgumentError(
+                    spos,
+                    format!("Input string \"{}\" must be 1-character long", s),
+                ));
+            }
+        };
+        if chars.next().is_some() {
+            return Err(CallError::ArgumentError(
+                spos,
+                format!("Input string \"{}\" must be 1-character long", s),
+            ));
+        }
+        let ch = if cfg!(debug_assertions) {
+            i32::try_from(ch as u32).expect("Unicode code points end at U+10FFFF")
+        } else {
+            ch as i32
+        };
+
+        Ok(Value::Integer(ch))
     }
 }
 
@@ -118,30 +122,29 @@ impl Function for ChrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        match args.as_slice() {
-            [v @ Value::Integer(_) | v @ Value::Double(_)] => {
-                let pos = span.args[0].start_pos();
-
-                let i = v.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
-                if i < 0 {
-                    return Err(CallError::ArgumentError(
-                        pos,
-                        format!("Character code {} must be positive", i),
-                    ));
-                }
-                let code = i as u32;
-
-                match char::from_u32(code) {
-                    Some(ch) => Ok(Value::Text(format!("{}", ch))),
-                    None => Err(CallError::ArgumentError(
-                        pos,
-                        format!("Invalid character code {}", code),
-                    )),
-                }
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let (i, ipos) = match iter.next() {
+            Some((value @ Value::Integer(_) | value @ Value::Double(_), pos)) => {
+                (value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
             }
-            _ => Err(CallError::SyntaxError),
+            _ => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        if i < 0 {
+            return Err(CallError::ArgumentError(
+                ipos,
+                format!("Character code {} must be positive", i),
+            ));
+        }
+        let code = i as u32;
+
+        match char::from_u32(code) {
+            Some(ch) => Ok(Value::Text(format!("{}", ch))),
+            None => Err(CallError::ArgumentError(ipos, format!("Invalid character code {}", code))),
         }
     }
 }
@@ -174,24 +177,27 @@ impl Function for LeftFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        match args.as_slice() {
-            [Value::Text(s), n] => {
-                let n = n.as_i32().map_err(|e| {
-                    CallError::ArgumentError(span.args[1].start_pos(), format!("{}", e))
-                })?;
-                if n < 0 {
-                    Err(CallError::ArgumentError(
-                        span.args[1].start_pos(),
-                        "n% cannot be negative".to_owned(),
-                    ))
-                } else {
-                    let n = min(s.len(), n as usize);
-                    Ok(Value::Text(s[..n].to_owned()))
-                }
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let s = match iter.next() {
+            Some((Value::Text(s), _pos)) => s,
+            _ => return Err(CallError::SyntaxError),
+        };
+        let (n, npos) = match iter.next() {
+            Some((value, pos)) => {
+                (value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
             }
-            _ => Err(CallError::SyntaxError),
+            _ => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        if n < 0 {
+            Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
+        } else {
+            let n = min(s.len(), n as usize);
+            Ok(Value::Text(s[..n].to_owned()))
         }
     }
 }
@@ -220,20 +226,20 @@ impl Function for LenFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        match args.as_slice() {
-            [Value::Text(s)] => {
-                if s.len() > std::i32::MAX as usize {
-                    Err(CallError::InternalError(
-                        span.args[0].start_pos(),
-                        "String too long".to_owned(),
-                    ))
-                } else {
-                    Ok(Value::Integer(s.len() as i32))
-                }
-            }
-            _ => Err(CallError::SyntaxError),
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let (s, spos) = match iter.next() {
+            Some((Value::Text(s), pos)) => (s, pos),
+            _ => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        if s.len() > std::i32::MAX as usize {
+            Err(CallError::InternalError(spos, "String too long".to_owned()))
+        } else {
+            Ok(Value::Integer(s.len() as i32))
         }
     }
 }
@@ -262,12 +268,17 @@ impl Function for LtrimFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        match args.as_slice() {
-            [Value::Text(s)] => Ok(Value::Text(s.trim_start().to_owned())),
-            _ => Err(CallError::SyntaxError),
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let s = match iter.next() {
+            Some((Value::Text(s), _pos)) => s,
+            _ => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
         }
+
+        Ok(Value::Text(s.trim_start().to_owned()))
     }
 }
 
@@ -300,33 +311,36 @@ impl Function for MidFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        match args.as_slice() {
-            [Value::Text(s), start, length] => {
-                let start = start.as_i32().map_err(|e| {
-                    CallError::ArgumentError(span.args[1].start_pos(), format!("{}", e))
-                })?;
-                let length = length.as_i32().map_err(|e| {
-                    CallError::ArgumentError(span.args[2].start_pos(), format!("{}", e))
-                })?;
-                if start < 0 {
-                    Err(CallError::ArgumentError(
-                        span.args[1].start_pos(),
-                        "start% cannot be negative".to_owned(),
-                    ))
-                } else if length < 0 {
-                    Err(CallError::ArgumentError(
-                        span.args[2].start_pos(),
-                        "length% cannot be negative".to_owned(),
-                    ))
-                } else {
-                    let start = min(s.len(), start as usize);
-                    let end = min(start + (length as usize), s.len());
-                    Ok(Value::Text(s[start..end].to_owned()))
-                }
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let s = match iter.next() {
+            Some((Value::Text(s), _pos)) => s,
+            _ => return Err(CallError::SyntaxError),
+        };
+        let (start, startpos) = match iter.next() {
+            Some((value, pos)) => {
+                (value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
             }
-            _ => Err(CallError::SyntaxError),
+            _ => return Err(CallError::SyntaxError),
+        };
+        let (length, lengthpos) = match iter.next() {
+            Some((value, pos)) => {
+                (value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
+            }
+            _ => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        if start < 0 {
+            Err(CallError::ArgumentError(startpos, "start% cannot be negative".to_owned()))
+        } else if length < 0 {
+            Err(CallError::ArgumentError(lengthpos, "length% cannot be negative".to_owned()))
+        } else {
+            let start = min(s.len(), start as usize);
+            let end = min(start + (length as usize), s.len());
+            Ok(Value::Text(s[start..end].to_owned()))
         }
     }
 }
@@ -359,24 +373,27 @@ impl Function for RightFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        match args.as_slice() {
-            [Value::Text(s), n] => {
-                let n = n.as_i32().map_err(|e| {
-                    CallError::ArgumentError(span.args[1].start_pos(), format!("{}", e))
-                })?;
-                if n < 0 {
-                    Err(CallError::ArgumentError(
-                        span.args[0].start_pos(),
-                        "n% cannot be negative".to_owned(),
-                    ))
-                } else {
-                    let n = min(s.len(), n as usize);
-                    Ok(Value::Text(s[s.len() - n..].to_owned()))
-                }
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let s = match iter.next() {
+            Some((Value::Text(s), _pos)) => s,
+            _ => return Err(CallError::SyntaxError),
+        };
+        let (n, npos) = match iter.next() {
+            Some((value, pos)) => {
+                (value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
             }
-            _ => Err(CallError::SyntaxError),
+            _ => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        if n < 0 {
+            Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
+        } else {
+            let n = min(s.len(), n as usize);
+            Ok(Value::Text(s[s.len() - n..].to_owned()))
         }
     }
 }
@@ -405,12 +422,17 @@ impl Function for RtrimFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        match args.as_slice() {
-            [Value::Text(s)] => Ok(Value::Text(s.trim_end().to_owned())),
-            _ => Err(CallError::SyntaxError),
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let s = match iter.next() {
+            Some((Value::Text(s), _pos)) => s,
+            _ => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
         }
+
+        Ok(Value::Text(s.trim_end().to_owned()))
     }
 }
 
@@ -447,11 +469,10 @@ impl Function for StrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        let mut iter = args.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
         let value = match iter.next() {
-            Some(v) => v,
+            Some((value, _pos)) => value,
             None => return Err(CallError::SyntaxError),
         };
         if iter.next().is_some() {
@@ -484,6 +505,8 @@ mod tests {
         check_expr_ok(' ' as i32, r#"ASC(" ")"#);
         check_expr_ok('오' as i32, r#"ASC("오")"#);
 
+        check_expr_ok_with_vars('a' as i32, r#"ASC(s)"#, [("s", "a".into())]);
+
         check_expr_error("1:10: In call to ASC: expected char$", r#"ASC()"#);
         check_expr_error("1:10: In call to ASC: expected char$", r#"ASC(3)"#);
         check_expr_error("1:10: In call to ASC: expected char$", r#"ASC("a", 1)"#);
@@ -503,6 +526,8 @@ mod tests {
         check_expr_ok("c", r#"CHR(98.6)"#);
         check_expr_ok(" ", r#"CHR(32)"#);
         check_expr_ok("오", r#"CHR(50724)"#);
+
+        check_expr_ok_with_vars(" ", r#"CHR(i)"#, [("i", 32.into())]);
 
         check_expr_error("1:10: In call to CHR: expected code%", r#"CHR()"#);
         check_expr_error("1:10: In call to CHR: expected code%", r#"CHR(FALSE)"#);
@@ -531,6 +556,8 @@ mod tests {
         check_expr_ok("abcdef", r#"LEFT("abcdef", 6)"#);
         check_expr_ok("abcdef", r#"LEFT("abcdef", 10)"#);
 
+        check_expr_ok_with_vars("abc", r#"LEFT(s, i)"#, [("s", "abcdef".into()), ("i", 3.into())]);
+
         check_expr_error("1:10: In call to LEFT: expected expr$, n%", r#"LEFT()"#);
         check_expr_error("1:10: In call to LEFT: expected expr$, n%", r#"LEFT("", 1, 2)"#);
         check_expr_error("1:10: In call to LEFT: expected expr$, n%", r#"LEFT(1, 2)"#);
@@ -547,6 +574,8 @@ mod tests {
         check_expr_ok(1, r#"LEN(" ")"#);
         check_expr_ok(5, r#"LEN("abcde")"#);
 
+        check_expr_ok_with_vars(4, r#"LEN(s)"#, [("s", "1234".into())]);
+
         check_expr_error("1:10: In call to LEN: expected expr$", r#"LEN()"#);
         check_expr_error("1:10: In call to LEN: expected expr$", r#"LEN(3)"#);
         check_expr_error("1:10: In call to LEN: expected expr$", r#"LEN(" ", 1)"#);
@@ -558,6 +587,8 @@ mod tests {
         check_expr_ok("", r#"LTRIM("  ")"#);
         check_expr_ok("", "LTRIM(\"\t\t\")");
         check_expr_ok("foo \t ", "LTRIM(\" \t foo \t \")");
+
+        check_expr_ok_with_vars("foo ", r#"LTRIM(s)"#, [("s", " foo ".into())]);
 
         check_expr_error("1:10: In call to LTRIM: expected expr$", r#"LTRIM()"#);
         check_expr_error("1:10: In call to LTRIM: expected expr$", r#"LTRIM(3)"#);
@@ -575,6 +606,12 @@ mod tests {
         check_expr_ok("asi", r#"MID("basic", 0.8, 3.2)"#);
         check_expr_ok("asic", r#"MID("basic", 1, 10)"#);
         check_expr_ok("", r#"MID("basic", 100, 10)"#);
+
+        check_expr_ok_with_vars(
+            "asic",
+            r#"MID(s, i, j)"#,
+            [("s", "basic".into()), ("i", 1.into()), ("j", 4.into())],
+        );
 
         check_expr_error("1:10: In call to MID: expected expr$, start%[, length%]", r#"MID()"#);
         check_expr_error("1:10: In call to MID: expected expr$, start%[, length%]", r#"MID(3)"#);
@@ -608,12 +645,14 @@ mod tests {
         check_expr_ok("abcdef", r#"RIGHT("abcdef", 6)"#);
         check_expr_ok("abcdef", r#"RIGHT("abcdef", 10)"#);
 
+        check_expr_ok_with_vars("def", r#"RIGHT(s, i)"#, [("s", "abcdef".into()), ("i", 3.into())]);
+
         check_expr_error("1:10: In call to RIGHT: expected expr$, n%", r#"RIGHT()"#);
         check_expr_error("1:10: In call to RIGHT: expected expr$, n%", r#"RIGHT("", 1, 2)"#);
         check_expr_error("1:10: In call to RIGHT: expected expr$, n%", r#"RIGHT(1, 2)"#);
         check_expr_error("1:10: In call to RIGHT: 1:20: \"\" is not a number", r#"RIGHT("", "")"#);
         check_expr_error(
-            "1:10: In call to RIGHT: 1:16: n% cannot be negative",
+            "1:10: In call to RIGHT: 1:26: n% cannot be negative",
             r#"RIGHT("abcdef", -5)"#,
         );
     }
@@ -624,6 +663,8 @@ mod tests {
         check_expr_ok("", r#"RTRIM("  ")"#);
         check_expr_ok("", "RTRIM(\"\t\t\")");
         check_expr_ok(" \t foo", "RTRIM(\" \t foo \t \")");
+
+        check_expr_ok_with_vars(" foo", r#"RTRIM(s)"#, [("s", " foo ".into())]);
 
         check_expr_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM()"#);
         check_expr_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM(3)"#);
@@ -646,6 +687,8 @@ mod tests {
         check_expr_ok("", r#"STR("")"#);
         check_expr_ok(" \t ", "STR(\" \t \")");
         check_expr_ok("foo bar", r#"STR("foo bar")"#);
+
+        check_expr_ok_with_vars(" 1", r#"STR(i)"#, [("i", 1.into())]);
 
         check_expr_error("1:10: In call to STR: expected expr", r#"STR()"#);
         check_expr_error("1:10: In call to STR: expected expr", r#"STR(" ", 1)"#);

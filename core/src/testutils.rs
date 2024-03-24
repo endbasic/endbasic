@@ -15,13 +15,14 @@
 
 //! Test utilities.
 
-use crate::ast::{ArgSep, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarRef, VarType};
-use crate::eval::{self, eval_all, Error};
+use crate::ast::{ArgSep, BuiltinCallSpan, Expr, Value, VarRef, VarType};
+use crate::eval;
 use crate::exec::Machine;
 use crate::syms::{
     Array, CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
     FunctionResult, Symbol, Symbols,
 };
+use crate::LineCol;
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -89,8 +90,8 @@ impl Function for CountFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _symbols: &mut Symbols) -> FunctionResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         let mut counter = self.counter.borrow_mut();
@@ -121,15 +122,14 @@ impl Function for RaiseFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        match args.as_slice() {
-            [Value::Text(s)] => {
-                let pos = span.args[0].start_pos();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let result = match iter.next().expect("Invalid arguments") {
+            (Value::Text(s), pos) => {
                 if s == "argument" {
                     Err(CallError::ArgumentError(pos, "Bad argument".to_owned()))
                 } else if s == "eval" {
-                    Err(Error::new(pos, "Some eval error").into())
+                    Err(CallError::EvalError(pos, "Some eval error".to_owned()))
                 } else if s == "internal" {
                     Err(CallError::InternalError(pos, "Some internal error".to_owned()))
                 } else if s == "io" {
@@ -141,7 +141,11 @@ impl Function for RaiseFunction {
                 }
             }
             _ => panic!("Invalid arguments"),
+        };
+        if iter.next().is_some() {
+            panic!("Invalid arguments");
         }
+        result
     }
 }
 
@@ -167,18 +171,14 @@ impl Function for GetHiddenFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let mut args = eval_all(&span.args, symbols).await?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
         if args.len() != 1 {
             return Err(CallError::SyntaxError);
         }
-        match args.pop().unwrap() {
-            Value::Text(name) => match symbols.get_var(&VarRef::new(name, VarType::Text)) {
+        match &args[0] {
+            (Value::Text(name), pos) => match symbols.get_var(&VarRef::new(name, VarType::Text)) {
                 Ok(t) => Ok(t.clone()),
-                Err(e) => Err(CallError::EvalError(eval::Error::from_value_error(
-                    e,
-                    span.args[0].start_pos(),
-                ))),
+                Err(e) => Err(CallError::EvalError(*pos, e.to_string())),
             },
             _ => Err(CallError::SyntaxError),
         }
@@ -334,15 +334,14 @@ impl Function for OutfFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        if span.args.len() < 2 {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        if args.is_empty() {
             return Err(CallError::SyntaxError);
         }
 
-        let args = eval_all(&span.args, symbols).await?;
-        let mut iter = args.into_iter();
+        let mut iter = symbols.load_all(args)?.into_iter();
         let result = match iter.next() {
-            Some(v @ Value::Integer(_)) => v,
+            Some((v @ Value::Integer(_), _pos)) => v,
             _ => return Err(CallError::SyntaxError),
         };
 
@@ -354,7 +353,7 @@ impl Function for OutfFunction {
             }
             first = false;
 
-            format_value(arg, &mut text);
+            format_value(arg.0, &mut text);
         }
         self.data.borrow_mut().push(text);
         Ok(result)
@@ -382,12 +381,10 @@ impl Function for SumFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
         let mut result = Value::Integer(0);
-        for a in &span.args {
-            let value = a.eval(symbols).await?;
-            result =
-                result.add(&value).map_err(|e| eval::Error::from_value_error(e, a.start_pos()))?;
+        for (value, pos) in symbols.load_all(args)? {
+            result = result.add(&value).map_err(|e| eval::Error::from_value_error(e, pos))?;
         }
         Ok(result)
     }
@@ -464,8 +461,8 @@ impl Function for TypeCheckFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
-        assert!(span.args.is_empty());
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _symbols: &mut Symbols) -> FunctionResult {
+        assert!(args.is_empty());
         Ok(self.value.clone())
     }
 }

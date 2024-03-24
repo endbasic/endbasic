@@ -16,9 +16,7 @@
 //! GPIO access functions and commands for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{
-    ArgSep, ArgSpan, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarType,
-};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -297,19 +295,21 @@ impl Function for GpioReadFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        match span.args.as_slice() {
-            [pin_expr] => {
-                let pin = pin_expr.eval(symbols).await?;
-                let pin = Pin::parse_value(pin, pin_expr.start_pos())?;
-                let value = match MockPins::try_new(symbols) {
-                    Some(mut pins) => pins.read(pin)?,
-                    None => self.pins.borrow_mut().read(pin)?,
-                };
-                Ok(value.into())
-            }
-            _ => Err(CallError::SyntaxError),
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let pin = match iter.next() {
+            Some((value, pos)) => Pin::parse_value(value, pos)?,
+            _ => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
         }
+
+        let value = match MockPins::try_new(symbols) {
+            Some(mut pins) => pins.read(pin)?,
+            None => self.pins.borrow_mut().read(pin)?,
+        };
+        Ok(value.into())
     }
 }
 
@@ -391,19 +391,41 @@ mod tests {
 
     /// Does a GPIO test using the mocking feature, running the commands in `code` and expecting
     /// that the `__GPIO_MOCK_DATA` array contains `trace` after completion.
-    fn do_mock_test<S: Into<String>>(code: S, trace: &[i32]) {
+    ///
+    /// Sets all `vars` before evaluating the expression so that the expression can contain variable
+    /// references.
+    fn do_mock_test_with_vars<S: Into<String>, VS: Into<Vec<(&'static str, Value)>>>(
+        code: S,
+        trace: &[i32],
+        vars: VS,
+    ) {
         let code = code.into();
+        let vars = vars.into();
 
         let mut exp_data = vec![Value::Integer(0); 50];
         for (i, d) in trace.iter().enumerate() {
             exp_data[i] = Value::Integer(*d);
         }
 
-        Tester::default()
-            .run(format!(r#"DIM __GPIO_MOCK_DATA(50) AS INTEGER: __GPIO_MOCK_LAST = 0: {}"#, code))
-            .expect_var("__GPIO_MOCK_LAST", Value::Integer(trace.len() as i32))
+        let mut t = Tester::default();
+        for var in vars.as_slice() {
+            t = t.set_var(var.0, var.1.clone());
+        }
+
+        let mut c = t
+            .run(format!(r#"DIM __GPIO_MOCK_DATA(50) AS INTEGER: __GPIO_MOCK_LAST = 0: {}"#, code));
+        for var in vars.into_iter() {
+            c = c.expect_var(var.0, var.1.clone());
+        }
+        c.expect_var("__GPIO_MOCK_LAST", Value::Integer(trace.len() as i32))
             .expect_array_simple("__GPIO_MOCK_DATA", VarType::Integer, exp_data)
             .check();
+    }
+
+    /// Does a GPIO test using the mocking feature, running the commands in `code` and expecting
+    /// that the `__GPIO_MOCK_DATA` array contains `trace` after completion.
+    fn do_mock_test<S: Into<String>>(code: S, trace: &[i32]) {
+        do_mock_test_with_vars(code, trace, [])
     }
 
     /// Tests that all GPIO operations delegate to the real pins implementation, which defaults to
@@ -487,12 +509,13 @@ mod tests {
 
     #[test]
     fn test_gpio_read_ok() {
-        do_mock_test(
+        do_mock_test_with_vars(
             "__GPIO_MOCK_DATA(0) = 310
             __GPIO_MOCK_DATA(2) = 311
             GPIO_WRITE 5, GPIO_READ(3.1)
-            GPIO_WRITE 7, GPIO_READ(3)",
+            GPIO_WRITE 7, GPIO_READ(pin)",
             &[310, 520, 311, 721],
+            [("pin", 3.into())],
         );
     }
 

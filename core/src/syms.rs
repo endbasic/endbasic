@@ -15,7 +15,7 @@
 
 //! Symbol definitions and symbols table representation.
 
-use crate::ast::{BuiltinCallSpan, FunctionCallSpan, Value, VarRef, VarType};
+use crate::ast::{BuiltinCallSpan, Value, VarRef, VarType};
 use crate::eval;
 use crate::exec::Machine;
 use crate::reader::LineCol;
@@ -39,7 +39,7 @@ pub enum CallError {
     ArgumentError(LineCol, String),
 
     /// Error while evaluating input arguments.
-    EvalError(eval::Error),
+    EvalError(LineCol, String),
 
     /// Any other error not representable by other values.
     InternalError(LineCol, String),
@@ -58,7 +58,7 @@ pub enum CallError {
 
 impl From<eval::Error> for CallError {
     fn from(e: eval::Error) -> Self {
-        Self::EvalError(e)
+        Self::EvalError(e.pos, e.message)
     }
 }
 
@@ -426,6 +426,26 @@ impl Symbols {
             None => Err(Error::new(format!("{} is not defined", name))),
         }
     }
+
+    /// Given a collection of arguments (values), loads all of those that are variable references.
+    ///
+    /// All functions should use this before inspecting their arguments, unless they care about
+    /// using values by reference.
+    pub fn load_all(
+        &mut self,
+        mut args: Vec<(Value, LineCol)>,
+    ) -> std::result::Result<Vec<(Value, LineCol)>, CallError> {
+        for arg in &mut args {
+            let new_value = match &arg.0 {
+                Value::VarRef(vref) => self
+                    .get_var(vref)
+                    .map_err(|e| CallError::ArgumentError(arg.1, e.to_string()))?,
+                _ => continue,
+            };
+            arg.0 = new_value.clone();
+        }
+        Ok(args)
+    }
 }
 
 /// Builder pattern for a callable's metadata.
@@ -564,14 +584,10 @@ pub trait Function {
 
     /// Executes the function.
     ///
-    /// `span` contains the details about the function call.  The arguments within the span are
-    /// unevaluated as provided in the invocation of the function.  These are needed to support
-    /// functions that need unevaluated symbol references (such as `LBOUND(array)`).  Because most
-    /// functions don't support this kind of input, they should use `eval::eval_all` to process all
-    /// arguments.
+    /// `args` contains the arguments to the function call.
     ///
     /// `symbols` provides mutable access to the current state of the machine's symbols.
-    async fn exec(&self, args: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult;
 }
 
 /// A trait to define a command that is executed by a `Machine`.

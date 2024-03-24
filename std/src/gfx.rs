@@ -17,14 +17,13 @@
 
 use crate::console::{Console, PixelsXY};
 use async_trait::async_trait;
-use endbasic_core::ast::{
-    ArgSep, ArgSpan, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarType,
-};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
     FunctionResult, Symbols,
 };
+use endbasic_core::LineCol;
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::rc::Rc;
@@ -193,8 +192,8 @@ impl Function for GfxHeightFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _symbols: &mut Symbols) -> FunctionResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         let size = self.console.borrow().size_pixels()?;
@@ -479,8 +478,8 @@ impl Function for GfxWidthFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _symbols: &mut Symbols) -> FunctionResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         let size = self.console.borrow().size_pixels()?;
