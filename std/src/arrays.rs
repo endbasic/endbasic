@@ -16,13 +16,13 @@
 //! Array-related functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{Expr, FunctionCallSpan, Value, VarType};
-use endbasic_core::eval;
+use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     Array, CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult, Symbol,
     Symbols,
 };
+use endbasic_core::LineCol;
 use std::rc::Rc;
 
 /// Category description for all symbols provided by this module.
@@ -31,30 +31,27 @@ const CATEGORY: &str = "Array functions";
 /// Extracts the array reference and the dimension number from the list of arguments passed to
 /// either `LBOUND` or `UBOUND`.
 #[allow(clippy::needless_lifetimes)]
-async fn parse_bound_args<'a>(
-    args: &[Expr],
+fn parse_bound_args<'a>(
+    args: Vec<(Value, LineCol)>,
     symbols: &'a mut Symbols,
 ) -> Result<(&'a Array, usize), CallError> {
     let mut iter = args.iter();
 
     let (arrayref, arraypos) = match iter.next() {
-        Some(Expr::Symbol(span)) => (&span.vref, span.pos),
+        Some((Value::VarRef(vref), pos)) => (vref, *pos),
         _ => return Err(CallError::SyntaxError),
     };
 
     let dim = match iter.next() {
-        Some(expr) => {
-            let value = expr.eval(symbols).await?;
-            let i = value
-                .as_i32()
-                .map_err(|e| CallError::ArgumentError(expr.start_pos(), format!("{}", e)))?;
+        Some((value, pos)) => {
+            let i = value.as_i32().map_err(|e| CallError::ArgumentError(*pos, format!("{}", e)))?;
             if i < 0 {
                 return Err(CallError::ArgumentError(
-                    expr.start_pos(),
+                    *pos,
                     format!("Dimension {} must be positive", i),
                 ));
             }
-            Some((i as usize, expr.start_pos()))
+            Some((i as usize, *pos))
         }
         None => None,
     };
@@ -65,7 +62,7 @@ async fn parse_bound_args<'a>(
 
     let array = match symbols
         .get(arrayref)
-        .map_err(|e| eval::Error::from_value_error(e, arraypos))?
+        .map_err(|e| CallError::ArgumentError(arraypos, format!("{}", e)))?
     {
         Some(Symbol::Array(array)) => array,
         Some(_) => {
@@ -136,8 +133,8 @@ impl Function for LboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let (_array, _dim) = parse_bound_args(&span.args, symbols).await?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let (_array, _dim) = parse_bound_args(args, symbols)?;
         Ok(Value::Integer(0))
     }
 }
@@ -172,8 +169,8 @@ impl Function for UboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let (array, dim) = parse_bound_args(&span.args, symbols).await?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let (array, dim) = parse_bound_args(args, symbols)?;
         Ok(Value::Integer((array.dimensions()[dim - 1] - 1) as i32))
     }
 }
@@ -223,10 +220,7 @@ mod tests {
 
         Tester::default()
             .run(&format!("i = 0: result = {}(i$)", func))
-            .expect_err(format!(
-                "1:17: In call to {}: 1:24: Incompatible types in i$ reference",
-                func
-            ))
+            .expect_err("1:24: Incompatible types in i$ reference")
             .expect_var("i", Value::Integer(0))
             .check();
 

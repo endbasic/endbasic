@@ -16,15 +16,13 @@
 //! Numerical functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{
-    ArgSep, ArgSpan, BuiltinCallSpan, Expr, FunctionCallSpan, Value, VarType,
-};
-use endbasic_core::eval::eval_all;
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
     FunctionResult, Symbols,
 };
+use endbasic_core::LineCol;
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
 use std::cell::RefCell;
@@ -56,17 +54,21 @@ impl Clearable for ClearableAngleMode {
 /// Gets the single argument to a trigonometric function, which is its angle.  Applies units
 /// conversion based on `angle_mode`.
 async fn get_angle(
-    args: &[Expr],
+    args: Vec<(Value, LineCol)>,
     symbols: &mut Symbols,
     angle_mode: &AngleMode,
 ) -> Result<f64, CallError> {
-    let values = eval_all(args, symbols).await?;
-    let angle = match values.as_slice() {
-        [v] => v
-            .as_f64()
-            .map_err(|e| CallError::ArgumentError(args[0].start_pos(), format!("{}", e)))?,
+    let mut iter = symbols.load_all(args)?.into_iter();
+    let angle = match iter.next() {
+        Some((value, pos)) => {
+            value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?
+        }
         _ => return Err(CallError::SyntaxError),
     };
+    if iter.next().is_some() {
+        return Err(CallError::SyntaxError);
+    }
+
     match angle_mode {
         AngleMode::Degrees => Ok(angle.to_radians()),
         AngleMode::Radians => Ok(angle),
@@ -138,13 +140,18 @@ impl Function for AtnFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        let n = match args.as_slice() {
-            [Value::Double(n)] => *n,
-            [Value::Integer(n)] => *n as f64,
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let n = match iter.next() {
+            Some((value @ Value::Integer(_) | value @ Value::Double(_), pos)) => {
+                value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?
+            }
             _ => return Err(CallError::SyntaxError),
         };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
         match *self.angle_mode.borrow() {
             AngleMode::Degrees => Ok(Value::Double(n.atan().to_degrees())),
             AngleMode::Radians => Ok(Value::Double(n.atan())),
@@ -180,16 +187,18 @@ impl Function for CintFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        if span.args.len() != 1 {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let value = match iter.next() {
+            Some((value, pos)) => value
+                .maybe_cast(VarType::Integer)
+                .map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?,
+            _ => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
             return Err(CallError::SyntaxError);
         }
-        let mut args = eval_all(&span.args, symbols).await?;
-        let value =
-            args.pop().unwrap().maybe_cast(VarType::Integer).map_err(|e| {
-                CallError::ArgumentError(span.args[0].start_pos(), format!("{}", e))
-            })?;
-        debug_assert!(args.is_empty());
+
         match value {
             Value::Double(_) | Value::Integer(_) => Ok(value),
             _ => Err(CallError::SyntaxError),
@@ -227,8 +236,8 @@ impl Function for CosFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let angle = get_angle(&span.args, symbols, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let angle = get_angle(args, symbols, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.cos()))
     }
 }
@@ -300,19 +309,20 @@ impl Function for IntFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        if span.args.len() != 1 {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let (value, valuepos) = match iter.next() {
+            Some((Value::Double(d), pos)) => (Value::Double(d.floor()), pos),
+            Some((v, pos)) => (v, pos),
+            _ => return Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
             return Err(CallError::SyntaxError);
         }
-        let mut args = eval_all(&span.args, symbols).await?;
-        let value = match args.pop().unwrap() {
-            Value::Double(d) => Value::Double(d.floor()),
-            v => v,
-        };
-        debug_assert!(args.is_empty());
+
         let value = value
             .maybe_cast(VarType::Integer)
-            .map_err(|e| CallError::ArgumentError(span.args[0].start_pos(), format!("{}", e)))?;
+            .map_err(|e| CallError::ArgumentError(valuepos, format!("{}", e)))?;
         match value {
             Value::Double(_) | Value::Integer(_) => Ok(value),
             _ => Err(CallError::SyntaxError),
@@ -344,16 +354,13 @@ impl Function for MaxFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        if span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        if args.is_empty() {
             return Err(CallError::SyntaxError);
         }
-        let args = eval_all(&span.args, symbols).await?;
         let mut max = f64::MIN;
-        for (arg, value) in span.args.iter().zip(args) {
-            let n = value
-                .as_f64()
-                .map_err(|e| CallError::ArgumentError(arg.start_pos(), format!("{}", e)))?;
+        for (value, pos) in symbols.load_all(args)?.into_iter() {
+            let n = value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
             if n > max {
                 max = n;
             }
@@ -386,16 +393,13 @@ impl Function for MinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        if span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        if args.is_empty() {
             return Err(CallError::SyntaxError);
         }
-        let args = eval_all(&span.args, symbols).await?;
         let mut min = f64::MAX;
-        for (arg, value) in span.args.iter().zip(args) {
-            let n = value
-                .as_f64()
-                .map_err(|e| CallError::ArgumentError(arg.start_pos(), format!("{}", e)))?;
+        for (value, pos) in symbols.load_all(args)?.into_iter() {
+            let n = value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
             if n < min {
                 min = n;
             }
@@ -428,8 +432,8 @@ impl Function for PiFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, _symbols: &mut Symbols) -> FunctionResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _symbols: &mut Symbols) -> FunctionResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         Ok(Value::Double(std::f64::consts::PI))
@@ -556,25 +560,28 @@ impl Function for RndFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        match args.as_slice() {
-            [] => Ok(Value::Double(self.prng.borrow_mut().next())),
-            [n] => {
-                let n = n.as_i32().map_err(|e| {
-                    CallError::ArgumentError(span.args[0].start_pos(), format!("{}", e))
-                })?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let result = match iter.next() {
+            None => Value::Double(self.prng.borrow_mut().next()),
+            Some((n, npos)) => {
+                let n = n.as_i32().map_err(|e| CallError::ArgumentError(npos, format!("{}", e)))?;
                 match n.cmp(&0) {
-                    Ordering::Equal => Ok(Value::Double(self.prng.borrow_mut().last())),
-                    Ordering::Greater => Ok(Value::Double(self.prng.borrow_mut().next())),
-                    Ordering::Less => Err(CallError::ArgumentError(
-                        span.args[0].start_pos(),
-                        "n% cannot be negative".to_owned(),
-                    )),
+                    Ordering::Equal => Value::Double(self.prng.borrow_mut().last()),
+                    Ordering::Greater => Value::Double(self.prng.borrow_mut().next()),
+                    Ordering::Less => {
+                        return Err(CallError::ArgumentError(
+                            npos,
+                            "n% cannot be negative".to_owned(),
+                        ))
+                    }
                 }
             }
-            _ => Err(CallError::SyntaxError),
+        };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
         }
+        Ok(result)
     }
 }
 
@@ -608,8 +615,8 @@ impl Function for SinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let angle = get_angle(&span.args, symbols, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let angle = get_angle(args, symbols, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.sin()))
     }
 }
@@ -638,16 +645,21 @@ impl Function for SqrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let args = eval_all(&span.args, symbols).await?;
-        let num = match args.as_slice() {
-            [Value::Integer(i)] => *i as f64,
-            [Value::Double(d)] => *d,
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let mut iter = symbols.load_all(args)?.into_iter();
+        let (num, numpos) = match iter.next() {
+            Some((value @ Value::Integer(_) | value @ Value::Double(_), pos)) => {
+                (value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
+            }
             _ => return Err(CallError::SyntaxError),
         };
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
         if num < 0.0 {
             return Err(CallError::ArgumentError(
-                span.args[0].start_pos(),
+                numpos,
                 "Cannot take square root of a negative number".to_owned(),
             ));
         }
@@ -685,8 +697,8 @@ impl Function for TanFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        let angle = get_angle(&span.args, symbols, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        let angle = get_angle(args, symbols, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.tan()))
     }
 }
@@ -721,6 +733,8 @@ mod tests {
         check_expr_ok(123f64.atan(), "ATN(123)");
         check_expr_ok(45.5f64.atan(), "ATN(45.5)");
 
+        check_expr_ok_with_vars(123f64.atan(), "ATN(a)", [("a", 123i32.into())]);
+
         check_expr_error("1:10: In call to ATN: expected n<%|#>", "ATN()");
         check_expr_error("1:10: In call to ATN: expected n<%|#>", "ATN(FALSE)");
         check_expr_error("1:10: In call to ATN: expected n<%|#>", "ATN(3, 4)");
@@ -732,6 +746,8 @@ mod tests {
         check_expr_ok(0, "CINT(-0.1)");
         check_expr_ok(1, "CINT(0.9)");
         check_expr_ok(-1, "CINT(-0.9)");
+
+        check_expr_ok_with_vars(1, "CINT(d)", [("d", 0.9f64.into())]);
 
         check_expr_error("1:10: In call to CINT: expected expr<%|#>", "CINT()");
         check_expr_error("1:10: In call to CINT: expected expr<%|#>", "CINT(FALSE)");
@@ -747,6 +763,8 @@ mod tests {
     fn test_cos() {
         check_expr_ok(123f64.cos(), "COS(123)");
         check_expr_ok(45.5f64.cos(), "COS(45.5)");
+
+        check_expr_ok_with_vars(123f64.cos(), "COS(i)", [("i", 123i32.into())]);
 
         check_expr_error("1:10: In call to COS: expected angle<%|#>", "COS()");
         check_expr_error("1:10: In call to COS: 1:14: FALSE is not a number", "COS(FALSE)");
@@ -782,6 +800,8 @@ mod tests {
         check_expr_ok(0, "INT(0.9)");
         check_expr_ok(-1, "INT(-0.9)");
 
+        check_expr_ok_with_vars(0, "INT(d)", [("d", 0.9f64.into())]);
+
         check_expr_error("1:10: In call to INT: expected expr<%|#>", "INT()");
         check_expr_error("1:10: In call to INT: expected expr<%|#>", "INT(FALSE)");
         check_expr_error("1:10: In call to INT: expected expr<%|#>", "INT(3.0, 4)");
@@ -810,6 +830,12 @@ mod tests {
 
         check_expr_ok(2.5, "MAX(1, 0.5, 2.5, 2)");
 
+        check_expr_ok_with_vars(
+            5.0,
+            "MAX(i, j, k)",
+            [("i", 5i32.into()), ("j", 3i32.into()), ("k", 4i32.into())],
+        );
+
         check_expr_error("1:10: In call to MAX: expected expr<%|#>[, .., expr<%|#>]", "MAX()");
         check_expr_error("1:10: In call to MAX: 1:14: FALSE is not a number", "MAX(FALSE)");
     }
@@ -831,6 +857,12 @@ mod tests {
         check_expr_ok(-5.3, "MIN(-5.3, -3.5, -4.2)");
 
         check_expr_ok(0.5, "MIN(1, 0.5, 2.5, 2)");
+
+        check_expr_ok_with_vars(
+            3.0,
+            "MIN(i, j, k)",
+            [("i", 5i32.into()), ("j", 3i32.into()), ("k", 4i32.into())],
+        );
 
         check_expr_error("1:10: In call to MIN: expected expr<%|#>[, .., expr<%|#>]", "MIN()");
         check_expr_error("1:10: In call to MIN: 1:14: FALSE is not a number", "MIN(FALSE)");
@@ -878,6 +910,8 @@ mod tests {
         check_expr_ok(123f64.sin(), "SIN(123)");
         check_expr_ok(45.5f64.sin(), "SIN(45.5)");
 
+        check_expr_ok_with_vars(123f64.sin(), "SIN(i)", [("i", 123i32.into())]);
+
         check_expr_error("1:10: In call to SIN: expected angle<%|#>", "SIN()");
         check_expr_error("1:10: In call to SIN: 1:14: FALSE is not a number", "SIN(FALSE)");
         check_expr_error("1:10: In call to SIN: expected angle<%|#>", "SIN(3, 4)");
@@ -889,6 +923,8 @@ mod tests {
         check_expr_ok(0f64.sqrt(), "SQR(-0.0)");
         check_expr_ok(9f64.sqrt(), "SQR(9)");
         check_expr_ok(100.50f64.sqrt(), "SQR(100.50)");
+
+        check_expr_ok_with_vars(9f64.sqrt(), "SQR(i)", [("i", 9i32.into())]);
 
         check_expr_error("1:10: In call to SQR: expected num<%|#>", "SQR()");
         check_expr_error("1:10: In call to SQR: expected num<%|#>", "SQR(FALSE)");
@@ -907,6 +943,8 @@ mod tests {
     fn test_tan() {
         check_expr_ok(123f64.tan(), "TAN(123)");
         check_expr_ok(45.5f64.tan(), "TAN(45.5)");
+
+        check_expr_ok_with_vars(123f64.tan(), "TAN(i)", [("i", 123i32.into())]);
 
         check_expr_error("1:10: In call to TAN: expected angle<%|#>", "TAN()");
         check_expr_error("1:10: In call to TAN: 1:14: FALSE is not a number", "TAN(FALSE)");

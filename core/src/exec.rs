@@ -37,8 +37,8 @@ pub enum Error {
     CompilerError(#[from] compiler::Error),
 
     /// Evaluation error during execution.
-    #[error("{0}")]
-    EvalError(#[from] eval::Error),
+    #[error("{}:{}: {}", .0.line, .0.col, .1)]
+    EvalError(LineCol, String),
 
     /// I/O error during execution.
     #[error("{0}")]
@@ -62,6 +62,12 @@ pub enum Error {
     ValueError(value::Error),
 }
 
+impl From<eval::Error> for Error {
+    fn from(value: eval::Error) -> Self {
+        Self::EvalError(value.pos, value.message)
+    }
+}
+
 impl Error {
     /// Annotates a call evaluation error with the command's metadata.
     // TODO(jmmv): This is a hack to support the transition to a better Command abstraction within
@@ -73,7 +79,7 @@ impl Error {
                 pos,
                 format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
             ),
-            CallError::EvalError(e) => Self::EvalError(e),
+            CallError::EvalError(pos2, e) => Self::EvalError(pos2, e),
             CallError::InternalError(pos2, e) => Self::SyntaxError(
                 pos,
                 format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
@@ -110,7 +116,7 @@ impl Error {
     fn is_catchable(&self) -> bool {
         match self {
             Error::CompilerError(_) => false,
-            Error::EvalError(_) => true,
+            Error::EvalError(..) => true,
             Error::IoError(_) => true,
             Error::NestedError(_) => false,
             Error::ParseError(_) => false,
@@ -477,6 +483,134 @@ impl Machine {
         Ok(())
     }
 
+    /// Evaluates the subscripts of an array reference.
+    fn get_array_args(&self, context: &mut Context, nargs: usize) -> Result<Vec<i32>> {
+        let mut subscripts = Vec::with_capacity(nargs);
+        for _ in 0..nargs {
+            let (value, pos) = context.value_stack.pop().unwrap();
+            match value {
+                Value::Integer(i) => {
+                    subscripts.push(i);
+                    continue;
+                }
+                Value::VarRef(vref) => {
+                    let value =
+                        self.symbols.get_var(&vref).map_err(|e| Error::from_value_error(e, pos))?;
+                    if let Value::Integer(i) = value {
+                        subscripts.push(*i);
+                        continue;
+                    }
+                }
+                _ => (), // Fall through to error.
+            }
+            return Err(Error::EvalError(pos, "Array subscripts must be integers".to_owned()));
+        }
+        Ok(subscripts)
+    }
+
+    /// Evaluates a function call specified by `fref` and arguments `args` on the function `f`.
+    async fn do_function_call(
+        &mut self,
+        context: &mut Context,
+        fref: &VarRef,
+        fref_pos: LineCol,
+        nargs: usize,
+        f: Rc<dyn Function>,
+    ) -> Result<()> {
+        let metadata = f.metadata();
+        if !fref.accepts(metadata.return_type()) {
+            return Err(Error::EvalError(
+                fref_pos,
+                "Incompatible type annotation for function call".to_owned(),
+            ));
+        }
+
+        let mut args = Vec::with_capacity(nargs);
+        for _ in 0..nargs {
+            let (value, pos) = context.value_stack.pop().unwrap();
+            args.push((value, pos));
+        }
+
+        let result = f.exec(args, &mut self.symbols).await;
+        match result {
+            Ok(value) => {
+                debug_assert!(metadata.return_type() != VarType::Auto);
+                let fref = VarRef::new(fref.name(), metadata.return_type());
+                // Given that we only support built-in functions at the moment, this
+                // could well be an assertion.  Doing so could turn into a time bomb
+                // when/if we add user-defined functions, so handle the problem as an
+                // error.
+                if !fref.accepts(value.as_vartype()) {
+                    return Err(Error::EvalError(
+                        fref_pos,
+                        format!(
+                            "Value returned by {} is incompatible with its type definition",
+                            fref.name(),
+                        ),
+                    ));
+                }
+                context.value_stack.push((value, fref_pos));
+                Ok(())
+            }
+            Err(e) => Err(Error::from_call_error(metadata, e, fref_pos)),
+        }
+    }
+
+    /// Handles a function call or an array reference.
+    async fn function_call_or_array_ref(
+        &mut self,
+        context: &mut Context,
+        fref: &VarRef,
+        fref_pos: LineCol,
+        nargs: usize,
+    ) -> Result<()> {
+        match self.symbols.get(fref).map_err(|e| Error::from_value_error(e, fref_pos))? {
+            Some(Symbol::Array(_)) => (), // Fallthrough.
+            Some(Symbol::Function(f)) => {
+                if f.metadata().is_argless() {
+                    return Err(Error::EvalError(
+                        fref_pos,
+                        format!(
+                            "In call to {}: expected no arguments nor parenthesis",
+                            f.metadata().name()
+                        ),
+                    ));
+                }
+                let f = f.clone();
+                return self.do_function_call(context, fref, fref_pos, nargs, f).await;
+            }
+
+            Some(_) => {
+                return Err(Error::EvalError(
+                    fref_pos,
+                    format!("{} is not an array or a function", fref),
+                ))
+            }
+            None => {
+                return Err(Error::EvalError(
+                    fref_pos,
+                    format!("Unknown function or array {}", fref),
+                ))
+            }
+        }
+
+        // We have to handle arrays outside of the match above because we cannot hold a
+        // reference to the array while we evaluate subscripts.  This implies that we have
+        // to do a second lookup of the array right below, which isn't great...
+        let subscripts = self.get_array_args(context, nargs)?;
+        match self.symbols.get(fref).map_err(|e| Error::from_value_error(e, fref_pos))? {
+            Some(Symbol::Array(array)) => {
+                let value = array
+                    .index(&subscripts)
+                    .cloned()
+                    .map_err(|e| Error::from_value_error(e, fref_pos))?;
+                context.value_stack.push((value, fref_pos));
+                Ok(())
+            }
+            _ => unreachable!(),
+        }
+    }
+
     /// Helper for `exec_one` that only worries about execution of a single instruction.
     ///
     /// Errors are handled on the caller side depending on the `ON ERROR` handling policy that is
@@ -603,30 +737,7 @@ impl Machine {
             }
 
             Instruction::FunctionCall(fref, pos, nargs) => {
-                // TODO(jmmv): Functions should receive the evaluated arguments, at which point
-                // we can remove this re-marshalling put in place for transitional purposes only.
-                let mut args = Vec::with_capacity(*nargs);
-                for _ in 0..*nargs {
-                    let arg = context.value_stack.pop().unwrap();
-                    match arg {
-                        (Value::Boolean(value), pos) => {
-                            args.push(Expr::Boolean(BooleanSpan { value, pos }))
-                        }
-                        (Value::Double(value), pos) => {
-                            args.push(Expr::Double(DoubleSpan { value, pos }))
-                        }
-                        (Value::Integer(value), pos) => {
-                            args.push(Expr::Integer(IntegerSpan { value, pos }))
-                        }
-                        (Value::Text(value), pos) => args.push(Expr::Text(TextSpan { value, pos })),
-                        (Value::VarRef(vref), pos) => {
-                            args.push(Expr::Symbol(SymbolSpan { vref, pos }))
-                        }
-                    }
-                }
-                let call = Expr::Call(FunctionCallSpan { fref: fref.clone(), args, pos: *pos });
-                let result = call.eval(&mut self.symbols).await?;
-                context.value_stack.push((result, *pos));
+                self.function_call_or_array_ref(context, fref, *pos, *nargs).await?;
                 context.pc += 1;
             }
 
@@ -713,6 +824,18 @@ impl Machine {
             }
 
             Instruction::LoadRef(vref, pos) => {
+                let sym = self.symbols.get(vref).map_err(|e| Error::from_value_error(e, *pos))?;
+                if let Some(Symbol::Function(f)) = sym {
+                    if f.metadata().is_argless() {
+                        let f = f.clone();
+                        let span = FunctionCallSpan { fref: vref.clone(), args: vec![], pos: *pos };
+                        let value = Expr::eval_function_call(&mut self.symbols, &span, f).await?;
+                        context.value_stack.push((value, *pos));
+                        context.pc += 1;
+                        return Ok(());
+                    }
+                };
+
                 context.value_stack.push((Value::VarRef(vref.clone()), *pos));
                 context.pc += 1;
             }
@@ -1086,6 +1209,16 @@ mod tests {
     #[test]
     fn test_assignment_ok_case_insensitive() {
         do_ok_test("foo = 32\nOUT FOO", &[], &["32"]);
+    }
+
+    #[test]
+    fn test_assignment_array_access_with_varref() {
+        do_ok_test("DIM a(1)\na(0) = 123\ni = 0\nr = a(i)\nOUT r", &[], &["123"]);
+    }
+
+    #[test]
+    fn test_assignment_argless_function_call() {
+        do_ok_test("a = SUM(3, COUNT, 5)\nOUT a", &[], &["9"]);
     }
 
     #[test]

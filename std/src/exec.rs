@@ -16,7 +16,7 @@
 //! Commands that manipulate the machine's state or the program's execution.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, FunctionCallSpan, Value, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -100,8 +100,8 @@ impl Function for ErrmsgFunction {
         &self.metadata
     }
 
-    async fn exec(&self, span: &FunctionCallSpan, symbols: &mut Symbols) -> FunctionResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         // TODO(jmmv): Instead of abusing a private variable to propagate the error message from
