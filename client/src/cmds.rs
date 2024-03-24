@@ -17,7 +17,7 @@
 
 use crate::*;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
+use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
@@ -107,7 +107,7 @@ impl Command for LoginCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
         if self.service.borrow().is_logged_in() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -116,45 +116,37 @@ impl Command for LoginCommand {
             .into());
         }
 
-        let (username, password) = match span.args.as_slice() {
-            [ArgSpan { expr: Some(username), sep: ArgSep::End, .. }] => {
-                match username.eval(machine.get_mut_symbols()).await? {
-                    Value::Text(username) => {
-                        let password =
-                            read_line_secure(&mut *self.console.borrow_mut(), "Password: ").await?;
-                        (username, password)
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let username = match iter.next() {
+            None => return Err(CallError::SyntaxError),
+            Some((Value::Text(t), _pos)) => t,
+            Some((_value, pos)) => {
+                return Err(CallError::ArgumentError(
+                    pos,
+                    "LOGIN requires a string as the username".to_owned(),
+                ))
+            }
+        };
+
+        let password = match iter.next() {
+            None => read_line_secure(&mut *self.console.borrow_mut(), "Password: ").await?,
+            Some((Value::Separator(ArgSep::Long), _pos)) => match iter.next() {
+                None => return Err(CallError::SyntaxError),
+                Some((Value::Text(t), _pos)) => {
+                    if iter.next().is_some() {
+                        return Err(CallError::SyntaxError);
                     }
-                    _ => {
-                        return Err(CallError::ArgumentError(
-                            username.start_pos(),
-                            "LOGIN requires a string as the username".to_owned(),
-                        ))
-                    }
+                    t
                 }
-            }
-            [ArgSpan { expr: Some(username), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(password), sep: ArgSep::End, .. }] =>
-            {
-                let username = match username.eval(machine.get_mut_symbols()).await? {
-                    Value::Text(username) => username,
-                    _ => {
-                        return Err(CallError::ArgumentError(
-                            username.start_pos(),
-                            "LOGIN requires a string as the username".to_owned(),
-                        ))
-                    }
-                };
-                let password = match password.eval(machine.get_mut_symbols()).await? {
-                    Value::Text(password) => password,
-                    _ => {
-                        return Err(CallError::ArgumentError(
-                            password.start_pos(),
-                            "LOGIN requires a string as the password".to_owned(),
-                        ))
-                    }
-                };
-                (username, password)
-            }
-            _ => return Err(CallError::SyntaxError),
+                Some((_value, pos)) => {
+                    return Err(CallError::ArgumentError(
+                        pos,
+                        "LOGIN requires a string as the password".to_owned(),
+                    ))
+                }
+            },
+            Some((_value, _pos)) => return Err(CallError::SyntaxError),
         };
 
         self.do_login(&username, &password).await
@@ -199,8 +191,8 @@ impl Command for LogoutCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
 
@@ -353,59 +345,58 @@ impl Command for ShareCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if span.args.is_empty() {
-            return Err(CallError::SyntaxError);
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let (filename, filenamepos) = match iter.next() {
+            None => return Err(CallError::SyntaxError),
+            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
+            Some((value, pos)) => (value, pos),
+        };
+
+        let mut acls = Vec::new();
+        loop {
+            match iter.next() {
+                None => break,
+                Some((Value::Separator(ArgSep::Long), _pos)) => (),
+                Some((_value, _pos)) => return Err(CallError::SyntaxError),
+            }
+
+            match iter.next() {
+                None => return Err(CallError::SyntaxError),
+                Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
+                Some((value, pos)) => acls.push((value, pos)),
+            }
         }
 
-        let filename = match &span.args[0].expr {
-            Some(e) => match e.eval(machine.get_mut_symbols()).await? {
-                Value::Text(t) => t,
-                _ => {
-                    return Err(CallError::ArgumentError(
-                        e.start_pos(),
-                        "SHARE requires a string as the filename".to_owned(),
-                    ))
-                }
-            },
-            None => {
+        let filename = match filename {
+            Value::Text(t) => t,
+            _ => {
                 return Err(CallError::ArgumentError(
-                    span.args[0].sep_pos,
+                    filenamepos,
                     "SHARE requires a string as the filename".to_owned(),
                 ))
             }
         };
-        if span.args[0].sep == ArgSep::End {
-            return self.show_acls(&filename).await;
-        } else if span.args[0].sep != ArgSep::Long {
-            return Err(CallError::SyntaxError);
-        }
 
         let mut add = FileAcls::default();
         let mut remove = FileAcls::default();
-        for arg in &span.args[1..] {
-            match arg {
-                ArgSpan { expr: None, sep: _, .. } => {
-                    return Err(CallError::SyntaxError);
-                }
-                ArgSpan { expr: _, sep: ArgSep::Short, .. } => {
-                    return Err(CallError::SyntaxError);
-                }
-                ArgSpan { expr: Some(acl), sep: _, .. } => {
-                    match acl.eval(machine.get_mut_symbols()).await? {
-                        Value::Text(t) => {
-                            ShareCommand::parse_acl(t, acl.start_pos(), &mut add, &mut remove)?
-                        }
-                        _ => {
-                            return Err(CallError::ArgumentError(
-                                acl.start_pos(),
-                                "SHARE requires strings as ACL changes".to_owned(),
-                            ))
-                        }
-                    }
+        for (acl, aclpos) in acls {
+            match acl {
+                Value::Text(t) => ShareCommand::parse_acl(t, aclpos, &mut add, &mut remove)?,
+                _ => {
+                    return Err(CallError::ArgumentError(
+                        aclpos,
+                        "SHARE requires strings as ACL changes".to_owned(),
+                    ))
                 }
             }
         }
+
+        if add.is_empty() && remove.is_empty() {
+            return self.show_acls(&filename).await;
+        }
+
         self.storage.borrow_mut().update_acls(&filename, &add, &remove).await?;
 
         if Self::has_public_acl(&add) {
@@ -534,7 +525,11 @@ impl Command for SignupCommand {
         &self.metadata
     }
 
-    async fn exec(&self, _span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
+            return Err(CallError::SyntaxError);
+        }
+
         let console = &mut *self.console.borrow_mut();
         console.print("")?;
         refill_and_print(
@@ -964,7 +959,7 @@ mod tests {
             r#"SHARE 1"#,
         );
         client_check_stmt_err(
-            "1:1: In call to SHARE: 1:7: SHARE requires a string as the filename",
+            "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
             r#"SHARE , "a""#,
         );
         client_check_stmt_err(
@@ -1125,7 +1120,12 @@ mod tests {
     }
 
     #[test]
-    fn test_signup_error() {
+    fn test_singup_errors() {
+        client_check_stmt_err("1:1: In call to SIGNUP: expected no arguments", r#"SIGNUP "a""#);
+    }
+
+    #[test]
+    fn test_signup_process_error() {
         let t = ClientTester::default();
         t.get_service().borrow_mut().add_mock_signup(
             SignupRequest {

@@ -16,7 +16,7 @@
 //! Numerical functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Value, VarType};
+use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -272,8 +272,8 @@ impl Command for DegCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         *self.angle_mode.borrow_mut() = AngleMode::Degrees;
@@ -470,8 +470,8 @@ impl Command for RadCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         *self.angle_mode.borrow_mut() = AngleMode::Radians;
@@ -509,20 +509,27 @@ impl Command for RandomizeCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        match span.args.as_slice() {
-            [] => {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        match iter.next() {
+            None => {
                 *self.prng.borrow_mut() = Prng::new_from_entryopy();
             }
-            [ArgSpan { expr: Some(expr), sep: ArgSep::End, .. }] => {
-                let n = expr.eval(machine.get_mut_symbols()).await?;
-                let n = n
-                    .as_i32()
-                    .map_err(|e| CallError::ArgumentError(expr.start_pos(), format!("{}", e)))?;
+            Some((Value::Missing, _pos)) => {
+                return Err(CallError::SyntaxError);
+            }
+            Some((value, pos)) => {
+                let n =
+                    value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
+
+                if iter.next().is_some() {
+                    return Err(CallError::SyntaxError);
+                }
+
                 *self.prng.borrow_mut() = Prng::new_from_seed(n);
             }
-            _ => return Err(CallError::SyntaxError),
-        };
+        }
         Ok(())
     }
 }

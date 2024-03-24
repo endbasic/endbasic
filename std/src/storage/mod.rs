@@ -56,6 +56,11 @@ pub struct FileAcls {
 }
 
 impl FileAcls {
+    /// Returns true if this group of ACLs is empty.
+    pub fn is_empty(&self) -> bool {
+        self.readers.is_empty()
+    }
+
     /// Extends this set of ACLs with the given `readers`.
     pub fn with_readers<T: Into<Vec<String>>>(mut self, readers: T) -> Self {
         self.readers.extend(readers.into());

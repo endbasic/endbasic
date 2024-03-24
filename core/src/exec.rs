@@ -73,13 +73,22 @@ impl Error {
     // TODO(jmmv): This is a hack to support the transition to a better Command abstraction within
     // Symbols and exists to minimize the amount of impacted tests.  Should be removed and/or
     // somehow unified with the equivalent function in eval::Error.
-    pub(crate) fn from_call_error(md: &CallableMetadata, e: CallError, pos: LineCol) -> Self {
+    fn from_call_error(md: &CallableMetadata, e: CallError, pos: LineCol) -> Self {
         match e {
             CallError::ArgumentError(pos2, e) => Self::SyntaxError(
                 pos,
                 format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
             ),
-            CallError::EvalError(pos2, e) => Self::EvalError(pos2, e),
+            CallError::EvalError(pos2, e) => {
+                if md.return_type() == VarType::Void {
+                    Self::EvalError(pos2, e)
+                } else {
+                    Self::EvalError(
+                        pos,
+                        format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
+                    )
+                }
+            }
             CallError::InternalError(pos2, e) => Self::SyntaxError(
                 pos,
                 format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
@@ -334,6 +343,17 @@ impl Machine {
         }
     }
 
+    /// Given a collection of arguments (values), loads all of those that are variable references.
+    ///
+    /// All commands should use this before inspecting their arguments, unless they care about
+    /// using values by reference.
+    pub fn load_all(
+        &mut self,
+        args: Vec<(Value, LineCol)>,
+    ) -> std::result::Result<Vec<(Value, LineCol)>, CallError> {
+        self.symbols.load_all(args)
+    }
+
     /// Returns true if execution should stop because we have hit a stop condition.
     async fn should_stop(&mut self) -> bool {
         if let Some(yield_now) = self.yield_now_fn.as_ref() {
@@ -383,23 +403,38 @@ impl Machine {
     }
 
     /// Handles a builtin call.
-    async fn call_builtin(&mut self, span: &BuiltinCallSpan) -> Result<()> {
-        let cmd = match self
-            .symbols
-            .get(&VarRef::new(&span.name, VarType::Auto))
-            .map_err(|e| Error::from_value_error(e, span.name_pos))?
-        {
-            Some(Symbol::Command(cmd)) => cmd.clone(),
-            Some(_) => {
-                return new_syntax_error(span.name_pos, format!("{} is not a command", span.name))
+    async fn builtin_call(
+        &mut self,
+        context: &mut Context,
+        bref: &VarRef,
+        bref_pos: LineCol,
+        nargs: usize,
+    ) -> Result<()> {
+        match self.symbols.get(bref).map_err(|e| Error::from_value_error(e, bref_pos))? {
+            Some(Symbol::Command(b)) => {
+                let metadata = b.metadata();
+                if !bref.accepts(metadata.return_type()) {
+                    return Err(Error::EvalError(
+                        bref_pos,
+                        "Incompatible type annotation for builtin call".to_owned(),
+                    ));
+                }
+
+                let mut args = Vec::with_capacity(nargs);
+                for _ in 0..nargs {
+                    let (value, pos) = context.value_stack.pop().unwrap();
+                    args.push((value, pos));
+                }
+
+                let b = b.clone();
+                b.exec(args, self)
+                    .await
+                    .map_err(|e| Error::from_call_error(b.metadata(), e, bref_pos))
             }
-            None => {
-                return new_syntax_error(span.name_pos, format!("Unknown builtin {}", span.name))
-            }
-        };
-        cmd.exec(span, self)
-            .await
-            .map_err(|e| Error::from_call_error(cmd.metadata(), e, span.name_pos))
+
+            Some(_) => Err(Error::EvalError(bref_pos, format!("{} is not a command", bref))),
+            None => Err(Error::EvalError(bref_pos, format!("Unknown builtin {}", bref))),
+        }
     }
 
     /// Handles an array definition.  The array must not yet exist, and the name may not overlap
@@ -726,8 +761,8 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::BuiltinCall(span) => {
-                self.call_builtin(span).await?;
+            Instruction::BuiltinCall(bref, bref_pos, nargs) => {
+                self.builtin_call(context, bref, *bref_pos, *nargs).await?;
                 context.pc += 1;
             }
 
@@ -884,7 +919,19 @@ impl Machine {
                     }
                     ErrorHandlerISpan::None => (),
                     ErrorHandlerISpan::ResumeNext => {
-                        context.pc += 1;
+                        if instrs[context.pc].is_statement() {
+                            context.pc += 1;
+                        } else {
+                            loop {
+                                context.pc += 1;
+                                if context.pc >= instrs.len() {
+                                    break;
+                                } else if instrs[context.pc].is_statement() {
+                                    context.pc += 1;
+                                    break;
+                                }
+                            }
+                        }
                         result = Ok(());
                     }
                 }

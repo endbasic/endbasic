@@ -18,7 +18,7 @@
 use crate::console::readline::read_line;
 use crate::console::{CharsXY, ClearType, Console, ConsoleClearable, Key};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -74,8 +74,8 @@ impl Command for ClsCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, _machine: &mut Machine) -> CommandResult {
-        if !span.args.is_empty() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         self.console.borrow_mut().clear(ClearType::All)?;
@@ -114,43 +114,40 @@ impl Command for ColorCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        let (fg_expr, bg_expr): (&Option<Expr>, &Option<Expr>) = match span.args.as_slice() {
-            [] => (&None, &None),
-            [ArgSpan { expr: fg, sep: ArgSep::End, .. }] => (fg, &None),
-            [ArgSpan { expr: fg, sep: ArgSep::Long, .. }, ArgSpan { expr: bg, sep: ArgSep::End, .. }] => {
-                (fg, bg)
-            }
-            _ => {
-                return Err(CallError::SyntaxError);
-            }
-        };
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
 
-        async fn get_color(
-            e: &Option<Expr>,
-            machine: &mut Machine,
-        ) -> Result<Option<u8>, CallError> {
-            match e {
-                Some(expr) => {
-                    let value = expr.eval(machine.get_mut_symbols()).await?;
-                    let i = value.as_i32().map_err(|e| {
-                        CallError::ArgumentError(expr.start_pos(), format!("{}", e))
-                    })?;
-                    if i >= 0 && i <= std::u8::MAX as i32 {
-                        Ok(Some(i as u8))
-                    } else {
-                        Err(CallError::ArgumentError(
-                            expr.start_pos(),
-                            "Color out of range".to_owned(),
-                        ))
-                    }
-                }
-                None => Ok(None),
+        fn get_color(value: Value, pos: LineCol) -> Result<Option<u8>, CallError> {
+            let i = value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
+            if i >= 0 && i <= std::u8::MAX as i32 {
+                Ok(Some(i as u8))
+            } else {
+                Err(CallError::ArgumentError(pos, "Color out of range".to_owned()))
             }
         }
 
-        let fg = get_color(fg_expr, machine).await?;
-        let bg = get_color(bg_expr, machine).await?;
+        let fg = match iter.next() {
+            None => None,
+            Some((Value::Missing, _pos)) => None,
+            Some((value, pos)) => get_color(value, pos)?,
+        };
+
+        let bg = match iter.next() {
+            Some((Value::Separator(ArgSep::Long), _pos)) => match iter.next() {
+                Some((Value::Missing, _pos)) => None,
+                Some((value, pos)) => get_color(value, pos)?,
+                None => return Err(CallError::SyntaxError),
+            },
+            Some((Value::Missing, _pos)) => {
+                return Err(CallError::SyntaxError);
+            }
+            Some((_value, _pos)) => return Err(CallError::SyntaxError),
+            None => None,
+        };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
 
         self.console.borrow_mut().set_color(fg, bg)?;
         Ok(())
@@ -260,50 +257,69 @@ impl Command for InputCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if span.args.is_empty() || span.args.len() > 2 {
-            return Err(CallError::SyntaxError);
-        }
-        let mut iter = span.args.iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = args.into_iter().rev();
 
-        let prompt = if span.args.len() == 2 {
-            let arg = iter.next().expect("Number of arguments validated above");
-            let mut prompt = match &arg.expr {
-                Some(e) => match e.eval(machine.get_mut_symbols()).await? {
-                    Value::Text(t) => t,
-                    _ => {
-                        return Err(CallError::ArgumentError(
-                            e.start_pos(),
-                            "INPUT prompt must be a string".to_owned(),
-                        ))
-                    }
-                },
-                None => "".to_owned(),
-            };
-            if let ArgSep::Short = span.args[0].sep {
-                prompt += "? ";
+        // Pay attention: we are iterating the arguments in reverse!
+
+        let (vref, pos) = match iter.next() {
+            None => return Err(CallError::SyntaxError),
+            Some((Value::VarRef(vref), pos)) => (vref, pos),
+            Some((Value::Missing, _pos)) => {
+                return Err(CallError::SyntaxError);
             }
-            prompt
-        } else {
-            "? ".to_owned()
-        };
-
-        let (vref, pos) = match &iter.next().expect("Number of arguments validated above").expr {
-            Some(Expr::Symbol(span)) => (&span.vref, span.pos),
-            Some(expr) => {
+            Some((_value, pos)) => {
                 return Err(CallError::ArgumentError(
-                    expr.start_pos(),
+                    pos,
                     "INPUT requires a variable reference".to_owned(),
                 ))
             }
-            None => return Err(CallError::SyntaxError),
         };
+
+        let prompt = match iter.next() {
+            None => "? ".to_owned(),
+
+            Some((Value::Separator(sep @ ArgSep::Long), _pos))
+            | Some((Value::Separator(sep @ ArgSep::Short), _pos)) => {
+                let (value, pos) = match iter.next() {
+                    Some((Value::VarRef(vref), pos)) => (
+                        machine
+                            .get_symbols()
+                            .get_var(&vref)
+                            .map_err(|e| CallError::ArgumentError(pos, e.to_string()))?
+                            .clone(),
+                        pos,
+                    ),
+                    Some((value, pos)) => (value, pos),
+                    None => return Err(CallError::SyntaxError),
+                };
+                let mut prompt = match value {
+                    Value::Missing => "".to_owned(),
+                    Value::Text(t) => t.to_owned(),
+                    _ => {
+                        return Err(CallError::ArgumentError(
+                            pos,
+                            "INPUT prompt must be a string".to_owned(),
+                        ));
+                    }
+                };
+                if sep == ArgSep::Short {
+                    prompt += "? ";
+                }
+                prompt
+            }
+
+            Some((_value, _pos)) => return Err(CallError::SyntaxError),
+        };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
         let vref = machine
             .get_symbols()
-            .qualify_varref(vref)
+            .qualify_varref(&vref)
             .map_err(|e| eval::Error::from_value_error(e, pos))?;
-
-        assert!(iter.next().is_none(), "Number of arguments validated above");
 
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
@@ -357,66 +373,54 @@ impl Command for LocateCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        if span.args.len() != 2 {
-            return Err(CallError::SyntaxError);
-        }
-        let (column_arg, row_arg) = (&span.args[0], &span.args[1]);
-        if column_arg.sep != ArgSep::Long {
-            return Err(CallError::SyntaxError);
-        }
-        debug_assert!(row_arg.sep == ArgSep::End);
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
 
-        let column = match &column_arg.expr {
-            Some(arg) => {
-                let value = arg.eval(machine.get_mut_symbols()).await?;
-                let i = value
-                    .as_i32()
-                    .map_err(|e| CallError::ArgumentError(arg.start_pos(), format!("{}", e)))?;
-                match u16::try_from(i) {
-                    Ok(v) => v,
-                    Err(_) => {
-                        return Err(CallError::ArgumentError(
-                            arg.start_pos(),
-                            "Column out of range".to_owned(),
-                        ))
-                    }
-                }
+        fn get_coord(value: Value, pos: LineCol, name: &str) -> Result<u16, CallError> {
+            let i = value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
+            match u16::try_from(i) {
+                Ok(v) => Ok(v),
+                Err(_) => Err(CallError::ArgumentError(pos, format!("{} out of range", name))),
             }
+        }
+
+        let (column, column_pos) = match iter.next() {
             None => return Err(CallError::SyntaxError),
+            Some((Value::Missing, _pos)) => {
+                return Err(CallError::SyntaxError);
+            }
+            Some((value, pos)) => (get_coord(value, pos, "Column")?, pos),
         };
 
-        let row = match &row_arg.expr {
-            Some(arg) => {
-                let value = arg.eval(machine.get_mut_symbols()).await?;
-                let i = value
-                    .as_i32()
-                    .map_err(|e| CallError::ArgumentError(arg.start_pos(), format!("{}", e)))?;
-                match u16::try_from(i) {
-                    Ok(v) => v,
-                    Err(_) => {
-                        return Err(CallError::ArgumentError(
-                            arg.start_pos(),
-                            "Row out of range".to_owned(),
-                        ))
-                    }
-                }
-            }
+        match iter.next() {
+            Some((Value::Separator(ArgSep::Long), _pos)) => (),
+            _ => return Err(CallError::SyntaxError),
+        }
+
+        let (row, row_pos) = match iter.next() {
             None => return Err(CallError::SyntaxError),
+            Some((Value::Missing, _pos)) => {
+                return Err(CallError::SyntaxError);
+            }
+            Some((value, pos)) => (get_coord(value, pos, "Row")?, pos),
         };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
 
         let mut console = self.console.borrow_mut();
         let size = console.size_chars()?;
 
         if column >= size.x {
             return Err(CallError::ArgumentError(
-                column_arg.expr.as_ref().expect("Presence checked above").start_pos(),
+                column_pos,
                 format!("Column {} exceeds visible range of {}", column, size.x - 1),
             ));
         }
         if row >= size.y {
             return Err(CallError::ArgumentError(
-                row_arg.expr.as_ref().expect("Presence checked above").start_pos(),
+                row_pos,
                 format!("Row {} exceeds visible range of {}", row, size.y - 1),
             ));
         }
@@ -463,40 +467,44 @@ impl Command for PrintCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let iter = machine.load_all(args)?.into_iter();
+
         let mut text = String::new();
         let mut nl = true;
-        for arg in span.args.iter() {
-            let add_space;
-            if let Some(expr) = arg.expr.as_ref() {
-                let value = expr.eval(machine.get_mut_symbols()).await?;
-                if let Value::Text(_) = value {
-                    add_space = false;
-                } else {
-                    add_space = true;
-                }
-                text += &value.to_text();
-                nl = true;
-            } else {
-                add_space = false;
-                nl = false;
-            }
-            match arg.sep {
-                ArgSep::End => break,
-                ArgSep::Short => {
+        let mut add_space = false;
+        for (value, _pos) in iter {
+            match value {
+                Value::Missing => (),
+                Value::Separator(ArgSep::Short) => {
                     if add_space {
-                        text += " ";
+                        text += " "
                     }
+                    add_space = false;
+                    nl = false;
                 }
-                ArgSep::Long => {
+                Value::Separator(ArgSep::Long) => {
                     text += " ";
                     while text.len() % 14 != 0 {
                         text += " ";
                     }
+                    add_space = false;
+                    nl = false;
                 }
-                ArgSep::As => return Err(CallError::SyntaxError),
+                Value::Separator(_) => return Err(CallError::SyntaxError),
+                Value::Text(t) => {
+                    add_space = false;
+                    text += &t;
+                    nl = true;
+                }
+                value => {
+                    add_space = true;
+                    text += &value.to_text();
+                    nl = true;
+                }
             }
         }
+
         if nl {
             self.console.borrow_mut().print(&text)?;
         } else {
@@ -768,9 +776,15 @@ mod tests {
         check_stmt_err("1:1: In call to INPUT: expected [\"prompt\" <;|,>] variableref", "INPUT ;");
         check_stmt_err("1:1: In call to INPUT: 1:7: INPUT prompt must be a string", "INPUT 3 ; a");
         check_stmt_err(
-            "1:1: In call to INPUT: 1:9: INPUT requires a variable reference",
-            "INPUT ; a + 1",
+            "1:1: In call to INPUT: expected [\"prompt\" <;|,>] variableref",
+            "INPUT \"foo\" AS bar",
         );
+        check_stmt_err("1:9: Undefined variable a", "INPUT ; a + 1");
+        Tester::default()
+            .run("a = 3: INPUT ; a + 1")
+            .expect_err("1:8: In call to INPUT: 1:18: INPUT requires a variable reference")
+            .expect_var("a", 3)
+            .check();
         check_stmt_err("1:11: Cannot add \"a\" and TRUE", "INPUT \"a\" + TRUE; b?");
     }
 
@@ -911,11 +925,11 @@ mod tests {
     fn test_print_errors() {
         check_stmt_err(
             "1:1: In call to PRINT: expected [expr1 [<;|,> [.. exprN]]]",
-            "PRINT 3 AS b",
+            "PRINT 3 AS 4",
         );
         check_stmt_err(
             "1:1: In call to PRINT: expected [expr1 [<;|,> [.. exprN]]]",
-            "PRINT 3, 4 AS b",
+            "PRINT 3, 4 AS 5",
         );
         // Ensure type errors from `Expr` and `Value` bubble up.
         check_stmt_uncatchable_err("1:9: Unexpected value in expression", "PRINT a b");

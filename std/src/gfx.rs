@@ -17,7 +17,7 @@
 
 use crate::console::{Console, PixelsXY};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, BuiltinCallSpan, Expr, Value, VarType};
+use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -35,46 +35,58 @@ design choice is that the console has two coordinate systems: the character-base
 the commands described in HELP \"CONSOLE\", and the pixel-based system, used by the commands \
 described in this section.";
 
+/// Extracts an `x, y` argument pair from the list of command arguments.
+fn extract_xy<I: Iterator<Item = (Value, LineCol)>>(
+    iter: &mut I,
+) -> Result<(Value, LineCol, Value, LineCol), CallError> {
+    let (xvalue, xpos) = match iter.next() {
+        Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
+        Some((value, pos)) => (value, pos),
+        _ => return Err(CallError::SyntaxError),
+    };
+
+    match iter.next() {
+        Some((Value::Separator(ArgSep::Long), _pos)) => (),
+        _ => return Err(CallError::SyntaxError),
+    };
+
+    let (yvalue, ypos) = match iter.next() {
+        Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
+        Some((value, pos)) => (value, pos),
+        _ => return Err(CallError::SyntaxError),
+    };
+
+    Ok((xvalue, xpos, yvalue, ypos))
+}
+
 /// Parses an expression that represents a single coordinate.
-async fn parse_coordinate(expr: &Expr, machine: &mut Machine) -> Result<i16, CallError> {
-    let value = expr.eval(machine.get_mut_symbols()).await?;
-    let i =
-        value.as_i32().map_err(|e| CallError::ArgumentError(expr.start_pos(), format!("{}", e)))?;
+fn parse_coordinate(value: Value, pos: LineCol) -> Result<i16, CallError> {
+    let i = value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
     match i16::try_from(i) {
         Ok(i) => Ok(i),
-        Err(_) => Err(CallError::ArgumentError(
-            expr.start_pos(),
-            format!("Coordinate {} out of range", i),
-        )),
+        Err(_) => Err(CallError::ArgumentError(pos, format!("Coordinate {} out of range", i))),
     }
 }
 
 /// Parses a pair of expressions that represent an (x,y) coordinate pair.
-async fn parse_coordinates(
-    xexpr: &Expr,
-    yexpr: &Expr,
-    machine: &mut Machine,
+fn parse_coordinates(
+    xvalue: Value,
+    xpos: LineCol,
+    yvalue: Value,
+    ypos: LineCol,
 ) -> Result<PixelsXY, CallError> {
-    Ok(PixelsXY {
-        x: parse_coordinate(xexpr, machine).await?,
-        y: parse_coordinate(yexpr, machine).await?,
-    })
+    Ok(PixelsXY { x: parse_coordinate(xvalue, xpos)?, y: parse_coordinate(yvalue, ypos)? })
 }
 
 /// Parses an expression that represents a radius.
-async fn parse_radius(expr: &Expr, machine: &mut Machine) -> Result<u16, CallError> {
-    let value = expr.eval(machine.get_mut_symbols()).await?;
-    let i =
-        value.as_i32().map_err(|e| CallError::ArgumentError(expr.start_pos(), format!("{}", e)))?;
+fn parse_radius(value: Value, pos: LineCol) -> Result<u16, CallError> {
+    let i = value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
     match u16::try_from(i) {
         Ok(i) => Ok(i),
-        Err(_) if i < 0 => Err(CallError::ArgumentError(
-            expr.start_pos(),
-            format!("Radius {} must be positive", i),
-        )),
-        Err(_) => {
-            Err(CallError::ArgumentError(expr.start_pos(), format!("Radius {} out of range", i)))
+        Err(_) if i < 0 => {
+            Err(CallError::ArgumentError(pos, format!("Radius {} must be positive", i)))
         }
+        Err(_) => Err(CallError::ArgumentError(pos, format!("Radius {} out of range", i))),
     }
 }
 
@@ -108,13 +120,28 @@ impl Command for GfxCircleCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        let (xy, r) = match span.args.as_slice() {
-            [ArgSpan { expr: Some(x), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(r), sep: ArgSep::End, .. }] => {
-                (parse_coordinates(x, y, machine).await?, parse_radius(r, machine).await?)
-            }
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let (xvalue, xpos, yvalue, ypos) = extract_xy(&mut iter)?;
+
+        match iter.next() {
+            Some((Value::Separator(ArgSep::Long), _pos)) => (),
             _ => return Err(CallError::SyntaxError),
         };
+
+        let (rvalue, rpos) = match iter.next() {
+            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
+            Some((value, pos)) => (value, pos),
+            _ => return Err(CallError::SyntaxError),
+        };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
+        let r = parse_radius(rvalue, rpos)?;
 
         self.console.borrow_mut().draw_circle(xy, r)?;
         Ok(())
@@ -150,13 +177,28 @@ impl Command for GfxCirclefCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        let (xy, r) = match span.args.as_slice() {
-            [ArgSpan { expr: Some(x), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(r), sep: ArgSep::End, .. }] => {
-                (parse_coordinates(x, y, machine).await?, parse_radius(r, machine).await?)
-            }
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let (xvalue, xpos, yvalue, ypos) = extract_xy(&mut iter)?;
+
+        match iter.next() {
+            Some((Value::Separator(ArgSep::Long), _pos)) => (),
             _ => return Err(CallError::SyntaxError),
         };
+
+        let (rvalue, rpos) = match iter.next() {
+            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
+            Some((value, pos)) => (value, pos),
+            _ => return Err(CallError::SyntaxError),
+        };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
+        let r = parse_radius(rvalue, rpos)?;
 
         self.console.borrow_mut().draw_circle_filled(xy, r)?;
         Ok(())
@@ -230,16 +272,24 @@ impl Command for GfxLineCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        let (x1y1, x2y2) = match span.args.as_slice() {
-            [ArgSpan { expr: Some(x1), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y1), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(x2), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y2), sep: ArgSep::End, .. }] => {
-                (
-                    parse_coordinates(x1, y1, machine).await?,
-                    parse_coordinates(x2, y2, machine).await?,
-                )
-            }
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let (x1value, x1pos, y1value, y1pos) = extract_xy(&mut iter)?;
+
+        match iter.next() {
+            Some((Value::Separator(ArgSep::Long), _pos)) => (),
             _ => return Err(CallError::SyntaxError),
         };
+
+        let (x2value, x2pos, y2value, y2pos) = extract_xy(&mut iter)?;
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
+        let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
 
         self.console.borrow_mut().draw_line(x1y1, x2y2)?;
         Ok(())
@@ -275,13 +325,16 @@ impl Command for GfxPixelCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        let xy = match span.args.as_slice() {
-            [ArgSpan { expr: Some(x), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y), sep: ArgSep::End, .. }] => {
-                parse_coordinates(x, y, machine).await?
-            }
-            _ => return Err(CallError::SyntaxError),
-        };
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let (xvalue, xpos, yvalue, ypos) = extract_xy(&mut iter)?;
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
 
         self.console.borrow_mut().draw_pixel(xy)?;
         Ok(())
@@ -318,16 +371,24 @@ impl Command for GfxRectCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        let (x1y1, x2y2) = match span.args.as_slice() {
-            [ArgSpan { expr: Some(x1), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y1), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(x2), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y2), sep: ArgSep::End, .. }] => {
-                (
-                    parse_coordinates(x1, y1, machine).await?,
-                    parse_coordinates(x2, y2, machine).await?,
-                )
-            }
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let (x1value, x1pos, y1value, y1pos) = extract_xy(&mut iter)?;
+
+        match iter.next() {
+            Some((Value::Separator(ArgSep::Long), _pos)) => (),
             _ => return Err(CallError::SyntaxError),
         };
+
+        let (x2value, x2pos, y2value, y2pos) = extract_xy(&mut iter)?;
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
+        let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
 
         self.console.borrow_mut().draw_rect(x1y1, x2y2)?;
         Ok(())
@@ -363,16 +424,24 @@ impl Command for GfxRectfCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        let (x1y1, x2y2) = match span.args.as_slice() {
-            [ArgSpan { expr: Some(x1), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y1), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(x2), sep: ArgSep::Long, .. }, ArgSpan { expr: Some(y2), sep: ArgSep::End, .. }] => {
-                (
-                    parse_coordinates(x1, y1, machine).await?,
-                    parse_coordinates(x2, y2, machine).await?,
-                )
-            }
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let (x1value, x1pos, y1value, y1pos) = extract_xy(&mut iter)?;
+
+        match iter.next() {
+            Some((Value::Separator(ArgSep::Long), _pos)) => (),
             _ => return Err(CallError::SyntaxError),
         };
+
+        let (x2value, x2pos, y2value, y2pos) = extract_xy(&mut iter)?;
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
+        }
+
+        let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
+        let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
 
         self.console.borrow_mut().draw_rect_filled(x1y1, x2y2)?;
         Ok(())
@@ -420,32 +489,40 @@ impl Command for GfxSyncCommand {
         &self.metadata
     }
 
-    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
-        match span.args.as_slice() {
-            [] => {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+        let mut iter = machine.load_all(args)?.into_iter();
+
+        let (enabled, pos) = match iter.next() {
+            None => {
                 self.console.borrow_mut().sync_now()?;
-                Ok(())
+                return Ok(());
             }
-            [ArgSpan { expr: Some(b), sep: ArgSep::End, .. }] => {
-                match b.eval(machine.get_mut_symbols()).await? {
-                    Value::Boolean(b) => {
-                        let mut console = self.console.borrow_mut();
-                        if b {
-                            console.show_cursor()?;
-                        } else {
-                            console.hide_cursor()?;
-                        }
-                        console.set_sync(b)?;
-                        Ok(())
-                    }
-                    _ => Err(CallError::ArgumentError(
-                        b.start_pos(),
-                        "Argument to GFX_SYNC must be a boolean".to_owned(),
-                    )),
-                }
-            }
-            _ => Err(CallError::SyntaxError),
+            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
+            Some((value, pos)) => (value, pos),
+        };
+
+        if iter.next().is_some() {
+            return Err(CallError::SyntaxError);
         }
+
+        let enabled = match enabled {
+            Value::Boolean(b) => b,
+            _ => {
+                return Err(CallError::ArgumentError(
+                    pos,
+                    "Argument to GFX_SYNC must be a boolean".to_owned(),
+                ));
+            }
+        };
+
+        let mut console = self.console.borrow_mut();
+        if enabled {
+            console.show_cursor()?;
+        } else {
+            console.hide_cursor()?;
+        }
+        console.set_sync(enabled)?;
+        Ok(())
     }
 }
 
