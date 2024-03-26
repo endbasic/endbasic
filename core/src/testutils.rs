@@ -101,15 +101,15 @@ impl Function for CountFunction {
     }
 }
 
-/// Returns the error type asked for in an argument.
-pub struct RaiseFunction {
+/// Raises the error type asked for in an argument.
+pub struct RaisefFunction {
     metadata: CallableMetadata,
 }
 
-impl RaiseFunction {
+impl RaisefFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("RAISE", VarType::Boolean)
+            metadata: CallableMetadataBuilder::new("RAISEF", VarType::Boolean)
                 .with_syntax("arg1$")
                 .test_build(),
         })
@@ -117,7 +117,7 @@ impl RaiseFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for RaiseFunction {
+impl Function for RaisefFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -146,6 +146,56 @@ impl Function for RaiseFunction {
             panic!("Invalid arguments");
         }
         result
+    }
+}
+
+/// Raises the error type asked for in an argument.
+pub struct RaiseCommand {
+    metadata: CallableMetadata,
+}
+
+impl RaiseCommand {
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("RAISE", VarType::Void)
+                .with_syntax("arg1$")
+                .test_build(),
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for RaiseCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, span: &BuiltinCallSpan, machine: &mut Machine) -> CommandResult {
+        if span.args.len() != 1 {
+            return Err(CallError::SyntaxError);
+        }
+        let arg0 = span.args[0].expr.as_ref().expect("Invalid arguments");
+        match arg0.eval(machine.get_mut_symbols()).await? {
+            Value::Text(s) => {
+                if s == "argument" {
+                    Err(CallError::ArgumentError(arg0.start_pos(), "Bad argument".to_owned()))
+                } else if s == "eval" {
+                    Err(CallError::EvalError(arg0.start_pos(), "Some eval error".to_owned()))
+                } else if s == "internal" {
+                    Err(CallError::InternalError(
+                        arg0.start_pos(),
+                        "Some internal error".to_owned(),
+                    ))
+                } else if s == "io" {
+                    Err(io::Error::new(io::ErrorKind::Other, "Some I/O error".to_owned()).into())
+                } else if s == "syntax" {
+                    Err(CallError::SyntaxError)
+                } else {
+                    panic!("Unknown argument");
+                }
+            }
+            _ => panic!("Invalid arguments"),
+        }
     }
 }
 
