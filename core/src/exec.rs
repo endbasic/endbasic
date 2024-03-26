@@ -1088,10 +1088,11 @@ mod tests {
         let mut machine = Machine::default();
         machine.add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))));
         machine.add_command(OutCommand::new(captured_out.clone()));
+        machine.add_command(RaiseCommand::new());
         machine.add_function(CountFunction::new());
         machine.add_function(GetHiddenFunction::new());
         machine.add_function(OutfFunction::new(captured_out));
-        machine.add_function(RaiseFunction::new());
+        machine.add_function(RaisefFunction::new());
         machine.add_function(SumFunction::new());
         machine.add_function(TypeCheckFunction::new(Value::Boolean(true)));
         block_on(machine.exec(&mut input.as_bytes()))
@@ -1923,12 +1924,12 @@ mod tests {
             r#"
             ON ERROR GOTO 100
             OUT 1
-            OUT RAISE("syntax")
+            OUT RAISEF("syntax")
             OUT 2
             100 OUT GETHIDDEN("0ERRMSG")
             "#,
             &[],
-            &["1", "4:17: In call to RAISE: expected arg1$"],
+            &["1", "4:17: In call to RAISEF: expected arg1$"],
         );
     }
 
@@ -1938,13 +1939,13 @@ mod tests {
             r#"
             ON ERROR GOTO @foo
             OUT 1
-            OUT RAISE("syntax")
+            OUT RAISEF("syntax")
             OUT 2
             @foo
             OUT GETHIDDEN("0ERRMSG")
             "#,
             &[],
-            &["1", "4:17: In call to RAISE: expected arg1$"],
+            &["1", "4:17: In call to RAISEF: expected arg1$"],
         );
     }
 
@@ -1954,62 +1955,100 @@ mod tests {
             r#"
             ON ERROR GOTO @foo
             OUT 1
-            OUT RAISE("syntax")
+            OUT RAISEF("syntax")
             @foo
             ON ERROR GOTO 0
             OUT 2
-            OUT RAISE("syntax")
+            OUT RAISEF("syntax")
             "#,
             &[],
             &["1", "2"],
-            "8:17: In call to RAISE: expected arg1$",
+            "8:17: In call to RAISEF: expected arg1$",
         );
     }
 
     #[test]
-    fn test_on_error_resume_next() {
+    fn test_on_error_resume_next_line_function_failure() {
         do_ok_test(
             r#"
             ON ERROR RESUME NEXT
             OUT 1
-            OUT RAISE("syntax")
+            OUT RAISEF("syntax")
             OUT GETHIDDEN("0ERRMSG")
             "#,
             &[],
-            &["1", "4:17: In call to RAISE: expected arg1$"],
+            &["1", "4:17: In call to RAISEF: expected arg1$"],
+        );
+    }
+
+    #[test]
+    fn test_on_error_resume_next_line_command_failure() {
+        do_ok_test(
+            r#"
+            ON ERROR RESUME NEXT
+            OUT 1
+            RAISE "syntax"
+            OUT GETHIDDEN("0ERRMSG")
+            "#,
+            &[],
+            &["1", "4:13: In call to RAISE: expected arg1$"],
+        );
+    }
+
+    #[test]
+    fn test_on_error_resume_next_statement_function_failure() {
+        do_ok_test(
+            r#"
+            ON ERROR RESUME NEXT
+            OUT 1: OUT RAISEF("syntax"): OUT GETHIDDEN("0ERRMSG")
+            "#,
+            &[],
+            &["1", "3:24: In call to RAISEF: expected arg1$"],
+        );
+    }
+
+    #[test]
+    fn test_on_error_resume_next_statement_command_failure() {
+        do_ok_test(
+            r#"
+            ON ERROR RESUME NEXT
+            OUT 1: RAISE "syntax": OUT GETHIDDEN("0ERRMSG")
+            "#,
+            &[],
+            &["1", "3:20: In call to RAISE: expected arg1$"],
         );
     }
 
     #[test]
     fn test_on_error_types() {
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISE("argument"): OUT GETHIDDEN("0ERRMSG")"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISEF("argument"): OUT GETHIDDEN("0ERRMSG")"#,
             &[],
-            &["1:27: In call to RAISE: 1:33: Bad argument"],
+            &["1:27: In call to RAISEF: 1:34: Bad argument"],
         );
 
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISE("eval"): OUT GETHIDDEN("0ERRMSG")"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISEF("eval"): OUT GETHIDDEN("0ERRMSG")"#,
             &[],
-            &["1:27: In call to RAISE: 1:33: Some eval error"],
+            &["1:27: In call to RAISEF: 1:34: Some eval error"],
         );
 
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISE("internal"): OUT GETHIDDEN("0ERRMSG")"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISEF("internal"): OUT GETHIDDEN("0ERRMSG")"#,
             &[],
-            &["1:27: In call to RAISE: 1:33: Some internal error"],
+            &["1:27: In call to RAISEF: 1:34: Some internal error"],
         );
 
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISE("io"): OUT GETHIDDEN("0ERRMSG")"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISEF("io"): OUT GETHIDDEN("0ERRMSG")"#,
             &[],
-            &["1:27: In call to RAISE: Some I/O error"],
+            &["1:27: In call to RAISEF: Some I/O error"],
         );
 
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISE("syntax"): OUT GETHIDDEN("0ERRMSG")"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISEF("syntax"): OUT GETHIDDEN("0ERRMSG")"#,
             &[],
-            &["1:27: In call to RAISE: expected arg1$"],
+            &["1:27: In call to RAISEF: expected arg1$"],
         );
     }
 
