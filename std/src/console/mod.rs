@@ -29,6 +29,7 @@ mod cmds;
 pub(crate) use cmds::add_all;
 mod colors;
 pub use colors::{ansi_color_to_rgb, AnsiColor, RGB};
+pub mod drawing;
 mod format;
 pub use format::refill_and_print;
 pub mod graphics;
@@ -151,15 +152,37 @@ impl PixelsXY {
     }
 }
 
+#[cfg(test)]
+impl PixelsXY {
+    pub(crate) const TOP_LEFT: Self = Self { x: i16::MIN, y: i16::MIN };
+    pub(crate) const TOP_RIGHT: Self = Self { x: i16::MAX, y: i16::MIN };
+    pub(crate) const BOTTOM_LEFT: Self = Self { x: i16::MIN, y: i16::MAX };
+    pub(crate) const BOTTOM_RIGHT: Self = Self { x: i16::MAX, y: i16::MAX };
+}
+
 /// Represents a rectangular size in pixels.
-#[derive(Clone, Copy, Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct SizeInPixels {
     /// The width in pixels.
     pub width: u16,
 
     /// The height in pixels.
     pub height: u16,
+}
+
+impl SizeInPixels {
+    /// Construts a new size in pixels, validating that the quantities are non-zero.
+    pub fn new(width: u16, height: u16) -> Self {
+        debug_assert!(width > 0, "Zero widths don't make sense");
+        debug_assert!(height > 0, "Zero heights don't make sense");
+        Self { width, height }
+    }
+}
+
+#[cfg(test)]
+impl SizeInPixels {
+    pub(crate) const MAX: Self = Self { width: u16::MAX, height: u16::MAX };
 }
 
 /// Hooks to implement the commands that manipulate the console.

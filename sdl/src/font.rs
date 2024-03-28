@@ -109,7 +109,7 @@ impl<'a> MonospacedFont<'a> {
                 }
             };
 
-            SizeInPixels { width, height }
+            SizeInPixels::new(width, height)
         };
 
         Ok(MonospacedFont { font, glyph_size })
@@ -117,8 +117,6 @@ impl<'a> MonospacedFont<'a> {
 
     /// Computes the number of characters that fit within the given pixels `area`.
     pub(crate) fn chars_in_area(&self, area: SizeInPixels) -> CharsXY {
-        debug_assert!(area.width > 0);
-        debug_assert!(area.height > 0);
         CharsXY::new(
             area.width
                 .checked_div(self.glyph_size.width)

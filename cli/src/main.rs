@@ -204,10 +204,23 @@ fn setup_console(
         Err(io::Error::new(io::ErrorKind::InvalidInput, "SDL support not compiled in"))
     }
 
+    #[cfg(feature = "rpi")]
+    fn setup_st7735s_console(signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
+        Ok(Rc::from(RefCell::from(endbasic_rpi::new_st7735s_console(signals_tx)?)))
+    }
+
+    #[cfg(not(feature = "rpi"))]
+    pub fn setup_st7735s_console(
+        _signals_tx: Sender<Signal>,
+    ) -> io::Result<Rc<RefCell<dyn Console>>> {
+        Err(io::Error::new(io::ErrorKind::InvalidInput, "ST7735S support not compiled in"))
+    }
+
     let console: Rc<RefCell<dyn Console>> = match console_spec {
         None | Some("text") => setup_text_console(signals_tx)?,
 
         Some("graphics") => setup_graphics_console(signals_tx, "")?,
+        Some("st7735s") => setup_st7735s_console(signals_tx)?,
         Some(text) if text.starts_with("graphics:") => {
             setup_graphics_console(signals_tx, &text["graphics:".len()..])?
         }

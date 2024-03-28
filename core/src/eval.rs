@@ -326,12 +326,10 @@ impl Expr {
                 // to do a second lookup of the array right below, which isn't great...
                 let subscripts = self.eval_array_args(syms, span).await?;
                 match syms.get(&span.fref).map_err(|e| Error::from_value_error(e, span.pos))? {
-                    Some(Symbol::Array(array)) => {
-                        Ok(array
-                            .index(&subscripts)
-                            .map(|v| v.clone())
-                            .map_err(|e| Error::from_value_error(e, span.pos))?)
-                    }
+                    Some(Symbol::Array(array)) => Ok(array
+                        .index(&subscripts)
+                        .cloned()
+                        .map_err(|e| Error::from_value_error(e, span.pos))?),
                     _ => unreachable!(),
                 }
             }

@@ -51,11 +51,20 @@ main() {
     esac
     [ -n "${version}" ] || err "Cannot determine version number"
 
+    local notices="$(echo NOTICE */NOTICE)"
+
     local distname="endbasic-${version}-${name}"
     local outdir="endbasic-${name}"
     mkdir -p "${distname}" "${outdir}"
 
-    cp LICENSE NEWS.md NOTICE README.md "${distname}"
+    cp LICENSE NEWS.md README.md "${distname}"
+
+    for f in ${notices}; do
+        echo "# ${f}"
+        echo
+        cat "${f}"
+        echo
+    done >"${distname}/NOTICE"
 
     local ext=
     local target=

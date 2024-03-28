@@ -37,10 +37,32 @@ pub trait ClampedInto<T> {
     fn clamped_into(self) -> T;
 }
 
+impl ClampedInto<usize> for i16 {
+    fn clamped_into(self) -> usize {
+        if self < 0 {
+            0
+        } else {
+            self as usize
+        }
+    }
+}
+
 impl ClampedInto<i16> for u16 {
     fn clamped_into(self) -> i16 {
         if self > u16::try_from(i16::MAX).unwrap() {
             i16::MAX
+        } else {
+            self as i16
+        }
+    }
+}
+
+impl ClampedInto<i16> for i32 {
+    fn clamped_into(self) -> i16 {
+        if self > i32::from(i16::MAX) {
+            i16::MAX
+        } else if self < i32::from(i16::MIN) {
+            i16::MIN
         } else {
             self as i16
         }
@@ -86,6 +108,17 @@ impl ClampedMul<u16, i16> for u16 {
     }
 }
 
+impl ClampedMul<u16, u16> for u16 {
+    fn clamped_mul(self, rhs: u16) -> u16 {
+        let product = u32::from(self) * u32::from(rhs);
+        if product > u16::MAX as u32 {
+            u16::MAX
+        } else {
+            product as u16
+        }
+    }
+}
+
 impl ClampedMul<u16, i32> for u16 {
     fn clamped_mul(self, rhs: u16) -> i32 {
         match i32::from(self).checked_mul(i32::from(rhs)) {
@@ -121,14 +154,26 @@ fn rect_points(x1y1: PixelsXY, x2y2: PixelsXY) -> (PixelsXY, SizeInPixels) {
     let (x1, x2) = if x1y1.x < x2y2.x { (x1y1.x, x2y2.x) } else { (x2y2.x, x1y1.x) };
     let (y1, y2) = if x1y1.y < x2y2.y { (x1y1.y, x2y2.y) } else { (x2y2.y, x1y1.y) };
 
-    let width = u32::try_from(i32::from(x2) - i32::from(x1))
-        .expect("Width must have been non-negative")
-        .clamped_into();
-    let height = u32::try_from(i32::from(y2) - i32::from(y1))
-        .expect("Height must have been non-negative")
-        .clamped_into();
+    let width = {
+        let width = i32::from(x2) - i32::from(x1);
+        if cfg!(debug_assertions) {
+            u32::try_from(width).expect("Width must have been non-negative")
+        } else {
+            width as u32
+        }
+    }
+    .clamped_into();
+    let height = {
+        let height = i32::from(y2) - i32::from(y1);
+        if cfg!(debug_assertions) {
+            u32::try_from(height).expect("Height must have been non-negative")
+        } else {
+            height as u32
+        }
+    }
+    .clamped_into();
 
-    (PixelsXY::new(x1, y1), SizeInPixels { width, height })
+    (PixelsXY::new(x1, y1), SizeInPixels::new(width, height))
 }
 
 /// Container for configuration information of the backing surface.
@@ -151,10 +196,23 @@ pub trait RasterOps {
     /// Queries information about the backend.
     fn get_info(&self) -> RasterInfo;
 
+    /// Sets the drawing color for subsequent operations.
+    fn set_draw_color(&mut self, color: RGB);
+
     /// Clears the whole console with the given color.
-    fn clear(&mut self, color: RGB) -> io::Result<()>;
+    fn clear(&mut self) -> io::Result<()>;
+
+    /// Sets whether automatic presentation of the canvas is enabled or not.
+    ///
+    /// Raster backends might need this when the device they talk to is very slow and they want to
+    /// buffer data in main memory first.
+    ///
+    /// Does *NOT* present the canvas.
+    fn set_sync(&mut self, _enabled: bool) {}
 
     /// Displays any buffered changes to the console.
+    ///
+    /// Should ignore any sync values that the backend might have cached via `set_sync`.
     fn present_canvas(&mut self) -> io::Result<()>;
 
     /// Reads the raw pixel data for the rectangular region specified by `xy` and `size`.
@@ -164,42 +222,30 @@ pub trait RasterOps {
     fn put_pixels(&mut self, xy: PixelsXY, data: &Self::ID) -> io::Result<()>;
 
     /// Moves the rectangular region specified by `x1y1` and `size` to `x2y2`.  The original region
-    /// is erased with `color`.
-    fn move_pixels(
-        &mut self,
-        x1y1: PixelsXY,
-        x2y2: PixelsXY,
-        size: SizeInPixels,
-        color: RGB,
-    ) -> io::Result<()>;
+    /// is erased with the current drawing color.
+    fn move_pixels(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, size: SizeInPixels)
+        -> io::Result<()>;
 
-    /// Writes `text` starting at `xy`.  The font is set to `fg_color` and the background of the
-    /// text is cleared with `bg_color`.
-    fn write_text(
-        &mut self,
-        xy: PixelsXY,
-        text: &str,
-        fg_color: RGB,
-        bg_color: RGB,
-    ) -> io::Result<()>;
+    /// Writes `text` starting at `xy` with the current drawing color.
+    fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()>;
 
-    /// Draws the outline of a circle at `center` with `radius` using the `color`.
-    fn draw_circle(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()>;
+    /// Draws the outline of a circle at `center` with `radius` using the current drawing color.
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()>;
 
-    /// Draws a filled circle at `center` with `radius` using `color`.
-    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()>;
+    /// Draws a filled circle at `center` with `radius` using the current drawing color.
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()>;
 
-    /// Draws a line from `x1y1` to `x2y2` using `color`.
-    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, color: RGB) -> io::Result<()>;
+    /// Draws a line from `x1y1` to `x2y2` using the current drawing color.
+    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()>;
 
-    /// Draws a single pixel at `xy` using `color`.
-    fn draw_pixel(&mut self, xy: PixelsXY, color: RGB) -> io::Result<()>;
+    /// Draws a single pixel at `xy` using the current drawing color.
+    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()>;
 
-    /// Draws the outline of a rectangle from `x1y1` to `x2y2` using `color`.
-    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()>;
+    /// Draws the outline of a rectangle from `x1y1` to `x2y2` using the current drawing color.
+    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()>;
 
-    /// Draws a filled rectangle from `x1y1` to `x2y2` using `color`.
-    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()>;
+    /// Draws a filled rectangle from `x1y1` to `x2y2` using the current drawing color.
+    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()>;
 }
 
 /// Primitive graphical console input operations.
@@ -319,7 +365,8 @@ where
         // under it are visible.  This was done before in the HTML canvas but was lost when I added
         // the GraphicsConsole abstraction.  Maybe all RGB colors should switch to RGBA.  Or maybe
         // we should special-case the cursor drawing.
-        self.raster_ops.draw_rect_filled(x1y1, self.glyph_size, self.fg_color)
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_rect_filled(x1y1, self.glyph_size)
     }
 
     /// Clears the cursor at the current position by restoring the contents of the screen saved by
@@ -350,12 +397,13 @@ where
 
         let x1y1 = PixelsXY::new(0, self.glyph_size.height.clamped_into());
         let x2y2 = PixelsXY::new(0, 0);
-        let size = SizeInPixels {
-            width: self.size_pixels.width,
-            height: self.size_pixels.height - self.glyph_size.height,
-        };
+        let size = SizeInPixels::new(
+            self.size_pixels.width,
+            self.size_pixels.height - self.glyph_size.height,
+        );
 
-        self.raster_ops.move_pixels(x1y1, x2y2, size, self.bg_color)?;
+        self.raster_ops.set_draw_color(self.bg_color);
+        self.raster_ops.move_pixels(x1y1, x2y2, size)?;
 
         self.cursor_pos.x = 0;
         Ok(())
@@ -370,20 +418,24 @@ where
             let fit_chars = self.size_chars.x - self.cursor_pos.x;
 
             let remaining = line_buffer.split_off(usize::from(fit_chars));
-            let len = line_buffer.len();
+            let len = match u16::try_from(line_buffer.len()) {
+                Ok(len) => len,
+                Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Text too long")),
+            };
+
             if len > 0 {
-                self.raster_ops.write_text(
-                    self.cursor_pos.clamped_mul(self.glyph_size),
-                    &line_buffer.into_inner(),
-                    self.fg_color,
-                    self.bg_color,
-                )?;
-                self.cursor_pos.x += match u16::try_from(len) {
-                    Ok(len) => len,
-                    Err(e) => {
-                        panic!("Partial length was computed to fit on the screen: {}", e)
-                    }
-                };
+                let xy = self.cursor_pos.clamped_mul(self.glyph_size);
+                let size = SizeInPixels::new(
+                    len.clamped_mul(self.glyph_size.width),
+                    self.glyph_size.height,
+                );
+
+                self.raster_ops.set_draw_color(self.bg_color);
+                self.raster_ops.draw_rect_filled(xy, size)?;
+
+                self.raster_ops.set_draw_color(self.fg_color);
+                self.raster_ops.write_text(xy, &line_buffer.into_inner())?;
+                self.cursor_pos.x += len;
             }
 
             line_buffer = remaining;
@@ -407,7 +459,8 @@ where
     fn clear(&mut self, how: ClearType) -> io::Result<()> {
         match how {
             ClearType::All => {
-                self.raster_ops.clear(self.bg_color)?;
+                self.raster_ops.set_draw_color(self.bg_color);
+                self.raster_ops.clear()?;
                 self.cursor_pos.y = 0;
                 self.cursor_pos.x = 0;
                 self.cursor_backup = None;
@@ -415,9 +468,9 @@ where
             ClearType::CurrentLine => {
                 self.clear_cursor()?;
                 let xy = PixelsXY::new(0, self.cursor_pos.y.clamped_mul(self.glyph_size.height));
-                let size =
-                    SizeInPixels { width: self.size_pixels.width, height: self.glyph_size.height };
-                self.raster_ops.draw_rect_filled(xy, size, self.bg_color)?;
+                let size = SizeInPixels::new(self.size_pixels.width, self.glyph_size.height);
+                self.raster_ops.set_draw_color(self.bg_color);
+                self.raster_ops.draw_rect_filled(xy, size)?;
                 self.cursor_pos.x = 0;
             }
             ClearType::PreviousChar => {
@@ -425,7 +478,8 @@ where
                     self.clear_cursor()?;
                     let previous_pos = CharsXY::new(self.cursor_pos.x - 1, self.cursor_pos.y);
                     let origin = previous_pos.clamped_mul(self.glyph_size);
-                    self.raster_ops.draw_rect_filled(origin, self.glyph_size, self.bg_color)?;
+                    self.raster_ops.set_draw_color(self.bg_color);
+                    self.raster_ops.draw_rect_filled(origin, self.glyph_size)?;
                     self.cursor_pos = previous_pos;
                 }
             }
@@ -434,11 +488,12 @@ where
                 let pos = self.cursor_pos.clamped_mul(self.glyph_size);
                 debug_assert!(pos.x >= 0, "Inputs to pos are unsigned");
                 debug_assert!(pos.y >= 0, "Inputs to pos are unsigned");
-                let size = SizeInPixels {
-                    width: (i32::from(self.size_pixels.width) - i32::from(pos.x)).clamped_into(),
-                    height: self.glyph_size.height,
-                };
-                self.raster_ops.draw_rect_filled(pos, size, self.bg_color)?;
+                let size = SizeInPixels::new(
+                    (i32::from(self.size_pixels.width) - i32::from(pos.x)).clamped_into(),
+                    self.glyph_size.height,
+                );
+                self.raster_ops.set_draw_color(self.bg_color);
+                self.raster_ops.draw_rect_filled(pos, size)?;
             }
         }
         self.draw_cursor()?;
@@ -574,34 +629,40 @@ where
     }
 
     fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        self.raster_ops.draw_circle(center, radius, self.fg_color)?;
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_circle(center, radius)?;
         self.present_canvas()
     }
 
     fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        self.raster_ops.draw_circle_filled(center, radius, self.fg_color)?;
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_circle_filled(center, radius)?;
         self.present_canvas()
     }
 
     fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        self.raster_ops.draw_line(x1y1, x2y2, self.fg_color)?;
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_line(x1y1, x2y2)?;
         self.present_canvas()
     }
 
     fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
-        self.raster_ops.draw_pixel(xy, self.fg_color)?;
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_pixel(xy)?;
         self.present_canvas()
     }
 
     fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         let (xy, size) = rect_points(x1y1, x2y2);
-        self.raster_ops.draw_rect(xy, size, self.fg_color)?;
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_rect(xy, size)?;
         self.present_canvas()
     }
 
     fn draw_rect_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         let (xy, size) = rect_points(x1y1, x2y2);
-        self.raster_ops.draw_rect_filled(xy, size, self.fg_color)?;
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_rect_filled(xy, size)?;
         self.present_canvas()
     }
 
@@ -619,6 +680,7 @@ where
         }
         let previous = self.sync_enabled;
         self.sync_enabled = enabled;
+        self.raster_ops.set_sync(enabled);
         Ok(previous)
     }
 }
@@ -634,6 +696,18 @@ mod tests {
         assert_eq!(i16::MAX - 1, u16::try_from(i16::MAX - 1).unwrap().clamped_into());
         assert_eq!(i16::MAX, u16::try_from(i16::MAX).unwrap().clamped_into());
         assert_eq!(i16::MAX, u16::MAX.clamped_into());
+    }
+
+    #[test]
+    fn test_clamped_into_u16_i32() {
+        assert_eq!(0i16, 0i32.clamped_into());
+        assert_eq!(10i16, 10i32.clamped_into());
+        assert_eq!(i16::MIN + 1, i32::from(i16::MIN + 1).clamped_into());
+        assert_eq!(i16::MIN, i32::from(i16::MIN).clamped_into());
+        assert_eq!(i16::MIN, i32::MIN.clamped_into());
+        assert_eq!(i16::MAX - 1, i32::from(i16::MAX - 1).clamped_into());
+        assert_eq!(i16::MAX, i32::from(i16::MAX).clamped_into());
+        assert_eq!(i16::MAX, i32::MAX.clamped_into());
     }
 
     #[test]
@@ -663,6 +737,13 @@ mod tests {
     }
 
     #[test]
+    fn test_clamped_mul_u16_u16_u16() {
+        assert_eq!(0u16, ClampedMul::<u16, u16>::clamped_mul(0u16, 0u16));
+        assert_eq!(55u16, ClampedMul::<u16, u16>::clamped_mul(11u16, 5u16));
+        assert_eq!(u16::MAX, ClampedMul::<u16, u16>::clamped_mul(u16::MAX, u16::MAX));
+    }
+
+    #[test]
     fn test_clamped_mul_u16_u16_i32() {
         assert_eq!(0i32, ClampedMul::<u16, i32>::clamped_mul(0u16, 0u16));
         assert_eq!(55i32, ClampedMul::<u16, i32>::clamped_mul(11u16, 5u16));
@@ -687,60 +768,60 @@ mod tests {
     fn test_clamped_mul_charsxy_sizeinpixels_pixelsxy() {
         assert_eq!(
             PixelsXY { x: 0, y: 0 },
-            CharsXY { x: 0, y: 0 }.clamped_mul(SizeInPixels { width: 0, height: 0 })
+            CharsXY { x: 0, y: 0 }.clamped_mul(SizeInPixels::new(1, 1))
         );
         assert_eq!(
             PixelsXY { x: 50, y: 120 },
-            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels { width: 5, height: 6 })
+            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels::new(5, 6))
         );
         assert_eq!(
             PixelsXY { x: i16::MAX, y: 120 },
-            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels { width: 50000, height: 6 })
+            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels::new(50000, 6))
         );
         assert_eq!(
             PixelsXY { x: 50, y: i16::MAX },
-            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels { width: 5, height: 60000 })
+            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels::new(5, 60000))
         );
         assert_eq!(
             PixelsXY { x: i16::MAX, y: i16::MAX },
-            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels { width: 50000, height: 60000 })
+            CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels::new(50000, 60000))
         );
     }
 
     #[test]
     fn test_rect_points() {
         assert_eq!(
-            (PixelsXY { x: 10, y: 20 }, SizeInPixels { width: 100, height: 200 }),
+            (PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200)),
             rect_points(PixelsXY { x: 10, y: 20 }, PixelsXY { x: 110, y: 220 })
         );
         assert_eq!(
-            (PixelsXY { x: 10, y: 20 }, SizeInPixels { width: 100, height: 200 }),
+            (PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200)),
             rect_points(PixelsXY { x: 110, y: 20 }, PixelsXY { x: 10, y: 220 })
         );
         assert_eq!(
-            (PixelsXY { x: 10, y: 20 }, SizeInPixels { width: 100, height: 200 }),
+            (PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200)),
             rect_points(PixelsXY { x: 10, y: 220 }, PixelsXY { x: 110, y: 20 })
         );
         assert_eq!(
-            (PixelsXY { x: 10, y: 20 }, SizeInPixels { width: 100, height: 200 }),
+            (PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200)),
             rect_points(PixelsXY { x: 110, y: 220 }, PixelsXY { x: 10, y: 20 })
         );
 
         assert_eq!(
-            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels { width: 31005, height: 32010 }),
+            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(31005, 32010)),
             rect_points(PixelsXY { x: 5, y: -32000 }, PixelsXY { x: -31000, y: 10 })
         );
         assert_eq!(
-            (PixelsXY { x: 10, y: 5 }, SizeInPixels { width: 30990, height: 31995 }),
+            (PixelsXY { x: 10, y: 5 }, SizeInPixels::new(30990, 31995)),
             rect_points(PixelsXY { x: 31000, y: 5 }, PixelsXY { x: 10, y: 32000 })
         );
 
         assert_eq!(
-            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels { width: 62000, height: 64000 }),
+            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(62000, 64000)),
             rect_points(PixelsXY { x: -31000, y: -32000 }, PixelsXY { x: 31000, y: 32000 })
         );
         assert_eq!(
-            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels { width: 62000, height: 64000 }),
+            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(62000, 64000)),
             rect_points(PixelsXY { x: 31000, y: 32000 }, PixelsXY { x: -31000, y: -32000 })
         );
     }

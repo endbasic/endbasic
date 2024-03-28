@@ -23,6 +23,7 @@ use crate::spec::Resolution;
 use crate::string_error_to_io_error;
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
+use endbasic_std::console::drawing::{draw_circle, draw_circle_filled};
 use endbasic_std::console::graphics::{ClampedInto, ClampedMul, InputOps, RasterInfo, RasterOps};
 use endbasic_std::console::{
     CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, SizeInPixels, RGB,
@@ -268,7 +269,7 @@ impl Context {
 
         let size_pixels = {
             let (width, height) = window.drawable_size();
-            SizeInPixels { width: width.clamped_into(), height: height.clamped_into() }
+            SizeInPixels::new(width.clamped_into(), height.clamped_into())
         };
         let size_chars = font.chars_in_area(size_pixels);
 
@@ -303,29 +304,6 @@ impl Context {
             draw_color,
         })
     }
-
-    /// Sets the draw color to `color` with caching.
-    fn set_draw_color(&mut self, color: RGB) {
-        if self.draw_color != color {
-            self.canvas.set_draw_color(rgb_to_color(color));
-            self.draw_color = color;
-        }
-    }
-
-    /// Reads all visible pixels.  This is different from `real_pixels` in that it does not read
-    /// any changes that haven't been written to the screen yet (such as the changes that happen
-    /// when syncing is off).
-    #[cfg(test)]
-    fn read_visible_pixels(&mut self) -> io::Result<Vec<u8>> {
-        let surface = self.window.surface(&self.event_pump).map_err(string_error_to_io_error)?;
-        let mut copy = Surface::new(surface.width(), surface.height(), self.pixel_format)
-            .map_err(string_error_to_io_error)?;
-        surface.blit(None, &mut copy, None).map_err(string_error_to_io_error)?;
-        copy.into_canvas()
-            .map_err(string_error_to_io_error)?
-            .read_pixels(None, self.pixel_format)
-            .map_err(string_error_to_io_error)
-    }
 }
 
 impl RasterOps for Context {
@@ -339,8 +317,14 @@ impl RasterOps for Context {
         }
     }
 
-    fn clear(&mut self, color: RGB) -> io::Result<()> {
-        self.set_draw_color(color);
+    fn set_draw_color(&mut self, color: RGB) {
+        if self.draw_color != color {
+            self.canvas.set_draw_color(rgb_to_color(color));
+            self.draw_color = color;
+        }
+    }
+
+    fn clear(&mut self) -> io::Result<()> {
         self.canvas.clear();
         Ok(())
     }
@@ -368,15 +352,12 @@ impl RasterOps for Context {
             .texture_creator
             .create_texture_static(None, rect.width(), rect.height())
             .map_err(texture_value_error_to_io_error)?;
-        texture
-            .update(
-                None,
-                data,
-                usize::try_from(rect.width())
-                    .expect("Width must fit in usize")
-                    .clamped_mul(self.pixel_format.byte_size_per_pixel()),
-            )
-            .map_err(update_texture_error_to_io_error)?;
+        let width = if cfg!(debug_assertions) {
+            usize::try_from(rect.width()).expect("Width must fit in usize")
+        } else {
+            rect.width() as usize
+        };
+        texture.update(None, data, width).map_err(update_texture_error_to_io_error)?;
         self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)
     }
 
@@ -385,15 +366,15 @@ impl RasterOps for Context {
         x1y1: PixelsXY,
         x2y2: PixelsXY,
         size: SizeInPixels,
-        color: RGB,
     ) -> io::Result<()> {
         let shifted = {
             let src = self.canvas.surface();
             let mut temp = Surface::new(src.width(), src.height(), self.pixel_format)
                 .map_err(string_error_to_io_error)?;
             let src_rect = rect_origin_size(x1y1, size);
-            let dst_rect = rect_origin_size(x2y2, SizeInPixels { width: 0, height: 0 });
-            temp.fill_rect(src_rect, rgb_to_color(color)).map_err(string_error_to_io_error)?;
+            let dst_rect = rect_origin_size(x2y2, SizeInPixels::new(0, 0));
+            temp.fill_rect(src_rect, rgb_to_color(self.draw_color))
+                .map_err(string_error_to_io_error)?;
             src.blit(src_rect, &mut temp, dst_rect).map_err(string_error_to_io_error)?;
             temp
         };
@@ -401,13 +382,7 @@ impl RasterOps for Context {
         Ok(())
     }
 
-    fn write_text(
-        &mut self,
-        xy: PixelsXY,
-        text: &str,
-        fg_color: RGB,
-        bg_color: RGB,
-    ) -> io::Result<()> {
+    fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()> {
         debug_assert!(!text.is_empty(), "SDL does not like empty strings");
 
         let len = match u16::try_from(text.chars().count()) {
@@ -415,143 +390,31 @@ impl RasterOps for Context {
             Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "String too long")),
         };
 
-        let surface = self
-            .font
-            .font
-            .render(text)
-            .shaded(fg_color, bg_color)
-            .map_err(font_error_to_io_error)?;
-        let texture = self
-            .texture_creator
-            .create_texture_from_surface(&surface)
-            .map_err(texture_value_error_to_io_error)?;
-
         let rect = Rect::new(
             i32::from(xy.x),
             i32::from(xy.y),
             len.clamped_mul(self.font.glyph_size.width),
             u32::from(self.font.glyph_size.height),
         );
+
+        let surface =
+            self.font.font.render(text).blended(self.draw_color).map_err(font_error_to_io_error)?;
+        let texture = self
+            .texture_creator
+            .create_texture_from_surface(&surface)
+            .map_err(texture_value_error_to_io_error)?;
         self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)
     }
 
-    fn draw_circle(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
-        // This implements the [Midpoint circle
-        // algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
-
-        fn point(canvas: &mut SurfaceCanvas<'static>, x: i16, y: i16) -> io::Result<()> {
-            canvas
-                .draw_point(Point::new(i32::from(x), i32::from(y)))
-                .map_err(string_error_to_io_error)
-        }
-
-        let (diameter, radius): (i16, i16) = match radius.checked_mul(2) {
-            Some(d) => match i16::try_from(d) {
-                Ok(d) => (d, radius as i16),
-                Err(_) => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big"))
-                }
-            },
-            None => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big")),
-        };
-
-        let mut x: i16 = radius - 1;
-        let mut y: i16 = 0;
-        let mut tx: i16 = 1;
-        let mut ty: i16 = 1;
-        let mut e: i16 = tx - diameter;
-
-        self.set_draw_color(color);
-        while x >= y {
-            point(&mut self.canvas, center.x + x, center.y - y)?;
-            point(&mut self.canvas, center.x + x, center.y + y)?;
-            point(&mut self.canvas, center.x - x, center.y - y)?;
-            point(&mut self.canvas, center.x - x, center.y + y)?;
-            point(&mut self.canvas, center.x + y, center.y - x)?;
-            point(&mut self.canvas, center.x + y, center.y + x)?;
-            point(&mut self.canvas, center.x - y, center.y - x)?;
-            point(&mut self.canvas, center.x - y, center.y + x)?;
-
-            if e <= 0 {
-                y += 1;
-                e += ty;
-                ty += 2;
-            }
-
-            if e > 0 {
-                x -= 1;
-                tx += 2;
-                e += tx - diameter;
-            }
-        }
-
-        Ok(())
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        draw_circle(self, center, radius)
     }
 
-    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
-        // This implements the [Midpoint circle
-        // algorithm](https://en.wikipedia.org/wiki/Midpoint_circle_algorithm).
-
-        fn line(
-            canvas: &mut SurfaceCanvas<'static>,
-            x1: i16,
-            y1: i16,
-            x2: i16,
-            y2: i16,
-        ) -> io::Result<()> {
-            canvas
-                .draw_line(
-                    Point::new(i32::from(x1), i32::from(y1)),
-                    Point::new(i32::from(x2), i32::from(y2)),
-                )
-                .map_err(string_error_to_io_error)
-        }
-
-        if radius == 1 {
-            self.set_draw_color(color);
-            return self.canvas.draw_point(point_xy(center)).map_err(string_error_to_io_error);
-        }
-
-        let (diameter, radius): (i16, i16) = match radius.checked_mul(2) {
-            Some(d) => match i16::try_from(d) {
-                Ok(d) => (d, radius as i16),
-                Err(_) => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big"))
-                }
-            },
-            None => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Radius is too big")),
-        };
-
-        let mut x: i16 = radius - 1;
-        let mut y: i16 = 0;
-        let mut tx: i16 = 1;
-        let mut ty: i16 = 1;
-        let mut e: i16 = tx - diameter;
-
-        self.set_draw_color(color);
-        while x >= y {
-            line(&mut self.canvas, center.x + x, center.y - y, center.x + x, center.y + y)?;
-            line(&mut self.canvas, center.x - x, center.y - y, center.x - x, center.y + y)?;
-            line(&mut self.canvas, center.x + y, center.y - x, center.x + y, center.y + x)?;
-            line(&mut self.canvas, center.x - y, center.y - x, center.x - y, center.y + x)?;
-
-            if e <= 0 {
-                y += 1;
-                e += ty;
-                ty += 2;
-            }
-
-            if e > 0 {
-                x -= 1;
-                tx += 2;
-                e += tx - diameter;
-            }
-        }
-
-        Ok(())
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        draw_circle_filled(self, center, radius)
     }
 
-    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, color: RGB) -> io::Result<()> {
+    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         if x1y1 == x2y2 {
             // Paper over differences between platforms.  On Linux, this would paint a single dot,
             // but on Windows, it paints nothing.  For consistency with drawing a circle of radius
@@ -559,24 +422,20 @@ impl RasterOps for Context {
             return Ok(());
         }
 
-        self.set_draw_color(color);
         self.canvas.draw_line(point_xy(x1y1), point_xy(x2y2)).map_err(string_error_to_io_error)
     }
 
-    fn draw_pixel(&mut self, xy: PixelsXY, color: RGB) -> io::Result<()> {
-        self.set_draw_color(color);
+    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
         self.canvas.draw_point(point_xy(xy)).map_err(string_error_to_io_error)
     }
 
-    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
+    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
         let rect = rect_origin_size(xy, size);
-        self.set_draw_color(color);
         self.canvas.draw_rect(rect).map_err(string_error_to_io_error)
     }
 
-    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
+    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
         let rect = rect_origin_size(xy, size);
-        self.set_draw_color(color);
         self.canvas.fill_rect(rect).map_err(string_error_to_io_error)
     }
 }
@@ -596,20 +455,8 @@ impl SharedContext {
     }
 
     #[cfg(test)]
-    fn raw_write(
-        &mut self,
-        text: &str,
-        xy: PixelsXY,
-        fg_color: RGB,
-        bg_color: RGB,
-    ) -> io::Result<()> {
-        (*self.0).borrow_mut().write_text(xy, text, fg_color, bg_color)
-    }
-
-    #[cfg(test)]
-    fn read_visible_pixels(&mut self) -> io::Result<(Vec<u8>, PixelFormatEnum)> {
-        let mut ctx = (*self.0).borrow_mut();
-        ctx.read_visible_pixels().map(|ps| (ps, ctx.pixel_format))
+    fn raw_write(&mut self, text: &str, xy: PixelsXY) -> io::Result<()> {
+        (*self.0).borrow_mut().write_text(xy, text)
     }
 
     #[cfg(test)]
@@ -627,8 +474,12 @@ impl RasterOps for SharedContext {
         self.0.borrow().get_info()
     }
 
-    fn clear(&mut self, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().clear(color)
+    fn set_draw_color(&mut self, color: RGB) {
+        (*self.0).borrow_mut().set_draw_color(color)
+    }
+
+    fn clear(&mut self) -> io::Result<()> {
+        (*self.0).borrow_mut().clear()
     }
 
     fn present_canvas(&mut self) -> io::Result<()> {
@@ -648,43 +499,36 @@ impl RasterOps for SharedContext {
         x1y1: PixelsXY,
         x2y2: PixelsXY,
         size: SizeInPixels,
-        color: RGB,
     ) -> io::Result<()> {
-        (*self.0).borrow_mut().move_pixels(x1y1, x2y2, size, color)
+        (*self.0).borrow_mut().move_pixels(x1y1, x2y2, size)
     }
 
-    fn write_text(
-        &mut self,
-        xy: PixelsXY,
-        text: &str,
-        fg_color: RGB,
-        bg_color: RGB,
-    ) -> io::Result<()> {
-        (*self.0).borrow_mut().write_text(xy, text, fg_color, bg_color)
+    fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()> {
+        (*self.0).borrow_mut().write_text(xy, text)
     }
 
-    fn draw_circle(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_circle(center, radius, color)
+    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_circle(center, radius)
     }
 
-    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_circle_filled(center, radius, color)
+    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_circle_filled(center, radius)
     }
 
-    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_line(x1y1, x2y2, color)
+    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_line(x1y1, x2y2)
     }
 
-    fn draw_pixel(&mut self, xy: PixelsXY, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_pixel(xy, color)
+    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_pixel(xy)
     }
 
-    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_rect(xy, size, color)
+    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_rect(xy, size)
     }
 
-    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels, color: RGB) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_rect_filled(xy, size, color)
+    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_rect_filled(xy, size)
     }
 }
 
@@ -716,9 +560,7 @@ pub(crate) enum Request {
     #[cfg(test)]
     PushEvent(Event),
     #[cfg(test)]
-    RawWrite(String, PixelsXY, RGB, RGB),
-    #[cfg(test)]
-    ReadVisiblePixels,
+    RawWrite(String, PixelsXY),
     #[cfg(test)]
     SaveBmp(PathBuf),
 }
@@ -730,9 +572,6 @@ pub(crate) enum Response {
     SizeChars(CharsXY),
     SizePixels(SizeInPixels),
     SetSync(io::Result<bool>),
-
-    #[cfg(test)]
-    Pixels(io::Result<(Vec<u8>, PixelFormatEnum)>),
 }
 
 /// Implementation of `InputOps` that should never be used.
@@ -818,12 +657,7 @@ pub(crate) fn run(
                     Request::PushEvent(ev) => Response::Empty(ctx.push_event(ev)),
 
                     #[cfg(test)]
-                    Request::RawWrite(text, start, fg_color, bg_color) => {
-                        Response::Empty(ctx.raw_write(&text, start, fg_color, bg_color))
-                    }
-
-                    #[cfg(test)]
-                    Request::ReadVisiblePixels => Response::Pixels(ctx.read_visible_pixels()),
+                    Request::RawWrite(text, start) => Response::Empty(ctx.raw_write(&text, start)),
 
                     #[cfg(test)]
                     Request::SaveBmp(path) => Response::Empty(ctx.save_bmp(&path)),
@@ -878,10 +712,7 @@ mod tests {
     fn test_rect_origin_size() {
         assert_eq!(
             Rect::new(-31000, -32000, 63000, 64000),
-            rect_origin_size(
-                PixelsXY { x: -31000, y: -32000 },
-                SizeInPixels { width: 63000, height: 64000 }
-            )
+            rect_origin_size(PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(63000, 64000))
         );
     }
 }

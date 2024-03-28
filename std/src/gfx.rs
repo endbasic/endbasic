@@ -646,7 +646,7 @@ mod tests {
     #[test]
     fn test_gfx_height() {
         let mut t = Tester::default();
-        t.get_console().borrow_mut().set_size_pixels(SizeInPixels { width: 0, height: 768 });
+        t.get_console().borrow_mut().set_size_pixels(SizeInPixels::new(1, 768));
         t.run("result = GFX_HEIGHT").expect_var("result", 768i32).check();
 
         check_expr_error(
@@ -804,7 +804,7 @@ mod tests {
     #[test]
     fn test_gfx_width() {
         let mut t = Tester::default();
-        t.get_console().borrow_mut().set_size_pixels(SizeInPixels { width: 12345, height: 0 });
+        t.get_console().borrow_mut().set_size_pixels(SizeInPixels::new(12345, 1));
         t.run("result = GFX_WIDTH").expect_var("result", 12345i32).check();
 
         check_expr_error(

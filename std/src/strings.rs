@@ -79,7 +79,11 @@ impl Function for AscFunction {
                         format!("Input string \"{}\" must be 1-character long", s),
                     ));
                 }
-                let ch = i32::try_from(ch as u32).expect("Unicode code points end at U+10FFFF");
+                let ch = if cfg!(debug_assertions) {
+                    i32::try_from(ch as u32).expect("Unicode code points end at U+10FFFF")
+                } else {
+                    ch as i32
+                };
                 Ok(Value::Integer(ch))
             }
             _ => Err(CallError::SyntaxError),
