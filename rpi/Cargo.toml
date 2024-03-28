@@ -28,3 +28,6 @@ path = "../std"
 [dependencies.endbasic-terminal]
 version = "0.10.99" # ENDBASIC-VERSION
 path = "../terminal"
+
+[dev-dependencies]
+tempfile = "3"

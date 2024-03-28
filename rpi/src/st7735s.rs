@@ -35,14 +35,44 @@ use endbasic_std::console::{
 use endbasic_terminal::TerminalConsole;
 use rppal::gpio::{Gpio, InputPin, Level, OutputPin};
 use rppal::spi::{self, Bus, SlaveSelect, Spi};
-use std::io;
+use std::path::Path;
 use std::time::Duration;
+use std::{fs, io};
+
+/// Path to the configuration file containing the maximum SPI transfer size.
+const SPIDEV_BUFSIZ_PATH: &str = "/sys/module/spidev/parameters/bufsiz";
 
 /// Converts an SPI error to an IO error.
 fn spi_error_to_io_error(e: spi::Error) -> io::Error {
     match e {
         spi::Error::Io(e) => e,
         e => io::Error::new(io::ErrorKind::InvalidInput, e.to_string()),
+    }
+}
+
+/// Queries the maximum SPI transfer size from `path`.  If `path` is not provided, defaults to
+/// `SPIDEV_BUFSIZ_PATH`.
+fn query_spi_bufsiz(path: Option<&Path>) -> io::Result<usize> {
+    let path = path.unwrap_or(Path::new(SPIDEV_BUFSIZ_PATH));
+
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(e) => {
+            return Err(io::Error::new(
+                e.kind(),
+                format!("Failed to read {}: {}", path.display(), e),
+            ));
+        }
+    };
+
+    let content = content.trim_end();
+
+    match content.parse::<usize>() {
+        Ok(i) => Ok(i),
+        Err(e) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Failed to read {}: invalid content: {}", path.display(), e),
+        )),
     }
 }
 
@@ -108,6 +138,7 @@ impl InputOps for ST7735SInput {
 /// LCD handler for the ST7735S console.
 struct ST7735SLcd {
     spi: Spi,
+    spi_bufsiz: usize,
 
     lcd_rst: OutputPin,
     lcd_dc: OutputPin,
@@ -131,9 +162,11 @@ impl ST7735SLcd {
             .map_err(spi_error_to_io_error)?;
         spi.set_ss_polarity(spi::Polarity::ActiveLow).map_err(spi_error_to_io_error)?;
 
+        let spi_bufsiz = query_spi_bufsiz(None)?;
+
         let size_pixels = LcdSize { width: 128, height: 128 };
 
-        let mut device = Self { lcd_rst, lcd_dc, lcd_bl, spi, size_pixels };
+        let mut device = Self { spi, spi_bufsiz, lcd_rst, lcd_dc, lcd_bl, size_pixels };
 
         device.lcd_init()?;
 
@@ -144,9 +177,7 @@ impl ST7735SLcd {
     ///
     /// The input data is chunked to respect the maximum write size accepted by the SPI bus.
     fn lcd_write(&mut self, data: &[u8]) -> io::Result<()> {
-        // TODO(jmmv): Read /sys/module/spidev/parameters/bufsiz and leverage larger writes if.
-        // possible.
-        for chunk in data.chunks(4096) {
+        for chunk in data.chunks(self.spi_bufsiz) {
             let mut i = 0;
             loop {
                 let n = self.spi.write(&chunk[i..]).map_err(spi_error_to_io_error)?;
@@ -443,4 +474,25 @@ pub fn new_st7735s_console(signals_tx: Sender<Signal>) -> io::Result<ST7735SCons
     let lcd = BufferedLcd::new(lcd);
     let inner = GraphicsConsole::new(input, lcd)?;
     Ok(ST7735SConsole { _gpio: gpio, inner })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_query_spi_bufsiz_with_newline() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempfile = tempdir.path().join("bufsiz");
+        fs::write(&tempfile, "1024\n").unwrap();
+        assert_eq!(1024, query_spi_bufsiz(Some(&tempfile)).unwrap());
+    }
+
+    #[test]
+    fn test_query_spi_bufsiz_without_newline() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempfile = tempdir.path().join("bufsiz");
+        fs::write(&tempfile, "4096").unwrap();
+        assert_eq!(4096, query_spi_bufsiz(Some(&tempfile)).unwrap());
+    }
 }
