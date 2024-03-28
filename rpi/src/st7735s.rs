@@ -24,7 +24,7 @@
 //! Console driver for the ST7735S LCD.
 
 use crate::gpio::gpio_error_to_io_error;
-use crate::lcd::{to_xy_size, BufferedLcd, Lcd, LcdSize, LcdXY};
+use crate::lcd::{to_xy_size, BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel};
 use async_channel::Sender;
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
@@ -301,7 +301,7 @@ impl Drop for ST7735SLcd {
 }
 
 impl Lcd for ST7735SLcd {
-    type Pixel = [u8; 2];
+    type Pixel = RGB565Pixel;
 
     fn info(&self) -> (LcdSize, usize) {
         (self.size_pixels, 2)
@@ -310,12 +310,11 @@ impl Lcd for ST7735SLcd {
     fn encode(&self, rgb: RGB) -> Self::Pixel {
         let rgb = (u16::from(rgb.0), u16::from(rgb.1), u16::from(rgb.2));
 
-        // RGB565 format.
         let pixel: u16 = ((rgb.0 >> 3) << 11) | ((rgb.1 >> 2) << 5) | (rgb.2 >> 3);
 
         let high = (pixel >> 8) as u8;
         let low = (pixel & 0xff) as u8;
-        [high, low]
+        RGB565Pixel([high, low])
     }
 
     fn set_data(&mut self, x1y1: LcdXY, x2y2: LcdXY, data: &[u8]) -> io::Result<()> {

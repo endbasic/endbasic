@@ -16,7 +16,7 @@
 //! Buffered implementation of the `RasterOps` for a hardware LCD.
 
 use crate::lcd::font8;
-use crate::lcd::{to_xy_size, Lcd, LcdSize, LcdXY};
+use crate::lcd::{to_xy_size, AsByteSlice, Lcd, LcdSize, LcdXY};
 use endbasic_std::console::drawing;
 use endbasic_std::console::graphics::{RasterInfo, RasterOps};
 use endbasic_std::console::{CharsXY, PixelsXY, SizeInPixels, RGB};
@@ -47,6 +47,7 @@ pub(crate) struct BufferedLcd<L: Lcd> {
     size_chars: CharsXY,
 
     draw_color: L::Pixel,
+    row_buffer: Vec<u8>,
 }
 
 impl<L> BufferedLcd<L>
@@ -69,6 +70,7 @@ where
         );
 
         let draw_color = lcd.encode((255, 255, 255));
+        let row_buffer = Vec::with_capacity(size.width * stride);
 
         Self {
             lcd,
@@ -80,6 +82,7 @@ where
             glyph_size,
             size_chars,
             draw_color,
+            row_buffer,
         }
     }
 
@@ -263,26 +266,32 @@ where
     /// If syncing is enabled, this writes directly to the LCD.  Otherwise, this writes to the
     /// framebuffer and records the area as damaged.
     fn fill(&mut self, x1y1: LcdXY, x2y2: LcdXY) -> io::Result<()> {
+        // Prepare self.row_buffer with the content of every row to be copied to the framebuffer.
+        // We do this for efficiency reasons because manipulating individual pixels is costly.
+        let rowlen = {
+            let xlen = x2y2.x - x1y1.x + 1;
+            let rowlen = xlen * self.stride;
+            self.row_buffer.clear();
+            let color = self.draw_color.as_slice();
+            for _ in 0..xlen {
+                self.row_buffer.extend_from_slice(color);
+            }
+            debug_assert_eq!(rowlen, self.row_buffer.len());
+            rowlen
+        };
+
         if self.sync {
             let mut data = LcdSize::between(x1y1, x2y2).new_buffer(self.stride);
             for y in x1y1.y..(x2y2.y + 1) {
-                for x in x1y1.x..(x2y2.x + 1) {
-                    let offset = self.fb_addr(x, y);
-                    for (i, byte) in self.draw_color.into_iter().enumerate() {
-                        self.fb[offset + i] = byte;
-                        data.push(byte);
-                    }
-                }
+                let offset = self.fb_addr(x1y1.x, y);
+                self.fb[offset..offset + rowlen].copy_from_slice(&self.row_buffer);
+                data.extend(&self.row_buffer);
             }
             self.lcd.set_data(x1y1, x2y2, &data)?;
         } else {
             for y in x1y1.y..(x2y2.y + 1) {
-                for x in x1y1.x..(x2y2.x + 1) {
-                    let offset = self.fb_addr(x, y);
-                    for (i, byte) in self.draw_color.into_iter().enumerate() {
-                        self.fb[offset + i] = byte;
-                    }
-                }
+                let offset = self.fb_addr(x1y1.x, y);
+                self.fb[offset..offset + rowlen].copy_from_slice(&self.row_buffer);
             }
             self.damage(x1y1, x2y2);
         }

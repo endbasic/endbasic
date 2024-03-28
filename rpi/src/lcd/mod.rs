@@ -24,10 +24,36 @@ mod font8;
 
 pub(crate) use buffered::BufferedLcd;
 
+pub(crate) trait AsByteSlice {
+    fn as_slice(&self) -> &[u8];
+}
+
+/// Data for one pixel encoded as RGB565.
+#[derive(Clone, Copy)]
+pub(crate) struct RGB565Pixel(pub(crate) [u8; 2]);
+
+impl AsByteSlice for RGB565Pixel {
+    fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+/// Data for one pixel encoded as RGB888.
+#[cfg(test)]
+#[derive(Clone, Copy)]
+pub(crate) struct RGB888Pixel(pub(crate) [u8; 3]);
+
+#[cfg(test)]
+impl AsByteSlice for RGB888Pixel {
+    fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 /// Primitives that an LCD must define.
 pub(crate) trait Lcd {
     /// The primitive type of the pixel data.
-    type Pixel: IntoIterator<Item = u8> + Copy;
+    type Pixel: AsByteSlice + Copy;
 
     /// Returns the dimensions of the LCD and size of the `Pixel` (stride).
     fn info(&self) -> (LcdSize, usize);
