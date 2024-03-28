@@ -15,7 +15,7 @@
 
 //! Utilities to implement tests for the `BufferedLcd`.
 
-use crate::lcd::{BufferedLcd, Lcd, LcdSize, LcdXY};
+use crate::lcd::{BufferedLcd, Lcd, LcdSize, LcdXY, RGB888Pixel};
 use endbasic_std::console::RGB;
 use std::io;
 
@@ -45,14 +45,14 @@ impl LcdRecorder {
 }
 
 impl Lcd for LcdRecorder {
-    type Pixel = [u8; 3];
+    type Pixel = RGB888Pixel;
 
     fn info(&self) -> (LcdSize, usize) {
         (self.size, 3)
     }
 
     fn encode(&self, rgb: RGB) -> Self::Pixel {
-        [rgb.0, rgb.1, rgb.2]
+        RGB888Pixel([rgb.0, rgb.1, rgb.2])
     }
 
     fn set_data(&mut self, x1y1: LcdXY, x2y2: LcdXY, data: &[u8]) -> io::Result<()> {
