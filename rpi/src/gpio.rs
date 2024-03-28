@@ -32,7 +32,10 @@ pub struct RppalPins {
 pub(crate) fn gpio_error_to_io_error(e: gpio::Error) -> io::Error {
     match e {
         gpio::Error::Io(e) => e,
-        gpio::Error::PermissionDenied(e) => io::Error::new(io::ErrorKind::PermissionDenied, e),
+        gpio::Error::PermissionDenied(path) => io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("Cannot open {}: permission denied", path),
+        ),
         gpio::Error::PinNotAvailable(pin) => {
             io::Error::new(io::ErrorKind::InvalidInput, format!("Unknown pin number {}", pin))
         }
