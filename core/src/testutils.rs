@@ -16,7 +16,6 @@
 //! Test utilities.
 
 use crate::ast::{ArgSep, Value, VarRef, VarType};
-use crate::eval;
 use crate::exec::Machine;
 use crate::syms::{
     Array, CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
@@ -40,6 +39,33 @@ fn format_value(v: Value, o: &mut String) {
         Value::Separator(s) => o.push_str(&format!("{:?}", s)),
         Value::Text(s) => o.push_str(&s),
         Value::VarRef(v) => o.push_str(&format!("{}", v)),
+    }
+}
+
+/// Returns a constant value.
+pub struct ArglessFunction {
+    metadata: CallableMetadata,
+    value: Value,
+}
+
+impl ArglessFunction {
+    pub fn new(value: Value) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("ARGLESS", value.as_vartype()).test_build(),
+            value,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Function for ArglessFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _symbols: &mut Symbols) -> FunctionResult {
+        assert!(args.is_empty());
+        Ok(self.value.clone())
     }
 }
 
@@ -304,11 +330,11 @@ impl Command for InCommand {
         let mut data = self.data.borrow_mut();
         let raw_value = data.next().unwrap().to_owned();
         let value = Value::parse_as(vref.ref_type(), raw_value)
-            .map_err(|e| eval::Error::from_value_error(e, pos))?;
+            .map_err(|e| CallError::EvalError(pos, e.message))?;
         machine
             .get_mut_symbols()
             .set_var(&vref, value)
-            .map_err(|e| eval::Error::from_value_error(e, pos))?;
+            .map_err(|e| CallError::EvalError(pos, e.message))?;
         Ok(())
     }
 }
@@ -436,7 +462,7 @@ impl Function for SumFunction {
     async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
         let mut result = Value::Integer(0);
         for (value, pos) in symbols.load_all(args)? {
-            result = result.add(&value).map_err(|e| eval::Error::from_value_error(e, pos))?;
+            result = result.add(&value).map_err(|e| CallError::EvalError(pos, e.message))?;
         }
         Ok(result)
     }

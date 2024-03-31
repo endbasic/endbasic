@@ -165,6 +165,45 @@ pub enum Expr {
     Call(FunctionCallSpan),
 }
 
+impl Expr {
+    /// Returns the start position of the expression.
+    pub(crate) fn start_pos(&self) -> LineCol {
+        match self {
+            Expr::Boolean(span) => span.pos,
+            Expr::Double(span) => span.pos,
+            Expr::Integer(span) => span.pos,
+            Expr::Text(span) => span.pos,
+
+            Expr::Symbol(span) => span.pos,
+
+            Expr::And(span) => span.lhs.start_pos(),
+            Expr::Or(span) => span.lhs.start_pos(),
+            Expr::Xor(span) => span.lhs.start_pos(),
+            Expr::Not(span) => span.pos,
+
+            Expr::ShiftLeft(span) => span.lhs.start_pos(),
+            Expr::ShiftRight(span) => span.lhs.start_pos(),
+
+            Expr::Equal(span) => span.lhs.start_pos(),
+            Expr::NotEqual(span) => span.lhs.start_pos(),
+            Expr::Less(span) => span.lhs.start_pos(),
+            Expr::LessEqual(span) => span.lhs.start_pos(),
+            Expr::Greater(span) => span.lhs.start_pos(),
+            Expr::GreaterEqual(span) => span.lhs.start_pos(),
+
+            Expr::Add(span) => span.lhs.start_pos(),
+            Expr::Subtract(span) => span.lhs.start_pos(),
+            Expr::Multiply(span) => span.lhs.start_pos(),
+            Expr::Divide(span) => span.lhs.start_pos(),
+            Expr::Modulo(span) => span.lhs.start_pos(),
+            Expr::Power(span) => span.lhs.start_pos(),
+            Expr::Negate(span) => span.pos,
+
+            Expr::Call(span) => span.pos,
+        }
+    }
+}
+
 /// Collection of types for a variable.
 // TODO(jmmv): Consider combining with `Value` and using `Discriminant<Value>` for the variable
 // types.
@@ -240,7 +279,6 @@ pub struct VarRef {
     ref_type: VarType,
 }
 
-// TODO(jmmv): This is the only `impl` in the AST.  Something seems wrong with this.
 impl VarRef {
     /// Creates a new reference to the variable with `name` and the optional `vtype` type.
     #[allow(clippy::redundant_field_names)]

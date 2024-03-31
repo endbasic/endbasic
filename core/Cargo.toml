@@ -13,7 +13,6 @@ edition = "2018"
 
 [dependencies]
 async-channel = "2.2"
-async-recursion = "1.0"
 async-trait = "0.1"
 thiserror = "1.0"
 
