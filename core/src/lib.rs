@@ -26,7 +26,6 @@
 pub mod ast;
 pub mod bytecode;
 pub mod compiler;
-pub mod eval;
 pub mod exec;
 mod lexer;
 mod parser;

@@ -24,7 +24,7 @@ use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
     FunctionResult, Symbols,
 };
-use endbasic_core::{eval, LineCol};
+use endbasic_core::LineCol;
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::io;
@@ -319,7 +319,7 @@ impl Command for InputCommand {
         let vref = machine
             .get_symbols()
             .qualify_varref(&vref)
-            .map_err(|e| eval::Error::from_value_error(e, pos))?;
+            .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
 
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
@@ -330,7 +330,7 @@ impl Command for InputCommand {
                         machine
                             .get_mut_symbols()
                             .set_var(&vref, value)
-                            .map_err(|e| eval::Error::from_value_error(e, pos))?;
+                            .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
                         return Ok(());
                     }
                     Err(e) => {

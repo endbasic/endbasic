@@ -16,7 +16,6 @@
 //! Symbol definitions and symbols table representation.
 
 use crate::ast::{Value, VarRef, VarType};
-use crate::eval;
 use crate::exec::Machine;
 use crate::reader::LineCol;
 use crate::value::{Error, Result};
@@ -54,12 +53,6 @@ pub enum CallError {
     /// General mismatch of parameters given to the function with expectations (different numbers,
     /// invalid types).
     SyntaxError,
-}
-
-impl From<eval::Error> for CallError {
-    fn from(e: eval::Error) -> Self {
-        Self::EvalError(e.pos, e.message)
-    }
 }
 
 impl From<io::Error> for CallError {

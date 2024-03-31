@@ -18,7 +18,6 @@
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::compiler;
-use crate::eval;
 use crate::parser;
 use crate::reader::LineCol;
 use crate::syms::{CallError, CallableMetadata, Command, Function, Symbol, Symbols};
@@ -60,12 +59,6 @@ pub enum Error {
     /// Value computation error during execution.
     #[error("{0}")]
     ValueError(value::Error),
-}
-
-impl From<eval::Error> for Error {
-    fn from(value: eval::Error) -> Self {
-        Self::EvalError(value.pos, value.message)
-    }
 }
 
 impl Error {
@@ -110,7 +103,7 @@ impl Error {
 
     /// Annotates a value computation error with a position.
     fn from_value_error(e: value::Error, pos: LineCol) -> Self {
-        eval::Error::from_value_error(e, pos).into()
+        Self::EvalError(pos, e.message)
     }
 
     /// Creates a position-less value computation error.
@@ -646,6 +639,45 @@ impl Machine {
         }
     }
 
+    /// Evaluates a call to an argless function.
+    async fn argless_function_call(
+        syms: &mut Symbols,
+        fref: VarRef,
+        fref_pos: LineCol,
+        f: Rc<dyn Function>,
+    ) -> Result<Value> {
+        let metadata = f.metadata();
+        if !fref.accepts(metadata.return_type()) {
+            return Err(Error::EvalError(
+                fref_pos,
+                "Incompatible type annotation for function call".to_owned(),
+            ));
+        }
+
+        let result = f.exec(vec![], syms).await;
+        match result {
+            Ok(value) => {
+                debug_assert!(metadata.return_type() != VarType::Auto);
+                let fref_checker = VarRef::new(fref.name(), metadata.return_type());
+                // Given that we only support built-in functions at the moment, this
+                // could well be an assertion.  Doing so could turn into a time bomb
+                // when/if we add user-defined functions, so handle the problem as an
+                // error.
+                if !fref_checker.accepts(value.as_vartype()) {
+                    return Err(Error::EvalError(
+                        fref_pos,
+                        format!(
+                            "Value returned by {} is incompatible with its type definition",
+                            fref.name(),
+                        ),
+                    ));
+                }
+                Ok(value)
+            }
+            Err(e) => Err(Error::from_call_error(metadata, e, fref_pos)),
+        }
+    }
+
     /// Helper for `exec_one` that only worries about execution of a single instruction.
     ///
     /// Errors are handled on the caller side depending on the `ON ERROR` handling policy that is
@@ -841,8 +873,13 @@ impl Machine {
                             );
                         }
                         let f = f.clone();
-                        let span = FunctionCallSpan { fref: vref.clone(), args: vec![], pos: *pos };
-                        Expr::eval_function_call(&mut self.symbols, &span, f).await?
+                        Machine::argless_function_call(
+                            self.get_mut_symbols(),
+                            vref.clone(),
+                            *pos,
+                            f,
+                        )
+                        .await?
                     }
                     Some(_) => {
                         return new_syntax_error(*pos, format!("{} is not a variable", vref.name()))
@@ -863,8 +900,13 @@ impl Machine {
                 if let Some(Symbol::Function(f)) = sym {
                     if f.metadata().is_argless() {
                         let f = f.clone();
-                        let span = FunctionCallSpan { fref: vref.clone(), args: vec![], pos: *pos };
-                        let value = Expr::eval_function_call(&mut self.symbols, &span, f).await?;
+                        let value = Machine::argless_function_call(
+                            self.get_mut_symbols(),
+                            vref.clone(),
+                            *pos,
+                            f,
+                        )
+                        .await?;
                         context.value_stack.push((value, *pos));
                         context.pc += 1;
                         return Ok(());
@@ -1136,12 +1178,13 @@ mod tests {
         machine.add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))));
         machine.add_command(OutCommand::new(captured_out.clone()));
         machine.add_command(RaiseCommand::new());
+        machine.add_function(ArglessFunction::new(Value::Integer(1234)));
         machine.add_function(CountFunction::new());
         machine.add_function(GetHiddenFunction::new());
         machine.add_function(OutfFunction::new(captured_out));
         machine.add_function(RaisefFunction::new());
         machine.add_function(SumFunction::new());
-        machine.add_function(TypeCheckFunction::new(Value::Boolean(true)));
+        machine.add_function(TypeCheckFunction::new(Value::Integer(5)));
         block_on(machine.exec(&mut input.as_bytes()))
     }
 
@@ -1788,13 +1831,17 @@ mod tests {
 
     #[test]
     fn test_function_call_argless() {
-        do_ok_test("x = FALSE: OUT x: x = TYPE_CHECK: OUT x", &[], &["FALSE", "TRUE"]);
+        do_ok_test("x = FALSE: OUT x: y = ARGLESS: OUT y", &[], &["FALSE", "1234"]);
     }
 
     #[test]
     fn test_function_call_errors() {
         do_simple_error_test("OUT OUT()", "1:5: OUT is not an array or a function");
         do_simple_error_test("OUT SUM?()", "1:5: Incompatible types in SUM? reference");
+        do_simple_error_test(
+            "OUT TYPE_CHECK",
+            "1:5: Value returned by TYPE_CHECK is incompatible with its type definition",
+        );
         do_simple_error_test(
             "OUT TYPE_CHECK()",
             "1:5: In call to TYPE_CHECK: expected no arguments nor parenthesis",
