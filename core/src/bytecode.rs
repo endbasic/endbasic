@@ -17,6 +17,7 @@
 
 use crate::ast::*;
 use crate::reader::LineCol;
+use std::borrow::Cow;
 
 /// Convenience type to represent a program address.
 pub type Address = usize;
@@ -216,6 +217,119 @@ pub enum Instruction {
 }
 
 impl Instruction {
+    /// Returns the textual representation of the instruction.
+    pub fn repr(&self) -> Cow<'static, str> {
+        match self {
+            Instruction::And(_pos) => Cow::from("and"),
+            Instruction::Or(_pos) => Cow::from("or"),
+            Instruction::Xor(_pos) => Cow::from("xor"),
+            Instruction::Not(_pos) => Cow::from("not"),
+            Instruction::ShiftLeft(_pos) => Cow::from("shl"),
+            Instruction::ShiftRight(_pos) => Cow::from("shr"),
+            Instruction::Equal(_pos) => Cow::from("cmpe"),
+            Instruction::NotEqual(_pos) => Cow::from("cmpne"),
+            Instruction::Less(_pos) => Cow::from("cmpl"),
+            Instruction::LessEqual(_pos) => Cow::from("cmple"),
+            Instruction::Greater(_pos) => Cow::from("cmpg"),
+            Instruction::GreaterEqual(_pos) => Cow::from("cmpge"),
+            Instruction::Add(_pos) => Cow::from("add"),
+            Instruction::Subtract(_pos) => Cow::from("sub"),
+            Instruction::Multiply(_pos) => Cow::from("mul"),
+            Instruction::Divide(_pos) => Cow::from("div"),
+            Instruction::Modulo(_pos) => Cow::from("mod"),
+            Instruction::Power(_pos) => Cow::from("pow"),
+            Instruction::Negate(_pos) => Cow::from("neg"),
+            Instruction::ArrayAssignment(vref, _pos, nargs) => {
+                Cow::from(format!("seta {}, {}", vref, nargs))
+            }
+            Instruction::Assign(vref, _pos) => Cow::from(format!("setv {}", vref)),
+            Instruction::BuiltinCall(vref, _pos, nargs) => {
+                Cow::from(format!("callb {}, {}", vref, nargs))
+            }
+            Instruction::Call(span) => Cow::from(format!("calla {:04x}", span.addr)),
+            Instruction::FunctionCall(vref, _pos, nargs) => {
+                Cow::from(format!("callf {}, {}", vref, nargs))
+            }
+            Instruction::Dim(span) => Cow::from(format!("dimv {}, {}", span.name, span.vtype)),
+            Instruction::DimArray(span) => {
+                Cow::from(format!("dima {}, {}, {}", span.name, span.dimensions, span.subtype))
+            }
+            Instruction::End(has_code) => Cow::from(format!("end {}", has_code)),
+            Instruction::Jump(span) => Cow::from(format!("jmp {:04x}", span.addr)),
+            Instruction::JumpIfDefined(span) => {
+                Cow::from(format!("jmpvd {}, {:04x}", span.var, span.addr))
+            }
+            Instruction::JumpIfTrue(span) => {
+                Cow::from(format!("jmpt {:04x}, \"{}\"", span.addr, span.error_msg))
+            }
+            Instruction::JumpIfNotTrue(span) => {
+                Cow::from(format!("jmpnt {:04x}, \"{}\"", span.addr, span.error_msg))
+            }
+            Instruction::Load(vref, _pos) => Cow::from(format!("loadv {}", vref)),
+            Instruction::LoadRef(vref, _pos) => Cow::from(format!("loadr {}", vref)),
+            Instruction::Nop => Cow::from("nop"),
+            Instruction::Push(value, _pos) => Cow::from(format!("pushv {}", value)),
+            Instruction::Return(_pos) => Cow::from("ret"),
+            Instruction::SetErrorHandler(span) => match span {
+                ErrorHandlerISpan::Jump(addr) => Cow::from(format!("seha {:04x}", addr)),
+                ErrorHandlerISpan::None => Cow::from("sehn"),
+                ErrorHandlerISpan::ResumeNext => Cow::from("sehrn"),
+            },
+            Instruction::Unset(span) => Cow::from(format!("unsetv {}", span.name)),
+        }
+    }
+
+    /// Returns the position in the source code where this instruction originated.
+    ///
+    /// For some instructions, we cannot tell their location right now, so we return None for those.
+    pub fn pos(&self) -> Option<LineCol> {
+        match self {
+            Instruction::And(pos) => Some(*pos),
+            Instruction::Or(pos) => Some(*pos),
+            Instruction::Xor(pos) => Some(*pos),
+            Instruction::Not(pos) => Some(*pos),
+            Instruction::ShiftLeft(pos) => Some(*pos),
+            Instruction::ShiftRight(pos) => Some(*pos),
+            Instruction::Equal(pos) => Some(*pos),
+            Instruction::NotEqual(pos) => Some(*pos),
+            Instruction::Less(pos) => Some(*pos),
+            Instruction::LessEqual(pos) => Some(*pos),
+            Instruction::Greater(pos) => Some(*pos),
+            Instruction::GreaterEqual(pos) => Some(*pos),
+            Instruction::Add(pos) => Some(*pos),
+            Instruction::Subtract(pos) => Some(*pos),
+            Instruction::Multiply(pos) => Some(*pos),
+            Instruction::Divide(pos) => Some(*pos),
+            Instruction::Modulo(pos) => Some(*pos),
+            Instruction::Power(pos) => Some(*pos),
+            Instruction::Negate(pos) => Some(*pos),
+            Instruction::ArrayAssignment(_, pos, _) => Some(*pos),
+            Instruction::Assign(_, pos) => Some(*pos),
+            Instruction::BuiltinCall(_, pos, _) => Some(*pos),
+            Instruction::Call(_) => None,
+            Instruction::FunctionCall(_, pos, _) => Some(*pos),
+            Instruction::Dim(span) => Some(span.name_pos),
+            Instruction::DimArray(span) => Some(span.name_pos),
+            Instruction::End(_) => None,
+            Instruction::Jump(_) => None,
+            Instruction::JumpIfDefined(_) => None,
+            Instruction::JumpIfTrue(_) => None,
+            Instruction::JumpIfNotTrue(_) => None,
+            Instruction::Load(_, pos) => Some(*pos),
+            Instruction::LoadRef(_, pos) => Some(*pos),
+            Instruction::Nop => None,
+            Instruction::Push(_, pos) => Some(*pos),
+            Instruction::Return(pos) => Some(*pos),
+            Instruction::SetErrorHandler(_) => None,
+            Instruction::Unset(span) => Some(span.pos),
+        }
+    }
+
+    /// Returns true if this instruction represents the execution of a statement.
+    ///
+    /// This is a heuristic to implement `ON ERROR RESUME NEXT`.  It works for now without
+    /// additional tracking, but maybe this needs to change in the future if we add some
+    /// instruction that cannot be disambiguated.
     pub(crate) fn is_statement(&self) -> bool {
         match self {
             Instruction::And(_)

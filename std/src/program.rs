@@ -19,7 +19,9 @@ use crate::console::{read_line, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
+use endbasic_core::compiler::compile;
 use endbasic_core::exec::{Machine, StopReason};
+use endbasic_core::parser::parse;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
 };
@@ -147,6 +149,59 @@ pub async fn continue_if_modified(
     match Value::parse_as(VarType::Boolean, answer) {
         Ok(Value::Boolean(b)) => Ok(b),
         _ => Ok(false),
+    }
+}
+
+/// The `DISASM` command.
+pub struct DisasmCommand {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+    program: Rc<RefCell<dyn Program>>,
+}
+
+impl DisasmCommand {
+    /// Creates a new `DISASM` command that dumps the disassembled version of the program.
+    pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("DISASM", VarType::Void)
+                .with_syntax("")
+                .with_category(CATEGORY)
+                .with_description("Disassembles the stored program.")
+                .build(),
+            console,
+            program,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Command for DisasmCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+        if !args.is_empty() {
+            return Err(CallError::SyntaxError);
+        }
+
+        let mut console = self.console.borrow_mut();
+        let program = self.program.borrow_mut();
+        let instrs = compile(parse(&mut program.text().as_bytes()).unwrap()).unwrap().instrs;
+        let mut addr = 0;
+        for instr in instrs {
+            let mut line = format!("{:04x}    {}", addr, instr.repr());
+            if let Some(pos) = instr.pos() {
+                while line.len() < 40 {
+                    line.push(' ');
+                }
+                line += &format!("# {}:{}", pos.line, pos.col);
+            }
+            console.print(&line)?;
+            addr += 1;
+        }
+        console.print("")?;
+        Ok(())
     }
 }
 
@@ -567,6 +622,7 @@ pub fn add_all(
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 ) {
+    machine.add_command(DisasmCommand::new(console.clone(), program.clone()));
     machine.add_command(EditCommand::new(console.clone(), program.clone()));
     machine.add_command(KillCommand::new(storage.clone()));
     machine.add_command(ListCommand::new(console.clone(), program.clone()));

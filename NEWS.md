@@ -30,6 +30,9 @@ for the time being.**
     towards user-supplied functions and the ability to interrupt functions as
     they execute.
 
+*   Added the `DISASM` command to show the disassembled version of a compiled
+    program.
+
 ## Changes in version 0.10.0
 
 **Released on 2022-12-27.**
