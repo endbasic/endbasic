@@ -1123,7 +1123,7 @@ fn compile_aux(stmts: Vec<Statement>, symtable: SymbolsTable) -> Result<(Image, 
 /// that exist in the virtual machine.
 // TODO(jmmv): This is ugly.  Now that we have a symbols table in here, we should not _also_ have a
 // Symbols object to maintain runtime state (or if we do, we shouldn't be getting it here).
-pub(crate) fn compile(stmts: Vec<Statement>, syms: &Symbols) -> Result<Image> {
+pub fn compile(stmts: Vec<Statement>, syms: &Symbols) -> Result<Image> {
     compile_aux(stmts, SymbolsTable::from(syms)).map(|(image, _symtable)| image)
 }
 

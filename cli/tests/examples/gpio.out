@@ -46,3 +46,147 @@ __GPIO_MOCK_DATA             12            1821
 __GPIO_MOCK_DATA             13            1820
 __GPIO_MOCK_DATA             14            1821
 __GPIO_MOCK_DATA             15            1820
+0000    PUSH%       8                           # 16:10
+0001    SETV        BUTTON
+0002    PUSH%       18                          # 17:7
+0003    SETV        LED
+0004    CALLB       CLS, 0                      # 19:1
+0005    PUSH%       11                          # 20:7
+0006    CALLB       COLOR, 1                    # 20:1
+0007    CALLB       PRINT, 0                    # 21:1
+0008    PUSH$       " GPIO demo"                # 22:7
+0009    PUSH%       4                           # 22:7
+000a    CALLB       PRINT, 2                    # 22:1
+000b    PUSH$       "==========="               # 23:7
+000c    PUSH%       4                           # 23:7
+000d    CALLB       PRINT, 2                    # 23:1
+000e    CALLB       COLOR, 0                    # 24:1
+000f    CALLB       PRINT, 0                    # 25:1
+0010    PUSH$       "This demo showcases how to poll a hardware button attached to a GPIO"    # 26:7
+0011    PUSH%       4                           # 26:7
+0012    CALLB       PRINT, 2                    # 26:1
+0013    PUSH$       "pin and how to flash an LED attached to another one."    # 27:7
+0014    PUSH%       4                           # 27:7
+0015    CALLB       PRINT, 2                    # 27:1
+0016    CALLB       PRINT, 0                    # 28:1
+0017    PUSH%       2                           # 29:7
+0018    CALLB       COLOR, 1                    # 29:1
+0019    PUSH$       "To get started, follow these steps:"    # 30:7
+001a    PUSH%       4                           # 30:7
+001b    CALLB       PRINT, 2                    # 30:1
+001c    CALLB       COLOR, 0                    # 31:1
+001d    CALLB       PRINT, 0                    # 32:1
+001e    PUSH$       "and to ground; don't forget to add a"    # 33:40
+001f    PUSH%       4                           # 33:40
+0020    PUSH%       1                           # 33:38
+0021    LOAD%       LED                         # 33:35
+0022    PUSH%       3                           # 33:35
+0023    PUSH%       1                           # 33:33
+0024    PUSH$       "1. Connect an LED to pin"    # 33:7
+0025    PUSH%       4                           # 33:7
+0026    CALLB       PRINT, 8                    # 33:1
+0027    PUSH$       "   resistor inline."       # 34:7
+0028    PUSH%       4                           # 34:7
+0029    CALLB       PRINT, 2                    # 34:1
+002a    CALLB       PRINT, 0                    # 35:1
+002b    PUSH$       "and to ground.  We'll be"    # 36:50
+002c    PUSH%       4                           # 36:50
+002d    PUSH%       1                           # 36:48
+002e    LOAD%       BUTTON                      # 36:42
+002f    PUSH%       3                           # 36:42
+0030    PUSH%       1                           # 36:40
+0031    PUSH$       "2. Connect a push button to pin"    # 36:7
+0032    PUSH%       4                           # 36:7
+0033    CALLB       PRINT, 8                    # 36:1
+0034    PUSH$       "   using the built-in pull-up resistor for the input pin so there is"    # 37:7
+0035    PUSH%       4                           # 37:7
+0036    CALLB       PRINT, 2                    # 37:1
+0037    PUSH$       "   no need to do any extra wiring."    # 38:7
+0038    PUSH%       4                           # 38:7
+0039    CALLB       PRINT, 2                    # 38:1
+003a    CALLB       PRINT, 0                    # 39:1
+003b    PUSH%       1                           # 40:7
+003c    CALLB       COLOR, 1                    # 40:1
+003d    PUSH$       "This demo is only functional on the Raspberry Pi and assumes you have"    # 41:7
+003e    PUSH%       4                           # 41:7
+003f    CALLB       PRINT, 2                    # 41:1
+0040    PUSH$       "built EndBASIC with --features=rpi.  If these conditions are not met,"    # 42:7
+0041    PUSH%       4                           # 42:7
+0042    CALLB       PRINT, 2                    # 42:1
+0043    PUSH$       "the demo will fail to run."    # 43:7
+0044    PUSH%       4                           # 43:7
+0045    CALLB       PRINT, 2                    # 43:1
+0046    CALLB       COLOR, 0                    # 44:1
+0047    CALLB       PRINT, 0                    # 45:1
+0048    LOADR       DUMMY                       # 46:71
+0049    PUSH%       2                           # 46:69
+004a    PUSH$       "Press ENTER when you are ready or CTRL+C to exit the demo..."    # 46:7
+004b    PUSH%       1                           # 46:7
+004c    CALLB       INPUT, 4                    # 46:1
+004d    CALLB       CLS, 0                      # 48:1
+004e    PUSH%       11                          # 49:7
+004f    CALLB       COLOR, 1                    # 49:1
+0050    CALLB       PRINT, 0                    # 50:1
+0051    PUSH$       " GPIO demo"                # 51:7
+0052    PUSH%       4                           # 51:7
+0053    CALLB       PRINT, 2                    # 51:1
+0054    PUSH$       "==========="               # 52:7
+0055    PUSH%       4                           # 52:7
+0056    CALLB       PRINT, 2                    # 52:1
+0057    CALLB       COLOR, 0                    # 53:1
+0058    CALLB       PRINT, 0                    # 54:1
+0059    PUSH$       "IN-PULL-UP"                # 57:20
+005a    LOAD%       BUTTON                      # 57:12
+005b    CALLB       GPIO_SETUP, 2               # 57:1
+005c    PUSH$       "OUT"                       # 58:17
+005d    LOAD%       LED                         # 58:12
+005e    CALLB       GPIO_SETUP, 2               # 58:1
+005f    PUSH$       "..."                       # 62:52
+0060    PUSH%       4                           # 62:52
+0061    PUSH%       1                           # 62:50
+0062    LOAD%       BUTTON                      # 62:44
+0063    PUSH%       3                           # 62:44
+0064    PUSH%       1                           # 62:42
+0065    PUSH$       "Waiting for a button press on pin"    # 62:7
+0066    PUSH%       4                           # 62:7
+0067    CALLB       PRINT, 8                    # 62:1
+0068    LOAD%       BUTTON                      # 63:17
+0069    CALLF?      GPIO_READ, 1                # 63:7
+006a    JMPNT       006e
+006b    PUSH#       0.05                        # 64:11
+006c    CALLB       SLEEP, 1                    # 64:5
+006d    JMP         0068
+006e    PUSH$       "..."                       # 68:51
+006f    PUSH%       4                           # 68:51
+0070    PUSH%       1                           # 68:49
+0071    LOAD%       LED                         # 68:46
+0072    PUSH%       3                           # 68:46
+0073    PUSH%       1                           # 68:44
+0074    PUSH$       "Button pressed! Blinking LED on pin"    # 68:7
+0075    PUSH%       4                           # 68:7
+0076    CALLB       PRINT, 8                    # 68:1
+0077    PUSH%       5                           # 69:9
+0078    SETV        I
+0079    LOAD%       I                           # 69:5
+007a    PUSH%       1                           # 69:14
+007b    CMPGE%                                  # 69:11
+007c    JMPNT       008f
+007d    PUSH?       true                        # 70:21
+007e    LOAD%       LED                         # 70:16
+007f    CALLB       GPIO_WRITE, 2               # 70:5
+0080    PUSH#       0.1                         # 71:11
+0081    CALLB       SLEEP, 1                    # 71:5
+0082    PUSH?       false                       # 72:21
+0083    LOAD%       LED                         # 72:16
+0084    CALLB       GPIO_WRITE, 2               # 72:5
+0085    PUSH#       0.1                         # 73:11
+0086    CALLB       SLEEP, 1                    # 73:5
+0087    LOAD%       I                           # 74:11
+0088    PUSH%       3                           # 74:11
+0089    CALLB       PRINT, 2                    # 74:5
+008a    LOAD%       I                           # 69:5
+008b    PUSH%       -1                          # 69:22
+008c    ADD%                                    # 69:11
+008d    SETV        I
+008e    JMP         0079
+

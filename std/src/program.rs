@@ -20,8 +20,9 @@ use crate::storage::Storage;
 use crate::strings::parse_boolean;
 use async_trait::async_trait;
 use endbasic_core::ast::ExprType;
-use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
+use endbasic_core::compiler::{compile, ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope, StopReason};
+use endbasic_core::parser::parse;
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
@@ -147,6 +148,78 @@ pub async fn continue_if_modified(
     }
     let answer = read_line(console, "Discard and continue (y/N)? ", "", None).await?;
     Ok(parse_boolean(&answer).unwrap_or(false))
+}
+
+/// The `DISASM` command.
+pub struct DisasmCommand {
+    metadata: CallableMetadata,
+    console: Rc<RefCell<dyn Console>>,
+    program: Rc<RefCell<dyn Program>>,
+}
+
+impl DisasmCommand {
+    /// Creates a new `DISASM` command that dumps the disassembled version of the program.
+    pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("DISASM")
+                .with_syntax(&[(&[], None)])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Disassembles the stored program.
+The assembly code printed by this command is provided as a tool to understand how high level code \
+gets translated to the machine code of a fictitious stack-based machine.  Note, however, that the \
+assembly code cannot be reassembled nor modified at this point.",
+                )
+                .build(),
+            console,
+            program,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Callable for DisasmCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
+
+        // TODO(jmmv): We shouldn't have to parse and compile the stored program here.  The machine
+        // should hold a copy at all times.
+        let image = {
+            let program = self.program.borrow_mut();
+            let ast = match parse(&mut program.text().as_bytes()) {
+                Ok(ast) => ast,
+                Err(e) => return Err(CallError::NestedError(e.to_string())),
+            };
+            compile(ast, machine.get_symbols())?
+        };
+
+        let mut console = self.console.borrow_mut();
+        let mut pager = Pager::new(&mut *console)?;
+        for (addr, instr) in image.instrs.iter().enumerate() {
+            let (op, args) = instr.repr();
+            let mut line = format!("{:04x}    {}", addr, op);
+            if let Some(args) = args {
+                while line.len() < 20 {
+                    line.push(' ');
+                }
+                line += &args;
+            }
+            if let Some(pos) = instr.pos() {
+                while line.len() < 44 {
+                    line.push(' ');
+                }
+                line += &format!("    # {}:{}", pos.line, pos.col);
+            }
+            pager.print(&line).await?;
+        }
+        pager.print("").await?;
+
+        Ok(())
+    }
 }
 
 /// The `KILL` command.
@@ -550,6 +623,7 @@ pub fn add_all(
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 ) {
+    machine.add_callable(DisasmCommand::new(console.clone(), program.clone()));
     machine.add_callable(EditCommand::new(console.clone(), program.clone()));
     machine.add_callable(KillCommand::new(storage.clone()));
     machine.add_callable(ListCommand::new(console.clone(), program.clone()));
@@ -601,6 +675,62 @@ mod tests {
             .expect_err("1:1: In call to KILL: Entry not found")
             .expect_file("MEMORY:/mismatched-extension.bat", "")
             .check();
+    }
+
+    #[test]
+    fn test_disasm_nothing() {
+        Tester::default().run("DISASM").expect_prints([""]).check();
+    }
+
+    #[test]
+    fn test_disasm_ok() {
+        Tester::default()
+            .set_program(None, "A = 2 + 3")
+            .run("DISASM")
+            .expect_prints([
+                "0000    PUSH%       2                           # 1:5",
+                "0001    PUSH%       3                           # 1:9",
+                "0002    ADD%                                    # 1:7",
+                "0003    SETV        A",
+                "",
+            ])
+            .expect_program(None as Option<&str>, "A = 2 + 3")
+            .check();
+    }
+
+    #[test]
+    fn test_disasm_paging() {
+        let t = Tester::default();
+        t.get_console().borrow_mut().set_interactive(true);
+        t.get_console().borrow_mut().set_size_chars(CharsXY { x: 80, y: 4 });
+        t.get_console().borrow_mut().add_input_keys(&[Key::NewLine]);
+        t.set_program(None, "A = 2 + 3")
+            .run("DISASM")
+            .expect_prints([
+                "0000    PUSH%       2                           # 1:5",
+                "0001    PUSH%       3                           # 1:9",
+                "0002    ADD%                                    # 1:7",
+                " << Press any key for more; ESC or Ctrl+C to stop >> ",
+                "0003    SETV        A",
+                "",
+            ])
+            .expect_program(None as Option<&str>, "A = 2 + 3")
+            .check();
+    }
+
+    #[test]
+    fn test_disasm_code_errors() {
+        Tester::default()
+            .set_program(None, "A = 3 +")
+            .run("DISASM")
+            .expect_err("1:7: Not enough values to apply operator")
+            .expect_program(None as Option<&str>, "A = 3 +")
+            .check();
+    }
+
+    #[test]
+    fn test_disasm_errors() {
+        check_stmt_compilation_err("1:1: In call to DISASM: expected no arguments", "DISASM 2");
     }
 
     #[test]

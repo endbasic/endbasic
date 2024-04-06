@@ -1,2 +1,58 @@
 fibonacci of 10 is: 55
 took 177 steps to calculate
+0000    DIMSV%      STEPS
+0001    PUSH%       10                          # 32:40
+0002    CALLA       0012
+0003    PUSH%       3                           # 32:30
+0004    PUSH%       1                           # 32:28
+0005    PUSH$       "fibonacci of 10 is:"       # 32:7
+0006    PUSH%       4                           # 32:7
+0007    CALLB       PRINT, 5                    # 32:1
+0008    PUSH$       "steps to calculate"        # 33:22
+0009    PUSH%       4                           # 33:22
+000a    PUSH%       1                           # 33:20
+000b    LOAD%       STEPS                       # 33:15
+000c    PUSH%       3                           # 33:15
+000d    PUSH%       1                           # 33:13
+000e    PUSH$       "took"                      # 33:7
+000f    PUSH%       4                           # 33:7
+0010    CALLB       PRINT, 8                    # 33:1
+0011    JMP         0037
+0012    ENTER
+0013    DIMV%       0RETURN_FIBONACCI
+0014    SETV        N
+0015    LOAD%       N                           # 24:17
+0016    SETV        0SELECT1
+0017    LOAD%       0SELECT1                    # 25:14
+0018    PUSH%       0                           # 25:14
+0019    CMPE%                                   # 25:14
+001a    JMPNT       001e
+001b    PUSH%       0                           # 25:29
+001c    SETV        0RETURN_FIBONACCI
+001d    JMP         002f
+001e    LOAD%       0SELECT1                    # 26:14
+001f    PUSH%       1                           # 26:14
+0020    CMPE%                                   # 26:14
+0021    JMPNT       0025
+0022    PUSH%       1                           # 26:29
+0023    SETV        0RETURN_FIBONACCI
+0024    JMP         002f
+0025    LOAD%       N                           # 27:42
+0026    PUSH%       1                           # 27:46
+0027    SUB%                                    # 27:44
+0028    CALLA       0012
+0029    LOAD%       N                           # 27:61
+002a    PUSH%       2                           # 27:65
+002b    SUB%                                    # 27:63
+002c    CALLA       0012
+002d    ADD%                                    # 27:49
+002e    SETV        0RETURN_FIBONACCI
+002f    UNSETV      0SELECT1                    # 28:5
+0030    LOAD%       STEPS                       # 29:13
+0031    PUSH%       1                           # 29:21
+0032    ADD%                                    # 29:19
+0033    SETV        STEPS
+0034    LOAD%       0RETURN_FIBONACCI           # 30:1
+0035    LEAVE
+0036    RET                                     # 30:1
+

@@ -29,3 +29,5 @@ PRINT "Dumping GPIO trace..."
 FOR i = 0 TO __GPIO_MOCK_LAST - 1
     PRINT "__GPIO_MOCK_DATA", i, __GPIO_MOCK_DATA(i)
 NEXT
+
+DISASM

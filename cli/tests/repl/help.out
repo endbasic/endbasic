@@ -265,13 +265,14 @@ Output from HELP "STORED":
     See the "File system" help topic for information on where the programs
     can be saved and loaded from.
 
-    >> [38;5;14mEDIT[39m    Interactively edits the stored program.
-    >> [38;5;14mKILL[39m    Deletes the given program.
-    >> [38;5;14mLIST[39m    Prints the currently-loaded program.
-    >> [38;5;14mLOAD[39m    Loads the given program.
-    >> [38;5;14mNEW [39m    Restores initial machine state and creates a new program.
-    >> [38;5;14mRUN [39m    Runs the stored program.
-    >> [38;5;14mSAVE[39m    Saves the current program in memory to the given filename.
+    >> [38;5;14mDISASM[39m    Disassembles the stored program.
+    >> [38;5;14mEDIT  [39m    Interactively edits the stored program.
+    >> [38;5;14mKILL  [39m    Deletes the given program.
+    >> [38;5;14mLIST  [39m    Prints the currently-loaded program.
+    >> [38;5;14mLOAD  [39m    Loads the given program.
+    >> [38;5;14mNEW   [39m    Restores initial machine state and creates a new program.
+    >> [38;5;14mRUN   [39m    Runs the stored program.
+    >> [38;5;14mSAVE  [39m    Saves the current program in memory to the given filename.
 
     Type HELP followed by the name of a topic for details.
 
@@ -678,6 +679,17 @@ Output from HELP "DIR":
 [38;5;11m    DIR <> | <path$>
 [39m
     Displays the list of files on the current or given path.
+
+Output from HELP "DISASM":
+
+[38;5;11m    DISASM
+[39m
+    Disassembles the stored program.
+
+    The assembly code printed by this command is provided as a tool to
+    understand how high level code gets translated to the machine code of a
+    fictitious stack-based machine.  Note, however, that the assembly code
+    cannot be reassembled nor modified at this point.
 
 Output from HELP "EDIT":
 

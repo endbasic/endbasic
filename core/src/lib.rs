@@ -28,7 +28,7 @@ pub mod bytecode;
 pub mod compiler;
 pub mod exec;
 mod lexer;
-mod parser;
+pub mod parser;
 mod reader;
 pub mod syms;
 #[cfg(test)]

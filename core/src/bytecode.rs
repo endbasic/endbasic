@@ -334,6 +334,258 @@ pub enum Instruction {
 }
 
 impl Instruction {
+    /// Returns the textual representation of the instruction.
+    pub fn repr(&self) -> (&'static str, Option<String>) {
+        match self {
+            Instruction::BitwiseAnd(_pos) => ("AND%", None),
+            Instruction::BitwiseOr(_pos) => ("OR%", None),
+            Instruction::BitwiseXor(_pos) => ("XOR%", None),
+            Instruction::BitwiseNot(_pos) => ("NOT%", None),
+
+            Instruction::LogicalAnd(_pos) => ("AND?", None),
+            Instruction::LogicalOr(_pos) => ("OR?", None),
+            Instruction::LogicalXor(_pos) => ("XOR?", None),
+            Instruction::LogicalNot(_pos) => ("NOT?", None),
+
+            Instruction::ShiftLeft(_pos) => ("SHL%", None),
+            Instruction::ShiftRight(_pos) => ("SHR%", None),
+
+            Instruction::EqualBooleans(_pos) => ("CMPE?", None),
+            Instruction::NotEqualBooleans(_pos) => ("CMPNE?", None),
+
+            Instruction::EqualDoubles(_pos) => ("CMPE#", None),
+            Instruction::NotEqualDoubles(_pos) => ("CMPNE#", None),
+            Instruction::LessDoubles(_pos) => ("CMPL#", None),
+            Instruction::LessEqualDoubles(_pos) => ("CMPLE#", None),
+            Instruction::GreaterDoubles(_pos) => ("CMPG#", None),
+            Instruction::GreaterEqualDoubles(_pos) => ("CMPGE#", None),
+
+            Instruction::EqualIntegers(_pos) => ("CMPE%", None),
+            Instruction::NotEqualIntegers(_pos) => ("CMPNE%", None),
+            Instruction::LessIntegers(_pos) => ("CMPL%", None),
+            Instruction::LessEqualIntegers(_pos) => ("CMPLE%", None),
+            Instruction::GreaterIntegers(_pos) => ("CMPG%", None),
+            Instruction::GreaterEqualIntegers(_pos) => ("CMPGE%", None),
+
+            Instruction::EqualStrings(_pos) => ("CMPE$", None),
+            Instruction::NotEqualStrings(_pos) => ("CMPNE$", None),
+            Instruction::LessStrings(_pos) => ("CMPL$", None),
+            Instruction::LessEqualStrings(_pos) => ("CMPLE$", None),
+            Instruction::GreaterStrings(_pos) => ("CMPG$", None),
+            Instruction::GreaterEqualStrings(_pos) => ("CMPGE$", None),
+
+            Instruction::AddDoubles(_pos) => ("ADD#", None),
+            Instruction::SubtractDoubles(_pos) => ("SUB#", None),
+            Instruction::MultiplyDoubles(_pos) => ("MUL#", None),
+            Instruction::DivideDoubles(_pos) => ("DIV#", None),
+            Instruction::ModuloDoubles(_pos) => ("MOD#", None),
+            Instruction::PowerDoubles(_pos) => ("POW#", None),
+            Instruction::NegateDouble(_pos) => ("NEG#", None),
+
+            Instruction::AddIntegers(_pos) => ("ADD%", None),
+            Instruction::SubtractIntegers(_pos) => ("SUB%", None),
+            Instruction::MultiplyIntegers(_pos) => ("MUL%", None),
+            Instruction::DivideIntegers(_pos) => ("DIV%", None),
+            Instruction::ModuloIntegers(_pos) => ("MOD%", None),
+            Instruction::PowerIntegers(_pos) => ("POW%", None),
+            Instruction::NegateInteger(_pos) => ("NEG%", None),
+
+            Instruction::ConcatStrings(_pos) => ("CONCAT$", None),
+
+            Instruction::ArrayAssignment(key, _pos, nargs) => {
+                ("SETA", Some(format!("{}, {}", key, nargs)))
+            }
+
+            Instruction::ArrayLoad(key, _pos, nargs) => {
+                ("LOADA", Some(format!("{}, {}", key, nargs)))
+            }
+
+            Instruction::Assign(key) => ("SETV", Some(key.to_string())),
+
+            Instruction::BuiltinCall(key, _pos, nargs) => {
+                ("CALLB", Some(format!("{}, {}", key, nargs)))
+            }
+
+            Instruction::Call(span) => ("CALLA", Some(format!("{:04x}", span.addr))),
+
+            Instruction::FunctionCall(key, etype, _pos, nargs) => {
+                let opcode = match etype {
+                    ExprType::Boolean => "CALLF?",
+                    ExprType::Double => "CALLF#",
+                    ExprType::Integer => "CALLF%",
+                    ExprType::Text => "CALLF$",
+                };
+                (opcode, Some(format!("{}, {}", key, nargs)))
+            }
+
+            Instruction::Dim(span) => {
+                let opcode = match (span.shared, span.vtype) {
+                    (false, ExprType::Boolean) => "DIMV?",
+                    (false, ExprType::Double) => "DIMV#",
+                    (false, ExprType::Integer) => "DIMV%",
+                    (false, ExprType::Text) => "DIMV$",
+                    (true, ExprType::Boolean) => "DIMSV?",
+                    (true, ExprType::Double) => "DIMSV#",
+                    (true, ExprType::Integer) => "DIMSV%",
+                    (true, ExprType::Text) => "DIMSV$",
+                };
+                (opcode, Some(format!("{}", span.name)))
+            }
+
+            Instruction::DimArray(span) => {
+                let opcode = match (span.shared, span.subtype) {
+                    (false, ExprType::Boolean) => "DIMA?",
+                    (false, ExprType::Double) => "DIMA#",
+                    (false, ExprType::Integer) => "DIMA%",
+                    (false, ExprType::Text) => "DIMA$",
+                    (true, ExprType::Boolean) => "DIMSA?",
+                    (true, ExprType::Double) => "DIMSA#",
+                    (true, ExprType::Integer) => "DIMSA%",
+                    (true, ExprType::Text) => "DIMSA$",
+                };
+                (opcode, Some(format!("{}, {}", span.name, span.dimensions)))
+            }
+
+            Instruction::End(has_code) => ("END", Some(format!("{}", has_code))),
+
+            Instruction::EnterScope => ("ENTER", None),
+
+            Instruction::DoubleToInteger => ("#TO%", None),
+            Instruction::IntegerToDouble => ("%TO#", None),
+
+            Instruction::Jump(span) => ("JMP", Some(format!("{:04x}", span.addr))),
+            Instruction::JumpIfDefined(span) => {
+                ("JMPVD", Some(format!("{}, {:04x}", span.var, span.addr)))
+            }
+            Instruction::JumpIfTrue(addr) => ("JMPT", Some(format!("{:04x}", addr))),
+            Instruction::JumpIfNotTrue(addr) => ("JMPNT", Some(format!("{:04x}", addr))),
+
+            Instruction::LeaveScope => ("LEAVE", None),
+
+            Instruction::LoadBoolean(key, _pos) => ("LOAD?", Some(key.to_string())),
+            Instruction::LoadDouble(key, _pos) => ("LOAD#", Some(key.to_string())),
+            Instruction::LoadInteger(key, _pos) => ("LOAD%", Some(key.to_string())),
+            Instruction::LoadString(key, _pos) => ("LOAD$", Some(key.to_string())),
+
+            Instruction::LoadRef(key, _etype, _pos) => ("LOADR", Some(key.to_string())),
+
+            Instruction::Nop => ("NOP", None),
+
+            Instruction::PushBoolean(b, _pos) => ("PUSH?", Some(format!("{}", b))),
+            Instruction::PushDouble(d, _pos) => ("PUSH#", Some(format!("{}", d))),
+            Instruction::PushInteger(i, _pos) => ("PUSH%", Some(format!("{}", i))),
+            Instruction::PushString(s, _pos) => ("PUSH$", Some(format!("\"{}\"", s))),
+
+            Instruction::Return(_pos) => ("RET", None),
+
+            Instruction::SetErrorHandler(span) => match span {
+                ErrorHandlerISpan::Jump(addr) => ("SEHA", Some(format!("{:04x}", addr))),
+                ErrorHandlerISpan::None => ("SEHN", None),
+                ErrorHandlerISpan::ResumeNext => ("SEHRN", None),
+            },
+
+            Instruction::Unset(span) => ("UNSETV", Some(format!("{}", span.name))),
+        }
+    }
+
+    /// Returns the position in the source code where this instruction originated.
+    ///
+    /// For some instructions, we cannot tell their location right now, so we return None for those.
+    pub fn pos(&self) -> Option<LineCol> {
+        match self {
+            Instruction::BitwiseAnd(pos) => Some(*pos),
+            Instruction::BitwiseOr(pos) => Some(*pos),
+            Instruction::BitwiseXor(pos) => Some(*pos),
+            Instruction::BitwiseNot(pos) => Some(*pos),
+
+            Instruction::LogicalAnd(pos) => Some(*pos),
+            Instruction::LogicalOr(pos) => Some(*pos),
+            Instruction::LogicalXor(pos) => Some(*pos),
+            Instruction::LogicalNot(pos) => Some(*pos),
+
+            Instruction::ShiftLeft(pos) => Some(*pos),
+            Instruction::ShiftRight(pos) => Some(*pos),
+
+            Instruction::EqualBooleans(pos) => Some(*pos),
+            Instruction::NotEqualBooleans(pos) => Some(*pos),
+
+            Instruction::EqualDoubles(pos) => Some(*pos),
+            Instruction::NotEqualDoubles(pos) => Some(*pos),
+            Instruction::LessDoubles(pos) => Some(*pos),
+            Instruction::LessEqualDoubles(pos) => Some(*pos),
+            Instruction::GreaterDoubles(pos) => Some(*pos),
+            Instruction::GreaterEqualDoubles(pos) => Some(*pos),
+
+            Instruction::EqualIntegers(pos) => Some(*pos),
+            Instruction::NotEqualIntegers(pos) => Some(*pos),
+            Instruction::LessIntegers(pos) => Some(*pos),
+            Instruction::LessEqualIntegers(pos) => Some(*pos),
+            Instruction::GreaterIntegers(pos) => Some(*pos),
+            Instruction::GreaterEqualIntegers(pos) => Some(*pos),
+
+            Instruction::EqualStrings(pos) => Some(*pos),
+            Instruction::NotEqualStrings(pos) => Some(*pos),
+            Instruction::LessStrings(pos) => Some(*pos),
+            Instruction::LessEqualStrings(pos) => Some(*pos),
+            Instruction::GreaterStrings(pos) => Some(*pos),
+            Instruction::GreaterEqualStrings(pos) => Some(*pos),
+
+            Instruction::AddDoubles(pos) => Some(*pos),
+            Instruction::SubtractDoubles(pos) => Some(*pos),
+            Instruction::MultiplyDoubles(pos) => Some(*pos),
+            Instruction::DivideDoubles(pos) => Some(*pos),
+            Instruction::ModuloDoubles(pos) => Some(*pos),
+            Instruction::PowerDoubles(pos) => Some(*pos),
+            Instruction::NegateDouble(pos) => Some(*pos),
+
+            Instruction::AddIntegers(pos) => Some(*pos),
+            Instruction::SubtractIntegers(pos) => Some(*pos),
+            Instruction::MultiplyIntegers(pos) => Some(*pos),
+            Instruction::DivideIntegers(pos) => Some(*pos),
+            Instruction::ModuloIntegers(pos) => Some(*pos),
+            Instruction::PowerIntegers(pos) => Some(*pos),
+            Instruction::NegateInteger(pos) => Some(*pos),
+
+            Instruction::ConcatStrings(pos) => Some(*pos),
+
+            Instruction::ArrayAssignment(_, pos, _) => Some(*pos),
+            Instruction::ArrayLoad(_, pos, _) => Some(*pos),
+            Instruction::Assign(_) => None,
+            Instruction::BuiltinCall(_, pos, _) => Some(*pos),
+            Instruction::Call(_) => None,
+            Instruction::FunctionCall(_, _, pos, _) => Some(*pos),
+            Instruction::Dim(_) => None,
+            Instruction::DimArray(span) => Some(span.name_pos),
+            Instruction::End(_) => None,
+            Instruction::EnterScope => None,
+            Instruction::DoubleToInteger => None,
+            Instruction::IntegerToDouble => None,
+            Instruction::Jump(_) => None,
+            Instruction::JumpIfDefined(_) => None,
+            Instruction::JumpIfTrue(_) => None,
+            Instruction::JumpIfNotTrue(_) => None,
+            Instruction::LeaveScope => None,
+            Instruction::LoadBoolean(_, pos) => Some(*pos),
+            Instruction::LoadDouble(_, pos) => Some(*pos),
+            Instruction::LoadInteger(_, pos) => Some(*pos),
+            Instruction::LoadString(_, pos) => Some(*pos),
+            Instruction::LoadRef(_, _, pos) => Some(*pos),
+            Instruction::Nop => None,
+            Instruction::PushBoolean(_, pos) => Some(*pos),
+            Instruction::PushDouble(_, pos) => Some(*pos),
+            Instruction::PushInteger(_, pos) => Some(*pos),
+            Instruction::PushString(_, pos) => Some(*pos),
+            Instruction::Return(pos) => Some(*pos),
+            Instruction::SetErrorHandler(_) => None,
+            Instruction::Unset(span) => Some(span.pos),
+        }
+    }
+
+    /// Returns true if this instruction represents the execution of a statement.
+    ///
+    /// This is a heuristic to implement `ON ERROR RESUME NEXT`.  It works for now without
+    /// additional tracking, but maybe this needs to change in the future if we add some
+    /// instruction that cannot be disambiguated.
     pub(crate) fn is_statement(&self) -> bool {
         match self {
             Instruction::LogicalAnd(_)
