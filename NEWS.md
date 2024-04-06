@@ -23,7 +23,8 @@ for the time being.**
     fixed handling of line input in prompts.
 
 *   Modified commands that print many lines (`DIR`, `HELP`, and `LIST`) to
-    paginate their output so that they are usable in short consoles.
+    paginate their output so that they are usable in short consoles.  Also
+    applies to the new `DISASM` command.
 
 *   Issue #110: Homogenized the implementation of the SDL and web consoles to
     guarantee consistent behavior and to have indirect test coverage of the
@@ -71,6 +72,9 @@ for the time being.**
 
 *   Issue #112: Added user-defined subroutines (also known as procedures or
     commands).
+
+*   Added the `DISASM` command to show the disassembled version of a compiled
+    program.
 
 ## Changes in version 0.10.0
 

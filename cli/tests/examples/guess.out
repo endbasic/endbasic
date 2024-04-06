@@ -41,3 +41,210 @@ You have 2 attempts left to guess my number
 
 Thanks for playing
 
+0000    PUSH%       15                          # 16:7
+0001    SETV        FG
+0002    PUSH%       4                           # 17:7
+0003    SETV        BG
+0004    PUSH%       14                          # 18:10
+0005    SETV        TITLE
+0006    PUSH%       9                           # 19:8
+0007    SETV        BAD
+0008    PUSH%       10                          # 20:9
+0009    SETV        GOOD
+000a    LOAD%       BG                          # 22:12
+000b    PUSH%       1                           # 22:12
+000c    LOAD%       FG                          # 22:7
+000d    PUSH%       1                           # 22:7
+000e    CALLB       COLOR, 4                    # 22:1
+000f    CALLB       CLS, 0                      # 23:1
+0010    CALLB       PRINT, 0                    # 24:1
+0011    LOAD%       BG                          # 25:15
+0012    PUSH%       1                           # 25:15
+0013    LOAD%       TITLE                       # 25:7
+0014    PUSH%       1                           # 25:7
+0015    CALLB       COLOR, 4                    # 25:1
+0016    PUSH$       " Guess the number!"        # 26:7
+0017    PUSH%       4                           # 26:7
+0018    CALLB       PRINT, 2                    # 26:1
+0019    PUSH$       "==================="       # 27:7
+001a    PUSH%       4                           # 27:7
+001b    CALLB       PRINT, 2                    # 27:1
+001c    LOAD%       BG                          # 28:12
+001d    PUSH%       1                           # 28:12
+001e    LOAD%       FG                          # 28:7
+001f    PUSH%       1                           # 28:7
+0020    CALLB       COLOR, 4                    # 28:1
+0021    CALLB       PRINT, 0                    # 29:1
+0022    LOADR       MAX_NUM                     # 30:46
+0023    PUSH%       1                           # 30:44
+0024    PUSH$       "What's the largest number I can use"    # 30:7
+0025    PUSH%       1                           # 30:7
+0026    CALLB       INPUT, 4                    # 30:1
+0027    LOADR       MAX_ATTEMPTS                # 31:38
+0028    PUSH%       1                           # 31:36
+0029    PUSH$       "How many attempts each time"    # 31:7
+002a    PUSH%       1                           # 31:7
+002b    CALLB       INPUT, 4                    # 31:1
+002c    PUSH%       0                           # 33:9
+002d    SETV        WINS
+002e    PUSH%       0                           # 34:11
+002f    SETV        LOSSES
+0030    PUSH?       true                        # 36:10
+0031    SETV        AGAIN
+0032    LOAD?       AGAIN                       # 37:7
+0033    JMPNT       00b8
+0034    CALLB       PRINT, 0                    # 38:5
+0035    PUSH%       1                           # 39:25
+0036    CALLF#      RND, 1                      # 39:20
+0037    LOAD%       MAX_NUM                     # 39:30
+0038    %TO#
+0039    MUL#                                    # 39:28
+003a    CALLF%      INT, 1                      # 39:15
+003b    SETV        SECRET
+003c    LOAD%       MAX_NUM                     # 40:60
+003d    PUSH%       3                           # 40:60
+003e    PUSH%       1                           # 40:58
+003f    PUSH$       "Alright! I have a secret number between 0 and"    # 40:11
+0040    PUSH%       4                           # 40:11
+0041    CALLB       PRINT, 5                    # 40:5
+0042    LOAD%       MAX_ATTEMPTS                # 42:17
+0043    SETV        ATTEMPTS
+0044    PUSH%       1                           # 43:15
+0045    NEG%                                    # 43:14
+0046    SETV        GUESS
+0047    LOAD%       ATTEMPTS                    # 44:11
+0048    PUSH%       0                           # 44:23
+0049    CMPG%                                   # 44:21
+004a    LOAD%       GUESS                       # 44:29
+004b    LOAD%       SECRET                      # 44:39
+004c    CMPNE%                                  # 44:36
+004d    AND?                                    # 44:25
+004e    JMPNT       008a
+004f    CALLB       PRINT, 0                    # 45:9
+0050    PUSH$       "attempts left to guess my number"    # 46:38
+0051    PUSH%       4                           # 46:38
+0052    PUSH%       1                           # 46:36
+0053    LOAD%       ATTEMPTS                    # 46:27
+0054    PUSH%       3                           # 46:27
+0055    PUSH%       1                           # 46:25
+0056    PUSH$       "You have"                  # 46:15
+0057    PUSH%       4                           # 46:15
+0058    CALLB       PRINT, 8                    # 46:9
+0059    LOADR       GUESS                       # 47:36
+005a    PUSH%       1                           # 47:34
+005b    PUSH$       "What's your guess"         # 47:15
+005c    PUSH%       1                           # 47:15
+005d    CALLB       INPUT, 4                    # 47:9
+005e    LOAD%       GUESS                       # 48:12
+005f    LOAD%       SECRET                      # 48:22
+0060    CMPNE%                                  # 48:19
+0061    JMPNT       0085
+0062    LOAD%       BG                          # 49:25
+0063    PUSH%       1                           # 49:25
+0064    LOAD%       BAD                         # 49:19
+0065    PUSH%       1                           # 49:19
+0066    CALLB       COLOR, 4                    # 49:13
+0067    LOAD%       GUESS                       # 50:16
+0068    LOAD%       SECRET                      # 50:25
+0069    CMPL%                                   # 50:23
+006a    JMPNT       0075
+006b    PUSH$       "is too low!"               # 51:41
+006c    PUSH%       4                           # 51:41
+006d    PUSH%       1                           # 51:39
+006e    LOAD%       GUESS                       # 51:33
+006f    PUSH%       3                           # 51:33
+0070    PUSH%       1                           # 51:31
+0071    PUSH$       "Wrong."                    # 51:23
+0072    PUSH%       4                           # 51:23
+0073    CALLB       PRINT, 8                    # 51:17
+0074    JMP         0080
+0075    PUSH?       true                        # 52:13
+0076    JMPNT       0080
+0077    PUSH$       "is too high!"              # 53:41
+0078    PUSH%       4                           # 53:41
+0079    PUSH%       1                           # 53:39
+007a    LOAD%       GUESS                       # 53:33
+007b    PUSH%       3                           # 53:33
+007c    PUSH%       1                           # 53:31
+007d    PUSH$       "Wrong."                    # 53:23
+007e    PUSH%       4                           # 53:23
+007f    CALLB       PRINT, 8                    # 53:17
+0080    LOAD%       BG                          # 55:24
+0081    PUSH%       1                           # 55:24
+0082    LOAD%       FG                          # 55:19
+0083    PUSH%       1                           # 55:19
+0084    CALLB       COLOR, 4                    # 55:13
+0085    LOAD%       ATTEMPTS                    # 57:21
+0086    PUSH%       1                           # 57:33
+0087    SUB%                                    # 57:31
+0088    SETV        ATTEMPTS
+0089    JMP         0047
+008a    LOAD%       GUESS                       # 60:8
+008b    LOAD%       SECRET                      # 60:17
+008c    CMPE%                                   # 60:15
+008d    JMPNT       009b
+008e    LOAD%       WINS                        # 61:17
+008f    PUSH%       1                           # 61:25
+0090    ADD%                                    # 61:23
+0091    SETV        WINS
+0092    LOAD%       BG                          # 62:22
+0093    PUSH%       1                           # 62:22
+0094    LOAD%       GOOD                        # 62:15
+0095    PUSH%       1                           # 62:15
+0096    CALLB       COLOR, 4                    # 62:9
+0097    PUSH$       "Correct. You win! :-)"     # 63:15
+0098    PUSH%       4                           # 63:15
+0099    CALLB       PRINT, 2                    # 63:9
+009a    JMP         00ac
+009b    PUSH?       true                        # 64:5
+009c    JMPNT       00ac
+009d    LOAD%       LOSSES                      # 65:19
+009e    PUSH%       1                           # 65:29
+009f    ADD%                                    # 65:27
+00a0    SETV        LOSSES
+00a1    LOAD%       BG                          # 66:21
+00a2    PUSH%       1                           # 66:21
+00a3    LOAD%       BAD                         # 66:15
+00a4    PUSH%       1                           # 66:15
+00a5    CALLB       COLOR, 4                    # 66:9
+00a6    LOAD%       SECRET                      # 67:60
+00a7    PUSH%       3                           # 67:60
+00a8    PUSH%       1                           # 67:58
+00a9    PUSH$       "Sorry. You lost :-( The secret number was"    # 67:15
+00aa    PUSH%       4                           # 67:15
+00ab    CALLB       PRINT, 5                    # 67:9
+00ac    LOAD%       BG                          # 69:16
+00ad    PUSH%       1                           # 69:16
+00ae    LOAD%       FG                          # 69:11
+00af    PUSH%       1                           # 69:11
+00b0    CALLB       COLOR, 4                    # 69:5
+00b1    CALLB       PRINT, 0                    # 70:5
+00b2    LOADR       AGAIN                       # 72:40
+00b3    PUSH%       1                           # 72:38
+00b4    PUSH$       "Do you want to play again"    # 72:11
+00b5    PUSH%       1                           # 72:11
+00b6    CALLB       INPUT, 4                    # 72:5
+00b7    JMP         0032
+00b8    CALLB       COLOR, 0                    # 75:1
+00b9    CALLB       CLS, 0                      # 76:1
+00ba    PUSH$       "losses"                    # 77:45
+00bb    PUSH%       4                           # 77:45
+00bc    PUSH%       1                           # 77:43
+00bd    LOAD%       LOSSES                      # 77:36
+00be    PUSH%       3                           # 77:36
+00bf    PUSH%       1                           # 77:34
+00c0    PUSH$       "wins and"                  # 77:24
+00c1    PUSH%       4                           # 77:24
+00c2    PUSH%       1                           # 77:22
+00c3    LOAD%       WINS                        # 77:17
+00c4    PUSH%       3                           # 77:17
+00c5    PUSH%       1                           # 77:15
+00c6    PUSH$       "Score:"                    # 77:7
+00c7    PUSH%       4                           # 77:7
+00c8    CALLB       PRINT, 14                   # 77:1
+00c9    CALLB       PRINT, 0                    # 78:1
+00ca    PUSH$       "Thanks for playing"        # 79:7
+00cb    PUSH%       4                           # 79:7
+00cc    CALLB       PRINT, 2                    # 79:1
+00cd    CALLB       PRINT, 0                    # 80:1
+

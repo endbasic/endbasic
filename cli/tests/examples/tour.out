@@ -156,3 +156,436 @@ you know, to keep me motivated in writing stuff and building this project:
 
 [38;5;10m-- Brought to you by Julio Merino <jmmv@>
 [?25h[39m
+0000    PUSH$       "Welcome!"                  # 48:8
+0001    CALLA       0167
+0002    PUSH$       "Welcome to the EndBASIC tour demo program.  I'm glad you have made it this far!"    # 49:7
+0003    PUSH%       4                           # 49:7
+0004    CALLB       PRINT, 2                    # 49:1
+0005    CALLB       PRINT, 0                    # 50:1
+0006    PUSH$       "EndBASIC is an interpreter for a BASIC-like language and is inspired by"    # 51:7
+0007    PUSH%       4                           # 51:7
+0008    CALLB       PRINT, 2                    # 51:1
+0009    PUSH$       "Amstrad's Locomotive BASIC 1.1 and Microsoft's QuickBASIC 4.5.  The main idea"    # 52:7
+000a    PUSH%       4                           # 52:7
+000b    CALLB       PRINT, 2                    # 52:1
+000c    PUSH$       "behind EndBASIC is to provide a playground for learning the foundations of"    # 53:7
+000d    PUSH%       4                           # 53:7
+000e    CALLB       PRINT, 2                    # 53:1
+000f    PUSH$       "programming in a simplified environment."    # 54:7
+0010    PUSH%       4                           # 54:7
+0011    CALLB       PRINT, 2                    # 54:1
+0012    CALLB       PRINT, 0                    # 55:1
+0013    PUSH$       "EndBASIC is written in Rust and is proven to work on Linux, macOS and Windows."    # 56:7
+0014    PUSH%       4                           # 56:7
+0015    CALLB       PRINT, 2                    # 56:1
+0016    PUSH$       "It likely works on other Unix systems too.  And, thanks to WASM, it also runs"    # 57:7
+0017    PUSH%       4                           # 57:7
+0018    CALLB       PRINT, 2                    # 57:1
+0019    PUSH$       "on the web--which I bet is how you are reading this right now."    # 58:7
+001a    PUSH%       4                           # 58:7
+001b    CALLB       PRINT, 2                    # 58:1
+001c    CALLB       PRINT, 0                    # 59:1
+001d    PUSH$       "If you are accessing EndBASIC via the web interface, please be aware that"    # 60:7
+001e    PUSH%       4                           # 60:7
+001f    CALLB       PRINT, 2                    # 60:1
+0020    PUSH$       "this interface is highly experimental and has many rough edges.  In particular,"    # 61:7
+0021    PUSH%       4                           # 61:7
+0022    CALLB       PRINT, 2                    # 61:1
+0023    PUSH$       "things will go wrong if you try to resize the browser window.  Just reload"    # 62:7
+0024    PUSH%       4                           # 62:7
+0025    CALLB       PRINT, 2                    # 62:1
+0026    PUSH$       "the page for a "reboot"."    # 63:7
+0027    PUSH%       4                           # 63:7
+0028    CALLB       PRINT, 2                    # 63:1
+0029    CALLB       PRINT, 0                    # 64:1
+002a    PUSH%       9                           # 65:7
+002b    CALLB       COLOR, 1                    # 65:1
+002c    PUSH$       "When not in the tour, use the HELP command to access the interactive help"    # 66:7
+002d    PUSH%       4                           # 66:7
+002e    CALLB       PRINT, 2                    # 66:1
+002f    PUSH$       "system."                   # 67:7
+0030    PUSH%       4                           # 67:7
+0031    CALLB       PRINT, 2                    # 67:1
+0032    CALLB       COLOR, 0                    # 68:1
+0033    CALLB       PRINT, 0                    # 69:1
+0034    PUSH$       "Without further ado, let's get started!"    # 70:7
+0035    PUSH%       4                           # 70:7
+0036    CALLB       PRINT, 2                    # 70:1
+0037    CALLA       0191
+0038    PUSH$       "Language basics"           # 73:8
+0039    CALLA       0167
+003a    PUSH$       "There are four primitive types: booleans (?), double-precision floating"    # 74:7
+003b    PUSH%       4                           # 74:7
+003c    CALLB       PRINT, 2                    # 74:1
+003d    PUSH$       "point numbers (#), 32-bit signed integers (%), and strings ($)."    # 75:7
+003e    PUSH%       4                           # 75:7
+003f    CALLB       PRINT, 2                    # 75:1
+0040    CALLB       PRINT, 0                    # 76:1
+0041    PUSH$       "The common IF and SELECT CASE conditional structures, the DO, FOR, and WHILE"    # 77:7
+0042    PUSH%       4                           # 77:7
+0043    CALLB       PRINT, 2                    # 77:1
+0044    PUSH$       "loops, as well as GOSUB and GOTO are supported."    # 78:7
+0045    PUSH%       4                           # 78:7
+0046    CALLB       PRINT, 2                    # 78:1
+0047    CALLB       PRINT, 0                    # 79:1
+0048    PUSH$       "A trivial program to ask a question and print an answer would look like:"    # 80:7
+0049    PUSH%       4                           # 80:7
+004a    CALLB       PRINT, 2                    # 80:1
+004b    CALLB       PRINT, 0                    # 81:1
+004c    PUSH$       "    @retry: INPUT "Enter a number greater than 10: ", n"    # 82:7
+004d    PUSH%       4                           # 82:7
+004e    CALLB       PRINT, 2                    # 82:1
+004f    PUSH$       "    IF n <= 10 THEN GOTO @retry"    # 83:7
+0050    PUSH%       4                           # 83:7
+0051    CALLB       PRINT, 2                    # 83:1
+0052    PUSH$       "    PRINT "Good job!""     # 84:7
+0053    PUSH%       4                           # 84:7
+0054    CALLB       PRINT, 2                    # 84:1
+0055    CALLB       PRINT, 0                    # 85:1
+0056    PUSH$       "Type HELP "LANG" for specific details about the language constructs."    # 86:7
+0057    PUSH%       4                           # 86:7
+0058    CALLB       PRINT, 2                    # 86:1
+0059    CALLA       0191
+005a    PUSH$       "File manipulation"         # 89:8
+005b    CALLA       0167
+005c    PUSH$       "Given that you are reading this tour, you have already encountered how to"    # 90:7
+005d    PUSH%       4                           # 90:7
+005e    CALLB       PRINT, 2                    # 90:1
+005f    PUSH$       "load a program and run it.  But here is how you'd go about creating a new"    # 91:7
+0060    PUSH%       4                           # 91:7
+0061    CALLB       PRINT, 2                    # 91:1
+0062    PUSH$       "program from scratch:"     # 92:7
+0063    PUSH%       4                           # 92:7
+0064    CALLB       PRINT, 2                    # 92:1
+0065    CALLB       PRINT, 0                    # 93:1
+0066    PUSH$       "1. Type NEW to clear the machine's program and variables."    # 94:7
+0067    PUSH%       4                           # 94:7
+0068    CALLB       PRINT, 2                    # 94:1
+0069    PUSH$       "2. Type EDIT to enter the full-screen editor."    # 95:7
+006a    PUSH%       4                           # 95:7
+006b    CALLB       PRINT, 2                    # 95:1
+006c    PUSH$       "3. Type your program in the editor and then press ESC to exit."    # 96:7
+006d    PUSH%       4                           # 96:7
+006e    CALLB       PRINT, 2                    # 96:1
+006f    PUSH$       "4. Optionally save your program with SAVE "some-name.bas"."    # 97:7
+0070    PUSH%       4                           # 97:7
+0071    CALLB       PRINT, 2                    # 97:1
+0072    PUSH$       "5. Run the program with RUN."    # 98:7
+0073    PUSH%       4                           # 98:7
+0074    CALLB       PRINT, 2                    # 98:1
+0075    PUSH$       "6. Repeat from 2 if things don't go as planned."    # 99:7
+0076    PUSH%       4                           # 99:7
+0077    CALLB       PRINT, 2                    # 99:1
+0078    CALLB       PRINT, 0                    # 100:1
+0079    PUSH$       "The cycle above works for demos too.  You can LOAD any demo program and"    # 101:7
+007a    PUSH%       4                           # 101:7
+007b    CALLB       PRINT, 2                    # 101:1
+007c    PUSH$       "enter the interactive editor with EDIT to see and modify its code.  What"    # 102:7
+007d    PUSH%       4                           # 102:7
+007e    CALLB       PRINT, 2                    # 102:1
+007f    PUSH$       "you cannot do is save them under their original name; you will have to pick"    # 103:7
+0080    PUSH%       4                           # 103:7
+0081    CALLB       PRINT, 2                    # 103:1
+0082    PUSH$       "a different name."         # 104:7
+0083    PUSH%       4                           # 104:7
+0084    CALLB       PRINT, 2                    # 104:1
+0085    CALLB       PRINT, 0                    # 105:1
+0086    PUSH$       "If you are in the browser, rest assured that all programs are stored in"    # 106:7
+0087    PUSH%       4                           # 106:7
+0088    CALLB       PRINT, 2                    # 106:1
+0089    PUSH$       "your browser's local storage.  Nothing goes to the cloud."    # 107:7
+008a    PUSH%       4                           # 107:7
+008b    CALLB       PRINT, 2                    # 107:1
+008c    CALLA       0191
+008d    PUSH$       "The file system"           # 110:8
+008e    CALLA       0167
+008f    PUSH$       "In the previous page, you learned how to create files and how to save and"    # 111:7
+0090    PUSH%       4                           # 111:7
+0091    CALLB       PRINT, 2                    # 111:1
+0092    PUSH$       "load them.  Those examples used relative paths.  However, EndBASIC supports"    # 112:7
+0093    PUSH%       4                           # 112:7
+0094    CALLB       PRINT, 2                    # 112:1
+0095    PUSH$       "multiple drives (although it does not yet support directories)."    # 113:7
+0096    PUSH%       4                           # 113:7
+0097    CALLB       PRINT, 2                    # 113:1
+0098    CALLB       PRINT, 0                    # 114:1
+0099    PUSH$       "Paths in EndBASIC have the form DRIVE:FILE or DRIVE:/FILE.  Given that"    # 115:7
+009a    PUSH%       4                           # 115:7
+009b    CALLB       PRINT, 2                    # 115:1
+009c    PUSH$       "directories are not yet supported, both are equivalent, but their meaning"    # 116:7
+009d    PUSH%       4                           # 116:7
+009e    CALLB       PRINT, 2                    # 116:1
+009f    PUSH$       "might change in the future.  All commands that operate on paths accept these"    # 117:7
+00a0    PUSH%       4                           # 117:7
+00a1    CALLB       PRINT, 2                    # 117:1
+00a2    PUSH$       "syntaxes.  Note that the DRIVE: part is optional: when not specified, the"    # 118:7
+00a3    PUSH%       4                           # 118:7
+00a4    CALLB       PRINT, 2                    # 118:1
+00a5    PUSH$       "current drive (shown by the DIR command) will be used."    # 119:7
+00a6    PUSH%       4                           # 119:7
+00a7    CALLB       PRINT, 2                    # 119:1
+00a8    CALLB       PRINT, 0                    # 120:1
+00a9    PUSH$       "You can use the MOUNT command to display the list of currently-mounted drives"    # 121:7
+00aa    PUSH%       4                           # 121:7
+00ab    CALLB       PRINT, 2                    # 121:1
+00ac    PUSH$       "and to attach new ones.  Pay attention to the default MOUNT output as it"    # 122:7
+00ad    PUSH%       4                           # 122:7
+00ae    CALLB       PRINT, 2                    # 122:1
+00af    PUSH$       "shows some of the possible URIs you can use to mount other drives."    # 123:7
+00b0    PUSH%       4                           # 123:7
+00b1    CALLB       PRINT, 2                    # 123:1
+00b2    PUSH$       "For example, if you want to gain access to an arbitrary directory in the"    # 124:7
+00b3    PUSH%       4                           # 124:7
+00b4    CALLB       PRINT, 2                    # 124:1
+00b5    PUSH$       "system, you could do:"     # 125:7
+00b6    PUSH%       4                           # 125:7
+00b7    CALLB       PRINT, 2                    # 125:1
+00b8    CALLB       PRINT, 0                    # 126:1
+00b9    PUSH$       "    MOUNT "TMP", "file:///PATH/TO/TMPDIR""    # 127:7
+00ba    PUSH%       4                           # 127:7
+00bb    CALLB       PRINT, 2                    # 127:1
+00bc    PUSH$       "    CD "TMP:/""            # 128:7
+00bd    PUSH%       4                           # 128:7
+00be    CALLB       PRINT, 2                    # 128:1
+00bf    CALLB       PRINT, 0                    # 129:1
+00c0    PUSH$       "Pay attention to the double quotes surrounding these arguments: these are"    # 130:7
+00c1    PUSH%       4                           # 130:7
+00c2    CALLB       PRINT, 2                    # 130:1
+00c3    PUSH$       "EndBASIC commands and thus you must provide the arguments as strings.  You"    # 131:7
+00c4    PUSH%       4                           # 131:7
+00c5    CALLB       PRINT, 2                    # 131:1
+00c6    PUSH$       "are bound to trip over this a few times due to muscle memory..."    # 132:7
+00c7    PUSH%       4                           # 132:7
+00c8    CALLB       PRINT, 2                    # 132:1
+00c9    CALLA       0191
+00ca    PUSH$       "Screen manipulation"       # 135:8
+00cb    CALLA       0167
+00cc    PUSH$       "You have several commands at your disposal to manipulate the contents of"    # 136:7
+00cd    PUSH%       4                           # 136:7
+00ce    CALLB       PRINT, 2                    # 136:1
+00cf    PUSH$       "the screen.  Visual features are particularly interesting for teaching"    # 137:7
+00d0    PUSH%       4                           # 137:7
+00d1    CALLB       PRINT, 2                    # 137:1
+00d2    PUSH$       "purposes, so expect more in this regard."    # 138:7
+00d3    PUSH%       4                           # 138:7
+00d4    CALLB       PRINT, 2                    # 138:1
+00d5    CALLB       PRINT, 0                    # 139:1
+00d6    PUSH$       "For example, we can print the foundational colors by selecting them with"    # 140:7
+00d7    PUSH%       4                           # 140:7
+00d8    CALLB       PRINT, 2                    # 140:1
+00d9    PUSH$       "the "COLOR" command and positioning the cursor with "LOCATE":"    # 141:7
+00da    PUSH%       4                           # 141:7
+00db    CALLB       PRINT, 2                    # 141:1
+00dc    CALLB       PRINT, 0                    # 142:1
+00dd    PUSH%       0                           # 143:10
+00de    SETV        C
+00df    LOAD%       C                           # 143:5
+00e0    PUSH%       7                           # 143:15
+00e1    CMPLE%                                  # 143:12
+00e2    JMPNT       00f5
+00e3    PUSH%       11                          # 144:15
+00e4    LOAD%       C                           # 144:20
+00e5    ADD%                                    # 144:18
+00e6    PUSH%       4                           # 144:12
+00e7    CALLB       LOCATE, 2                   # 144:5
+00e8    LOAD%       C                           # 145:11
+00e9    CALLB       COLOR, 1                    # 145:5
+00ea    LOAD%       C                           # 146:28
+00eb    PUSH%       3                           # 146:28
+00ec    PUSH%       1                           # 146:26
+00ed    PUSH$       "This is color"             # 146:11
+00ee    PUSH%       4                           # 146:11
+00ef    CALLB       PRINT, 5                    # 146:5
+00f0    LOAD%       C                           # 143:5
+00f1    PUSH%       1                           # 143:16
+00f2    ADD%                                    # 143:12
+00f3    SETV        C
+00f4    JMP         00df
+00f5    PUSH%       8                           # 148:10
+00f6    SETV        C
+00f7    LOAD%       C                           # 148:5
+00f8    PUSH%       15                          # 148:15
+00f9    CMPLE%                                  # 148:12
+00fa    JMPNT       010f
+00fb    PUSH%       11                          # 149:16
+00fc    LOAD%       C                           # 149:21
+00fd    ADD%                                    # 149:19
+00fe    PUSH%       8                           # 149:26
+00ff    SUB%                                    # 149:24
+0100    PUSH%       23                          # 149:12
+0101    CALLB       LOCATE, 2                   # 149:5
+0102    LOAD%       C                           # 150:11
+0103    CALLB       COLOR, 1                    # 150:5
+0104    LOAD%       C                           # 151:28
+0105    PUSH%       3                           # 151:28
+0106    PUSH%       1                           # 151:26
+0107    PUSH$       "This is color"             # 151:11
+0108    PUSH%       4                           # 151:11
+0109    CALLB       PRINT, 5                    # 151:5
+010a    LOAD%       C                           # 148:5
+010b    PUSH%       1                           # 148:17
+010c    ADD%                                    # 148:12
+010d    SETV        C
+010e    JMP         00f7
+010f    CALLB       COLOR, 0                    # 153:1
+0110    CALLA       0191
+0111    PUSH$       "Hardware access"           # 156:8
+0112    CALLA       0167
+0113    PUSH$       "If you happen to be running on a Raspberry Pi, EndBASIC has some support"    # 157:7
+0114    PUSH%       4                           # 157:7
+0115    CALLB       PRINT, 2                    # 157:1
+0116    PUSH$       "to manipulate its hardware.  At the moment this includes only basic access"    # 158:7
+0117    PUSH%       4                           # 158:7
+0118    CALLB       PRINT, 2                    # 158:1
+0119    PUSH$       "to the GPIO lines.  See the "DEMOS:/GPIO.BAS" demo for an example."    # 159:7
+011a    PUSH%       4                           # 159:7
+011b    CALLB       PRINT, 2                    # 159:1
+011c    CALLB       PRINT, 0                    # 160:1
+011d    PUSH$       "Please note that you have to be running on a Raspberry Pi *AND* you must"    # 161:7
+011e    PUSH%       4                           # 161:7
+011f    CALLB       PRINT, 2                    # 161:1
+0120    PUSH$       "have compiled EndBASIC with --features=rpi for this to work."    # 162:7
+0121    PUSH%       4                           # 162:7
+0122    CALLB       PRINT, 2                    # 162:1
+0123    CALLA       0191
+0124    PUSH$       "Enjoy"                     # 165:8
+0125    CALLA       0167
+0126    PUSH$       "And that's it for the tour.  You can now type EDIT to see the code that"    # 166:7
+0127    PUSH%       4                           # 166:7
+0128    CALLB       PRINT, 2                    # 166:1
+0129    PUSH$       "took you over this journey, load other demo files or... just go forth and"    # 167:7
+012a    PUSH%       4                           # 167:7
+012b    CALLB       PRINT, 2                    # 167:1
+012c    PUSH$       "explore.  HELP, MOUNT, and DIR are your friends at any point, but so that"    # 168:7
+012d    PUSH%       4                           # 168:7
+012e    CALLB       PRINT, 2                    # 168:1
+012f    PUSH$       "you don't feel too lost, run this now:"    # 169:7
+0130    PUSH%       4                           # 169:7
+0131    CALLB       PRINT, 2                    # 169:1
+0132    CALLB       PRINT, 0                    # 170:1
+0133    PUSH%       1                           # 171:7
+0134    CALLB       COLOR, 1                    # 171:1
+0135    PUSH$       "    CD "DEMOS:/""          # 172:7
+0136    PUSH%       4                           # 172:7
+0137    CALLB       PRINT, 2                    # 172:1
+0138    PUSH$       "    DIR"                   # 173:7
+0139    PUSH%       4                           # 173:7
+013a    CALLB       PRINT, 2                    # 173:1
+013b    CALLB       COLOR, 0                    # 174:1
+013c    CALLB       PRINT, 0                    # 175:1
+013d    PUSH$       "If you like what you have seen so far, please head to the project's GitHub"    # 176:7
+013e    PUSH%       4                           # 176:7
+013f    CALLB       PRINT, 2                    # 176:1
+0140    PUSH$       "page and give it a star:"    # 177:7
+0141    PUSH%       4                           # 177:7
+0142    CALLB       PRINT, 2                    # 177:1
+0143    PUSH%       12                          # 178:7
+0144    CALLB       COLOR, 1                    # 178:1
+0145    CALLB       PRINT, 0                    # 179:1
+0146    PUSH$       "    https://github.com/endbasic/endbasic/"    # 180:7
+0147    PUSH%       4                           # 180:7
+0148    CALLB       PRINT, 2                    # 180:1
+0149    CALLB       PRINT, 0                    # 181:1
+014a    CALLB       COLOR, 0                    # 182:1
+014b    PUSH$       "Then, visit my blog and subscribe to receive fresh EndBASIC content or..."    # 183:7
+014c    PUSH%       4                           # 183:7
+014d    CALLB       PRINT, 2                    # 183:1
+014e    PUSH$       "you know, to keep me motivated in writing stuff and building this project:"    # 184:7
+014f    PUSH%       4                           # 184:7
+0150    CALLB       PRINT, 2                    # 184:1
+0151    PUSH%       12                          # 185:7
+0152    CALLB       COLOR, 1                    # 185:1
+0153    CALLB       PRINT, 0                    # 186:1
+0154    PUSH$       "    https://jmmv.dev/"     # 187:7
+0155    PUSH%       4                           # 187:7
+0156    CALLB       PRINT, 2                    # 187:1
+0157    CALLB       PRINT, 0                    # 188:1
+0158    CALLB       COLOR, 0                    # 189:1
+0159    PUSH$       "Thank you! :-)"            # 190:7
+015a    PUSH%       4                           # 190:7
+015b    CALLB       PRINT, 2                    # 190:1
+015c    CALLB       PRINT, 0                    # 191:1
+015d    PUSH%       10                          # 192:7
+015e    CALLB       COLOR, 1                    # 192:1
+015f    PUSH$       "-- Brought to you by Julio Merino <jmmv@>"    # 193:7
+0160    PUSH%       4                           # 193:7
+0161    CALLB       PRINT, 2                    # 193:1
+0162    PUSH?       true                        # 196:10
+0163    CALLB       GFX_SYNC, 1                 # 196:1
+0164    CALLB       COLOR, 0                    # 197:1
+0165    CALLB       PRINT, 0                    # 198:1
+0166    JMP         01b0
+0167    ENTER
+0168    SETV        TITLE
+0169    CALLB       CLS, 0                      # 18:5
+016a    PUSH?       false                       # 19:14
+016b    CALLB       GFX_SYNC, 1                 # 19:5
+016c    PUSH%       11                          # 20:11
+016d    CALLB       COLOR, 1                    # 20:5
+016e    CALLB       PRINT, 0                    # 21:5
+016f    PUSH$       " EndBASIC tour: "          # 22:14
+0170    LOAD$       TITLE                       # 22:35
+0171    CONCAT$                                 # 22:33
+0172    SETV        TITLE
+0173    PUSH$       ""                          # 23:18
+0174    SETV        UNDERLINE
+0175    PUSH%       1                           # 24:13
+0176    SETV        I
+0177    LOAD%       I                           # 24:9
+0178    LOAD$       TITLE                       # 24:23
+0179    CALLF%      LEN, 1                      # 24:18
+017a    PUSH%       1                           # 24:33
+017b    ADD%                                    # 24:31
+017c    CMPLE%                                  # 24:15
+017d    JMPNT       0187
+017e    LOAD$       UNDERLINE                   # 25:22
+017f    PUSH$       "="                         # 25:35
+0180    CONCAT$                                 # 25:33
+0181    SETV        UNDERLINE
+0182    LOAD%       I                           # 24:9
+0183    PUSH%       1                           # 24:34
+0184    ADD%                                    # 24:15
+0185    SETV        I
+0186    JMP         0177
+0187    LOAD$       TITLE                       # 27:11
+0188    PUSH%       4                           # 27:11
+0189    CALLB       PRINT, 2                    # 27:5
+018a    LOAD$       UNDERLINE                   # 28:11
+018b    PUSH%       4                           # 28:11
+018c    CALLB       PRINT, 2                    # 28:5
+018d    CALLB       COLOR, 0                    # 29:5
+018e    CALLB       PRINT, 0                    # 30:5
+018f    LEAVE
+0190    RET                                     # 31:1
+0191    ENTER
+0192    CALLB       PRINT, 0                    # 35:5
+0193    PUSH%       11                          # 36:11
+0194    CALLB       COLOR, 1                    # 36:5
+0195    PUSH%       0                           # 37:64
+0196    PUSH%       1                           # 37:63
+0197    PUSH$       "Press ENTER to continue or ESC to exit the demo..."    # 37:11
+0198    PUSH%       4                           # 37:11
+0199    CALLB       PRINT, 4                    # 37:5
+019a    PUSH?       true                        # 38:14
+019b    CALLB       GFX_SYNC, 1                 # 38:5
+019c    CALLF$      INKEY, 0                    # 40:21
+019d    SETV        0SELECT1
+019e    LOAD$       0SELECT1                    # 41:14
+019f    PUSH$       "ENTER"                     # 41:14
+01a0    CMPE$                                   # 41:14
+01a1    JMPNT       01a4
+01a2    JMP         01ae
+01a3    JMP         01ac
+01a4    LOAD$       0SELECT1                    # 42:14
+01a5    PUSH$       "ESC"                       # 42:14
+01a6    CMPE$                                   # 42:14
+01a7    JMPNT       01aa
+01a8    JMP         0162
+01a9    JMP         01ac
+01aa    PUSH#       0.01                        # 43:26
+01ab    CALLB       SLEEP, 1                    # 43:20
+01ac    UNSETV      0SELECT1                    # 44:9
+01ad    JMP         019c
+01ae    LEAVE
+01af    RET                                     # 46:1
+
