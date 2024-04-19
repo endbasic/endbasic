@@ -1,5 +1,5 @@
 ' EndBASIC
-' Copyright 2021 Julio Merino
+' Copyright 2024 Julio Merino
 '
 ' Licensed under the Apache License, Version 2.0 (the "License"); you may not
 ' use this file except in compliance with the License.  You may obtain a copy
@@ -13,7 +13,10 @@
 ' License for the specific language governing permissions and limitations
 ' under the License.
 
-' A sample program to test the scripting interpreter.
+' A sample program to test compilation errors in the scripting interpreter.
 
-RANDOMIZE 10
-PRINT "The random number is:"; INT(RND() * 100.0)
+' Call a command that is for interactive purposes only and expect that the
+' program fails to compile.
+PRINT "Not visible"
+HELP "RANDOMIZE"
+PRINT "Not visible"

@@ -48,7 +48,8 @@ This command resets the machine to a semi-pristine state by clearing all user-de
 and restoring the state of shared resources.  These resources include: the console, whose color \
 and video syncing bit are reset; and the GPIO pins, which are set to their default state.
 The stored program is kept in memory.  To clear that too, use NEW (but don't forget to first \
-SAVE your program!).",
+SAVE your program!).
+This command is for interactive use only.",
                 )
                 .build(),
         })
@@ -183,14 +184,18 @@ impl Callable for SleepCommand {
     }
 }
 
-/// Instantiates all REPL commands and adds them to the `machine`.
+/// Instantiates all REPL commands for the scripting machine and adds them to the `machine`.
 ///
 /// `sleep_fn` is an async function that implements a pause given a `Duration`.  If not provided,
 /// uses the `std::thread::sleep` function.
-pub fn add_all(machine: &mut Machine, sleep_fn: Option<SleepFn>) {
-    machine.add_callable(ClearCommand::new());
+pub fn add_scripting(machine: &mut Machine, sleep_fn: Option<SleepFn>) {
     machine.add_callable(ErrmsgFunction::new());
     machine.add_callable(SleepCommand::new(sleep_fn.unwrap_or_else(|| Box::from(system_sleep))));
+}
+
+/// Instantiates all REPL commands for the interactive machine and adds them to the `machine`.
+pub fn add_interactive(machine: &mut Machine) {
+    machine.add_callable(ClearCommand::new());
 }
 
 #[cfg(test)]
@@ -203,7 +208,7 @@ mod tests {
     fn test_clear_ok() {
         Tester::default().run("a = 1: CLEAR").expect_clear().check();
         Tester::default()
-            .run("DIM a(2): CLEAR: DIM a(5) AS STRING: CLEAR")
+            .run_n(&["DIM a(2): CLEAR", "DIM a(5) AS STRING: CLEAR"])
             .expect_clear()
             .expect_clear()
             .check();

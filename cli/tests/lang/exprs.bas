@@ -28,7 +28,6 @@ PRINT TRUE
 PRINT 0.0
 PRINT 0
 PRINT "z"
-CLEAR
 
 PRINT ">>> Symbol references"
 b = TRUE: PRINT b
@@ -36,7 +35,6 @@ d = 0.0: PRINT d
 i = 0: PRINT i
 s = "z": PRINT s
 PRINT x: PRINT ERRMSG
-CLEAR
 
 PRINT ">>> Logical operations"
 ' These tests just make sure that the expression evaluator delegates to the
@@ -47,7 +45,6 @@ PRINT FALSE AND 0: PRINT ERRMSG
 PRINT FALSE OR 0: PRINT ERRMSG
 PRINT FALSE XOR 0: PRINT ERRMSG
 PRINT NOT 0.0: PRINT ERRMSG
-CLEAR
 
 PRINT ">>> Relational operations"
 ' These tests just make sure that the expression evaluator delegates to the
@@ -60,7 +57,6 @@ PRINT FALSE < 0: PRINT ERRMSG
 PRINT FALSE <= 0: PRINT ERRMSG
 PRINT FALSE > 0: PRINT ERRMSG
 PRINT FALSE >= 0: PRINT ERRMSG
-CLEAR
 
 PRINT ">>> Arithmetic operations"
 ' These tests just make sure that the expression evaluator delegates to the
@@ -74,7 +70,6 @@ PRINT FALSE / 0: PRINT ERRMSG
 PRINT FALSE MOD 0: PRINT ERRMSG
 PRINT FALSE ^ 0: PRINT ERRMSG
 PRINT -FALSE: PRINT ERRMSG
-CLEAR
 
 PRINT ">>> Operations and variables"
 x = 10
@@ -82,30 +77,18 @@ y = 3
 PRINT y * (x + 2)
 PRINT x = (7 + y)
 PRINT 3 = 7 + TRUE: PRINT ERRMSG
-CLEAR
 
 PRINT ">>> Array accesses"
-DIM x(2, 4) AS INTEGER
-x(1, 3) = 8
-PRINT x(0, 3)
-PRINT x%(1, 3)
-PRINT x#(1, 3): PRINT ERRMSG
-PRINT x(1): PRINT ERRMSG
-PRINT x(-1): PRINT ERRMSG
-PRINT x(10, 0): PRINT ERRMSG
-PRINT y$(3, 4): PRINT ERRMSG
-CLEAR
+DIM a(2, 4) AS INTEGER
+a(1, 3) = 8
+PRINT a(0, 3)
+PRINT a%(1, 3)
+PRINT a(1): PRINT ERRMSG
+PRINT a(-1): PRINT ERRMSG
+PRINT a(10, 0): PRINT ERRMSG
 
 PRINT ">>> Simple function calls"
 PRINT PI
 PRINT MAX(5)
 PRINT MAX(2, 5, 3)
 PRINT MAX#(2, 5, 3)
-PRINT MAX$(2, 5, 3): PRINT ERRMSG
-PRINT UNKNOWN(2): PRINT ERRMSG
-CLEAR
-
-PRINT ">>> Calling of non-functions"
-x = 0
-PRINT x()
-PRINT PRINT()

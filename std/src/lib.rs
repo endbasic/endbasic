@@ -117,7 +117,7 @@ impl MachineBuilder {
         data::add_all(&mut machine);
         gfx::add_all(&mut machine, console);
         gpio::add_all(&mut machine, gpio_pins);
-        exec::add_all(&mut machine, self.sleep_fn);
+        exec::add_scripting(&mut machine, self.sleep_fn);
         numerics::add_all(&mut machine);
         strings::add_all(&mut machine);
         Ok(machine)
@@ -179,6 +179,7 @@ impl InteractiveMachineBuilder {
         let storage = self.get_storage();
         let mut machine = self.builder.build()?;
 
+        exec::add_interactive(&mut machine);
         help::add_all(&mut machine, console.clone());
         program::add_all(&mut machine, program, console.clone(), storage.clone());
         storage::add_all(&mut machine, console, storage);

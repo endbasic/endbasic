@@ -156,6 +156,9 @@ pub enum Instruction {
     /// Represents an assignment to an element of an array with the given number of subscripts.
     ArrayAssignment(VarRef, LineCol, usize),
 
+    /// Represents a load of an array's element into the stack.
+    ArrayLoad(VarRef, LineCol, usize),
+
     /// Represents an assignment of a value to a variable.
     Assign(VarRef, LineCol),
 
@@ -219,6 +222,7 @@ impl Instruction {
     pub(crate) fn is_statement(&self) -> bool {
         match self {
             Instruction::And(_)
+            | Instruction::ArrayLoad(_, _, _)
             | Instruction::Or(_)
             | Instruction::Xor(_)
             | Instruction::Not(_)
