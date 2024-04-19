@@ -597,6 +597,8 @@ Output from HELP "CLEAR":
     The stored program is kept in memory.  To clear that too, use NEW (but
     don't forget to first SAVE your program!).
 
+    This command is for interactive use only.
+
 Output from HELP "CLS":
 
 [38;5;11m    CLS

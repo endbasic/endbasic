@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::reader::LineCol;
+use crate::syms::{Symbol, Symbols};
 
 /// Compilation errors.
 #[derive(Debug, thiserror::Error)]
@@ -39,6 +40,83 @@ impl Error {
 
 /// Result for compiler return values.
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Information about a symbol in the symbols table.
+pub(crate) enum SymbolPrototype {
+    /// Information about an array.
+    Array(VarType),
+
+    /// Information about a callable.
+    Callable(VarType),
+
+    /// Information about a variable.
+    Variable(#[allow(unused)] VarType),
+}
+
+/// The key of a symbol in the symbols table.
+#[derive(Hash, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct SymbolKey(String);
+
+impl<R: AsRef<str>> From<R> for SymbolKey {
+    fn from(value: R) -> Self {
+        Self(value.as_ref().to_ascii_uppercase())
+    }
+}
+
+/// Type for the symbols table.
+#[derive(Default)]
+pub(crate) struct SymbolsTable {
+    table: HashMap<SymbolKey, SymbolPrototype>,
+}
+
+impl From<HashMap<SymbolKey, SymbolPrototype>> for SymbolsTable {
+    fn from(table: HashMap<SymbolKey, SymbolPrototype>) -> Self {
+        Self { table }
+    }
+}
+
+impl From<&Symbols> for SymbolsTable {
+    fn from(syms: &Symbols) -> Self {
+        let mut table = HashMap::default();
+        for (name, symbol) in syms.as_hashmap() {
+            let proto = match symbol {
+                Symbol::Array(array) => SymbolPrototype::Array(array.subtype()),
+                Symbol::Callable(callable) => {
+                    SymbolPrototype::Callable(callable.metadata().return_type())
+                }
+                Symbol::Variable(var) => SymbolPrototype::Variable(var.as_vartype()),
+            };
+            debug_assert_eq!(name, &name.to_ascii_uppercase());
+            table.insert(SymbolKey::from(name), proto);
+        }
+        Self { table }
+    }
+}
+
+impl SymbolsTable {
+    /// Returns true if the symbols table contains `key`.
+    fn contains_key(&mut self, key: &SymbolKey) -> bool {
+        self.table.contains_key(key)
+    }
+
+    /// Returns the information for the symbol `key` if it exists, otherwise `None`.
+    fn get(&self, key: &SymbolKey) -> Option<&SymbolPrototype> {
+        self.table.get(key)
+    }
+
+    /// Inserts the new information `proto` about symbol `key` into the symbols table.
+    /// The symbol must not yet exist.
+    fn insert(&mut self, key: SymbolKey, proto: SymbolPrototype) {
+        let previous = self.table.insert(key, proto);
+        assert!(previous.is_none(), "Cannot redefine a symbol");
+    }
+
+    /// Removes information about the symbol `key`.
+    fn remove(&mut self, key: SymbolKey) {
+        let previous = self.table.remove(&key);
+        assert!(previous.is_some(), "Cannot unset a non-existing symbol");
+    }
+}
 
 /// Indicates the type of fixup required at the address.
 enum FixupType {
@@ -103,6 +181,9 @@ struct Compiler {
 
     /// Data discovered so far.
     data: Vec<Option<Value>>,
+
+    /// Symbols table.
+    symtable: SymbolsTable,
 }
 
 impl Compiler {
@@ -131,6 +212,23 @@ impl Compiler {
     /// digit.
     fn select_test_var_name(selects: usize) -> String {
         format!("0select{}", selects)
+    }
+
+    /// Compiles an assignment, be it from the code or one synthesized during compilation.
+    ///
+    /// It's important to always use this function instead of manually emitting `Instruction::Assign`
+    /// instructions to ensure consistent handling of the symbols table.
+    fn compile_assignment(&mut self, vref: VarRef, vref_pos: LineCol, expr: Expr) -> Result<()> {
+        let key = SymbolKey::from(&vref.name());
+        // TODO(jmmv): Replace with an error.
+        if !self.symtable.contains_key(&key) {
+            self.symtable.insert(key, SymbolPrototype::Variable(vref.ref_type()));
+        }
+
+        self.compile_expr(expr, false)?;
+        self.emit(Instruction::Assign(vref, vref_pos));
+
+        Ok(())
     }
 
     /// Compiles a `DO` loop and appends its instructions to the compilation context.
@@ -224,8 +322,7 @@ impl Compiler {
             });
         }
 
-        self.compile_expr(span.start, false)?;
-        self.emit(Instruction::Assign(span.iter.clone(), span.iter_pos));
+        self.compile_assignment(span.iter.clone(), span.iter_pos, span.start)?;
 
         let start_pc = self.next_pc;
         self.compile_expr(span.end, false)?;
@@ -233,8 +330,7 @@ impl Compiler {
 
         self.compile_many(span.body)?;
 
-        self.compile_expr(span.next, false)?;
-        self.emit(Instruction::Assign(span.iter.clone(), span.iter_pos));
+        self.compile_assignment(span.iter.clone(), span.iter_pos, span.next)?;
 
         self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
 
@@ -353,9 +449,7 @@ impl Compiler {
 
         self.selects += 1;
         let test_vref = VarRef::new(Compiler::select_test_var_name(self.selects), VarType::Auto);
-        let expr_pos = span.expr.start_pos();
-        self.compile_expr(span.expr, false)?;
-        self.emit(Instruction::Assign(test_vref.clone(), expr_pos));
+        self.compile_assignment(test_vref.clone(), span.expr.start_pos(), span.expr)?;
 
         let mut iter = span.cases.into_iter();
         let mut next = iter.next();
@@ -390,10 +484,12 @@ impl Compiler {
             self.instrs[end_pc] = Instruction::Jump(JumpISpan { addr: self.next_pc });
         }
 
+        let test_key = SymbolKey::from(test_vref.name());
         self.emit(Instruction::Unset(UnsetISpan {
             name: test_vref.take_name(),
             pos: span.end_pos,
         }));
+        self.symtable.remove(test_key);
 
         Ok(())
     }
@@ -553,7 +649,44 @@ impl Compiler {
                 for arg in span.args.into_iter().rev() {
                     self.compile_expr(arg, true)?;
                 }
-                self.emit(Instruction::FunctionCall(span.fref, span.pos, nargs));
+
+                let key = SymbolKey::from(span.fref.name());
+                match self.symtable.get(&key) {
+                    Some(SymbolPrototype::Array(vtype)) => {
+                        if !span.fref.accepts(*vtype) {
+                            return Err(Error::new(
+                                span.pos,
+                                format!("Incompatible type annotation in {} reference", span.fref),
+                            ));
+                        }
+                        self.emit(Instruction::ArrayLoad(span.fref, span.pos, nargs));
+                    }
+
+                    Some(SymbolPrototype::Callable(vtype)) => {
+                        if !span.fref.accepts(*vtype) {
+                            return Err(Error::new(
+                                span.pos,
+                                format!("Incompatible type annotation in {} reference", span.fref),
+                            ));
+                        }
+
+                        self.emit(Instruction::FunctionCall(span.fref, span.pos, nargs));
+                    }
+
+                    Some(SymbolPrototype::Variable(_)) => {
+                        return Err(Error::new(
+                            span.pos,
+                            format!("{} is not an array nor a function", span.fref.name()),
+                        ));
+                    }
+
+                    None => {
+                        return Err(Error::new(
+                            span.pos,
+                            format!("Unknown function or array {}", span.fref.name()),
+                        ));
+                    }
+                }
             }
         }
 
@@ -573,11 +706,36 @@ impl Compiler {
             }
 
             Statement::Assignment(span) => {
-                self.compile_expr(span.expr, false)?;
-                self.emit(Instruction::Assign(span.vref, span.vref_pos));
+                self.compile_assignment(span.vref, span.vref_pos, span.expr)?;
             }
 
             Statement::BuiltinCall(span) => {
+                let key = SymbolKey::from(&span.name);
+                match self.symtable.get(&key) {
+                    Some(SymbolPrototype::Callable(ftype)) => {
+                        if *ftype != VarType::Void {
+                            return Err(Error::new(
+                                span.name_pos,
+                                format!("{} is not a command", span.name),
+                            ));
+                        }
+                    }
+
+                    Some(_) => {
+                        return Err(Error::new(
+                            span.name_pos,
+                            format!("{} is not a command", span.name),
+                        ));
+                    }
+
+                    None => {
+                        return Err(Error::new(
+                            span.name_pos,
+                            format!("Unknown builtin {}", span.name),
+                        ));
+                    }
+                }
+
                 let mut nargs = 0;
                 for argspan in span.args.into_iter().rev() {
                     if argspan.sep != ArgSep::End {
@@ -598,6 +756,7 @@ impl Compiler {
                     }
                     nargs += 1;
                 }
+
                 let bref = VarRef::new(span.name, VarType::Auto);
                 self.emit(Instruction::BuiltinCall(bref, span.name_pos, nargs));
             }
@@ -607,10 +766,24 @@ impl Compiler {
             }
 
             Statement::Dim(span) => {
+                let key = SymbolKey::from(&span.name);
+                // TODO(jmmv): Replace with an error.
+                if !self.symtable.contains_key(&key) {
+                    self.symtable.insert(key, SymbolPrototype::Variable(span.vtype));
+                }
+
                 self.emit(Instruction::Dim(span));
             }
 
             Statement::DimArray(span) => {
+                let key = SymbolKey::from(&span.name);
+                if self.symtable.contains_key(&key) {
+                    return Err(Error::new(
+                        span.name_pos,
+                        format!("Cannot DIM already-defined symbol {}", span.name),
+                    ));
+                }
+
                 let nargs = span.dimensions.len();
                 for arg in span.dimensions.into_iter().rev() {
                     self.compile_expr(arg, false)?;
@@ -622,6 +795,8 @@ impl Compiler {
                     subtype: span.subtype,
                     subtype_pos: span.subtype_pos,
                 }));
+
+                self.symtable.insert(key, SymbolPrototype::Array(span.subtype));
             }
 
             Statement::Do(span) => {
@@ -733,26 +908,49 @@ impl Compiler {
 }
 
 /// Compiles a collection of statements into an image ready for execution.
-pub fn compile(stmts: Vec<Statement>) -> Result<Image> {
-    let mut compiler = Compiler::default();
+///
+/// `symtable` is the symbols table as used by the compiler and should be prepopulated with any
+/// callables that the compiled program should recognize.
+fn compile_aux(stmts: Vec<Statement>, symtable: SymbolsTable) -> Result<Image> {
+    let mut compiler = Compiler { symtable, ..Default::default() };
     compiler.compile_many(stmts)?;
     compiler.to_image()
 }
 
+/// Compiles a collection of statements into an image ready for execution.
+///
+/// `syms` is a reference to the execution symbols and is used to obtain the names of the callables
+/// that exist in the virtual machine.
+// TODO(jmmv): This is ugly.  Now that we have a symbols table in here, we should not _also_ have a
+// Symbols object to maintain runtime state (or if we do, we shouldn't be getting it here).
+pub fn compile(stmts: Vec<Statement>, syms: &Symbols) -> Result<Image> {
+    compile_aux(stmts, SymbolsTable::from(syms))
+}
+
 #[cfg(test)]
 mod testutils {
-    use crate::parser;
-
     use super::*;
+    use crate::parser;
 
     /// Builder pattern to prepare the compiler for testing purposes.
     #[derive(Default)]
     #[must_use]
     pub(crate) struct Tester {
         stmts: Vec<Statement>,
+        symtable: SymbolsTable,
     }
 
     impl Tester {
+        /// Inserts `name` into the symbols table with the type defined by `proto`.
+        pub(crate) fn define<K: Into<SymbolKey>>(
+            mut self,
+            name: K,
+            proto: SymbolPrototype,
+        ) -> Self {
+            self.symtable.insert(name.into(), proto);
+            self
+        }
+
         /// Parses and appends statements to the list of statements to be compiled.
         pub(crate) fn parse(mut self, input: &str) -> Self {
             let mut stmts = parser::parse(&mut input.as_bytes()).unwrap();
@@ -764,7 +962,7 @@ mod testutils {
         /// validate expectations about the compilation.
         pub(crate) fn compile(self) -> Checker {
             Checker {
-                result: compile(self.stmts),
+                result: compile_aux(self.stmts, self.symtable),
                 exp_error: None,
                 ignore_instrs: false,
                 exp_instrs: vec![],
@@ -892,6 +1090,7 @@ mod tests {
     #[test]
     fn test_compile_builtin_call_no_args() {
         Tester::default()
+            .define("CMD", SymbolPrototype::Callable(VarType::Void))
             .parse("CMD")
             .compile()
             .expect_instr(
@@ -904,6 +1103,7 @@ mod tests {
     #[test]
     fn test_compile_builtin_call_separator_types() {
         Tester::default()
+            .define("CMD", SymbolPrototype::Callable(VarType::Void))
             .parse("CMD a;;b,c AS d")
             .compile()
             .expect_instr(0, Instruction::LoadRef(VarRef::new("d", VarType::Auto), lc(1, 15)))
@@ -1010,6 +1210,7 @@ mod tests {
     #[test]
     fn test_compile_do_infinite() {
         Tester::default()
+            .define("FOO", SymbolPrototype::Callable(VarType::Void))
             .parse("DO\nFOO\nLOOP")
             .compile()
             .expect_instr(
@@ -1023,6 +1224,7 @@ mod tests {
     #[test]
     fn test_compile_do_pre_guard() {
         Tester::default()
+            .define("FOO", SymbolPrototype::Callable(VarType::Void))
             .parse("DO WHILE TRUE\nFOO\nLOOP")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
@@ -1044,6 +1246,7 @@ mod tests {
     #[test]
     fn test_compile_do_post_guard() {
         Tester::default()
+            .define("FOO", SymbolPrototype::Callable(VarType::Void))
             .parse("DO\nFOO\nLOOP WHILE TRUE")
             .compile()
             .expect_instr(
@@ -1318,8 +1521,25 @@ mod tests {
     }
 
     #[test]
+    fn test_compile_expr_array_ref() {
+        Tester::default()
+            .define("FOO", SymbolPrototype::Array(VarType::Integer))
+            .parse("i = FOO(3, j, k + 1)")
+            .compile()
+            .expect_instr(0, Instruction::Load(VarRef::new("k", VarType::Auto), lc(1, 15)))
+            .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 19)))
+            .expect_instr(2, Instruction::Add(lc(1, 17)))
+            .expect_instr(3, Instruction::LoadRef(VarRef::new("j", VarType::Auto), lc(1, 12)))
+            .expect_instr(4, Instruction::Push(Value::Integer(3), lc(1, 9)))
+            .expect_instr(5, Instruction::ArrayLoad(VarRef::new("FOO", VarType::Auto), lc(1, 5), 3))
+            .expect_instr(6, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(1, 1)))
+            .check();
+    }
+
+    #[test]
     fn test_compile_expr_function_call() {
         Tester::default()
+            .define("FOO", SymbolPrototype::Callable(VarType::Integer))
             .parse("i = FOO(3, j, k + 1)")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("k", VarType::Auto), lc(1, 15)))
@@ -1332,6 +1552,24 @@ mod tests {
                 Instruction::FunctionCall(VarRef::new("FOO", VarType::Auto), lc(1, 5), 3),
             )
             .expect_instr(6, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(1, 1)))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_or_function_not_defined() {
+        Tester::default()
+            .parse("i = FOO(3, j, k + 1)")
+            .compile()
+            .expect_err("1:5: Unknown function or array FOO")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_or_function_references_variable() {
+        Tester::default()
+            .parse("i = 3: j = i()")
+            .compile()
+            .expect_err("1:12: i is not an array nor a function")
             .check();
     }
 
@@ -1472,6 +1710,7 @@ mod tests {
     #[test]
     fn test_compile_gosub_and_return() {
         Tester::default()
+            .define("FOO", SymbolPrototype::Callable(VarType::Void))
             .parse("@sub\nFOO\nRETURN\nGOSUB @sub")
             .compile()
             .expect_instr(
@@ -1495,6 +1734,7 @@ mod tests {
     #[test]
     fn test_compile_if_one_branch() {
         Tester::default()
+            .define("FOO", SymbolPrototype::Callable(VarType::Void))
             .parse("IF FALSE THEN: FOO: END IF")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(false), lc(1, 4)))
@@ -1515,6 +1755,9 @@ mod tests {
     #[test]
     fn test_compile_if_many_branches() {
         Tester::default()
+            .define("FOO", SymbolPrototype::Callable(VarType::Void))
+            .define("BAR", SymbolPrototype::Callable(VarType::Void))
+            .define("BAZ", SymbolPrototype::Callable(VarType::Void))
             .parse("IF FALSE THEN\nFOO\nELSEIF TRUE THEN\nBAR\nELSE\nBAZ\nEND IF")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(false), lc(1, 4)))
@@ -1600,6 +1843,7 @@ mod tests {
     /// `exp_expr` must assume that its position starts at `(2, 6)`.
     fn do_compile_case_guard_test(guards: &str, exp_expr_instrs: Vec<Instruction>) {
         let mut t = Tester::default()
+            .define("FOO", SymbolPrototype::Callable(VarType::Void))
             .parse(&format!("SELECT CASE 5\nCASE {}\nFOO\nEND SELECT", guards))
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -1754,6 +1998,7 @@ mod tests {
     #[test]
     fn test_compile_select_one_case() {
         Tester::default()
+            .define("FOO", SymbolPrototype::Callable(VarType::Void))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -1796,6 +2041,7 @@ mod tests {
     #[test]
     fn test_compile_select_only_case_else() {
         Tester::default()
+            .define("FOO", SymbolPrototype::Callable(VarType::Void))
             .parse("SELECT CASE 5\nCASE ELSE\nFOO\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -1814,6 +2060,8 @@ mod tests {
     #[test]
     fn test_compile_select_many_cases_without_else() {
         Tester::default()
+            .define("FOO", SymbolPrototype::Callable(VarType::Void))
+            .define("BAR", SymbolPrototype::Callable(VarType::Void))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE IS <> 8\nBAR\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -1857,6 +2105,8 @@ mod tests {
     #[test]
     fn test_compile_select_many_cases_with_else() {
         Tester::default()
+            .define("FOO", SymbolPrototype::Callable(VarType::Void))
+            .define("BAR", SymbolPrototype::Callable(VarType::Void))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE ELSE\nBAR\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -1910,6 +2160,7 @@ mod tests {
     #[test]
     fn test_compile_while() {
         Tester::default()
+            .define("FOO", SymbolPrototype::Callable(VarType::Void))
             .parse("WHILE TRUE\nFOO\nWEND")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 7)))

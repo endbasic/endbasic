@@ -510,6 +510,25 @@ impl Tester {
         let result = block_on(self.machine.exec(&mut script.into().as_bytes()));
         Checker::new(self, result)
     }
+
+    /// Runs `scripts` in the configured machine and returns a `Checker` object to validate
+    /// expectations about the execution.
+    ///
+    /// The first entry in `scripts` to fail aborts execution and allows checking the result
+    /// of that specific invocation.
+    ///
+    /// This is useful when compared to `run` because `Machine::exec` compiles the script as one
+    /// unit and thus compilation errors may prevent validating other operations later on.
+    pub fn run_n(&mut self, scripts: &[&str]) -> Checker {
+        let mut result = Ok(StopReason::Eof);
+        for script in scripts {
+            result = block_on(self.machine.exec(&mut script.as_bytes()));
+            if result.is_err() {
+                break;
+            }
+        }
+        Checker::new(self, result)
+    }
 }
 
 /// Captures expectations about the execution of a command and validates them.

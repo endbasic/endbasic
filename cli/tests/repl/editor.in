@@ -37,7 +37,7 @@ RUN
 NEW
 yes
 EDIT
-PRINT "This is a new program with an invalid command"
+PRINT "Should not be printed"
 INVALID LINE
 PRINT "Should not be reached"
 

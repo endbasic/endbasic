@@ -1,0 +1,16 @@
+
+    EndBASIC X.Y.Z
+    Copyright YYYY-YYYY Julio Merino
+
+    Type HELP for interactive usage information.
+
+>>> Array accesses
+ERROR: 1:7: Incompatible type annotation in x# reference
+ERROR: 1:7: Unknown function or array y
+>>> Simple function calls
+ERROR: 1:7: Incompatible type annotation in MAX$ reference
+ERROR: 1:7: Unknown function or array UNKNOWN
+>>> Calling of non-functions
+ERROR: 1:7: z is not an array nor a function
+ERROR: 1:7: PRINT is not an array nor a function
+End of input by CTRL-D

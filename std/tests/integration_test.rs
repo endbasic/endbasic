@@ -135,9 +135,21 @@ fn test_example_script_runner() {
     check(
         bin_path("examples/script-runner"),
         &[&src_str("std/tests/script.bas")],
-        1,
+        0,
         Behavior::Null,
         Behavior::File(src_path("std/tests/script.out")),
-        Behavior::File(src_path("std/tests/script.err")),
+        Behavior::Null,
+    );
+}
+
+#[test]
+fn test_example_script_runner_errors() {
+    check(
+        bin_path("examples/script-runner"),
+        &[&src_str("std/tests/script-errors.bas")],
+        1,
+        Behavior::Null,
+        Behavior::Null,
+        Behavior::File(src_path("std/tests/script-errors.err")),
     );
 }

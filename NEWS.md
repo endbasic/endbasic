@@ -37,6 +37,9 @@ for the time being.**
 *   Changed the way integers with explicit bases are parsed so that they can
     express integers with their highest bit set.  For bitmasks, this is needed.
 
+*   The `CLEAR` command is now only available in the interactive interpreter given
+    that it cannot clear compilation state.
+
 ## Changes in version 0.10.0
 
 **Released on 2022-12-27.**

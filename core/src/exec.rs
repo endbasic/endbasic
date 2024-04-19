@@ -407,37 +407,27 @@ impl Machine {
         bref_pos: LineCol,
         nargs: usize,
     ) -> Result<()> {
-        match self.symbols.get(bref).map_err(|e| Error::from_value_error(e, bref_pos))? {
-            Some(Symbol::Callable(b)) => {
-                let metadata = b.metadata();
-                if metadata.is_function() {
-                    return Err(Error::EvalError(bref_pos, format!("{} is not a command", bref)));
-                }
-                if !bref.accepts(metadata.return_type()) {
-                    return Err(Error::EvalError(
-                        bref_pos,
-                        "Incompatible type annotation for builtin call".to_owned(),
-                    ));
-                }
+        let b = match self.symbols.get(bref).map_err(|e| Error::from_value_error(e, bref_pos))? {
+            Some(Symbol::Callable(b)) => b,
+            _ => panic!("Command existence and type checking happen at compile time"),
+        };
 
-                let mut args = Vec::with_capacity(nargs);
-                for _ in 0..nargs {
-                    let (value, pos) = context.value_stack.pop().unwrap();
-                    args.push((value, pos));
-                }
+        let metadata = b.metadata();
+        debug_assert_eq!(VarType::Void, metadata.return_type());
 
-                let b = b.clone();
-                let value = b
-                    .exec(args, self)
-                    .await
-                    .map_err(|e| Error::from_call_error(b.metadata(), e, bref_pos))?;
-                assert_eq!(value, Value::Void, "Commands do return values");
-                Ok(())
-            }
-
-            Some(_) => Err(Error::EvalError(bref_pos, format!("{} is not a command", bref))),
-            None => Err(Error::EvalError(bref_pos, format!("Unknown builtin {}", bref))),
+        let mut args = Vec::with_capacity(nargs);
+        for _ in 0..nargs {
+            let (value, pos) = context.value_stack.pop().unwrap();
+            args.push((value, pos));
         }
+
+        let b = b.clone();
+        let value = b
+            .exec(args, self)
+            .await
+            .map_err(|e| Error::from_call_error(b.metadata(), e, bref_pos))?;
+        assert_eq!(value, Value::Void, "Commands do return values");
+        Ok(())
     }
 
     /// Handles an array definition.  The array must not yet exist, and the name may not overlap
@@ -556,12 +546,7 @@ impl Machine {
         f: Rc<dyn Callable>,
     ) -> Result<()> {
         let metadata = f.metadata();
-        if !fref.accepts(metadata.return_type()) {
-            return Err(Error::EvalError(
-                fref_pos,
-                "Incompatible type annotation for function call".to_owned(),
-            ));
-        }
+        debug_assert!(fref.accepts(metadata.return_type()));
 
         let mut args = Vec::with_capacity(nargs);
         for _ in 0..nargs {
@@ -594,8 +579,38 @@ impl Machine {
         }
     }
 
-    /// Handles a function call or an array reference.
-    async fn function_call_or_array_ref(
+    /// Handles an array reference.
+    async fn array_ref(
+        &mut self,
+        context: &mut Context,
+        vref: &VarRef,
+        vref_pos: LineCol,
+        nargs: usize,
+    ) -> Result<()> {
+        match self.symbols.get(vref).map_err(|e| Error::from_value_error(e, vref_pos))? {
+            Some(Symbol::Array(_)) => (), // Fallthrough.
+            _ => panic!("Array existence and type checking happens at compile time"),
+        }
+
+        // We have to handle arrays outside of the match above because we cannot hold a
+        // reference to the array while we evaluate subscripts.  This implies that we have
+        // to do a second lookup of the array right below, which isn't great...
+        let subscripts = self.get_array_args(context, nargs)?;
+        match self.symbols.get(vref).map_err(|e| Error::from_value_error(e, vref_pos))? {
+            Some(Symbol::Array(array)) => {
+                let value = array
+                    .index(&subscripts)
+                    .cloned()
+                    .map_err(|e| Error::from_value_error(e, vref_pos))?;
+                context.value_stack.push((value, vref_pos));
+                Ok(())
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    /// Handles a function call.
+    async fn function_call(
         &mut self,
         context: &mut Context,
         fref: &VarRef,
@@ -603,7 +618,6 @@ impl Machine {
         nargs: usize,
     ) -> Result<()> {
         match self.symbols.get(fref).map_err(|e| Error::from_value_error(e, fref_pos))? {
-            Some(Symbol::Array(_)) => (), // Fallthrough.
             Some(Symbol::Callable(f)) => {
                 if !f.metadata().is_function() {
                     return Err(Error::EvalError(
@@ -621,36 +635,9 @@ impl Machine {
                     ));
                 }
                 let f = f.clone();
-                return self.do_function_call(context, fref, fref_pos, nargs, f).await;
+                self.do_function_call(context, fref, fref_pos, nargs, f).await
             }
-            Some(Symbol::Variable(_)) => {
-                return Err(Error::EvalError(
-                    fref_pos,
-                    format!("{} is not an array or a function", fref),
-                ))
-            }
-            None => {
-                return Err(Error::EvalError(
-                    fref_pos,
-                    format!("Unknown function or array {}", fref),
-                ))
-            }
-        }
-
-        // We have to handle arrays outside of the match above because we cannot hold a
-        // reference to the array while we evaluate subscripts.  This implies that we have
-        // to do a second lookup of the array right below, which isn't great...
-        let subscripts = self.get_array_args(context, nargs)?;
-        match self.symbols.get(fref).map_err(|e| Error::from_value_error(e, fref_pos))? {
-            Some(Symbol::Array(array)) => {
-                let value = array
-                    .index(&subscripts)
-                    .cloned()
-                    .map_err(|e| Error::from_value_error(e, fref_pos))?;
-                context.value_stack.push((value, fref_pos));
-                Ok(())
-            }
-            _ => unreachable!(),
+            _ => panic!("Array existence and type checking has been done at compile time"),
         }
     }
 
@@ -814,6 +801,11 @@ impl Machine {
                 context.pc += 1;
             }
 
+            Instruction::ArrayLoad(fref, pos, nargs) => {
+                self.array_ref(context, fref, *pos, *nargs).await?;
+                context.pc += 1;
+            }
+
             Instruction::BuiltinCall(bref, bref_pos, nargs) => {
                 self.builtin_call(context, bref, *bref_pos, *nargs).await?;
                 context.pc += 1;
@@ -825,7 +817,7 @@ impl Machine {
             }
 
             Instruction::FunctionCall(fref, pos, nargs) => {
-                self.function_call_or_array_ref(context, fref, *pos, *nargs).await?;
+                self.function_call(context, fref, *pos, *nargs).await?;
                 context.pc += 1;
             }
 
@@ -1001,7 +993,7 @@ impl Machine {
         // TODO(jmmv): It should be possible to make the parser return statements one at a time and
         // stream them to the compiler, instead of buffering everything in a vector.
         let stmts = parser::parse(input)?;
-        let image = compiler::compile(stmts)?;
+        let image = compiler::compile(stmts, &self.symbols)?;
 
         assert!(self.data.is_empty());
         self.data = image.data;
@@ -1852,7 +1844,7 @@ mod tests {
         do_simple_error_test("OUT CLEAR()", "1:5: CLEAR is not an array nor a function");
         do_simple_error_test("OUT OUT()", "1:5: OUT is not an array nor a function");
         do_simple_error_test("OUT OUT(3)", "1:5: OUT is not an array nor a function");
-        do_simple_error_test("OUT SUM?()", "1:5: Incompatible types in SUM? reference");
+        do_simple_error_test("OUT SUM?()", "1:5: Incompatible type annotation in SUM? reference");
         do_simple_error_test(
             "OUT TYPE_CHECK",
             "1:5: Value returned by TYPE_CHECK is incompatible with its type definition",
@@ -2429,17 +2421,42 @@ mod tests {
 
     #[test]
     fn test_top_level_semantic_errors_allow_execution() {
+        do_simple_error_test(r#"OUT RAISEF("io")"#, "1:5: In call to RAISEF: Some I/O error");
+        do_error_test(
+            r#"OUT "a": OUT RAISEF("io"): OUT "b""#,
+            &[],
+            &["a"],
+            "1:14: In call to RAISEF: Some I/O error",
+        );
+    }
+
+    #[test]
+    fn test_top_level_compilation_errors_abort_execution() {
         do_simple_error_test("FOO BAR", "1:1: Unknown builtin FOO");
-        do_error_test(r#"OUT "a": FOO BAR: OUT "b""#, &[], &["a"], "1:10: Unknown builtin FOO");
+        do_error_test(r#"OUT "a": FOO BAR: OUT "b""#, &[], &[], "1:10: Unknown builtin FOO");
     }
 
     #[test]
     fn test_inner_level_semantic_errors_allow_execution() {
+        do_simple_error_test(
+            r#"IF TRUE THEN: OUT RAISEF("io"): END IF"#,
+            "1:19: In call to RAISEF: Some I/O error",
+        );
+        do_error_test(
+            r#"OUT "a": IF TRUE THEN: OUT RAISEF("io"): END IF: OUT "b""#,
+            &[],
+            &["a"],
+            "1:28: In call to RAISEF: Some I/O error",
+        );
+    }
+
+    #[test]
+    fn test_inner_level_compilation_errors_abort_execution() {
         do_simple_error_test(r#"IF TRUE THEN: FOO BAR: END IF"#, "1:15: Unknown builtin FOO");
         do_error_test(
             r#"OUT "a": IF TRUE THEN: FOO BAR: END IF: OUT "b""#,
             &[],
-            &["a"],
+            &[],
             "1:24: Unknown builtin FOO",
         );
     }
