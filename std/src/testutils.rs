@@ -712,7 +712,7 @@ impl<'a> Checker<'a> {
                     // below.  Should try to avoid it and remove the Clone impl from Array.
                     arrays.insert(name.to_owned(), array.clone());
                 }
-                Symbol::Command(_) | Symbol::Function(_) => {
+                Symbol::Callable(_) => {
                     // We currently don't support user-defined callables at runtime so there is no
                     // need to validate anything about them.
                 }

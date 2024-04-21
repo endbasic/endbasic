@@ -493,7 +493,7 @@ impl SymbolsBuilder {
     pub fn add_command(mut self, cmd: Rc<dyn Callable>) -> Self {
         let name = cmd.metadata().name();
         assert!(name == name.to_ascii_uppercase());
-        self.by_name.insert(name.to_owned(), Symbol::Command(cmd));
+        self.by_name.insert(name.to_owned(), Symbol::Callable(cmd));
         self
     }
 
@@ -501,7 +501,7 @@ impl SymbolsBuilder {
     pub fn add_function(mut self, func: Rc<dyn Callable>) -> Self {
         let name = func.metadata().name();
         assert!(name == name.to_ascii_uppercase());
-        self.by_name.insert(name.to_owned(), Symbol::Function(func));
+        self.by_name.insert(name.to_owned(), Symbol::Callable(func));
         self
     }
 

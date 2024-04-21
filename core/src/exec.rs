@@ -413,7 +413,7 @@ impl Machine {
         nargs: usize,
     ) -> Result<()> {
         match self.symbols.get(bref).map_err(|e| Error::from_value_error(e, bref_pos))? {
-            Some(Symbol::Command(b)) => {
+            Some(Symbol::Callable(b)) => {
                 let metadata = b.metadata();
                 if !bref.accepts(metadata.return_type()) {
                     return Err(Error::EvalError(
@@ -606,7 +606,13 @@ impl Machine {
     ) -> Result<()> {
         match self.symbols.get(fref).map_err(|e| Error::from_value_error(e, fref_pos))? {
             Some(Symbol::Array(_)) => (), // Fallthrough.
-            Some(Symbol::Function(f)) => {
+            Some(Symbol::Callable(f)) => {
+                if !f.metadata().is_function() {
+                    return Err(Error::EvalError(
+                        fref_pos,
+                        format!("{} is not an array nor a function", f.metadata().name()),
+                    ));
+                }
                 if f.metadata().is_argless() {
                     return Err(Error::EvalError(
                         fref_pos,
@@ -619,8 +625,7 @@ impl Machine {
                 let f = f.clone();
                 return self.do_function_call(context, fref, fref_pos, nargs, f).await;
             }
-
-            Some(_) => {
+            Some(Symbol::Variable(_)) => {
                 return Err(Error::EvalError(
                     fref_pos,
                     format!("{} is not an array or a function", fref),
@@ -659,6 +664,12 @@ impl Machine {
         f: Rc<dyn Callable>,
     ) -> Result<Value> {
         let metadata = f.metadata();
+        if !metadata.is_function() {
+            return Err(Error::EvalError(
+                fref_pos,
+                format!("{} is not an array nor a function", metadata.name()),
+            ));
+        }
         if !fref.accepts(metadata.return_type()) {
             return Err(Error::EvalError(
                 fref_pos,
@@ -877,7 +888,7 @@ impl Machine {
                     .map_err(|e| Error::from_value_error(e, *pos))?
                 {
                     Some(Symbol::Variable(v)) => v.clone(),
-                    Some(Symbol::Function(f)) => {
+                    Some(Symbol::Callable(f)) => {
                         if !f.metadata().is_argless() {
                             return new_syntax_error(
                                 *pos,
@@ -903,7 +914,7 @@ impl Machine {
 
             Instruction::LoadRef(vref, pos) => {
                 let sym = self.symbols.get(vref).map_err(|e| Error::from_value_error(e, *pos))?;
-                if let Some(Symbol::Function(f)) = sym {
+                if let Some(Symbol::Callable(f)) = sym {
                     if f.metadata().is_argless() {
                         let f = f.clone();
                         let value = self.argless_function_call(vref.clone(), *pos, f).await?;
@@ -1175,6 +1186,7 @@ mod tests {
         captured_out: Rc<RefCell<Vec<String>>>,
     ) -> Result<StopReason> {
         let mut machine = Machine::default();
+        machine.add_command(ClearCommand::new());
         machine.add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))));
         machine.add_command(OutCommand::new(captured_out.clone()));
         machine.add_command(RaiseCommand::new());
@@ -1836,7 +1848,10 @@ mod tests {
 
     #[test]
     fn test_function_call_errors() {
-        do_simple_error_test("OUT OUT()", "1:5: OUT is not an array or a function");
+        do_simple_error_test("OUT CLEAR", "1:5: CLEAR is not an array nor a function");
+        do_simple_error_test("OUT CLEAR()", "1:5: CLEAR is not an array nor a function");
+        do_simple_error_test("OUT OUT()", "1:5: OUT is not an array nor a function");
+        do_simple_error_test("OUT OUT(3)", "1:5: OUT is not an array nor a function");
         do_simple_error_test("OUT SUM?()", "1:5: Incompatible types in SUM? reference");
         do_simple_error_test(
             "OUT TYPE_CHECK",

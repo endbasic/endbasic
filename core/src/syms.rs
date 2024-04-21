@@ -171,11 +171,8 @@ pub enum Symbol {
     /// An array definition.
     Array(Array),
 
-    /// A command definition.
-    Command(Rc<dyn Callable>),
-
-    /// A function definition.
-    Function(Rc<dyn Callable>),
+    /// A callable definition.
+    Callable(Rc<dyn Callable>),
 
     /// A variable definition.
     Variable(Value),
@@ -186,8 +183,7 @@ impl Symbol {
     fn eval_type(&self) -> VarType {
         match self {
             Symbol::Array(array) => array.subtype(),
-            Symbol::Command(command) => command.metadata().return_type(),
-            Symbol::Function(function) => function.metadata().return_type(),
+            Symbol::Callable(callable) => callable.metadata().return_type(),
             Symbol::Variable(value) => value.as_vartype(),
         }
     }
@@ -196,8 +192,7 @@ impl Symbol {
     pub fn metadata(&self) -> Option<&CallableMetadata> {
         match self {
             Symbol::Array(_) => None,
-            Symbol::Command(command) => Some(command.metadata()),
-            Symbol::Function(function) => Some(function.metadata()),
+            Symbol::Callable(callable) => Some(callable.metadata()),
             Symbol::Variable(_) => None,
         }
     }
@@ -206,8 +201,7 @@ impl Symbol {
     fn user_defined(&self) -> bool {
         match self {
             Symbol::Array(_) => true,
-            Symbol::Command(_) => false,
-            Symbol::Function(_) => false,
+            Symbol::Callable(_) => false,
             Symbol::Variable(_) => true,
         }
     }
@@ -217,8 +211,7 @@ impl fmt::Debug for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Symbol::Array(array) => write!(f, "Array({:?})", array),
-            Symbol::Command(command) => write!(f, "Command({:?})", command.metadata()),
-            Symbol::Function(function) => write!(f, "Function({:?})", function.metadata()),
+            Symbol::Callable(callable) => write!(f, "Callable({:?})", callable.metadata()),
             Symbol::Variable(value) => write!(f, "Variable({:?})", value),
         }
     }
@@ -246,7 +239,7 @@ impl Symbols {
         let key = command.metadata().name();
         debug_assert!(key == key.to_ascii_uppercase());
         assert!(!self.by_name.contains_key(key));
-        self.by_name.insert(key.to_owned(), Symbol::Command(command));
+        self.by_name.insert(key.to_owned(), Symbol::Callable(command));
     }
 
     /// Registers the given builtin function.
@@ -257,7 +250,7 @@ impl Symbols {
         let key = function.metadata().name();
         debug_assert!(key == key.to_ascii_uppercase());
         assert!(!self.by_name.contains_key(key));
-        self.by_name.insert(key.to_owned(), Symbol::Function(function));
+        self.by_name.insert(key.to_owned(), Symbol::Callable(function));
     }
 
     /// Returns the mapping of all symbols.
@@ -554,6 +547,11 @@ impl CallableMetadata {
     /// Returns true if this is a callable that takes no arguments.
     pub fn is_argless(&self) -> bool {
         self.syntax.is_empty()
+    }
+
+    /// Returns true if this callable is a function (not a command).
+    pub fn is_function(&self) -> bool {
+        self.return_type != VarType::Void
     }
 }
 
@@ -945,7 +943,7 @@ mod tests {
         );
 
         match syms.get(&VarRef::new("out", VarType::Auto)).unwrap().unwrap() {
-            Symbol::Command(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
+            Symbol::Callable(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
             _ => panic!("Got something that is not the command we asked for"),
         }
         assert_eq!(
@@ -955,7 +953,7 @@ mod tests {
 
         for ref_type in &[VarType::Auto, VarType::Integer] {
             match syms.get(&VarRef::new("sum", *ref_type)).unwrap().unwrap() {
-                Symbol::Function(f) => assert_eq!(VarType::Integer, f.metadata().return_type()),
+                Symbol::Callable(f) => assert_eq!(VarType::Integer, f.metadata().return_type()),
                 _ => panic!("Got something that is not the function we asked for"),
             }
         }
@@ -1028,7 +1026,7 @@ mod tests {
         );
 
         match syms.get_mut(&VarRef::new("out", VarType::Auto)).unwrap().unwrap() {
-            Symbol::Command(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
+            Symbol::Callable(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
             _ => panic!("Got something that is not the command we asked for"),
         }
         assert_eq!(
@@ -1038,7 +1036,7 @@ mod tests {
 
         for ref_type in &[VarType::Auto, VarType::Integer] {
             match syms.get_mut(&VarRef::new("sum", *ref_type)).unwrap().unwrap() {
-                Symbol::Function(f) => assert_eq!(VarType::Integer, f.metadata().return_type()),
+                Symbol::Callable(f) => assert_eq!(VarType::Integer, f.metadata().return_type()),
                 _ => panic!("Got something that is not the function we asked for"),
             }
         }
@@ -1105,12 +1103,12 @@ mod tests {
         }
 
         match syms.get_auto("out").unwrap() {
-            Symbol::Command(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
+            Symbol::Callable(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
             _ => panic!("Got something that is not the command we asked for"),
         }
 
         match syms.get_auto("sum").unwrap() {
-            Symbol::Function(f) => assert_eq!(VarType::Integer, f.metadata().return_type()),
+            Symbol::Callable(f) => assert_eq!(VarType::Integer, f.metadata().return_type()),
             _ => panic!("Got something that is not the function we asked for"),
         }
 
