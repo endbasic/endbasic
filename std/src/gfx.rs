@@ -20,7 +20,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Function,
+    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
 use endbasic_core::LineCol;
 use std::cell::RefCell;
@@ -114,7 +114,7 @@ area of the circle is left untouched.",
 }
 
 #[async_trait(?Send)]
-impl Command for GfxCircleCommand {
+impl Callable for GfxCircleCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -171,7 +171,7 @@ The outline and area of the circle are drawn using the foreground color as selec
 }
 
 #[async_trait(?Send)]
-impl Command for GfxCirclefCommand {
+impl Callable for GfxCirclefCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -228,7 +228,7 @@ See GFX_WIDTH to query the other dimension.",
 }
 
 #[async_trait(?Send)]
-impl Function for GfxHeightFunction {
+impl Callable for GfxHeightFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -266,7 +266,7 @@ The line is drawn using the foreground color as selected by COLOR.",
 }
 
 #[async_trait(?Send)]
-impl Command for GfxLineCommand {
+impl Callable for GfxLineCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -319,7 +319,7 @@ The pixel is drawn using the foreground color as selected by COLOR.",
 }
 
 #[async_trait(?Send)]
-impl Command for GfxPixelCommand {
+impl Callable for GfxPixelCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -365,7 +365,7 @@ area of the rectangle is left untouched.",
 }
 
 #[async_trait(?Send)]
-impl Command for GfxRectCommand {
+impl Callable for GfxRectCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -418,7 +418,7 @@ The outline and area of the rectangle are drawn using the foreground color as se
 }
 
 #[async_trait(?Send)]
-impl Command for GfxRectfCommand {
+impl Callable for GfxRectfCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -483,7 +483,7 @@ be able to see what you are typing any longer until you reenable video syncing."
 }
 
 #[async_trait(?Send)]
-impl Command for GfxSyncCommand {
+impl Callable for GfxSyncCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -549,7 +549,7 @@ See GFX_HEIGHT to query the other dimension.",
 }
 
 #[async_trait(?Send)]
-impl Function for GfxWidthFunction {
+impl Callable for GfxWidthFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

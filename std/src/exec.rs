@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Function, Symbol,
+    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
 };
 use endbasic_core::LineCol;
 use futures_lite::future::{BoxedLocal, FutureExt};
@@ -56,7 +56,7 @@ SAVE your program!).",
 }
 
 #[async_trait(?Send)]
-impl Command for ClearCommand {
+impl Callable for ClearCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -94,7 +94,7 @@ returns the empty string.",
 }
 
 #[async_trait(?Send)]
-impl Function for ErrmsgFunction {
+impl Callable for ErrmsgFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -152,7 +152,7 @@ integer or as a floating point number for finer precision.",
 }
 
 #[async_trait(?Send)]
-impl Command for SleepCommand {
+impl Callable for SleepCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

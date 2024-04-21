@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
-    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command,
+    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
 use endbasic_core::LineCol;
 use std::cell::RefCell;
@@ -70,7 +70,7 @@ CLEAR.",
 }
 
 #[async_trait(?Send)]
-impl Command for ReadCommand {
+impl Callable for ReadCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -165,7 +165,7 @@ values defined by DATA.",
 }
 
 #[async_trait(?Send)]
-impl Command for RestoreCommand {
+impl Callable for RestoreCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

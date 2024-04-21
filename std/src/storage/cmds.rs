@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command,
+    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
 use endbasic_core::LineCol;
 use std::cell::RefCell;
@@ -141,7 +141,7 @@ impl CdCommand {
 }
 
 #[async_trait(?Send)]
-impl Command for CdCommand {
+impl Callable for CdCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -198,7 +198,7 @@ impl DirCommand {
 }
 
 #[async_trait(?Send)]
-impl Command for DirCommand {
+impl Callable for DirCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -261,7 +261,7 @@ without a colon at the end, and targets are given in the form of a URI.",
 }
 
 #[async_trait(?Send)]
-impl Command for MountCommand {
+impl Callable for MountCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -346,7 +346,7 @@ by the underlying operating system, displays such path as well.",
 }
 
 #[async_trait(?Send)]
-impl Command for PwdCommand {
+impl Callable for PwdCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -397,7 +397,7 @@ Drive names are specified without a colon at the end.",
 }
 
 #[async_trait(?Send)]
-impl Command for UnmountCommand {
+impl Callable for UnmountCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

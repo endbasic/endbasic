@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    Array, CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Function, Symbol,
+    Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
     Symbols,
 };
 use endbasic_core::LineCol;
@@ -128,7 +128,7 @@ dimension% is a 1-indexed integer.",
 }
 
 #[async_trait(?Send)]
-impl Function for LboundFunction {
+impl Callable for LboundFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -164,7 +164,7 @@ dimension% is a 1-indexed integer.",
 }
 
 #[async_trait(?Send)]
-impl Function for UboundFunction {
+impl Callable for UboundFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Function,
+    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
 use endbasic_core::LineCol;
 use std::cmp::min;
@@ -54,7 +54,7 @@ See CHR$() for the inverse of this function.",
 }
 
 #[async_trait(?Send)]
-impl Function for AscFunction {
+impl Callable for AscFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -117,7 +117,7 @@ See ASC%() for the inverse of this function.",
 }
 
 #[async_trait(?Send)]
-impl Function for ChrFunction {
+impl Callable for ChrFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -172,7 +172,7 @@ If n% is greater than or equal to the number of characters in expr$, returns exp
 }
 
 #[async_trait(?Send)]
-impl Function for LeftFunction {
+impl Callable for LeftFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -221,7 +221,7 @@ impl LenFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for LenFunction {
+impl Callable for LenFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -263,7 +263,7 @@ impl LtrimFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for LtrimFunction {
+impl Callable for LtrimFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -306,7 +306,7 @@ until the end of the string.",
 }
 
 #[async_trait(?Send)]
-impl Function for MidFunction {
+impl Callable for MidFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -368,7 +368,7 @@ If n% is greater than or equal to the number of characters in expr$, returns exp
 }
 
 #[async_trait(?Send)]
-impl Function for RightFunction {
+impl Callable for RightFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -417,7 +417,7 @@ impl RtrimFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for RtrimFunction {
+impl Callable for RtrimFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -464,7 +464,7 @@ in it, do LTRIM$(STR$(expr)).",
 }
 
 #[async_trait(?Send)]
-impl Function for StrFunction {
+impl Callable for StrFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

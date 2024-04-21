@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Function,
+    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
 use endbasic_core::LineCol;
 use std::cell::RefCell;
@@ -68,7 +68,7 @@ impl ClsCommand {
 }
 
 #[async_trait(?Send)]
-impl Command for ClsCommand {
+impl Callable for ClsCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -108,7 +108,7 @@ necessarily match any other color specifiable in the 0 to 255 range, as it might
 }
 
 #[async_trait(?Send)]
-impl Command for ColorCommand {
+impl Callable for ColorCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -187,7 +187,7 @@ GPIO_INPUT?, within the same loop.",
 }
 
 #[async_trait(?Send)]
-impl Function for InKeyFunction {
+impl Callable for InKeyFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -251,7 +251,7 @@ variable to update with the obtained input.",
 }
 
 #[async_trait(?Send)]
-impl Command for InputCommand {
+impl Callable for InputCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -367,7 +367,7 @@ impl LocateCommand {
 }
 
 #[async_trait(?Send)]
-impl Command for LocateCommand {
+impl Callable for LocateCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -461,7 +461,7 @@ the cursor position remains on the same line of the message right after what was
 }
 
 #[async_trait(?Send)]
-impl Command for PrintCommand {
+impl Callable for PrintCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -537,7 +537,7 @@ See SCRROWS to query the other dimension.",
 }
 
 #[async_trait(?Send)]
-impl Function for ScrColsFunction {
+impl Callable for ScrColsFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -575,7 +575,7 @@ See SCRCOLS to query the other dimension.",
 }
 
 #[async_trait(?Send)]
-impl Function for ScrRowsFunction {
+impl Callable for ScrRowsFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

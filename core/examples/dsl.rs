@@ -25,7 +25,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_core::syms::{
-    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Function,
+    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
 use endbasic_core::LineCol;
 use futures_lite::future::block_on;
@@ -70,7 +70,7 @@ impl NumLightsFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for NumLightsFunction {
+impl Callable for NumLightsFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -106,7 +106,7 @@ impl SwitchLightCommand {
 }
 
 #[async_trait(?Send)]
-impl Command for SwitchLightCommand {
+impl Callable for SwitchLightCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
-    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Function, Symbols,
+    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
 };
 use endbasic_core::LineCol;
 use std::cell::RefCell;
@@ -175,7 +175,7 @@ It is OK to reconfigure an already configured pin without clearing its state fir
 }
 
 #[async_trait(?Send)]
-impl Command for GpioSetupCommand {
+impl Callable for GpioSetupCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -241,7 +241,7 @@ before.",
 }
 
 #[async_trait(?Send)]
-impl Command for GpioClearCommand {
+impl Callable for GpioClearCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -299,7 +299,7 @@ Returns FALSE to represent a low value, and TRUE to represent a high value.",
 }
 
 #[async_trait(?Send)]
-impl Function for GpioReadFunction {
+impl Callable for GpioReadFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -347,7 +347,7 @@ A FALSE value? sets the pin to low, and a TRUE value? sets the pin to high.",
 }
 
 #[async_trait(?Send)]
-impl Command for GpioWriteCommand {
+impl Callable for GpioWriteCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

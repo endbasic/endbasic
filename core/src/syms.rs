@@ -172,10 +172,10 @@ pub enum Symbol {
     Array(Array),
 
     /// A command definition.
-    Command(Rc<dyn Command>),
+    Command(Rc<dyn Callable>),
 
     /// A function definition.
-    Function(Rc<dyn Function>),
+    Function(Rc<dyn Callable>),
 
     /// A variable definition.
     Variable(Value),
@@ -242,7 +242,7 @@ impl Symbols {
     ///
     /// Given that commands cannot be defined at runtime, specifying a non-unique name results in
     /// a panic.
-    pub fn add_command(&mut self, command: Rc<dyn Command>) {
+    pub fn add_command(&mut self, command: Rc<dyn Callable>) {
         let key = command.metadata().name();
         debug_assert!(key == key.to_ascii_uppercase());
         assert!(!self.by_name.contains_key(key));
@@ -253,7 +253,7 @@ impl Symbols {
     ///
     /// Given that functions cannot be defined at runtime, specifying a non-unique name results in
     /// a panic.
-    pub fn add_function(&mut self, function: Rc<dyn Function>) {
+    pub fn add_function(&mut self, function: Rc<dyn Callable>) {
         let key = function.metadata().name();
         debug_assert!(key == key.to_ascii_uppercase());
         assert!(!self.by_name.contains_key(key));
@@ -557,16 +557,16 @@ impl CallableMetadata {
     }
 }
 
-/// A trait to define a function that is executed by a `Machine`.
+/// A trait to define a callable that is executed by a `Machine`.
 ///
-/// The functions themselves are immutable but they can reference mutable state.  Given that
+/// The callable themselves are immutable but they can reference mutable state.  Given that
 /// EndBASIC is not threaded, it is sufficient for those references to be behind a `RefCell`
 /// and/or an `Rc`.
 ///
 /// Idiomatically, these objects need to provide a `new()` method that returns an `Rc<Callable>`, as
 /// that's the type used throughout the execution engine.
 #[async_trait(?Send)]
-pub trait Function {
+pub trait Callable {
     /// Returns the metadata for this function.
     ///
     /// The return value takes the form of a reference to force the callable to store the metadata
@@ -578,34 +578,6 @@ pub trait Function {
     /// `args` contains the arguments to the function call.
     ///
     /// `machine` provides mutable access to the current state of the machine invoking the function.
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult;
-}
-
-/// A trait to define a command that is executed by a `Machine`.
-///
-/// The commands themselves are immutable but they can reference mutable state.  Given that
-/// EndBASIC is not threaded, it is sufficient for those references to be behind a `RefCell`
-/// and/or an `Rc`.
-///
-/// Idiomatically, these objects need to provide a `new()` method that returns an `Rc<Callable>`, as
-/// that's the type used throughout the execution engine.
-#[async_trait(?Send)]
-pub trait Command {
-    /// Returns the metadata for this command.
-    ///
-    /// The return value takes the form of a reference to force the callable to store the metadata
-    /// as a struct field so that calls to this function are guaranteed to be cheap.
-    fn metadata(&self) -> &CallableMetadata;
-
-    /// Executes the command.
-    ///
-    /// `args` contains the details about the command invocation.  These are represented as a
-    /// sequence of values with details about the separators as values that separate the actual
-    /// arguments.
-    ///
-    /// `machine` provides mutable access to the current state of the machine invoking the command.
-    ///
-    /// Commands cannot return any value except for errors.
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult;
 }
 

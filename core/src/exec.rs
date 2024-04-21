@@ -20,7 +20,7 @@ use crate::bytecode::*;
 use crate::compiler;
 use crate::parser;
 use crate::reader::LineCol;
-use crate::syms::{CallError, CallableMetadata, Command, Function, Symbol, Symbols};
+use crate::syms::{CallError, Callable, CallableMetadata, Symbol, Symbols};
 use crate::value;
 use async_channel::{Receiver, Sender, TryRecvError};
 use std::future::Future;
@@ -260,12 +260,12 @@ impl Machine {
     }
 
     /// Registers the given builtin command, which must not yet be registered.
-    pub fn add_command(&mut self, command: Rc<dyn Command>) {
+    pub fn add_command(&mut self, command: Rc<dyn Callable>) {
         self.symbols.add_command(command)
     }
 
     /// Registers the given builtin function, which must not yet be registered.
-    pub fn add_function(&mut self, function: Rc<dyn Function>) {
+    pub fn add_function(&mut self, function: Rc<dyn Callable>) {
         self.symbols.add_function(function)
     }
 
@@ -555,7 +555,7 @@ impl Machine {
         fref: &VarRef,
         fref_pos: LineCol,
         nargs: usize,
-        f: Rc<dyn Function>,
+        f: Rc<dyn Callable>,
     ) -> Result<()> {
         let metadata = f.metadata();
         if !fref.accepts(metadata.return_type()) {
@@ -656,7 +656,7 @@ impl Machine {
         &mut self,
         fref: VarRef,
         fref_pos: LineCol,
-        f: Rc<dyn Function>,
+        f: Rc<dyn Callable>,
     ) -> Result<Value> {
         let metadata = f.metadata();
         if !fref.accepts(metadata.return_type()) {
