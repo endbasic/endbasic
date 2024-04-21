@@ -259,14 +259,9 @@ impl Machine {
         self.clearables.push(clearable);
     }
 
-    /// Registers the given builtin command, which must not yet be registered.
-    pub fn add_command(&mut self, command: Rc<dyn Callable>) {
-        self.symbols.add_command(command)
-    }
-
-    /// Registers the given builtin function, which must not yet be registered.
-    pub fn add_function(&mut self, function: Rc<dyn Callable>) {
-        self.symbols.add_function(function)
+    /// Registers the given builtin callable, which must not yet be registered.
+    pub fn add_callable(&mut self, callable: Rc<dyn Callable>) {
+        self.symbols.add_callable(callable)
     }
 
     /// Obtains a channel via which to send signals to the machine during execution.
@@ -1072,7 +1067,7 @@ mod tests {
     fn test_get_data() {
         let captured_data = Rc::from(RefCell::from(vec![]));
         let mut machine = Machine::default();
-        machine.add_command(GetDataCommand::new(captured_data.clone()));
+        machine.add_callable(GetDataCommand::new(captured_data.clone()));
 
         assert!(machine.get_data().is_empty());
 
@@ -1189,17 +1184,17 @@ mod tests {
         captured_out: Rc<RefCell<Vec<String>>>,
     ) -> Result<StopReason> {
         let mut machine = Machine::default();
-        machine.add_command(ClearCommand::new());
-        machine.add_command(InCommand::new(Box::from(RefCell::from(golden_in.iter()))));
-        machine.add_command(OutCommand::new(captured_out.clone()));
-        machine.add_command(RaiseCommand::new());
-        machine.add_function(ArglessFunction::new(Value::Integer(1234)));
-        machine.add_function(CountFunction::new());
-        machine.add_function(GetHiddenFunction::new());
-        machine.add_function(OutfFunction::new(captured_out));
-        machine.add_function(RaisefFunction::new());
-        machine.add_function(SumFunction::new());
-        machine.add_function(TypeCheckFunction::new(Value::Integer(5)));
+        machine.add_callable(ArglessFunction::new(Value::Integer(1234)));
+        machine.add_callable(ClearCommand::new());
+        machine.add_callable(CountFunction::new());
+        machine.add_callable(GetHiddenFunction::new());
+        machine.add_callable(InCommand::new(Box::from(RefCell::from(golden_in.iter()))));
+        machine.add_callable(OutCommand::new(captured_out.clone()));
+        machine.add_callable(OutfFunction::new(captured_out));
+        machine.add_callable(RaiseCommand::new());
+        machine.add_callable(RaisefFunction::new());
+        machine.add_callable(SumFunction::new());
+        machine.add_callable(TypeCheckFunction::new(Value::Integer(5)));
         block_on(machine.exec(&mut input.as_bytes()))
     }
 
@@ -1472,8 +1467,8 @@ mod tests {
     fn test_end_can_resume() {
         let captured_out = Rc::from(RefCell::from(vec![]));
         let mut machine = Machine::default();
-        machine.add_command(OutCommand::new(captured_out.clone()));
-        machine.add_function(SumFunction::new());
+        machine.add_callable(OutCommand::new(captured_out.clone()));
+        machine.add_callable(SumFunction::new());
 
         assert_eq!(
             StopReason::Exited(10),
@@ -2307,7 +2302,7 @@ mod tests {
         "#;
 
         let mut machine = Machine::default();
-        machine.add_command(ClearCommand::new());
+        machine.add_callable(ClearCommand::new());
         let e = block_on(machine.exec(&mut code.as_bytes())).unwrap_err();
         // This is a corner case of how the current implementation uses "hidden" variables to hold
         // the test expression and a `clear()` can unset this variable.  We could try to be better

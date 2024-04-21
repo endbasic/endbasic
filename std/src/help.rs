@@ -514,7 +514,7 @@ impl Callable for HelpCommand {
 
 /// Adds all help-related commands to the `machine` and makes them write to `console`.
 pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
-    machine.add_command(HelpCommand::new(console));
+    machine.add_callable(HelpCommand::new(console));
 }
 
 #[cfg(test)]
@@ -689,13 +689,13 @@ This is the first and only topic with just one line.
     fn tester() -> Tester {
         let tester = Tester::empty();
         let console = tester.get_console();
-        tester.add_command(HelpCommand::new(console))
+        tester.add_callable(HelpCommand::new(console))
     }
 
     #[test]
     fn test_help_summarize_symbols() {
         let mut t =
-            tester().add_command(DoNothingCommand::new()).add_function(EmptyFunction::new());
+            tester().add_callable(DoNothingCommand::new()).add_callable(EmptyFunction::new());
         t.get_console().borrow_mut().set_color(Some(100), Some(200)).unwrap();
         t.run("HELP")
             .expect_output([
@@ -743,7 +743,7 @@ This is the first and only topic with just one line.
     #[test]
     fn test_help_describe_callables_topic() {
         let mut t =
-            tester().add_command(DoNothingCommand::new()).add_function(EmptyFunction::new());
+            tester().add_callable(DoNothingCommand::new()).add_callable(EmptyFunction::new());
         t.get_console().borrow_mut().set_color(Some(70), Some(50)).unwrap();
         t.run(r#"help "testing""#)
             .expect_output([CapturedOut::SetColor(Some(70), Some(50)), CapturedOut::SetSync(false)])
@@ -775,7 +775,7 @@ This is the first and only topic with just one line.
 
     #[test]
     fn test_help_describe_command() {
-        let mut t = tester().add_command(DoNothingCommand::new());
+        let mut t = tester().add_callable(DoNothingCommand::new());
         t.get_console().borrow_mut().set_color(Some(20), Some(21)).unwrap();
         t.run(r#"help "Do_Nothing""#)
             .expect_output([CapturedOut::SetColor(Some(20), Some(21)), CapturedOut::SetSync(false)])
@@ -801,7 +801,7 @@ This is the first and only topic with just one line.
     }
 
     fn do_help_describe_function_test(name: &str) {
-        let mut t = tester().add_function(EmptyFunction::new());
+        let mut t = tester().add_callable(EmptyFunction::new());
         t.get_console().borrow_mut().set_color(Some(30), Some(26)).unwrap();
         t.run(format!(r#"help "{}""#, name))
             .expect_output([CapturedOut::SetColor(Some(30), Some(26)), CapturedOut::SetSync(false)])
@@ -839,7 +839,7 @@ This is the first and only topic with just one line.
     #[test]
     fn test_help_eval_arg() {
         tester()
-            .add_command(DoNothingCommand::new())
+            .add_callable(DoNothingCommand::new())
             .run(r#"topic = "Do_Nothing": HELP topic"#)
             .expect_output([CapturedOut::SetSync(false)])
             .expect_prints([""])
@@ -891,9 +891,9 @@ This is the first and only topic with just one line.
 
         for cmd in &[r#"help "aa""#, r#"help "aab""#, r#"help "aabc""#] {
             tester()
-                .add_function(EmptyFunction::new_with_name("AABC"))
-                .add_function(EmptyFunction::new_with_name("ABC"))
-                .add_function(EmptyFunction::new_with_name("BC"))
+                .add_callable(EmptyFunction::new_with_name("AABC"))
+                .add_callable(EmptyFunction::new_with_name("ABC"))
+                .add_callable(EmptyFunction::new_with_name("BC"))
                 .run(*cmd)
                 .expect_output(exp_output("AABC$", true))
                 .check();
@@ -901,26 +901,26 @@ This is the first and only topic with just one line.
 
         for cmd in &[r#"help "b""#, r#"help "bc""#] {
             tester()
-                .add_function(EmptyFunction::new_with_name("AABC"))
-                .add_function(EmptyFunction::new_with_name("ABC"))
-                .add_function(EmptyFunction::new_with_name("BC"))
+                .add_callable(EmptyFunction::new_with_name("AABC"))
+                .add_callable(EmptyFunction::new_with_name("ABC"))
+                .add_callable(EmptyFunction::new_with_name("BC"))
                 .run(*cmd)
                 .expect_output(exp_output("BC$", true))
                 .check();
         }
 
         tester()
-            .add_command(DoNothingCommand::new_with_name("AAAB"))
-            .add_command(DoNothingCommand::new_with_name("AAAA"))
-            .add_command(DoNothingCommand::new_with_name("AAAAA"))
+            .add_callable(DoNothingCommand::new_with_name("AAAB"))
+            .add_callable(DoNothingCommand::new_with_name("AAAA"))
+            .add_callable(DoNothingCommand::new_with_name("AAAAA"))
             .run(r#"help "aaaa""#)
             .expect_output(exp_output("AAAA", false))
             .check();
 
         tester()
-            .add_command(DoNothingCommand::new_with_name("ZAB"))
-            .add_function(EmptyFunction::new_with_name("ZABC"))
-            .add_function(EmptyFunction::new_with_name("ZAABC"))
+            .add_callable(DoNothingCommand::new_with_name("ZAB"))
+            .add_callable(EmptyFunction::new_with_name("ZABC"))
+            .add_callable(EmptyFunction::new_with_name("ZAABC"))
             .run(r#"help "za""#)
             .expect_err("1:1: In call to HELP: 1:6: Ambiguous help topic za; candidates are: ZAABC$, ZAB, ZABC$")
             .check();
@@ -929,7 +929,7 @@ This is the first and only topic with just one line.
     #[test]
     fn test_help_errors() {
         let mut t =
-            tester().add_command(DoNothingCommand::new()).add_function(EmptyFunction::new());
+            tester().add_callable(DoNothingCommand::new()).add_callable(EmptyFunction::new());
 
         t.run(r#"HELP foo bar"#)
             .expect_uncatchable_err("1:10: Unexpected value in expression")

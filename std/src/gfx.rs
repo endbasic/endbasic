@@ -565,15 +565,15 @@ impl Callable for GfxWidthFunction {
 
 /// Adds all console-related commands for the given `console` to the `machine`.
 pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
-    machine.add_command(GfxCircleCommand::new(console.clone()));
-    machine.add_command(GfxCirclefCommand::new(console.clone()));
-    machine.add_function(GfxHeightFunction::new(console.clone()));
-    machine.add_command(GfxLineCommand::new(console.clone()));
-    machine.add_command(GfxPixelCommand::new(console.clone()));
-    machine.add_command(GfxRectCommand::new(console.clone()));
-    machine.add_command(GfxRectfCommand::new(console.clone()));
-    machine.add_command(GfxSyncCommand::new(console.clone()));
-    machine.add_function(GfxWidthFunction::new(console));
+    machine.add_callable(GfxCircleCommand::new(console.clone()));
+    machine.add_callable(GfxCirclefCommand::new(console.clone()));
+    machine.add_callable(GfxHeightFunction::new(console.clone()));
+    machine.add_callable(GfxLineCommand::new(console.clone()));
+    machine.add_callable(GfxPixelCommand::new(console.clone()));
+    machine.add_callable(GfxRectCommand::new(console.clone()));
+    machine.add_callable(GfxRectfCommand::new(console.clone()));
+    machine.add_callable(GfxSyncCommand::new(console.clone()));
+    machine.add_callable(GfxWidthFunction::new(console));
 }
 
 #[cfg(test)]

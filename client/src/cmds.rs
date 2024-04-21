@@ -615,15 +615,15 @@ pub fn add_all<S: Into<String>>(
         .borrow_mut()
         .register_scheme("cloud", Box::from(CloudDriveFactory::new(service.clone())));
 
-    machine.add_command(LoginCommand::new(service.clone(), console.clone(), storage.clone()));
-    machine.add_command(LogoutCommand::new(service.clone(), console.clone(), storage.clone()));
-    machine.add_command(ShareCommand::new(
+    machine.add_callable(LoginCommand::new(service.clone(), console.clone(), storage.clone()));
+    machine.add_callable(LogoutCommand::new(service.clone(), console.clone(), storage.clone()));
+    machine.add_callable(ShareCommand::new(
         service.clone(),
         console.clone(),
         storage,
         exec_base_url,
     ));
-    machine.add_command(SignupCommand::new(service, console));
+    machine.add_callable(SignupCommand::new(service, console));
 }
 
 #[cfg(test)]

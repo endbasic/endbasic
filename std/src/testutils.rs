@@ -431,14 +431,8 @@ impl Tester {
     }
 
     /// Registers the given builtin command into the machine, which must not yet be registered.
-    pub fn add_command(mut self, command: Rc<dyn Callable>) -> Self {
-        self.machine.add_command(command);
-        self
-    }
-
-    /// Registers the given builtin function into the machine, which must not yet be registered.
-    pub fn add_function(mut self, function: Rc<dyn Callable>) -> Self {
-        self.machine.add_function(function);
+    pub fn add_callable(mut self, callable: Rc<dyn Callable>) -> Self {
+        self.machine.add_callable(callable);
         self
     }
 

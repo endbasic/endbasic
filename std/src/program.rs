@@ -567,13 +567,13 @@ pub fn add_all(
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 ) {
-    machine.add_command(EditCommand::new(console.clone(), program.clone()));
-    machine.add_command(KillCommand::new(storage.clone()));
-    machine.add_command(ListCommand::new(console.clone(), program.clone()));
-    machine.add_command(LoadCommand::new(console.clone(), storage.clone(), program.clone()));
-    machine.add_command(NewCommand::new(console.clone(), program.clone()));
-    machine.add_command(RunCommand::new(console.clone(), program.clone()));
-    machine.add_command(SaveCommand::new(console, storage, program));
+    machine.add_callable(EditCommand::new(console.clone(), program.clone()));
+    machine.add_callable(KillCommand::new(storage.clone()));
+    machine.add_callable(ListCommand::new(console.clone(), program.clone()));
+    machine.add_callable(LoadCommand::new(console.clone(), storage.clone(), program.clone()));
+    machine.add_callable(NewCommand::new(console.clone(), program.clone()));
+    machine.add_callable(RunCommand::new(console.clone(), program.clone()));
+    machine.add_callable(SaveCommand::new(console, storage, program));
 }
 
 #[cfg(test)]

@@ -435,11 +435,11 @@ pub fn add_all(
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 ) {
-    machine.add_command(CdCommand::new(storage.clone()));
-    machine.add_command(DirCommand::new(console.clone(), storage.clone()));
-    machine.add_command(MountCommand::new(console.clone(), storage.clone()));
-    machine.add_command(PwdCommand::new(console.clone(), storage.clone()));
-    machine.add_command(UnmountCommand::new(storage));
+    machine.add_callable(CdCommand::new(storage.clone()));
+    machine.add_callable(DirCommand::new(console.clone(), storage.clone()));
+    machine.add_callable(MountCommand::new(console.clone(), storage.clone()));
+    machine.add_callable(PwdCommand::new(console.clone(), storage.clone()));
+    machine.add_callable(UnmountCommand::new(storage));
 }
 
 #[cfg(test)]

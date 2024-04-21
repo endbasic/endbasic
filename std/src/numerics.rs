@@ -714,20 +714,20 @@ pub fn add_all(machine: &mut Machine) {
     let angle_mode = Rc::from(RefCell::from(AngleMode::Radians));
     let prng = Rc::from(RefCell::from(Prng::new_from_entryopy()));
     machine.add_clearable(Box::from(ClearableAngleMode { angle_mode: angle_mode.clone() }));
-    machine.add_command(RandomizeCommand::new(prng.clone()));
-    machine.add_command(DegCommand::new(angle_mode.clone()));
-    machine.add_function(AtnFunction::new(angle_mode.clone()));
-    machine.add_function(CintFunction::new());
-    machine.add_function(CosFunction::new(angle_mode.clone()));
-    machine.add_function(IntFunction::new());
-    machine.add_function(MaxFunction::new());
-    machine.add_function(MinFunction::new());
-    machine.add_function(PiFunction::new());
-    machine.add_command(RadCommand::new(angle_mode.clone()));
-    machine.add_function(RndFunction::new(prng));
-    machine.add_function(SinFunction::new(angle_mode.clone()));
-    machine.add_function(SqrFunction::new());
-    machine.add_function(TanFunction::new(angle_mode));
+    machine.add_callable(AtnFunction::new(angle_mode.clone()));
+    machine.add_callable(CintFunction::new());
+    machine.add_callable(CosFunction::new(angle_mode.clone()));
+    machine.add_callable(DegCommand::new(angle_mode.clone()));
+    machine.add_callable(IntFunction::new());
+    machine.add_callable(MaxFunction::new());
+    machine.add_callable(MinFunction::new());
+    machine.add_callable(PiFunction::new());
+    machine.add_callable(RadCommand::new(angle_mode.clone()));
+    machine.add_callable(RandomizeCommand::new(prng.clone()));
+    machine.add_callable(RndFunction::new(prng));
+    machine.add_callable(SinFunction::new(angle_mode.clone()));
+    machine.add_callable(SqrFunction::new());
+    machine.add_callable(TanFunction::new(angle_mode));
 }
 
 #[cfg(test)]

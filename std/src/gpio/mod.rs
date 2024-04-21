@@ -387,10 +387,10 @@ impl Callable for GpioWriteCommand {
 /// Adds all symbols provided by this module to the given `machine`.
 pub fn add_all(machine: &mut Machine, pins: Rc<RefCell<dyn Pins>>) {
     machine.add_clearable(PinsClearable::new(pins.clone()));
-    machine.add_command(GpioClearCommand::new(pins.clone()));
-    machine.add_command(GpioSetupCommand::new(pins.clone()));
-    machine.add_command(GpioWriteCommand::new(pins.clone()));
-    machine.add_function(GpioReadFunction::new(pins));
+    machine.add_callable(GpioClearCommand::new(pins.clone()));
+    machine.add_callable(GpioReadFunction::new(pins.clone()));
+    machine.add_callable(GpioSetupCommand::new(pins.clone()));
+    machine.add_callable(GpioWriteCommand::new(pins));
 }
 
 #[cfg(test)]
