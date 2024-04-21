@@ -79,7 +79,7 @@ impl Command for ClsCommand {
             return Err(CallError::SyntaxError);
         }
         self.console.borrow_mut().clear(ClearType::All)?;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -150,7 +150,7 @@ impl Command for ColorCommand {
         }
 
         self.console.borrow_mut().set_color(fg, bg)?;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -331,7 +331,7 @@ impl Command for InputCommand {
                             .get_mut_symbols()
                             .set_var(&vref, value)
                             .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
-                        return Ok(());
+                        return Ok(Value::Void);
                     }
                     Err(e) => {
                         console.print(&format!("Retry input: {}", e))?;
@@ -426,7 +426,7 @@ impl Command for LocateCommand {
         }
 
         console.locate(CharsXY::new(column, row))?;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -510,7 +510,7 @@ impl Command for PrintCommand {
         } else {
             self.console.borrow_mut().write(&text)?;
         }
-        Ok(())
+        Ok(Value::Void)
     }
 }
 

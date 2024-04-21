@@ -212,7 +212,7 @@ impl Command for GpioSetupCommand {
             Some(mut pins) => pins.setup(pin, mode)?,
             None => self.pins.borrow_mut().setup(pin, mode)?,
         };
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -272,7 +272,7 @@ impl Command for GpioClearCommand {
             }
         }
 
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -381,7 +381,7 @@ impl Command for GpioWriteCommand {
             Some(mut pins) => pins.write(pin, value)?,
             None => self.pins.borrow_mut().write(pin, value)?,
         };
-        Ok(())
+        Ok(Value::Void)
     }
 }
 

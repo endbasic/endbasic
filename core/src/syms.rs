@@ -62,7 +62,7 @@ impl From<io::Error> for CallError {
 }
 
 /// Result for command execution return values.
-pub type CommandResult = std::result::Result<(), CallError>;
+pub type CommandResult = std::result::Result<Value, CallError>;
 
 /// Result for function evaluation return values.
 pub type FunctionResult = std::result::Result<Value, CallError>;

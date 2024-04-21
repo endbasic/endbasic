@@ -67,7 +67,7 @@ impl Command for ClearCommand {
             return Err(CallError::SyntaxError);
         }
         machine.clear();
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -123,7 +123,7 @@ pub type SleepFn = Box<dyn Fn(Duration, LineCol) -> BoxedLocal<CommandResult>>;
 fn system_sleep(d: Duration, _pos: LineCol) -> BoxedLocal<CommandResult> {
     async move {
         thread::sleep(d);
-        Ok(())
+        Ok(Value::Void)
     }
     .boxed_local()
 }

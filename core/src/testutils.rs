@@ -39,6 +39,7 @@ fn format_value(v: Value, o: &mut String) {
         Value::Separator(s) => o.push_str(&format!("{:?}", s)),
         Value::Text(s) => o.push_str(&s),
         Value::VarRef(v) => o.push_str(&format!("{}", v)),
+        Value::Void => panic!("Should never try to format void in tests"),
     }
 }
 
@@ -93,7 +94,7 @@ impl Command for ClearCommand {
             return Err(CallError::SyntaxError);
         }
         machine.clear();
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -288,7 +289,7 @@ impl Command for GetDataCommand {
             return Err(CallError::SyntaxError);
         }
         *self.data.borrow_mut() = machine.get_data().to_vec();
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -335,7 +336,7 @@ impl Command for InCommand {
             .get_mut_symbols()
             .set_var(&vref, value)
             .map_err(|e| CallError::EvalError(pos, e.message))?;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -383,7 +384,7 @@ impl Command for OutCommand {
             }
         }
         self.data.borrow_mut().push(text);
-        Ok(())
+        Ok(Value::Void)
     }
 }
 

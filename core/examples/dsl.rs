@@ -139,7 +139,7 @@ impl Command for SwitchLightCommand {
             println!("Turning light {} on", i);
         }
         lights[i - 1] = !lights[i - 1];
-        Ok(())
+        Ok(Value::Void)
     }
 }
 

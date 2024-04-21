@@ -429,9 +429,12 @@ impl Machine {
                 }
 
                 let b = b.clone();
-                b.exec(args, self)
+                let value = b
+                    .exec(args, self)
                     .await
-                    .map_err(|e| Error::from_call_error(b.metadata(), e, bref_pos))
+                    .map_err(|e| Error::from_call_error(b.metadata(), e, bref_pos))?;
+                assert_eq!(value, Value::Void, "Commands do return values");
+                Ok(())
             }
 
             Some(_) => Err(Error::EvalError(bref_pos, format!("{} is not a command", bref))),

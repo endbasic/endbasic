@@ -97,7 +97,7 @@ To create an account, use the SIGNUP command.",
         let mut storage = self.storage.borrow_mut();
         storage.mount("CLOUD", &format!("cloud://{}", username))?;
 
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -230,7 +230,7 @@ impl Command for LogoutCommand {
             console.print("")?;
         }
 
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -288,7 +288,7 @@ impl ShareCommand {
         acl_pos: LineCol,
         add: &mut FileAcls,
         remove: &mut FileAcls,
-    ) -> CommandResult {
+    ) -> Result<(), CallError> {
         let change = if acl.len() < 3 { String::new() } else { acl.split_off(acl.len() - 2) };
         let username = acl; // For clarity after splitting off the ACL change request.
         match (username, change.as_str()) {
@@ -335,7 +335,7 @@ impl ShareCommand {
         }
         console.print("")?;
 
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -427,7 +427,7 @@ auto-run your public file by visiting:",
             console.print("")?;
         }
 
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -580,7 +580,7 @@ have no adverse impact in the service you receive.",
         if !proceed {
             // TODO(jmmv): This should return an error of some form once we have error handling in
             // the language.
-            return Ok(());
+            return Ok(Value::Void);
         }
 
         let request = SignupRequest { username, password, email, promotional_email };
@@ -598,7 +598,7 @@ in it to activate your account.  Make sure to check your spam folder.",
         )?;
         console.print("")?;
 
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
