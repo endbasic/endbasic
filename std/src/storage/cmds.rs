@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
+    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command,
 };
 use endbasic_core::LineCol;
 use std::cell::RefCell;
@@ -146,7 +146,7 @@ impl Command for CdCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let (target, pos) = match iter.next() {
@@ -203,7 +203,7 @@ impl Command for DirCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let maybe_path = match iter.next() {
@@ -266,7 +266,7 @@ impl Command for MountCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let (target, targetpos) = match iter.next() {
@@ -351,7 +351,7 @@ impl Command for PwdCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -402,7 +402,7 @@ impl Command for UnmountCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let (drive, pos) = match iter.next() {

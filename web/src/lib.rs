@@ -25,7 +25,7 @@
 use async_channel::{Receiver, Sender};
 use endbasic_core::ast::Value;
 use endbasic_core::exec::{Signal, YieldNowFn};
-use endbasic_core::syms::{self, CommandResult};
+use endbasic_core::syms::{self, CallResult};
 use endbasic_core::LineCol;
 use endbasic_std::console::{Console, GraphicsConsole};
 use std::cell::RefCell;
@@ -106,7 +106,7 @@ fn js_sleep(
     d: Duration,
     pos: LineCol,
     yielder: Rc<RefCell<Yielder>>,
-) -> Pin<Box<dyn Future<Output = CommandResult>>> {
+) -> Pin<Box<dyn Future<Output = CallResult>>> {
     let ms = d.as_millis();
     if ms > std::i32::MAX as u128 {
         // The JavaScript setTimeout function only takes i32s so ensure our value fits.  If it

@@ -21,8 +21,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
-    FunctionResult,
+    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Function,
 };
 use endbasic_core::LineCol;
 use std::cell::RefCell;
@@ -74,7 +73,7 @@ impl Command for ClsCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -114,7 +113,7 @@ impl Command for ColorCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         fn get_color(value: Value, pos: LineCol) -> Result<Option<u8>, CallError> {
@@ -193,7 +192,7 @@ impl Function for InKeyFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -257,7 +256,7 @@ impl Command for InputCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = args.into_iter().rev();
 
         // Pay attention: we are iterating the arguments in reverse!
@@ -373,7 +372,7 @@ impl Command for LocateCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         fn get_coord(value: Value, pos: LineCol, name: &str) -> Result<u16, CallError> {
@@ -467,7 +466,7 @@ impl Command for PrintCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let iter = machine.load_all(args)?.into_iter();
 
         let mut text = String::new();
@@ -543,7 +542,7 @@ impl Function for ScrColsFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -581,7 +580,7 @@ impl Function for ScrRowsFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }

@@ -19,8 +19,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
-    FunctionResult, Symbols,
+    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Function, Symbols,
 };
 use endbasic_core::LineCol;
 use std::cell::RefCell;
@@ -181,7 +180,7 @@ impl Command for GpioSetupCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let (pin, pinpos) = match iter.next() {
@@ -247,7 +246,7 @@ impl Command for GpioClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         match iter.next() {
@@ -305,7 +304,7 @@ impl Function for GpioReadFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
         let pin = match iter.next() {
             Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
@@ -353,7 +352,7 @@ impl Command for GpioWriteCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let pin = match iter.next() {

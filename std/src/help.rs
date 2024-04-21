@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Symbols,
+    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Symbols,
 };
 use endbasic_core::LineCol;
 use radix_trie::{Trie, TrieCommon};
@@ -478,7 +478,7 @@ impl Command for HelpCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         // TODO(jmmv): Now that we can "see" unexpanded variable references, it might be interesting
         // to restore the previous "HELP foo" functionality (without double quotes).
         let mut iter = machine.load_all(args)?.into_iter();
@@ -521,9 +521,7 @@ pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
 pub(crate) mod testutils {
     use super::*;
     use endbasic_core::ast::Value;
-    use endbasic_core::syms::{
-        CallableMetadata, CallableMetadataBuilder, Function, FunctionResult,
-    };
+    use endbasic_core::syms::{CallResult, CallableMetadata, CallableMetadataBuilder, Function};
 
     /// A command that does nothing.
     pub(crate) struct DoNothingCommand {
@@ -561,11 +559,7 @@ Second paragraph of the extended description.",
             &self.metadata
         }
 
-        async fn exec(
-            &self,
-            _args: Vec<(Value, LineCol)>,
-            _machine: &mut Machine,
-        ) -> CommandResult {
+        async fn exec(&self, _args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
             Ok(Value::Void)
         }
     }
@@ -606,11 +600,7 @@ Second paragraph of the extended description.",
             &self.metadata
         }
 
-        async fn exec(
-            &self,
-            _args: Vec<(Value, LineCol)>,
-            _machine: &mut Machine,
-        ) -> FunctionResult {
+        async fn exec(&self, _args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
             Ok(Value::Text("irrelevant".to_owned()))
         }
     }

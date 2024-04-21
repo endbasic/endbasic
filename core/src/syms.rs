@@ -61,11 +61,8 @@ impl From<io::Error> for CallError {
     }
 }
 
-/// Result for command execution return values.
-pub type CommandResult = std::result::Result<Value, CallError>;
-
-/// Result for function evaluation return values.
-pub type FunctionResult = std::result::Result<Value, CallError>;
+/// Result for callable execution return values.
+pub type CallResult = std::result::Result<Value, CallError>;
 
 /// Represents a multidimensional array.
 #[derive(Clone, Debug, PartialEq)]
@@ -581,7 +578,7 @@ pub trait Function {
     /// `args` contains the arguments to the function call.
     ///
     /// `machine` provides mutable access to the current state of the machine invoking the function.
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult;
 }
 
 /// A trait to define a command that is executed by a `Machine`.
@@ -609,7 +606,7 @@ pub trait Command {
     /// `machine` provides mutable access to the current state of the machine invoking the command.
     ///
     /// Commands cannot return any value except for errors.
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult;
 }
 
 #[cfg(test)]

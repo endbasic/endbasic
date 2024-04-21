@@ -19,8 +19,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
-    FunctionResult, Symbol,
+    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Function, Symbol,
 };
 use endbasic_core::LineCol;
 use futures_lite::future::{BoxedLocal, FutureExt};
@@ -62,7 +61,7 @@ impl Command for ClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -100,7 +99,7 @@ impl Function for ErrmsgFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -117,10 +116,10 @@ impl Function for ErrmsgFunction {
 }
 
 /// Type of the sleep function used by the `SLEEP` command to actually suspend execution.
-pub type SleepFn = Box<dyn Fn(Duration, LineCol) -> BoxedLocal<CommandResult>>;
+pub type SleepFn = Box<dyn Fn(Duration, LineCol) -> BoxedLocal<CallResult>>;
 
 /// An implementation of a `SleepFn` that stops the current thread.
-fn system_sleep(d: Duration, _pos: LineCol) -> BoxedLocal<CommandResult> {
+fn system_sleep(d: Duration, _pos: LineCol) -> BoxedLocal<CallResult> {
     async move {
         thread::sleep(d);
         Ok(Value::Void)
@@ -158,7 +157,7 @@ impl Command for SleepCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let (duration, pos) = match iter.next() {
@@ -248,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_sleep_ok_int() {
-        let sleep_fake = |d: Duration, pos: LineCol| -> BoxedLocal<CommandResult> {
+        let sleep_fake = |d: Duration, pos: LineCol| -> BoxedLocal<CallResult> {
             async move { Err(CallError::InternalError(pos, format!("Got {} ms", d.as_millis()))) }
                 .boxed_local()
         };
@@ -259,7 +258,7 @@ mod tests {
 
     #[test]
     fn test_sleep_ok_float() {
-        let sleep_fake = |d: Duration, pos: LineCol| -> BoxedLocal<CommandResult> {
+        let sleep_fake = |d: Duration, pos: LineCol| -> BoxedLocal<CallResult> {
             async move {
                 let ms = d.as_millis();
                 if ms > 123095 && ms < 123105 {
