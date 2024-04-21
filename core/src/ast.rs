@@ -349,6 +349,9 @@ pub enum Value {
 
     /// A reference to a variable.
     VarRef(VarRef),
+
+    /// A value that does not exist.
+    Void,
 }
 
 impl From<bool> for Value {
@@ -398,6 +401,7 @@ impl fmt::Display for Value {
             Value::Separator(s) => write!(f, "{}", s),
             Value::Text(s) => write!(f, "\"{}\"", s),
             Value::VarRef(v) => write!(f, "{}", v),
+            Value::Void => write!(f, "()"),
         }
     }
 }
@@ -413,6 +417,7 @@ impl Value {
             Value::Separator(_) => VarType::Integer,
             Value::Text(_) => VarType::Text,
             Value::VarRef(vref) => vref.ref_type,
+            Value::Void => VarType::Void,
         }
     }
 
@@ -436,6 +441,7 @@ impl Value {
             Value::Separator(_s) => panic!("Separators should not be printed"),
             Value::Text(s) => s,
             Value::VarRef(v) => format!("{}", v),
+            Value::Void => panic!("Void should not be printed"),
         }
     }
 }

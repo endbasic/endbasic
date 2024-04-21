@@ -144,7 +144,7 @@ impl Command for GfxCircleCommand {
         let r = parse_radius(rvalue, rpos)?;
 
         self.console.borrow_mut().draw_circle(xy, r)?;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -201,7 +201,7 @@ impl Command for GfxCirclefCommand {
         let r = parse_radius(rvalue, rpos)?;
 
         self.console.borrow_mut().draw_circle_filled(xy, r)?;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -292,7 +292,7 @@ impl Command for GfxLineCommand {
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
 
         self.console.borrow_mut().draw_line(x1y1, x2y2)?;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -337,7 +337,7 @@ impl Command for GfxPixelCommand {
         let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
 
         self.console.borrow_mut().draw_pixel(xy)?;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -391,7 +391,7 @@ impl Command for GfxRectCommand {
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
 
         self.console.borrow_mut().draw_rect(x1y1, x2y2)?;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -444,7 +444,7 @@ impl Command for GfxRectfCommand {
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
 
         self.console.borrow_mut().draw_rect_filled(x1y1, x2y2)?;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -495,7 +495,7 @@ impl Command for GfxSyncCommand {
         let (enabled, pos) = match iter.next() {
             None => {
                 self.console.borrow_mut().sync_now()?;
-                return Ok(());
+                return Ok(Value::Void);
             }
             Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
             Some((value, pos)) => (value, pos),
@@ -522,7 +522,7 @@ impl Command for GfxSyncCommand {
             console.hide_cursor()?;
         }
         console.set_sync(enabled)?;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 

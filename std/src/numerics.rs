@@ -277,7 +277,7 @@ impl Command for DegCommand {
             return Err(CallError::SyntaxError);
         }
         *self.angle_mode.borrow_mut() = AngleMode::Degrees;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -475,7 +475,7 @@ impl Command for RadCommand {
             return Err(CallError::SyntaxError);
         }
         *self.angle_mode.borrow_mut() = AngleMode::Radians;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -530,7 +530,7 @@ impl Command for RandomizeCommand {
                 *self.prng.borrow_mut() = Prng::new_from_seed(n);
             }
         }
-        Ok(())
+        Ok(Value::Void)
     }
 }
 

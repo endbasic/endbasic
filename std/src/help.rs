@@ -508,7 +508,7 @@ impl Command for HelpCommand {
             _ => return Err(CallError::SyntaxError),
         }
 
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -566,7 +566,7 @@ Second paragraph of the extended description.",
             _args: Vec<(Value, LineCol)>,
             _machine: &mut Machine,
         ) -> CommandResult {
-            Ok(())
+            Ok(Value::Void)
         }
     }
 

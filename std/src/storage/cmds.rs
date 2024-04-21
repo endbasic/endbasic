@@ -171,7 +171,7 @@ impl Command for CdCommand {
 
         self.storage.borrow_mut().cd(&target)?;
 
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -229,7 +229,7 @@ impl Command for DirCommand {
 
         show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), &path).await?;
 
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -272,7 +272,7 @@ impl Command for MountCommand {
         let (target, targetpos) = match iter.next() {
             None => {
                 show_drives(&self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
-                return Ok(());
+                return Ok(Value::Void);
             }
             Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
             Some((value, pos)) => (value, pos),
@@ -315,7 +315,7 @@ impl Command for MountCommand {
 
         self.storage.borrow_mut().mount(&name, &target)?;
 
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -369,7 +369,7 @@ impl Command for PwdCommand {
         }
         console.print("")?;
 
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -424,7 +424,7 @@ impl Command for UnmountCommand {
 
         self.storage.borrow_mut().unmount(&drive)?;
 
-        Ok(())
+        Ok(Value::Void)
     }
 }
 

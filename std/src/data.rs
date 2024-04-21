@@ -136,7 +136,7 @@ impl Command for ReadCommand {
                 .map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
         }
 
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
@@ -175,7 +175,7 @@ impl Command for RestoreCommand {
             return Err(CallError::SyntaxError);
         }
         *self.index.borrow_mut() = 0;
-        Ok(())
+        Ok(Value::Void)
     }
 }
 
