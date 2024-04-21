@@ -489,19 +489,11 @@ impl SymbolsBuilder {
         self
     }
 
-    /// Adds the command `cmd` to the list of symbols.
-    pub fn add_command(mut self, cmd: Rc<dyn Callable>) -> Self {
-        let name = cmd.metadata().name();
+    /// Adds the `callable` to the list of symbols.
+    pub fn add_callable(mut self, callable: Rc<dyn Callable>) -> Self {
+        let name = callable.metadata().name();
         assert!(name == name.to_ascii_uppercase());
-        self.by_name.insert(name.to_owned(), Symbol::Callable(cmd));
-        self
-    }
-
-    /// Adds the function `func` to the list of symbols.
-    pub fn add_function(mut self, func: Rc<dyn Callable>) -> Self {
-        let name = func.metadata().name();
-        assert!(name == name.to_ascii_uppercase());
-        self.by_name.insert(name.to_owned(), Symbol::Callable(func));
+        self.by_name.insert(name.to_owned(), Symbol::Callable(callable));
         self
     }
 

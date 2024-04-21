@@ -188,9 +188,9 @@ impl Callable for SleepCommand {
 /// `sleep_fn` is an async function that implements a pause given a `Duration`.  If not provided,
 /// uses the `std::thread::sleep` function.
 pub fn add_all(machine: &mut Machine, sleep_fn: Option<SleepFn>) {
-    machine.add_command(ClearCommand::new());
-    machine.add_function(ErrmsgFunction::new());
-    machine.add_command(SleepCommand::new(sleep_fn.unwrap_or_else(|| Box::from(system_sleep))));
+    machine.add_callable(ClearCommand::new());
+    machine.add_callable(ErrmsgFunction::new());
+    machine.add_callable(SleepCommand::new(sleep_fn.unwrap_or_else(|| Box::from(system_sleep))));
 }
 
 #[cfg(test)]
@@ -252,7 +252,7 @@ mod tests {
                 .boxed_local()
         };
 
-        let mut t = Tester::empty().add_command(SleepCommand::new(Box::from(sleep_fake)));
+        let mut t = Tester::empty().add_callable(SleepCommand::new(Box::from(sleep_fake)));
         t.run("SLEEP 123").expect_err("1:1: In call to SLEEP: 1:7: Got 123000 ms").check();
     }
 
@@ -270,7 +270,7 @@ mod tests {
             .boxed_local()
         };
 
-        let mut t = Tester::empty().add_command(SleepCommand::new(Box::from(sleep_fake)));
+        let mut t = Tester::empty().add_callable(SleepCommand::new(Box::from(sleep_fake)));
         t.run("SLEEP 123.1").expect_err("1:1: In call to SLEEP: 1:7: Good").check();
     }
 

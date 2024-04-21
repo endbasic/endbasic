@@ -484,15 +484,15 @@ impl Callable for StrFunction {
 
 /// Adds all symbols provided by this module to the given `machine`.
 pub fn add_all(machine: &mut Machine) {
-    machine.add_function(AscFunction::new());
-    machine.add_function(ChrFunction::new());
-    machine.add_function(LeftFunction::new());
-    machine.add_function(LenFunction::new());
-    machine.add_function(LtrimFunction::new());
-    machine.add_function(MidFunction::new());
-    machine.add_function(RightFunction::new());
-    machine.add_function(RtrimFunction::new());
-    machine.add_function(StrFunction::new());
+    machine.add_callable(AscFunction::new());
+    machine.add_callable(ChrFunction::new());
+    machine.add_callable(LeftFunction::new());
+    machine.add_callable(LenFunction::new());
+    machine.add_callable(LtrimFunction::new());
+    machine.add_callable(MidFunction::new());
+    machine.add_callable(RightFunction::new());
+    machine.add_callable(RtrimFunction::new());
+    machine.add_callable(StrFunction::new());
 }
 
 #[cfg(test)]

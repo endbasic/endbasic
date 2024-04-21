@@ -592,14 +592,14 @@ impl Callable for ScrRowsFunction {
 /// Adds all console-related commands for the given `console` to the `machine`.
 pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
     machine.add_clearable(ConsoleClearable::new(console.clone()));
-    machine.add_command(ClsCommand::new(console.clone()));
-    machine.add_command(ColorCommand::new(console.clone()));
-    machine.add_function(InKeyFunction::new(console.clone()));
-    machine.add_command(InputCommand::new(console.clone()));
-    machine.add_command(LocateCommand::new(console.clone()));
-    machine.add_command(PrintCommand::new(console.clone()));
-    machine.add_function(ScrColsFunction::new(console.clone()));
-    machine.add_function(ScrRowsFunction::new(console));
+    machine.add_callable(ClsCommand::new(console.clone()));
+    machine.add_callable(ColorCommand::new(console.clone()));
+    machine.add_callable(InKeyFunction::new(console.clone()));
+    machine.add_callable(InputCommand::new(console.clone()));
+    machine.add_callable(LocateCommand::new(console.clone()));
+    machine.add_callable(PrintCommand::new(console.clone()));
+    machine.add_callable(ScrColsFunction::new(console.clone()));
+    machine.add_callable(ScrRowsFunction::new(console));
 }
 
 #[cfg(test)]

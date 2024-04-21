@@ -177,8 +177,8 @@ impl Callable for UboundFunction {
 
 /// Adds all symbols provided by this module to the given `machine`.
 pub fn add_all(machine: &mut Machine) {
-    machine.add_function(LboundFunction::new());
-    machine.add_function(UboundFunction::new());
+    machine.add_callable(LboundFunction::new());
+    machine.add_callable(UboundFunction::new());
 }
 
 #[cfg(test)]

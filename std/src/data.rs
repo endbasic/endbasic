@@ -183,8 +183,8 @@ impl Callable for RestoreCommand {
 pub fn add_all(machine: &mut Machine) {
     let index = Rc::from(RefCell::from(0));
     machine.add_clearable(Box::from(ClearableIndex(index.clone())));
-    machine.add_command(ReadCommand::new(index.clone()));
-    machine.add_command(RestoreCommand::new(index));
+    machine.add_callable(ReadCommand::new(index.clone()));
+    machine.add_callable(RestoreCommand::new(index));
 }
 
 #[cfg(test)]

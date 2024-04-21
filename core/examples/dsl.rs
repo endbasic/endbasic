@@ -149,8 +149,8 @@ fn main() {
 
     // Create the EndBASIC machine and register our callable objects to create our DSL.
     let mut machine = Machine::default();
-    machine.add_command(SwitchLightCommand::new(lights.clone()));
-    machine.add_function(NumLightsFunction::new(lights.clone()));
+    machine.add_callable(NumLightsFunction::new(lights.clone()));
+    machine.add_callable(SwitchLightCommand::new(lights.clone()));
 
     // Execute the sample script, which will call back into our callable objects in Rust land to
     // manipulate the state of the lights.

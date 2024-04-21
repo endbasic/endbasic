@@ -231,26 +231,15 @@ impl Symbols {
         Self { by_name }
     }
 
-    /// Registers the given builtin command.
+    /// Registers the given builtin callable.
     ///
-    /// Given that commands cannot be defined at runtime, specifying a non-unique name results in
+    /// Given that callable cannot be defined at runtime, specifying a non-unique name results in
     /// a panic.
-    pub fn add_command(&mut self, command: Rc<dyn Callable>) {
-        let key = command.metadata().name();
+    pub fn add_callable(&mut self, callable: Rc<dyn Callable>) {
+        let key = callable.metadata().name();
         debug_assert!(key == key.to_ascii_uppercase());
         assert!(!self.by_name.contains_key(key));
-        self.by_name.insert(key.to_owned(), Symbol::Callable(command));
-    }
-
-    /// Registers the given builtin function.
-    ///
-    /// Given that functions cannot be defined at runtime, specifying a non-unique name results in
-    /// a panic.
-    pub fn add_function(&mut self, function: Rc<dyn Callable>) {
-        let key = function.metadata().name();
-        debug_assert!(key == key.to_ascii_uppercase());
-        assert!(!self.by_name.contains_key(key));
-        self.by_name.insert(key.to_owned(), Symbol::Callable(function));
+        self.by_name.insert(key.to_owned(), Symbol::Callable(callable));
     }
 
     /// Returns the mapping of all symbols.
@@ -770,8 +759,8 @@ mod tests {
     fn test_symbols_clear() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
-            .add_function(SumFunction::new())
+            .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
+            .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .add_var("__SYSTEM_VAR", Value::Integer(42))
             .build();
@@ -822,8 +811,8 @@ mod tests {
     fn test_symbols_dim_name_overlap() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
-            .add_function(SumFunction::new())
+            .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
+            .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
@@ -895,8 +884,8 @@ mod tests {
     fn test_symbols_dim_array_name_overlap() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
-            .add_function(SumFunction::new())
+            .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
+            .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
@@ -926,8 +915,8 @@ mod tests {
         // If modifying this test, update the identical test for get_auto() and get_mut().
         let syms = SymbolsBuilder::default()
             .add_array("BOOL_ARRAY", VarType::Boolean)
-            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
-            .add_function(SumFunction::new())
+            .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
+            .add_callable(SumFunction::new())
             .add_var("STRING_VAR", Value::Text("".to_owned()))
             .build();
 
@@ -979,8 +968,8 @@ mod tests {
         // If modifying this test, update the identical test for get_auto() and get_mut().
         let syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
-            .add_function(SumFunction::new())
+            .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
+            .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
@@ -1009,8 +998,8 @@ mod tests {
         // If modifying this test, update the identical test for get() and get_auto().
         let mut syms = SymbolsBuilder::default()
             .add_array("BOOL_ARRAY", VarType::Boolean)
-            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
-            .add_function(SumFunction::new())
+            .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
+            .add_callable(SumFunction::new())
             .add_var("STRING_VAR", Value::Text("".to_owned()))
             .build();
 
@@ -1062,8 +1051,8 @@ mod tests {
         // If modifying this test, update the identical test for get() and get_auto().
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
-            .add_function(SumFunction::new())
+            .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
+            .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
@@ -1092,8 +1081,8 @@ mod tests {
         // If modifying this test, update the identical test for get() and get_mut().
         let syms = SymbolsBuilder::default()
             .add_array("BOOL_ARRAY", VarType::Boolean)
-            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
-            .add_function(SumFunction::new())
+            .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
+            .add_callable(SumFunction::new())
             .add_var("STRING_VAR", Value::Text("".to_owned()))
             .build();
 
@@ -1123,8 +1112,8 @@ mod tests {
         // If modifying this test, update the identical test for get() and get_mut().
         let syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
-            .add_function(SumFunction::new())
+            .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
+            .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
@@ -1289,8 +1278,8 @@ mod tests {
     fn test_symbols_set_var_name_overlap() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
-            .add_function(SumFunction::new())
+            .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
+            .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
@@ -1367,8 +1356,8 @@ mod tests {
     fn test_symbols_unset_ok() {
         let mut syms = SymbolsBuilder::default()
             .add_array("SOMEARRAY", VarType::Integer)
-            .add_command(OutCommand::new(Rc::from(RefCell::from(vec![]))))
-            .add_function(SumFunction::new())
+            .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
+            .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
