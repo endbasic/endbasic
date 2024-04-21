@@ -21,7 +21,7 @@ use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
-    FunctionResult, Symbols,
+    FunctionResult,
 };
 use endbasic_core::LineCol;
 use std::cell::RefCell;
@@ -234,7 +234,7 @@ impl Function for GfxHeightFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -555,7 +555,7 @@ impl Function for GfxWidthFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }

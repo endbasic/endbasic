@@ -33,7 +33,7 @@ const CATEGORY: &str = "Array functions";
 #[allow(clippy::needless_lifetimes)]
 fn parse_bound_args<'a>(
     args: Vec<(Value, LineCol)>,
-    symbols: &'a mut Symbols,
+    symbols: &'a Symbols,
 ) -> Result<(&'a Array, usize), CallError> {
     let mut iter = args.iter();
 
@@ -133,8 +133,8 @@ impl Function for LboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let (_array, _dim) = parse_bound_args(args, symbols)?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let (_array, _dim) = parse_bound_args(args, machine.get_symbols())?;
         Ok(Value::Integer(0))
     }
 }
@@ -169,8 +169,8 @@ impl Function for UboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let (array, dim) = parse_bound_args(args, symbols)?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let (array, dim) = parse_bound_args(args, machine.get_symbols())?;
         Ok(Value::Integer((array.dimensions()[dim - 1] - 1) as i32))
     }
 }

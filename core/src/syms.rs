@@ -425,7 +425,7 @@ impl Symbols {
     /// All functions should use this before inspecting their arguments, unless they care about
     /// using values by reference.
     pub fn load_all(
-        &mut self,
+        &self,
         mut args: Vec<(Value, LineCol)>,
     ) -> std::result::Result<Vec<(Value, LineCol)>, CallError> {
         for arg in &mut args {
@@ -562,8 +562,9 @@ impl CallableMetadata {
 
 /// A trait to define a function that is executed by a `Machine`.
 ///
-/// The functions themselves are, for now, pure.  They can only access their input arguments and
-/// cannot modify the state of the machine.
+/// The functions themselves are immutable but they can reference mutable state.  Given that
+/// EndBASIC is not threaded, it is sufficient for those references to be behind a `RefCell`
+/// and/or an `Rc`.
 ///
 /// Idiomatically, these objects need to provide a `new()` method that returns an `Rc<Callable>`, as
 /// that's the type used throughout the execution engine.
@@ -579,8 +580,8 @@ pub trait Function {
     ///
     /// `args` contains the arguments to the function call.
     ///
-    /// `symbols` provides mutable access to the current state of the machine's symbols.
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult;
+    /// `machine` provides mutable access to the current state of the machine invoking the function.
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult;
 }
 
 /// A trait to define a command that is executed by a `Machine`.

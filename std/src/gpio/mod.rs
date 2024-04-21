@@ -305,8 +305,8 @@ impl Function for GpioReadFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let pin = match iter.next() {
             Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
             Some((value, pos)) => Pin::parse(value, pos)?,
@@ -316,7 +316,7 @@ impl Function for GpioReadFunction {
             return Err(CallError::SyntaxError);
         }
 
-        let value = match MockPins::try_new(symbols) {
+        let value = match MockPins::try_new(machine.get_mut_symbols()) {
             Some(mut pins) => pins.read(pin)?,
             None => self.pins.borrow_mut().read(pin)?,
         };

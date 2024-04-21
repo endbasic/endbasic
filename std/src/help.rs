@@ -609,7 +609,7 @@ Second paragraph of the extended description.",
         async fn exec(
             &self,
             _args: Vec<(Value, LineCol)>,
-            _symbols: &mut Symbols,
+            _machine: &mut Machine,
         ) -> FunctionResult {
             Ok(Value::Text("irrelevant".to_owned()))
         }

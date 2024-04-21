@@ -63,7 +63,7 @@ impl Function for ArglessFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
         assert!(args.is_empty());
         Ok(self.value.clone())
     }
@@ -118,7 +118,7 @@ impl Function for CountFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -150,8 +150,8 @@ impl Function for RaisefFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let result = match iter.next().expect("Invalid arguments") {
             (Value::Text(s), pos) => {
                 if s == "argument" {
@@ -247,12 +247,12 @@ impl Function for GetHiddenFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
         if args.len() != 1 {
             return Err(CallError::SyntaxError);
         }
         match &args[0] {
-            (Value::Text(name), pos) => match symbols.get_var(&VarRef::new(name, VarType::Text)) {
+            (Value::Text(name), pos) => match machine.get_var(&VarRef::new(name, VarType::Text)) {
                 Ok(t) => Ok(t.clone()),
                 Err(e) => Err(CallError::EvalError(*pos, e.to_string())),
             },
@@ -412,12 +412,12 @@ impl Function for OutfFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
         if args.is_empty() {
             return Err(CallError::SyntaxError);
         }
 
-        let mut iter = symbols.load_all(args)?.into_iter();
+        let mut iter = machine.load_all(args)?.into_iter();
         let result = match iter.next() {
             Some((v @ Value::Integer(_), _pos)) => v,
             _ => return Err(CallError::SyntaxError),
@@ -459,9 +459,9 @@ impl Function for SumFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
         let mut result = Value::Integer(0);
-        for (value, pos) in symbols.load_all(args)? {
+        for (value, pos) in machine.load_all(args)? {
             result = result.add(&value).map_err(|e| CallError::EvalError(pos, e.message))?;
         }
         Ok(result)
@@ -539,7 +539,7 @@ impl Function for TypeCheckFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
         assert!(args.is_empty());
         Ok(self.value.clone())
     }

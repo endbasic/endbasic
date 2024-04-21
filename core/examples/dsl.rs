@@ -26,7 +26,7 @@ use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
-    FunctionResult, Symbols,
+    FunctionResult,
 };
 use endbasic_core::LineCol;
 use futures_lite::future::block_on;
@@ -76,7 +76,7 @@ impl Function for NumLightsFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
