@@ -24,7 +24,7 @@ use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarRef, VarType};
 use endbasic_core::exec::{self, Machine, StopReason};
-use endbasic_core::syms::{Array, Command, Function, Symbol};
+use endbasic_core::syms::{Array, Callable, Symbol};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
@@ -431,13 +431,13 @@ impl Tester {
     }
 
     /// Registers the given builtin command into the machine, which must not yet be registered.
-    pub fn add_command(mut self, command: Rc<dyn Command>) -> Self {
+    pub fn add_command(mut self, command: Rc<dyn Callable>) -> Self {
         self.machine.add_command(command);
         self
     }
 
     /// Registers the given builtin function into the machine, which must not yet be registered.
-    pub fn add_function(mut self, function: Rc<dyn Function>) -> Self {
+    pub fn add_function(mut self, function: Rc<dyn Callable>) -> Self {
         self.machine.add_function(function);
         self
     }

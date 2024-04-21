@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Symbols,
+    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
 };
 use endbasic_core::LineCol;
 use radix_trie::{Trie, TrieCommon};
@@ -473,7 +473,7 @@ equivalent: HELP \"CON\", HELP \"console\", HELP \"Console manipulation\".",
 }
 
 #[async_trait(?Send)]
-impl Command for HelpCommand {
+impl Callable for HelpCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -521,7 +521,7 @@ pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
 pub(crate) mod testutils {
     use super::*;
     use endbasic_core::ast::Value;
-    use endbasic_core::syms::{CallResult, CallableMetadata, CallableMetadataBuilder, Function};
+    use endbasic_core::syms::{CallResult, Callable, CallableMetadata, CallableMetadataBuilder};
 
     /// A command that does nothing.
     pub(crate) struct DoNothingCommand {
@@ -554,7 +554,7 @@ Second paragraph of the extended description.",
     }
 
     #[async_trait(?Send)]
-    impl Command for DoNothingCommand {
+    impl Callable for DoNothingCommand {
         fn metadata(&self) -> &CallableMetadata {
             &self.metadata
         }
@@ -595,7 +595,7 @@ Second paragraph of the extended description.",
     }
 
     #[async_trait(?Send)]
-    impl Function for EmptyFunction {
+    impl Callable for EmptyFunction {
         fn metadata(&self) -> &CallableMetadata {
             &self.metadata
         }

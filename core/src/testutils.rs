@@ -18,8 +18,8 @@
 use crate::ast::{ArgSep, Value, VarRef, VarType};
 use crate::exec::Machine;
 use crate::syms::{
-    Array, CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Function,
-    Symbol, Symbols,
+    Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
+    Symbols,
 };
 use crate::LineCol;
 use async_trait::async_trait;
@@ -59,7 +59,7 @@ impl ArglessFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for ArglessFunction {
+impl Callable for ArglessFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -84,7 +84,7 @@ impl ClearCommand {
 }
 
 #[async_trait(?Send)]
-impl Command for ClearCommand {
+impl Callable for ClearCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -114,7 +114,7 @@ impl CountFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for CountFunction {
+impl Callable for CountFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -146,7 +146,7 @@ impl RaisefFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for RaisefFunction {
+impl Callable for RaisefFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -194,7 +194,7 @@ impl RaiseCommand {
 }
 
 #[async_trait(?Send)]
-impl Command for RaiseCommand {
+impl Callable for RaiseCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -243,7 +243,7 @@ impl GetHiddenFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for GetHiddenFunction {
+impl Callable for GetHiddenFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -279,7 +279,7 @@ impl GetDataCommand {
 }
 
 #[async_trait(?Send)]
-impl Command for GetDataCommand {
+impl Callable for GetDataCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -313,7 +313,7 @@ impl InCommand {
 }
 
 #[async_trait(?Send)]
-impl Command for InCommand {
+impl Callable for InCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -362,7 +362,7 @@ impl OutCommand {
 }
 
 #[async_trait(?Send)]
-impl Command for OutCommand {
+impl Callable for OutCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -408,7 +408,7 @@ impl OutfFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for OutfFunction {
+impl Callable for OutfFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -455,7 +455,7 @@ impl SumFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for SumFunction {
+impl Callable for SumFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -490,7 +490,7 @@ impl SymbolsBuilder {
     }
 
     /// Adds the command `cmd` to the list of symbols.
-    pub fn add_command(mut self, cmd: Rc<dyn Command>) -> Self {
+    pub fn add_command(mut self, cmd: Rc<dyn Callable>) -> Self {
         let name = cmd.metadata().name();
         assert!(name == name.to_ascii_uppercase());
         self.by_name.insert(name.to_owned(), Symbol::Command(cmd));
@@ -498,7 +498,7 @@ impl SymbolsBuilder {
     }
 
     /// Adds the function `func` to the list of symbols.
-    pub fn add_function(mut self, func: Rc<dyn Function>) -> Self {
+    pub fn add_function(mut self, func: Rc<dyn Callable>) -> Self {
         let name = func.metadata().name();
         assert!(name == name.to_ascii_uppercase());
         self.by_name.insert(name.to_owned(), Symbol::Function(func));
@@ -535,7 +535,7 @@ impl TypeCheckFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for TypeCheckFunction {
+impl Callable for TypeCheckFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

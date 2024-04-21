@@ -20,7 +20,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command,
+    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
 use endbasic_core::LineCol;
 use endbasic_std::console::{is_narrow, read_line, read_line_secure, refill_and_print, Console};
@@ -102,7 +102,7 @@ To create an account, use the SIGNUP command.",
 }
 
 #[async_trait(?Send)]
-impl Command for LoginCommand {
+impl Callable for LoginCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -186,7 +186,7 @@ LOGOUT from within the CLOUD drive will fail.",
 }
 
 #[async_trait(?Send)]
-impl Command for LogoutCommand {
+impl Callable for LogoutCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -340,7 +340,7 @@ impl ShareCommand {
 }
 
 #[async_trait(?Send)]
-impl Command for ShareCommand {
+impl Callable for ShareCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -520,7 +520,7 @@ cloud service.  You will be asked for confirmation before proceeding.",
 }
 
 #[async_trait(?Send)]
-impl Command for SignupCommand {
+impl Callable for SignupCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

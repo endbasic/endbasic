@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_core::syms::{
-    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command,
+    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
 use endbasic_core::LineCol;
 use std::cell::RefCell;
@@ -179,7 +179,7 @@ See the \"File system\" help topic for information on the path syntax.",
 }
 
 #[async_trait(?Send)]
-impl Command for KillCommand {
+impl Callable for KillCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -233,7 +233,7 @@ impl EditCommand {
 }
 
 #[async_trait(?Send)]
-impl Command for EditCommand {
+impl Callable for EditCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -273,7 +273,7 @@ impl ListCommand {
 }
 
 #[async_trait(?Send)]
-impl Command for ListCommand {
+impl Callable for ListCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -327,7 +327,7 @@ See the \"File system\" help topic for information on the path syntax.",
 }
 
 #[async_trait(?Send)]
-impl Command for LoadCommand {
+impl Callable for LoadCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -398,7 +398,7 @@ instead.",
 }
 
 #[async_trait(?Send)]
-impl Command for NewCommand {
+impl Callable for NewCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -449,7 +449,7 @@ from interfering with the new execution.",
 }
 
 #[async_trait(?Send)]
-impl Command for RunCommand {
+impl Callable for RunCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -515,7 +515,7 @@ See the \"File system\" help topic for information on the path syntax.",
 }
 
 #[async_trait(?Send)]
-impl Command for SaveCommand {
+impl Callable for SaveCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }

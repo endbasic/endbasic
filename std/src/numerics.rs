@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
-    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Function, Symbols,
+    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
 };
 use endbasic_core::LineCol;
 use rand::rngs::SmallRng;
@@ -134,7 +134,7 @@ the DEG and RAD commands.",
 }
 
 #[async_trait(?Send)]
-impl Function for AtnFunction {
+impl Callable for AtnFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -181,7 +181,7 @@ integer.  For example, 4.4 becomes 4, but both 4.5 and 4.6 become 5.",
 }
 
 #[async_trait(?Send)]
-impl Function for CintFunction {
+impl Callable for CintFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -230,7 +230,7 @@ selected by the DEG and RAD commands.",
 }
 
 #[async_trait(?Send)]
-impl Function for CosFunction {
+impl Callable for CosFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -266,7 +266,7 @@ environment to use degrees until instructed otherwise.",
 }
 
 #[async_trait(?Send)]
-impl Command for DegCommand {
+impl Callable for DegCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -303,7 +303,7 @@ integer that is not larger than the double value.  For example, all of 4.4, 4.5 
 }
 
 #[async_trait(?Send)]
-impl Function for IntFunction {
+impl Callable for IntFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -348,7 +348,7 @@ impl MaxFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for MaxFunction {
+impl Callable for MaxFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -387,7 +387,7 @@ impl MinFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for MinFunction {
+impl Callable for MinFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -426,7 +426,7 @@ impl PiFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for PiFunction {
+impl Callable for PiFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -464,7 +464,7 @@ degrees with the DEG command.  RAD restores the environment to use radians mode.
 }
 
 #[async_trait(?Send)]
-impl Command for RadCommand {
+impl Callable for RadCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -503,7 +503,7 @@ WARNING: These random numbers offer no cryptographic guarantees.",
 }
 
 #[async_trait(?Send)]
-impl Command for RandomizeCommand {
+impl Callable for RandomizeCommand {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -561,7 +561,7 @@ WARNING: These random numbers offer no cryptographic guarantees.",
 }
 
 #[async_trait(?Send)]
-impl Function for RndFunction {
+impl Callable for RndFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -616,7 +616,7 @@ selected by the DEG and RAD commands.",
 }
 
 #[async_trait(?Send)]
-impl Function for SinFunction {
+impl Callable for SinFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -646,7 +646,7 @@ impl SqrFunction {
 }
 
 #[async_trait(?Send)]
-impl Function for SqrFunction {
+impl Callable for SqrFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
@@ -698,7 +698,7 @@ selected by the DEG and RAD commands.",
 }
 
 #[async_trait(?Send)]
-impl Function for TanFunction {
+impl Callable for TanFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
