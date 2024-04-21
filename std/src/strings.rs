@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult, Symbols,
+    CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult,
 };
 use endbasic_core::LineCol;
 use std::cmp::min;
@@ -59,8 +59,8 @@ impl Function for AscFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let (s, spos) = match iter.next() {
             Some((Value::Text(s), pos)) => (s, pos),
             _ => return Err(CallError::SyntaxError),
@@ -122,8 +122,8 @@ impl Function for ChrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let (i, ipos) = match iter.next() {
             Some((value @ Value::Integer(_) | value @ Value::Double(_), pos)) => {
                 (value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
@@ -177,8 +177,8 @@ impl Function for LeftFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let s = match iter.next() {
             Some((Value::Text(s), _pos)) => s,
             _ => return Err(CallError::SyntaxError),
@@ -226,8 +226,8 @@ impl Function for LenFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let (s, spos) = match iter.next() {
             Some((Value::Text(s), pos)) => (s, pos),
             _ => return Err(CallError::SyntaxError),
@@ -268,8 +268,8 @@ impl Function for LtrimFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let s = match iter.next() {
             Some((Value::Text(s), _pos)) => s,
             _ => return Err(CallError::SyntaxError),
@@ -311,8 +311,8 @@ impl Function for MidFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let s = match iter.next() {
             Some((Value::Text(s), _pos)) => s,
             _ => return Err(CallError::SyntaxError),
@@ -373,8 +373,8 @@ impl Function for RightFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let s = match iter.next() {
             Some((Value::Text(s), _pos)) => s,
             _ => return Err(CallError::SyntaxError),
@@ -422,8 +422,8 @@ impl Function for RtrimFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let s = match iter.next() {
             Some((Value::Text(s), _pos)) => s,
             _ => return Err(CallError::SyntaxError),
@@ -469,8 +469,8 @@ impl Function for StrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let value = match iter.next() {
             Some((value, _pos)) => value,
             None => return Err(CallError::SyntaxError),

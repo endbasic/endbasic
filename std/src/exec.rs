@@ -20,7 +20,7 @@ use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
-    FunctionResult, Symbol, Symbols,
+    FunctionResult, Symbol,
 };
 use endbasic_core::LineCol;
 use futures_lite::future::{BoxedLocal, FutureExt};
@@ -100,7 +100,7 @@ impl Function for ErrmsgFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -108,7 +108,7 @@ impl Function for ErrmsgFunction {
         // the machine to here, we should query the last error message from the machine itself via
         // a method, but this is difficult (from a refactoring perspective) because a function's
         // exec() does not have access to the Machine.
-        match symbols.get_auto("0errmsg") {
+        match machine.get_symbols().get_auto("0errmsg") {
             Some(Symbol::Variable(v @ Value::Text(_))) => Ok(v.clone()),
             Some(_) => panic!("Internal symbol must be of a specific type"),
             None => Ok(Value::Text("".to_owned())),

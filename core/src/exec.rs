@@ -323,6 +323,15 @@ impl Machine {
         }
     }
 
+    /// Obtains the value of a variable.
+    ///
+    /// Returns an error if the variable is not defined, if the referenced symbol is not a variable,
+    /// or if the type annotation in the variable reference does not match the type of the value
+    /// that the variable contains.
+    pub fn get_var(&self, vref: &VarRef) -> std::result::Result<&Value, value::Error> {
+        self.symbols.get_var(vref)
+    }
+
     /// Retrieves the variable `name` as a string.  Fails if it is some other type or if it's not
     /// defined.
     pub fn get_var_as_string(&self, name: &str) -> Result<&str> {
@@ -341,7 +350,7 @@ impl Machine {
     /// All commands should use this before inspecting their arguments, unless they care about
     /// using values by reference.
     pub fn load_all(
-        &mut self,
+        &self,
         args: Vec<(Value, LineCol)>,
     ) -> std::result::Result<Vec<(Value, LineCol)>, CallError> {
         self.symbols.load_all(args)
@@ -559,7 +568,7 @@ impl Machine {
             args.push((value, pos));
         }
 
-        let result = f.exec(args, &mut self.symbols).await;
+        let result = f.exec(args, self).await;
         match result {
             Ok(value) => {
                 debug_assert!(metadata.return_type() != VarType::Auto);
@@ -641,7 +650,7 @@ impl Machine {
 
     /// Evaluates a call to an argless function.
     async fn argless_function_call(
-        syms: &mut Symbols,
+        &mut self,
         fref: VarRef,
         fref_pos: LineCol,
         f: Rc<dyn Function>,
@@ -654,7 +663,7 @@ impl Machine {
             ));
         }
 
-        let result = f.exec(vec![], syms).await;
+        let result = f.exec(vec![], self).await;
         match result {
             Ok(value) => {
                 debug_assert!(metadata.return_type() != VarType::Auto);
@@ -873,13 +882,7 @@ impl Machine {
                             );
                         }
                         let f = f.clone();
-                        Machine::argless_function_call(
-                            self.get_mut_symbols(),
-                            vref.clone(),
-                            *pos,
-                            f,
-                        )
-                        .await?
+                        self.argless_function_call(vref.clone(), *pos, f).await?
                     }
                     Some(_) => {
                         return new_syntax_error(*pos, format!("{} is not a variable", vref.name()))
@@ -900,13 +903,7 @@ impl Machine {
                 if let Some(Symbol::Function(f)) = sym {
                     if f.metadata().is_argless() {
                         let f = f.clone();
-                        let value = Machine::argless_function_call(
-                            self.get_mut_symbols(),
-                            vref.clone(),
-                            *pos,
-                            f,
-                        )
-                        .await?;
+                        let value = self.argless_function_call(vref.clone(), *pos, f).await?;
                         context.value_stack.push((value, *pos));
                         context.pc += 1;
                         return Ok(());

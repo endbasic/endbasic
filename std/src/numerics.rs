@@ -55,10 +55,10 @@ impl Clearable for ClearableAngleMode {
 /// conversion based on `angle_mode`.
 async fn get_angle(
     args: Vec<(Value, LineCol)>,
-    symbols: &mut Symbols,
+    machine: &Machine,
     angle_mode: &AngleMode,
 ) -> Result<f64, CallError> {
-    let mut iter = symbols.load_all(args)?.into_iter();
+    let mut iter = machine.load_all(args)?.into_iter();
     let angle = match iter.next() {
         Some((value, pos)) => {
             value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?
@@ -140,8 +140,8 @@ impl Function for AtnFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let n = match iter.next() {
             Some((value @ Value::Integer(_) | value @ Value::Double(_), pos)) => {
                 value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?
@@ -187,8 +187,8 @@ impl Function for CintFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let value = match iter.next() {
             Some((value, pos)) => value
                 .maybe_cast(VarType::Integer)
@@ -236,8 +236,8 @@ impl Function for CosFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let angle = get_angle(args, symbols, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let angle = get_angle(args, machine, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.cos()))
     }
 }
@@ -309,8 +309,8 @@ impl Function for IntFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let (value, valuepos) = match iter.next() {
             Some((Value::Double(d), pos)) => (Value::Double(d.floor()), pos),
             Some((v, pos)) => (v, pos),
@@ -354,12 +354,12 @@ impl Function for MaxFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
         if args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         let mut max = f64::MIN;
-        for (value, pos) in symbols.load_all(args)?.into_iter() {
+        for (value, pos) in machine.load_all(args)?.into_iter() {
             let n = value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
             if n > max {
                 max = n;
@@ -393,12 +393,12 @@ impl Function for MinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
         if args.is_empty() {
             return Err(CallError::SyntaxError);
         }
         let mut min = f64::MAX;
-        for (value, pos) in symbols.load_all(args)?.into_iter() {
+        for (value, pos) in machine.load_all(args)?.into_iter() {
             let n = value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
             if n < min {
                 min = n;
@@ -432,7 +432,7 @@ impl Function for PiFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _symbols: &mut Symbols) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -567,8 +567,8 @@ impl Function for RndFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let result = match iter.next() {
             None => Value::Double(self.prng.borrow_mut().next()),
             Some((n, npos)) => {
@@ -622,8 +622,8 @@ impl Function for SinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let angle = get_angle(args, symbols, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let angle = get_angle(args, machine, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.sin()))
     }
 }
@@ -652,8 +652,8 @@ impl Function for SqrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let mut iter = symbols.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let mut iter = machine.load_all(args)?.into_iter();
         let (num, numpos) = match iter.next() {
             Some((value @ Value::Integer(_) | value @ Value::Double(_), pos)) => {
                 (value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
@@ -704,8 +704,8 @@ impl Function for TanFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, symbols: &mut Symbols) -> FunctionResult {
-        let angle = get_angle(args, symbols, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+        let angle = get_angle(args, machine, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.tan()))
     }
 }
