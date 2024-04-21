@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
+    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command,
 };
 use endbasic_core::LineCol;
 use std::cell::RefCell;
@@ -184,7 +184,7 @@ impl Command for KillCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let name = match iter.next() {
@@ -238,7 +238,7 @@ impl Command for EditCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -278,7 +278,7 @@ impl Command for ListCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -332,7 +332,7 @@ impl Command for LoadCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let pathname = match iter.next() {
@@ -403,7 +403,7 @@ impl Command for NewCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -454,7 +454,7 @@ impl Command for RunCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -520,7 +520,7 @@ impl Command for SaveCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let name = match iter.next() {

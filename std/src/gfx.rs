@@ -20,8 +20,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
-    FunctionResult,
+    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Function,
 };
 use endbasic_core::LineCol;
 use std::cell::RefCell;
@@ -120,7 +119,7 @@ impl Command for GfxCircleCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let (xvalue, xpos, yvalue, ypos) = extract_xy(&mut iter)?;
@@ -177,7 +176,7 @@ impl Command for GfxCirclefCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let (xvalue, xpos, yvalue, ypos) = extract_xy(&mut iter)?;
@@ -234,7 +233,7 @@ impl Function for GfxHeightFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -272,7 +271,7 @@ impl Command for GfxLineCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let (x1value, x1pos, y1value, y1pos) = extract_xy(&mut iter)?;
@@ -325,7 +324,7 @@ impl Command for GfxPixelCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let (xvalue, xpos, yvalue, ypos) = extract_xy(&mut iter)?;
@@ -371,7 +370,7 @@ impl Command for GfxRectCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let (x1value, x1pos, y1value, y1pos) = extract_xy(&mut iter)?;
@@ -424,7 +423,7 @@ impl Command for GfxRectfCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let (x1value, x1pos, y1value, y1pos) = extract_xy(&mut iter)?;
@@ -489,7 +488,7 @@ impl Command for GfxSyncCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let (enabled, pos) = match iter.next() {
@@ -555,7 +554,7 @@ impl Function for GfxWidthFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }

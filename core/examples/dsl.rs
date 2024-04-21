@@ -25,8 +25,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
-    FunctionResult,
+    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Function,
 };
 use endbasic_core::LineCol;
 use futures_lite::future::block_on;
@@ -76,7 +75,7 @@ impl Function for NumLightsFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -112,7 +111,7 @@ impl Command for SwitchLightCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
         let (i, ipos) = match iter.next() {
             Some((Value::Integer(i), pos)) => (i, pos),

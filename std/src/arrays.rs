@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    Array, CallError, CallableMetadata, CallableMetadataBuilder, Function, FunctionResult, Symbol,
+    Array, CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Function, Symbol,
     Symbols,
 };
 use endbasic_core::LineCol;
@@ -133,7 +133,7 @@ impl Function for LboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let (_array, _dim) = parse_bound_args(args, machine.get_symbols())?;
         Ok(Value::Integer(0))
     }
@@ -169,7 +169,7 @@ impl Function for UboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let (array, dim) = parse_bound_args(args, machine.get_symbols())?;
         Ok(Value::Integer((array.dimensions()[dim - 1] - 1) as i32))
     }

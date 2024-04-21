@@ -20,7 +20,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult,
+    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command,
 };
 use endbasic_core::LineCol;
 use endbasic_std::console::{is_narrow, read_line, read_line_secure, refill_and_print, Console};
@@ -78,7 +78,7 @@ To create an account, use the SIGNUP command.",
     }
 
     /// Performs the login workflow against the server.
-    async fn do_login(&self, username: &str, password: &str) -> CommandResult {
+    async fn do_login(&self, username: &str, password: &str) -> CallResult {
         let response = self.service.borrow_mut().login(username, password).await?;
 
         {
@@ -107,7 +107,7 @@ impl Command for LoginCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         if self.service.borrow().is_logged_in() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -191,7 +191,7 @@ impl Command for LogoutCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -320,7 +320,7 @@ impl ShareCommand {
     }
 
     /// Fetches and prints the ACLs for `filename`.
-    async fn show_acls(&self, filename: &str) -> CommandResult {
+    async fn show_acls(&self, filename: &str) -> CallResult {
         let acls = self.storage.borrow().get_acls(filename).await?;
 
         let mut console = self.console.borrow_mut();
@@ -345,7 +345,7 @@ impl Command for ShareCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         let (filename, filenamepos) = match iter.next() {
@@ -525,7 +525,7 @@ impl Command for SignupCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }

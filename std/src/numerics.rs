@@ -19,8 +19,7 @@ use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Command, CommandResult, Function,
-    FunctionResult, Symbols,
+    CallError, CallResult, CallableMetadata, CallableMetadataBuilder, Command, Function, Symbols,
 };
 use endbasic_core::LineCol;
 use rand::rngs::SmallRng;
@@ -140,7 +139,7 @@ impl Function for AtnFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
         let n = match iter.next() {
             Some((value @ Value::Integer(_) | value @ Value::Double(_), pos)) => {
@@ -187,7 +186,7 @@ impl Function for CintFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
         let value = match iter.next() {
             Some((value, pos)) => value
@@ -236,7 +235,7 @@ impl Function for CosFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let angle = get_angle(args, machine, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.cos()))
     }
@@ -272,7 +271,7 @@ impl Command for DegCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -309,7 +308,7 @@ impl Function for IntFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
         let (value, valuepos) = match iter.next() {
             Some((Value::Double(d), pos)) => (Value::Double(d.floor()), pos),
@@ -354,7 +353,7 @@ impl Function for MaxFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         if args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -393,7 +392,7 @@ impl Function for MinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         if args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -432,7 +431,7 @@ impl Function for PiFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -470,7 +469,7 @@ impl Command for RadCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if !args.is_empty() {
             return Err(CallError::SyntaxError);
         }
@@ -509,7 +508,7 @@ impl Command for RandomizeCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CommandResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
 
         match iter.next() {
@@ -567,7 +566,7 @@ impl Function for RndFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
         let result = match iter.next() {
             None => Value::Double(self.prng.borrow_mut().next()),
@@ -622,7 +621,7 @@ impl Function for SinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let angle = get_angle(args, machine, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.sin()))
     }
@@ -652,7 +651,7 @@ impl Function for SqrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut iter = machine.load_all(args)?.into_iter();
         let (num, numpos) = match iter.next() {
             Some((value @ Value::Integer(_) | value @ Value::Double(_), pos)) => {
@@ -704,7 +703,7 @@ impl Function for TanFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> FunctionResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let angle = get_angle(args, machine, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.tan()))
     }
