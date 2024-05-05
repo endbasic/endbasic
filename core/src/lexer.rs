@@ -79,6 +79,7 @@ pub enum Token {
     Error,
     Exit,
     For,
+    Function,
     Gosub,
     Goto,
     If,
@@ -160,6 +161,7 @@ impl fmt::Display for Token {
             Token::Error => write!(f, "ERROR"),
             Token::Exit => write!(f, "EXIT"),
             Token::For => write!(f, "FOR"),
+            Token::Function => write!(f, "FUNCTION"),
             Token::Gosub => write!(f, "GOSUB"),
             Token::Goto => write!(f, "GOTO"),
             Token::If => write!(f, "IF"),
@@ -525,6 +527,7 @@ impl<'a> Lexer<'a> {
             "EXIT" => Token::Exit,
             "FALSE" => Token::Boolean(false),
             "FOR" => Token::For,
+            "FUNCTION" => Token::Function,
             "GOSUB" => Token::Gosub,
             "GOTO" => Token::Goto,
             "IF" => Token::If,
@@ -1186,6 +1189,31 @@ mod tests {
                 ts(Token::Step, 1, 8, 4),
                 ts(Token::Next, 1, 13, 4),
                 ts(Token::Eof, 1, 17, 0),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_function() {
+        do_ok_test(
+            "FUNCTION FOO END FUNCTION",
+            &[
+                ts(Token::Function, 1, 1, 8),
+                ts(Token::Symbol(VarRef::new("FOO", None)), 1, 10, 3),
+                ts(Token::End, 1, 14, 3),
+                ts(Token::Function, 1, 18, 8),
+                ts(Token::Eof, 1, 26, 0),
+            ],
+        );
+
+        do_ok_test(
+            "function foo end function",
+            &[
+                ts(Token::Function, 1, 1, 8),
+                ts(Token::Symbol(VarRef::new("foo", None)), 1, 10, 3),
+                ts(Token::End, 1, 14, 3),
+                ts(Token::Function, 1, 18, 8),
+                ts(Token::Eof, 1, 26, 0),
             ],
         );
     }

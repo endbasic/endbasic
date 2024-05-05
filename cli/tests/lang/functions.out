@@ -1,0 +1,15 @@
+>>> argless functions with default return values
+argless_default_default:  0
+argless_boolean_default: FALSE
+argless_double_default:  4
+argless_integer_default:  4
+argless_string_default: bar
+>>> argless functions with explicit return values
+argless_default_set:  5
+argless_boolean_set: TRUE
+argless_double_set:  9.2
+argless_integer_set:  127
+argless_string_set: foobar
+>>> Call chains
+first:  5
+second: foo

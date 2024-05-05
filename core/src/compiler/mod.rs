@@ -18,9 +18,9 @@
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::reader::LineCol;
-use crate::syms::CallError;
-use crate::syms::CallableMetadata;
-use crate::syms::{Symbol, SymbolKey, Symbols};
+use crate::syms::{
+    CallError, CallableMetadata, CallableMetadataBuilder, Symbol, SymbolKey, Symbols,
+};
 use std::collections::HashMap;
 #[cfg(test)]
 use std::collections::HashSet;
@@ -225,6 +225,12 @@ struct Compiler {
 
     /// Symbols table.
     symtable: SymbolsTable,
+
+    /// Name of the function being compiled, needed to set the return value in assignment operators.
+    current_function: Option<SymbolKey>,
+
+    /// Functions to be compiled.
+    function_spans: Vec<FunctionSpan>,
 }
 
 impl Compiler {
@@ -244,6 +250,11 @@ impl Compiler {
     /// numeric.
     fn do_label(level: (usize, usize)) -> String {
         format!("0do{}_{}", level.0, level.1)
+    }
+
+    /// Generates the name of the symbol that holds the return value of the function `name`.
+    fn return_key(name: &SymbolKey) -> SymbolKey {
+        SymbolKey::from(format!("0return_{}", name))
     }
 
     /// Generates an internal variable name to hold the result of a `SELECT` test evaluation.
@@ -339,8 +350,14 @@ impl Compiler {
     /// It's important to always use this function instead of manually emitting `Instruction::Assign`
     /// instructions to ensure consistent handling of the symbols table.
     fn compile_assignment(&mut self, vref: VarRef, vref_pos: LineCol, expr: Expr) -> Result<()> {
-        let key = SymbolKey::from(&vref.name());
+        let mut key = SymbolKey::from(&vref.name());
         let etype = self.compile_expr(expr, false)?;
+
+        if let Some(current_function) = self.current_function.as_ref() {
+            if &key == current_function {
+                key = Compiler::return_key(current_function);
+            }
+        }
 
         let vtype = match self.symtable.get(&key) {
             Some(SymbolPrototype::Variable(vtype)) => *vtype,
@@ -806,6 +823,18 @@ impl Compiler {
                 self.compile_for(span)?;
             }
 
+            Statement::Function(span) => {
+                let md = CallableMetadataBuilder::new("USER DEFINED FUNCTION")
+                    .with_return_type(span.name.ref_type().unwrap_or(ExprType::Integer))
+                    .with_syntax(&[(&[], None)])
+                    .with_category("User defined")
+                    .with_description("User defined symbol")
+                    .build();
+                self.symtable
+                    .insert(SymbolKey::from(span.name.name()), SymbolPrototype::Callable(md));
+                self.function_spans.push(span);
+            }
+
             Statement::Gosub(span) => {
                 let gosub_pc = self.emit(Instruction::Nop);
                 self.fixups.insert(gosub_pc, Fixup::from_gosub(span));
@@ -859,9 +888,65 @@ impl Compiler {
         Ok(())
     }
 
+    /// Compiles all functions discovered during the first phase and fixes up all call sites to
+    /// point to the compiled code.
+    fn compile_functions(&mut self) -> Result<()> {
+        let end = self.emit(Instruction::Nop);
+
+        let mut functions = HashMap::with_capacity(self.function_spans.len());
+        let function_spans = std::mem::take(&mut self.function_spans);
+        for span in function_spans {
+            let pc = self.next_pc;
+
+            let key = SymbolKey::from(span.name.name());
+            let return_value = Compiler::return_key(&key);
+
+            let return_type = span.name.ref_type().unwrap_or(ExprType::Integer);
+
+            self.emit(Instruction::Dim(return_value.clone(), return_type));
+            self.symtable.insert(return_value.clone(), SymbolPrototype::Variable(return_type));
+
+            self.current_function = Some(key.clone());
+            self.compile_many(span.body)?;
+            self.current_function = None;
+
+            let load_inst = match return_type {
+                ExprType::Boolean => Instruction::LoadBoolean,
+                ExprType::Double => Instruction::LoadDouble,
+                ExprType::Integer => Instruction::LoadInteger,
+                ExprType::Text => Instruction::LoadString,
+            };
+            self.emit(load_inst(return_value.clone(), span.end_pos));
+            self.emit(Instruction::Unset(UnsetISpan {
+                name: return_value.clone(),
+                pos: span.end_pos,
+            }));
+            self.symtable.remove(return_value);
+            self.emit(Instruction::Return(span.end_pos));
+
+            functions.insert(key, pc);
+        }
+
+        for instr in &mut self.instrs {
+            if let Instruction::FunctionCall(key, _, _, _) = instr {
+                if let Some(addr) = functions.get(key) {
+                    *instr = Instruction::Call(JumpISpan { addr: *addr });
+                }
+            }
+        }
+
+        self.instrs[end] = Instruction::Jump(JumpISpan { addr: self.next_pc });
+
+        Ok(())
+    }
+
     /// Finishes compilation and returns the image representing the compiled program.
     #[allow(clippy::wrong_self_convention)]
     fn to_image(mut self) -> Result<(Image, SymbolsTable)> {
+        if !self.function_spans.is_empty() {
+            self.compile_functions()?;
+        }
+
         for (pc, fixup) in self.fixups {
             let addr = match self.labels.get(&fixup.target) {
                 Some(addr) => *addr,
@@ -1718,6 +1803,70 @@ mod tests {
             .expect_instr(12, Instruction::AddDoubles(lc(1, 14)))
             .expect_instr(13, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(14, Instruction::Jump(JumpISpan { addr: 5 }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_function_and_nothing_else() {
+        Tester::default()
+            .parse("FUNCTION foo: a = 3: END FUNCTION")
+            .compile()
+            .expect_instr(0, Instruction::Jump(JumpISpan { addr: 7 }))
+            .expect_instr(1, Instruction::Dim(SymbolKey::from("0return_foo"), ExprType::Integer))
+            .expect_instr(2, Instruction::PushInteger(3, lc(1, 19)))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(4, Instruction::LoadInteger(SymbolKey::from("0return_foo"), lc(1, 22)))
+            .expect_instr(
+                5,
+                Instruction::Unset(UnsetISpan {
+                    name: SymbolKey::from("0return_foo"),
+                    pos: lc(1, 22),
+                }),
+            )
+            .expect_instr(6, Instruction::Return(lc(1, 22)))
+            .expect_symtable(
+                SymbolKey::from("foo"),
+                SymbolPrototype::Callable(
+                    CallableMetadataBuilder::new("USER DEFINED FUNCTION")
+                        .with_syntax(&[(&[], None)])
+                        .with_category("User defined")
+                        .with_description("User defined function")
+                        .build(),
+                ),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_function_defined_between_code() {
+        Tester::default()
+            .parse("before = 1: FUNCTION foo: END FUNCTION: after = 2")
+            .compile()
+            .expect_instr(0, Instruction::PushInteger(1, lc(1, 10)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("before")))
+            .expect_instr(2, Instruction::PushInteger(2, lc(1, 49)))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("after")))
+            .expect_instr(4, Instruction::Jump(JumpISpan { addr: 9 }))
+            .expect_instr(5, Instruction::Dim(SymbolKey::from("0return_foo"), ExprType::Integer))
+            .expect_instr(6, Instruction::LoadInteger(SymbolKey::from("0return_foo"), lc(1, 27)))
+            .expect_instr(
+                7,
+                Instruction::Unset(UnsetISpan {
+                    name: SymbolKey::from("0return_foo"),
+                    pos: lc(1, 27),
+                }),
+            )
+            .expect_instr(8, Instruction::Return(lc(1, 27)))
+            .expect_symtable(
+                SymbolKey::from("foo"),
+                SymbolPrototype::Callable(
+                    CallableMetadataBuilder::new("USER DEFINED FUNCTION")
+                        .with_syntax(&[(&[], None)])
+                        .with_category("User defined")
+                        .with_description("User defined function")
+                        .build(),
+                ),
+            )
             .check();
     }
 
