@@ -3330,4 +3330,75 @@ mod tests {
             block_on(machine.exec(&mut b"b = a".as_ref())).expect("Execution failed")
         );
     }
+
+    #[test]
+    fn test_user_functions_default_return_values() {
+        let code = r#"
+            FUNCTION unannotated: END FUNCTION
+            FUNCTION annotated_boolean?: END FUNCTION
+            FUNCTION annotated_double#: END FUNCTION
+            FUNCTION annotated_integer%: END FUNCTION
+            FUNCTION annotated_string$: END FUNCTION
+            OUT unannotated; unannotated%
+            OUT annotated_boolean; annotated_boolean?
+            OUT annotated_double; annotated_double#
+            OUT annotated_integer; annotated_integer%
+            OUT annotated_string; annotated_string$
+        "#;
+        do_ok_test(code, &[], &["0 0", "FALSE FALSE", "0 0", "0 0", " "]);
+    }
+
+    #[test]
+    fn test_user_functions_set_return_values() {
+        let code = r#"
+            FUNCTION unannotated: unannotated = 5: END FUNCTION
+            FUNCTION annotated_boolean?: annotated_boolean = TRUE: END FUNCTION
+            FUNCTION annotated_double#: annotated_double = 5.3: END FUNCTION
+            FUNCTION annotated_integer%: annotated_integer = 8: END FUNCTION
+            FUNCTION annotated_string$: annotated_string = "foo": END FUNCTION
+            OUT unannotated; unannotated%
+            OUT annotated_boolean; annotated_boolean?
+            OUT annotated_double; annotated_double#
+            OUT annotated_integer; annotated_integer%
+            OUT annotated_string; annotated_string$
+        "#;
+        do_ok_test(code, &[], &["5 5", "TRUE TRUE", "5.3 5.3", "8 8", "foo foo"]);
+    }
+
+    #[test]
+    fn test_user_functions_mix_set_return_and_code() {
+        let code = r#"
+            FUNCTION f
+                OUT "before"
+                f = 3
+                OUT "middle"
+                f = 5
+                OUT "after"
+            END FUNCTION
+            OUT f
+        "#;
+        do_ok_test(code, &[], &["before", "middle", "after", "5"]);
+    }
+
+    #[test]
+    fn test_user_functions_return_type_inconsistent() {
+        let code = r#"
+            FUNCTION f$: f = 3: END FUNCTION
+        "#;
+        do_error_test(
+            code,
+            &[],
+            &[],
+            "2:26: Cannot assign value of type INTEGER to variable of type STRING",
+        );
+    }
+
+    #[test]
+    fn test_user_functions_call_type_inconsistent() {
+        let code = r#"
+            FUNCTION f$: END FUNCTION
+            OUT f%
+        "#;
+        do_error_test(code, &[], &[], "3:17: Incompatible type annotation in f% reference");
+    }
 }

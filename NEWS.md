@@ -61,6 +61,8 @@ for the time being.**
     definitions that `HELP` prints now follow a consistent pattern and that such
     help strings truly match what the commands and functions expect.
 
+*   Issue #112: Added user-defined functions.
+
 ## Changes in version 0.10.0
 
 **Released on 2022-12-27.**

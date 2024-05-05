@@ -39,6 +39,7 @@ currently supports:
     strings are supported, but strings must be double-quoted.
 *   `DO` / `LOOP` statements with optional `UNTIL` / `WHILE` pre- and
     post-guards and optional `EXIT DO` early terminations.
+*   `FUNCTION name` / `END FUNCTION`.
 *   `IF ... THEN ... [ELSE ...]` uniline statements.
 *   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` multiline
     statements.

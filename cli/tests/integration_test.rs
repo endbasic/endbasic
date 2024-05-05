@@ -473,6 +473,18 @@ fn test_lang_exprs_errors() {
 }
 
 #[test]
+fn test_lang_functions() {
+    check(
+        bin_path("endbasic"),
+        &["--local-drive=memory://", &src_str("cli/tests/lang/functions.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/lang/functions.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_lang_hello() {
     check(
         bin_path("endbasic"),

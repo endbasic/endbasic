@@ -630,6 +630,7 @@ impl<'a> Parser<'a> {
     /// as `END IF`, returns the token that followed `END`.
     fn maybe_parse_end(&mut self) -> Result<std::result::Result<Statement, Token>> {
         match self.lexer.peek()?.token {
+            Token::Function => Ok(Err(Token::Function)),
             Token::If => Ok(Err(Token::If)),
             Token::Select => Ok(Err(Token::Select)),
             _ => {
@@ -902,6 +903,7 @@ impl<'a> Parser<'a> {
                 | Token::Error
                 | Token::Exit
                 | Token::For
+                | Token::Function
                 | Token::Gosub
                 | Token::Goto
                 | Token::If
@@ -1256,6 +1258,108 @@ impl<'a> Parser<'a> {
                 Token::Eof => break,
                 Token::Next => {
                     self.lexer.consume_peeked();
+                    break;
+                }
+                _ => {
+                    self.lexer.consume_peeked();
+                }
+            }
+        }
+        self.reset()
+    }
+
+    /// Parses a `FUNCTION` definition.
+    fn parse_function(&mut self, function_pos: LineCol) -> Result<Statement> {
+        let token_span = self.lexer.read()?;
+        let name = match token_span.token {
+            Token::Symbol(name) => name,
+            _ => {
+                return Err(Error::Bad(
+                    token_span.pos,
+                    "Expected a function name after FUNCTION".to_owned(),
+                ));
+            }
+        };
+        let name_pos = token_span.pos;
+
+        // TODO(jmmv): Parse arguments.
+
+        self.expect_and_consume(Token::Eol, "Expected newline after FUNCTION name")?;
+
+        let mut body = vec![];
+        let end_pos;
+        loop {
+            let peeked = self.lexer.peek()?;
+            match peeked.token {
+                Token::Eof => {
+                    end_pos = peeked.pos;
+                    break;
+                }
+
+                Token::Eol => {
+                    self.lexer.consume_peeked();
+                }
+
+                Token::Function => {
+                    return Err(Error::Bad(
+                        token_span.pos,
+                        "Cannot nest FUNCTION definitions".to_owned(),
+                    ));
+                }
+
+                Token::End => {
+                    let end_span = self.lexer.consume_peeked();
+                    match self.maybe_parse_end()? {
+                        Ok(stmt) => {
+                            body.push(stmt);
+                        }
+                        Err(Token::Function) => {
+                            end_pos = end_span.pos;
+                            break;
+                        }
+                        Err(token) => {
+                            return Err(Error::Bad(
+                                end_span.pos,
+                                format!("END {} without {}", token, token),
+                            ));
+                        }
+                    }
+                }
+
+                // TODO(jmmv): Handle `EXIT FUNCTION`.
+                _ => match self.parse_one_safe()? {
+                    Some(stmt) => body.push(stmt),
+                    None => {
+                        return Err(Error::Bad(
+                            token_span.pos,
+                            "FUNCTION without END FUNCTION".to_owned(),
+                        ));
+                    }
+                },
+            }
+        }
+
+        self.expect_and_consume_with_pos(
+            Token::Function,
+            function_pos,
+            "FUNCTION without END FUNCTION",
+        )?;
+
+        Ok(Statement::Function(FunctionSpan { name, name_pos, body, end_pos }))
+    }
+
+    /// Advances until the next statement after failing to parse a `FUNCTION` definition.
+    fn reset_function(&mut self, function_pos: LineCol) -> Result<()> {
+        loop {
+            match self.lexer.peek()?.token {
+                Token::Eof => break,
+                Token::End => {
+                    self.lexer.consume_peeked();
+                    self.expect_and_consume_with_pos(
+                        Token::Function,
+                        function_pos,
+                        "FUNCTION without END FUNCTION",
+                    )?;
                     break;
                 }
                 _ => {
@@ -1622,6 +1726,13 @@ impl<'a> Parser<'a> {
                 let result = self.parse_for(token_span.pos);
                 if result.is_err() {
                     self.reset_for()?;
+                }
+                Ok(Some(result?))
+            }
+            Token::Function => {
+                let result = self.parse_function(token_span.pos);
+                if result.is_err() {
+                    self.reset_function(token_span.pos)?;
                 }
                 Ok(Some(result?))
             }
@@ -3825,6 +3936,59 @@ mod tests {
         do_error_test("FOR i = 3 TO 1 STEP -1", "1:23: Expecting newline after FOR");
 
         do_error_test("    FOR i = 0 TO 10\nPRINT i\n", "1:5: FOR without NEXT");
+    }
+
+    #[test]
+    fn test_function_empty() {
+        do_ok_test(
+            "FUNCTION foo$\nEND FUNCTION",
+            &[Statement::Function(FunctionSpan {
+                name: VarRef::new("foo", Some(ExprType::Text)),
+                name_pos: lc(1, 10),
+                body: vec![],
+                end_pos: lc(2, 1),
+            })],
+        );
+    }
+
+    #[test]
+    fn test_function_some_content() {
+        do_ok_test(
+            r#"
+                FUNCTION foo$
+                    A
+                    END
+                    END 8
+                    B
+                END FUNCTION
+            "#,
+            &[Statement::Function(FunctionSpan {
+                name: VarRef::new("foo", Some(ExprType::Text)),
+                name_pos: lc(2, 26),
+                body: vec![
+                    make_bare_builtin_call("A", 3, 21),
+                    Statement::End(EndSpan { code: None }),
+                    Statement::End(EndSpan {
+                        code: Some(Expr::Integer(IntegerSpan { value: 8, pos: lc(5, 25) })),
+                    }),
+                    make_bare_builtin_call("B", 6, 21),
+                ],
+                end_pos: lc(7, 17),
+            })],
+        );
+    }
+
+    #[test]
+    fn test_function_errors() {
+        do_error_test("FUNCTION", "1:9: Expected a function name after FUNCTION");
+        do_error_test("FUNCTION foo", "1:13: Expected newline after FUNCTION name");
+        do_error_test("FUNCTION foo 3", "1:14: Expected newline after FUNCTION name");
+        do_error_test("FUNCTION foo\nEND", "1:1: FUNCTION without END FUNCTION");
+        do_error_test("FUNCTION foo\nEND IF", "2:1: END IF without IF");
+        do_error_test(
+            "FUNCTION foo\nFUNCTION bar\nEND FUNCTION\nEND FUNCTION",
+            "1:10: Cannot nest FUNCTION definitions",
+        );
     }
 
     #[test]

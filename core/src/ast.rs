@@ -640,6 +640,22 @@ pub struct ForSpan {
     pub body: Vec<Statement>,
 }
 
+/// Components of a `FUNCTION` definition.
+#[derive(Debug, PartialEq)]
+pub struct FunctionSpan {
+    /// Name of the function, expressed as a variable reference.
+    pub name: VarRef,
+
+    /// Position of the name of the function.
+    pub name_pos: LineCol,
+
+    /// Statements within the function's body.
+    pub body: Vec<Statement>,
+
+    /// Position of the end of the function, used when injecting the implicit return.
+    pub end_pos: LineCol,
+}
+
 /// Components of a `GOTO` or a `GOSUB` statement.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GotoSpan {
@@ -781,6 +797,9 @@ pub enum Statement {
 
     /// Represents a `FOR` statement.
     For(ForSpan),
+
+    /// Represents a `FUNCTION` definition.
+    Function(FunctionSpan),
 
     /// Represents a `GOSUB` statement.
     Gosub(GotoSpan),
