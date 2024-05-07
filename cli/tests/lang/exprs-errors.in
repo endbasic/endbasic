@@ -26,6 +26,44 @@
 ' execution engine.  As a result, it is much simpler to validate these cases
 ' with an integration test.
 
+PRINT ">>> Logical operations"
+' These tests just make sure that the expression evaluator delegates to the
+' Value operations for each expression operator to essentially avoid duplicating
+' all those tests.  We do this by triggering errors and rely on the fact that
+' their messages are different for every operation.
+PRINT FALSE AND 0
+PRINT FALSE OR 0
+PRINT FALSE XOR 0
+PRINT NOT 0.0
+
+PRINT ">>> Relational operations"
+' These tests just make sure that the expression evaluator delegates to the
+' Value operations for each expression operator to essentially avoid duplicating
+' all those tests.  We do this by triggering errors and rely on the fact that
+' their messages are different for every operation.
+PRINT FALSE = 0
+PRINT FALSE <> 0
+PRINT FALSE < 0
+PRINT FALSE <= 0
+PRINT FALSE > 0
+PRINT FALSE >= 0
+
+PRINT ">>> Arithmetic operations"
+' These tests just make sure that the expression evaluator delegates to the
+' Value operations for each expression operator to essentially avoid duplicating
+' all those tests.  We do this by triggering errors and rely on the fact that
+' their messages are different for every operation.
+PRINT FALSE + 0
+PRINT FALSE - 0
+PRINT FALSE * 0
+PRINT FALSE / 0
+PRINT FALSE MOD 0
+PRINT FALSE ^ 0
+PRINT -FALSE
+
+PRINT ">>> Operations and variables"
+PRINT 3 = 7 + TRUE
+
 PRINT ">>> Array accesses"
 DIM x(2, 4) AS INTEGER
 PRINT x#(1, 3)

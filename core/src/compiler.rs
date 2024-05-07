@@ -15,12 +15,12 @@
 
 //! Converts our AST into bytecode.
 
-use std::collections::HashMap;
-
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::reader::LineCol;
 use crate::syms::{Symbol, Symbols};
+use std::collections::HashMap;
+use std::fmt;
 
 /// Compilation errors.
 #[derive(Debug, thiserror::Error)]
@@ -41,16 +41,114 @@ impl Error {
 /// Result for compiler return values.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Represents type of an expression.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum ExprType {
+    Boolean,
+    Double,
+    Integer,
+    Text,
+}
+
+impl From<VarType> for ExprType {
+    fn from(value: VarType) -> Self {
+        match value {
+            VarType::Auto => unreachable!(),
+            VarType::Boolean => ExprType::Boolean,
+            VarType::Double => ExprType::Double,
+            VarType::Integer => ExprType::Integer,
+            VarType::Text => ExprType::Text,
+            VarType::Void => unreachable!(),
+        }
+    }
+}
+
+impl From<ExprType> for VarType {
+    fn from(value: ExprType) -> Self {
+        match value {
+            ExprType::Boolean => VarType::Boolean,
+            ExprType::Double => VarType::Double,
+            ExprType::Integer => VarType::Integer,
+            ExprType::Text => VarType::Text,
+        }
+    }
+}
+
+impl fmt::Display for ExprType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExprType::Boolean => write!(f, "BOOLEAN"),
+            ExprType::Double => write!(f, "DOUBLE"),
+            ExprType::Integer => write!(f, "INTEGER"),
+            ExprType::Text => write!(f, "STRING"),
+        }
+    }
+}
+
+/// Represents the type of a callable.
+///
+/// This is a superset of `ExprType` with the addition of the `Void` required to represent
+/// commands.
+#[derive(Clone, Copy, PartialEq)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub(crate) enum CallableType {
+    Boolean,
+    Double,
+    Integer,
+    Text,
+    Void,
+}
+
+impl From<VarType> for CallableType {
+    fn from(value: VarType) -> Self {
+        match value {
+            VarType::Auto => unreachable!(),
+            VarType::Boolean => CallableType::Boolean,
+            VarType::Double => CallableType::Double,
+            VarType::Integer => CallableType::Integer,
+            VarType::Text => CallableType::Text,
+            VarType::Void => CallableType::Void,
+        }
+    }
+}
+
+impl From<CallableType> for VarType {
+    fn from(value: CallableType) -> Self {
+        match value {
+            CallableType::Boolean => VarType::Boolean,
+            CallableType::Double => VarType::Double,
+            CallableType::Integer => VarType::Integer,
+            CallableType::Text => VarType::Text,
+            CallableType::Void => VarType::Void,
+        }
+    }
+}
+
+impl CallableType {
+    /// Returns the expression type of this callable, or `None` if this corresponds to a command.
+    fn as_expr_type(self) -> Option<ExprType> {
+        match self {
+            CallableType::Boolean => Some(ExprType::Boolean),
+            CallableType::Double => Some(ExprType::Double),
+            CallableType::Integer => Some(ExprType::Integer),
+            CallableType::Text => Some(ExprType::Text),
+            CallableType::Void => None,
+        }
+    }
+}
+
 /// Information about a symbol in the symbols table.
+#[derive(Clone, Copy)]
 pub(crate) enum SymbolPrototype {
     /// Information about an array.
-    Array(VarType),
+    Array(ExprType),
 
-    /// Information about a callable.
-    Callable(VarType),
+    /// Information about a callable.  The boolean indicates if this callable is an argless function
+    /// or not.
+    Callable(CallableType, bool),
 
     /// Information about a variable.
-    Variable(#[allow(unused)] VarType),
+    Variable(#[allow(unused)] ExprType),
 }
 
 /// The key of a symbol in the symbols table.
@@ -80,11 +178,12 @@ impl From<&Symbols> for SymbolsTable {
         let mut table = HashMap::default();
         for (name, symbol) in syms.as_hashmap() {
             let proto = match symbol {
-                Symbol::Array(array) => SymbolPrototype::Array(array.subtype()),
+                Symbol::Array(array) => SymbolPrototype::Array(array.subtype().into()),
                 Symbol::Callable(callable) => {
-                    SymbolPrototype::Callable(callable.metadata().return_type())
+                    let md = callable.metadata();
+                    SymbolPrototype::Callable(md.return_type().into(), md.is_argless())
                 }
-                Symbol::Variable(var) => SymbolPrototype::Variable(var.as_vartype()),
+                Symbol::Variable(var) => SymbolPrototype::Variable(var.as_vartype().into()),
             };
             debug_assert_eq!(name, &name.to_ascii_uppercase());
             table.insert(SymbolKey::from(name), proto);
@@ -100,8 +199,8 @@ impl SymbolsTable {
     }
 
     /// Returns the information for the symbol `key` if it exists, otherwise `None`.
-    fn get(&self, key: &SymbolKey) -> Option<&SymbolPrototype> {
-        self.table.get(key)
+    fn get(&self, key: &SymbolKey) -> Option<SymbolPrototype> {
+        self.table.get(key).copied()
     }
 
     /// Inserts the new information `proto` about symbol `key` into the symbols table.
@@ -214,18 +313,56 @@ impl Compiler {
         format!("0select{}", selects)
     }
 
+    /// Emits the necessary casts to convert the value at the top of the stack from its type `from`
+    /// to the new type `target`.
+    ///
+    /// Returns `target` if the conversion is possible, or `from` otherwise.
+    fn maybe_cast(&mut self, target: ExprType, from: ExprType) -> ExprType {
+        match (target, from) {
+            (ExprType::Double, ExprType::Integer) => {
+                self.emit(Instruction::IntegerToDouble);
+                target
+            }
+            (ExprType::Integer, ExprType::Double) => {
+                self.emit(Instruction::DoubleToInteger);
+                target
+            }
+            _ => from,
+        }
+    }
+
     /// Compiles an assignment, be it from the code or one synthesized during compilation.
     ///
     /// It's important to always use this function instead of manually emitting `Instruction::Assign`
     /// instructions to ensure consistent handling of the symbols table.
     fn compile_assignment(&mut self, vref: VarRef, vref_pos: LineCol, expr: Expr) -> Result<()> {
         let key = SymbolKey::from(&vref.name());
-        // TODO(jmmv): Replace with an error.
-        if !self.symtable.contains_key(&key) {
-            self.symtable.insert(key, SymbolPrototype::Variable(vref.ref_type()));
-        }
+        let etype = self.compile_expr(expr, false)?;
 
-        self.compile_expr(expr, false)?;
+        let vtype = match self.symtable.get(&key) {
+            Some(SymbolPrototype::Variable(vtype)) => vtype,
+            Some(_) => {
+                return Err(Error::new(vref_pos, format!("Cannot redefine {} as a variable", vref)))
+            }
+            None => {
+                // TODO(jmmv): Compile separate Dim instructions for new variables instead of
+                // checking this every time.
+                if vref.ref_type() == VarType::Auto {
+                    self.symtable.insert(key, SymbolPrototype::Variable(etype));
+                } else {
+                    self.symtable.insert(key, SymbolPrototype::Variable(vref.ref_type().into()));
+                }
+                etype
+            }
+        };
+
+        let etype = self.maybe_cast(vtype, etype);
+        if etype != vtype {
+            return Err(Error::new(
+                vref_pos,
+                format!("Cannot assign value of type {} to variable of type {}", etype, vtype,),
+            ));
+        }
         self.emit(Instruction::Assign(vref, vref_pos));
 
         Ok(())
@@ -307,14 +444,21 @@ impl Compiler {
         );
 
         if span.iter_double && span.iter.ref_type() == VarType::Auto {
+            let key = SymbolKey::from(span.iter.name());
             let skip_pc = self.emit(Instruction::Nop);
 
-            self.emit(Instruction::Dim(DimSpan {
-                name: span.iter.name().to_owned(),
-                name_pos: span.iter_pos,
-                vtype: VarType::Double,
-                vtype_pos: span.iter_pos,
-            }));
+            if self.symtable.get(&key).is_none() {
+                self.emit(Instruction::Dim(DimSpan {
+                    name: span.iter.name().to_owned(),
+                    name_pos: span.iter_pos,
+                    vtype: VarType::Double,
+                    vtype_pos: span.iter_pos,
+                }));
+                self.symtable.insert(
+                    SymbolKey::from(span.iter.name()),
+                    SymbolPrototype::Variable(ExprType::Double),
+                );
+            }
 
             self.instrs[skip_pc] = Instruction::JumpIfDefined(JumpIfDefinedISpan {
                 var: span.iter.name().to_owned(),
@@ -512,137 +656,376 @@ impl Compiler {
         Ok(())
     }
 
-    /// Compiles a unary operator and appends its instructions to the compilation context.
-    fn compile_unary_op<F: Fn(LineCol) -> Instruction>(
-        &mut self,
-        make_inst: F,
-        span: UnaryOpSpan,
-    ) -> Result<()> {
-        self.compile_expr(span.expr, false)?;
-        self.emit(make_inst(span.pos));
-        Ok(())
+    /// Compiles a logical or bitwise unary operator and appends its instructions to the compilation
+    /// context.
+    fn compile_not_op(&mut self, span: UnaryOpSpan) -> Result<ExprType> {
+        let expr_type = self.compile_expr(span.expr, false)?;
+        match expr_type {
+            ExprType::Boolean | ExprType::Integer => (),
+            _ => {
+                return Err(Error::new(span.pos, format!("Cannot apply NOT to {}", expr_type)));
+            }
+        };
+        self.emit(Instruction::Not(span.pos));
+        Ok(expr_type)
     }
 
-    /// Compiles a binary operator and appends its instructions to the compilation context.
-    fn compile_binary_op<F: Fn(LineCol) -> Instruction>(
+    /// Compiles a negate operator and appends its instructions to the compilation context.
+    fn compile_neg_op(&mut self, span: UnaryOpSpan) -> Result<ExprType> {
+        let expr_type = self.compile_expr(span.expr, false)?;
+        match expr_type {
+            ExprType::Double | ExprType::Integer => (),
+            _ => {
+                return Err(Error::new(span.pos, format!("Cannot negate {}", expr_type)));
+            }
+        };
+        self.emit(Instruction::Negate(span.pos));
+        Ok(expr_type)
+    }
+
+    /// Compiles a logical binary operator and appends its instructions to the compilation context.
+    fn compile_logical_binary_op<F: Fn(LineCol) -> Instruction>(
         &mut self,
         make_inst: F,
         span: BinaryOpSpan,
-    ) -> Result<()> {
-        self.compile_expr(span.lhs, false)?;
-        self.compile_expr(span.rhs, false)?;
+        op_name: &str,
+    ) -> Result<ExprType> {
+        let lhs_type = self.compile_expr(span.lhs, false)?;
+        let rhs_type = self.compile_expr(span.rhs, false)?;
+        let result = match (lhs_type, rhs_type) {
+            (ExprType::Boolean, ExprType::Boolean) => ExprType::Boolean,
+            (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
+            (_, _) => {
+                return Err(Error::new(
+                    span.pos,
+                    format!("Cannot {} {} and {}", op_name, lhs_type, rhs_type),
+                ));
+            }
+        };
+
         self.emit(make_inst(span.pos));
-        Ok(())
+        Ok(result)
     }
 
-    /// Compiles the evaluation of an expression and appends its instructions to the
+    /// Compiles a logical or bitwise binary operator and appends its instructions to the
     /// compilation context.
+    fn compile_equality_binary_op<F: Fn(LineCol) -> Instruction>(
+        &mut self,
+        make_inst: F,
+        span: BinaryOpSpan,
+        op_name: &str,
+    ) -> Result<ExprType> {
+        let lhs_type = self.compile_expr(span.lhs, false)?;
+        let pc = self.next_pc;
+        self.emit(Instruction::Nop);
+
+        let mut keep_nop = false;
+        let rhs_type = self.compile_expr(span.rhs, false)?;
+        match (lhs_type, rhs_type) {
+            (lhs_type, rhs_type) if lhs_type == rhs_type => (),
+
+            (ExprType::Double, ExprType::Integer) => {
+                self.emit(Instruction::IntegerToDouble);
+            }
+
+            (ExprType::Integer, ExprType::Double) => {
+                self.instrs[pc] = Instruction::IntegerToDouble;
+                keep_nop = true;
+            }
+
+            (_, _) => {
+                return Err(Error::new(
+                    span.pos,
+                    format!("Cannot compare {} and {} with {}", lhs_type, rhs_type, op_name),
+                ));
+            }
+        };
+
+        if !keep_nop {
+            self.instrs.remove(pc);
+            self.next_pc -= 1;
+        }
+
+        self.emit(make_inst(span.pos));
+
+        Ok(ExprType::Boolean)
+    }
+
+    /// Compiles a binary shift operator and appends its instructions to the compilation context.
+    fn compile_shift_binary_op<F: Fn(LineCol) -> Instruction>(
+        &mut self,
+        make_inst: F,
+        span: BinaryOpSpan,
+        op_name: &str,
+    ) -> Result<ExprType> {
+        let lhs_type = self.compile_expr(span.lhs, false)?;
+        match lhs_type {
+            ExprType::Integer => (),
+            _ => {
+                return Err(Error::new(
+                    span.pos,
+                    format!("Cannot apply {} to {}", op_name, lhs_type),
+                ));
+            }
+        };
+
+        let rhs_type = self.compile_expr(span.rhs, false)?;
+        match rhs_type {
+            ExprType::Integer => (),
+            _ => {
+                return Err(Error::new(
+                    span.pos,
+                    format!(
+                        "Number of bits to {} must be an {}, not a {}",
+                        op_name,
+                        ExprType::Integer,
+                        rhs_type
+                    ),
+                ));
+            }
+        };
+
+        self.emit(make_inst(span.pos));
+
+        Ok(ExprType::Integer)
+    }
+
+    /// Compiles the evaluation of an expression, appends its instructions to the
+    /// Compiles a binary operator and appends its instructions to the compilation context.
+    fn compile_arithmetic_binary_op<F: Fn(LineCol) -> Instruction>(
+        &mut self,
+        make_inst: F,
+        span: BinaryOpSpan,
+        op_name: &str,
+    ) -> Result<ExprType> {
+        let lhs_type = self.compile_expr(span.lhs, false)?;
+        let pc = self.next_pc;
+        self.emit(Instruction::Nop);
+
+        let mut keep_nop = false;
+        let rhs_type = self.compile_expr(span.rhs, false)?;
+        let result = match (lhs_type, rhs_type) {
+            (ExprType::Text, ExprType::Text) => ExprType::Text,
+            (ExprType::Double, ExprType::Double) => ExprType::Double,
+            (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
+
+            (ExprType::Double, ExprType::Integer) => {
+                self.emit(Instruction::IntegerToDouble);
+                ExprType::Double
+            }
+
+            (ExprType::Integer, ExprType::Double) => {
+                self.instrs[pc] = Instruction::IntegerToDouble;
+                keep_nop = true;
+                ExprType::Double
+            }
+
+            (_, _) => {
+                return Err(Error::new(
+                    span.pos,
+                    format!("Cannot {} {} and {}", op_name, lhs_type, rhs_type),
+                ));
+            }
+        };
+
+        if !keep_nop {
+            self.instrs.remove(pc);
+            self.next_pc -= 1;
+        }
+
+        self.emit(make_inst(span.pos));
+
+        Ok(result)
+    }
+
+    /// Compiles the evaluation of an expression, appends its instructions to the
+    /// compilation context, and returns the type of the compiled expression.
     ///
     /// `allow_varrefs` should be true for top-level expression compilations within
     /// function arguments.  In that specific case, we must leave bare variable
     /// references unevaluated because we don't know if the function wants to take
     /// the reference or the value.
-    fn compile_expr(&mut self, expr: Expr, allow_varrefs: bool) -> Result<()> {
+    fn compile_expr(&mut self, expr: Expr, allow_varrefs: bool) -> Result<ExprType> {
         match expr {
             Expr::Boolean(span) => {
                 self.emit(Instruction::Push(Value::Boolean(span.value), span.pos));
+                Ok(ExprType::Boolean)
             }
 
             Expr::Double(span) => {
                 self.emit(Instruction::Push(Value::Double(span.value), span.pos));
+                Ok(ExprType::Double)
             }
 
             Expr::Integer(span) => {
                 self.emit(Instruction::Push(Value::Integer(span.value), span.pos));
+                Ok(ExprType::Integer)
             }
 
             Expr::Text(span) => {
                 self.emit(Instruction::Push(Value::Text(span.value), span.pos));
+                Ok(ExprType::Text)
             }
 
             Expr::Symbol(span) => {
+                let key = SymbolKey::from(span.vref.name());
                 if allow_varrefs {
+                    let result = match self.symtable.get(&key) {
+                        None => {
+                            let vtype = if span.vref.ref_type() == VarType::Auto {
+                                ExprType::Integer
+                            } else {
+                                span.vref.ref_type().into()
+                            };
+                            self.symtable.insert(key, SymbolPrototype::Variable(vtype));
+                            vtype
+                        }
+
+                        Some(SymbolPrototype::Array(vtype))
+                        | Some(SymbolPrototype::Variable(vtype)) => vtype,
+
+                        Some(SymbolPrototype::Callable(ctype, is_argless)) => {
+                            if !is_argless {
+                                unreachable!();
+                            }
+                            match ctype.as_expr_type() {
+                                Some(etype) => etype,
+                                None => {
+                                    return Err(Error::new(
+                                        span.pos,
+                                        format!(
+                                            "{} is not an array nor a function",
+                                            span.vref.name()
+                                        ),
+                                    ));
+                                }
+                            }
+                        }
+                    };
                     self.emit(Instruction::LoadRef(span.vref, span.pos));
+                    Ok(result)
                 } else {
+                    let result = match self.symtable.get(&key) {
+                        None => {
+                            return Err(Error::new(
+                                span.pos,
+                                format!("Undefined variable {}", span.vref.name()),
+                            ))
+                        }
+                        Some(SymbolPrototype::Variable(vtype)) => vtype,
+                        Some(SymbolPrototype::Callable(ctype, is_argless)) if is_argless => {
+                            // TODO(jmmv): This could emit a Call instruction instead of Load,
+                            // avoiding the runtime check.
+                            match ctype.as_expr_type() {
+                                Some(etype) => etype,
+                                None => {
+                                    return Err(Error::new(
+                                        span.pos,
+                                        format!(
+                                            "{} is not an array nor a function",
+                                            span.vref.name()
+                                        ),
+                                    ));
+                                }
+                            }
+                        }
+                        Some(_) => {
+                            return Err(Error::new(
+                                span.pos,
+                                format!("{} is not a variable", span.vref.name()),
+                            ))
+                        }
+                    };
                     self.emit(Instruction::Load(span.vref, span.pos));
+                    Ok(result)
                 }
             }
 
-            Expr::And(span) => {
-                self.compile_binary_op(Instruction::And, *span)?;
-            }
+            Expr::And(span) => self.compile_logical_binary_op(Instruction::And, *span, "AND"),
 
-            Expr::Or(span) => {
-                self.compile_binary_op(Instruction::Or, *span)?;
-            }
+            Expr::Or(span) => self.compile_logical_binary_op(Instruction::Or, *span, "OR"),
 
-            Expr::Xor(span) => {
-                self.compile_binary_op(Instruction::Xor, *span)?;
-            }
+            Expr::Xor(span) => self.compile_logical_binary_op(Instruction::Xor, *span, "XOR"),
 
-            Expr::Not(span) => {
-                self.compile_unary_op(Instruction::Not, *span)?;
-            }
+            Expr::Not(span) => self.compile_not_op(*span),
 
             Expr::ShiftLeft(span) => {
-                self.compile_binary_op(Instruction::ShiftLeft, *span)?;
+                let result = self.compile_shift_binary_op(Instruction::ShiftLeft, *span, "<<")?;
+                debug_assert_eq!(ExprType::Integer, result);
+                Ok(result)
             }
 
             Expr::ShiftRight(span) => {
-                self.compile_binary_op(Instruction::ShiftRight, *span)?;
+                let result = self.compile_shift_binary_op(Instruction::ShiftRight, *span, ">>")?;
+                debug_assert_eq!(ExprType::Integer, result);
+                Ok(result)
             }
 
             Expr::Equal(span) => {
-                self.compile_binary_op(Instruction::Equal, *span)?;
+                let result = self.compile_equality_binary_op(Instruction::Equal, *span, "=")?;
+                debug_assert_eq!(ExprType::Boolean, result);
+                Ok(result)
             }
 
             Expr::NotEqual(span) => {
-                self.compile_binary_op(Instruction::NotEqual, *span)?;
+                let result = self.compile_equality_binary_op(Instruction::NotEqual, *span, "<>")?;
+                debug_assert_eq!(ExprType::Boolean, result);
+                Ok(result)
             }
 
             Expr::Less(span) => {
-                self.compile_binary_op(Instruction::Less, *span)?;
+                let result = self.compile_equality_binary_op(Instruction::Less, *span, "<")?;
+                debug_assert_eq!(ExprType::Boolean, result);
+                Ok(result)
             }
 
             Expr::LessEqual(span) => {
-                self.compile_binary_op(Instruction::LessEqual, *span)?;
+                let result =
+                    self.compile_equality_binary_op(Instruction::LessEqual, *span, "<=")?;
+                debug_assert_eq!(ExprType::Boolean, result);
+                Ok(result)
             }
 
             Expr::Greater(span) => {
-                self.compile_binary_op(Instruction::Greater, *span)?;
+                let result = self.compile_equality_binary_op(Instruction::Greater, *span, ">")?;
+                debug_assert_eq!(ExprType::Boolean, result);
+                Ok(result)
             }
 
             Expr::GreaterEqual(span) => {
-                self.compile_binary_op(Instruction::GreaterEqual, *span)?;
+                let result =
+                    self.compile_equality_binary_op(Instruction::GreaterEqual, *span, ">=")?;
+                debug_assert_eq!(ExprType::Boolean, result);
+                Ok(result)
             }
 
             Expr::Add(span) => {
-                self.compile_binary_op(Instruction::Add, *span)?;
+                // TODO(jmmv): Need to emit different addition operations depending on the types
+                // and remove the logic from the runtime.  Applies to all other operators as well.
+                Ok(self.compile_arithmetic_binary_op(Instruction::Add, *span, "+")?)
             }
 
             Expr::Subtract(span) => {
-                self.compile_binary_op(Instruction::Subtract, *span)?;
+                Ok(self.compile_arithmetic_binary_op(Instruction::Subtract, *span, "-")?)
             }
 
             Expr::Multiply(span) => {
-                self.compile_binary_op(Instruction::Multiply, *span)?;
+                Ok(self.compile_arithmetic_binary_op(Instruction::Multiply, *span, "*")?)
             }
 
             Expr::Divide(span) => {
-                self.compile_binary_op(Instruction::Divide, *span)?;
+                Ok(self.compile_arithmetic_binary_op(Instruction::Divide, *span, "/")?)
             }
 
             Expr::Modulo(span) => {
-                self.compile_binary_op(Instruction::Modulo, *span)?;
+                Ok(self.compile_arithmetic_binary_op(Instruction::Modulo, *span, "MOD")?)
             }
 
             Expr::Power(span) => {
-                self.compile_binary_op(Instruction::Power, *span)?;
+                Ok(self.compile_arithmetic_binary_op(Instruction::Power, *span, "^")?)
             }
 
-            Expr::Negate(span) => {
-                self.compile_unary_op(Instruction::Negate, *span)?;
-            }
+            Expr::Negate(span) => Ok(self.compile_neg_op(*span)?),
 
             Expr::Call(span) => {
                 let nargs = span.args.len();
@@ -651,26 +1034,38 @@ impl Compiler {
                 }
 
                 let key = SymbolKey::from(span.fref.name());
-                match self.symtable.get(&key) {
+                let result = match self.symtable.get(&key) {
                     Some(SymbolPrototype::Array(vtype)) => {
-                        if !span.fref.accepts(*vtype) {
+                        if !span.fref.accepts((vtype).into()) {
                             return Err(Error::new(
                                 span.pos,
                                 format!("Incompatible type annotation in {} reference", span.fref),
                             ));
                         }
                         self.emit(Instruction::ArrayLoad(span.fref, span.pos, nargs));
+                        vtype
                     }
 
-                    Some(SymbolPrototype::Callable(vtype)) => {
-                        if !span.fref.accepts(*vtype) {
+                    Some(SymbolPrototype::Callable(ctype, _is_argless)) => {
+                        if !span.fref.accepts((ctype).into()) {
                             return Err(Error::new(
                                 span.pos,
                                 format!("Incompatible type annotation in {} reference", span.fref),
                             ));
                         }
 
+                        let vtype = match ctype.as_expr_type() {
+                            Some(vtype) => vtype,
+                            None => {
+                                return Err(Error::new(
+                                    span.pos,
+                                    format!("{} is not an array nor a function", span.fref.name()),
+                                ));
+                            }
+                        };
+
                         self.emit(Instruction::FunctionCall(span.fref, span.pos, nargs));
+                        vtype
                     }
 
                     Some(SymbolPrototype::Variable(_)) => {
@@ -686,11 +1081,10 @@ impl Compiler {
                             format!("Unknown function or array {}", span.fref.name()),
                         ));
                     }
-                }
+                };
+                Ok(result)
             }
         }
-
-        Ok(())
     }
 
     /// Compiles one statement and appends its bytecode to the current compilation context.
@@ -712,8 +1106,8 @@ impl Compiler {
             Statement::BuiltinCall(span) => {
                 let key = SymbolKey::from(&span.name);
                 match self.symtable.get(&key) {
-                    Some(SymbolPrototype::Callable(ftype)) => {
-                        if *ftype != VarType::Void {
+                    Some(SymbolPrototype::Callable(ftype, _is_argless)) => {
+                        if ftype != CallableType::Void {
                             return Err(Error::new(
                                 span.name_pos,
                                 format!("{} is not a command", span.name),
@@ -769,7 +1163,7 @@ impl Compiler {
                 let key = SymbolKey::from(&span.name);
                 // TODO(jmmv): Replace with an error.
                 if !self.symtable.contains_key(&key) {
-                    self.symtable.insert(key, SymbolPrototype::Variable(span.vtype));
+                    self.symtable.insert(key, SymbolPrototype::Variable(span.vtype.into()));
                 }
 
                 self.emit(Instruction::Dim(span));
@@ -796,7 +1190,7 @@ impl Compiler {
                     subtype_pos: span.subtype_pos,
                 }));
 
-                self.symtable.insert(key, SymbolPrototype::Array(span.subtype));
+                self.symtable.insert(key, SymbolPrototype::Array(span.subtype.into()));
             }
 
             Statement::Do(span) => {
@@ -1052,6 +1446,7 @@ mod tests {
     #[test]
     fn test_compile_array_assignment() {
         Tester::default()
+            .define("i", SymbolPrototype::Variable(ExprType::Integer))
             .parse("foo(3, 4 + i, i) = 5")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 20)))
@@ -1080,6 +1475,7 @@ mod tests {
     #[test]
     fn test_compile_assignment_varref_is_evaluated() {
         Tester::default()
+            .define("i", SymbolPrototype::Variable(ExprType::Integer))
             .parse("foo = i")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 7)))
@@ -1090,7 +1486,7 @@ mod tests {
     #[test]
     fn test_compile_builtin_call_no_args() {
         Tester::default()
-            .define("CMD", SymbolPrototype::Callable(VarType::Void))
+            .define("CMD", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("CMD")
             .compile()
             .expect_instr(
@@ -1103,7 +1499,7 @@ mod tests {
     #[test]
     fn test_compile_builtin_call_separator_types() {
         Tester::default()
-            .define("CMD", SymbolPrototype::Callable(VarType::Void))
+            .define("CMD", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("CMD a;;b,c AS d")
             .compile()
             .expect_instr(0, Instruction::LoadRef(VarRef::new("d", VarType::Auto), lc(1, 15)))
@@ -1188,6 +1584,7 @@ mod tests {
     #[test]
     fn test_compile_dim_array_exprs() {
         Tester::default()
+            .define("i", SymbolPrototype::Variable(ExprType::Integer))
             .parse("DIM var(i, 3 + 4) AS INTEGER")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(3), lc(1, 12)))
@@ -1210,7 +1607,7 @@ mod tests {
     #[test]
     fn test_compile_do_infinite() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(VarType::Void))
+            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("DO\nFOO\nLOOP")
             .compile()
             .expect_instr(
@@ -1224,7 +1621,7 @@ mod tests {
     #[test]
     fn test_compile_do_pre_guard() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(VarType::Void))
+            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("DO WHILE TRUE\nFOO\nLOOP")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
@@ -1246,7 +1643,7 @@ mod tests {
     #[test]
     fn test_compile_do_post_guard() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(VarType::Void))
+            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("DO\nFOO\nLOOP WHILE TRUE")
             .compile()
             .expect_instr(
@@ -1272,6 +1669,7 @@ mod tests {
     #[test]
     fn test_compile_end_with_exit_code_expr() {
         Tester::default()
+            .define("i", SymbolPrototype::Variable(ExprType::Integer))
             .parse("END 2 + i")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(2), lc(1, 5)))
@@ -1284,6 +1682,7 @@ mod tests {
     #[test]
     fn test_compile_end_with_exit_code_varref() {
         Tester::default()
+            .define("i", SymbolPrototype::Variable(ExprType::Integer))
             .parse("END i")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 5)))
@@ -1437,6 +1836,7 @@ mod tests {
     #[test]
     fn test_compile_expr_varrefs_are_evaluated() {
         Tester::default()
+            .define("j", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = j")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("j", VarType::Auto), lc(1, 5)))
@@ -1447,6 +1847,9 @@ mod tests {
     #[test]
     fn test_compile_expr_logical_ops() {
         Tester::default()
+            .define("x", SymbolPrototype::Variable(ExprType::Boolean))
+            .define("y", SymbolPrototype::Variable(ExprType::Boolean))
+            .define("z", SymbolPrototype::Variable(ExprType::Boolean))
             .parse("b = true OR x AND y XOR NOT z")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 5)))
@@ -1464,6 +1867,8 @@ mod tests {
     #[test]
     fn test_compile_expr_bitwise_ops() {
         Tester::default()
+            .define("a", SymbolPrototype::Variable(ExprType::Integer))
+            .define("b", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = a >> 5 << b")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("a", VarType::Auto), lc(1, 5)))
@@ -1477,29 +1882,30 @@ mod tests {
 
     #[test]
     fn test_compile_expr_relational_ops() {
-        Tester::default()
-            .parse("b = a = 10 <> 20 < 30 <= 40 > 50 >= 60")
-            .compile()
-            .expect_instr(0, Instruction::Load(VarRef::new("a", VarType::Auto), lc(1, 5)))
-            .expect_instr(1, Instruction::Push(Value::Integer(10), lc(1, 9)))
-            .expect_instr(2, Instruction::Equal(lc(1, 7)))
-            .expect_instr(3, Instruction::Push(Value::Integer(20), lc(1, 15)))
-            .expect_instr(4, Instruction::NotEqual(lc(1, 12)))
-            .expect_instr(5, Instruction::Push(Value::Integer(30), lc(1, 20)))
-            .expect_instr(6, Instruction::Less(lc(1, 18)))
-            .expect_instr(7, Instruction::Push(Value::Integer(40), lc(1, 26)))
-            .expect_instr(8, Instruction::LessEqual(lc(1, 23)))
-            .expect_instr(9, Instruction::Push(Value::Integer(50), lc(1, 31)))
-            .expect_instr(10, Instruction::Greater(lc(1, 29)))
-            .expect_instr(11, Instruction::Push(Value::Integer(60), lc(1, 37)))
-            .expect_instr(12, Instruction::GreaterEqual(lc(1, 34)))
-            .expect_instr(13, Instruction::Assign(VarRef::new("b", VarType::Auto), lc(1, 1)))
-            .check();
+        fn test_op<F: Fn(LineCol) -> Instruction>(make_inst: F, op_name: &str) {
+            Tester::default()
+                .define("a", SymbolPrototype::Variable(ExprType::Integer))
+                .parse(&format!("b = a {} 10", op_name))
+                .compile()
+                .expect_instr(0, Instruction::Load(VarRef::new("a", VarType::Auto), lc(1, 5)))
+                .expect_instr(1, Instruction::Push(Value::Integer(10), lc(1, 8 + op_name.len())))
+                .expect_instr(2, make_inst(lc(1, 7)))
+                .expect_instr(3, Instruction::Assign(VarRef::new("b", VarType::Auto), lc(1, 1)))
+                .check();
+        }
+
+        test_op(Instruction::Equal, "=");
+        test_op(Instruction::NotEqual, "<>");
+        test_op(Instruction::Less, "<");
+        test_op(Instruction::LessEqual, "<=");
+        test_op(Instruction::Greater, ">");
+        test_op(Instruction::GreaterEqual, ">=");
     }
 
     #[test]
     fn test_compile_expr_arithmetic_ops() {
         Tester::default()
+            .define("a", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = a + 10 - 20 * 30 / 40 MOD 50 ^ (-60)")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("a", VarType::Auto), lc(1, 5)))
@@ -1523,7 +1929,9 @@ mod tests {
     #[test]
     fn test_compile_expr_array_ref() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Array(VarType::Integer))
+            .define("FOO", SymbolPrototype::Array(ExprType::Integer))
+            .define("j", SymbolPrototype::Variable(ExprType::Text))
+            .define("k", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = FOO(3, j, k + 1)")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("k", VarType::Auto), lc(1, 15)))
@@ -1539,25 +1947,30 @@ mod tests {
     #[test]
     fn test_compile_expr_function_call() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(VarType::Integer))
+            .define("FOO", SymbolPrototype::Callable(CallableType::Integer, false))
+            .define("j", SymbolPrototype::Variable(ExprType::Text))
+            .define("k", SymbolPrototype::Variable(ExprType::Double))
             .parse("i = FOO(3, j, k + 1)")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("k", VarType::Auto), lc(1, 15)))
             .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 19)))
-            .expect_instr(2, Instruction::Add(lc(1, 17)))
-            .expect_instr(3, Instruction::LoadRef(VarRef::new("j", VarType::Auto), lc(1, 12)))
-            .expect_instr(4, Instruction::Push(Value::Integer(3), lc(1, 9)))
+            .expect_instr(2, Instruction::IntegerToDouble)
+            .expect_instr(3, Instruction::Add(lc(1, 17)))
+            .expect_instr(4, Instruction::LoadRef(VarRef::new("j", VarType::Auto), lc(1, 12)))
+            .expect_instr(5, Instruction::Push(Value::Integer(3), lc(1, 9)))
             .expect_instr(
-                5,
+                6,
                 Instruction::FunctionCall(VarRef::new("FOO", VarType::Auto), lc(1, 5), 3),
             )
-            .expect_instr(6, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(1, 1)))
+            .expect_instr(7, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(1, 1)))
             .check();
     }
 
     #[test]
     fn test_compile_expr_array_or_function_not_defined() {
         Tester::default()
+            .define("j", SymbolPrototype::Variable(ExprType::Integer))
+            .define("k", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = FOO(3, j, k + 1)")
             .compile()
             .expect_err("1:5: Unknown function or array FOO")
@@ -1603,6 +2016,8 @@ mod tests {
     #[test]
     fn test_compile_for_simple_varrefs_are_evaluated() {
         Tester::default()
+            .define("i", SymbolPrototype::Variable(ExprType::Integer))
+            .define("j", SymbolPrototype::Variable(ExprType::Integer))
             .parse("FOR iter = i TO j: a = FALSE: NEXT")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 12)))
@@ -1630,6 +2045,8 @@ mod tests {
     #[test]
     fn test_compile_for_expressions() {
         Tester::default()
+            .define("i", SymbolPrototype::Variable(ExprType::Integer))
+            .define("j", SymbolPrototype::Variable(ExprType::Integer))
             .parse("FOR iter = (i + 1) TO (2 + j): a = FALSE: NEXT")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 13)))
@@ -1677,22 +2094,24 @@ mod tests {
                 }),
             )
             .expect_instr(2, Instruction::Push(Value::Integer(0), lc(1, 12)))
-            .expect_instr(3, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
-            .expect_instr(4, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
-            .expect_instr(5, Instruction::Push(Value::Integer(2), lc(1, 17)))
-            .expect_instr(6, Instruction::LessEqual(lc(1, 14)))
+            .expect_instr(3, Instruction::IntegerToDouble)
+            .expect_instr(4, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(5, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(6, Instruction::Push(Value::Integer(2), lc(1, 17)))
+            .expect_instr(7, Instruction::IntegerToDouble)
+            .expect_instr(8, Instruction::LessEqual(lc(1, 14)))
             .expect_instr(
-                7,
+                9,
                 Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 13,
+                    addr: 15,
                     error_msg: "FOR supports numeric iteration only",
                 }),
             )
-            .expect_instr(8, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
-            .expect_instr(9, Instruction::Push(Value::Double(0.1), lc(1, 24)))
-            .expect_instr(10, Instruction::Add(lc(1, 14)))
-            .expect_instr(11, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
-            .expect_instr(12, Instruction::Jump(JumpISpan { addr: 4 }))
+            .expect_instr(10, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(11, Instruction::Push(Value::Double(0.1), lc(1, 24)))
+            .expect_instr(12, Instruction::Add(lc(1, 14)))
+            .expect_instr(13, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(14, Instruction::Jump(JumpISpan { addr: 5 }))
             .check();
     }
 
@@ -1710,7 +2129,7 @@ mod tests {
     #[test]
     fn test_compile_gosub_and_return() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(VarType::Void))
+            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("@sub\nFOO\nRETURN\nGOSUB @sub")
             .compile()
             .expect_instr(
@@ -1734,7 +2153,7 @@ mod tests {
     #[test]
     fn test_compile_if_one_branch() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(VarType::Void))
+            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("IF FALSE THEN: FOO: END IF")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(false), lc(1, 4)))
@@ -1755,9 +2174,9 @@ mod tests {
     #[test]
     fn test_compile_if_many_branches() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(VarType::Void))
-            .define("BAR", SymbolPrototype::Callable(VarType::Void))
-            .define("BAZ", SymbolPrototype::Callable(VarType::Void))
+            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
+            .define("BAR", SymbolPrototype::Callable(CallableType::Void, false))
+            .define("BAZ", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("IF FALSE THEN\nFOO\nELSEIF TRUE THEN\nBAR\nELSE\nBAZ\nEND IF")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(false), lc(1, 4)))
@@ -1843,7 +2262,7 @@ mod tests {
     /// `exp_expr` must assume that its position starts at `(2, 6)`.
     fn do_compile_case_guard_test(guards: &str, exp_expr_instrs: Vec<Instruction>) {
         let mut t = Tester::default()
-            .define("FOO", SymbolPrototype::Callable(VarType::Void))
+            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
             .parse(&format!("SELECT CASE 5\nCASE {}\nFOO\nEND SELECT", guards))
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -1998,7 +2417,7 @@ mod tests {
     #[test]
     fn test_compile_select_one_case() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(VarType::Void))
+            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -2027,6 +2446,7 @@ mod tests {
     #[test]
     fn test_compile_select_one_case_varref_is_evaluated() {
         Tester::default()
+            .define("i", SymbolPrototype::Variable(ExprType::Integer))
             .parse("SELECT CASE i: END SELECT")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 13)))
@@ -2041,7 +2461,7 @@ mod tests {
     #[test]
     fn test_compile_select_only_case_else() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(VarType::Void))
+            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("SELECT CASE 5\nCASE ELSE\nFOO\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -2060,8 +2480,8 @@ mod tests {
     #[test]
     fn test_compile_select_many_cases_without_else() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(VarType::Void))
-            .define("BAR", SymbolPrototype::Callable(VarType::Void))
+            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
+            .define("BAR", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE IS <> 8\nBAR\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -2105,8 +2525,8 @@ mod tests {
     #[test]
     fn test_compile_select_many_cases_with_else() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(VarType::Void))
-            .define("BAR", SymbolPrototype::Callable(VarType::Void))
+            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
+            .define("BAR", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE ELSE\nBAR\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -2160,7 +2580,7 @@ mod tests {
     #[test]
     fn test_compile_while() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(VarType::Void))
+            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("WHILE TRUE\nFOO\nWEND")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 7)))

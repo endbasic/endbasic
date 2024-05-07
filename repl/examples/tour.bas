@@ -13,6 +13,8 @@
 ' License for the specific language governing permissions and limitations
 ' under the License.
 
+title$ = ""
+
 GOTO @main
 
 ' Clears the screen and prints the title in `title$`.

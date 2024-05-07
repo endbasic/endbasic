@@ -14,7 +14,7 @@
 ' under the License.
 
 PRINT "foo"
-IF 2 < TRUE THEN ' Invalid types in expression.
+IF 2 << -3 THEN ' Invalid values in expression.
     PRINT "bar"
 END IF
 PRINT "baz"

@@ -816,6 +816,16 @@ impl Machine {
                 context.pc = span.addr;
             }
 
+            Instruction::DoubleToInteger => {
+                let (value, pos) = context.value_stack.pop().unwrap();
+                debug_assert_eq!(VarType::Double, value.as_vartype());
+                context.value_stack.push((
+                    Value::Integer(value.as_i32().map_err(|e| Error::from_value_error(e, pos))?),
+                    pos,
+                ));
+                context.pc += 1;
+            }
+
             Instruction::FunctionCall(fref, pos, nargs) => {
                 self.function_call(context, fref, *pos, *nargs).await?;
                 context.pc += 1;
@@ -835,6 +845,16 @@ impl Machine {
 
             Instruction::End(has_code) => {
                 self.end(context, *has_code)?;
+            }
+
+            Instruction::IntegerToDouble => {
+                let (value, pos) = context.value_stack.pop().unwrap();
+                debug_assert_eq!(VarType::Integer, value.as_vartype());
+                context.value_stack.push((
+                    Value::Double(value.as_f64().map_err(|e| Error::from_value_error(e, pos))?),
+                    pos,
+                ));
+                context.pc += 1;
             }
 
             Instruction::Jump(span) => {
@@ -1809,20 +1829,20 @@ mod tests {
 
         do_simple_error_test(
             "FOR i = \"a\" TO 3\nNEXT",
-            "1:13: Cannot compare \"a\" and 3 with <=",
+            "1:13: Cannot compare STRING and INTEGER with <=",
         );
         do_simple_error_test(
             "FOR i = 1 TO \"a\"\nNEXT",
-            "1:11: Cannot compare 1 and \"a\" with <=",
+            "1:11: Cannot compare INTEGER and STRING with <=",
         );
 
         do_simple_error_test(
             "FOR i = \"b\" TO 7 STEP -8\nNEXT",
-            "1:13: Cannot compare \"b\" and 7 with >=",
+            "1:13: Cannot compare STRING and INTEGER with >=",
         );
         do_simple_error_test(
             "FOR i = 1 TO \"b\" STEP -8\nNEXT",
-            "1:11: Cannot compare 1 and \"b\" with >=",
+            "1:11: Cannot compare INTEGER and STRING with >=",
         );
     }
 
@@ -2357,7 +2377,7 @@ mod tests {
 
         do_simple_error_test(
             "SELECT CASE 2\nCASE FALSE\nEND SELECT",
-            "2:6: Cannot compare 2 and FALSE with =",
+            "2:6: Cannot compare INTEGER and BOOLEAN with =",
         );
     }
 

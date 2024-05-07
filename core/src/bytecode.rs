@@ -184,6 +184,12 @@ pub enum Instruction {
     /// at the top of the stack.
     End(bool),
 
+    /// Represents a conversion of a float to an integer with rounding.
+    DoubleToInteger,
+
+    /// Represents a conversion of an integer to a float.
+    IntegerToDouble,
+
     /// Represents an unconditional jump.
     Jump(JumpISpan),
 
@@ -242,6 +248,8 @@ impl Instruction {
             | Instruction::Power(_)
             | Instruction::Negate(_)
             | Instruction::FunctionCall(_, _, _)
+            | Instruction::DoubleToInteger
+            | Instruction::IntegerToDouble
             | Instruction::Load(_, _)
             | Instruction::LoadRef(_, _)
             | Instruction::Push(_, _) => false,

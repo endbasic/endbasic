@@ -4,6 +4,28 @@
 
     Type HELP for interactive usage information.
 
+>>> Logical operations
+ERROR: 1:13: Cannot AND BOOLEAN and INTEGER
+ERROR: 1:13: Cannot OR BOOLEAN and INTEGER
+ERROR: 1:13: Cannot XOR BOOLEAN and INTEGER
+ERROR: 1:7: Cannot apply NOT to DOUBLE
+>>> Relational operations
+ERROR: 1:13: Cannot compare BOOLEAN and INTEGER with =
+ERROR: 1:13: Cannot compare BOOLEAN and INTEGER with <>
+ERROR: 1:13: Cannot compare BOOLEAN and INTEGER with <
+ERROR: 1:13: Cannot compare BOOLEAN and INTEGER with <=
+ERROR: 1:13: Cannot compare BOOLEAN and INTEGER with >
+ERROR: 1:13: Cannot compare BOOLEAN and INTEGER with >=
+>>> Arithmetic operations
+ERROR: 1:13: Cannot + BOOLEAN and INTEGER
+ERROR: 1:13: Cannot - BOOLEAN and INTEGER
+ERROR: 1:13: Cannot * BOOLEAN and INTEGER
+ERROR: 1:13: Cannot / BOOLEAN and INTEGER
+ERROR: 1:13: Cannot MOD BOOLEAN and INTEGER
+ERROR: 1:13: Cannot ^ BOOLEAN and INTEGER
+ERROR: 1:7: Cannot negate BOOLEAN
+>>> Operations and variables
+ERROR: 1:13: Cannot + INTEGER and BOOLEAN
 >>> Array accesses
 ERROR: 1:7: Incompatible type annotation in x# reference
 ERROR: 1:7: Unknown function or array y

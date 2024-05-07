@@ -9,19 +9,19 @@ FALSE
 FALSE
 FALSE
 TRUE
-ERROR: 1:12: Cannot AND TRUE and 5
+ERROR: 1:12: Cannot AND BOOLEAN and INTEGER
 >>> Test logical OR
 FALSE
 TRUE
 TRUE
 TRUE
-ERROR: 1:12: Cannot OR TRUE and 5
+ERROR: 1:12: Cannot OR BOOLEAN and INTEGER
 >>> Test logical XOR
 FALSE
 TRUE
 TRUE
 FALSE
-ERROR: 1:12: Cannot XOR TRUE and 5
+ERROR: 1:12: Cannot XOR BOOLEAN and INTEGER
 >>> Test logical NOT
 TRUE
 FALSE
@@ -29,20 +29,20 @@ FALSE
  5
  0
  1234
-ERROR: 1:11: Cannot AND 3.0 and 4.0
+ERROR: 1:11: Cannot AND DOUBLE and DOUBLE
 >>> Test bitwise OR
  7
  6
 -1
-ERROR: 1:11: Cannot OR 3.0 and 4.0
+ERROR: 1:11: Cannot OR DOUBLE and DOUBLE
 >>> Test bitwise XOR
  2
  6
 -1235
-ERROR: 1:11: Cannot XOR 3.0 and 4.0
+ERROR: 1:11: Cannot XOR DOUBLE and DOUBLE
 >>> Test bitwise NOT
 -1
-ERROR: 1:7: Cannot apply NOT to 3.0
+ERROR: 1:7: Cannot apply NOT to DOUBLE
 >>> Test bitwise shift left
  12
 -268435456
@@ -52,12 +52,12 @@ ERROR: 1:7: Cannot apply NOT to 3.0
  0
  0
  0
-ERROR: 1:13: Cannot apply << to non-integer FALSE
-ERROR: 1:13: Cannot apply << to non-integer FALSE
-ERROR: 1:11: Cannot apply << to non-integer 3.0
-ERROR: 1:13: Cannot apply << to non-integer "foo"
-ERROR: 1:9: Number of bits to << (TRUE) must be an integer
-ERROR: 1:9: Number of bits to << (4.0) must be an integer
+ERROR: 1:13: Cannot apply << to BOOLEAN
+ERROR: 1:13: Cannot apply << to BOOLEAN
+ERROR: 1:11: Cannot apply << to DOUBLE
+ERROR: 1:13: Cannot apply << to STRING
+ERROR: 1:9: Number of bits to << must be an INTEGER, not a BOOLEAN
+ERROR: 1:9: Number of bits to << must be an INTEGER, not a DOUBLE
 ERROR: 1:9: Number of bits to << (-1) must be positive
 >>> Test bitwise shift right
  3
@@ -72,17 +72,17 @@ ERROR: 1:9: Number of bits to << (-1) must be positive
  0
 -1
 -1
-ERROR: 1:13: Cannot apply >> to non-integer FALSE
-ERROR: 1:13: Cannot apply >> to non-integer FALSE
-ERROR: 1:11: Cannot apply >> to non-integer 3.0
-ERROR: 1:13: Cannot apply >> to non-integer "foo"
-ERROR: 1:9: Number of bits to >> (TRUE) must be an integer
-ERROR: 1:9: Number of bits to >> (4.0) must be an integer
+ERROR: 1:13: Cannot apply >> to BOOLEAN
+ERROR: 1:13: Cannot apply >> to BOOLEAN
+ERROR: 1:11: Cannot apply >> to DOUBLE
+ERROR: 1:13: Cannot apply >> to STRING
+ERROR: 1:9: Number of bits to >> must be an INTEGER, not a BOOLEAN
+ERROR: 1:9: Number of bits to >> must be an INTEGER, not a DOUBLE
 ERROR: 1:9: Number of bits to >> (-1) must be positive
 >>> Test = types
 TRUE
 FALSE
-ERROR: 1:12: Cannot compare TRUE and 5 with =
+ERROR: 1:12: Cannot compare BOOLEAN and INTEGER with =
 TRUE
 FALSE
 TRUE
@@ -93,11 +93,11 @@ TRUE
 FALSE
 TRUE
 FALSE
-ERROR: 1:10: Cannot compare "" and FALSE with =
+ERROR: 1:10: Cannot compare STRING and BOOLEAN with =
 >>> Test <> types
 FALSE
 TRUE
-ERROR: 1:12: Cannot compare TRUE and 5 with <>
+ERROR: 1:12: Cannot compare BOOLEAN and INTEGER with <>
 FALSE
 TRUE
 FALSE
@@ -108,7 +108,7 @@ FALSE
 TRUE
 FALSE
 TRUE
-ERROR: 1:10: Cannot compare "" and FALSE with <>
+ERROR: 1:10: Cannot compare STRING and BOOLEAN with <>
 >>> Test < types
 ERROR: 1:13: Cannot compare FALSE and TRUE with <
 FALSE
@@ -123,7 +123,7 @@ FALSE
 TRUE
 FALSE
 TRUE
-ERROR: 1:10: Cannot compare "" and FALSE with <
+ERROR: 1:10: Cannot compare STRING and BOOLEAN with <
 >>> Test <= types
 ERROR: 1:13: Cannot compare FALSE and TRUE with <
 FALSE
@@ -141,7 +141,7 @@ TRUE
 FALSE
 TRUE
 TRUE
-ERROR: 1:10: Cannot compare "" and FALSE with <=
+ERROR: 1:10: Cannot compare STRING and BOOLEAN with <=
 >>> Test > types
 ERROR: 1:13: Cannot compare FALSE and TRUE with >
 FALSE
@@ -156,7 +156,7 @@ FALSE
 TRUE
 FALSE
 TRUE
-ERROR: 1:10: Cannot compare "" and FALSE with >
+ERROR: 1:10: Cannot compare STRING and BOOLEAN with >
 >>> Test >= types
 ERROR: 1:13: Cannot compare FALSE and TRUE with >
 FALSE
@@ -174,9 +174,9 @@ TRUE
 FALSE
 TRUE
 TRUE
-ERROR: 1:10: Cannot compare "" and FALSE with >=
+ERROR: 1:10: Cannot compare STRING and BOOLEAN with >=
 >>> Test + types
-ERROR: 1:13: Cannot add FALSE and TRUE
+ERROR: 1:13: Cannot + BOOLEAN and BOOLEAN
  7.1
  9.5
  5
@@ -184,9 +184,9 @@ ERROR: 1:13: Cannot add FALSE and TRUE
  2147483648
  9.3
 ab
-ERROR: 1:10: Cannot add "" and FALSE
+ERROR: 1:10: Cannot + STRING and BOOLEAN
 >>> Test - types
-ERROR: 1:13: Cannot subtract TRUE from FALSE
+ERROR: 1:13: Cannot - BOOLEAN and BOOLEAN
 -1
 -1.5
 -1
@@ -195,7 +195,7 @@ ERROR: 1:13: Cannot subtract TRUE from FALSE
 -1.5
 ERROR: 1:12: Cannot subtract "a" from "ab"
 >>> Test * types
-ERROR: 1:13: Cannot multiply FALSE by TRUE
+ERROR: 1:13: Cannot * BOOLEAN and BOOLEAN
  40
  20.5
  6
@@ -204,7 +204,7 @@ ERROR: 1:13: Cannot multiply FALSE by TRUE
  20.8
 ERROR: 1:10: Cannot multiply "" by "a"
 >>> Test / types
-ERROR: 1:13: Cannot divide FALSE by TRUE
+ERROR: 1:13: Cannot / BOOLEAN and BOOLEAN
  4
  inf
  5.1
@@ -216,7 +216,7 @@ ERROR: 1:9: Division by zero
  4
 ERROR: 1:10: Cannot divide "" by "a"
 >>> Test MOD types
-ERROR: 1:13: Cannot modulo FALSE by TRUE
+ERROR: 1:13: Cannot MOD BOOLEAN and BOOLEAN
  0
  NaN
  0.3000000000000007
@@ -227,7 +227,7 @@ ERROR: 1:9: Modulo by zero
  1
 ERROR: 1:10: Cannot modulo "" by "a"
 >>> Test ^ types
-ERROR: 1:13: Cannot raise FALSE to the power of TRUE
+ERROR: 1:13: Cannot ^ BOOLEAN and BOOLEAN
  1
  8.574187700290345
  1024
@@ -239,11 +239,11 @@ ERROR: 1:13: Cannot raise FALSE to the power of TRUE
  1024
 ERROR: 1:10: Cannot raise "" to the power of "a"
 >>> Test unary - types
-ERROR: 1:7: Cannot negate TRUE
+ERROR: 1:7: Cannot negate BOOLEAN
 -6.12
  5.53
 -6
  5
  2147483648
-ERROR: 1:7: Cannot negate ""
+ERROR: 1:7: Cannot negate STRING
 End of input by CTRL-D
