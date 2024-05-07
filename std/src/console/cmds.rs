@@ -778,13 +778,13 @@ mod tests {
             "1:1: In call to INPUT: expected [\"prompt\" <;|,>] variableref",
             "INPUT \"foo\" AS bar",
         );
-        check_stmt_err("1:9: Undefined variable a", "INPUT ; a + 1");
+        check_stmt_uncatchable_err("1:9: Undefined variable a", "INPUT ; a + 1");
         Tester::default()
             .run("a = 3: INPUT ; a + 1")
             .expect_err("1:8: In call to INPUT: 1:18: INPUT requires a variable reference")
             .expect_var("a", 3)
             .check();
-        check_stmt_err("1:11: Cannot add \"a\" and TRUE", "INPUT \"a\" + TRUE; b?");
+        check_stmt_uncatchable_err("1:11: Cannot + STRING and BOOLEAN", "INPUT \"a\" + TRUE; b?");
     }
 
     #[test]
@@ -932,7 +932,7 @@ mod tests {
         );
         // Ensure type errors from `Expr` and `Value` bubble up.
         check_stmt_uncatchable_err("1:9: Unexpected value in expression", "PRINT a b");
-        check_stmt_err("1:9: Cannot add 3 and TRUE", "PRINT 3 + TRUE");
+        check_stmt_uncatchable_err("1:9: Cannot + INTEGER and BOOLEAN", "PRINT 3 + TRUE");
     }
 
     #[test]

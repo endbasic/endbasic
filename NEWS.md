@@ -40,6 +40,10 @@ for the time being.**
 *   The `CLEAR` command is now only available in the interactive interpreter given
     that it cannot clear compilation state.
 
+*   Many errors that were previously discovered only at runtime (such as undefined
+    variables) are now caught during the compilation stage.  This means that bad
+    programs abort earlier instead of half-way during execution.
+
 ## Changes in version 0.10.0
 
 **Released on 2022-12-27.**

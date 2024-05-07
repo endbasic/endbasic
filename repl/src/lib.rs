@@ -296,8 +296,25 @@ mod tests {
     }
 
     #[test]
-    fn test_autoexec_error_is_ignored() {
+    fn test_autoexec_compilation_error_is_ignored() {
         let autoexec = "a = 1\nb = undef: c = 2";
+        let mut tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
+        let (console, storage) = (tester.get_console(), tester.get_storage());
+        block_on(try_load_autoexec(tester.get_machine(), console, storage)).unwrap();
+        tester
+            .run("after = 5")
+            .expect_var("after", 5)
+            .expect_prints([
+                "Loading AUTOEXEC.BAS...",
+                "AUTOEXEC.BAS failed: 2:5: Undefined variable undef",
+            ])
+            .expect_file("MEMORY:/AUTOEXEC.BAS", autoexec)
+            .check();
+    }
+
+    #[test]
+    fn test_autoexec_execution_error_is_ignored() {
+        let autoexec = "a = 1\nb = 3 >> -1: c = 2";
         let mut tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
         let (console, storage) = (tester.get_console(), tester.get_storage());
         block_on(try_load_autoexec(tester.get_machine(), console, storage)).unwrap();
@@ -305,10 +322,10 @@ mod tests {
             .run("after = 5")
             .expect_var("a", 1)
             .expect_var("after", 5)
-            .expect_var("0ERRMSG", "2:5: Undefined variable undef")
+            .expect_var("0ERRMSG", "2:7: Number of bits to >> (-1) must be positive")
             .expect_prints([
                 "Loading AUTOEXEC.BAS...",
-                "AUTOEXEC.BAS failed: 2:5: Undefined variable undef",
+                "AUTOEXEC.BAS failed: 2:7: Number of bits to >> (-1) must be positive",
             ])
             .expect_file("MEMORY:/AUTOEXEC.BAS", autoexec)
             .check();

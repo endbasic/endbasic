@@ -9,36 +9,15 @@ TRUE
  0
 z
 37:1: In call to PRINT: 37:7: Undefined variable x
->>> Logical operations
-44:13: Cannot AND FALSE and 0
-45:13: Cannot OR FALSE and 0
-46:13: Cannot XOR FALSE and 0
-47:7: Cannot apply NOT to 0.0
->>> Relational operations
-54:13: Cannot compare FALSE and 0 with =
-55:13: Cannot compare FALSE and 0 with <>
-56:13: Cannot compare FALSE and 0 with <
-57:13: Cannot compare FALSE and 0 with <=
-58:13: Cannot compare FALSE and 0 with >
-59:13: Cannot compare FALSE and 0 with >=
->>> Arithmetic operations
-66:13: Cannot add FALSE and 0
-67:13: Cannot subtract 0 from FALSE
-68:13: Cannot multiply FALSE by 0
-69:13: Cannot divide FALSE by 0
-70:13: Cannot modulo FALSE by 0
-71:13: Cannot raise FALSE to the power of 0
-72:7: Cannot negate FALSE
 >>> Operations and variables
  36
 TRUE
-79:13: Cannot add 7 and TRUE
 >>> Array accesses
  0
  8
-86:7: Cannot index array with 1 subscripts; need 2
-87:7: Cannot index array with 1 subscripts; need 2
-88:7: Subscript 10 exceeds limit of 2
+50:7: Cannot index array with 1 subscripts; need 2
+51:7: Cannot index array with 1 subscripts; need 2
+52:7: Subscript 10 exceeds limit of 2
 >>> Simple function calls
  3.141592653589793
  5

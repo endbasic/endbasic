@@ -36,47 +36,11 @@ i = 0: PRINT i
 s = "z": PRINT s
 PRINT x: PRINT ERRMSG
 
-PRINT ">>> Logical operations"
-' These tests just make sure that the expression evaluator delegates to the
-' Value operations for each expression operator to essentially avoid duplicating
-' all those tests.  We do this by triggering errors and rely on the fact that
-' their messages are different for every operation.
-PRINT FALSE AND 0: PRINT ERRMSG
-PRINT FALSE OR 0: PRINT ERRMSG
-PRINT FALSE XOR 0: PRINT ERRMSG
-PRINT NOT 0.0: PRINT ERRMSG
-
-PRINT ">>> Relational operations"
-' These tests just make sure that the expression evaluator delegates to the
-' Value operations for each expression operator to essentially avoid duplicating
-' all those tests.  We do this by triggering errors and rely on the fact that
-' their messages are different for every operation.
-PRINT FALSE = 0: PRINT ERRMSG
-PRINT FALSE <> 0: PRINT ERRMSG
-PRINT FALSE < 0: PRINT ERRMSG
-PRINT FALSE <= 0: PRINT ERRMSG
-PRINT FALSE > 0: PRINT ERRMSG
-PRINT FALSE >= 0: PRINT ERRMSG
-
-PRINT ">>> Arithmetic operations"
-' These tests just make sure that the expression evaluator delegates to the
-' Value operations for each expression operator to essentially avoid duplicating
-' all those tests.  We do this by triggering errors and rely on the fact that
-' their messages are different for every operation.
-PRINT FALSE + 0: PRINT ERRMSG
-PRINT FALSE - 0: PRINT ERRMSG
-PRINT FALSE * 0: PRINT ERRMSG
-PRINT FALSE / 0: PRINT ERRMSG
-PRINT FALSE MOD 0: PRINT ERRMSG
-PRINT FALSE ^ 0: PRINT ERRMSG
-PRINT -FALSE: PRINT ERRMSG
-
 PRINT ">>> Operations and variables"
 x = 10
 y = 3
 PRINT y * (x + 2)
 PRINT x = (7 + y)
-PRINT 3 = 7 + TRUE: PRINT ERRMSG
 
 PRINT ">>> Array accesses"
 DIM a(2, 4) AS INTEGER
