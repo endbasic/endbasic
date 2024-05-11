@@ -64,6 +64,16 @@ impl From<io::Error> for CallError {
 /// Result for callable execution return values.
 pub type CallResult = std::result::Result<Value, CallError>;
 
+/// The key of a symbol in the symbols table.
+#[derive(Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
+pub struct SymbolKey(String);
+
+impl<R: AsRef<str>> From<R> for SymbolKey {
+    fn from(value: R) -> Self {
+        Self(value.as_ref().to_ascii_uppercase())
+    }
+}
+
 /// Represents a multidimensional array.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Array {
@@ -221,6 +231,7 @@ impl fmt::Debug for Symbol {
 #[derive(Default)]
 pub struct Symbols {
     /// Map of symbol names to their definitions.
+    // TODO(jmmv): The key should be a `SymbolKey`.
     by_name: HashMap<String, Symbol>,
 }
 
@@ -255,30 +266,23 @@ impl Symbols {
         self.by_name.retain(|name, symbol| name.starts_with("__") || !symbol.user_defined());
     }
 
-    /// Defines a new variable `name` of type `vartype`.  The variable must not yet exist.
-    pub fn dim(&mut self, name: &str, vartype: VarType) -> Result<()> {
-        let key = name.to_ascii_uppercase();
-        if self.by_name.contains_key(&key) {
-            return Err(Error::new(format!("Cannot DIM already-defined symbol {}", name)));
-        }
-        self.by_name.insert(key, Symbol::Variable(vartype.default_value()));
-        Ok(())
+    /// Defines a new variable `key` of type `vartype`.  The variable must not yet exist.
+    pub fn dim(&mut self, key: SymbolKey, vartype: VarType) {
+        let previous = self.by_name.insert(key.0, Symbol::Variable(vartype.default_value()));
+        debug_assert!(
+            previous.is_none(),
+            "Pre-existence of variables is checked at compilation time"
+        );
     }
 
-    /// Defines a new array `name` of type `subtype` with `dimensions`.  The array must not yet
+    /// Defines a new array `key` of type `subtype` with `dimensions`.  The array must not yet
     /// exist, and the name may not overlap function or variable names.
-    pub fn dim_array(
-        &mut self,
-        name: &str,
-        subtype: VarType,
-        dimensions: Vec<usize>,
-    ) -> Result<()> {
-        let key = name.to_ascii_uppercase();
-        if self.by_name.contains_key(&key) {
-            return Err(Error::new(format!("Cannot DIM already-defined symbol {}", name)));
-        }
-        self.by_name.insert(key, Symbol::Array(Array::new(subtype, dimensions)));
-        Ok(())
+    pub fn dim_array(&mut self, key: SymbolKey, subtype: VarType, dimensions: Vec<usize>) {
+        let previous = self.by_name.insert(key.0, Symbol::Array(Array::new(subtype, dimensions)));
+        debug_assert!(
+            previous.is_none(),
+            "Pre-existence of variables is checked at compilation time"
+        );
     }
 
     /// Obtains the value of a symbol or `None` if it is not defined.
@@ -782,59 +786,11 @@ mod tests {
     fn test_symbols_dim_ok() {
         let mut syms = Symbols::default();
 
-        syms.dim("a_boolean", VarType::Boolean).unwrap();
+        syms.dim(SymbolKey::from("A_Boolean"), VarType::Boolean);
         match syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap().unwrap() {
             Symbol::Variable(value) => assert_eq!(&Value::Boolean(false), value),
             _ => panic!("Got something that is not the variable we asked for"),
         }
-
-        syms.dim("a_double", VarType::Double).unwrap();
-        match syms.get(&VarRef::new("a_double", VarType::Auto)).unwrap().unwrap() {
-            Symbol::Variable(value) => assert_eq!(&Value::Double(0.0), value),
-            _ => panic!("Got something that is not the variable we asked for"),
-        }
-
-        syms.dim("an_integer", VarType::Integer).unwrap();
-        match syms.get(&VarRef::new("an_integer", VarType::Auto)).unwrap().unwrap() {
-            Symbol::Variable(value) => assert_eq!(&Value::Integer(0), value),
-            _ => panic!("Got something that is not the variable we asked for"),
-        }
-
-        syms.dim("a_string", VarType::Text).unwrap();
-        match syms.get(&VarRef::new("a_string", VarType::Auto)).unwrap().unwrap() {
-            Symbol::Variable(value) => assert_eq!(&Value::Text("".to_owned()), value),
-            _ => panic!("Got something that is not the variable we asked for"),
-        }
-    }
-
-    #[test]
-    fn test_symbols_dim_name_overlap() {
-        let mut syms = SymbolsBuilder::default()
-            .add_array("SOMEARRAY", VarType::Integer)
-            .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
-            .add_callable(SumFunction::new())
-            .add_var("SOMEVAR", Value::Boolean(true))
-            .build();
-
-        assert_eq!(
-            "Cannot DIM already-defined symbol Out",
-            format!("{}", syms.dim("Out", VarType::Integer).unwrap_err())
-        );
-
-        assert_eq!(
-            "Cannot DIM already-defined symbol Sum",
-            format!("{}", syms.dim("Sum", VarType::Integer).unwrap_err())
-        );
-
-        assert_eq!(
-            "Cannot DIM already-defined symbol SomeVar",
-            format!("{}", syms.dim("SomeVar", VarType::Integer).unwrap_err())
-        );
-
-        assert_eq!(
-            "Cannot DIM already-defined symbol SomeArray",
-            format!("{}", syms.dim("SomeArray", VarType::Integer).unwrap_err())
-        );
     }
 
     fn assert_same_array_shape(exp_subtype: VarType, exp_dims: &[usize], symbol: &Symbol) {
@@ -851,62 +807,11 @@ mod tests {
     fn test_symbols_dim_array_ok() {
         let mut syms = Symbols::default();
 
-        syms.dim_array("a_boolean", VarType::Boolean, vec![1]).unwrap();
+        syms.dim_array(SymbolKey::from("A_Boolean"), VarType::Boolean, vec![1]);
         assert_same_array_shape(
             VarType::Boolean,
             &[1],
             syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap().unwrap(),
-        );
-
-        syms.dim_array("a_double", VarType::Double, vec![5, 10]).unwrap();
-        assert_same_array_shape(
-            VarType::Double,
-            &[5, 10],
-            syms.get(&VarRef::new("a_double", VarType::Auto)).unwrap().unwrap(),
-        );
-
-        syms.dim_array("an_integer", VarType::Integer, vec![100]).unwrap();
-        assert_same_array_shape(
-            VarType::Integer,
-            &[100],
-            syms.get(&VarRef::new("an_integer", VarType::Auto)).unwrap().unwrap(),
-        );
-
-        syms.dim_array("a_string", VarType::Text, vec![1, 1]).unwrap();
-        assert_same_array_shape(
-            VarType::Text,
-            &[1, 1],
-            syms.get(&VarRef::new("a_string", VarType::Auto)).unwrap().unwrap(),
-        );
-    }
-
-    #[test]
-    fn test_symbols_dim_array_name_overlap() {
-        let mut syms = SymbolsBuilder::default()
-            .add_array("SOMEARRAY", VarType::Integer)
-            .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
-            .add_callable(SumFunction::new())
-            .add_var("SOMEVAR", Value::Boolean(true))
-            .build();
-
-        assert_eq!(
-            "Cannot DIM already-defined symbol Out",
-            format!("{}", syms.dim_array("Out", VarType::Integer, vec![5]).unwrap_err())
-        );
-
-        assert_eq!(
-            "Cannot DIM already-defined symbol Sum",
-            format!("{}", syms.dim_array("Sum", VarType::Integer, vec![5]).unwrap_err())
-        );
-
-        assert_eq!(
-            "Cannot DIM already-defined symbol SomeVar",
-            format!("{}", syms.dim_array("SomeVar", VarType::Integer, vec![5]).unwrap_err())
-        );
-
-        assert_eq!(
-            "Cannot DIM already-defined symbol SomeArray",
-            format!("{}", syms.dim_array("SomeArray", VarType::Integer, vec![5]).unwrap_err())
         );
     }
 

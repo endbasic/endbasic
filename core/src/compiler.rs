@@ -18,7 +18,7 @@
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::reader::LineCol;
-use crate::syms::{Symbol, Symbols};
+use crate::syms::{Symbol, SymbolKey, Symbols};
 use std::collections::HashMap;
 use std::fmt;
 
@@ -149,16 +149,6 @@ pub(crate) enum SymbolPrototype {
 
     /// Information about a variable.
     Variable(#[allow(unused)] ExprType),
-}
-
-/// The key of a symbol in the symbols table.
-#[derive(Hash, Eq, Ord, PartialEq, PartialOrd)]
-pub(crate) struct SymbolKey(String);
-
-impl<R: AsRef<str>> From<R> for SymbolKey {
-    fn from(value: R) -> Self {
-        Self(value.as_ref().to_ascii_uppercase())
-    }
 }
 
 /// Type for the symbols table.
@@ -368,6 +358,22 @@ impl Compiler {
         Ok(())
     }
 
+    /// Compiles a `DIM` statement.
+    fn compile_dim(&mut self, span: DimSpan) -> Result<()> {
+        let key = SymbolKey::from(&span.name);
+        if self.symtable.contains_key(&key) {
+            return Err(Error::new(
+                span.name_pos,
+                format!("Cannot DIM already-defined symbol {}", span.name),
+            ));
+        }
+
+        self.emit(Instruction::Dim(key.clone(), span.vtype));
+        self.symtable.insert(key, SymbolPrototype::Variable(span.vtype.into()));
+
+        Ok(())
+    }
+
     /// Compiles a `DO` loop and appends its instructions to the compilation context.
     fn compile_do(&mut self, span: DoSpan) -> Result<()> {
         self.exit_do_level.1 += 1;
@@ -448,12 +454,7 @@ impl Compiler {
             let skip_pc = self.emit(Instruction::Nop);
 
             if self.symtable.get(&key).is_none() {
-                self.emit(Instruction::Dim(DimSpan {
-                    name: span.iter.name().to_owned(),
-                    name_pos: span.iter_pos,
-                    vtype: VarType::Double,
-                    vtype_pos: span.iter_pos,
-                }));
+                self.emit(Instruction::Dim(key, VarType::Double));
                 self.symtable.insert(
                     SymbolKey::from(span.iter.name()),
                     SymbolPrototype::Variable(ExprType::Double),
@@ -1160,13 +1161,7 @@ impl Compiler {
             }
 
             Statement::Dim(span) => {
-                let key = SymbolKey::from(&span.name);
-                // TODO(jmmv): Replace with an error.
-                if !self.symtable.contains_key(&key) {
-                    self.symtable.insert(key, SymbolPrototype::Variable(span.vtype.into()));
-                }
-
-                self.emit(Instruction::Dim(span));
+                self.compile_dim(span)?;
             }
 
             Statement::DimArray(span) => {
@@ -1183,7 +1178,7 @@ impl Compiler {
                     self.compile_expr(arg, false)?;
                 }
                 self.emit(Instruction::DimArray(DimArrayISpan {
-                    name: span.name,
+                    name: key.clone(),
                     name_pos: span.name_pos,
                     dimensions: nargs,
                     subtype: span.subtype,
@@ -1546,19 +1541,59 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_dim() {
+    fn test_compile_dim_ok() {
+        Tester::default()
+            .parse("DIM var AS BOOLEAN")
+            .compile()
+            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), VarType::Boolean))
+            .check();
+        Tester::default()
+            .parse("DIM var AS DOUBLE")
+            .compile()
+            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), VarType::Double))
+            .check();
         Tester::default()
             .parse("DIM var AS INTEGER")
             .compile()
-            .expect_instr(
-                0,
-                Instruction::Dim(DimSpan {
-                    name: "var".to_owned(),
-                    name_pos: lc(1, 5),
-                    vtype: VarType::Integer,
-                    vtype_pos: lc(1, 12),
-                }),
-            )
+            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), VarType::Integer))
+            .check();
+        Tester::default()
+            .parse("DIM var AS STRING")
+            .compile()
+            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), VarType::Text))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_dim_case_insensitivity() {
+        Tester::default()
+            .parse("DIM foo: DIM Foo")
+            .compile()
+            .expect_err("1:14: Cannot DIM already-defined symbol Foo")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_dim_name_overlap() {
+        Tester::default()
+            .define("SomeArray", SymbolPrototype::Array(ExprType::Integer))
+            .parse("DIM somearray")
+            .compile()
+            .expect_err("1:5: Cannot DIM already-defined symbol somearray")
+            .check();
+
+        Tester::default()
+            .define("Out", SymbolPrototype::Callable(CallableType::Integer, false))
+            .parse("DIM OuT")
+            .compile()
+            .expect_err("1:5: Cannot DIM already-defined symbol OuT")
+            .check();
+
+        Tester::default()
+            .define("SomeVar", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("DIM SOMEVAR")
+            .compile()
+            .expect_err("1:5: Cannot DIM already-defined symbol SOMEVAR")
             .check();
     }
 
@@ -1571,7 +1606,7 @@ mod tests {
             .expect_instr(
                 1,
                 Instruction::DimArray(DimArrayISpan {
-                    name: "var".to_owned(),
+                    name: SymbolKey::from("var"),
                     name_pos: lc(1, 5),
                     dimensions: 1,
                     subtype: VarType::Integer,
@@ -1594,7 +1629,7 @@ mod tests {
             .expect_instr(
                 4,
                 Instruction::DimArray(DimArrayISpan {
-                    name: "var".to_owned(),
+                    name: SymbolKey::from("var"),
                     name_pos: lc(1, 5),
                     dimensions: 2,
                     subtype: VarType::Integer,
@@ -2084,15 +2119,7 @@ mod tests {
                 0,
                 Instruction::JumpIfDefined(JumpIfDefinedISpan { var: "iter".to_owned(), addr: 2 }),
             )
-            .expect_instr(
-                1,
-                Instruction::Dim(DimSpan {
-                    name: "iter".to_owned(),
-                    name_pos: lc(1, 5),
-                    vtype: VarType::Double,
-                    vtype_pos: lc(1, 5),
-                }),
-            )
+            .expect_instr(1, Instruction::Dim(SymbolKey::from("iter"), VarType::Double))
             .expect_instr(2, Instruction::Push(Value::Integer(0), lc(1, 12)))
             .expect_instr(3, Instruction::IntegerToDouble)
             .expect_instr(4, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
