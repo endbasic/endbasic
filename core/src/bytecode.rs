@@ -17,6 +17,7 @@
 
 use crate::ast::*;
 use crate::reader::LineCol;
+use crate::syms::SymbolKey;
 
 /// Convenience type to represent a program address.
 pub type Address = usize;
@@ -25,9 +26,8 @@ pub type Address = usize;
 #[derive(Debug, PartialEq)]
 #[cfg_attr(test, derive(Clone))]
 pub struct DimArrayISpan {
-    /// Name of the array to define.  Type annotations are not allowed, hence why this is not a
-    /// `VarRef`.
-    pub name: String,
+    /// Name of the array to define.
+    pub name: SymbolKey,
 
     /// Position of the name.
     pub name_pos: LineCol,
@@ -175,7 +175,7 @@ pub enum Instruction {
     FunctionCall(VarRef, LineCol, usize),
 
     /// Represents a variable definition.
-    Dim(DimSpan),
+    Dim(SymbolKey, VarType),
 
     /// Represents an array definition.
     DimArray(DimArrayISpan),
@@ -258,7 +258,7 @@ impl Instruction {
             | Instruction::Assign(_, _)
             | Instruction::BuiltinCall(_, _, _)
             | Instruction::Call(_)
-            | Instruction::Dim(_)
+            | Instruction::Dim(_, _)
             | Instruction::DimArray(_)
             | Instruction::End(_)
             | Instruction::Jump(_)

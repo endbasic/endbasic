@@ -447,9 +447,7 @@ impl Machine {
                 _ => return new_syntax_error(pos, "Dimensions in DIM array must be integers"),
             }
         }
-        self.symbols
-            .dim_array(&span.name, span.subtype, ds)
-            .map_err(|e| Error::from_value_error(e, span.name_pos))?;
+        self.symbols.dim_array(span.name.clone(), span.subtype, ds);
         Ok(())
     }
 
@@ -831,10 +829,8 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::Dim(span) => {
-                self.symbols
-                    .dim(&span.name, span.vtype)
-                    .map_err(|e| Error::from_value_error(e, span.name_pos))?;
+            Instruction::Dim(name, vtype) => {
+                self.symbols.dim(name.clone(), *vtype);
                 context.pc += 1;
             }
 
