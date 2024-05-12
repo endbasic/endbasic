@@ -1013,7 +1013,11 @@ impl Machine {
 
         let mut context = Context::default();
         let mut result = Ok(());
-        while result.is_ok() && context.pc < image.instrs.len() && !self.should_stop().await {
+        while result.is_ok() && context.pc < image.instrs.len() {
+            if image.instrs[context.pc].is_statement() && self.should_stop().await {
+                break;
+            }
+
             result = self.exec_one(&mut context, &image.instrs).await;
         }
 
