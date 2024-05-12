@@ -20,6 +20,7 @@ use crate::bytecode::*;
 use crate::compiler;
 use crate::parser;
 use crate::reader::LineCol;
+use crate::syms::SymbolKey;
 use crate::syms::{CallError, Callable, CallableMetadata, Symbol, Symbols};
 use crate::value;
 use async_channel::{Receiver, Sender, TryRecvError};
@@ -786,11 +787,9 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::Assign(vref, vref_pos) => {
+            Instruction::Assign(key) => {
                 let (value, _pos) = context.value_stack.pop().unwrap();
-                self.symbols
-                    .set_var(vref, value)
-                    .map_err(|e| Error::from_value_error(e, *vref_pos))?;
+                self.symbols.assign(key, value);
                 context.pc += 1;
             }
 
@@ -967,9 +966,7 @@ impl Machine {
         let mut result = self.exec_safe(context, instrs).await;
         if let Err(e) = result.as_ref() {
             if e.is_catchable() {
-                self.symbols
-                    .set_var(&VarRef::new("0errmsg", VarType::Text), Value::Text(format!("{}", e)))
-                    .expect("Internal symbol must be of a specific type");
+                self.symbols.assign(&SymbolKey::from("0errmsg"), Value::Text(format!("{}", e)));
 
                 match context.err_handler {
                     ErrorHandlerISpan::Jump(addr) => {

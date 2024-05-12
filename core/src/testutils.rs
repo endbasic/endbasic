@@ -19,7 +19,7 @@ use crate::ast::{ArgSep, Value, VarRef, VarType};
 use crate::exec::Machine;
 use crate::syms::{
     Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
-    Symbols,
+    SymbolKey, Symbols,
 };
 use crate::LineCol;
 use async_trait::async_trait;
@@ -332,10 +332,7 @@ impl Callable for InCommand {
         let raw_value = data.next().unwrap().to_owned();
         let value = Value::parse_as(vref.ref_type(), raw_value)
             .map_err(|e| CallError::EvalError(pos, e.message))?;
-        machine
-            .get_mut_symbols()
-            .set_var(&vref, value)
-            .map_err(|e| CallError::EvalError(pos, e.message))?;
+        machine.get_mut_symbols().assign(&SymbolKey::from(vref.name()), value);
         Ok(Value::Void)
     }
 }

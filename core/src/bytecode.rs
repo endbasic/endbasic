@@ -160,7 +160,7 @@ pub enum Instruction {
     ArrayLoad(VarRef, LineCol, usize),
 
     /// Represents an assignment of a value to a variable.
-    Assign(VarRef, LineCol),
+    Assign(SymbolKey),
 
     /// Represents a call to a builtin command such as `PRINT` with the given number of arguments.
     ///
@@ -255,7 +255,7 @@ impl Instruction {
             | Instruction::Push(_, _) => false,
 
             Instruction::ArrayAssignment(_, _, _)
-            | Instruction::Assign(_, _)
+            | Instruction::Assign(_)
             | Instruction::BuiltinCall(_, _, _)
             | Instruction::Call(_)
             | Instruction::Dim(_, _)

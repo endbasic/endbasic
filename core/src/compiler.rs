@@ -90,7 +90,7 @@ impl fmt::Display for ExprType {
 /// This is a superset of `ExprType` with the addition of the `Void` required to represent
 /// commands.
 #[derive(Clone, Copy, PartialEq)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[cfg_attr(any(debug_assertions, test), derive(Debug))]
 pub(crate) enum CallableType {
     Boolean,
     Double,
@@ -139,6 +139,7 @@ impl CallableType {
 
 /// Information about a symbol in the symbols table.
 #[derive(Clone, Copy)]
+#[cfg_attr(any(debug_assertions, test), derive(Debug, PartialEq))]
 pub(crate) enum SymbolPrototype {
     /// Information about an array.
     Array(ExprType),
@@ -153,6 +154,7 @@ pub(crate) enum SymbolPrototype {
 
 /// Type for the symbols table.
 #[derive(Default)]
+#[cfg_attr(test, derive(Debug))]
 pub(crate) struct SymbolsTable {
     table: HashMap<SymbolKey, SymbolPrototype>,
 }
@@ -337,12 +339,14 @@ impl Compiler {
             None => {
                 // TODO(jmmv): Compile separate Dim instructions for new variables instead of
                 // checking this every time.
+                let key = key.clone();
                 if vref.ref_type() == VarType::Auto {
                     self.symtable.insert(key, SymbolPrototype::Variable(etype));
+                    etype
                 } else {
                     self.symtable.insert(key, SymbolPrototype::Variable(vref.ref_type().into()));
+                    vref.ref_type().into()
                 }
-                etype
             }
         };
 
@@ -353,7 +357,12 @@ impl Compiler {
                 format!("Cannot assign value of type {} to variable of type {}", etype, vtype,),
             ));
         }
-        self.emit(Instruction::Assign(vref, vref_pos));
+
+        if vref.ref_type() != VarType::Auto && vref.ref_type() != vtype.into() {
+            return Err(Error::new(vref_pos, format!("Incompatible types in {} reference", vref)));
+        }
+
+        self.emit(Instruction::Assign(key));
 
         Ok(())
     }
@@ -1272,7 +1281,7 @@ impl Compiler {
 
     /// Finishes compilation and returns the image representing the compiled program.
     #[allow(clippy::wrong_self_convention)]
-    fn to_image(mut self) -> Result<Image> {
+    fn to_image(mut self) -> Result<(Image, SymbolsTable)> {
         for (pc, fixup) in self.fixups {
             let addr = match self.labels.get(&fixup.target) {
                 Some(addr) => *addr,
@@ -1292,7 +1301,8 @@ impl Compiler {
                 }
             }
         }
-        Ok(Image { instrs: self.instrs, data: self.data })
+        let image = Image { instrs: self.instrs, data: self.data };
+        Ok((image, self.symtable))
     }
 }
 
@@ -1300,7 +1310,7 @@ impl Compiler {
 ///
 /// `symtable` is the symbols table as used by the compiler and should be prepopulated with any
 /// callables that the compiled program should recognize.
-fn compile_aux(stmts: Vec<Statement>, symtable: SymbolsTable) -> Result<Image> {
+fn compile_aux(stmts: Vec<Statement>, symtable: SymbolsTable) -> Result<(Image, SymbolsTable)> {
     let mut compiler = Compiler { symtable, ..Default::default() };
     compiler.compile_many(stmts)?;
     compiler.to_image()
@@ -1313,7 +1323,7 @@ fn compile_aux(stmts: Vec<Statement>, symtable: SymbolsTable) -> Result<Image> {
 // TODO(jmmv): This is ugly.  Now that we have a symbols table in here, we should not _also_ have a
 // Symbols object to maintain runtime state (or if we do, we shouldn't be getting it here).
 pub fn compile(stmts: Vec<Statement>, syms: &Symbols) -> Result<Image> {
-    compile_aux(stmts, SymbolsTable::from(syms))
+    compile_aux(stmts, SymbolsTable::from(syms)).map(|(image, _symtable)| image)
 }
 
 #[cfg(test)]
@@ -1356,6 +1366,7 @@ mod testutils {
                 ignore_instrs: false,
                 exp_instrs: vec![],
                 exp_data: vec![],
+                exp_symtable: HashMap::default(),
             }
         }
     }
@@ -1363,11 +1374,12 @@ mod testutils {
     /// Captures expectations about a compilation and validates them.
     #[must_use]
     pub(crate) struct Checker {
-        result: Result<Image>,
+        result: Result<(Image, SymbolsTable)>,
         exp_error: Option<String>,
         ignore_instrs: bool,
         exp_instrs: Vec<Instruction>,
         exp_data: Vec<Option<Value>>,
+        exp_symtable: HashMap<SymbolKey, SymbolPrototype>,
     }
 
     impl Checker {
@@ -1380,6 +1392,13 @@ mod testutils {
                 self.exp_instrs.resize_with(addr + 1, || Instruction::Nop);
             }
             self.exp_instrs[addr] = instr;
+            self
+        }
+
+        /// Records an entry to be expected in the symbols table.
+        pub(crate) fn expect_symtable(mut self, key: SymbolKey, proto: SymbolPrototype) -> Self {
+            let previous = self.exp_symtable.insert(key, proto);
+            assert!(previous.is_none());
             self
         }
 
@@ -1408,7 +1427,7 @@ mod testutils {
                 assert_eq!(message, format!("{}", self.result.unwrap_err()));
                 return;
             }
-            let image = self.result.unwrap();
+            let (image, symtable) = self.result.unwrap();
 
             if self.ignore_instrs {
                 assert!(
@@ -1418,7 +1437,18 @@ mod testutils {
             } else {
                 assert_eq!(self.exp_instrs, image.instrs);
             }
+
             assert_eq!(self.exp_data, image.data);
+
+            // TODO(jmmv): This should do an equality comparison to check all symbols, not just
+            // those that tests have specified.  I did not do this when adding this check here
+            // to avoid having to update all tests that didn't require this feature.
+            for (key, exp_proto) in self.exp_symtable {
+                match symtable.get(&key) {
+                    Some(proto) => assert_eq!(exp_proto, proto),
+                    None => panic!("Expected symbol {:?} not defined", key),
+                }
+            }
         }
     }
 
@@ -1463,7 +1493,7 @@ mod tests {
             .parse("foo = 5")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 7)))
-            .expect_instr(1, Instruction::Assign(VarRef::new("foo", VarType::Auto), lc(1, 1)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("foo")))
             .check();
     }
 
@@ -1474,7 +1504,49 @@ mod tests {
             .parse("foo = i")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 7)))
-            .expect_instr(1, Instruction::Assign(VarRef::new("foo", VarType::Auto), lc(1, 1)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("foo")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_assignment_new_var_auto_ref_expr_determines_type() {
+        Tester::default()
+            .parse("foo = 2.3")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Double(2.3), lc(1, 7)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("foo")))
+            .expect_symtable(SymbolKey::from("foo"), SymbolPrototype::Variable(ExprType::Double))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_assignment_new_var_explicit_ref_determines_type() {
+        Tester::default()
+            .parse("foo# = 2")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(2), lc(1, 8)))
+            .expect_instr(1, Instruction::IntegerToDouble)
+            .expect_instr(2, Instruction::Assign(SymbolKey::from("foo")))
+            .expect_symtable(SymbolKey::from("foo"), SymbolPrototype::Variable(ExprType::Double))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_assignment_bad_types_existing_var() {
+        Tester::default()
+            .parse("foo# = TRUE")
+            .compile()
+            .expect_err("1:1: Cannot assign value of type BOOLEAN to variable of type DOUBLE")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_assignment_bad_annotation_existing_var() {
+        Tester::default()
+            .define(SymbolKey::from("foo"), SymbolPrototype::Variable(ExprType::Text))
+            .parse("foo# = \"hello\"")
+            .compile()
+            .expect_err("1:1: Incompatible types in foo# reference")
             .check();
     }
 
@@ -1858,13 +1930,13 @@ mod tests {
             .parse("b = TRUE\nd = 2.3\ni = 5\nt = \"foo\"")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 5)))
-            .expect_instr(1, Instruction::Assign(VarRef::new("b", VarType::Auto), lc(1, 1)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("b")))
             .expect_instr(2, Instruction::Push(Value::Double(2.3), lc(2, 5)))
-            .expect_instr(3, Instruction::Assign(VarRef::new("d", VarType::Auto), lc(2, 1)))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("d")))
             .expect_instr(4, Instruction::Push(Value::Integer(5), lc(3, 5)))
-            .expect_instr(5, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(3, 1)))
+            .expect_instr(5, Instruction::Assign(SymbolKey::from("i")))
             .expect_instr(6, Instruction::Push(Value::Text("foo".to_owned()), lc(4, 5)))
-            .expect_instr(7, Instruction::Assign(VarRef::new("t", VarType::Auto), lc(4, 1)))
+            .expect_instr(7, Instruction::Assign(SymbolKey::from("t")))
             .check();
     }
 
@@ -1875,7 +1947,7 @@ mod tests {
             .parse("i = j")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("j", VarType::Auto), lc(1, 5)))
-            .expect_instr(1, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(1, 1)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
             .check();
     }
 
@@ -1895,7 +1967,7 @@ mod tests {
             .expect_instr(5, Instruction::Load(VarRef::new("z", VarType::Auto), lc(1, 29)))
             .expect_instr(6, Instruction::Not(lc(1, 25)))
             .expect_instr(7, Instruction::Xor(lc(1, 21)))
-            .expect_instr(8, Instruction::Assign(VarRef::new("b", VarType::Auto), lc(1, 1)))
+            .expect_instr(8, Instruction::Assign(SymbolKey::from("b")))
             .check();
     }
 
@@ -1911,7 +1983,7 @@ mod tests {
             .expect_instr(2, Instruction::ShiftRight(lc(1, 7)))
             .expect_instr(3, Instruction::Load(VarRef::new("b", VarType::Auto), lc(1, 15)))
             .expect_instr(4, Instruction::ShiftLeft(lc(1, 12)))
-            .expect_instr(5, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(1, 1)))
+            .expect_instr(5, Instruction::Assign(SymbolKey::from("i")))
             .check();
     }
 
@@ -1925,7 +1997,7 @@ mod tests {
                 .expect_instr(0, Instruction::Load(VarRef::new("a", VarType::Auto), lc(1, 5)))
                 .expect_instr(1, Instruction::Push(Value::Integer(10), lc(1, 8 + op_name.len())))
                 .expect_instr(2, make_inst(lc(1, 7)))
-                .expect_instr(3, Instruction::Assign(VarRef::new("b", VarType::Auto), lc(1, 1)))
+                .expect_instr(3, Instruction::Assign(SymbolKey::from("b")))
                 .check();
         }
 
@@ -1957,7 +2029,7 @@ mod tests {
             .expect_instr(11, Instruction::Power(lc(1, 34)))
             .expect_instr(12, Instruction::Modulo(lc(1, 27)))
             .expect_instr(13, Instruction::Subtract(lc(1, 12)))
-            .expect_instr(14, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(1, 1)))
+            .expect_instr(14, Instruction::Assign(SymbolKey::from("i")))
             .check();
     }
 
@@ -1975,7 +2047,7 @@ mod tests {
             .expect_instr(3, Instruction::LoadRef(VarRef::new("j", VarType::Auto), lc(1, 12)))
             .expect_instr(4, Instruction::Push(Value::Integer(3), lc(1, 9)))
             .expect_instr(5, Instruction::ArrayLoad(VarRef::new("FOO", VarType::Auto), lc(1, 5), 3))
-            .expect_instr(6, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(1, 1)))
+            .expect_instr(6, Instruction::Assign(SymbolKey::from("i")))
             .check();
     }
 
@@ -1997,7 +2069,7 @@ mod tests {
                 6,
                 Instruction::FunctionCall(VarRef::new("FOO", VarType::Auto), lc(1, 5), 3),
             )
-            .expect_instr(7, Instruction::Assign(VarRef::new("i", VarType::Auto), lc(1, 1)))
+            .expect_instr(7, Instruction::Assign(SymbolKey::from("i")))
             .check();
     }
 
@@ -2027,7 +2099,7 @@ mod tests {
             .parse("FOR iter = 1 TO 5: a = FALSE: NEXT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(1), lc(1, 12)))
-            .expect_instr(1, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(2, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
             .expect_instr(3, Instruction::Push(Value::Integer(5), lc(1, 17)))
             .expect_instr(4, Instruction::LessEqual(lc(1, 14)))
@@ -2039,11 +2111,11 @@ mod tests {
                 }),
             )
             .expect_instr(6, Instruction::Push(Value::Boolean(false), lc(1, 24)))
-            .expect_instr(7, Instruction::Assign(VarRef::new("a", VarType::Auto), lc(1, 20)))
+            .expect_instr(7, Instruction::Assign(SymbolKey::from("a")))
             .expect_instr(8, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
             .expect_instr(9, Instruction::Push(Value::Integer(1), lc(1, 18)))
             .expect_instr(10, Instruction::Add(lc(1, 14)))
-            .expect_instr(11, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(11, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(12, Instruction::Jump(JumpISpan { addr: 2 }))
             .check();
     }
@@ -2056,7 +2128,7 @@ mod tests {
             .parse("FOR iter = i TO j: a = FALSE: NEXT")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 12)))
-            .expect_instr(1, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(2, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
             .expect_instr(3, Instruction::Load(VarRef::new("j", VarType::Auto), lc(1, 17)))
             .expect_instr(4, Instruction::LessEqual(lc(1, 14)))
@@ -2068,11 +2140,11 @@ mod tests {
                 }),
             )
             .expect_instr(6, Instruction::Push(Value::Boolean(false), lc(1, 24)))
-            .expect_instr(7, Instruction::Assign(VarRef::new("a", VarType::Auto), lc(1, 20)))
+            .expect_instr(7, Instruction::Assign(SymbolKey::from("a")))
             .expect_instr(8, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
             .expect_instr(9, Instruction::Push(Value::Integer(1), lc(1, 18)))
             .expect_instr(10, Instruction::Add(lc(1, 14)))
-            .expect_instr(11, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(11, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(12, Instruction::Jump(JumpISpan { addr: 2 }))
             .check();
     }
@@ -2087,7 +2159,7 @@ mod tests {
             .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 13)))
             .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 17)))
             .expect_instr(2, Instruction::Add(lc(1, 15)))
-            .expect_instr(3, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(4, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
             .expect_instr(5, Instruction::Push(Value::Integer(2), lc(1, 24)))
             .expect_instr(6, Instruction::Load(VarRef::new("j", VarType::Auto), lc(1, 28)))
@@ -2101,11 +2173,11 @@ mod tests {
                 }),
             )
             .expect_instr(10, Instruction::Push(Value::Boolean(false), lc(1, 36)))
-            .expect_instr(11, Instruction::Assign(VarRef::new("a", VarType::Auto), lc(1, 32)))
+            .expect_instr(11, Instruction::Assign(SymbolKey::from("a")))
             .expect_instr(12, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
             .expect_instr(13, Instruction::Push(Value::Integer(1), lc(1, 30)))
             .expect_instr(14, Instruction::Add(lc(1, 20)))
-            .expect_instr(15, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(15, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(16, Instruction::Jump(JumpISpan { addr: 4 }))
             .check();
     }
@@ -2122,7 +2194,7 @@ mod tests {
             .expect_instr(1, Instruction::Dim(SymbolKey::from("iter"), VarType::Double))
             .expect_instr(2, Instruction::Push(Value::Integer(0), lc(1, 12)))
             .expect_instr(3, Instruction::IntegerToDouble)
-            .expect_instr(4, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(4, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(5, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
             .expect_instr(6, Instruction::Push(Value::Integer(2), lc(1, 17)))
             .expect_instr(7, Instruction::IntegerToDouble)
@@ -2137,7 +2209,7 @@ mod tests {
             .expect_instr(10, Instruction::Load(VarRef::new("iter", VarType::Auto), lc(1, 5)))
             .expect_instr(11, Instruction::Push(Value::Double(0.1), lc(1, 24)))
             .expect_instr(12, Instruction::Add(lc(1, 14)))
-            .expect_instr(13, Instruction::Assign(VarRef::new("iter", VarType::Auto), lc(1, 5)))
+            .expect_instr(13, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(14, Instruction::Jump(JumpISpan { addr: 5 }))
             .check();
     }
@@ -2293,10 +2365,7 @@ mod tests {
             .parse(&format!("SELECT CASE 5\nCASE {}\nFOO\nEND SELECT", guards))
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
-            .expect_instr(
-                1,
-                Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)),
-            );
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")));
         let mut n = 2;
         for instr in exp_expr_instrs {
             t = t.expect_instr(n, instr);
@@ -2433,7 +2502,7 @@ mod tests {
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
             .expect_instr(1, Instruction::Push(Value::Integer(3), lc(1, 17)))
             .expect_instr(2, Instruction::Add(lc(1, 15)))
-            .expect_instr(3, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(
                 4,
                 Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(1, 20) }),
@@ -2448,7 +2517,7 @@ mod tests {
             .parse("SELECT CASE 5\nCASE 7\nFOO\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
-            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(2, Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 6)))
             .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
             .expect_instr(4, Instruction::Equal(lc(2, 6)))
@@ -2477,7 +2546,7 @@ mod tests {
             .parse("SELECT CASE i: END SELECT")
             .compile()
             .expect_instr(0, Instruction::Load(VarRef::new("i", VarType::Auto), lc(1, 13)))
-            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(
                 2,
                 Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(1, 16) }),
@@ -2492,7 +2561,7 @@ mod tests {
             .parse("SELECT CASE 5\nCASE ELSE\nFOO\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
-            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(
                 2,
                 Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(3, 1), 0),
@@ -2512,7 +2581,7 @@ mod tests {
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE IS <> 8\nBAR\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
-            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(2, Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 6)))
             .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
             .expect_instr(4, Instruction::Equal(lc(2, 6)))
@@ -2557,7 +2626,7 @@ mod tests {
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE ELSE\nBAR\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
-            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(2, Instruction::Load(VarRef::new("0select1", VarType::Auto), lc(2, 6)))
             .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
             .expect_instr(4, Instruction::Equal(lc(2, 6)))
@@ -2590,13 +2659,13 @@ mod tests {
             .parse("SELECT CASE 0: END SELECT\nSELECT CASE 0: END SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(0), lc(1, 13)))
-            .expect_instr(1, Instruction::Assign(VarRef::new("0select1", VarType::Auto), lc(1, 13)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(
                 2,
                 Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(1, 16) }),
             )
             .expect_instr(3, Instruction::Push(Value::Integer(0), lc(2, 13)))
-            .expect_instr(4, Instruction::Assign(VarRef::new("0select2", VarType::Auto), lc(2, 13)))
+            .expect_instr(4, Instruction::Assign(SymbolKey::from("0select2")))
             .expect_instr(
                 5,
                 Instruction::Unset(UnsetISpan { name: "0select2".to_owned(), pos: lc(2, 16) }),
