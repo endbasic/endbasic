@@ -357,6 +357,27 @@ impl Symbols {
         }
     }
 
+    /// Sets the value of a variable without type promotion nor type checking.
+    ///
+    /// This is meant to use by the compiler only.  All other users should call `set_var` instead
+    /// to do the necessary runtime validity checks.
+    pub(crate) fn assign(&mut self, key: &SymbolKey, value: Value) {
+        match self.by_name.get_mut(&key.0) {
+            Some(Symbol::Variable(old_value)) => {
+                debug_assert_eq!(
+                    mem::discriminant(old_value),
+                    mem::discriminant(&value),
+                    "Type consistency is validated at compilation time"
+                );
+                *old_value = value;
+            }
+            Some(_) => unreachable!("Type consistency is validated at compilation time"),
+            None => {
+                self.by_name.insert(key.0.clone(), Symbol::Variable(value));
+            }
+        }
+    }
+
     /// Sets the value of a variable.
     ///
     /// If `vref` contains a type annotation, the type of the value must be compatible with that
@@ -365,6 +386,7 @@ impl Symbols {
     /// If the variable is already defined, then the type of the new value must be compatible with
     /// the existing variable.  In other words: a variable cannot change types while it's alive.
     pub fn set_var(&mut self, vref: &VarRef, value: Value) -> Result<()> {
+        let key = SymbolKey::from(vref.name());
         let value = value.maybe_cast(vref.ref_type())?;
         match self.get_mut(vref)? {
             Some(Symbol::Variable(old_value)) => {
@@ -376,7 +398,7 @@ impl Symbols {
                         old_value.as_vartype(),
                     )));
                 }
-                *old_value = value;
+                self.assign(&key, value);
                 Ok(())
             }
             Some(_) => Err(Error::new(format!("Cannot redefine {} as a variable", vref))),
@@ -388,7 +410,7 @@ impl Symbols {
                         vref.ref_type(),
                     )));
                 }
-                self.by_name.insert(vref.name().to_ascii_uppercase(), Symbol::Variable(value));
+                self.by_name.insert(key.0, Symbol::Variable(value));
                 Ok(())
             }
         }
@@ -1091,6 +1113,45 @@ mod tests {
             syms.set_var(&VarRef::new("v", value.as_vartype()), value.clone()).unwrap();
             check_var(&syms, "v", value);
         }
+    }
+
+    #[test]
+    fn test_symbols_apply_new() {
+        let mut syms = Symbols::default();
+        syms.assign(&SymbolKey::from("a"), Value::Integer(5));
+        check_var(&syms, "a", Value::Integer(5));
+    }
+
+    #[test]
+    fn test_symbols_apply_existing() {
+        let mut syms = SymbolsBuilder::default().add_var("A", Value::Double(1.0)).build();
+        syms.assign(&SymbolKey::from("a"), Value::Double(2.0));
+        check_var(&syms, "a", Value::Double(2.0));
+    }
+
+    #[test]
+    fn test_symbols_get_var_apply_case_insensitivity() {
+        let mut syms = Symbols::default();
+        syms.assign(&SymbolKey::from("SomeName"), Value::Integer(6));
+        assert_eq!(
+            Value::Integer(6),
+            *syms.get_var(&VarRef::new("somename", VarType::Auto)).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_symbols_get_var_apply_replace_value() {
+        let mut syms = Symbols::default();
+        syms.assign(&SymbolKey::from("the_var"), Value::Integer(100));
+        assert_eq!(
+            Value::Integer(100),
+            *syms.get_var(&VarRef::new("the_var", VarType::Auto)).unwrap()
+        );
+        syms.assign(&SymbolKey::from("the_var"), Value::Integer(200));
+        assert_eq!(
+            Value::Integer(200),
+            *syms.get_var(&VarRef::new("the_var", VarType::Auto)).unwrap()
+        );
     }
 
     #[test]
