@@ -220,8 +220,7 @@ mod tests {
 
         Tester::default()
             .run(&format!("i = 0: result = {}(i$)", func))
-            .expect_err("1:24: Incompatible types in i$ reference")
-            .expect_var("i", Value::Integer(0))
+            .expect_compilation_err("1:24: Incompatible type annotation in i$ reference")
             .check();
 
         Tester::default()

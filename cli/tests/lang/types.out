@@ -1,4 +1,32 @@
-TRUE          FALSE
- 1.5           2.7
- 1             2
-foo           bar
+
+    EndBASIC X.Y.Z
+    Copyright YYYY-YYYY Julio Merino
+
+    Type HELP for interactive usage information.
+
+>>> Type inference
+FALSE FALSE
+ 0  0
+ 3  3
+HelloHello
+>>> Automatic type promotion
+ 5.4
+ 8
+>>> Inconsistent type annotations in expressions
+ERROR: 1:22: Incompatible type annotation in d? reference
+ERROR: 1:34: Incompatible type annotation in a1# reference
+>>> Inconsistent type annotations in commands
+ERROR: 1:14: Incompatible type annotation in i# reference
+ERROR: 1:30: Incompatible type annotation in a2# reference
+>>> Type annotations in function calls
+ 3
+ 3
+ERROR: 1:7: Incompatible type annotation in LEN$ reference
+>>> Invalid type access
+ERROR: 1:14: i is not an array nor a function
+ERROR: 1:7: In call to LEN: function requires arguments
+ERROR: 1:7: PRINT is not an array nor a function
+>>> Argless function calls
+ 3.141592653589793
+ERROR: 1:7: In call to PI: expected no arguments nor parenthesis
+End of input by CTRL-D

@@ -74,6 +74,12 @@ impl<R: AsRef<str>> From<R> for SymbolKey {
     }
 }
 
+impl fmt::Display for SymbolKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Represents a multidimensional array.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Array {
@@ -287,10 +293,18 @@ impl Symbols {
 
     /// Obtains the value of a symbol or `None` if it is not defined.
     ///
+    /// This is meant to use by the compiler only.  All other users should call `get` instead
+    /// to do the necessary runtime validity checks.
+    pub(crate) fn load(&self, key: &SymbolKey) -> Option<&Symbol> {
+        self.by_name.get(&key.0)
+    }
+
+    /// Obtains the value of a symbol or `None` if it is not defined.
+    ///
     /// Returns an error if the type annotation in the symbol reference does not match its type.
     pub fn get(&self, vref: &VarRef) -> Result<Option<&Symbol>> {
-        let key = &vref.name().to_ascii_uppercase();
-        let symbol = self.by_name.get(key);
+        let key = SymbolKey::from(vref.name());
+        let symbol = self.load(&key);
         if let Some(symbol) = symbol {
             let stype = symbol.eval_type();
             if !vref.accepts(stype) {
