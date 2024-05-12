@@ -624,19 +624,10 @@ impl Machine {
                         format!("{} is not an array nor a function", f.metadata().name()),
                     ));
                 }
-                if f.metadata().is_argless() {
-                    return Err(Error::EvalError(
-                        fref_pos,
-                        format!(
-                            "In call to {}: expected no arguments nor parenthesis",
-                            f.metadata().name()
-                        ),
-                    ));
-                }
                 let f = f.clone();
                 self.do_function_call(context, fref, fref_pos, nargs, f).await
             }
-            _ => panic!("Array existence and type checking has been done at compile time"),
+            _ => unreachable!("Array existence and type checking has been done at compile time"),
         }
     }
 
@@ -648,19 +639,6 @@ impl Machine {
         f: Rc<dyn Callable>,
     ) -> Result<Value> {
         let metadata = f.metadata();
-        if !metadata.is_function() {
-            return Err(Error::EvalError(
-                fref_pos,
-                format!("{} is not an array nor a function", metadata.name()),
-            ));
-        }
-        if !fref.accepts(metadata.return_type()) {
-            return Err(Error::EvalError(
-                fref_pos,
-                "Incompatible type annotation for function call".to_owned(),
-            ));
-        }
-
         let result = f.exec(vec![], self).await;
         match result {
             Ok(value) => {
@@ -886,39 +864,21 @@ impl Machine {
                 }
             }
 
-            Instruction::Load(vref, pos) => {
-                let value = match self
-                    .symbols
-                    .get(vref)
-                    .map_err(|e| Error::from_value_error(e, *pos))?
-                {
+            Instruction::Load(key, pos) => {
+                let value = match self.symbols.load(key) {
                     Some(Symbol::Variable(v)) => v.clone(),
-                    Some(Symbol::Callable(f)) => {
-                        if !f.metadata().is_argless() {
-                            return new_syntax_error(
-                                *pos,
-                                format!("{} requires one or more arguments", vref.name()),
-                            );
-                        }
-                        let f = f.clone();
-                        self.argless_function_call(vref.clone(), *pos, f).await?
-                    }
-                    Some(_) => {
-                        return new_syntax_error(*pos, format!("{} is not a variable", vref.name()))
-                    }
-                    None => {
-                        return new_syntax_error(
-                            *pos,
-                            format!("Undefined variable {}", vref.name()),
-                        )
-                    }
+                    Some(_) => unreachable!("Variable type checking has been done at compile time"),
+                    None => return new_syntax_error(*pos, format!("Undefined variable {}", key)),
                 };
                 context.value_stack.push((value, *pos));
                 context.pc += 1;
             }
 
             Instruction::LoadRef(vref, pos) => {
-                let sym = self.symbols.get(vref).map_err(|e| Error::from_value_error(e, *pos))?;
+                // TODO(jmmv): LoadRef should carry the SymbolKey instead of a VarRef, but we need
+                // the VarRef below to re-inject it into the stack.
+                let key = SymbolKey::from(vref.name());
+                let sym = self.symbols.load(&key);
                 if let Some(Symbol::Callable(f)) = sym {
                     if f.metadata().is_argless() {
                         let f = f.clone();
@@ -1664,6 +1624,23 @@ mod tests {
             &[],
             &["5 2", "5 1", "4 2", "4 1", "3 2", "2 2", "2 1"],
         );
+    }
+
+    #[test]
+    fn test_expr_load_not_assigned() {
+        do_error_test(
+            r#"
+            GOTO @skip
+            a = 0
+            @skip
+            OUT "running"
+            OUT a + 1
+            OUT "not reached"
+            "#,
+            &[],
+            &["running"],
+            "6:17: Undefined variable A",
+        )
     }
 
     #[test]

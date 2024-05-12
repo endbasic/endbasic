@@ -669,11 +669,11 @@ mod tests {
 
     #[test]
     fn test_inkey_errors() {
-        check_expr_error(
+        check_expr_compilation_error(
             "1:10: In call to INKEY: expected no arguments nor parenthesis",
             "INKEY()",
         );
-        check_expr_error(
+        check_expr_compilation_error(
             "1:10: In call to INKEY: expected no arguments nor parenthesis",
             "INKEY(1)",
         );
@@ -941,11 +941,11 @@ mod tests {
         t.get_console().borrow_mut().set_size_chars(CharsXY { x: 12345, y: 0 });
         t.run("result = SCRCOLS").expect_var("result", 12345i32).check();
 
-        check_expr_error(
+        check_expr_compilation_error(
             "1:10: In call to SCRCOLS: expected no arguments nor parenthesis",
             "SCRCOLS()",
         );
-        check_expr_error(
+        check_expr_compilation_error(
             "1:10: In call to SCRCOLS: expected no arguments nor parenthesis",
             "SCRCOLS(1)",
         );
@@ -957,11 +957,11 @@ mod tests {
         t.get_console().borrow_mut().set_size_chars(CharsXY { x: 0, y: 768 });
         t.run("result = SCRROWS").expect_var("result", 768i32).check();
 
-        check_expr_error(
+        check_expr_compilation_error(
             "1:10: In call to SCRROWS: expected no arguments nor parenthesis",
             "SCRROWS()",
         );
-        check_expr_error(
+        check_expr_compilation_error(
             "1:10: In call to SCRROWS: expected no arguments nor parenthesis",
             "SCRROWS(1)",
         );

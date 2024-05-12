@@ -729,11 +729,11 @@ mod tests {
             "GFX_HEIGHT",
         );
 
-        check_expr_error(
+        check_expr_compilation_error(
             "1:10: In call to GFX_HEIGHT: expected no arguments nor parenthesis",
             "GFX_HEIGHT()",
         );
-        check_expr_error(
+        check_expr_compilation_error(
             "1:10: In call to GFX_HEIGHT: expected no arguments nor parenthesis",
             "GFX_HEIGHT(1)",
         );
@@ -887,11 +887,11 @@ mod tests {
             "GFX_WIDTH",
         );
 
-        check_expr_error(
+        check_expr_compilation_error(
             "1:10: In call to GFX_WIDTH: expected no arguments nor parenthesis",
             "GFX_WIDTH()",
         );
-        check_expr_error(
+        check_expr_compilation_error(
             "1:10: In call to GFX_WIDTH: expected no arguments nor parenthesis",
             "GFX_WIDTH(1)",
         );

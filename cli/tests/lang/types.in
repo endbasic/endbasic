@@ -1,0 +1,53 @@
+' EndBASIC
+' Copyright 2020 Julio Merino
+'
+' Licensed under the Apache License, Version 2.0 (the "License"); you may not
+' use this file except in compliance with the License.  You may obtain a copy
+' of the License at:
+'
+'     http://www.apache.org/licenses/LICENSE-2.0
+'
+' Unless required by applicable law or agreed to in writing, software
+' distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+' WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+' License for the specific language governing permissions and limitations
+' under the License.
+
+' Tests for types, including type annotations and type inference.
+'
+' This is must be run through the REPL (as opposed to running as a script)
+' because the statements below may trigger compilation errors and abort
+' execution right away.  The REPL compiles each statement separately so it
+' can print those errors.
+
+PRINT ">>> Type inference"
+b = FALSE: b? = FALSE: PRINT b; b?
+d = 0.0: d# = 0.0: PRINT d; d#
+i = 3: i% = 3: PRINT i; i%
+s = "Hello": s$ = "Hello": PRINT s; s$
+
+PRINT ">>> Automatic type promotion"
+d = 2.4: d = d + 3: PRINT d
+i = 5: i = i + 2.6: PRINT i
+
+PRINT ">>> Inconsistent type annotations in expressions"
+d = 0.0: PRINT 2.1 + d? + 3.1
+DIM a1(10) AS INTEGER: PRINT 3 + a1#(2) + 8
+
+PRINT ">>> Inconsistent type annotations in commands"
+i = 0: PRINT i#
+DIM a2(10) AS INTEGER: PRINT a2#(2)
+
+PRINT ">>> Type annotations in function calls"
+PRINT LEN("foo")
+PRINT LEN%("foo")
+PRINT LEN$("foo")
+
+PRINT ">>> Invalid type access"
+i = 0: PRINT i(3)
+PRINT LEN
+PRINT PRINT
+
+PRINT ">>> Argless function calls"
+PRINT PI
+PRINT PI()

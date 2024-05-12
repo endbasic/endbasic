@@ -203,7 +203,7 @@ pub enum Instruction {
     JumpIfNotTrue(JumpIfBoolISpan),
 
     /// Represents a load of a variable's value from main memory into the stack.
-    Load(VarRef, LineCol),
+    Load(SymbolKey, LineCol),
 
     /// Represents a load of a variable's reference into the stack.
     LoadRef(VarRef, LineCol),

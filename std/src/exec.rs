@@ -240,11 +240,11 @@ mod tests {
 
     #[test]
     fn test_errmsg_errors() {
-        check_expr_error(
+        check_expr_compilation_error(
             "1:10: In call to ERRMSG: expected no arguments nor parenthesis",
             r#"ERRMSG()"#,
         );
-        check_expr_error(
+        check_expr_compilation_error(
             "1:10: In call to ERRMSG: expected no arguments nor parenthesis",
             r#"ERRMSG(3)"#,
         );

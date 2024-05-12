@@ -574,6 +574,18 @@ impl<'a> Checker<'a> {
         self
     }
 
+    /// Expects the invocation to have erroneously terminated with the exact `message` during
+    /// compilation.
+    ///
+    /// If not called, defaults to expecting that execution terminated due to EOF.  This or
+    /// `expect_err` can only be called once.
+    pub fn expect_compilation_err<S: Into<String>>(mut self, message: S) -> Self {
+        let message = message.into();
+        assert_eq!(Ok(StopReason::Eof), self.exp_result);
+        self.exp_result = Err(message.clone());
+        self
+    }
+
     /// Expects the invocation to have erroneously terminated with the exact `message` that comes
     /// from an error that can be caught.
     ///
@@ -815,4 +827,13 @@ pub fn check_expr_ok_with_vars<V: Into<Value>, VS: Into<Vec<(&'static str, Value
 /// machine.
 pub fn check_expr_error<S: Into<String>>(exp_error: S, expr: &str) {
     Tester::default().run(format!("result = {}", expr)).expect_err(exp_error).check();
+}
+
+/// Executes `expr` on a scripting interpreter and ensures that evaluation fails with `exp_error`
+/// during compilation.
+///
+/// Note that `exp_error` is a literal exact match on the formatted error message returned by the
+/// machine.
+pub fn check_expr_compilation_error<S: Into<String>>(exp_error: S, expr: &str) {
+    Tester::default().run(format!("result = {}", expr)).expect_compilation_err(exp_error).check();
 }

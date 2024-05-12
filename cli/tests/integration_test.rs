@@ -524,9 +524,9 @@ fn test_lang_parser_error() {
 fn test_lang_types() {
     check(
         bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/lang/types.bas")],
+        &["--local-drive=memory://"],
         0,
-        Behavior::Null,
+        Behavior::File(src_path("cli/tests/lang/types.in")),
         Behavior::File(src_path("cli/tests/lang/types.out")),
         Behavior::Null,
     );
