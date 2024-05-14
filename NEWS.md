@@ -22,6 +22,10 @@ for the time being.**
     concise directory summary, made `LOGIN` skip the server's `motd`, and
     fixed handling of line input in prompts.
 
+*   Issue #110: Homogenized the implementation of the SDL and web consoles to
+    guarantee consistent behavior and to have indirect test coverage of the
+    web console.
+
 *   Added the new console `st7735s` for the Raspberry Pi.  This console uses the
     ST7735S 1.44in LCD for the console output and the terminal console for input,
     but also recognizes the hat's buttons and injects them as keyboard events.
@@ -310,8 +314,8 @@ General command changes:
 
 Interactivity improvements:
 
-*   Added support for the Home, End, Page Up, and Page Down keys in the text
-    editor.
+*   Issue #119: Added support for the Home, End, Page Up, and Page Down keys
+    in the text editor.
 
 *   Made the Backspace and Tab keys aware of indentation in the editor.
 
