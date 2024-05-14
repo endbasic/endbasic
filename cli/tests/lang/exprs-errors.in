@@ -68,6 +68,7 @@ PRINT ">>> Array accesses"
 DIM x(2, 4) AS INTEGER
 PRINT x#(1, 3)
 PRINT y$(3, 4)
+PRINT a(1)
 CLEAR
 
 PRINT ">>> Simple function calls"
