@@ -399,11 +399,11 @@ impl Machine {
     async fn builtin_call(
         &mut self,
         context: &mut Context,
-        bref: &VarRef,
+        name: &SymbolKey,
         bref_pos: LineCol,
         nargs: usize,
     ) -> Result<()> {
-        let b = match self.symbols.get(bref).map_err(|e| Error::from_value_error(e, bref_pos))? {
+        let b = match self.symbols.load(name) {
             Some(Symbol::Callable(b)) => b,
             _ => panic!("Command existence and type checking happen at compile time"),
         };
@@ -524,13 +524,14 @@ impl Machine {
     async fn do_function_call(
         &mut self,
         context: &mut Context,
-        fref: &VarRef,
+        name: &SymbolKey,
+        return_type: VarType,
         fref_pos: LineCol,
         nargs: usize,
         f: Rc<dyn Callable>,
     ) -> Result<()> {
         let metadata = f.metadata();
-        debug_assert!(fref.accepts(metadata.return_type()));
+        debug_assert_eq!(return_type, metadata.return_type());
 
         let mut args = Vec::with_capacity(nargs);
         for _ in 0..nargs {
@@ -542,17 +543,16 @@ impl Machine {
         match result {
             Ok(value) => {
                 debug_assert!(metadata.return_type() != VarType::Auto);
-                let fref = VarRef::new(fref.name(), metadata.return_type());
                 // Given that we only support built-in functions at the moment, this
                 // could well be an assertion.  Doing so could turn into a time bomb
                 // when/if we add user-defined functions, so handle the problem as an
                 // error.
-                if !fref.accepts(value.as_vartype()) {
+                if return_type != value.as_vartype() {
                     return Err(Error::EvalError(
                         fref_pos,
                         format!(
                             "Value returned by {} is incompatible with its type definition",
-                            fref.name(),
+                            name,
                         ),
                     ));
                 }
@@ -590,11 +590,12 @@ impl Machine {
     async fn function_call(
         &mut self,
         context: &mut Context,
-        fref: &VarRef,
+        name: &SymbolKey,
+        return_type: VarType,
         fref_pos: LineCol,
         nargs: usize,
     ) -> Result<()> {
-        match self.symbols.get(fref).map_err(|e| Error::from_value_error(e, fref_pos))? {
+        match self.symbols.load(name) {
             Some(Symbol::Callable(f)) => {
                 if !f.metadata().is_function() {
                     return Err(Error::EvalError(
@@ -603,9 +604,9 @@ impl Machine {
                     ));
                 }
                 let f = f.clone();
-                self.do_function_call(context, fref, fref_pos, nargs, f).await
+                self.do_function_call(context, name, return_type, fref_pos, nargs, f).await
             }
-            _ => unreachable!("Array existence and type checking has been done at compile time"),
+            _ => unreachable!("Function existence and type checking has been done at compile time"),
         }
     }
 
@@ -759,8 +760,8 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::BuiltinCall(bref, bref_pos, nargs) => {
-                self.builtin_call(context, bref, *bref_pos, *nargs).await?;
+            Instruction::BuiltinCall(name, bref_pos, nargs) => {
+                self.builtin_call(context, name, *bref_pos, *nargs).await?;
                 context.pc += 1;
             }
 
@@ -779,8 +780,8 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::FunctionCall(fref, pos, nargs) => {
-                self.function_call(context, fref, *pos, *nargs).await?;
+            Instruction::FunctionCall(name, return_type, pos, nargs) => {
+                self.function_call(context, name, *return_type, *pos, *nargs).await?;
                 context.pc += 1;
             }
 

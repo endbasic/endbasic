@@ -949,7 +949,7 @@ impl Compiler {
 
                 match ctype.as_expr_type() {
                     Some(etype) => {
-                        (Instruction::FunctionCall(span.vref.clone(), span.pos, 0), etype)
+                        (Instruction::FunctionCall(key, ctype.into(), span.pos, 0), etype)
                     }
                     None => {
                         return Err(Error::new(
@@ -1221,7 +1221,7 @@ impl Compiler {
                             ));
                         }
 
-                        self.emit(Instruction::FunctionCall(span.fref, span.pos, nargs));
+                        self.emit(Instruction::FunctionCall(key, ctype.into(), span.pos, nargs));
                         Ok(vtype)
                     }
 
@@ -1298,8 +1298,7 @@ impl Compiler {
                     nargs += 1;
                 }
 
-                let bref = VarRef::new(span.name, VarType::Auto);
-                self.emit(Instruction::BuiltinCall(bref, span.name_pos, nargs));
+                self.emit(Instruction::BuiltinCall(key, span.name_pos, nargs));
             }
 
             Statement::Data(mut span) => {
@@ -1805,10 +1804,7 @@ mod tests {
             .define("CMD", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("CMD")
             .compile()
-            .expect_instr(
-                0,
-                Instruction::BuiltinCall(VarRef::new("CMD", VarType::Auto), lc(1, 1), 0),
-            )
+            .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 1), 0))
             .check();
     }
 
@@ -1827,10 +1823,7 @@ mod tests {
             .expect_instr(6, Instruction::Push(Value::Missing, lc(1, 7)))
             .expect_instr(7, Instruction::Push(Value::Separator(ArgSep::Short), lc(1, 6)))
             .expect_instr(8, Instruction::LoadRef(VarRef::new("a", VarType::Auto), lc(1, 5)))
-            .expect_instr(
-                9,
-                Instruction::BuiltinCall(VarRef::new("CMD", VarType::Auto), lc(1, 1), 9),
-            )
+            .expect_instr(9, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 1), 9))
             .check();
     }
 
@@ -1966,10 +1959,7 @@ mod tests {
             .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("DO\nFOO\nLOOP")
             .compile()
-            .expect_instr(
-                0,
-                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(2, 1), 0),
-            )
+            .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
             .expect_instr(1, Instruction::Jump(JumpISpan { addr: 0 }))
             .check();
     }
@@ -1988,10 +1978,7 @@ mod tests {
                     error_msg: "DO requires a boolean condition",
                 }),
             )
-            .expect_instr(
-                2,
-                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(2, 1), 0),
-            )
+            .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
             .check();
     }
@@ -2002,10 +1989,7 @@ mod tests {
             .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("DO\nFOO\nLOOP WHILE TRUE")
             .compile()
-            .expect_instr(
-                0,
-                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(2, 1), 0),
-            )
+            .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
             .expect_instr(1, Instruction::Push(Value::Boolean(true), lc(3, 12)))
             .expect_instr(
                 2,
@@ -2208,7 +2192,7 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::FunctionCall(VarRef::new("f", VarType::Auto), lc(1, 5), 0),
+                Instruction::FunctionCall(SymbolKey::from("f"), VarType::Integer, lc(1, 5), 0),
             )
             .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
             .check();
@@ -2232,7 +2216,7 @@ mod tests {
             .parse("c f")
             .compile()
             .expect_instr(0, Instruction::LoadRef(VarRef::new("f", VarType::Auto), lc(1, 3)))
-            .expect_instr(1, Instruction::BuiltinCall(VarRef::new("C", VarType::Auto), lc(1, 1), 1))
+            .expect_instr(1, Instruction::BuiltinCall(SymbolKey::from("C"), lc(1, 1), 1))
             .check();
     }
 
@@ -2305,7 +2289,7 @@ mod tests {
             .parse("c a")
             .compile()
             .expect_instr(0, Instruction::LoadRef(VarRef::new("a", VarType::Auto), lc(1, 3)))
-            .expect_instr(1, Instruction::BuiltinCall(VarRef::new("C", VarType::Auto), lc(1, 1), 1))
+            .expect_instr(1, Instruction::BuiltinCall(SymbolKey::from("C"), lc(1, 1), 1))
             .check();
     }
 
@@ -2519,7 +2503,7 @@ mod tests {
             .expect_instr(5, Instruction::Push(Value::Integer(3), lc(1, 9)))
             .expect_instr(
                 6,
-                Instruction::FunctionCall(VarRef::new("FOO", VarType::Auto), lc(1, 5), 3),
+                Instruction::FunctionCall(SymbolKey::from("FOO"), VarType::Integer, lc(1, 5), 3),
             )
             .expect_instr(7, Instruction::Assign(SymbolKey::from("i")))
             .check();
@@ -2683,10 +2667,7 @@ mod tests {
             .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
             .parse("@sub\nFOO\nRETURN\nGOSUB @sub")
             .compile()
-            .expect_instr(
-                0,
-                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(2, 1), 0),
-            )
+            .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
             .expect_instr(1, Instruction::Return(lc(3, 1)))
             .expect_instr(2, Instruction::Call(JumpISpan { addr: 0 }))
             .check();
@@ -2715,10 +2696,7 @@ mod tests {
                     error_msg: "IF/ELSEIF require a boolean condition",
                 }),
             )
-            .expect_instr(
-                2,
-                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(1, 16), 0),
-            )
+            .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(1, 16), 0))
             .check();
     }
 
@@ -2738,10 +2716,7 @@ mod tests {
                     error_msg: "IF/ELSEIF require a boolean condition",
                 }),
             )
-            .expect_instr(
-                2,
-                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(2, 1), 0),
-            )
+            .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 11 }))
             .expect_instr(4, Instruction::Push(Value::Boolean(true), lc(3, 8)))
             .expect_instr(
@@ -2751,10 +2726,7 @@ mod tests {
                     error_msg: "IF/ELSEIF require a boolean condition",
                 }),
             )
-            .expect_instr(
-                6,
-                Instruction::BuiltinCall(VarRef::new("BAR", VarType::Auto), lc(4, 1), 0),
-            )
+            .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("BAR"), lc(4, 1), 0))
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 11 }))
             .expect_instr(8, Instruction::Push(Value::Boolean(true), lc(5, 1)))
             .expect_instr(
@@ -2764,10 +2736,7 @@ mod tests {
                     error_msg: "IF/ELSEIF require a boolean condition",
                 }),
             )
-            .expect_instr(
-                10,
-                Instruction::BuiltinCall(VarRef::new("BAZ", VarType::Auto), lc(6, 1), 0),
-            )
+            .expect_instr(10, Instruction::BuiltinCall(SymbolKey::from("BAZ"), lc(6, 1), 0))
             .check();
     }
 
@@ -2830,10 +2799,7 @@ mod tests {
                 error_msg: "SELECT requires a boolean condition",
             }),
         )
-        .expect_instr(
-            n + 1,
-            Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(3, 1), 0),
-        )
+        .expect_instr(n + 1, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
         .expect_instr(
             n + 2,
             Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
@@ -2980,10 +2946,7 @@ mod tests {
                     error_msg: "SELECT requires a boolean condition",
                 }),
             )
-            .expect_instr(
-                6,
-                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(3, 1), 0),
-            )
+            .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
             .expect_instr(
                 7,
                 Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
@@ -3014,10 +2977,7 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
             .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
-            .expect_instr(
-                2,
-                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(3, 1), 0),
-            )
+            .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
             .expect_instr(
                 3,
                 Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
@@ -3044,10 +3004,7 @@ mod tests {
                     error_msg: "SELECT requires a boolean condition",
                 }),
             )
-            .expect_instr(
-                6,
-                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(3, 1), 0),
-            )
+            .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 13 }))
             .expect_instr(8, Instruction::Load(SymbolKey::from("0select1"), lc(4, 12)))
             .expect_instr(9, Instruction::Push(Value::Integer(8), lc(4, 12)))
@@ -3059,10 +3016,7 @@ mod tests {
                     error_msg: "SELECT requires a boolean condition",
                 }),
             )
-            .expect_instr(
-                12,
-                Instruction::BuiltinCall(VarRef::new("BAR", VarType::Auto), lc(5, 1), 0),
-            )
+            .expect_instr(12, Instruction::BuiltinCall(SymbolKey::from("BAR"), lc(5, 1), 0))
             .expect_instr(
                 13,
                 Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(6, 1) }),
@@ -3089,15 +3043,9 @@ mod tests {
                     error_msg: "SELECT requires a boolean condition",
                 }),
             )
-            .expect_instr(
-                6,
-                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(3, 1), 0),
-            )
+            .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 9 }))
-            .expect_instr(
-                8,
-                Instruction::BuiltinCall(VarRef::new("BAR", VarType::Auto), lc(5, 1), 0),
-            )
+            .expect_instr(8, Instruction::BuiltinCall(SymbolKey::from("BAR"), lc(5, 1), 0))
             .expect_instr(
                 9,
                 Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(6, 1) }),
@@ -3139,10 +3087,7 @@ mod tests {
                     error_msg: "WHILE requires a boolean condition",
                 }),
             )
-            .expect_instr(
-                2,
-                Instruction::BuiltinCall(VarRef::new("FOO", VarType::Auto), lc(2, 1), 0),
-            )
+            .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
             .check();
     }
