@@ -166,13 +166,13 @@ pub enum Instruction {
     ///
     /// The arguments in the stack are interspersed with the separators used to separate them from.
     /// each other, because those separators have meaning.
-    BuiltinCall(VarRef, LineCol, usize),
+    BuiltinCall(SymbolKey, LineCol, usize),
 
     /// Represents an unconditional call to a location that will return.
     Call(JumpISpan),
 
     /// Represents a call to the given function with the given number of arguments.
-    FunctionCall(VarRef, LineCol, usize),
+    FunctionCall(SymbolKey, VarType, LineCol, usize),
 
     /// Represents a variable definition.
     Dim(SymbolKey, VarType),
@@ -247,7 +247,7 @@ impl Instruction {
             | Instruction::Modulo(_)
             | Instruction::Power(_)
             | Instruction::Negate(_)
-            | Instruction::FunctionCall(_, _, _)
+            | Instruction::FunctionCall(_, _, _, _)
             | Instruction::DoubleToInteger
             | Instruction::IntegerToDouble
             | Instruction::Load(_, _)
