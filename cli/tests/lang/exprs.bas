@@ -47,8 +47,7 @@ DIM a(2, 4) AS INTEGER
 a(1, 3) = 8
 PRINT a(0, 3)
 PRINT a%(1, 3)
-PRINT a(1): PRINT ERRMSG
-PRINT a(-1): PRINT ERRMSG
+PRINT a(-1, 0): PRINT ERRMSG
 PRINT a(10, 0): PRINT ERRMSG
 
 PRINT ">>> Simple function calls"

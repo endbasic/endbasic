@@ -368,35 +368,30 @@ impl Machine {
     }
 
     /// Handles an array assignment.
-    async fn assign_array(
+    fn assign_array(
         &mut self,
         context: &mut Context,
-        vref: &VarRef,
+        key: &SymbolKey,
         vref_pos: LineCol,
         nargs: usize,
     ) -> Result<()> {
         let mut ds = Vec::with_capacity(nargs);
         for _ in 0..nargs {
-            let (value, pos) = context.value_stack.pop().unwrap();
+            let (value, _pos) = context.value_stack.pop().unwrap();
             match value {
                 Value::Integer(i) => ds.push(i),
-                v => return new_syntax_error(pos, format!("Subscript {} must be an integer", v)),
+                _ => unreachable!("Array subscript type checking has been done at compile time"),
             }
         }
 
         let (value, _pos) = context.value_stack.pop().unwrap();
 
-        match self.symbols.get_mut(vref).map_err(|e| Error::from_value_error(e, vref_pos))? {
+        match self.symbols.load_mut(key) {
             Some(Symbol::Array(array)) => {
                 array.assign(&ds, value).map_err(|e| Error::from_value_error(e, vref_pos))?;
                 Ok(())
             }
-            Some(_) => {
-                new_syntax_error(vref_pos, format!("Cannot index non-array {}", vref.name()))
-            }
-            None => {
-                new_syntax_error(vref_pos, format!("Cannot index undefined array {}", vref.name()))
-            }
+            _ => unreachable!("Array existence and type checking has been done at compile time"),
         }
     }
 
@@ -514,23 +509,13 @@ impl Machine {
     fn get_array_args(&self, context: &mut Context, nargs: usize) -> Result<Vec<i32>> {
         let mut subscripts = Vec::with_capacity(nargs);
         for _ in 0..nargs {
-            let (value, pos) = context.value_stack.pop().unwrap();
+            let (value, _pos) = context.value_stack.pop().unwrap();
             match value {
                 Value::Integer(i) => {
                     subscripts.push(i);
-                    continue;
                 }
-                Value::VarRef(vref) => {
-                    let value =
-                        self.symbols.get_var(&vref).map_err(|e| Error::from_value_error(e, pos))?;
-                    if let Value::Integer(i) = value {
-                        subscripts.push(*i);
-                        continue;
-                    }
-                }
-                _ => (), // Fall through to error.
+                _ => unreachable!("Invalid types in index; guaranteed valid by the compiler"),
             }
-            return Err(Error::EvalError(pos, "Array subscripts must be integers".to_owned()));
         }
         Ok(subscripts)
     }
@@ -579,23 +564,15 @@ impl Machine {
     }
 
     /// Handles an array reference.
-    async fn array_ref(
+    fn array_ref(
         &mut self,
         context: &mut Context,
-        vref: &VarRef,
+        key: &SymbolKey,
         vref_pos: LineCol,
         nargs: usize,
     ) -> Result<()> {
-        match self.symbols.get(vref).map_err(|e| Error::from_value_error(e, vref_pos))? {
-            Some(Symbol::Array(_)) => (), // Fallthrough.
-            _ => panic!("Array existence and type checking happens at compile time"),
-        }
-
-        // We have to handle arrays outside of the match above because we cannot hold a
-        // reference to the array while we evaluate subscripts.  This implies that we have
-        // to do a second lookup of the array right below, which isn't great...
         let subscripts = self.get_array_args(context, nargs)?;
-        match self.symbols.get(vref).map_err(|e| Error::from_value_error(e, vref_pos))? {
+        match self.symbols.load(key) {
             Some(Symbol::Array(array)) => {
                 let value = array
                     .index(&subscripts)
@@ -604,7 +581,8 @@ impl Machine {
                 context.value_stack.push((value, vref_pos));
                 Ok(())
             }
-            _ => unreachable!(),
+            Some(_) => unreachable!("Array type checking has been done at compile time"),
+            None => Err(Error::EvalError(vref_pos, format!("{} is not defined", key))),
         }
     }
 
@@ -771,13 +749,13 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::ArrayAssignment(vref, vref_pos, nargs) => {
-                self.assign_array(context, vref, *vref_pos, *nargs).await?;
+            Instruction::ArrayAssignment(name, vref_pos, nargs) => {
+                self.assign_array(context, name, *vref_pos, *nargs)?;
                 context.pc += 1;
             }
 
-            Instruction::ArrayLoad(fref, pos, nargs) => {
-                self.array_ref(context, fref, *pos, *nargs).await?;
+            Instruction::ArrayLoad(name, pos, nargs) => {
+                self.array_ref(context, name, *pos, *nargs)?;
                 context.pc += 1;
             }
 
@@ -1240,7 +1218,10 @@ mod tests {
             "2:1: Cannot index array with 0 subscripts; need 1",
         );
         do_simple_error_test("DIM a(1)\na(-1) = 3\n", "2:1: Subscript -1 cannot be negative");
-        do_simple_error_test("DIM a(1)\na(1, 3.0) = 3\n", "2:6: Subscript 3.0 must be an integer");
+        do_simple_error_test(
+            "DIM a(1, 2)\na(1, TRUE) = 3\n",
+            "2:6: Array index must be INTEGER, not BOOLEAN",
+        );
         do_simple_error_test("DIM a(2)\na$(1) = 3", "2:1: Incompatible types in a$ reference");
     }
 
@@ -1640,6 +1621,23 @@ mod tests {
             &[],
             &["running"],
             "6:17: Undefined variable A",
+        )
+    }
+
+    #[test]
+    fn test_expr_array_load_not_assigned() {
+        do_error_test(
+            r#"
+            GOTO @skip
+            DIM a(3)
+            @skip
+            OUT "running"
+            OUT a(0) + 1
+            OUT "not reached"
+            "#,
+            &[],
+            &["running"],
+            "6:17: A is not defined",
         )
     }
 

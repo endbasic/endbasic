@@ -29,6 +29,7 @@ ERROR: 1:13: Cannot + INTEGER and BOOLEAN
 >>> Array accesses
 ERROR: 1:7: Incompatible type annotation in x# reference
 ERROR: 1:7: Unknown function or array y
+ERROR: 1:7: Unknown function or array a
 >>> Simple function calls
 ERROR: 1:7: Incompatible type annotation in MAX$ reference
 ERROR: 1:7: Unknown function or array UNKNOWN

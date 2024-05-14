@@ -154,10 +154,10 @@ pub enum Instruction {
     Negate(LineCol),
 
     /// Represents an assignment to an element of an array with the given number of subscripts.
-    ArrayAssignment(VarRef, LineCol, usize),
+    ArrayAssignment(SymbolKey, LineCol, usize),
 
     /// Represents a load of an array's element into the stack.
-    ArrayLoad(VarRef, LineCol, usize),
+    ArrayLoad(SymbolKey, LineCol, usize),
 
     /// Represents an assignment of a value to a variable.
     Assign(SymbolKey),

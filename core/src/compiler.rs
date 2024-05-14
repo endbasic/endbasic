@@ -141,8 +141,8 @@ impl CallableType {
 #[derive(Clone, Copy)]
 #[cfg_attr(any(debug_assertions, test), derive(Debug, PartialEq))]
 pub(crate) enum SymbolPrototype {
-    /// Information about an array.
-    Array(ExprType),
+    /// Information about an array.  The integer indicates the number of dimensions in the array.
+    Array(ExprType, usize),
 
     /// Information about a callable.  The boolean indicates if this callable is an argless function
     /// or not.
@@ -170,7 +170,9 @@ impl From<&Symbols> for SymbolsTable {
         let mut table = HashMap::default();
         for (name, symbol) in syms.as_hashmap() {
             let proto = match symbol {
-                Symbol::Array(array) => SymbolPrototype::Array(array.subtype().into()),
+                Symbol::Array(array) => {
+                    SymbolPrototype::Array(array.subtype().into(), array.dimensions().len())
+                }
                 Symbol::Callable(callable) => {
                     let md = callable.metadata();
                     SymbolPrototype::Callable(md.return_type().into(), md.is_argless())
@@ -321,6 +323,82 @@ impl Compiler {
             }
             _ => from,
         }
+    }
+
+    /// Compiles the indices used to address an array.
+    fn compile_array_indices(
+        &mut self,
+        exp_nargs: usize,
+        args: Vec<Expr>,
+        name_pos: LineCol,
+    ) -> Result<()> {
+        if exp_nargs != args.len() {
+            return Err(Error::new(
+                name_pos,
+                format!("Cannot index array with {} subscripts; need {}", args.len(), exp_nargs),
+            ));
+        }
+
+        for arg in args.into_iter().rev() {
+            let arg_pos = arg.start_pos();
+            match self.compile_expr(arg, false)? {
+                ExprType::Integer => (),
+                ExprType::Double => {
+                    self.emit(Instruction::DoubleToInteger);
+                }
+                itype => {
+                    return Err(Error::new(
+                        arg_pos,
+                        format!("Array index must be INTEGER, not {}", itype),
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Compiles an assignment to an array position.
+    fn compile_array_assignment(&mut self, span: ArrayAssignmentSpan) -> Result<()> {
+        let key = SymbolKey::from(span.vref.name());
+        let (atype, dims) = match self.symtable.get(&key) {
+            Some(SymbolPrototype::Array(atype, dims)) => (atype, dims),
+            Some(_) => {
+                return Err(Error::new(
+                    span.vref_pos,
+                    format!("Cannot index non-array {}", span.vref),
+                ));
+            }
+            None => {
+                return Err(Error::new(
+                    span.vref_pos,
+                    format!("Cannot index undefined array {}", span.vref),
+                ));
+            }
+        };
+
+        if !span.vref.accepts(atype.into()) {
+            return Err(Error::new(
+                span.vref_pos,
+                format!("Incompatible types in {} reference", span.vref),
+            ));
+        }
+
+        let etype = self.compile_expr(span.expr, false)?;
+        let etype = self.maybe_cast(atype, etype);
+        if etype != atype {
+            return Err(Error::new(
+                span.vref_pos,
+                format!("Cannot assign value of type {} to array of type {}", etype, atype),
+            ));
+        }
+
+        let nargs = span.subscripts.len();
+        self.compile_array_indices(dims, span.subscripts, span.vref_pos)?;
+
+        self.emit(Instruction::ArrayAssignment(key, span.vref_pos, nargs));
+
+        Ok(())
     }
 
     /// Compiles an assignment, be it from the code or one synthesized during compilation.
@@ -918,7 +996,7 @@ impl Compiler {
                 vtype
             }
 
-            Some(SymbolPrototype::Array(vtype)) | Some(SymbolPrototype::Variable(vtype)) => {
+            Some(SymbolPrototype::Array(vtype, _)) | Some(SymbolPrototype::Variable(vtype)) => {
                 if !span.vref.accepts(vtype.into()) {
                     return Err(Error::new(
                         span.pos,
@@ -957,6 +1035,27 @@ impl Compiler {
         };
         self.emit(Instruction::LoadRef(span.vref, span.pos));
         Ok(result)
+    }
+
+    /// Compiles an array access.
+    fn compile_array_ref(
+        &mut self,
+        span: FunctionCallSpan,
+        key: SymbolKey,
+        vtype: ExprType,
+        dimensions: usize,
+    ) -> Result<ExprType> {
+        let nargs = span.args.len();
+        self.compile_array_indices(dimensions, span.args, span.pos)?;
+
+        if !span.fref.accepts(vtype.into()) {
+            return Err(Error::new(
+                span.pos,
+                format!("Incompatible type annotation in {} reference", span.fref),
+            ));
+        }
+        self.emit(Instruction::ArrayLoad(key, span.pos, nargs));
+        Ok(vtype)
     }
 
     /// Compiles the evaluation of an expression, appends its instructions to the
@@ -1083,25 +1182,18 @@ impl Compiler {
             Expr::Negate(span) => Ok(self.compile_neg_op(*span)?),
 
             Expr::Call(span) => {
-                let nargs = span.args.len();
-                for arg in span.args.into_iter().rev() {
-                    self.compile_expr(arg, true)?;
-                }
-
                 let key = SymbolKey::from(span.fref.name());
-                let result = match self.symtable.get(&key) {
-                    Some(SymbolPrototype::Array(vtype)) => {
-                        if !span.fref.accepts((vtype).into()) {
-                            return Err(Error::new(
-                                span.pos,
-                                format!("Incompatible type annotation in {} reference", span.fref),
-                            ));
-                        }
-                        self.emit(Instruction::ArrayLoad(span.fref, span.pos, nargs));
-                        vtype
+                match self.symtable.get(&key) {
+                    Some(SymbolPrototype::Array(vtype, dims)) => {
+                        self.compile_array_ref(span, key, vtype, dims)
                     }
 
                     Some(SymbolPrototype::Callable(ctype, is_argless)) => {
+                        let nargs = span.args.len();
+                        for arg in span.args.into_iter().rev() {
+                            self.compile_expr(arg, true)?;
+                        }
+
                         if !span.fref.accepts((ctype).into()) {
                             return Err(Error::new(
                                 span.pos,
@@ -1130,24 +1222,19 @@ impl Compiler {
                         }
 
                         self.emit(Instruction::FunctionCall(span.fref, span.pos, nargs));
-                        vtype
+                        Ok(vtype)
                     }
 
-                    Some(SymbolPrototype::Variable(_)) => {
-                        return Err(Error::new(
-                            span.pos,
-                            format!("{} is not an array nor a function", span.fref.name()),
-                        ));
-                    }
+                    Some(SymbolPrototype::Variable(_)) => Err(Error::new(
+                        span.pos,
+                        format!("{} is not an array nor a function", span.fref.name()),
+                    )),
 
-                    None => {
-                        return Err(Error::new(
-                            span.pos,
-                            format!("Unknown function or array {}", span.fref.name()),
-                        ));
-                    }
-                };
-                Ok(result)
+                    None => Err(Error::new(
+                        span.pos,
+                        format!("Unknown function or array {}", span.fref.name()),
+                    )),
+                }
             }
         }
     }
@@ -1156,12 +1243,7 @@ impl Compiler {
     fn compile_one(&mut self, stmt: Statement) -> Result<()> {
         match stmt {
             Statement::ArrayAssignment(span) => {
-                self.compile_expr(span.expr, false)?;
-                let nargs = span.subscripts.len();
-                for arg in span.subscripts.into_iter().rev() {
-                    self.compile_expr(arg, false)?;
-                }
-                self.emit(Instruction::ArrayAssignment(span.vref, span.vref_pos, nargs));
+                self.compile_array_assignment(span)?;
             }
 
             Statement::Assignment(span) => {
@@ -1249,7 +1331,7 @@ impl Compiler {
                     subtype_pos: span.subtype_pos,
                 }));
 
-                self.symtable.insert(key, SymbolPrototype::Array(span.subtype.into()));
+                self.symtable.insert(key, SymbolPrototype::Array(span.subtype.into(), nargs));
             }
 
             Statement::Do(span) => {
@@ -1524,8 +1606,9 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_array_assignment() {
+    fn test_compile_array_assignment_exprs() {
         Tester::default()
+            .define("foo", SymbolPrototype::Array(ExprType::Integer, 3))
             .define("i", SymbolPrototype::Variable(ExprType::Integer))
             .parse("foo(3, 4 + i, i) = 5")
             .compile()
@@ -1535,10 +1618,121 @@ mod tests {
             .expect_instr(3, Instruction::Load(SymbolKey::from("i"), lc(1, 12)))
             .expect_instr(4, Instruction::Add(lc(1, 10)))
             .expect_instr(5, Instruction::Push(Value::Integer(3), lc(1, 5)))
-            .expect_instr(
-                6,
-                Instruction::ArrayAssignment(VarRef::new("foo", VarType::Auto), lc(1, 1), 3),
-            )
+            .expect_instr(6, Instruction::ArrayAssignment(SymbolKey::from("foo"), lc(1, 1), 3))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_array_assignment_ok_annotation() {
+        Tester::default()
+            .define("a", SymbolPrototype::Array(ExprType::Integer, 1))
+            .parse("a%(0) = 1")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(1), lc(1, 9)))
+            .expect_instr(1, Instruction::Push(Value::Integer(0), lc(1, 4)))
+            .expect_instr(2, Instruction::ArrayAssignment(SymbolKey::from("a"), lc(1, 1), 1))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_array_assignment_index_double() {
+        Tester::default()
+            .define("a", SymbolPrototype::Array(ExprType::Integer, 1))
+            .parse("a(1.2) = 1")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(1), lc(1, 10)))
+            .expect_instr(1, Instruction::Push(Value::Double(1.2), lc(1, 3)))
+            .expect_instr(2, Instruction::DoubleToInteger)
+            .expect_instr(3, Instruction::ArrayAssignment(SymbolKey::from("a"), lc(1, 1), 1))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_array_assignment_index_bad_type() {
+        Tester::default()
+            .define("a", SymbolPrototype::Array(ExprType::Integer, 1))
+            .parse("a(TRUE) = 1")
+            .compile()
+            .expect_err("1:3: Array index must be INTEGER, not BOOLEAN")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_array_assignment_bad_annotation() {
+        Tester::default()
+            .define("a", SymbolPrototype::Array(ExprType::Integer, 1))
+            .parse("a#(0) = 1")
+            .compile()
+            .expect_err("1:1: Incompatible types in a# reference")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_array_assignment_double_to_integer_promotion() {
+        Tester::default()
+            .define("a", SymbolPrototype::Array(ExprType::Integer, 1))
+            .define("d", SymbolPrototype::Variable(ExprType::Double))
+            .parse("a(3) = d")
+            .compile()
+            .expect_instr(0, Instruction::Load(SymbolKey::from("d"), lc(1, 8)))
+            .expect_instr(1, Instruction::DoubleToInteger)
+            .expect_instr(2, Instruction::Push(Value::Integer(3), lc(1, 3)))
+            .expect_instr(3, Instruction::ArrayAssignment(SymbolKey::from("a"), lc(1, 1), 1))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_array_assignment_integer_to_double_promotion() {
+        Tester::default()
+            .define("a", SymbolPrototype::Array(ExprType::Double, 1))
+            .define("i", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("a(3) = i")
+            .compile()
+            .expect_instr(0, Instruction::Load(SymbolKey::from("i"), lc(1, 8)))
+            .expect_instr(1, Instruction::IntegerToDouble)
+            .expect_instr(2, Instruction::Push(Value::Integer(3), lc(1, 3)))
+            .expect_instr(3, Instruction::ArrayAssignment(SymbolKey::from("a"), lc(1, 1), 1))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_array_assignment_bad_types() {
+        Tester::default()
+            .define("a", SymbolPrototype::Array(ExprType::Double, 1))
+            .define("i", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("a(3) = FALSE")
+            .compile()
+            .expect_err("1:1: Cannot assign value of type BOOLEAN to array of type DOUBLE")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_array_assignment_bad_dimensions() {
+        Tester::default()
+            .define("a", SymbolPrototype::Array(ExprType::Double, 1))
+            .define("i", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("a(3, 5) = 7")
+            .compile()
+            .expect_err("1:1: Cannot index array with 2 subscripts; need 1")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_array_assignment_not_defined() {
+        Tester::default()
+            .parse("a(3) = FALSE")
+            .compile()
+            .expect_err("1:1: Cannot index undefined array a")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_array_assignment_not_an_array() {
+        Tester::default()
+            .define("a", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("a(3) = FALSE")
+            .compile()
+            .expect_err("1:1: Cannot index non-array a")
             .check();
     }
 
@@ -1703,7 +1897,7 @@ mod tests {
     #[test]
     fn test_compile_dim_name_overlap() {
         Tester::default()
-            .define("SomeArray", SymbolPrototype::Array(ExprType::Integer))
+            .define("SomeArray", SymbolPrototype::Array(ExprType::Integer, 3))
             .parse("DIM somearray")
             .compile()
             .expect_err("1:5: Cannot DIM already-defined symbol somearray")
@@ -2096,7 +2290,7 @@ mod tests {
     #[test]
     fn test_compile_expr_try_load_array_as_var() {
         Tester::default()
-            .define(SymbolKey::from("a"), SymbolPrototype::Array(ExprType::Integer))
+            .define(SymbolKey::from("a"), SymbolPrototype::Array(ExprType::Integer, 2))
             .parse("b = a")
             .compile()
             .expect_err("1:5: a is not a variable")
@@ -2106,7 +2300,7 @@ mod tests {
     #[test]
     fn test_compile_expr_ref_try_load_array_as_var() {
         Tester::default()
-            .define(SymbolKey::from("a"), SymbolPrototype::Array(ExprType::Integer))
+            .define(SymbolKey::from("a"), SymbolPrototype::Array(ExprType::Integer, 1))
             .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, false))
             .parse("c a")
             .compile()
@@ -2218,20 +2412,94 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_expr_array_ref() {
+    fn test_compile_expr_array_ref_exprs() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Array(ExprType::Integer))
-            .define("j", SymbolPrototype::Variable(ExprType::Text))
+            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 3))
+            .define("j", SymbolPrototype::Variable(ExprType::Integer))
             .define("k", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = FOO(3, j, k + 1)")
             .compile()
             .expect_instr(0, Instruction::Load(SymbolKey::from("k"), lc(1, 15)))
             .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 19)))
             .expect_instr(2, Instruction::Add(lc(1, 17)))
-            .expect_instr(3, Instruction::LoadRef(VarRef::new("j", VarType::Auto), lc(1, 12)))
+            .expect_instr(3, Instruction::Load(SymbolKey::from("j"), lc(1, 12)))
             .expect_instr(4, Instruction::Push(Value::Integer(3), lc(1, 9)))
-            .expect_instr(5, Instruction::ArrayLoad(VarRef::new("FOO", VarType::Auto), lc(1, 5), 3))
+            .expect_instr(5, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 3))
             .expect_instr(6, Instruction::Assign(SymbolKey::from("i")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_ok_annotation() {
+        Tester::default()
+            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 1))
+            .parse("i = FOO%(3)")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(3), lc(1, 10)))
+            .expect_instr(1, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 1))
+            .expect_instr(2, Instruction::Assign(SymbolKey::from("i")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_bad_annotation() {
+        Tester::default()
+            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 1))
+            .parse("i = FOO#(3)")
+            .compile()
+            .expect_err("1:5: Incompatible type annotation in FOO# reference")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_index_double() {
+        Tester::default()
+            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 1))
+            .parse("i = FOO(3.8)")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Double(3.8), lc(1, 9)))
+            .expect_instr(1, Instruction::DoubleToInteger)
+            .expect_instr(2, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 1))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("i")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_index_bad_type() {
+        Tester::default()
+            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 1))
+            .parse("i = FOO(FALSE)")
+            .compile()
+            .expect_err("1:9: Array index must be INTEGER, not BOOLEAN")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_bad_dimensions() {
+        Tester::default()
+            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 3))
+            .parse("i = FOO#(3, 4)")
+            .compile()
+            .expect_err("1:5: Cannot index array with 2 subscripts; need 3")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_not_defined() {
+        Tester::default()
+            .parse("i = a(4)")
+            .compile()
+            .expect_err("1:5: Unknown function or array a")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_not_an_array() {
+        Tester::default()
+            .define("a", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("i = a(3)")
+            .compile()
+            .expect_err("1:5: a is not an array nor a function")
             .check();
     }
 

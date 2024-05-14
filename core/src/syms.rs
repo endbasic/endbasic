@@ -137,13 +137,11 @@ impl Array {
     /// It is an error if `dimensions` and `subscripts` have different sizes, or if the values in
     /// `subscripts` are negative.
     fn native_index(dimensions: &[usize], subscripts: &[i32]) -> Result<usize> {
-        if subscripts.len() != dimensions.len() {
-            return Err(Error::new(format!(
-                "Cannot index array with {} subscripts; need {}",
-                subscripts.len(),
-                dimensions.len()
-            )));
-        }
+        debug_assert_eq!(
+            subscripts.len(),
+            dimensions.len(),
+            "Invalid number of subscripts; guaranteed valid by the compiler"
+        );
 
         let mut offset = 0;
         let mut multiplier = 1;
@@ -160,14 +158,18 @@ impl Array {
 
     /// Assings the `value` to the array position indicated by the `subscripts`.
     pub fn assign(&mut self, subscripts: &[i32], value: Value) -> Result<()> {
-        let value = value.maybe_cast(self.subtype)?;
-        if value.as_vartype() != self.subtype {
-            return Err(Error::new(format!(
-                "Cannot assign value of type {} to array of type {}",
-                value.as_vartype(),
-                self.subtype
-            )));
-        }
+        debug_assert_eq!(
+            subscripts.len(),
+            self.dimensions.len(),
+            "Invalid number of subscripts; guaranteed valid by the compiler"
+        );
+
+        debug_assert_eq!(
+            value.as_vartype(),
+            self.subtype,
+            "Invalid types in assignment; guaranteed valid by the compiler"
+        );
+
         let i = Array::native_index(&self.dimensions, subscripts)?;
         self.values[i] = value;
         Ok(())
@@ -297,6 +299,14 @@ impl Symbols {
     /// to do the necessary runtime validity checks.
     pub(crate) fn load(&self, key: &SymbolKey) -> Option<&Symbol> {
         self.by_name.get(&key.0)
+    }
+
+    /// Obtains the value of a symbol or `None` if it is not defined.
+    ///
+    /// This is meant to use by the compiler only.  All other users should call `get` instead
+    /// to do the necessary runtime validity checks.
+    pub(crate) fn load_mut(&mut self, key: &SymbolKey) -> Option<&mut Symbol> {
+        self.by_name.get_mut(&key.0)
     }
 
     /// Obtains the value of a symbol or `None` if it is not defined.
@@ -634,24 +644,6 @@ mod tests {
         let mut array = Array::new(VarType::Integer, vec![5]);
 
         assert_eq!(
-            "Cannot index array with 0 subscripts; need 1",
-            format!("{}", array.assign(&[], Value::Integer(1)).unwrap_err())
-        );
-        assert_eq!(
-            "Cannot index array with 0 subscripts; need 1",
-            format!("{}", array.index(&[]).unwrap_err())
-        );
-
-        assert_eq!(
-            "Cannot index array with 2 subscripts; need 1",
-            format!("{}", array.assign(&[1, 2], Value::Integer(1)).unwrap_err())
-        );
-        assert_eq!(
-            "Cannot index array with 2 subscripts; need 1",
-            format!("{}", array.index(&[1, 2]).unwrap_err())
-        );
-
-        assert_eq!(
             "Subscript -1 cannot be negative",
             format!("{}", array.assign(&[-1], Value::Integer(1)).unwrap_err())
         );
@@ -665,11 +657,6 @@ mod tests {
             format!("{}", array.assign(&[6], Value::Integer(1)).unwrap_err())
         );
         assert_eq!("Subscript 6 exceeds limit of 5", format!("{}", array.index(&[6]).unwrap_err()));
-
-        assert_eq!(
-            "Cannot assign value of type STRING to array of type INTEGER",
-            format!("{}", array.assign(&[0], Value::Text("a".to_owned())).unwrap_err())
-        );
     }
 
     #[test]
@@ -691,24 +678,6 @@ mod tests {
     #[test]
     fn test_array_bidimensional_errors() {
         let mut array = Array::new(VarType::Integer, vec![5, 2]);
-
-        assert_eq!(
-            "Cannot index array with 0 subscripts; need 2",
-            format!("{}", array.assign(&[], Value::Integer(1)).unwrap_err())
-        );
-        assert_eq!(
-            "Cannot index array with 0 subscripts; need 2",
-            format!("{}", array.index(&[]).unwrap_err())
-        );
-
-        assert_eq!(
-            "Cannot index array with 1 subscripts; need 2",
-            format!("{}", array.assign(&[1], Value::Integer(1)).unwrap_err())
-        );
-        assert_eq!(
-            "Cannot index array with 1 subscripts; need 2",
-            format!("{}", array.index(&[1]).unwrap_err())
-        );
 
         assert_eq!(
             "Subscript -1 cannot be negative",
@@ -735,11 +704,6 @@ mod tests {
         assert_eq!(
             "Subscript 2 exceeds limit of 2",
             format!("{}", array.index(&[-1, 2]).unwrap_err())
-        );
-
-        assert_eq!(
-            "Cannot assign value of type STRING to array of type INTEGER",
-            format!("{}", array.assign(&[0, 0], Value::Text("a".to_owned())).unwrap_err())
         );
     }
 
@@ -775,24 +739,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    #[test]
-    fn test_array_integer_to_double() {
-        let mut array = Array::new(VarType::Double, vec![1]);
-        array.assign(&[0], Value::Integer(3)).unwrap();
-        assert_eq!(&Value::Double(3.0), array.index(&[0]).unwrap());
-    }
-
-    #[test]
-    fn test_array_double_to_integer() {
-        let mut array = Array::new(VarType::Integer, vec![3]);
-        array.assign(&[0], Value::Double(5.4)).unwrap();
-        array.assign(&[1], Value::Double(5.5)).unwrap();
-        array.assign(&[2], Value::Double(5.6)).unwrap();
-        assert_eq!(&Value::Integer(5), array.index(&[0]).unwrap());
-        assert_eq!(&Value::Integer(6), array.index(&[1]).unwrap());
-        assert_eq!(&Value::Integer(6), array.index(&[2]).unwrap());
     }
 
     #[test]

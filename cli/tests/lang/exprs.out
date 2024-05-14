@@ -15,9 +15,8 @@ TRUE
 >>> Array accesses
  0
  8
-50:7: Cannot index array with 1 subscripts; need 2
-51:7: Cannot index array with 1 subscripts; need 2
-52:7: Subscript 10 exceeds limit of 2
+50:7: Subscript -1 cannot be negative
+51:7: Subscript 10 exceeds limit of 2
 >>> Simple function calls
  3.141592653589793
  5
