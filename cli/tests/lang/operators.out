@@ -181,6 +181,8 @@ ERROR: 1:13: Cannot + BOOLEAN and BOOLEAN
  9.5
  5
  2147483647
+ 2147483647
+ERROR: 1:15: Integer overflow
  2147483648
  9.3
 ab
@@ -191,6 +193,8 @@ ERROR: 1:13: Cannot - BOOLEAN and BOOLEAN
 -1.5
 -1
 -2147483648
+-2147483648
+ERROR: 1:15: Integer underflow
 -2147483649
 -1.5
 ERROR: 1:12: Cannot subtract "a" from "ab"
@@ -200,6 +204,8 @@ ERROR: 1:13: Cannot * BOOLEAN and BOOLEAN
  20.5
  6
  2147483647
+ 2147483647
+ERROR: 1:15: Integer overflow
  4294967294
  20.8
 ERROR: 1:10: Cannot multiply "" by "a"
@@ -211,7 +217,9 @@ ERROR: 1:13: Cannot / BOOLEAN and BOOLEAN
  2
  6
 -2147483648
+-2147483648
 ERROR: 1:9: Division by zero
+ERROR: 1:15: Integer underflow
  2147483648
  4
 ERROR: 1:10: Cannot divide "" by "a"
@@ -223,6 +231,7 @@ ERROR: 1:13: Cannot MOD BOOLEAN and BOOLEAN
  0
  2
 ERROR: 1:9: Modulo by zero
+ERROR: 1:15: Integer underflow
 -0
  1
 ERROR: 1:10: Cannot modulo "" by "a"
@@ -234,8 +243,10 @@ ERROR: 1:13: Cannot ^ BOOLEAN and BOOLEAN
  1
  9
  2147483647
+ 2147483647
+ERROR: 1:15: Integer overflow
  4611686014132420600
- 1
+ERROR: 1:9: Exponent -3 cannot be negative
  1024
 ERROR: 1:10: Cannot raise "" to the power of "a"
 >>> Test unary - types
@@ -244,6 +255,7 @@ ERROR: 1:7: Cannot negate BOOLEAN
  5.53
 -6
  5
+ERROR: 1:7: Integer underflow
  2147483648
 ERROR: 1:7: Cannot negate STRING
 End of input by CTRL-D
