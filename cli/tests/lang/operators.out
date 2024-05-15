@@ -110,7 +110,7 @@ FALSE
 TRUE
 ERROR: 1:10: Cannot compare STRING and BOOLEAN with <>
 >>> Test < types
-ERROR: 1:13: Cannot compare FALSE and TRUE with <
+ERROR: 1:13: Cannot compare BOOLEAN and BOOLEAN with <
 FALSE
 TRUE
 FALSE
@@ -125,7 +125,7 @@ FALSE
 TRUE
 ERROR: 1:10: Cannot compare STRING and BOOLEAN with <
 >>> Test <= types
-ERROR: 1:13: Cannot compare FALSE and TRUE with <
+ERROR: 1:13: Cannot compare BOOLEAN and BOOLEAN with <
 FALSE
 TRUE
 TRUE
@@ -143,7 +143,7 @@ TRUE
 TRUE
 ERROR: 1:10: Cannot compare STRING and BOOLEAN with <=
 >>> Test > types
-ERROR: 1:13: Cannot compare FALSE and TRUE with >
+ERROR: 1:13: Cannot compare BOOLEAN and BOOLEAN with >
 FALSE
 TRUE
 FALSE
@@ -158,7 +158,7 @@ FALSE
 TRUE
 ERROR: 1:10: Cannot compare STRING and BOOLEAN with >
 >>> Test >= types
-ERROR: 1:13: Cannot compare FALSE and TRUE with >
+ERROR: 1:13: Cannot compare BOOLEAN and BOOLEAN with >
 FALSE
 TRUE
 TRUE
@@ -197,7 +197,7 @@ ERROR: 1:13: Cannot - BOOLEAN and BOOLEAN
 ERROR: 1:15: Integer underflow
 -2147483649
 -1.5
-ERROR: 1:12: Cannot subtract "a" from "ab"
+ERROR: 1:12: Cannot - STRING and STRING
 >>> Test * types
 ERROR: 1:13: Cannot * BOOLEAN and BOOLEAN
  40
@@ -208,7 +208,7 @@ ERROR: 1:13: Cannot * BOOLEAN and BOOLEAN
 ERROR: 1:15: Integer overflow
  4294967294
  20.8
-ERROR: 1:10: Cannot multiply "" by "a"
+ERROR: 1:10: Cannot * STRING and STRING
 >>> Test / types
 ERROR: 1:13: Cannot / BOOLEAN and BOOLEAN
  4
@@ -222,7 +222,7 @@ ERROR: 1:9: Division by zero
 ERROR: 1:15: Integer underflow
  2147483648
  4
-ERROR: 1:10: Cannot divide "" by "a"
+ERROR: 1:10: Cannot / STRING and STRING
 >>> Test MOD types
 ERROR: 1:13: Cannot MOD BOOLEAN and BOOLEAN
  0
@@ -234,7 +234,7 @@ ERROR: 1:9: Modulo by zero
 ERROR: 1:15: Integer underflow
 -0
  1
-ERROR: 1:10: Cannot modulo "" by "a"
+ERROR: 1:10: Cannot MOD STRING and STRING
 >>> Test ^ types
 ERROR: 1:13: Cannot ^ BOOLEAN and BOOLEAN
  1
@@ -248,7 +248,7 @@ ERROR: 1:15: Integer overflow
  4611686014132420600
 ERROR: 1:9: Exponent -3 cannot be negative
  1024
-ERROR: 1:10: Cannot raise "" to the power of "a"
+ERROR: 1:10: Cannot ^ STRING and STRING
 >>> Test unary - types
 ERROR: 1:7: Cannot negate BOOLEAN
 -6.12

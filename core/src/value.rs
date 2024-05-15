@@ -119,7 +119,7 @@ impl Value {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs && *rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs & *rhs)),
-            (_, _) => Err(Error::new(format!("Cannot AND {} and {}", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -128,7 +128,7 @@ impl Value {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs || *rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs | *rhs)),
-            (_, _) => Err(Error::new(format!("Cannot OR {} and {}", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -137,7 +137,7 @@ impl Value {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs ^ *rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs ^ *rhs)),
-            (_, _) => Err(Error::new(format!("Cannot XOR {} and {}", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -146,7 +146,7 @@ impl Value {
         match self {
             Value::Boolean(b) => Ok(Value::Boolean(!b)),
             Value::Integer(b) => Ok(Value::Integer(!b)),
-            _ => Err(Error::new(format!("Cannot apply NOT to {}", self))),
+            _ => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -168,11 +168,8 @@ impl Value {
                     None => Ok(Value::Integer(0)),
                 }
             }
-            (Value::Integer(_), _) => {
-                Err(Error::new(format!("Number of bits to << ({}) must be an integer", other)))
-            }
 
-            (_, _) => Err(Error::new(format!("Cannot apply << to non-integer {}", self))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -196,11 +193,7 @@ impl Value {
                 }
             }
 
-            (Value::Integer(_), _) => {
-                Err(Error::new(format!("Number of bits to >> ({}) must be an integer", other)))
-            }
-
-            (_, _) => Err(Error::new(format!("Cannot apply >> to non-integer {}", self))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -212,7 +205,7 @@ impl Value {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs == rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs == rhs)),
 
-            (_, _) => Err(Error::new(format!("Cannot compare {} and {} with =", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -224,7 +217,7 @@ impl Value {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs != rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs != rhs)),
 
-            (_, _) => Err(Error::new(format!("Cannot compare {} and {} with <>", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -235,7 +228,7 @@ impl Value {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs < rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs < rhs)),
 
-            (_, _) => Err(Error::new(format!("Cannot compare {} and {} with <", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -246,7 +239,7 @@ impl Value {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
 
-            (_, _) => Err(Error::new(format!("Cannot compare {} and {} with <=", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -257,7 +250,7 @@ impl Value {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs > rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs > rhs)),
 
-            (_, _) => Err(Error::new(format!("Cannot compare {} and {} with >", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -268,7 +261,7 @@ impl Value {
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
 
-            (_, _) => Err(Error::new(format!("Cannot compare {} and {} with >=", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -282,7 +275,7 @@ impl Value {
             },
             (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Text(lhs.to_owned() + rhs)),
 
-            (_, _) => Err(Error::new(format!("Cannot add {} and {}", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -295,7 +288,7 @@ impl Value {
                 None => Err(Error::new("Integer underflow".to_owned())),
             },
 
-            (_, _) => Err(Error::new(format!("Cannot subtract {} from {}", other, self))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -308,7 +301,7 @@ impl Value {
                 None => Err(Error::new("Integer overflow".to_owned())),
             },
 
-            (_, _) => Err(Error::new(format!("Cannot multiply {} by {}", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -326,7 +319,7 @@ impl Value {
                 }
             }
 
-            (_, _) => Err(Error::new(format!("Cannot divide {} by {}", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -344,7 +337,7 @@ impl Value {
                 }
             }
 
-            (_, _) => Err(Error::new(format!("Cannot modulo {} by {}", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -365,7 +358,7 @@ impl Value {
                 }
             }
 
-            (_, _) => Err(Error::new(format!("Cannot raise {} to the power of {}", self, other))),
+            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -377,7 +370,7 @@ impl Value {
                 Some(i) => Ok(Value::Integer(i)),
                 None => Err(Error::new("Integer underflow".to_owned())),
             },
-            _ => Err(Error::new(format!("Cannot negate {}", self))),
+            _ => unreachable!("Types validated during compilation"),
         }
     }
 }
@@ -582,11 +575,6 @@ mod tests {
         assert_eq!(Boolean(false), Boolean(false).and(&Boolean(true)).unwrap());
         assert_eq!(Boolean(false), Boolean(true).and(&Boolean(false)).unwrap());
         assert_eq!(Boolean(true), Boolean(true).and(&Boolean(true)).unwrap());
-
-        assert_eq!(
-            "Cannot AND TRUE and 5",
-            format!("{}", Boolean(true).and(&Integer(5)).unwrap_err())
-        );
     }
 
     #[test]
@@ -595,11 +583,6 @@ mod tests {
         assert_eq!(Boolean(true), Boolean(false).or(&Boolean(true)).unwrap());
         assert_eq!(Boolean(true), Boolean(true).or(&Boolean(false)).unwrap());
         assert_eq!(Boolean(true), Boolean(true).or(&Boolean(true)).unwrap());
-
-        assert_eq!(
-            "Cannot OR TRUE and 5",
-            format!("{}", Boolean(true).or(&Integer(5)).unwrap_err())
-        );
     }
 
     #[test]
@@ -608,11 +591,6 @@ mod tests {
         assert_eq!(Boolean(true), Boolean(false).xor(&Boolean(true)).unwrap());
         assert_eq!(Boolean(true), Boolean(true).xor(&Boolean(false)).unwrap());
         assert_eq!(Boolean(false), Boolean(true).xor(&Boolean(true)).unwrap());
-
-        assert_eq!(
-            "Cannot XOR TRUE and 5",
-            format!("{}", Boolean(true).xor(&Integer(5)).unwrap_err())
-        );
     }
 
     #[test]
@@ -626,11 +604,6 @@ mod tests {
         assert_eq!(Integer(5), Integer(7).and(&Integer(5)).unwrap());
         assert_eq!(Integer(0), Integer(2).and(&Integer(4)).unwrap());
         assert_eq!(Integer(1234), Integer(-1).and(&Integer(1234)).unwrap());
-
-        assert_eq!(
-            "Cannot AND 3.0 and 4.0",
-            format!("{}", Double(3.0).and(&Double(4.0)).unwrap_err())
-        );
     }
 
     #[test]
@@ -638,11 +611,6 @@ mod tests {
         assert_eq!(Integer(7), Integer(7).or(&Integer(5)).unwrap());
         assert_eq!(Integer(6), Integer(2).or(&Integer(4)).unwrap());
         assert_eq!(Integer(-1), Integer(-1).or(&Integer(1234)).unwrap());
-
-        assert_eq!(
-            "Cannot OR 3.0 and 4.0",
-            format!("{}", Double(3.0).or(&Double(4.0)).unwrap_err())
-        );
     }
 
     #[test]
@@ -650,18 +618,11 @@ mod tests {
         assert_eq!(Integer(2), Integer(7).xor(&Integer(5)).unwrap());
         assert_eq!(Integer(6), Integer(2).xor(&Integer(4)).unwrap());
         assert_eq!(Integer(-1235), Integer(-1).xor(&Integer(1234)).unwrap());
-
-        assert_eq!(
-            "Cannot XOR 3.0 and 4.0",
-            format!("{}", Double(3.0).xor(&Double(4.0)).unwrap_err())
-        );
     }
 
     #[test]
     fn test_value_bitwise_not() {
         assert_eq!(Integer(-1), Integer(0).not().unwrap());
-
-        assert_eq!("Cannot apply NOT to 3.0", format!("{}", Double(3.0).not().unwrap_err()));
     }
 
     #[test]
@@ -681,32 +642,6 @@ mod tests {
         assert_eq!(Integer(0), Integer(0x80000000u32 as i32).shl(&Integer(1)).unwrap());
         assert_eq!(Integer(0), Integer(1).shl(&Integer(32)).unwrap());
         assert_eq!(Integer(0), Integer(1).shl(&Integer(64)).unwrap());
-
-        assert_eq!(
-            "Cannot apply << to non-integer FALSE",
-            format!("{}", Boolean(false).shl(&Boolean(true)).unwrap_err())
-        );
-        assert_eq!(
-            "Cannot apply << to non-integer FALSE",
-            format!("{}", Boolean(false).shl(&Integer(8)).unwrap_err())
-        );
-        assert_eq!(
-            "Cannot apply << to non-integer 3.0",
-            format!("{}", Double(3.0).shl(&Integer(8)).unwrap_err())
-        );
-        assert_eq!(
-            "Cannot apply << to non-integer \"foo\"",
-            format!("{}", Text("foo".to_owned()).shl(&Integer(8)).unwrap_err())
-        );
-
-        assert_eq!(
-            "Number of bits to << (TRUE) must be an integer",
-            format!("{}", Integer(3).shl(&Boolean(true)).unwrap_err())
-        );
-        assert_eq!(
-            "Number of bits to << (4.0) must be an integer",
-            format!("{}", Integer(3).shl(&Double(4.0)).unwrap_err())
-        );
 
         assert_eq!(
             "Number of bits to << (-1) must be positive",
@@ -740,32 +675,6 @@ mod tests {
         assert_eq!(Integer(-1), Integer(0x80000000u32 as i32).shr(&Integer(64)).unwrap());
 
         assert_eq!(
-            "Cannot apply >> to non-integer FALSE",
-            format!("{}", Boolean(false).shr(&Boolean(true)).unwrap_err())
-        );
-        assert_eq!(
-            "Cannot apply >> to non-integer FALSE",
-            format!("{}", Boolean(false).shr(&Integer(8)).unwrap_err())
-        );
-        assert_eq!(
-            "Cannot apply >> to non-integer 3.0",
-            format!("{}", Double(3.0).shr(&Integer(8)).unwrap_err())
-        );
-        assert_eq!(
-            "Cannot apply >> to non-integer \"foo\"",
-            format!("{}", Text("foo".to_owned()).shr(&Integer(8)).unwrap_err())
-        );
-
-        assert_eq!(
-            "Number of bits to >> (TRUE) must be an integer",
-            format!("{}", Integer(3).shr(&Boolean(true)).unwrap_err())
-        );
-        assert_eq!(
-            "Number of bits to >> (4.0) must be an integer",
-            format!("{}", Integer(3).shr(&Double(4.0)).unwrap_err())
-        );
-
-        assert_eq!(
             "Number of bits to >> (-1) must be positive",
             format!("{}", Integer(3).shr(&Integer(-1)).unwrap_err())
         );
@@ -775,10 +684,6 @@ mod tests {
     fn test_value_eq() {
         assert_eq!(Boolean(true), Boolean(false).eq(&Boolean(false)).unwrap());
         assert_eq!(Boolean(false), Boolean(true).eq(&Boolean(false)).unwrap());
-        assert_eq!(
-            "Cannot compare TRUE and 5 with =",
-            format!("{}", Boolean(true).eq(&Integer(5)).unwrap_err())
-        );
 
         assert_eq!(Boolean(true), Double(2.5).eq(&Double(2.5)).unwrap());
         assert_eq!(Boolean(false), Double(3.5).eq(&Double(3.6)).unwrap());
@@ -788,20 +693,12 @@ mod tests {
 
         assert_eq!(Boolean(true), Text("a".to_owned()).eq(&Text("a".to_owned())).unwrap());
         assert_eq!(Boolean(false), Text("b".to_owned()).eq(&Text("c".to_owned())).unwrap());
-        assert_eq!(
-            "Cannot compare \"\" and FALSE with =",
-            format!("{}", Text("".to_owned()).eq(&Boolean(false)).unwrap_err())
-        );
     }
 
     #[test]
     fn test_value_ne() {
         assert_eq!(Boolean(false), Boolean(false).ne(&Boolean(false)).unwrap());
         assert_eq!(Boolean(true), Boolean(true).ne(&Boolean(false)).unwrap());
-        assert_eq!(
-            "Cannot compare TRUE and 5 with <>",
-            format!("{}", Boolean(true).ne(&Integer(5)).unwrap_err())
-        );
 
         assert_eq!(Boolean(false), Double(2.5).ne(&Double(2.5)).unwrap());
         assert_eq!(Boolean(true), Double(3.5).ne(&Double(3.6)).unwrap());
@@ -811,19 +708,10 @@ mod tests {
 
         assert_eq!(Boolean(false), Text("a".to_owned()).ne(&Text("a".to_owned())).unwrap());
         assert_eq!(Boolean(true), Text("b".to_owned()).ne(&Text("c".to_owned())).unwrap());
-        assert_eq!(
-            "Cannot compare \"\" and FALSE with <>",
-            format!("{}", Text("".to_owned()).ne(&Boolean(false)).unwrap_err())
-        );
     }
 
     #[test]
     fn test_value_lt() {
-        assert_eq!(
-            "Cannot compare FALSE and TRUE with <",
-            format!("{}", Boolean(false).lt(&Boolean(true)).unwrap_err())
-        );
-
         assert_eq!(Boolean(false), Double(2.5).lt(&Double(2.5)).unwrap());
         assert_eq!(Boolean(true), Double(3.5).lt(&Double(3.6)).unwrap());
 
@@ -832,19 +720,10 @@ mod tests {
 
         assert_eq!(Boolean(false), Text("a".to_owned()).lt(&Text("a".to_owned())).unwrap());
         assert_eq!(Boolean(true), Text("a".to_owned()).lt(&Text("c".to_owned())).unwrap());
-        assert_eq!(
-            "Cannot compare \"\" and FALSE with <",
-            format!("{}", Text("".to_owned()).lt(&Boolean(false)).unwrap_err())
-        );
     }
 
     #[test]
     fn test_value_le() {
-        assert_eq!(
-            "Cannot compare FALSE and TRUE with <=",
-            format!("{}", Boolean(false).le(&Boolean(true)).unwrap_err())
-        );
-
         assert_eq!(Boolean(false), Double(2.1).le(&Double(2.0)).unwrap());
         assert_eq!(Boolean(true), Double(2.1).le(&Double(2.1)).unwrap());
         assert_eq!(Boolean(true), Double(2.1).le(&Double(2.2)).unwrap());
@@ -856,19 +735,10 @@ mod tests {
         assert_eq!(Boolean(false), Text("b".to_owned()).le(&Text("a".to_owned())).unwrap());
         assert_eq!(Boolean(true), Text("a".to_owned()).le(&Text("a".to_owned())).unwrap());
         assert_eq!(Boolean(true), Text("a".to_owned()).le(&Text("c".to_owned())).unwrap());
-        assert_eq!(
-            "Cannot compare \"\" and FALSE with <=",
-            format!("{}", Text("".to_owned()).le(&Boolean(false)).unwrap_err())
-        );
     }
 
     #[test]
     fn test_value_gt() {
-        assert_eq!(
-            "Cannot compare FALSE and TRUE with >",
-            format!("{}", Boolean(false).gt(&Boolean(true)).unwrap_err())
-        );
-
         assert_eq!(Boolean(false), Double(2.1).gt(&Double(2.1)).unwrap());
         assert_eq!(Boolean(true), Double(4.1).gt(&Double(4.0)).unwrap());
 
@@ -877,19 +747,10 @@ mod tests {
 
         assert_eq!(Boolean(false), Text("a".to_owned()).gt(&Text("a".to_owned())).unwrap());
         assert_eq!(Boolean(true), Text("c".to_owned()).gt(&Text("a".to_owned())).unwrap());
-        assert_eq!(
-            "Cannot compare \"\" and FALSE with >",
-            format!("{}", Text("".to_owned()).gt(&Boolean(false)).unwrap_err())
-        );
     }
 
     #[test]
     fn test_value_ge() {
-        assert_eq!(
-            "Cannot compare FALSE and TRUE with >=",
-            format!("{}", Boolean(false).ge(&Boolean(true)).unwrap_err())
-        );
-
         assert_eq!(Boolean(false), Double(2.0).ge(&Double(2.1)).unwrap());
         assert_eq!(Boolean(true), Double(2.1).ge(&Double(2.1)).unwrap());
         assert_eq!(Boolean(true), Double(2.2).ge(&Double(2.1)).unwrap());
@@ -901,19 +762,10 @@ mod tests {
         assert_eq!(Boolean(false), Text("".to_owned()).ge(&Text("b".to_owned())).unwrap());
         assert_eq!(Boolean(true), Text("a".to_owned()).ge(&Text("a".to_owned())).unwrap());
         assert_eq!(Boolean(true), Text("c".to_owned()).ge(&Text("a".to_owned())).unwrap());
-        assert_eq!(
-            "Cannot compare \"\" and FALSE with >=",
-            format!("{}", Text("".to_owned()).ge(&Boolean(false)).unwrap_err())
-        );
     }
 
     #[test]
     fn test_value_add() {
-        assert_eq!(
-            "Cannot add FALSE and TRUE",
-            format!("{}", Boolean(false).add(&Boolean(true)).unwrap_err())
-        );
-
         assert_eq!(Double(7.1), Double(2.1).add(&Double(5.0)).unwrap());
 
         assert_eq!(Integer(5), Integer(2).add(&Integer(3)).unwrap());
@@ -922,21 +774,10 @@ mod tests {
             "Integer overflow",
             format!("{}", Integer(std::i32::MAX).add(&Integer(1)).unwrap_err())
         );
-
-        assert_eq!(Text("ab".to_owned()), Text("a".to_owned()).add(&Text("b".to_owned())).unwrap());
-        assert_eq!(
-            "Cannot add \"\" and FALSE",
-            format!("{}", Text("".to_owned()).add(&Boolean(false)).unwrap_err())
-        );
     }
 
     #[test]
     fn test_value_sub() {
-        assert_eq!(
-            "Cannot subtract TRUE from FALSE",
-            format!("{}", Boolean(false).sub(&Boolean(true)).unwrap_err())
-        );
-
         assert_eq!(Double(-1.0), Double(2.5).sub(&Double(3.5)).unwrap());
 
         assert_eq!(Integer(-1), Integer(2).sub(&Integer(3)).unwrap());
@@ -945,20 +786,10 @@ mod tests {
             "Integer underflow",
             format!("{}", Integer(std::i32::MIN).sub(&Integer(1)).unwrap_err())
         );
-
-        assert_eq!(
-            "Cannot subtract \"a\" from \"ab\"",
-            format!("{}", Text("ab".to_owned()).sub(&Text("a".to_owned())).unwrap_err())
-        );
     }
 
     #[test]
     fn test_value_mul() {
-        assert_eq!(
-            "Cannot multiply FALSE by TRUE",
-            format!("{}", Boolean(false).mul(&Boolean(true)).unwrap_err())
-        );
-
         assert_eq!(Double(40.0), Double(4.0).mul(&Double(10.0)).unwrap());
 
         assert_eq!(Integer(6), Integer(2).mul(&Integer(3)).unwrap());
@@ -967,20 +798,10 @@ mod tests {
             "Integer overflow",
             format!("{}", Integer(std::i32::MAX).mul(&Integer(2)).unwrap_err())
         );
-
-        assert_eq!(
-            "Cannot multiply \"\" by \"a\"",
-            format!("{}", Text("".to_owned()).mul(&Text("a".to_owned())).unwrap_err())
-        );
     }
 
     #[test]
     fn test_value_div() {
-        assert_eq!(
-            "Cannot divide FALSE by TRUE",
-            format!("{}", Boolean(false).div(&Boolean(true)).unwrap_err())
-        );
-
         assert_eq!(Double(4.0), Double(10.0).div(&Double(2.5)).unwrap());
         assert_eq!(Double(f64::INFINITY), Double(1.0).div(&Double(0.0)).unwrap());
 
@@ -992,20 +813,10 @@ mod tests {
             "Integer underflow",
             format!("{}", Integer(std::i32::MIN).div(&Integer(-1)).unwrap_err())
         );
-
-        assert_eq!(
-            "Cannot divide \"\" by \"a\"",
-            format!("{}", Text("".to_owned()).div(&Text("a".to_owned())).unwrap_err())
-        );
     }
 
     #[test]
     fn test_value_modulo() {
-        assert_eq!(
-            "Cannot modulo FALSE by TRUE",
-            format!("{}", Boolean(false).modulo(&Boolean(true)).unwrap_err())
-        );
-
         assert_eq!(Double(0.0), Double(10.0).modulo(&Double(2.5)).unwrap());
         match Double(1.0).modulo(&Double(0.0)).unwrap() {
             Double(d) => assert!(d.is_nan()),
@@ -1019,20 +830,10 @@ mod tests {
             "Integer underflow",
             format!("{}", Integer(std::i32::MIN).modulo(&Integer(-1)).unwrap_err())
         );
-
-        assert_eq!(
-            "Cannot modulo \"\" by \"a\"",
-            format!("{}", Text("".to_owned()).modulo(&Text("a".to_owned())).unwrap_err())
-        );
     }
 
     #[test]
     fn test_value_power() {
-        assert_eq!(
-            "Cannot raise FALSE to the power of TRUE",
-            format!("{}", Boolean(false).pow(&Boolean(true)).unwrap_err())
-        );
-
         assert_eq!(Double(1.0), Double(0.0).pow(&Double(0.0)).unwrap());
         assert_eq!(Double(2.0f64.powf(3.1)), Double(2.0).pow(&Double(3.1)).unwrap());
 
@@ -1047,23 +848,14 @@ mod tests {
             "Exponent -3 cannot be negative",
             format!("{}", Integer(1).pow(&Integer(-3)).unwrap_err())
         );
-
-        assert_eq!(
-            "Cannot raise \"\" to the power of \"a\"",
-            format!("{}", Text("".to_owned()).pow(&Text("a".to_owned())).unwrap_err())
-        );
     }
 
     #[test]
     fn test_value_neg() {
-        assert_eq!("Cannot negate TRUE", format!("{}", Boolean(true).neg().unwrap_err()));
-
         assert_eq!(Double(-6.12), Double(6.12).neg().unwrap());
         assert_eq!(Double(5.53), Double(-5.53).neg().unwrap());
 
         assert_eq!(Integer(-6), Integer(6).neg().unwrap());
         assert_eq!(Integer(5), Integer(-5).neg().unwrap());
-
-        assert_eq!("Cannot negate \"\"", format!("{}", Text("".to_owned()).neg().unwrap_err()));
     }
 }
