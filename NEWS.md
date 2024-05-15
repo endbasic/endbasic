@@ -30,6 +30,9 @@ for the time being.**
     towards user-supplied functions and the ability to interrupt functions as
     they execute.
 
+*   Changed the way integers with explicit bases are parsed so that they can
+    express integers with their highest bit set.  For bitmasks, this is needed.
+
 ## Changes in version 0.10.0
 
 **Released on 2022-12-27.**

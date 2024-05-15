@@ -374,8 +374,8 @@ impl<'a> Lexer<'a> {
             return self.handle_bad_read("No digits in integer literal", pos);
         }
 
-        match i32::from_str_radix(&s, u32::from(base)) {
-            Ok(i) => Ok(TokenSpan::new(Token::Integer(i), pos, s.len() + prefix_len)),
+        match u32::from_str_radix(&s, u32::from(base)) {
+            Ok(i) => Ok(TokenSpan::new(Token::Integer(i as i32), pos, s.len() + prefix_len)),
             Err(e) => self.handle_bad_read(format!("Bad integer {}: {}", s, e), pos),
         }
     }
@@ -899,6 +899,16 @@ mod tests {
                 ts(Token::Integer(180150000), 1, 55, 10),
                 ts(Token::Integer(1953), 1, 66, 5),
                 ts(Token::Eof, 1, 71, 0),
+            ],
+        );
+
+        do_ok_test(
+            "&b11111111111111111111111111111111 &xf0000000 &xffffffff",
+            &[
+                ts(Token::Integer(-1), 1, 1, 34),
+                ts(Token::Integer(-268435456), 1, 36, 10),
+                ts(Token::Integer(-1), 1, 47, 10),
+                ts(Token::Eof, 1, 57, 0),
             ],
         );
 
