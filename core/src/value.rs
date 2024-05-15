@@ -114,91 +114,8 @@ impl Value {
         }
     }
 
-    /// Performs a logical or bitwise "and" operation.
-    pub fn and(&self, other: &Self) -> Result<Self> {
-        match (self, other) {
-            (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs && *rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs & *rhs)),
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs a logical or bitwise "or" operation.
-    pub fn or(&self, other: &Self) -> Result<Self> {
-        match (self, other) {
-            (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs || *rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs | *rhs)),
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs a logical or bitwise "xor" operation.
-    pub fn xor(&self, other: &Self) -> Result<Self> {
-        match (self, other) {
-            (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(*lhs ^ *rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Integer(*lhs ^ *rhs)),
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs a logical or bitwise "not" operation.
-    pub fn not(&self) -> Result<Self> {
-        match self {
-            Value::Boolean(b) => Ok(Value::Boolean(!b)),
-            Value::Integer(b) => Ok(Value::Integer(!b)),
-            _ => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs a left shift.
-    pub fn shl(&self, other: &Self) -> Result<Self> {
-        match (self, other) {
-            (Value::Integer(lhs), Value::Integer(rhs)) => {
-                let bits = match u32::try_from(*rhs) {
-                    Ok(n) => n,
-                    Err(_) => {
-                        return Err(Error::new(format!(
-                            "Number of bits to << ({}) must be positive",
-                            other
-                        )))
-                    }
-                };
-                match lhs.checked_shl(bits) {
-                    Some(i) => Ok(Value::Integer(i)),
-                    None => Ok(Value::Integer(0)),
-                }
-            }
-
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs a right shift.
-    pub fn shr(&self, other: &Self) -> Result<Self> {
-        match (self, other) {
-            (Value::Integer(lhs), Value::Integer(rhs)) => {
-                let bits = match u32::try_from(*rhs) {
-                    Ok(n) => n,
-                    Err(_) => {
-                        return Err(Error::new(format!(
-                            "Number of bits to >> ({}) must be positive",
-                            other
-                        )))
-                    }
-                };
-                match lhs.checked_shr(bits) {
-                    Some(i) => Ok(Value::Integer(i)),
-                    None if *lhs < 0 => Ok(Value::Integer(-1)),
-                    None => Ok(Value::Integer(0)),
-                }
-            }
-
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
     /// Performs an equality check.
-    pub fn eq(&self, other: &Self) -> Result<Self> {
+    pub fn eq(&self, other: &Self) -> Result<Value> {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(lhs == rhs)),
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs == rhs)),
@@ -210,7 +127,7 @@ impl Value {
     }
 
     /// Performs an inequality check.
-    pub fn ne(&self, other: &Self) -> Result<Self> {
+    pub fn ne(&self, other: &Self) -> Result<Value> {
         match (self, other) {
             (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(lhs != rhs)),
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs != rhs)),
@@ -222,7 +139,7 @@ impl Value {
     }
 
     /// Performs a less-than check.
-    pub fn lt(&self, other: &Self) -> Result<Self> {
+    pub fn lt(&self, other: &Self) -> Result<Value> {
         match (self, other) {
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs < rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs < rhs)),
@@ -233,7 +150,7 @@ impl Value {
     }
 
     /// Performs a less-than or equal-to check.
-    pub fn le(&self, other: &Self) -> Result<Self> {
+    pub fn le(&self, other: &Self) -> Result<Value> {
         match (self, other) {
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
@@ -244,7 +161,7 @@ impl Value {
     }
 
     /// Performs a greater-than check.
-    pub fn gt(&self, other: &Self) -> Result<Self> {
+    pub fn gt(&self, other: &Self) -> Result<Value> {
         match (self, other) {
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs > rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs > rhs)),
@@ -255,7 +172,7 @@ impl Value {
     }
 
     /// Performs a greater-than or equal to check.
-    pub fn ge(&self, other: &Self) -> Result<Self> {
+    pub fn ge(&self, other: &Self) -> Result<Value> {
         match (self, other) {
             (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
             (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
@@ -372,6 +289,111 @@ impl Value {
             },
             _ => unreachable!("Types validated during compilation"),
         }
+    }
+}
+
+/// Performs a logical "and" operation.
+pub(crate) fn logical_and(lhs: Value, rhs: Value) -> Value {
+    match (lhs, rhs) {
+        (Value::Boolean(lhs), Value::Boolean(rhs)) => Value::Boolean(lhs && rhs),
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a logical "or" operation.
+pub(crate) fn logical_or(lhs: Value, rhs: Value) -> Value {
+    match (lhs, rhs) {
+        (Value::Boolean(lhs), Value::Boolean(rhs)) => Value::Boolean(lhs || rhs),
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a logical "xor" operation.
+pub(crate) fn logical_xor(lhs: Value, rhs: Value) -> Value {
+    match (lhs, rhs) {
+        (Value::Boolean(lhs), Value::Boolean(rhs)) => Value::Boolean(lhs ^ rhs),
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a logical "not" operation.
+pub(crate) fn logical_not(value: Value) -> Value {
+    match value {
+        Value::Boolean(b) => Value::Boolean(!b),
+        _ => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a bitwise "and" operation.
+pub(crate) fn bitwise_and(lhs: Value, rhs: Value) -> Value {
+    match (lhs, rhs) {
+        (Value::Integer(lhs), Value::Integer(rhs)) => Value::Integer(lhs & rhs),
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a bitwise "or" operation.
+pub(crate) fn bitwise_or(lhs: Value, rhs: Value) -> Value {
+    match (lhs, rhs) {
+        (Value::Integer(lhs), Value::Integer(rhs)) => Value::Integer(lhs | rhs),
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a bitwise "xor" operation.
+pub(crate) fn bitwise_xor(lhs: Value, rhs: Value) -> Value {
+    match (lhs, rhs) {
+        (Value::Integer(lhs), Value::Integer(rhs)) => Value::Integer(lhs ^ rhs),
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a bitwise "not" operation.
+pub(crate) fn bitwise_not(value: Value) -> Value {
+    match value {
+        Value::Integer(b) => Value::Integer(!b),
+        _ => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a left shift.
+pub(crate) fn bitwise_shl(lhs: Value, rhs: Value) -> Result<Value> {
+    let (lhs, rhs) = match (lhs, rhs) {
+        (Value::Integer(lhs), Value::Integer(rhs)) => (lhs, rhs),
+        (_, _) => unreachable!("Types validated during compilation"),
+    };
+
+    let bits = match u32::try_from(rhs) {
+        Ok(n) => n,
+        Err(_) => {
+            return Err(Error::new(format!("Number of bits to << ({}) must be positive", rhs)))
+        }
+    };
+
+    match lhs.checked_shl(bits) {
+        Some(i) => Ok(Value::Integer(i)),
+        None => Ok(Value::Integer(0)),
+    }
+}
+
+/// Performs a right shift.
+pub(crate) fn bitwise_shr(lhs: Value, rhs: Value) -> Result<Value> {
+    let (lhs, rhs) = match (lhs, rhs) {
+        (Value::Integer(lhs), Value::Integer(rhs)) => (lhs, rhs),
+        (_, _) => unreachable!("Types validated during compilation"),
+    };
+
+    let bits = match u32::try_from(rhs) {
+        Ok(n) => n,
+        Err(_) => {
+            return Err(Error::new(format!("Number of bits to >> ({}) must be positive", rhs)))
+        }
+    };
+
+    match lhs.checked_shr(bits) {
+        Some(i) => Ok(Value::Integer(i)),
+        None if lhs < 0 => Ok(Value::Integer(-1)),
+        None => Ok(Value::Integer(0)),
     }
 }
 
@@ -571,112 +593,112 @@ mod tests {
 
     #[test]
     fn test_value_logical_and() {
-        assert_eq!(Boolean(false), Boolean(false).and(&Boolean(false)).unwrap());
-        assert_eq!(Boolean(false), Boolean(false).and(&Boolean(true)).unwrap());
-        assert_eq!(Boolean(false), Boolean(true).and(&Boolean(false)).unwrap());
-        assert_eq!(Boolean(true), Boolean(true).and(&Boolean(true)).unwrap());
+        assert_eq!(Boolean(false), logical_and(Boolean(false), Boolean(false)));
+        assert_eq!(Boolean(false), logical_and(Boolean(false), Boolean(true)));
+        assert_eq!(Boolean(false), logical_and(Boolean(true), Boolean(false)));
+        assert_eq!(Boolean(true), logical_and(Boolean(true), Boolean(true)));
     }
 
     #[test]
     fn test_value_logical_or() {
-        assert_eq!(Boolean(false), Boolean(false).or(&Boolean(false)).unwrap());
-        assert_eq!(Boolean(true), Boolean(false).or(&Boolean(true)).unwrap());
-        assert_eq!(Boolean(true), Boolean(true).or(&Boolean(false)).unwrap());
-        assert_eq!(Boolean(true), Boolean(true).or(&Boolean(true)).unwrap());
+        assert_eq!(Boolean(false), logical_or(Boolean(false), Boolean(false)));
+        assert_eq!(Boolean(true), logical_or(Boolean(false), Boolean(true)));
+        assert_eq!(Boolean(true), logical_or(Boolean(true), Boolean(false)));
+        assert_eq!(Boolean(true), logical_or(Boolean(true), Boolean(true)));
     }
 
     #[test]
     fn test_value_logical_xor() {
-        assert_eq!(Boolean(false), Boolean(false).xor(&Boolean(false)).unwrap());
-        assert_eq!(Boolean(true), Boolean(false).xor(&Boolean(true)).unwrap());
-        assert_eq!(Boolean(true), Boolean(true).xor(&Boolean(false)).unwrap());
-        assert_eq!(Boolean(false), Boolean(true).xor(&Boolean(true)).unwrap());
+        assert_eq!(Boolean(false), logical_xor(Boolean(false), Boolean(false)));
+        assert_eq!(Boolean(true), logical_xor(Boolean(false), Boolean(true)));
+        assert_eq!(Boolean(true), logical_xor(Boolean(true), Boolean(false)));
+        assert_eq!(Boolean(false), logical_xor(Boolean(true), Boolean(true)));
     }
 
     #[test]
     fn test_value_logical_not() {
-        assert_eq!(Boolean(true), Boolean(false).not().unwrap());
-        assert_eq!(Boolean(false), Boolean(true).not().unwrap());
+        assert_eq!(Boolean(true), logical_not(Boolean(false)));
+        assert_eq!(Boolean(false), logical_not(Boolean(true)));
     }
 
     #[test]
     fn test_value_bitwise_and() {
-        assert_eq!(Integer(5), Integer(7).and(&Integer(5)).unwrap());
-        assert_eq!(Integer(0), Integer(2).and(&Integer(4)).unwrap());
-        assert_eq!(Integer(1234), Integer(-1).and(&Integer(1234)).unwrap());
+        assert_eq!(Integer(5), bitwise_and(Integer(7), Integer(5)));
+        assert_eq!(Integer(0), bitwise_and(Integer(2), Integer(4)));
+        assert_eq!(Integer(1234), bitwise_and(Integer(-1), Integer(1234)));
     }
 
     #[test]
     fn test_value_bitwise_or() {
-        assert_eq!(Integer(7), Integer(7).or(&Integer(5)).unwrap());
-        assert_eq!(Integer(6), Integer(2).or(&Integer(4)).unwrap());
-        assert_eq!(Integer(-1), Integer(-1).or(&Integer(1234)).unwrap());
+        assert_eq!(Integer(7), bitwise_or(Integer(7), Integer(5)));
+        assert_eq!(Integer(6), bitwise_or(Integer(2), Integer(4)));
+        assert_eq!(Integer(-1), bitwise_or(Integer(-1), Integer(1234)));
     }
 
     #[test]
     fn test_value_bitwise_xor() {
-        assert_eq!(Integer(2), Integer(7).xor(&Integer(5)).unwrap());
-        assert_eq!(Integer(6), Integer(2).xor(&Integer(4)).unwrap());
-        assert_eq!(Integer(-1235), Integer(-1).xor(&Integer(1234)).unwrap());
+        assert_eq!(Integer(2), bitwise_xor(Integer(7), Integer(5)));
+        assert_eq!(Integer(6), bitwise_xor(Integer(2), Integer(4)));
+        assert_eq!(Integer(-1235), bitwise_xor(Integer(-1), Integer(1234)));
     }
 
     #[test]
     fn test_value_bitwise_not() {
-        assert_eq!(Integer(-1), Integer(0).not().unwrap());
+        assert_eq!(Integer(-1), bitwise_not(Integer(0)));
     }
 
     #[test]
     fn test_value_shl() {
-        assert_eq!(Integer(12), Integer(3).shl(&Integer(2)).unwrap());
+        assert_eq!(Integer(12), bitwise_shl(Integer(3), Integer(2)).unwrap());
         assert_eq!(
             Integer(0xf0000000u32 as i32),
-            Integer(0xf0000000u32 as i32).shl(&Integer(0)).unwrap()
+            bitwise_shl(Integer(0xf0000000u32 as i32), Integer(0)).unwrap()
         );
-        assert_eq!(Integer(0x80000000u32 as i32), Integer(1).shl(&Integer(31)).unwrap());
-        assert_eq!(Integer(0), Integer(0xf0000000u32 as i32).shl(&Integer(31)).unwrap());
+        assert_eq!(Integer(0x80000000u32 as i32), bitwise_shl(Integer(1), Integer(31)).unwrap());
+        assert_eq!(Integer(0), bitwise_shl(Integer(0xf0000000u32 as i32), Integer(31)).unwrap());
 
         assert_eq!(
             Integer(0xe0000000u32 as i32),
-            Integer(0xf0000000u32 as i32).shl(&Integer(1)).unwrap()
+            bitwise_shl(Integer(0xf0000000u32 as i32), Integer(1)).unwrap()
         );
-        assert_eq!(Integer(0), Integer(0x80000000u32 as i32).shl(&Integer(1)).unwrap());
-        assert_eq!(Integer(0), Integer(1).shl(&Integer(32)).unwrap());
-        assert_eq!(Integer(0), Integer(1).shl(&Integer(64)).unwrap());
+        assert_eq!(Integer(0), bitwise_shl(Integer(0x80000000u32 as i32), Integer(1)).unwrap());
+        assert_eq!(Integer(0), bitwise_shl(Integer(1), Integer(32)).unwrap());
+        assert_eq!(Integer(0), bitwise_shl(Integer(1), Integer(64)).unwrap());
 
         assert_eq!(
             "Number of bits to << (-1) must be positive",
-            format!("{}", Integer(3).shl(&Integer(-1)).unwrap_err())
+            format!("{}", bitwise_shl(Integer(3), Integer(-1)).unwrap_err())
         );
     }
 
     #[test]
     fn test_value_shr() {
-        assert_eq!(Integer(3), Integer(12).shr(&Integer(2)).unwrap());
+        assert_eq!(Integer(3), bitwise_shr(Integer(12), Integer(2)).unwrap());
         assert_eq!(
             Integer(0xf0000000u32 as i32),
-            Integer(0xf0000000u32 as i32).shr(&Integer(0)).unwrap()
+            bitwise_shr(Integer(0xf0000000u32 as i32), Integer(0)).unwrap()
         );
-        assert_eq!(Integer(-1), Integer(0xf0000000u32 as i32).shr(&Integer(31)).unwrap());
-        assert_eq!(Integer(1), Integer(0x70000000u32 as i32).shr(&Integer(30)).unwrap());
-        assert_eq!(Integer(-2), Integer(-8).shr(&Integer(2)).unwrap());
+        assert_eq!(Integer(-1), bitwise_shr(Integer(0xf0000000u32 as i32), Integer(31)).unwrap());
+        assert_eq!(Integer(1), bitwise_shr(Integer(0x70000000u32 as i32), Integer(30)).unwrap());
+        assert_eq!(Integer(-2), bitwise_shr(Integer(-8), Integer(2)).unwrap());
 
         assert_eq!(
             Integer(0xf0000000u32 as i32),
-            Integer(0xe0000000u32 as i32).shr(&Integer(1)).unwrap()
+            bitwise_shr(Integer(0xe0000000u32 as i32), Integer(1)).unwrap()
         );
         assert_eq!(
             Integer(0xc0000000u32 as i32),
-            Integer(0x80000000u32 as i32).shr(&Integer(1)).unwrap()
+            bitwise_shr(Integer(0x80000000u32 as i32), Integer(1)).unwrap()
         );
-        assert_eq!(Integer(0x38000000), Integer(0x70000000).shr(&Integer(1)).unwrap());
-        assert_eq!(Integer(0), Integer(0x70000000u32 as i32).shr(&Integer(32)).unwrap());
-        assert_eq!(Integer(0), Integer(0x70000000u32 as i32).shr(&Integer(32)).unwrap());
-        assert_eq!(Integer(-1), Integer(0x80000000u32 as i32).shr(&Integer(32)).unwrap());
-        assert_eq!(Integer(-1), Integer(0x80000000u32 as i32).shr(&Integer(64)).unwrap());
+        assert_eq!(Integer(0x38000000), bitwise_shr(Integer(0x70000000), Integer(1)).unwrap());
+        assert_eq!(Integer(0), bitwise_shr(Integer(0x70000000u32 as i32), Integer(32)).unwrap());
+        assert_eq!(Integer(0), bitwise_shr(Integer(0x70000000u32 as i32), Integer(32)).unwrap());
+        assert_eq!(Integer(-1), bitwise_shr(Integer(0x80000000u32 as i32), Integer(32)).unwrap());
+        assert_eq!(Integer(-1), bitwise_shr(Integer(0x80000000u32 as i32), Integer(64)).unwrap());
 
         assert_eq!(
             "Number of bits to >> (-1) must be positive",
-            format!("{}", Integer(3).shr(&Integer(-1)).unwrap_err())
+            format!("{}", bitwise_shr(Integer(3), Integer(-1)).unwrap_err())
         );
     }
 

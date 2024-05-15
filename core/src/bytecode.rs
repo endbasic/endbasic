@@ -96,17 +96,29 @@ pub struct UnsetISpan {
 /// Representation of all possible instructions in the bytecode.
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub enum Instruction {
-    /// Represents a binary "and" operation.
-    And(LineCol),
+    /// Represents a binary logical "and" operation.
+    LogicalAnd(LineCol),
 
-    /// Represents a binary "or" operation.
-    Or(LineCol),
+    /// Represents a binary logical "or" operation.
+    LogicalOr(LineCol),
 
-    /// Represents a binary "xor" operation.
-    Xor(LineCol),
+    /// Represents a binary logical "xor" operation.
+    LogicalXor(LineCol),
 
-    /// Represents a unary "nor" operation.
-    Not(LineCol),
+    /// Represents a unary logical "not" operation.
+    LogicalNot(LineCol),
+
+    /// Represents a binary bitwise "and" operation.
+    BitwiseAnd(LineCol),
+
+    /// Represents a binary bitwise "or" operation.
+    BitwiseOr(LineCol),
+
+    /// Represents a binary bitwise "xor" operation.
+    BitwiseXor(LineCol),
+
+    /// Represents a unary bitwise "not" operation.
+    BitwiseNot(LineCol),
 
     /// Represents a left bitshift.
     ShiftLeft(LineCol),
@@ -227,11 +239,15 @@ pub enum Instruction {
 impl Instruction {
     pub(crate) fn is_statement(&self) -> bool {
         match self {
-            Instruction::And(_)
+            Instruction::LogicalAnd(_)
+            | Instruction::LogicalOr(_)
+            | Instruction::LogicalXor(_)
+            | Instruction::LogicalNot(_)
+            | Instruction::BitwiseAnd(_)
+            | Instruction::BitwiseOr(_)
+            | Instruction::BitwiseXor(_)
+            | Instruction::BitwiseNot(_)
             | Instruction::ArrayLoad(_, _, _)
-            | Instruction::Or(_)
-            | Instruction::Xor(_)
-            | Instruction::Not(_)
             | Instruction::ShiftLeft(_)
             | Instruction::ShiftRight(_)
             | Instruction::Equal(_)

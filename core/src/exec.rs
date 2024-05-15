@@ -492,6 +492,16 @@ impl Machine {
         Ok(())
     }
 
+    /// Handles a unary operator that cannot fail.
+    fn exec_unary_op_cannot_fail<F: Fn(Value) -> Value>(
+        context: &mut Context,
+        op: F,
+        pos: LineCol,
+    ) {
+        let (value, _pos) = context.value_stack.pop().unwrap();
+        context.value_stack.push((op(value), pos));
+    }
+
     /// Handles a binary operator that is part of an expression.
     fn exec_binary_op<F: Fn(&Value, &Value) -> value::Result<Value>>(
         context: &mut Context,
@@ -503,6 +513,30 @@ impl Machine {
         let result = op(&lhs, &rhs).map_err(|e| Error::from_value_error(e, pos))?;
         context.value_stack.push((result, pos));
         Ok(())
+    }
+
+    /// Handles a binary operator that can fail.
+    fn exec_binary_op_can_fail<F: Fn(Value, Value) -> value::Result<Value>>(
+        context: &mut Context,
+        op: F,
+        pos: LineCol,
+    ) -> Result<()> {
+        let (rhs, _pos) = context.value_stack.pop().unwrap();
+        let (lhs, _pos) = context.value_stack.pop().unwrap();
+        let result = op(lhs, rhs).map_err(|e| Error::from_value_error(e, pos))?;
+        context.value_stack.push((result, pos));
+        Ok(())
+    }
+
+    /// Handles a binary operator that cannot fail.
+    fn exec_binary_op_cannot_fail<F: Fn(Value, Value) -> Value>(
+        context: &mut Context,
+        op: F,
+        pos: LineCol,
+    ) {
+        let (rhs, _pos) = context.value_stack.pop().unwrap();
+        let (lhs, _pos) = context.value_stack.pop().unwrap();
+        context.value_stack.push((op(lhs, rhs), pos));
     }
 
     /// Evaluates the subscripts of an array reference.
@@ -649,33 +683,53 @@ impl Machine {
     async fn exec_safe(&mut self, context: &mut Context, instrs: &[Instruction]) -> Result<()> {
         let instr = &instrs[context.pc];
         match instr {
-            Instruction::And(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.and(rhs), *pos)?;
+            Instruction::LogicalAnd(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::logical_and, *pos);
                 context.pc += 1;
             }
 
-            Instruction::Or(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.or(rhs), *pos)?;
+            Instruction::LogicalOr(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::logical_or, *pos);
                 context.pc += 1;
             }
 
-            Instruction::Xor(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.xor(rhs), *pos)?;
+            Instruction::LogicalXor(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::logical_xor, *pos);
                 context.pc += 1;
             }
 
-            Instruction::Not(pos) => {
-                Machine::exec_unary_op(context, |value| value.not(), *pos)?;
+            Instruction::LogicalNot(pos) => {
+                Machine::exec_unary_op_cannot_fail(context, value::logical_not, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::BitwiseAnd(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::bitwise_and, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::BitwiseOr(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::bitwise_or, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::BitwiseXor(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::bitwise_xor, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::BitwiseNot(pos) => {
+                Machine::exec_unary_op_cannot_fail(context, value::bitwise_not, *pos);
                 context.pc += 1;
             }
 
             Instruction::ShiftLeft(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.shl(rhs), *pos)?;
+                Machine::exec_binary_op_can_fail(context, value::bitwise_shl, *pos)?;
                 context.pc += 1;
             }
 
             Instruction::ShiftRight(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.shr(rhs), *pos)?;
+                Machine::exec_binary_op_can_fail(context, value::bitwise_shr, *pos)?;
                 context.pc += 1;
             }
 

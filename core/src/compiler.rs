@@ -749,13 +749,16 @@ impl Compiler {
     fn compile_not_op(&mut self, span: UnaryOpSpan) -> Result<ExprType> {
         let expr_type = self.compile_expr(span.expr, false)?;
         match expr_type {
-            ExprType::Boolean | ExprType::Integer => (),
-            _ => {
-                return Err(Error::new(span.pos, format!("Cannot apply NOT to {}", expr_type)));
+            ExprType::Boolean => {
+                self.emit(Instruction::LogicalNot(span.pos));
+                Ok(ExprType::Boolean)
             }
-        };
-        self.emit(Instruction::Not(span.pos));
-        Ok(expr_type)
+            ExprType::Integer => {
+                self.emit(Instruction::BitwiseNot(span.pos));
+                Ok(ExprType::Integer)
+            }
+            _ => Err(Error::new(span.pos, format!("Cannot apply NOT to {}", expr_type))),
+        }
     }
 
     /// Compiles a negate operator and appends its instructions to the compilation context.
@@ -772,27 +775,29 @@ impl Compiler {
     }
 
     /// Compiles a logical binary operator and appends its instructions to the compilation context.
-    fn compile_logical_binary_op<F: Fn(LineCol) -> Instruction>(
+    fn compile_logical_binary_op<F1: Fn(LineCol) -> Instruction, F2: Fn(LineCol) -> Instruction>(
         &mut self,
-        make_inst: F,
+        logical_make_inst: F1,
+        bitwise_make_inst: F2,
         span: BinaryOpSpan,
         op_name: &str,
     ) -> Result<ExprType> {
         let lhs_type = self.compile_expr(span.lhs, false)?;
         let rhs_type = self.compile_expr(span.rhs, false)?;
-        let result = match (lhs_type, rhs_type) {
-            (ExprType::Boolean, ExprType::Boolean) => ExprType::Boolean,
-            (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
-            (_, _) => {
-                return Err(Error::new(
-                    span.pos,
-                    format!("Cannot {} {} and {}", op_name, lhs_type, rhs_type),
-                ));
+        match (lhs_type, rhs_type) {
+            (ExprType::Boolean, ExprType::Boolean) => {
+                self.emit(logical_make_inst(span.pos));
+                Ok(ExprType::Boolean)
             }
-        };
-
-        self.emit(make_inst(span.pos));
-        Ok(result)
+            (ExprType::Integer, ExprType::Integer) => {
+                self.emit(bitwise_make_inst(span.pos));
+                Ok(ExprType::Integer)
+            }
+            (_, _) => Err(Error::new(
+                span.pos,
+                format!("Cannot {} {} and {}", op_name, lhs_type, rhs_type),
+            )),
+        }
     }
 
     /// Compiles a logical or bitwise binary operator and appends its instructions to the
@@ -1142,11 +1147,26 @@ impl Compiler {
                 }
             }
 
-            Expr::And(span) => self.compile_logical_binary_op(Instruction::And, *span, "AND"),
+            Expr::And(span) => self.compile_logical_binary_op(
+                Instruction::LogicalAnd,
+                Instruction::BitwiseAnd,
+                *span,
+                "AND",
+            ),
 
-            Expr::Or(span) => self.compile_logical_binary_op(Instruction::Or, *span, "OR"),
+            Expr::Or(span) => self.compile_logical_binary_op(
+                Instruction::LogicalOr,
+                Instruction::BitwiseOr,
+                *span,
+                "OR",
+            ),
 
-            Expr::Xor(span) => self.compile_logical_binary_op(Instruction::Xor, *span, "XOR"),
+            Expr::Xor(span) => self.compile_logical_binary_op(
+                Instruction::LogicalXor,
+                Instruction::BitwiseXor,
+                *span,
+                "XOR",
+            ),
 
             Expr::Not(span) => self.compile_not_op(*span),
 
@@ -2370,12 +2390,12 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 5)))
             .expect_instr(1, Instruction::Load(SymbolKey::from("x"), lc(1, 13)))
-            .expect_instr(2, Instruction::Or(lc(1, 10)))
+            .expect_instr(2, Instruction::LogicalOr(lc(1, 10)))
             .expect_instr(3, Instruction::Load(SymbolKey::from("y"), lc(1, 19)))
-            .expect_instr(4, Instruction::And(lc(1, 15)))
+            .expect_instr(4, Instruction::LogicalAnd(lc(1, 15)))
             .expect_instr(5, Instruction::Load(SymbolKey::from("z"), lc(1, 29)))
-            .expect_instr(6, Instruction::Not(lc(1, 25)))
-            .expect_instr(7, Instruction::Xor(lc(1, 21)))
+            .expect_instr(6, Instruction::LogicalNot(lc(1, 25)))
+            .expect_instr(7, Instruction::LogicalXor(lc(1, 21)))
             .expect_instr(8, Instruction::Assign(SymbolKey::from("b")))
             .check();
     }
@@ -2938,7 +2958,7 @@ mod tests {
                 Instruction::Load(SymbolKey::from("0select1"), lc(2, 6)),
                 Instruction::Push(Value::Integer(2), lc(2, 11)),
                 Instruction::LessEqual(lc(2, 11)),
-                Instruction::And(lc(2, 6)),
+                Instruction::LogicalAnd(lc(2, 6)),
             ],
         );
     }
@@ -2954,7 +2974,7 @@ mod tests {
                 Instruction::Load(SymbolKey::from("0select1"), lc(2, 15)),
                 Instruction::Push(Value::Integer(8), lc(2, 15)),
                 Instruction::Equal(lc(2, 15)),
-                Instruction::Or(lc(2, 12)),
+                Instruction::LogicalOr(lc(2, 12)),
             ],
         );
     }
