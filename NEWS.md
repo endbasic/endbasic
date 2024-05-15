@@ -44,6 +44,12 @@ for the time being.**
     variables) are now caught during the compilation stage.  This means that bad
     programs abort earlier instead of half-way during execution.
 
+*   Reverted integer-only operations to *not* perform automatic upgrades to
+    doubles on underflows, overflows, and other error conditions.  This behavior
+    was previously added in 0.10.0 but it's now problematic that we do type
+    propagation during compilation as it pushes too much responsibility to the
+    runtime.
+
 ## Changes in version 0.10.0
 
 **Released on 2022-12-27.**
