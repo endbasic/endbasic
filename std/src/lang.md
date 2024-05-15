@@ -38,7 +38,7 @@ EndBASIC supports the following primitive types:
 
 *   `%`: INTEGER
     *   32-bit signed integers.
-    *   Literal values can be specified in binary (`b`), decimal (`d`), octal (`o`) and hexadecimal (`h`) bases.
+    *   Literal values can be specified in binary (`b`), decimal (`d`), octal (`o`) and hexadecimal (`x`) bases.
     *   Literal values have the form 123, &d123, or &d_123, where `d` specifies the base.
 
 *   `$`: STRING
