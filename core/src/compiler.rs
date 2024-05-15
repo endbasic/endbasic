@@ -839,6 +839,53 @@ impl Compiler {
         Ok(ExprType::Boolean)
     }
 
+    /// Compiles a logical or bitwise binary operator and appends its instructions to the
+    /// compilation context.
+    fn compile_relational_binary_op<F: Fn(LineCol) -> Instruction>(
+        &mut self,
+        make_inst: F,
+        span: BinaryOpSpan,
+        op_name: &str,
+    ) -> Result<ExprType> {
+        let lhs_type = self.compile_expr(span.lhs, false)?;
+        let pc = self.next_pc;
+        self.emit(Instruction::Nop);
+
+        let mut keep_nop = false;
+        let rhs_type = self.compile_expr(span.rhs, false)?;
+        match (lhs_type, rhs_type) {
+            // Boolean is explicitly excluded here.
+            (ExprType::Double, ExprType::Double) => (),
+            (ExprType::Integer, ExprType::Integer) => (),
+            (ExprType::Text, ExprType::Text) => (),
+
+            (ExprType::Double, ExprType::Integer) => {
+                self.emit(Instruction::IntegerToDouble);
+            }
+
+            (ExprType::Integer, ExprType::Double) => {
+                self.instrs[pc] = Instruction::IntegerToDouble;
+                keep_nop = true;
+            }
+
+            (_, _) => {
+                return Err(Error::new(
+                    span.pos,
+                    format!("Cannot compare {} and {} with {}", lhs_type, rhs_type, op_name),
+                ));
+            }
+        };
+
+        if !keep_nop {
+            self.instrs.remove(pc);
+            self.next_pc -= 1;
+        }
+
+        self.emit(make_inst(span.pos));
+
+        Ok(ExprType::Boolean)
+    }
+
     /// Compiles a binary shift operator and appends its instructions to the compilation context.
     fn compile_shift_binary_op<F: Fn(LineCol) -> Instruction>(
         &mut self,
@@ -893,9 +940,9 @@ impl Compiler {
         let mut keep_nop = false;
         let rhs_type = self.compile_expr(span.rhs, false)?;
         let result = match (lhs_type, rhs_type) {
-            (ExprType::Text, ExprType::Text) => ExprType::Text,
             (ExprType::Double, ExprType::Double) => ExprType::Double,
             (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
+            (ExprType::Text, ExprType::Text) if op_name == "+" => ExprType::Text,
 
             (ExprType::Double, ExprType::Integer) => {
                 self.emit(Instruction::IntegerToDouble);
@@ -1128,27 +1175,27 @@ impl Compiler {
             }
 
             Expr::Less(span) => {
-                let result = self.compile_equality_binary_op(Instruction::Less, *span, "<")?;
+                let result = self.compile_relational_binary_op(Instruction::Less, *span, "<")?;
                 debug_assert_eq!(ExprType::Boolean, result);
                 Ok(result)
             }
 
             Expr::LessEqual(span) => {
                 let result =
-                    self.compile_equality_binary_op(Instruction::LessEqual, *span, "<=")?;
+                    self.compile_relational_binary_op(Instruction::LessEqual, *span, "<=")?;
                 debug_assert_eq!(ExprType::Boolean, result);
                 Ok(result)
             }
 
             Expr::Greater(span) => {
-                let result = self.compile_equality_binary_op(Instruction::Greater, *span, ">")?;
+                let result = self.compile_relational_binary_op(Instruction::Greater, *span, ">")?;
                 debug_assert_eq!(ExprType::Boolean, result);
                 Ok(result)
             }
 
             Expr::GreaterEqual(span) => {
                 let result =
-                    self.compile_equality_binary_op(Instruction::GreaterEqual, *span, ">=")?;
+                    self.compile_relational_binary_op(Instruction::GreaterEqual, *span, ">=")?;
                 debug_assert_eq!(ExprType::Boolean, result);
                 Ok(result)
             }
