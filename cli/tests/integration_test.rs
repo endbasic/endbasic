@@ -485,6 +485,18 @@ fn test_lang_matrix() {
 }
 
 #[test]
+fn test_lang_operators() {
+    check(
+        bin_path("endbasic"),
+        &["--local-drive=memory://"],
+        0,
+        Behavior::File(src_path("cli/tests/lang/operators.in")),
+        Behavior::File(src_path("cli/tests/lang/operators.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_lang_parser_error() {
     check(
         bin_path("endbasic"),

@@ -1,0 +1,368 @@
+' EndBASIC
+' Copyright 2020 Julio Merino
+'
+' Licensed under the Apache License, Version 2.0 (the "License"); you may not
+' use this file except in compliance with the License.  You may obtain a copy
+' of the License at:
+'
+'     http://www.apache.org/licenses/LICENSE-2.0
+'
+' Unless required by applicable law or agreed to in writing, software
+' distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+' WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+' License for the specific language governing permissions and limitations
+' under the License.
+
+' Tests for operators.
+'
+' This is must be run through the REPL (as opposed to running as a script)
+' because the statements below may trigger compilation errors and abort
+' execution right away.  The REPL compiles each statement separately so it
+' can print those errors.
+
+' TODO(jmmv): Replace with CONST once implemented and allow representing
+' i32's min value as a literal value.
+INT_MAX = 2147483647
+INT_MIN = -2147483647 - 1
+
+PRINT ">>> Test logical AND"
+
+PRINT FALSE AND FALSE
+PRINT FALSE AND TRUE
+PRINT TRUE AND FALSE
+PRINT TRUE AND TRUE
+
+PRINT TRUE AND 5
+
+PRINT ">>> Test logical OR"
+
+PRINT FALSE OR FALSE
+PRINT FALSE OR TRUE
+PRINT TRUE OR FALSE
+PRINT TRUE OR TRUE
+
+PRINT TRUE OR 5
+
+PRINT ">>> Test logical XOR"
+
+PRINT FALSE XOR FALSE
+PRINT FALSE XOR TRUE
+PRINT TRUE XOR FALSE
+PRINT TRUE XOR TRUE
+
+PRINT TRUE XOR 5
+
+PRINT ">>> Test logical NOT"
+
+PRINT NOT FALSE
+PRINT NOT TRUE
+
+PRINT ">>> Test bitwise AND"
+
+PRINT 7 AND 5
+PRINT 2 AND 4
+PRINT -1 AND 1234
+
+PRINT 3.0 AND 4.0
+
+PRINT ">>> Test bitwise OR"
+
+PRINT 7 OR 5
+PRINT 2 OR 4
+PRINT -1 OR 1234
+
+PRINT 3.0 OR 4.0
+
+PRINT ">>> Test bitwise XOR"
+
+PRINT 7 XOR 5
+PRINT 2 XOR 4
+PRINT -1 XOR 1234
+
+PRINT 3.0 XOR 4.0
+
+PRINT ">>> Test bitwise NOT"
+
+PRINT NOT 0
+
+PRINT NOT 3.0
+
+PRINT ">>> Test bitwise shift left"
+
+PRINT 3 << 2
+PRINT &x_f0000000 << 0
+PRINT 1 << 31
+PRINT &x_f0000000 << 31
+
+PRINT &x_f0000000 << 1
+PRINT &x_80000000 << 1
+PRINT 1 << 32
+PRINT 1 << 64
+
+PRINT FALSE << TRUE
+PRINT FALSE << 8
+PRINT 3.0 << 8
+PRINT "foo" << 8
+
+PRINT 3 << TRUE
+PRINT 3 << 4.0
+
+PRINT 3 << -1
+
+PRINT ">>> Test bitwise shift right"
+
+PRINT 12 >> 2
+PRINT &x_f0000000 >> 0
+PRINT &x_f0000000 >> 31
+PRINT &x_70000000 >> 30
+PRINT -8 >> 2
+
+PRINT &x_e0000000 >> 1
+PRINT &x_80000000 >> 1
+PRINT &x_70000000 >> 1
+PRINT &x_70000000 >> 32
+PRINT &x_70000000 >> 32
+PRINT &x_80000000 >> 32
+PRINT &x_80000000 >> 64
+
+PRINT FALSE >> TRUE
+PRINT FALSE >> 8
+PRINT 3.0 >> 8
+PRINT "foo" >> 8
+
+PRINT 3 >> TRUE
+PRINT 3 >> 4.0
+
+PRINT 3 >> -1
+
+PRINT ">>> Test = types"
+
+PRINT FALSE = FALSE
+PRINT TRUE = FALSE
+PRINT TRUE = 5
+
+PRINT 2.5 = 2.5
+PRINT 3.5 = 3.6
+PRINT 4.0 = 4
+PRINT 1.2 = 1
+
+PRINT 2 = 2
+PRINT 3 = 4
+PRINT 4 = 4.0
+PRINT 1 = 1.2
+
+PRINT "a" = "a"
+PRINT "b" = "c"
+PRINT "" = FALSE
+
+PRINT ">>> Test <> types"
+
+PRINT FALSE <> FALSE
+PRINT TRUE <> FALSE
+PRINT TRUE <> 5
+
+PRINT 2.5 <> 2.5
+PRINT 3.5 <> 3.6
+PRINT 4.0 <> 4
+PRINT 1.2 <> 1
+
+PRINT 2 <> 2
+PRINT 3 <> 4
+PRINT 4 <> 4.0
+PRINT 4 <> 4.2
+
+PRINT "a" <> "a"
+PRINT "b" <> "c"
+PRINT "" <> FALSE
+
+PRINT ">>> Test < types"
+
+PRINT FALSE < TRUE
+
+PRINT 2.5 < 2.5
+PRINT 3.5 < 3.6
+PRINT 4.0 < 1
+PRINT 4.0 < 4
+PRINT 4.9 < 5
+
+PRINT 2 < 2
+PRINT 3 < 4
+PRINT 4 < 3.9
+PRINT 4 < 4.0
+PRINT 4 < 4.1
+
+PRINT "a" < "a"
+PRINT "b" < "c"
+PRINT "" < FALSE
+
+PRINT ">>> Test <= types"
+
+PRINT FALSE < TRUE
+
+PRINT 2.1 <= 2.0
+PRINT 2.1 <= 2.1
+PRINT 2.1 <= 2.2
+PRINT 3.1 <= 3
+PRINT 3.9 <= 4
+PRINT 4.0 <= 4
+
+PRINT 2 <= 1
+PRINT 2 <= 2
+PRINT 2 <= 3
+PRINT 4 <= 3.9
+PRINT 4 <= 4.0
+PRINT 4 <= 4.1
+
+PRINT "b" <= "a"
+PRINT "a" <= "a"
+PRINT "a" <= "c"
+PRINT "" <= FALSE
+
+PRINT ">>> Test > types"
+
+PRINT FALSE > TRUE
+
+PRINT 2.1 > 2.1
+PRINT 4.1 > 4.0
+PRINT 3.9 > 4
+PRINT 4.0 > 4
+PRINT 4.1 > 4
+
+PRINT 2 > 2
+PRINT 4 > 3
+PRINT 4 > 4.0
+PRINT 4 > 4.1
+PRINT 4 > 3.9
+
+PRINT "a" > "a"
+PRINT "c" > "a"
+PRINT "" > FALSE
+
+PRINT ">>> Test >= types"
+
+PRINT FALSE > TRUE
+
+PRINT 2.0 >= 2.1
+PRINT 2.1 >= 2.1
+PRINT 2.2 >= 2.1
+PRINT 3.9 >= 4
+PRINT 4.0 >= 4
+PRINT 4.1 >= 4
+
+PRINT 1 >= 2
+PRINT 2 >= 2
+PRINT 4 >= 3
+PRINT 4 >= 4.1
+PRINT 4 >= 4.0
+PRINT 4 >= 3.9
+
+PRINT "" >= "b"
+PRINT "a" >= "a"
+PRINT "c" >= "a"
+PRINT "" >= FALSE
+
+PRINT ">>> Test + types"
+
+PRINT FALSE + TRUE
+
+PRINT 2.1 + 5.0
+PRINT 4.5 + 5
+
+PRINT 2 + 3
+PRINT INT_MAX + 0
+PRINT INT_MAX + 1
+PRINT 4 + 5.3
+
+PRINT "a" + "b"
+PRINT "" + FALSE
+
+PRINT ">>> Test - types"
+
+PRINT FALSE - TRUE
+
+PRINT 2.5 - 3.5
+PRINT 3.5 - 5
+
+PRINT 2 - 3
+PRINT INT_MIN - 0
+PRINT INT_MIN - 1
+PRINT 4 - 5.5
+
+PRINT "ab" - "a"
+
+PRINT ">>> Test * types"
+
+PRINT FALSE * TRUE
+
+PRINT 4.0 * 10.0
+PRINT 4.1 * 5
+
+PRINT 2 * 3
+PRINT INT_MAX * 1
+PRINT INT_MAX * 2
+PRINT 4 * 5.2
+
+PRINT "" * "a"
+
+PRINT ">>> Test / types"
+
+PRINT FALSE / TRUE
+
+PRINT 10.0 / 2.5
+PRINT 1.0 / 0.0
+PRINT 10.2 / 2
+
+PRINT 10 / 5
+PRINT 20 / 3
+PRINT INT_MIN / 1
+PRINT 4 / 0
+PRINT INT_MIN / -1
+PRINT 10 / 2.5
+
+PRINT "" / "a"
+
+PRINT ">>> Test MOD types"
+
+PRINT FALSE MOD TRUE
+
+PRINT 10.0 MOD 2.5
+PRINT 1.0 MOD 0.0
+PRINT 10.3 MOD 2
+
+PRINT 10 MOD 5
+PRINT 20 MOD 3
+PRINT 4 MOD 0
+PRINT INT_MIN MOD -1
+PRINT 10 MOD 3.0
+
+PRINT "" MOD "a"
+
+PRINT ">>> Test ^ types"
+
+PRINT FALSE ^ TRUE
+
+PRINT 0.0 ^ 0.0
+PRINT 2.0 ^ 3.1
+PRINT 4.0 ^ 5
+
+PRINT 0 ^ 0
+PRINT 3 ^ 2
+PRINT INT_MAX ^ 1
+PRINT INT_MAX ^ 2
+PRINT 1 ^ -3
+PRINT 4 ^ 5.0
+
+PRINT "" ^ "a"
+
+PRINT ">>> Test unary - types"
+
+PRINT -TRUE
+
+PRINT -6.12
+PRINT -(-5.53)
+
+PRINT -6
+PRINT -(-5)
+PRINT -INT_MIN
+
+PRINT -""
