@@ -1,0 +1,249 @@
+
+    EndBASIC X.Y.Z
+    Copyright YYYY-YYYY Julio Merino
+
+    Type HELP for interactive usage information.
+
+>>> Test logical AND
+FALSE
+FALSE
+FALSE
+TRUE
+ERROR: 1:12: Cannot AND TRUE and 5
+>>> Test logical OR
+FALSE
+TRUE
+TRUE
+TRUE
+ERROR: 1:12: Cannot OR TRUE and 5
+>>> Test logical XOR
+FALSE
+TRUE
+TRUE
+FALSE
+ERROR: 1:12: Cannot XOR TRUE and 5
+>>> Test logical NOT
+TRUE
+FALSE
+>>> Test bitwise AND
+ 5
+ 0
+ 1234
+ERROR: 1:11: Cannot AND 3.0 and 4.0
+>>> Test bitwise OR
+ 7
+ 6
+-1
+ERROR: 1:11: Cannot OR 3.0 and 4.0
+>>> Test bitwise XOR
+ 2
+ 6
+-1235
+ERROR: 1:11: Cannot XOR 3.0 and 4.0
+>>> Test bitwise NOT
+-1
+ERROR: 1:7: Cannot apply NOT to 3.0
+>>> Test bitwise shift left
+ 12
+-268435456
+-2147483648
+ 0
+-536870912
+ 0
+ 0
+ 0
+ERROR: 1:13: Cannot apply << to non-integer FALSE
+ERROR: 1:13: Cannot apply << to non-integer FALSE
+ERROR: 1:11: Cannot apply << to non-integer 3.0
+ERROR: 1:13: Cannot apply << to non-integer "foo"
+ERROR: 1:9: Number of bits to << (TRUE) must be an integer
+ERROR: 1:9: Number of bits to << (4.0) must be an integer
+ERROR: 1:9: Number of bits to << (-1) must be positive
+>>> Test bitwise shift right
+ 3
+-268435456
+-1
+ 1
+-2
+-268435456
+-1073741824
+ 939524096
+ 0
+ 0
+-1
+-1
+ERROR: 1:13: Cannot apply >> to non-integer FALSE
+ERROR: 1:13: Cannot apply >> to non-integer FALSE
+ERROR: 1:11: Cannot apply >> to non-integer 3.0
+ERROR: 1:13: Cannot apply >> to non-integer "foo"
+ERROR: 1:9: Number of bits to >> (TRUE) must be an integer
+ERROR: 1:9: Number of bits to >> (4.0) must be an integer
+ERROR: 1:9: Number of bits to >> (-1) must be positive
+>>> Test = types
+TRUE
+FALSE
+ERROR: 1:12: Cannot compare TRUE and 5 with =
+TRUE
+FALSE
+TRUE
+FALSE
+TRUE
+FALSE
+TRUE
+FALSE
+TRUE
+FALSE
+ERROR: 1:10: Cannot compare "" and FALSE with =
+>>> Test <> types
+FALSE
+TRUE
+ERROR: 1:12: Cannot compare TRUE and 5 with <>
+FALSE
+TRUE
+FALSE
+TRUE
+FALSE
+TRUE
+FALSE
+TRUE
+FALSE
+TRUE
+ERROR: 1:10: Cannot compare "" and FALSE with <>
+>>> Test < types
+ERROR: 1:13: Cannot compare FALSE and TRUE with <
+FALSE
+TRUE
+FALSE
+FALSE
+TRUE
+FALSE
+TRUE
+FALSE
+FALSE
+TRUE
+FALSE
+TRUE
+ERROR: 1:10: Cannot compare "" and FALSE with <
+>>> Test <= types
+ERROR: 1:13: Cannot compare FALSE and TRUE with <
+FALSE
+TRUE
+TRUE
+FALSE
+TRUE
+TRUE
+FALSE
+TRUE
+TRUE
+FALSE
+TRUE
+TRUE
+FALSE
+TRUE
+TRUE
+ERROR: 1:10: Cannot compare "" and FALSE with <=
+>>> Test > types
+ERROR: 1:13: Cannot compare FALSE and TRUE with >
+FALSE
+TRUE
+FALSE
+FALSE
+TRUE
+FALSE
+TRUE
+FALSE
+FALSE
+TRUE
+FALSE
+TRUE
+ERROR: 1:10: Cannot compare "" and FALSE with >
+>>> Test >= types
+ERROR: 1:13: Cannot compare FALSE and TRUE with >
+FALSE
+TRUE
+TRUE
+FALSE
+TRUE
+TRUE
+FALSE
+TRUE
+TRUE
+FALSE
+TRUE
+TRUE
+FALSE
+TRUE
+TRUE
+ERROR: 1:10: Cannot compare "" and FALSE with >=
+>>> Test + types
+ERROR: 1:13: Cannot add FALSE and TRUE
+ 7.1
+ 9.5
+ 5
+ 2147483647
+ 2147483648
+ 9.3
+ab
+ERROR: 1:10: Cannot add "" and FALSE
+>>> Test - types
+ERROR: 1:13: Cannot subtract TRUE from FALSE
+-1
+-1.5
+-1
+-2147483648
+-2147483649
+-1.5
+ERROR: 1:12: Cannot subtract "a" from "ab"
+>>> Test * types
+ERROR: 1:13: Cannot multiply FALSE by TRUE
+ 40
+ 20.5
+ 6
+ 2147483647
+ 4294967294
+ 20.8
+ERROR: 1:10: Cannot multiply "" by "a"
+>>> Test / types
+ERROR: 1:13: Cannot divide FALSE by TRUE
+ 4
+ inf
+ 5.1
+ 2
+ 6
+-2147483648
+ERROR: 1:9: Division by zero
+ 2147483648
+ 4
+ERROR: 1:10: Cannot divide "" by "a"
+>>> Test MOD types
+ERROR: 1:13: Cannot modulo FALSE by TRUE
+ 0
+ NaN
+ 0.3000000000000007
+ 0
+ 2
+ERROR: 1:9: Modulo by zero
+-0
+ 1
+ERROR: 1:10: Cannot modulo "" by "a"
+>>> Test ^ types
+ERROR: 1:13: Cannot raise FALSE to the power of TRUE
+ 1
+ 8.574187700290345
+ 1024
+ 1
+ 9
+ 2147483647
+ 4611686014132420600
+ 1
+ 1024
+ERROR: 1:10: Cannot raise "" to the power of "a"
+>>> Test unary - types
+ERROR: 1:7: Cannot negate TRUE
+-6.12
+ 5.53
+-6
+ 5
+ 2147483648
+ERROR: 1:7: Cannot negate ""
+End of input by CTRL-D
