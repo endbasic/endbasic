@@ -16,6 +16,7 @@
 //! Operations on EndBASIC values.
 
 use crate::ast::*;
+use paste::paste;
 use std::convert::TryFrom;
 
 /// Evaluation errors.
@@ -111,74 +112,6 @@ impl Value {
             (VarType::Integer, d @ Value::Double(_)) => Ok(Value::Integer(d.as_i32()?)),
             (VarType::Double, i @ Value::Integer(_)) => Ok(Value::Double(i.as_f64()?)),
             (_, v) => Ok(v),
-        }
-    }
-
-    /// Performs an equality check.
-    pub fn eq(&self, other: &Self) -> Result<Value> {
-        match (self, other) {
-            (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(lhs == rhs)),
-            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs == rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs == rhs)),
-            (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs == rhs)),
-
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs an inequality check.
-    pub fn ne(&self, other: &Self) -> Result<Value> {
-        match (self, other) {
-            (Value::Boolean(lhs), Value::Boolean(rhs)) => Ok(Value::Boolean(lhs != rhs)),
-            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs != rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs != rhs)),
-            (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs != rhs)),
-
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs a less-than check.
-    pub fn lt(&self, other: &Self) -> Result<Value> {
-        match (self, other) {
-            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs < rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs < rhs)),
-            (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs < rhs)),
-
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs a less-than or equal-to check.
-    pub fn le(&self, other: &Self) -> Result<Value> {
-        match (self, other) {
-            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
-            (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs <= rhs)),
-
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs a greater-than check.
-    pub fn gt(&self, other: &Self) -> Result<Value> {
-        match (self, other) {
-            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs > rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs > rhs)),
-            (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs > rhs)),
-
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs a greater-than or equal to check.
-    pub fn ge(&self, other: &Self) -> Result<Value> {
-        match (self, other) {
-            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
-            (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Boolean(lhs >= rhs)),
-
-            (_, _) => unreachable!("Types validated during compilation"),
         }
     }
 
@@ -396,6 +329,75 @@ pub(crate) fn bitwise_shr(lhs: Value, rhs: Value) -> Result<Value> {
         None => Ok(Value::Integer(0)),
     }
 }
+
+macro_rules! equality_ops {
+    ( $name:ident, $vtype:expr ) => {
+        paste! {
+            /// Performs an equality check.
+            pub(crate) fn [< eq_ $name >](lhs: Value, rhs: Value) -> Value {
+                match (lhs, rhs) {
+                    ($vtype(lhs), $vtype(rhs)) => Value::Boolean(lhs == rhs),
+                    (_, _) => unreachable!("Types validated during compilation"),
+                }
+            }
+
+            /// Performs an inequality check.
+            pub(crate) fn [< ne_ $name >](lhs: Value, rhs: Value) -> Value {
+                match (lhs, rhs) {
+                    ($vtype(lhs), $vtype(rhs)) => Value::Boolean(lhs != rhs),
+                    (_, _) => unreachable!("Types validated during compilation"),
+                }
+            }
+        }
+    };
+}
+
+equality_ops!(boolean, Value::Boolean);
+equality_ops!(double, Value::Double);
+equality_ops!(integer, Value::Integer);
+equality_ops!(text, Value::Text);
+
+macro_rules! relational_ops {
+    ( $name:ident, $vtype:expr ) => {
+        paste! {
+            /// Performs an equality check.
+            pub(crate) fn [< lt_ $name >](lhs: Value, rhs: Value) -> Value {
+                match (lhs, rhs) {
+                    ($vtype(lhs), $vtype(rhs)) => Value::Boolean(lhs < rhs),
+                    (_, _) => unreachable!("Types validated during compilation"),
+                }
+            }
+
+            /// Performs an equality check.
+            pub(crate) fn [< le_ $name >](lhs: Value, rhs: Value) -> Value {
+                match (lhs, rhs) {
+                    ($vtype(lhs), $vtype(rhs)) => Value::Boolean(lhs <= rhs),
+                    (_, _) => unreachable!("Types validated during compilation"),
+                }
+            }
+
+            /// Performs an equality check.
+            pub(crate) fn [< gt_ $name >](lhs: Value, rhs: Value) -> Value {
+                match (lhs, rhs) {
+                    ($vtype(lhs), $vtype(rhs)) => Value::Boolean(lhs > rhs),
+                    (_, _) => unreachable!("Types validated during compilation"),
+                }
+            }
+
+            /// Performs an equality check.
+            pub(crate) fn [< ge_ $name >](lhs: Value, rhs: Value) -> Value {
+                match (lhs, rhs) {
+                    ($vtype(lhs), $vtype(rhs)) => Value::Boolean(lhs >= rhs),
+                    (_, _) => unreachable!("Types validated during compilation"),
+                }
+            }
+        }
+    };
+}
+
+relational_ops!(double, Value::Double);
+relational_ops!(integer, Value::Integer);
+relational_ops!(text, Value::Text);
 
 #[cfg(test)]
 mod tests {
@@ -703,87 +705,129 @@ mod tests {
     }
 
     #[test]
-    fn test_value_eq() {
-        assert_eq!(Boolean(true), Boolean(false).eq(&Boolean(false)).unwrap());
-        assert_eq!(Boolean(false), Boolean(true).eq(&Boolean(false)).unwrap());
-
-        assert_eq!(Boolean(true), Double(2.5).eq(&Double(2.5)).unwrap());
-        assert_eq!(Boolean(false), Double(3.5).eq(&Double(3.6)).unwrap());
-
-        assert_eq!(Boolean(true), Integer(2).eq(&Integer(2)).unwrap());
-        assert_eq!(Boolean(false), Integer(3).eq(&Integer(4)).unwrap());
-
-        assert_eq!(Boolean(true), Text("a".to_owned()).eq(&Text("a".to_owned())).unwrap());
-        assert_eq!(Boolean(false), Text("b".to_owned()).eq(&Text("c".to_owned())).unwrap());
+    fn test_value_eq_boolean() {
+        assert_eq!(Boolean(true), eq_boolean(Boolean(false), Boolean(false)));
+        assert_eq!(Boolean(false), eq_boolean(Boolean(true), Boolean(false)));
     }
 
     #[test]
-    fn test_value_ne() {
-        assert_eq!(Boolean(false), Boolean(false).ne(&Boolean(false)).unwrap());
-        assert_eq!(Boolean(true), Boolean(true).ne(&Boolean(false)).unwrap());
-
-        assert_eq!(Boolean(false), Double(2.5).ne(&Double(2.5)).unwrap());
-        assert_eq!(Boolean(true), Double(3.5).ne(&Double(3.6)).unwrap());
-
-        assert_eq!(Boolean(false), Integer(2).ne(&Integer(2)).unwrap());
-        assert_eq!(Boolean(true), Integer(3).ne(&Integer(4)).unwrap());
-
-        assert_eq!(Boolean(false), Text("a".to_owned()).ne(&Text("a".to_owned())).unwrap());
-        assert_eq!(Boolean(true), Text("b".to_owned()).ne(&Text("c".to_owned())).unwrap());
+    fn test_value_eq_double() {
+        assert_eq!(Boolean(true), eq_double(Double(2.5), Double(2.5)));
+        assert_eq!(Boolean(false), eq_double(Double(3.5), Double(3.6)));
     }
 
     #[test]
-    fn test_value_lt() {
-        assert_eq!(Boolean(false), Double(2.5).lt(&Double(2.5)).unwrap());
-        assert_eq!(Boolean(true), Double(3.5).lt(&Double(3.6)).unwrap());
-
-        assert_eq!(Boolean(false), Integer(2).lt(&Integer(2)).unwrap());
-        assert_eq!(Boolean(true), Integer(3).lt(&Integer(4)).unwrap());
-
-        assert_eq!(Boolean(false), Text("a".to_owned()).lt(&Text("a".to_owned())).unwrap());
-        assert_eq!(Boolean(true), Text("a".to_owned()).lt(&Text("c".to_owned())).unwrap());
+    fn test_value_eq_integer() {
+        assert_eq!(Boolean(true), eq_integer(Integer(2), Integer(2)));
+        assert_eq!(Boolean(false), eq_integer(Integer(3), Integer(4)));
     }
 
     #[test]
-    fn test_value_le() {
-        assert_eq!(Boolean(false), Double(2.1).le(&Double(2.0)).unwrap());
-        assert_eq!(Boolean(true), Double(2.1).le(&Double(2.1)).unwrap());
-        assert_eq!(Boolean(true), Double(2.1).le(&Double(2.2)).unwrap());
-
-        assert_eq!(Boolean(false), Integer(2).le(&Integer(1)).unwrap());
-        assert_eq!(Boolean(true), Integer(2).le(&Integer(2)).unwrap());
-        assert_eq!(Boolean(true), Integer(2).le(&Integer(3)).unwrap());
-
-        assert_eq!(Boolean(false), Text("b".to_owned()).le(&Text("a".to_owned())).unwrap());
-        assert_eq!(Boolean(true), Text("a".to_owned()).le(&Text("a".to_owned())).unwrap());
-        assert_eq!(Boolean(true), Text("a".to_owned()).le(&Text("c".to_owned())).unwrap());
+    fn test_value_eq_text() {
+        assert_eq!(Boolean(true), eq_text(Text("a".to_owned()), Text("a".to_owned())));
+        assert_eq!(Boolean(false), eq_text(Text("b".to_owned()), Text("c".to_owned())));
     }
 
     #[test]
-    fn test_value_gt() {
-        assert_eq!(Boolean(false), Double(2.1).gt(&Double(2.1)).unwrap());
-        assert_eq!(Boolean(true), Double(4.1).gt(&Double(4.0)).unwrap());
-
-        assert_eq!(Boolean(false), Integer(2).gt(&Integer(2)).unwrap());
-        assert_eq!(Boolean(true), Integer(4).gt(&Integer(3)).unwrap());
-
-        assert_eq!(Boolean(false), Text("a".to_owned()).gt(&Text("a".to_owned())).unwrap());
-        assert_eq!(Boolean(true), Text("c".to_owned()).gt(&Text("a".to_owned())).unwrap());
+    fn test_value_ne_boolean() {
+        assert_eq!(Boolean(false), ne_boolean(Boolean(false), Boolean(false)));
+        assert_eq!(Boolean(true), ne_boolean(Boolean(true), Boolean(false)));
     }
 
     #[test]
-    fn test_value_ge() {
-        assert_eq!(Boolean(false), Double(2.0).ge(&Double(2.1)).unwrap());
-        assert_eq!(Boolean(true), Double(2.1).ge(&Double(2.1)).unwrap());
-        assert_eq!(Boolean(true), Double(2.2).ge(&Double(2.1)).unwrap());
+    fn test_value_ne_double() {
+        assert_eq!(Boolean(false), ne_double(Double(2.5), Double(2.5)));
+        assert_eq!(Boolean(true), ne_double(Double(3.5), Double(3.6)));
+    }
 
-        assert_eq!(Boolean(false), Integer(1).ge(&Integer(2)).unwrap());
-        assert_eq!(Boolean(true), Integer(2).ge(&Integer(2)).unwrap());
-        assert_eq!(Boolean(true), Integer(4).ge(&Integer(3)).unwrap());
+    #[test]
+    fn test_value_ne_integer() {
+        assert_eq!(Boolean(false), ne_integer(Integer(2), Integer(2)));
+        assert_eq!(Boolean(true), ne_integer(Integer(3), Integer(4)));
+    }
 
-        assert_eq!(Boolean(false), Text("".to_owned()).ge(&Text("b".to_owned())).unwrap());
-        assert_eq!(Boolean(true), Text("a".to_owned()).ge(&Text("a".to_owned())).unwrap());
-        assert_eq!(Boolean(true), Text("c".to_owned()).ge(&Text("a".to_owned())).unwrap());
+    #[test]
+    fn test_value_ne_text() {
+        assert_eq!(Boolean(false), ne_text(Text("a".to_owned()), Text("a".to_owned())));
+        assert_eq!(Boolean(true), ne_text(Text("b".to_owned()), Text("c".to_owned())));
+    }
+
+    #[test]
+    fn test_value_lt_double() {
+        assert_eq!(Boolean(false), lt_double(Double(2.5), Double(2.5)));
+        assert_eq!(Boolean(true), lt_double(Double(3.5), Double(3.6)));
+    }
+
+    #[test]
+    fn test_value_lt_integer() {
+        assert_eq!(Boolean(false), lt_integer(Integer(2), Integer(2)));
+        assert_eq!(Boolean(true), lt_integer(Integer(3), Integer(4)));
+    }
+
+    #[test]
+    fn test_value_lt_text() {
+        assert_eq!(Boolean(false), lt_text(Text("a".to_owned()), Text("a".to_owned())));
+        assert_eq!(Boolean(true), lt_text(Text("a".to_owned()), Text("c".to_owned())));
+    }
+
+    #[test]
+    fn test_value_le_double() {
+        assert_eq!(Boolean(false), le_double(Double(2.1), Double(2.0)));
+        assert_eq!(Boolean(true), le_double(Double(2.1), Double(2.1)));
+        assert_eq!(Boolean(true), le_double(Double(2.1), Double(2.2)));
+    }
+
+    #[test]
+    fn test_value_le_integer() {
+        assert_eq!(Boolean(false), le_integer(Integer(2), Integer(1)));
+        assert_eq!(Boolean(true), le_integer(Integer(2), Integer(2)));
+        assert_eq!(Boolean(true), le_integer(Integer(2), Integer(3)));
+    }
+
+    #[test]
+    fn test_value_le_text() {
+        assert_eq!(Boolean(false), le_text(Text("b".to_owned()), Text("a".to_owned())));
+        assert_eq!(Boolean(true), le_text(Text("a".to_owned()), Text("a".to_owned())));
+        assert_eq!(Boolean(true), le_text(Text("a".to_owned()), Text("c".to_owned())));
+    }
+
+    #[test]
+    fn test_value_gt_double() {
+        assert_eq!(Boolean(false), gt_double(Double(2.1), Double(2.1)));
+        assert_eq!(Boolean(true), gt_double(Double(4.1), Double(4.0)));
+    }
+
+    #[test]
+    fn test_value_gt_integer() {
+        assert_eq!(Boolean(false), gt_integer(Integer(2), Integer(2)));
+        assert_eq!(Boolean(true), gt_integer(Integer(4), Integer(3)));
+    }
+
+    #[test]
+    fn test_value_gt_text() {
+        assert_eq!(Boolean(false), gt_text(Text("a".to_owned()), Text("a".to_owned())));
+        assert_eq!(Boolean(true), gt_text(Text("c".to_owned()), Text("a".to_owned())));
+    }
+
+    #[test]
+    fn test_value_ge_double() {
+        assert_eq!(Boolean(false), ge_double(Double(2.0), Double(2.1)));
+        assert_eq!(Boolean(true), ge_double(Double(2.1), Double(2.1)));
+        assert_eq!(Boolean(true), ge_double(Double(2.2), Double(2.1)));
+    }
+
+    #[test]
+    fn test_value_ge_integer() {
+        assert_eq!(Boolean(false), ge_integer(Integer(1), Integer(2)));
+        assert_eq!(Boolean(true), ge_integer(Integer(2), Integer(2)));
+        assert_eq!(Boolean(true), ge_integer(Integer(4), Integer(3)));
+    }
+
+    #[test]
+    fn test_value_ge_text() {
+        assert_eq!(Boolean(false), ge_text(Text("".to_owned()), Text("b".to_owned())));
+        assert_eq!(Boolean(true), ge_text(Text("a".to_owned()), Text("a".to_owned())));
+        assert_eq!(Boolean(true), ge_text(Text("c".to_owned()), Text("a".to_owned())));
     }
 
     #[test]
