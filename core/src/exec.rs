@@ -481,13 +481,13 @@ impl Machine {
     }
 
     /// Handles a unary operator that is part of an expression.
-    fn exec_unary_op<F: Fn(&Value) -> value::Result<Value>>(
+    fn exec_unary_op_can_fail<F: Fn(Value) -> value::Result<Value>>(
         context: &mut Context,
         op: F,
         pos: LineCol,
     ) -> Result<()> {
         let (value, _pos) = context.value_stack.pop().unwrap();
-        let result = op(&value).map_err(|e| Error::from_value_error(e, pos))?;
+        let result = op(value).map_err(|e| Error::from_value_error(e, pos))?;
         context.value_stack.push((result, pos));
         Ok(())
     }
@@ -500,19 +500,6 @@ impl Machine {
     ) {
         let (value, _pos) = context.value_stack.pop().unwrap();
         context.value_stack.push((op(value), pos));
-    }
-
-    /// Handles a binary operator that is part of an expression.
-    fn exec_binary_op<F: Fn(&Value, &Value) -> value::Result<Value>>(
-        context: &mut Context,
-        op: F,
-        pos: LineCol,
-    ) -> Result<()> {
-        let (rhs, _pos) = context.value_stack.pop().unwrap();
-        let (lhs, _pos) = context.value_stack.pop().unwrap();
-        let result = op(&lhs, &rhs).map_err(|e| Error::from_value_error(e, pos))?;
-        context.value_stack.push((result, pos));
-        Ok(())
     }
 
     /// Handles a binary operator that can fail.
@@ -833,38 +820,78 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::Add(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.add(rhs), *pos)?;
+            Instruction::AddDoubles(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::add_double, *pos);
                 context.pc += 1;
             }
 
-            Instruction::Subtract(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.sub(rhs), *pos)?;
+            Instruction::SubtractDoubles(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::sub_double, *pos);
                 context.pc += 1;
             }
 
-            Instruction::Multiply(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.mul(rhs), *pos)?;
+            Instruction::MultiplyDoubles(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::mul_double, *pos);
                 context.pc += 1;
             }
 
-            Instruction::Divide(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.div(rhs), *pos)?;
+            Instruction::DivideDoubles(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::div_double, *pos);
                 context.pc += 1;
             }
 
-            Instruction::Modulo(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.modulo(rhs), *pos)?;
+            Instruction::ModuloDoubles(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::modulo_double, *pos);
                 context.pc += 1;
             }
 
-            Instruction::Power(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.pow(rhs), *pos)?;
+            Instruction::PowerDoubles(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::pow_double, *pos);
                 context.pc += 1;
             }
 
-            Instruction::Negate(pos) => {
-                Machine::exec_unary_op(context, |value| value.neg(), *pos)?;
+            Instruction::NegateDouble(pos) => {
+                Machine::exec_unary_op_cannot_fail(context, value::neg_double, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::AddIntegers(pos) => {
+                Machine::exec_binary_op_can_fail(context, value::add_integer, *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::SubtractIntegers(pos) => {
+                Machine::exec_binary_op_can_fail(context, value::sub_integer, *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::MultiplyIntegers(pos) => {
+                Machine::exec_binary_op_can_fail(context, value::mul_integer, *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::DivideIntegers(pos) => {
+                Machine::exec_binary_op_can_fail(context, value::div_integer, *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::ModuloIntegers(pos) => {
+                Machine::exec_binary_op_can_fail(context, value::modulo_integer, *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::PowerIntegers(pos) => {
+                Machine::exec_binary_op_can_fail(context, value::pow_integer, *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::NegateInteger(pos) => {
+                Machine::exec_unary_op_can_fail(context, value::neg_integer, *pos)?;
+                context.pc += 1;
+            }
+
+            Instruction::ConcatStrings(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::add_text, *pos);
                 context.pc += 1;
             }
 

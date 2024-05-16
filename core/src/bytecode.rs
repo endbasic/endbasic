@@ -186,26 +186,50 @@ pub enum Instruction {
     /// Represents a greater-or-equal comparison for strings.
     GreaterEqualStrings(LineCol),
 
-    /// Represents an arithmetic addition operation.
-    Add(LineCol),
+    /// Represents an arithmetic addition operation for doubles.
+    AddDoubles(LineCol),
 
-    /// Represents an arithmetic subtraction operation.
-    Subtract(LineCol),
+    /// Represents an arithmetic subtraction operation for doubles.
+    SubtractDoubles(LineCol),
 
-    /// Represents an arithmetic multiplication operation.
-    Multiply(LineCol),
+    /// Represents an arithmetic multiplication operation for doubles.
+    MultiplyDoubles(LineCol),
 
-    /// Represents an arithmetic division operation.
-    Divide(LineCol),
+    /// Represents an arithmetic division operation for doubles.
+    DivideDoubles(LineCol),
 
-    /// Represents an arithmetic modulo operation.
-    Modulo(LineCol),
+    /// Represents an arithmetic modulo operation for doubles.
+    ModuloDoubles(LineCol),
 
-    /// Represents an arithmetic power operation.
-    Power(LineCol),
+    /// Represents an arithmetic power operation for doubles.
+    PowerDoubles(LineCol),
 
-    /// Represents an arithmetic sign flip operation.
-    Negate(LineCol),
+    /// Represents an arithmetic sign flip operation for a double.
+    NegateDouble(LineCol),
+
+    /// Represents an arithmetic addition operation for integers.
+    AddIntegers(LineCol),
+
+    /// Represents an arithmetic subtraction operation for integers.
+    SubtractIntegers(LineCol),
+
+    /// Represents an arithmetic multiplication operation for integers.
+    MultiplyIntegers(LineCol),
+
+    /// Represents an arithmetic division operation for integers.
+    DivideIntegers(LineCol),
+
+    /// Represents an arithmetic modulo operation for integers.
+    ModuloIntegers(LineCol),
+
+    /// Represents an arithmetic power operation for integers.
+    PowerIntegers(LineCol),
+
+    /// Represents an arithmetic sign flip operation for an integer.
+    NegateInteger(LineCol),
+
+    /// Represents the concatenation of strings.
+    ConcatStrings(LineCol),
 
     /// Represents an assignment to an element of an array with the given number of subscripts.
     ArrayAssignment(SymbolKey, LineCol, usize),
@@ -312,13 +336,21 @@ impl Instruction {
             | Instruction::LessEqualStrings(_)
             | Instruction::GreaterStrings(_)
             | Instruction::GreaterEqualStrings(_)
-            | Instruction::Add(_)
-            | Instruction::Subtract(_)
-            | Instruction::Multiply(_)
-            | Instruction::Divide(_)
-            | Instruction::Modulo(_)
-            | Instruction::Power(_)
-            | Instruction::Negate(_)
+            | Instruction::AddDoubles(_)
+            | Instruction::SubtractDoubles(_)
+            | Instruction::MultiplyDoubles(_)
+            | Instruction::DivideDoubles(_)
+            | Instruction::ModuloDoubles(_)
+            | Instruction::PowerDoubles(_)
+            | Instruction::NegateDouble(_)
+            | Instruction::AddIntegers(_)
+            | Instruction::SubtractIntegers(_)
+            | Instruction::MultiplyIntegers(_)
+            | Instruction::DivideIntegers(_)
+            | Instruction::ModuloIntegers(_)
+            | Instruction::PowerIntegers(_)
+            | Instruction::NegateInteger(_)
+            | Instruction::ConcatStrings(_)
             | Instruction::FunctionCall(_, _, _, _)
             | Instruction::DoubleToInteger
             | Instruction::IntegerToDouble

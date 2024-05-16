@@ -114,115 +114,6 @@ impl Value {
             (_, v) => Ok(v),
         }
     }
-
-    /// Performs an arithmetic addition.
-    pub fn add(&self, other: &Self) -> Result<Self> {
-        match (self, other) {
-            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs + rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_add(*rhs) {
-                Some(i) => Ok(Value::Integer(i)),
-                None => Err(Error::new("Integer overflow".to_owned())),
-            },
-            (Value::Text(lhs), Value::Text(rhs)) => Ok(Value::Text(lhs.to_owned() + rhs)),
-
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs an arithmetic subtraction.
-    pub fn sub(&self, other: &Self) -> Result<Self> {
-        match (self, other) {
-            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs - rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_sub(*rhs) {
-                Some(i) => Ok(Value::Integer(i)),
-                None => Err(Error::new("Integer underflow".to_owned())),
-            },
-
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs a multiplication.
-    pub fn mul(&self, other: &Self) -> Result<Self> {
-        match (self, other) {
-            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs * rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_mul(*rhs) {
-                Some(i) => Ok(Value::Integer(i)),
-                None => Err(Error::new("Integer overflow".to_owned())),
-            },
-
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs an arithmetic division.
-    pub fn div(&self, other: &Self) -> Result<Self> {
-        match (self, other) {
-            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs / rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => {
-                if rhs == &0 {
-                    return Err(Error::new("Division by zero"));
-                }
-                match lhs.checked_div(*rhs) {
-                    Some(i) => Ok(Value::Integer(i)),
-                    None => Err(Error::new("Integer underflow".to_owned())),
-                }
-            }
-
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs a modulo operation.
-    pub fn modulo(&self, other: &Self) -> Result<Self> {
-        match (self, other) {
-            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs % rhs)),
-            (Value::Integer(lhs), Value::Integer(rhs)) => {
-                if rhs == &0 {
-                    return Err(Error::new("Modulo by zero"));
-                }
-                match lhs.checked_rem(*rhs) {
-                    Some(i) => Ok(Value::Integer(i)),
-                    None => Err(Error::new("Integer underflow".to_owned())),
-                }
-            }
-
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs a power operation.
-    pub fn pow(&self, other: &Self) -> Result<Self> {
-        match (self, other) {
-            (Value::Double(lhs), Value::Double(rhs)) => Ok(Value::Double(lhs.powf(*rhs))),
-            (Value::Integer(lhs), Value::Integer(rhs)) => {
-                let exp = match u32::try_from(*rhs) {
-                    Ok(exp) => exp,
-                    Err(_) => {
-                        return Err(Error::new(format!("Exponent {} cannot be negative", rhs)));
-                    }
-                };
-                match lhs.checked_pow(exp) {
-                    Some(i) => Ok(Value::Integer(i)),
-                    None => Err(Error::new("Integer overflow".to_owned())),
-                }
-            }
-
-            (_, _) => unreachable!("Types validated during compilation"),
-        }
-    }
-
-    /// Performs an arithmetic negation.
-    pub fn neg(&self) -> Result<Self> {
-        match self {
-            Value::Double(d) => Ok(Value::Double(-d)),
-            Value::Integer(i) => match i.checked_neg() {
-                Some(i) => Ok(Value::Integer(i)),
-                None => Err(Error::new("Integer underflow".to_owned())),
-            },
-            _ => unreachable!("Types validated during compilation"),
-        }
-    }
 }
 
 /// Performs a logical "and" operation.
@@ -398,6 +289,165 @@ macro_rules! relational_ops {
 relational_ops!(double, Value::Double);
 relational_ops!(integer, Value::Integer);
 relational_ops!(text, Value::Text);
+
+/// Performs an arithmetic addition of doubles.
+pub fn add_double(lhs: Value, rhs: Value) -> Value {
+    match (lhs, rhs) {
+        (Value::Double(lhs), Value::Double(rhs)) => Value::Double(lhs + rhs),
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs an arithmetic subtraction of doubles.
+pub fn sub_double(lhs: Value, rhs: Value) -> Value {
+    match (lhs, rhs) {
+        (Value::Double(lhs), Value::Double(rhs)) => Value::Double(lhs - rhs),
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a multiplication of doubles.
+pub fn mul_double(lhs: Value, rhs: Value) -> Value {
+    match (lhs, rhs) {
+        (Value::Double(lhs), Value::Double(rhs)) => Value::Double(lhs * rhs),
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs an arithmetic division of doubles.
+pub fn div_double(lhs: Value, rhs: Value) -> Value {
+    match (lhs, rhs) {
+        (Value::Double(lhs), Value::Double(rhs)) => Value::Double(lhs / rhs),
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a modulo operation of doubles.
+pub fn modulo_double(lhs: Value, rhs: Value) -> Value {
+    match (lhs, rhs) {
+        (Value::Double(lhs), Value::Double(rhs)) => Value::Double(lhs % rhs),
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a power operation of doubles.
+pub fn pow_double(lhs: Value, rhs: Value) -> Value {
+    match (lhs, rhs) {
+        (Value::Double(lhs), Value::Double(rhs)) => Value::Double(lhs.powf(rhs)),
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs an arithmetic negation of a double.
+pub fn neg_double(value: Value) -> Value {
+    match value {
+        Value::Double(d) => Value::Double(-d),
+        _ => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs an arithmetic addition of integers.
+pub fn add_integer(lhs: Value, rhs: Value) -> Result<Value> {
+    match (lhs, rhs) {
+        (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_add(rhs) {
+            Some(i) => Ok(Value::Integer(i)),
+            None => Err(Error::new("Integer overflow".to_owned())),
+        },
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs an arithmetic subtraction of integers.
+pub fn sub_integer(lhs: Value, rhs: Value) -> Result<Value> {
+    match (lhs, rhs) {
+        (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_sub(rhs) {
+            Some(i) => Ok(Value::Integer(i)),
+            None => Err(Error::new("Integer underflow".to_owned())),
+        },
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a multiplication of integers.
+pub fn mul_integer(lhs: Value, rhs: Value) -> Result<Value> {
+    match (lhs, rhs) {
+        (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_mul(rhs) {
+            Some(i) => Ok(Value::Integer(i)),
+            None => Err(Error::new("Integer overflow".to_owned())),
+        },
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs an arithmetic division of integers.
+pub fn div_integer(lhs: Value, rhs: Value) -> Result<Value> {
+    match (lhs, rhs) {
+        (Value::Integer(lhs), Value::Integer(rhs)) => {
+            if rhs == 0 {
+                return Err(Error::new("Division by zero"));
+            }
+            match lhs.checked_div(rhs) {
+                Some(i) => Ok(Value::Integer(i)),
+                None => Err(Error::new("Integer underflow".to_owned())),
+            }
+        }
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a modulo operation of integers.
+pub fn modulo_integer(lhs: Value, rhs: Value) -> Result<Value> {
+    match (lhs, rhs) {
+        (Value::Integer(lhs), Value::Integer(rhs)) => {
+            if rhs == 0 {
+                return Err(Error::new("Modulo by zero"));
+            }
+            match lhs.checked_rem(rhs) {
+                Some(i) => Ok(Value::Integer(i)),
+                None => Err(Error::new("Integer underflow".to_owned())),
+            }
+        }
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs a power operation of integers.
+pub fn pow_integer(lhs: Value, rhs: Value) -> Result<Value> {
+    match (lhs, rhs) {
+        (Value::Integer(lhs), Value::Integer(rhs)) => {
+            let exp = match u32::try_from(rhs) {
+                Ok(exp) => exp,
+                Err(_) => {
+                    return Err(Error::new(format!("Exponent {} cannot be negative", rhs)));
+                }
+            };
+            match lhs.checked_pow(exp) {
+                Some(i) => Ok(Value::Integer(i)),
+                None => Err(Error::new("Integer overflow".to_owned())),
+            }
+        }
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs an arithmetic negation of an integer.
+pub fn neg_integer(value: Value) -> Result<Value> {
+    match value {
+        Value::Integer(i) => match i.checked_neg() {
+            Some(i) => Ok(Value::Integer(i)),
+            None => Err(Error::new("Integer underflow".to_owned())),
+        },
+        _ => unreachable!("Types validated during compilation"),
+    }
+}
+
+/// Performs the concatenation of strings.
+pub fn add_text(lhs: Value, rhs: Value) -> Value {
+    match (lhs, rhs) {
+        (Value::Text(lhs), Value::Text(rhs)) => Value::Text(format!("{}{}", lhs, rhs)),
+        (_, _) => unreachable!("Types validated during compilation"),
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -831,97 +881,147 @@ mod tests {
     }
 
     #[test]
-    fn test_value_add() {
-        assert_eq!(Double(7.1), Double(2.1).add(&Double(5.0)).unwrap());
-
-        assert_eq!(Integer(5), Integer(2).add(&Integer(3)).unwrap());
-        assert_eq!(Integer(std::i32::MAX), Integer(std::i32::MAX).add(&Integer(0)).unwrap());
-        assert_eq!(
-            "Integer overflow",
-            format!("{}", Integer(std::i32::MAX).add(&Integer(1)).unwrap_err())
-        );
+    fn test_value_add_double() {
+        assert_eq!(Double(7.1), add_double(Double(2.1), Double(5.0)));
     }
 
     #[test]
-    fn test_value_sub() {
-        assert_eq!(Double(-1.0), Double(2.5).sub(&Double(3.5)).unwrap());
-
-        assert_eq!(Integer(-1), Integer(2).sub(&Integer(3)).unwrap());
-        assert_eq!(Integer(std::i32::MIN), Integer(std::i32::MIN).sub(&Integer(0)).unwrap());
-        assert_eq!(
-            "Integer underflow",
-            format!("{}", Integer(std::i32::MIN).sub(&Integer(1)).unwrap_err())
-        );
+    fn test_value_sub_double() {
+        assert_eq!(Double(-1.0), sub_double(Double(2.5), Double(3.5)));
     }
 
     #[test]
-    fn test_value_mul() {
-        assert_eq!(Double(40.0), Double(4.0).mul(&Double(10.0)).unwrap());
-
-        assert_eq!(Integer(6), Integer(2).mul(&Integer(3)).unwrap());
-        assert_eq!(Integer(std::i32::MAX), Integer(std::i32::MAX).mul(&Integer(1)).unwrap());
-        assert_eq!(
-            "Integer overflow",
-            format!("{}", Integer(std::i32::MAX).mul(&Integer(2)).unwrap_err())
-        );
+    fn test_value_mul_double() {
+        assert_eq!(Double(40.0), mul_double(Double(4.0), Double(10.0)));
     }
 
     #[test]
-    fn test_value_div() {
-        assert_eq!(Double(4.0), Double(10.0).div(&Double(2.5)).unwrap());
-        assert_eq!(Double(f64::INFINITY), Double(1.0).div(&Double(0.0)).unwrap());
-
-        assert_eq!(Integer(2), Integer(10).div(&Integer(5)).unwrap());
-        assert_eq!(Integer(6), Integer(20).div(&Integer(3)).unwrap());
-        assert_eq!(Integer(std::i32::MIN), Integer(std::i32::MIN).div(&Integer(1)).unwrap());
-        assert_eq!("Division by zero", format!("{}", Integer(4).div(&Integer(0)).unwrap_err()));
-        assert_eq!(
-            "Integer underflow",
-            format!("{}", Integer(std::i32::MIN).div(&Integer(-1)).unwrap_err())
-        );
+    fn test_value_div_double() {
+        assert_eq!(Double(4.0), div_double(Double(10.0), Double(2.5)));
+        assert_eq!(Double(f64::INFINITY), div_double(Double(1.0), Double(0.0)));
     }
 
     #[test]
-    fn test_value_modulo() {
-        assert_eq!(Double(0.0), Double(10.0).modulo(&Double(2.5)).unwrap());
-        match Double(1.0).modulo(&Double(0.0)).unwrap() {
+    fn test_value_modulo_double() {
+        assert_eq!(Double(0.0), modulo_double(Double(10.0), Double(2.5)));
+        match modulo_double(Double(1.0), Double(0.0)) {
             Double(d) => assert!(d.is_nan()),
             _ => panic!("Did not get a double"),
         };
+    }
 
-        assert_eq!(Integer(0), Integer(10).modulo(&Integer(5)).unwrap());
-        assert_eq!(Integer(2), Integer(20).modulo(&Integer(3)).unwrap());
-        assert_eq!("Modulo by zero", format!("{}", Integer(4).modulo(&Integer(0)).unwrap_err()));
+    #[test]
+    fn test_value_pow_double() {
+        assert_eq!(Double(1.0), pow_double(Double(0.0), Double(0.0)));
+        assert_eq!(Double(2.0f64.powf(3.1)), pow_double(Double(2.0), Double(3.1)));
+    }
+
+    #[test]
+    fn test_value_neg_double() {
+        assert_eq!(Double(-6.12), neg_double(Double(6.12)));
+        assert_eq!(Double(5.53), neg_double(Double(-5.53)));
+    }
+
+    #[test]
+    fn test_value_add_integer() {
+        assert_eq!(Integer(5), add_integer(Integer(2), Integer(3)).unwrap());
         assert_eq!(
-            "Integer underflow",
-            format!("{}", Integer(std::i32::MIN).modulo(&Integer(-1)).unwrap_err())
+            Integer(std::i32::MAX),
+            add_integer(Integer(std::i32::MAX), Integer(0)).unwrap()
+        );
+        assert_eq!(
+            "Integer overflow",
+            format!("{}", add_integer(Integer(std::i32::MAX), Integer(1)).unwrap_err())
         );
     }
 
     #[test]
-    fn test_value_power() {
-        assert_eq!(Double(1.0), Double(0.0).pow(&Double(0.0)).unwrap());
-        assert_eq!(Double(2.0f64.powf(3.1)), Double(2.0).pow(&Double(3.1)).unwrap());
+    fn test_value_sub_integer() {
+        assert_eq!(Integer(-1), sub_integer(Integer(2), Integer(3)).unwrap());
+        assert_eq!(
+            Integer(std::i32::MIN),
+            sub_integer(Integer(std::i32::MIN), Integer(0)).unwrap()
+        );
+        assert_eq!(
+            "Integer underflow",
+            format!("{}", sub_integer(Integer(std::i32::MIN), Integer(1)).unwrap_err())
+        );
+    }
 
-        assert_eq!(Integer(1), Integer(0).pow(&Integer(0)).unwrap());
-        assert_eq!(Integer(9), Integer(3).pow(&Integer(2)).unwrap());
-        assert_eq!(Integer(std::i32::MAX), Integer(std::i32::MAX).pow(&Integer(1)).unwrap());
+    #[test]
+    fn test_value_mul_integer() {
+        assert_eq!(Integer(6), mul_integer(Integer(2), Integer(3)).unwrap());
+        assert_eq!(
+            Integer(std::i32::MAX),
+            mul_integer(Integer(std::i32::MAX), Integer(1)).unwrap()
+        );
         assert_eq!(
             "Integer overflow",
-            format!("{}", Integer(std::i32::MAX).pow(&Integer(2)).unwrap_err())
+            format!("{}", mul_integer(Integer(std::i32::MAX), Integer(2)).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_value_div_integer() {
+        assert_eq!(Integer(2), div_integer(Integer(10), Integer(5)).unwrap());
+        assert_eq!(Integer(6), div_integer(Integer(20), Integer(3)).unwrap());
+        assert_eq!(
+            Integer(std::i32::MIN),
+            div_integer(Integer(std::i32::MIN), Integer(1)).unwrap()
+        );
+        assert_eq!(
+            "Division by zero",
+            format!("{}", div_integer(Integer(4), Integer(0)).unwrap_err())
+        );
+        assert_eq!(
+            "Integer underflow",
+            format!("{}", div_integer(Integer(std::i32::MIN), Integer(-1)).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_value_modulo_integer() {
+        assert_eq!(Integer(0), modulo_integer(Integer(10), Integer(5)).unwrap());
+        assert_eq!(Integer(2), modulo_integer(Integer(20), Integer(3)).unwrap());
+        assert_eq!(
+            "Modulo by zero",
+            format!("{}", modulo_integer(Integer(4), Integer(0)).unwrap_err())
+        );
+        assert_eq!(
+            "Integer underflow",
+            format!("{}", modulo_integer(Integer(std::i32::MIN), Integer(-1)).unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_value_pow_integer() {
+        assert_eq!(Integer(1), pow_integer(Integer(0), Integer(0)).unwrap());
+        assert_eq!(Integer(9), pow_integer(Integer(3), Integer(2)).unwrap());
+        assert_eq!(
+            Integer(std::i32::MAX),
+            pow_integer(Integer(std::i32::MAX), Integer(1)).unwrap()
+        );
+        assert_eq!(
+            "Integer overflow",
+            format!("{}", pow_integer(Integer(std::i32::MAX), Integer(2)).unwrap_err())
         );
         assert_eq!(
             "Exponent -3 cannot be negative",
-            format!("{}", Integer(1).pow(&Integer(-3)).unwrap_err())
+            format!("{}", pow_integer(Integer(1), Integer(-3)).unwrap_err())
         );
     }
 
     #[test]
-    fn test_value_neg() {
-        assert_eq!(Double(-6.12), Double(6.12).neg().unwrap());
-        assert_eq!(Double(5.53), Double(-5.53).neg().unwrap());
+    fn test_value_neg_integer() {
+        assert_eq!(Integer(-6), neg_integer(Integer(6)).unwrap());
+        assert_eq!(Integer(5), neg_integer(Integer(-5)).unwrap());
+    }
 
-        assert_eq!(Integer(-6), Integer(6).neg().unwrap());
-        assert_eq!(Integer(5), Integer(-5).neg().unwrap());
+    #[test]
+    fn test_value_add_text() {
+        assert_eq!(
+            Text("foobar".to_owned()),
+            add_text(Text("foo".to_owned()), Text("bar".to_owned()))
+        );
     }
 }

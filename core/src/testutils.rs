@@ -21,6 +21,7 @@ use crate::syms::{
     Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
     SymbolKey, Symbols,
 };
+use crate::value;
 use crate::LineCol;
 use async_trait::async_trait;
 use std::cell::RefCell;
@@ -460,7 +461,8 @@ impl Callable for SumFunction {
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
         let mut result = Value::Integer(0);
         for (value, pos) in machine.load_all(args)? {
-            result = result.add(&value).map_err(|e| CallError::EvalError(pos, e.message))?;
+            result = value::add_integer(result, value)
+                .map_err(|e| CallError::EvalError(pos, e.message))?;
         }
         Ok(result)
     }
