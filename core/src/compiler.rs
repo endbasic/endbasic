@@ -765,13 +765,16 @@ impl Compiler {
     fn compile_neg_op(&mut self, span: UnaryOpSpan) -> Result<ExprType> {
         let expr_type = self.compile_expr(span.expr, false)?;
         match expr_type {
-            ExprType::Double | ExprType::Integer => (),
-            _ => {
-                return Err(Error::new(span.pos, format!("Cannot negate {}", expr_type)));
+            ExprType::Double => {
+                self.emit(Instruction::NegateDouble(span.pos));
+                Ok(ExprType::Double)
             }
-        };
-        self.emit(Instruction::Negate(span.pos));
-        Ok(expr_type)
+            ExprType::Integer => {
+                self.emit(Instruction::NegateInteger(span.pos));
+                Ok(ExprType::Integer)
+            }
+            _ => Err(Error::new(span.pos, format!("Cannot negate {}", expr_type))),
+        }
     }
 
     /// Compiles a logical binary operator and appends its instructions to the compilation context.
@@ -960,9 +963,13 @@ impl Compiler {
 
     /// Compiles the evaluation of an expression, appends its instructions to the
     /// Compiles a binary operator and appends its instructions to the compilation context.
-    fn compile_arithmetic_binary_op<F: Fn(LineCol) -> Instruction>(
+    fn compile_arithmetic_binary_op<
+        F1: Fn(LineCol) -> Instruction,
+        F2: Fn(LineCol) -> Instruction,
+    >(
         &mut self,
-        make_inst: F,
+        double_make_inst: F1,
+        integer_make_inst: F2,
         span: BinaryOpSpan,
         op_name: &str,
     ) -> Result<ExprType> {
@@ -1001,7 +1008,15 @@ impl Compiler {
             self.next_pc -= 1;
         }
 
-        self.emit(make_inst(span.pos));
+        match result {
+            ExprType::Boolean => unreachable!("Filtered out above"),
+            ExprType::Double => self.emit(double_make_inst(span.pos)),
+            ExprType::Integer => self.emit(integer_make_inst(span.pos)),
+            ExprType::Text => {
+                debug_assert_eq!("+", op_name, "Filtered out above");
+                self.emit(Instruction::ConcatStrings(span.pos))
+            }
+        };
 
         Ok(result)
     }
@@ -1284,31 +1299,47 @@ impl Compiler {
                 Ok(result)
             }
 
-            Expr::Add(span) => {
-                // TODO(jmmv): Need to emit different addition operations depending on the types
-                // and remove the logic from the runtime.  Applies to all other operators as well.
-                Ok(self.compile_arithmetic_binary_op(Instruction::Add, *span, "+")?)
-            }
+            Expr::Add(span) => Ok(self.compile_arithmetic_binary_op(
+                Instruction::AddDoubles,
+                Instruction::AddIntegers,
+                *span,
+                "+",
+            )?),
 
-            Expr::Subtract(span) => {
-                Ok(self.compile_arithmetic_binary_op(Instruction::Subtract, *span, "-")?)
-            }
+            Expr::Subtract(span) => Ok(self.compile_arithmetic_binary_op(
+                Instruction::SubtractDoubles,
+                Instruction::SubtractIntegers,
+                *span,
+                "-",
+            )?),
 
-            Expr::Multiply(span) => {
-                Ok(self.compile_arithmetic_binary_op(Instruction::Multiply, *span, "*")?)
-            }
+            Expr::Multiply(span) => Ok(self.compile_arithmetic_binary_op(
+                Instruction::MultiplyDoubles,
+                Instruction::MultiplyIntegers,
+                *span,
+                "*",
+            )?),
 
-            Expr::Divide(span) => {
-                Ok(self.compile_arithmetic_binary_op(Instruction::Divide, *span, "/")?)
-            }
+            Expr::Divide(span) => Ok(self.compile_arithmetic_binary_op(
+                Instruction::DivideDoubles,
+                Instruction::DivideIntegers,
+                *span,
+                "/",
+            )?),
 
-            Expr::Modulo(span) => {
-                Ok(self.compile_arithmetic_binary_op(Instruction::Modulo, *span, "MOD")?)
-            }
+            Expr::Modulo(span) => Ok(self.compile_arithmetic_binary_op(
+                Instruction::ModuloDoubles,
+                Instruction::ModuloIntegers,
+                *span,
+                "MOD",
+            )?),
 
-            Expr::Power(span) => {
-                Ok(self.compile_arithmetic_binary_op(Instruction::Power, *span, "^")?)
-            }
+            Expr::Power(span) => Ok(self.compile_arithmetic_binary_op(
+                Instruction::PowerDoubles,
+                Instruction::PowerIntegers,
+                *span,
+                "^",
+            )?),
 
             Expr::Negate(span) => Ok(self.compile_neg_op(*span)?),
 
@@ -1746,7 +1777,7 @@ mod tests {
             .expect_instr(1, Instruction::Load(SymbolKey::from("i"), lc(1, 15)))
             .expect_instr(2, Instruction::Push(Value::Integer(4), lc(1, 8)))
             .expect_instr(3, Instruction::Load(SymbolKey::from("i"), lc(1, 12)))
-            .expect_instr(4, Instruction::Add(lc(1, 10)))
+            .expect_instr(4, Instruction::AddIntegers(lc(1, 10)))
             .expect_instr(5, Instruction::Push(Value::Integer(3), lc(1, 5)))
             .expect_instr(6, Instruction::ArrayAssignment(SymbolKey::from("foo"), lc(1, 1), 3))
             .check();
@@ -2069,7 +2100,7 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(3), lc(1, 12)))
             .expect_instr(1, Instruction::Push(Value::Integer(4), lc(1, 16)))
-            .expect_instr(2, Instruction::Add(lc(1, 14)))
+            .expect_instr(2, Instruction::AddIntegers(lc(1, 14)))
             .expect_instr(3, Instruction::Load(SymbolKey::from("i"), lc(1, 9)))
             .expect_instr(
                 4,
@@ -2145,7 +2176,7 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(2), lc(1, 5)))
             .expect_instr(1, Instruction::Load(SymbolKey::from("i"), lc(1, 9)))
-            .expect_instr(2, Instruction::Add(lc(1, 7)))
+            .expect_instr(2, Instruction::AddIntegers(lc(1, 7)))
             .expect_instr(3, Instruction::End(true))
             .check();
     }
@@ -2542,26 +2573,37 @@ mod tests {
 
     #[test]
     fn test_compile_expr_arithmetic_ops() {
+        do_op_test(Instruction::AddDoubles, "+", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::SubtractDoubles, "-", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::MultiplyDoubles, "*", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::DivideDoubles, "/", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::ModuloDoubles, "MOD", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::PowerDoubles, "^", Value::Double(10.2), "10.2");
         Tester::default()
             .define("a", SymbolPrototype::Variable(ExprType::Integer))
-            .parse("i = a + 10 - 20 * 30 / 40 MOD 50 ^ (-60)")
+            .parse("i = -60.2")
             .compile()
-            .expect_instr(0, Instruction::Load(SymbolKey::from("a"), lc(1, 5)))
-            .expect_instr(1, Instruction::Push(Value::Integer(10), lc(1, 9)))
-            .expect_instr(2, Instruction::Add(lc(1, 7)))
-            .expect_instr(3, Instruction::Push(Value::Integer(20), lc(1, 14)))
-            .expect_instr(4, Instruction::Push(Value::Integer(30), lc(1, 19)))
-            .expect_instr(5, Instruction::Multiply(lc(1, 17)))
-            .expect_instr(6, Instruction::Push(Value::Integer(40), lc(1, 24)))
-            .expect_instr(7, Instruction::Divide(lc(1, 22)))
-            .expect_instr(8, Instruction::Push(Value::Integer(50), lc(1, 31)))
-            .expect_instr(9, Instruction::Push(Value::Integer(60), lc(1, 38)))
-            .expect_instr(10, Instruction::Negate(lc(1, 37)))
-            .expect_instr(11, Instruction::Power(lc(1, 34)))
-            .expect_instr(12, Instruction::Modulo(lc(1, 27)))
-            .expect_instr(13, Instruction::Subtract(lc(1, 12)))
-            .expect_instr(14, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(0, Instruction::Push(Value::Double(60.2), lc(1, 6)))
+            .expect_instr(1, Instruction::NegateDouble(lc(1, 5)))
+            .expect_instr(2, Instruction::Assign(SymbolKey::from("i")))
             .check();
+
+        do_op_test(Instruction::AddIntegers, "+", Value::Integer(10), "10");
+        do_op_test(Instruction::SubtractIntegers, "-", Value::Integer(10), "10");
+        do_op_test(Instruction::MultiplyIntegers, "*", Value::Integer(10), "10");
+        do_op_test(Instruction::DivideIntegers, "/", Value::Integer(10), "10");
+        do_op_test(Instruction::ModuloIntegers, "MOD", Value::Integer(10), "10");
+        do_op_test(Instruction::PowerIntegers, "^", Value::Integer(10), "10");
+        Tester::default()
+            .define("a", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("i = -60")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(60), lc(1, 6)))
+            .expect_instr(1, Instruction::NegateInteger(lc(1, 5)))
+            .expect_instr(2, Instruction::Assign(SymbolKey::from("i")))
+            .check();
+
+        do_op_test(Instruction::ConcatStrings, "+", Value::Text("foo".to_owned()), "\"foo\"");
     }
 
     #[test]
@@ -2574,7 +2616,7 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Load(SymbolKey::from("k"), lc(1, 15)))
             .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 19)))
-            .expect_instr(2, Instruction::Add(lc(1, 17)))
+            .expect_instr(2, Instruction::AddIntegers(lc(1, 17)))
             .expect_instr(3, Instruction::Load(SymbolKey::from("j"), lc(1, 12)))
             .expect_instr(4, Instruction::Push(Value::Integer(3), lc(1, 9)))
             .expect_instr(5, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 3))
@@ -2667,7 +2709,7 @@ mod tests {
             .expect_instr(0, Instruction::Load(SymbolKey::from("k"), lc(1, 15)))
             .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 19)))
             .expect_instr(2, Instruction::IntegerToDouble)
-            .expect_instr(3, Instruction::Add(lc(1, 17)))
+            .expect_instr(3, Instruction::AddDoubles(lc(1, 17)))
             .expect_instr(4, Instruction::LoadRef(VarRef::new("j", VarType::Auto), lc(1, 12)))
             .expect_instr(5, Instruction::Push(Value::Integer(3), lc(1, 9)))
             .expect_instr(
@@ -2719,7 +2761,7 @@ mod tests {
             .expect_instr(7, Instruction::Assign(SymbolKey::from("a")))
             .expect_instr(8, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
             .expect_instr(9, Instruction::Push(Value::Integer(1), lc(1, 18)))
-            .expect_instr(10, Instruction::Add(lc(1, 14)))
+            .expect_instr(10, Instruction::AddIntegers(lc(1, 14)))
             .expect_instr(11, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(12, Instruction::Jump(JumpISpan { addr: 2 }))
             .check();
@@ -2748,7 +2790,7 @@ mod tests {
             .expect_instr(7, Instruction::Assign(SymbolKey::from("a")))
             .expect_instr(8, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
             .expect_instr(9, Instruction::Push(Value::Integer(1), lc(1, 18)))
-            .expect_instr(10, Instruction::Add(lc(1, 14)))
+            .expect_instr(10, Instruction::AddIntegers(lc(1, 14)))
             .expect_instr(11, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(12, Instruction::Jump(JumpISpan { addr: 2 }))
             .check();
@@ -2763,12 +2805,12 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Load(SymbolKey::from("i"), lc(1, 13)))
             .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 17)))
-            .expect_instr(2, Instruction::Add(lc(1, 15)))
+            .expect_instr(2, Instruction::AddIntegers(lc(1, 15)))
             .expect_instr(3, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(4, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
             .expect_instr(5, Instruction::Push(Value::Integer(2), lc(1, 24)))
             .expect_instr(6, Instruction::Load(SymbolKey::from("j"), lc(1, 28)))
-            .expect_instr(7, Instruction::Add(lc(1, 26)))
+            .expect_instr(7, Instruction::AddIntegers(lc(1, 26)))
             .expect_instr(8, Instruction::LessEqualIntegers(lc(1, 20)))
             .expect_instr(
                 9,
@@ -2781,7 +2823,7 @@ mod tests {
             .expect_instr(11, Instruction::Assign(SymbolKey::from("a")))
             .expect_instr(12, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
             .expect_instr(13, Instruction::Push(Value::Integer(1), lc(1, 30)))
-            .expect_instr(14, Instruction::Add(lc(1, 20)))
+            .expect_instr(14, Instruction::AddIntegers(lc(1, 20)))
             .expect_instr(15, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(16, Instruction::Jump(JumpISpan { addr: 4 }))
             .check();
@@ -2813,7 +2855,7 @@ mod tests {
             )
             .expect_instr(10, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
             .expect_instr(11, Instruction::Push(Value::Double(0.1), lc(1, 24)))
-            .expect_instr(12, Instruction::Add(lc(1, 14)))
+            .expect_instr(12, Instruction::AddDoubles(lc(1, 14)))
             .expect_instr(13, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(14, Instruction::Jump(JumpISpan { addr: 5 }))
             .check();
@@ -2984,7 +3026,7 @@ mod tests {
                 Instruction::Load(SymbolKey::from("0select1"), lc(2, 6)),
                 Instruction::Push(Value::Integer(1), lc(2, 6)),
                 Instruction::Push(Value::Integer(2), lc(2, 10)),
-                Instruction::Add(lc(2, 8)),
+                Instruction::AddIntegers(lc(2, 8)),
                 Instruction::EqualIntegers(lc(2, 6)),
             ],
         );
@@ -2998,7 +3040,7 @@ mod tests {
                 Instruction::Load(SymbolKey::from("0select1"), lc(2, 11)),
                 Instruction::Push(Value::Integer(9), lc(2, 11)),
                 Instruction::Push(Value::Integer(8), lc(2, 15)),
-                Instruction::Add(lc(2, 13)),
+                Instruction::AddIntegers(lc(2, 13)),
                 Instruction::EqualIntegers(lc(2, 11)),
             ],
         );
@@ -3088,7 +3130,7 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
             .expect_instr(1, Instruction::Push(Value::Integer(3), lc(1, 17)))
-            .expect_instr(2, Instruction::Add(lc(1, 15)))
+            .expect_instr(2, Instruction::AddIntegers(lc(1, 15)))
             .expect_instr(3, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(
                 4,
