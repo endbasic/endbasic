@@ -126,23 +126,65 @@ pub enum Instruction {
     /// Represents a right bitshift.
     ShiftRight(LineCol),
 
-    /// Represents an equality comparison.
-    Equal(LineCol),
+    /// Represents an equality comparison for booleans.
+    EqualBooleans(LineCol),
 
-    /// Represents an inequality comparison.
-    NotEqual(LineCol),
+    /// Represents an inequality comparison for booleans.
+    NotEqualBooleans(LineCol),
 
-    /// Represents a less-than comparison.
-    Less(LineCol),
+    /// Represents an equality comparison for doubles.
+    EqualDoubles(LineCol),
 
-    /// Represents a less-or-equal comparison.
-    LessEqual(LineCol),
+    /// Represents an inequality comparison for doubles.
+    NotEqualDoubles(LineCol),
 
-    /// Represents a greater-than comparison.
-    Greater(LineCol),
+    /// Represents a less-than comparison for doubles.
+    LessDoubles(LineCol),
 
-    /// Represents a greater-or-equal comparison.
-    GreaterEqual(LineCol),
+    /// Represents a less-or-equal comparison for doubles.
+    LessEqualDoubles(LineCol),
+
+    /// Represents a greater-than comparison for doubles.
+    GreaterDoubles(LineCol),
+
+    /// Represents a greater-or-equal comparison for doubles.
+    GreaterEqualDoubles(LineCol),
+
+    /// Represents an equality comparison for integers.
+    EqualIntegers(LineCol),
+
+    /// Represents an inequality comparison for integers.
+    NotEqualIntegers(LineCol),
+
+    /// Represents a less-than comparison for integers.
+    LessIntegers(LineCol),
+
+    /// Represents a less-or-equal comparison for integers.
+    LessEqualIntegers(LineCol),
+
+    /// Represents a greater-than comparison for integers.
+    GreaterIntegers(LineCol),
+
+    /// Represents a greater-or-equal comparison for integers.
+    GreaterEqualIntegers(LineCol),
+
+    /// Represents an equality comparison for strings.
+    EqualStrings(LineCol),
+
+    /// Represents an inequality comparison for strings.
+    NotEqualStrings(LineCol),
+
+    /// Represents a less-than comparison for strings.
+    LessStrings(LineCol),
+
+    /// Represents a less-or-equal comparison for strings.
+    LessEqualStrings(LineCol),
+
+    /// Represents a greater-than comparison for strings.
+    GreaterStrings(LineCol),
+
+    /// Represents a greater-or-equal comparison for strings.
+    GreaterEqualStrings(LineCol),
 
     /// Represents an arithmetic addition operation.
     Add(LineCol),
@@ -250,12 +292,26 @@ impl Instruction {
             | Instruction::ArrayLoad(_, _, _)
             | Instruction::ShiftLeft(_)
             | Instruction::ShiftRight(_)
-            | Instruction::Equal(_)
-            | Instruction::NotEqual(_)
-            | Instruction::Less(_)
-            | Instruction::LessEqual(_)
-            | Instruction::Greater(_)
-            | Instruction::GreaterEqual(_)
+            | Instruction::EqualBooleans(_)
+            | Instruction::NotEqualBooleans(_)
+            | Instruction::EqualDoubles(_)
+            | Instruction::NotEqualDoubles(_)
+            | Instruction::LessDoubles(_)
+            | Instruction::LessEqualDoubles(_)
+            | Instruction::GreaterDoubles(_)
+            | Instruction::GreaterEqualDoubles(_)
+            | Instruction::EqualIntegers(_)
+            | Instruction::NotEqualIntegers(_)
+            | Instruction::LessIntegers(_)
+            | Instruction::LessEqualIntegers(_)
+            | Instruction::GreaterIntegers(_)
+            | Instruction::GreaterEqualIntegers(_)
+            | Instruction::EqualStrings(_)
+            | Instruction::NotEqualStrings(_)
+            | Instruction::LessStrings(_)
+            | Instruction::LessEqualStrings(_)
+            | Instruction::GreaterStrings(_)
+            | Instruction::GreaterEqualStrings(_)
             | Instruction::Add(_)
             | Instruction::Subtract(_)
             | Instruction::Multiply(_)

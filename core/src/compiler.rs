@@ -800,11 +800,19 @@ impl Compiler {
         }
     }
 
-    /// Compiles a logical or bitwise binary operator and appends its instructions to the
-    /// compilation context.
-    fn compile_equality_binary_op<F: Fn(LineCol) -> Instruction>(
+    /// Compiles an equality binary operator and appends its instructions to the compilation
+    /// context.
+    fn compile_equality_binary_op<
+        F1: Fn(LineCol) -> Instruction,
+        F2: Fn(LineCol) -> Instruction,
+        F3: Fn(LineCol) -> Instruction,
+        F4: Fn(LineCol) -> Instruction,
+    >(
         &mut self,
-        make_inst: F,
+        boolean_make_inst: F1,
+        double_make_inst: F2,
+        integer_make_inst: F3,
+        text_make_inst: F4,
         span: BinaryOpSpan,
         op_name: &str,
     ) -> Result<ExprType> {
@@ -814,16 +822,18 @@ impl Compiler {
 
         let mut keep_nop = false;
         let rhs_type = self.compile_expr(span.rhs, false)?;
-        match (lhs_type, rhs_type) {
-            (lhs_type, rhs_type) if lhs_type == rhs_type => (),
+        let result = match (lhs_type, rhs_type) {
+            (lhs_type, rhs_type) if lhs_type == rhs_type => lhs_type,
 
             (ExprType::Double, ExprType::Integer) => {
                 self.emit(Instruction::IntegerToDouble);
+                ExprType::Double
             }
 
             (ExprType::Integer, ExprType::Double) => {
                 self.instrs[pc] = Instruction::IntegerToDouble;
                 keep_nop = true;
+                ExprType::Double
             }
 
             (_, _) => {
@@ -839,16 +849,27 @@ impl Compiler {
             self.next_pc -= 1;
         }
 
-        self.emit(make_inst(span.pos));
+        match result {
+            ExprType::Boolean => self.emit(boolean_make_inst(span.pos)),
+            ExprType::Double => self.emit(double_make_inst(span.pos)),
+            ExprType::Integer => self.emit(integer_make_inst(span.pos)),
+            ExprType::Text => self.emit(text_make_inst(span.pos)),
+        };
 
         Ok(ExprType::Boolean)
     }
 
-    /// Compiles a logical or bitwise binary operator and appends its instructions to the
-    /// compilation context.
-    fn compile_relational_binary_op<F: Fn(LineCol) -> Instruction>(
+    /// Compiles a relational binary operator and appends its instructions to the compilation
+    /// context.
+    fn compile_relational_binary_op<
+        F1: Fn(LineCol) -> Instruction,
+        F2: Fn(LineCol) -> Instruction,
+        F3: Fn(LineCol) -> Instruction,
+    >(
         &mut self,
-        make_inst: F,
+        double_make_inst: F1,
+        integer_make_inst: F2,
+        text_make_inst: F3,
         span: BinaryOpSpan,
         op_name: &str,
     ) -> Result<ExprType> {
@@ -858,19 +879,21 @@ impl Compiler {
 
         let mut keep_nop = false;
         let rhs_type = self.compile_expr(span.rhs, false)?;
-        match (lhs_type, rhs_type) {
+        let result = match (lhs_type, rhs_type) {
             // Boolean is explicitly excluded here.
-            (ExprType::Double, ExprType::Double) => (),
-            (ExprType::Integer, ExprType::Integer) => (),
-            (ExprType::Text, ExprType::Text) => (),
+            (ExprType::Double, ExprType::Double) => ExprType::Double,
+            (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
+            (ExprType::Text, ExprType::Text) => ExprType::Text,
 
             (ExprType::Double, ExprType::Integer) => {
                 self.emit(Instruction::IntegerToDouble);
+                ExprType::Double
             }
 
             (ExprType::Integer, ExprType::Double) => {
                 self.instrs[pc] = Instruction::IntegerToDouble;
                 keep_nop = true;
+                ExprType::Double
             }
 
             (_, _) => {
@@ -886,7 +909,12 @@ impl Compiler {
             self.next_pc -= 1;
         }
 
-        self.emit(make_inst(span.pos));
+        match result {
+            ExprType::Boolean => unreachable!("Filtered out above"),
+            ExprType::Double => self.emit(double_make_inst(span.pos)),
+            ExprType::Integer => self.emit(integer_make_inst(span.pos)),
+            ExprType::Text => self.emit(text_make_inst(span.pos)),
+        };
 
         Ok(ExprType::Boolean)
     }
@@ -1183,39 +1211,75 @@ impl Compiler {
             }
 
             Expr::Equal(span) => {
-                let result = self.compile_equality_binary_op(Instruction::Equal, *span, "=")?;
+                let result = self.compile_equality_binary_op(
+                    Instruction::EqualBooleans,
+                    Instruction::EqualDoubles,
+                    Instruction::EqualIntegers,
+                    Instruction::EqualStrings,
+                    *span,
+                    "=",
+                )?;
                 debug_assert_eq!(ExprType::Boolean, result);
                 Ok(result)
             }
 
             Expr::NotEqual(span) => {
-                let result = self.compile_equality_binary_op(Instruction::NotEqual, *span, "<>")?;
+                let result = self.compile_equality_binary_op(
+                    Instruction::NotEqualBooleans,
+                    Instruction::NotEqualDoubles,
+                    Instruction::NotEqualIntegers,
+                    Instruction::NotEqualStrings,
+                    *span,
+                    "<>",
+                )?;
                 debug_assert_eq!(ExprType::Boolean, result);
                 Ok(result)
             }
 
             Expr::Less(span) => {
-                let result = self.compile_relational_binary_op(Instruction::Less, *span, "<")?;
+                let result = self.compile_relational_binary_op(
+                    Instruction::LessDoubles,
+                    Instruction::LessIntegers,
+                    Instruction::LessStrings,
+                    *span,
+                    "<",
+                )?;
                 debug_assert_eq!(ExprType::Boolean, result);
                 Ok(result)
             }
 
             Expr::LessEqual(span) => {
-                let result =
-                    self.compile_relational_binary_op(Instruction::LessEqual, *span, "<=")?;
+                let result = self.compile_relational_binary_op(
+                    Instruction::LessEqualDoubles,
+                    Instruction::LessEqualIntegers,
+                    Instruction::LessEqualStrings,
+                    *span,
+                    "<=",
+                )?;
                 debug_assert_eq!(ExprType::Boolean, result);
                 Ok(result)
             }
 
             Expr::Greater(span) => {
-                let result = self.compile_relational_binary_op(Instruction::Greater, *span, ">")?;
+                let result = self.compile_relational_binary_op(
+                    Instruction::GreaterDoubles,
+                    Instruction::GreaterIntegers,
+                    Instruction::GreaterStrings,
+                    *span,
+                    ">",
+                )?;
                 debug_assert_eq!(ExprType::Boolean, result);
                 Ok(result)
             }
 
             Expr::GreaterEqual(span) => {
-                let result =
-                    self.compile_relational_binary_op(Instruction::GreaterEqual, *span, ">=")?;
+                let result = self.compile_relational_binary_op(
+                    Instruction::GreaterEqualDoubles,
+                    Instruction::GreaterEqualIntegers,
+                    Instruction::GreaterEqualStrings,
+                    *span,
+                    ">=",
+                )?;
                 debug_assert_eq!(ExprType::Boolean, result);
                 Ok(result)
             }
@@ -2416,26 +2480,64 @@ mod tests {
             .check();
     }
 
+    /// Tests the behavior of one binary operator.
+    ///
+    /// `make_inst` is the instruction to expect.  `op_name` is the literal name of the operator as
+    /// it appears in EndBASIC code.  `test_value` is a value of the right type to use with the
+    /// operator call and `test_value_str` is the same value as represented in EndBASIC code.
+    fn do_op_test<F: Fn(LineCol) -> Instruction>(
+        make_inst: F,
+        op_name: &str,
+        test_value: Value,
+        test_value_str: &str,
+    ) {
+        Tester::default()
+            .define("a", SymbolPrototype::Variable(test_value.as_vartype().into()))
+            .parse(&format!("b = a {} {}", op_name, test_value_str))
+            .compile()
+            .expect_instr(0, Instruction::Load(SymbolKey::from("a"), lc(1, 5)))
+            .expect_instr(1, Instruction::Push(test_value, lc(1, 8 + op_name.len())))
+            .expect_instr(2, make_inst(lc(1, 7)))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("b")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_equality_ops() {
+        do_op_test(Instruction::EqualBooleans, "=", Value::Boolean(true), "TRUE");
+        do_op_test(Instruction::NotEqualBooleans, "<>", Value::Boolean(true), "TRUE");
+
+        do_op_test(Instruction::EqualDoubles, "=", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::NotEqualDoubles, "<>", Value::Double(10.2), "10.2");
+
+        do_op_test(Instruction::EqualIntegers, "=", Value::Integer(10), "10");
+        do_op_test(Instruction::NotEqualIntegers, "<>", Value::Integer(10), "10");
+
+        do_op_test(Instruction::EqualStrings, "=", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(Instruction::NotEqualStrings, "<>", Value::Text("foo".to_owned()), "\"foo\"");
+    }
+
     #[test]
     fn test_compile_expr_relational_ops() {
-        fn test_op<F: Fn(LineCol) -> Instruction>(make_inst: F, op_name: &str) {
-            Tester::default()
-                .define("a", SymbolPrototype::Variable(ExprType::Integer))
-                .parse(&format!("b = a {} 10", op_name))
-                .compile()
-                .expect_instr(0, Instruction::Load(SymbolKey::from("a"), lc(1, 5)))
-                .expect_instr(1, Instruction::Push(Value::Integer(10), lc(1, 8 + op_name.len())))
-                .expect_instr(2, make_inst(lc(1, 7)))
-                .expect_instr(3, Instruction::Assign(SymbolKey::from("b")))
-                .check();
-        }
+        do_op_test(Instruction::LessDoubles, "<", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::LessEqualDoubles, "<=", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::GreaterDoubles, ">", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::GreaterEqualDoubles, ">=", Value::Double(10.2), "10.2");
 
-        test_op(Instruction::Equal, "=");
-        test_op(Instruction::NotEqual, "<>");
-        test_op(Instruction::Less, "<");
-        test_op(Instruction::LessEqual, "<=");
-        test_op(Instruction::Greater, ">");
-        test_op(Instruction::GreaterEqual, ">=");
+        do_op_test(Instruction::LessIntegers, "<", Value::Integer(10), "10");
+        do_op_test(Instruction::LessEqualIntegers, "<=", Value::Integer(10), "10");
+        do_op_test(Instruction::GreaterIntegers, ">", Value::Integer(10), "10");
+        do_op_test(Instruction::GreaterEqualIntegers, ">=", Value::Integer(10), "10");
+
+        do_op_test(Instruction::LessStrings, "<", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(Instruction::LessEqualStrings, "<=", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(Instruction::GreaterStrings, ">", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(
+            Instruction::GreaterEqualStrings,
+            ">=",
+            Value::Text("foo".to_owned()),
+            "\"foo\"",
+        );
     }
 
     #[test]
@@ -2605,7 +2707,7 @@ mod tests {
             .expect_instr(1, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(2, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
             .expect_instr(3, Instruction::Push(Value::Integer(5), lc(1, 17)))
-            .expect_instr(4, Instruction::LessEqual(lc(1, 14)))
+            .expect_instr(4, Instruction::LessEqualIntegers(lc(1, 14)))
             .expect_instr(
                 5,
                 Instruction::JumpIfNotTrue(JumpIfBoolISpan {
@@ -2634,7 +2736,7 @@ mod tests {
             .expect_instr(1, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(2, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
             .expect_instr(3, Instruction::Load(SymbolKey::from("j"), lc(1, 17)))
-            .expect_instr(4, Instruction::LessEqual(lc(1, 14)))
+            .expect_instr(4, Instruction::LessEqualIntegers(lc(1, 14)))
             .expect_instr(
                 5,
                 Instruction::JumpIfNotTrue(JumpIfBoolISpan {
@@ -2667,7 +2769,7 @@ mod tests {
             .expect_instr(5, Instruction::Push(Value::Integer(2), lc(1, 24)))
             .expect_instr(6, Instruction::Load(SymbolKey::from("j"), lc(1, 28)))
             .expect_instr(7, Instruction::Add(lc(1, 26)))
-            .expect_instr(8, Instruction::LessEqual(lc(1, 20)))
+            .expect_instr(8, Instruction::LessEqualIntegers(lc(1, 20)))
             .expect_instr(
                 9,
                 Instruction::JumpIfNotTrue(JumpIfBoolISpan {
@@ -2701,7 +2803,7 @@ mod tests {
             .expect_instr(5, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
             .expect_instr(6, Instruction::Push(Value::Integer(2), lc(1, 17)))
             .expect_instr(7, Instruction::IntegerToDouble)
-            .expect_instr(8, Instruction::LessEqual(lc(1, 14)))
+            .expect_instr(8, Instruction::LessEqualDoubles(lc(1, 14)))
             .expect_instr(
                 9,
                 Instruction::JumpIfNotTrue(JumpIfBoolISpan {
@@ -2883,7 +2985,7 @@ mod tests {
                 Instruction::Push(Value::Integer(1), lc(2, 6)),
                 Instruction::Push(Value::Integer(2), lc(2, 10)),
                 Instruction::Add(lc(2, 8)),
-                Instruction::Equal(lc(2, 6)),
+                Instruction::EqualIntegers(lc(2, 6)),
             ],
         );
     }
@@ -2897,7 +2999,7 @@ mod tests {
                 Instruction::Push(Value::Integer(9), lc(2, 11)),
                 Instruction::Push(Value::Integer(8), lc(2, 15)),
                 Instruction::Add(lc(2, 13)),
-                Instruction::Equal(lc(2, 11)),
+                Instruction::EqualIntegers(lc(2, 11)),
             ],
         );
 
@@ -2906,7 +3008,7 @@ mod tests {
             vec![
                 Instruction::Load(SymbolKey::from("0select1"), lc(2, 12)),
                 Instruction::Push(Value::Integer(9), lc(2, 12)),
-                Instruction::NotEqual(lc(2, 12)),
+                Instruction::NotEqualIntegers(lc(2, 12)),
             ],
         );
 
@@ -2915,7 +3017,7 @@ mod tests {
             vec![
                 Instruction::Load(SymbolKey::from("0select1"), lc(2, 11)),
                 Instruction::Push(Value::Integer(9), lc(2, 11)),
-                Instruction::Less(lc(2, 11)),
+                Instruction::LessIntegers(lc(2, 11)),
             ],
         );
 
@@ -2924,7 +3026,7 @@ mod tests {
             vec![
                 Instruction::Load(SymbolKey::from("0select1"), lc(2, 12)),
                 Instruction::Push(Value::Integer(9), lc(2, 12)),
-                Instruction::LessEqual(lc(2, 12)),
+                Instruction::LessEqualIntegers(lc(2, 12)),
             ],
         );
 
@@ -2933,7 +3035,7 @@ mod tests {
             vec![
                 Instruction::Load(SymbolKey::from("0select1"), lc(2, 11)),
                 Instruction::Push(Value::Integer(9), lc(2, 11)),
-                Instruction::Greater(lc(2, 11)),
+                Instruction::GreaterIntegers(lc(2, 11)),
             ],
         );
 
@@ -2942,7 +3044,7 @@ mod tests {
             vec![
                 Instruction::Load(SymbolKey::from("0select1"), lc(2, 12)),
                 Instruction::Push(Value::Integer(9), lc(2, 12)),
-                Instruction::GreaterEqual(lc(2, 12)),
+                Instruction::GreaterEqualIntegers(lc(2, 12)),
             ],
         );
     }
@@ -2954,10 +3056,10 @@ mod tests {
             vec![
                 Instruction::Load(SymbolKey::from("0select1"), lc(2, 6)),
                 Instruction::Push(Value::Integer(1), lc(2, 6)),
-                Instruction::GreaterEqual(lc(2, 6)),
+                Instruction::GreaterEqualIntegers(lc(2, 6)),
                 Instruction::Load(SymbolKey::from("0select1"), lc(2, 6)),
                 Instruction::Push(Value::Integer(2), lc(2, 11)),
-                Instruction::LessEqual(lc(2, 11)),
+                Instruction::LessEqualIntegers(lc(2, 11)),
                 Instruction::LogicalAnd(lc(2, 6)),
             ],
         );
@@ -2970,10 +3072,10 @@ mod tests {
             vec![
                 Instruction::Load(SymbolKey::from("0select1"), lc(2, 12)),
                 Instruction::Push(Value::Integer(9), lc(2, 12)),
-                Instruction::NotEqual(lc(2, 12)),
+                Instruction::NotEqualIntegers(lc(2, 12)),
                 Instruction::Load(SymbolKey::from("0select1"), lc(2, 15)),
                 Instruction::Push(Value::Integer(8), lc(2, 15)),
-                Instruction::Equal(lc(2, 15)),
+                Instruction::EqualIntegers(lc(2, 15)),
                 Instruction::LogicalOr(lc(2, 12)),
             ],
         );
@@ -3005,7 +3107,7 @@ mod tests {
             .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(2, Instruction::Load(SymbolKey::from("0select1"), lc(2, 6)))
             .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
-            .expect_instr(4, Instruction::Equal(lc(2, 6)))
+            .expect_instr(4, Instruction::EqualIntegers(lc(2, 6)))
             .expect_instr(
                 5,
                 Instruction::JumpIfNotTrue(JumpIfBoolISpan {
@@ -3063,7 +3165,7 @@ mod tests {
             .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(2, Instruction::Load(SymbolKey::from("0select1"), lc(2, 6)))
             .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
-            .expect_instr(4, Instruction::Equal(lc(2, 6)))
+            .expect_instr(4, Instruction::EqualIntegers(lc(2, 6)))
             .expect_instr(
                 5,
                 Instruction::JumpIfNotTrue(JumpIfBoolISpan {
@@ -3075,7 +3177,7 @@ mod tests {
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 13 }))
             .expect_instr(8, Instruction::Load(SymbolKey::from("0select1"), lc(4, 12)))
             .expect_instr(9, Instruction::Push(Value::Integer(8), lc(4, 12)))
-            .expect_instr(10, Instruction::NotEqual(lc(4, 12)))
+            .expect_instr(10, Instruction::NotEqualIntegers(lc(4, 12)))
             .expect_instr(
                 11,
                 Instruction::JumpIfNotTrue(JumpIfBoolISpan {
@@ -3102,7 +3204,7 @@ mod tests {
             .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(2, Instruction::Load(SymbolKey::from("0select1"), lc(2, 6)))
             .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
-            .expect_instr(4, Instruction::Equal(lc(2, 6)))
+            .expect_instr(4, Instruction::EqualIntegers(lc(2, 6)))
             .expect_instr(
                 5,
                 Instruction::JumpIfNotTrue(JumpIfBoolISpan {

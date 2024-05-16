@@ -733,33 +733,103 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::Equal(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.eq(rhs), *pos)?;
+            Instruction::EqualBooleans(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::eq_boolean, *pos);
                 context.pc += 1;
             }
 
-            Instruction::NotEqual(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.ne(rhs), *pos)?;
+            Instruction::NotEqualBooleans(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::ne_boolean, *pos);
                 context.pc += 1;
             }
 
-            Instruction::Less(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.lt(rhs), *pos)?;
+            Instruction::EqualDoubles(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::eq_double, *pos);
                 context.pc += 1;
             }
 
-            Instruction::LessEqual(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.le(rhs), *pos)?;
+            Instruction::NotEqualDoubles(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::ne_double, *pos);
                 context.pc += 1;
             }
 
-            Instruction::Greater(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.gt(rhs), *pos)?;
+            Instruction::LessDoubles(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::lt_double, *pos);
                 context.pc += 1;
             }
 
-            Instruction::GreaterEqual(pos) => {
-                Machine::exec_binary_op(context, |lhs, rhs| lhs.ge(rhs), *pos)?;
+            Instruction::LessEqualDoubles(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::le_double, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::GreaterDoubles(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::gt_double, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::GreaterEqualDoubles(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::ge_double, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::EqualIntegers(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::eq_integer, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::NotEqualIntegers(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::ne_integer, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::LessIntegers(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::lt_integer, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::LessEqualIntegers(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::le_integer, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::GreaterIntegers(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::gt_integer, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::GreaterEqualIntegers(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::ge_integer, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::EqualStrings(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::eq_text, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::NotEqualStrings(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::ne_text, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::LessStrings(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::lt_text, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::LessEqualStrings(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::le_text, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::GreaterStrings(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::gt_text, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::GreaterEqualStrings(pos) => {
+                Machine::exec_binary_op_cannot_fail(context, value::ge_text, *pos);
                 context.pc += 1;
             }
 
