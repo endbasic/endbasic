@@ -50,6 +50,9 @@ for the time being.**
     propagation during compilation as it pushes too much responsibility to the
     runtime.
 
+*   Major performance improvements: type checking now happens at compilation time
+    and the interpreter checks for interrupts more rarely now.
+
 ## Changes in version 0.10.0
 
 **Released on 2022-12-27.**
