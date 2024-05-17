@@ -276,6 +276,7 @@ impl Machine {
             clearable.reset_state(&mut self.symbols);
         }
         self.symbols.clear();
+        let _ = self.symbols.unset("0errmsg");
     }
 
     /// Obtains immutable access to the data values available during the *current* execution.
@@ -2435,7 +2436,7 @@ mod tests {
     }
 
     #[test]
-    fn test_select_clear_causes_internal_error() {
+    fn test_select_clear_does_not_cause_internal_error() {
         let code = r#"
             SELECT CASE 4
                 CASE 4: CLEAR
@@ -2444,12 +2445,7 @@ mod tests {
 
         let mut machine = Machine::default();
         machine.add_callable(ClearCommand::new());
-        let e = block_on(machine.exec(&mut code.as_bytes())).unwrap_err();
-        // This is a corner case of how the current implementation uses "hidden" variables to hold
-        // the test expression and a `clear()` can unset this variable.  We could try to be better
-        // here, but I'd say that if a program is issuing a `clear()` halfway through its execution,
-        // it is bound to suffer from issues anyway so it's not worth improving this.
-        assert_eq!("4:13: 0select1 is not defined", format!("{}", e));
+        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut code.as_bytes())).unwrap());
     }
 
     #[test]

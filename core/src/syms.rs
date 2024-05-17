@@ -268,10 +268,16 @@ impl Symbols {
 
     /// Clears all user-defined symbols.
     pub fn clear(&mut self) {
-        // TODO(jmmv): Preserving symbols that start with __ is a hack that was added to support
-        // the already-existing GPIO tests when RUN was changed to issue a CLEAR upfront.  This
-        // is undocumented behavior and we should find a nicer way to do this.
-        self.by_name.retain(|name, symbol| name.starts_with("__") || !symbol.user_defined());
+        self.by_name.retain(|name, symbol| {
+            let is_internal = name.starts_with(|c: char| c.is_ascii_digit());
+
+            // TODO(jmmv): Preserving symbols that start with __ is a hack that was added to support
+            // the already-existing GPIO tests when RUN was changed to issue a CLEAR upfront.  This
+            // is undocumented behavior and we should find a nicer way to do this.
+            let is_gpio_hack = name.starts_with("__");
+
+            is_internal || is_gpio_hack || !symbol.user_defined()
+        });
     }
 
     /// Defines a new variable `key` of type `vartype`.  The variable must not yet exist.
