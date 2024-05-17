@@ -64,10 +64,12 @@ jobs:
             - run: cargo test --package=endbasic-core -- --include-ignored
             - run: cargo test --package=endbasic-std -- --include-ignored
             - run: cargo test --package=endbasic-repl -- --include-ignored
-            - run: cargo test --package=endbasic-sdl
+            - run: LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
+                   cargo test --package=endbasic-sdl
                    -- --include-ignored --skip sdl_console
             - run: cargo test --package=endbasic-terminal -- --include-ignored
-            - run: cargo test --package=endbasic --features=sdl
+            - run: LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
+                   cargo test --package=endbasic --features=sdl
                    -- --include-ignored --skip sdl_console
             - run: cargo test --package=endbasic-web -- --include-ignored
 
