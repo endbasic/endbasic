@@ -276,7 +276,7 @@ impl Machine {
             clearable.reset_state(&mut self.symbols);
         }
         self.symbols.clear();
-        let _ = self.symbols.unset("0errmsg");
+        let _ = self.symbols.unset(&SymbolKey::from("0errmsg"));
     }
 
     /// Obtains immutable access to the data values available during the *current* execution.
@@ -966,7 +966,7 @@ impl Machine {
             }
 
             Instruction::JumpIfDefined(span) => {
-                if self.symbols.get_auto(&span.var).is_some() {
+                if self.symbols.load(&span.var).is_some() {
                     context.pc = span.addr;
                 } else {
                     context.pc += 1;
@@ -1050,7 +1050,7 @@ impl Machine {
             }
 
             Instruction::Unset(span) => {
-                self.symbols.unset(&span.name).map_err(|e| Error::from_value_error(e, span.pos))?;
+                self.symbols.unset(&span.name).expect("Should only unset variables that were set");
                 context.pc += 1;
             }
         }
