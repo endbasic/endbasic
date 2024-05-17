@@ -46,38 +46,6 @@ pub(crate) fn js_value_to_io_error(e: JsValue) -> io::Error {
     io::Error::new(io::ErrorKind::Other, "Unknown error")
 }
 
-/// Multiplication of values into a narrower type with silent value clamping.
-trait ClampedMul<T, O> {
-    /// Multiplies self by `rhs` and clamps the result to fit in `O`.
-    fn clamped_mul(self, rhs: T) -> O;
-}
-
-impl ClampedMul<u16, i16> for u16 {
-    fn clamped_mul(self, rhs: u16) -> i16 {
-        let product = u32::from(self) * u32::from(rhs);
-        if product > i16::MAX as u32 {
-            i16::MAX
-        } else {
-            product as i16
-        }
-    }
-}
-
-impl ClampedMul<u16, u16> for u16 {
-    fn clamped_mul(self, rhs: u16) -> u16 {
-        match self.checked_mul(rhs) {
-            Some(v) => v,
-            None => u16::MAX,
-        }
-    }
-}
-
-impl ClampedMul<SizeInPixels, PixelsXY> for CharsXY {
-    fn clamped_mul(self, rhs: SizeInPixels) -> PixelsXY {
-        PixelsXY { x: self.x.clamped_mul(rhs.width), y: self.y.clamped_mul(rhs.height) }
-    }
-}
-
 /// Returns the 2D rendering context for a given `canvas` element.
 fn html_canvas_to_2d_context(canvas: HtmlCanvasElement) -> io::Result<CanvasRenderingContext2d> {
     let mut attrs = ContextAttributes2d::new();
@@ -397,24 +365,5 @@ impl RasterOps for CanvasRasterOps {
             f64::from(size.height),
         );
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_clamped_mul_u16_u16_i16() {
-        assert_eq!(0i16, ClampedMul::<u16, i16>::clamped_mul(0u16, 0u16));
-        assert_eq!(55i16, ClampedMul::<u16, i16>::clamped_mul(11u16, 5u16));
-        assert_eq!(i16::MAX, ClampedMul::<u16, i16>::clamped_mul(u16::MAX, u16::MAX));
-    }
-
-    #[test]
-    fn test_clamped_mul_u16_u16_u16() {
-        assert_eq!(0u16, ClampedMul::<u16, u16>::clamped_mul(0u16, 0u16));
-        assert_eq!(55u16, ClampedMul::<u16, u16>::clamped_mul(11u16, 5u16));
-        assert_eq!(u16::MAX, ClampedMul::<u16, u16>::clamped_mul(u16::MAX, u16::MAX));
     }
 }
