@@ -362,7 +362,7 @@ impl Program for RecordedProgram {
 
     fn load(&mut self, name: Option<&str>, text: &str) {
         self.name = name.map(str::to_owned);
-        self.content = text.to_owned();
+        text.clone_into(&mut self.content);
         self.dirty = false;
     }
 

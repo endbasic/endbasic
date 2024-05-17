@@ -158,7 +158,7 @@ impl ST7735SLcd {
         lcd_cs.write(Level::High);
         lcd_bl.write(Level::High);
 
-        let spi = Spi::new(Bus::Spi0, SlaveSelect::Ss0, 9000000, rppal::spi::Mode::Mode0)
+        let spi = Spi::new(Bus::Spi0, SlaveSelect::Ss0, 9000000, spi::Mode::Mode0)
             .map_err(spi_error_to_io_error)?;
         spi.set_ss_polarity(spi::Polarity::ActiveLow).map_err(spi_error_to_io_error)?;
 

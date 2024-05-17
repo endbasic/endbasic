@@ -156,7 +156,7 @@ mod tests {
 
     /// Creates `path` with the contents in `lines` and with a deterministic modification time.
     fn write_file(path: &Path, lines: &[&str]) {
-        let mut file = fs::OpenOptions::new()
+        let mut file = OpenOptions::new()
             .create(true)
             .truncate(false) // Should not be creating the same file more than once.
             .write(true)
