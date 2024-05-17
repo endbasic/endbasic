@@ -972,25 +972,31 @@ impl Machine {
                 }
             }
 
-            Instruction::JumpIfTrue(span) => {
-                let (arg, pos) = context.value_stack.pop().unwrap();
-                match arg {
-                    Value::Boolean(false) => context.pc += 1,
-                    Value::Boolean(true) => context.pc = span.addr,
-                    _ => {
-                        return new_syntax_error(pos, span.error_msg);
-                    }
+            Instruction::JumpIfTrue(addr) => {
+                let (arg, _pos) = context.value_stack.pop().unwrap();
+                let cond = match arg {
+                    Value::Boolean(value) => value,
+                    _ => unreachable!("Types validated during compilation"),
+                };
+
+                if cond {
+                    context.pc = *addr;
+                } else {
+                    context.pc += 1;
                 }
             }
 
-            Instruction::JumpIfNotTrue(span) => {
-                let (arg, pos) = context.value_stack.pop().unwrap();
-                match arg {
-                    Value::Boolean(true) => context.pc += 1,
-                    Value::Boolean(false) => context.pc = span.addr,
-                    _ => {
-                        return new_syntax_error(pos, span.error_msg);
-                    }
+            Instruction::JumpIfNotTrue(addr) => {
+                let (arg, _pos) = context.value_stack.pop().unwrap();
+                let cond = match arg {
+                    Value::Boolean(value) => value,
+                    _ => unreachable!("Types validated during compilation"),
+                };
+
+                if cond {
+                    context.pc += 1;
+                } else {
+                    context.pc = *addr;
                 }
             }
 
@@ -1524,7 +1530,7 @@ mod tests {
                 OUT OUTF(1, 100)
                 END
                 OUT OUTF(2, 200)
-            ELSEIF OUTF(3, 300) THEN
+            ELSEIF OUTF(3, 300) = 0 THEN
                 OUT OUTF(4, 400)
             ELSE
                 OUT OUTF(5, 500)
@@ -1826,7 +1832,7 @@ mod tests {
     }
 
     #[test]
-    fn test_if_ok_on_malformed_branch() {
+    fn test_if_not_executed_on_malformed_branch() {
         let code = r#"
             IN n
             IF n = 3 THEN
@@ -1835,7 +1841,6 @@ mod tests {
                 OUT "no match"
             END IF
         "#;
-        do_ok_test(code, &["3"], &["match"]);
         do_error_test(code, &["5"], &[], "5:20: IF/ELSEIF require a boolean condition");
     }
 

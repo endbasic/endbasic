@@ -475,46 +475,34 @@ impl Compiler {
 
             DoGuard::PreUntil(guard) => {
                 let start_pc = self.next_pc;
-                self.compile_expr(guard, false)?;
+                self.compile_expr_guard(guard, "DO requires a boolean condition")?;
                 let jump_pc = self.emit(Instruction::Nop);
                 self.compile_many(span.body)?;
                 end_pc = self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
-                self.instrs[jump_pc] = Instruction::JumpIfTrue(JumpIfBoolISpan {
-                    addr: self.next_pc,
-                    error_msg: "DO requires a boolean condition",
-                });
+                self.instrs[jump_pc] = Instruction::JumpIfTrue(self.next_pc);
             }
 
             DoGuard::PreWhile(guard) => {
                 let start_pc = self.next_pc;
-                self.compile_expr(guard, false)?;
+                self.compile_expr_guard(guard, "DO requires a boolean condition")?;
                 let jump_pc = self.emit(Instruction::Nop);
                 self.compile_many(span.body)?;
                 end_pc = self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
-                self.instrs[jump_pc] = Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: self.next_pc,
-                    error_msg: "DO requires a boolean condition",
-                });
+                self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.next_pc);
             }
 
             DoGuard::PostUntil(guard) => {
                 let start_pc = self.next_pc;
                 self.compile_many(span.body)?;
-                self.compile_expr(guard, false)?;
-                end_pc = self.emit(Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: start_pc,
-                    error_msg: "LOOP requires a boolean condition",
-                }));
+                self.compile_expr_guard(guard, "LOOP requires a boolean condition")?;
+                end_pc = self.emit(Instruction::JumpIfNotTrue(start_pc));
             }
 
             DoGuard::PostWhile(guard) => {
                 let start_pc = self.next_pc;
                 self.compile_many(span.body)?;
-                self.compile_expr(guard, false)?;
-                end_pc = self.emit(Instruction::JumpIfTrue(JumpIfBoolISpan {
-                    addr: start_pc,
-                    error_msg: "LOOP requires a boolean condition",
-                }));
+                self.compile_expr_guard(guard, "LOOP requires a boolean condition")?;
+                end_pc = self.emit(Instruction::JumpIfTrue(start_pc));
             }
         }
 
@@ -557,7 +545,11 @@ impl Compiler {
         self.compile_assignment(span.iter.clone(), span.iter_pos, span.start)?;
 
         let start_pc = self.next_pc;
-        self.compile_expr(span.end, false)?;
+        let end_etype = self.compile_expr(span.end, false)?;
+        match end_etype {
+            ExprType::Boolean => (),
+            _ => panic!("Synthesized end condition for FOR must yield a boolean"),
+        };
         let jump_pc = self.emit(Instruction::Nop);
 
         self.compile_many(span.body)?;
@@ -566,10 +558,7 @@ impl Compiler {
 
         self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
 
-        self.instrs[jump_pc] = Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-            addr: self.next_pc,
-            error_msg: "FOR supports numeric iteration only",
-        });
+        self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.next_pc);
 
         Ok(())
     }
@@ -583,7 +572,7 @@ impl Compiler {
         while let Some(branch) = next {
             let next2 = iter.next();
 
-            self.compile_expr(branch.guard, false)?;
+            self.compile_expr_guard(branch.guard, "IF/ELSEIF require a boolean condition")?;
             let jump_pc = self.emit(Instruction::Nop);
             self.compile_many(branch.body)?;
 
@@ -592,10 +581,7 @@ impl Compiler {
                 self.emit(Instruction::Nop);
             }
 
-            self.instrs[jump_pc] = Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                addr: self.next_pc,
-                error_msg: "IF/ELSEIF require a boolean condition",
-            });
+            self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.next_pc);
 
             next = next2;
         }
@@ -693,7 +679,7 @@ impl Compiler {
                     self.compile_many(case.body)?;
                 }
                 Some(guard) => {
-                    self.compile_expr(guard, false)?;
+                    self.compile_expr_guard(guard, "SELECT requires a boolean condition")?;
                     let jump_pc = self.emit(Instruction::Nop);
                     self.compile_many(case.body)?;
 
@@ -702,10 +688,7 @@ impl Compiler {
                         self.emit(Instruction::Nop);
                     }
 
-                    self.instrs[jump_pc] = Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                        addr: self.next_pc,
-                        error_msg: "SELECT requires a boolean condition",
-                    });
+                    self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.next_pc);
                 }
             }
 
@@ -729,17 +712,14 @@ impl Compiler {
     /// Compiles a `WHILE` loop and appends its instructions to the compilation context.
     fn compile_while(&mut self, span: WhileSpan) -> Result<()> {
         let start_pc = self.next_pc;
-        self.compile_expr(span.expr, false)?;
+        self.compile_expr_guard(span.expr, "WHILE requires a boolean condition")?;
         let jump_pc = self.emit(Instruction::Nop);
 
         self.compile_many(span.body)?;
 
         self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
 
-        self.instrs[jump_pc] = Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-            addr: self.next_pc,
-            error_msg: "WHILE requires a boolean condition",
-        });
+        self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.next_pc);
 
         Ok(())
     }
@@ -1398,6 +1378,16 @@ impl Compiler {
                     )),
                 }
             }
+        }
+    }
+
+    /// Compiles an expression that guards a conditional statement.  Returns an error if the
+    /// expression is invalid or if it does not evaluate to a boolean.
+    fn compile_expr_guard<S: Into<String>>(&mut self, guard: Expr, errmsg: S) -> Result<()> {
+        let pos = guard.start_pos();
+        match self.compile_expr(guard, false)? {
+            ExprType::Boolean => Ok(()),
+            _ => Err(Error::new(pos, errmsg.into())),
         }
     }
 
@@ -2133,13 +2123,7 @@ mod tests {
             .parse("DO WHILE TRUE\nFOO\nLOOP")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
-            .expect_instr(
-                1,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 4,
-                    error_msg: "DO requires a boolean condition",
-                }),
-            )
+            .expect_instr(1, Instruction::JumpIfNotTrue(4))
             .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
             .check();
@@ -2153,13 +2137,7 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
             .expect_instr(1, Instruction::Push(Value::Boolean(true), lc(3, 12)))
-            .expect_instr(
-                2,
-                Instruction::JumpIfTrue(JumpIfBoolISpan {
-                    addr: 0,
-                    error_msg: "LOOP requires a boolean condition",
-                }),
-            )
+            .expect_instr(2, Instruction::JumpIfTrue(0))
             .check();
     }
 
@@ -2208,13 +2186,7 @@ mod tests {
             .parse("DO WHILE TRUE\nEXIT DO\nLOOP")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
-            .expect_instr(
-                1,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 4,
-                    error_msg: "DO requires a boolean condition",
-                }),
-            )
+            .expect_instr(1, Instruction::JumpIfNotTrue(4))
             .expect_instr(2, Instruction::Jump(JumpISpan { addr: 4 }))
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
             .check();
@@ -2226,22 +2198,10 @@ mod tests {
             .parse("DO WHILE TRUE\nEXIT DO\nDO UNTIL FALSE\nEXIT DO\nLOOP\nLOOP")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
-            .expect_instr(
-                1,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 8,
-                    error_msg: "DO requires a boolean condition",
-                }),
-            )
+            .expect_instr(1, Instruction::JumpIfNotTrue(8))
             .expect_instr(2, Instruction::Jump(JumpISpan { addr: 8 }))
             .expect_instr(3, Instruction::Push(Value::Boolean(false), lc(3, 10)))
-            .expect_instr(
-                4,
-                Instruction::JumpIfTrue(JumpIfBoolISpan {
-                    addr: 7,
-                    error_msg: "DO requires a boolean condition",
-                }),
-            )
+            .expect_instr(4, Instruction::JumpIfTrue(7))
             .expect_instr(5, Instruction::Jump(JumpISpan { addr: 7 }))
             .expect_instr(6, Instruction::Jump(JumpISpan { addr: 3 }))
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 0 }))
@@ -2254,23 +2214,11 @@ mod tests {
             .parse("DO WHILE TRUE\nEXIT DO\nLOOP\nDO WHILE TRUE\nEXIT DO\nLOOP")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
-            .expect_instr(
-                1,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 4,
-                    error_msg: "DO requires a boolean condition",
-                }),
-            )
+            .expect_instr(1, Instruction::JumpIfNotTrue(4))
             .expect_instr(2, Instruction::Jump(JumpISpan { addr: 4 }))
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
             .expect_instr(4, Instruction::Push(Value::Boolean(true), lc(4, 10)))
-            .expect_instr(
-                5,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 8,
-                    error_msg: "DO requires a boolean condition",
-                }),
-            )
+            .expect_instr(5, Instruction::JumpIfNotTrue(8))
             .expect_instr(6, Instruction::Jump(JumpISpan { addr: 8 }))
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 4 }))
             .check();
@@ -2282,22 +2230,10 @@ mod tests {
             .parse("DO WHILE TRUE\nEXIT DO\nWHILE FALSE\nEXIT DO\nWEND\nLOOP")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
-            .expect_instr(
-                1,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 8,
-                    error_msg: "DO requires a boolean condition",
-                }),
-            )
+            .expect_instr(1, Instruction::JumpIfNotTrue(8))
             .expect_instr(2, Instruction::Jump(JumpISpan { addr: 8 }))
             .expect_instr(3, Instruction::Push(Value::Boolean(false), lc(3, 7)))
-            .expect_instr(
-                4,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 7,
-                    error_msg: "WHILE requires a boolean condition",
-                }),
-            )
+            .expect_instr(4, Instruction::JumpIfNotTrue(7))
             .expect_instr(5, Instruction::Jump(JumpISpan { addr: 8 }))
             .expect_instr(6, Instruction::Jump(JumpISpan { addr: 3 }))
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 0 }))
@@ -2750,13 +2686,7 @@ mod tests {
             .expect_instr(2, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
             .expect_instr(3, Instruction::Push(Value::Integer(5), lc(1, 17)))
             .expect_instr(4, Instruction::LessEqualIntegers(lc(1, 14)))
-            .expect_instr(
-                5,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 13,
-                    error_msg: "FOR supports numeric iteration only",
-                }),
-            )
+            .expect_instr(5, Instruction::JumpIfNotTrue(13))
             .expect_instr(6, Instruction::Push(Value::Boolean(false), lc(1, 24)))
             .expect_instr(7, Instruction::Assign(SymbolKey::from("a")))
             .expect_instr(8, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
@@ -2779,13 +2709,7 @@ mod tests {
             .expect_instr(2, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
             .expect_instr(3, Instruction::Load(SymbolKey::from("j"), lc(1, 17)))
             .expect_instr(4, Instruction::LessEqualIntegers(lc(1, 14)))
-            .expect_instr(
-                5,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 13,
-                    error_msg: "FOR supports numeric iteration only",
-                }),
-            )
+            .expect_instr(5, Instruction::JumpIfNotTrue(13))
             .expect_instr(6, Instruction::Push(Value::Boolean(false), lc(1, 24)))
             .expect_instr(7, Instruction::Assign(SymbolKey::from("a")))
             .expect_instr(8, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
@@ -2812,13 +2736,7 @@ mod tests {
             .expect_instr(6, Instruction::Load(SymbolKey::from("j"), lc(1, 28)))
             .expect_instr(7, Instruction::AddIntegers(lc(1, 26)))
             .expect_instr(8, Instruction::LessEqualIntegers(lc(1, 20)))
-            .expect_instr(
-                9,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 17,
-                    error_msg: "FOR supports numeric iteration only",
-                }),
-            )
+            .expect_instr(9, Instruction::JumpIfNotTrue(17))
             .expect_instr(10, Instruction::Push(Value::Boolean(false), lc(1, 36)))
             .expect_instr(11, Instruction::Assign(SymbolKey::from("a")))
             .expect_instr(12, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
@@ -2846,13 +2764,7 @@ mod tests {
             .expect_instr(6, Instruction::Push(Value::Integer(2), lc(1, 17)))
             .expect_instr(7, Instruction::IntegerToDouble)
             .expect_instr(8, Instruction::LessEqualDoubles(lc(1, 14)))
-            .expect_instr(
-                9,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 15,
-                    error_msg: "FOR supports numeric iteration only",
-                }),
-            )
+            .expect_instr(9, Instruction::JumpIfNotTrue(15))
             .expect_instr(10, Instruction::Load(SymbolKey::from("iter"), lc(1, 5)))
             .expect_instr(11, Instruction::Push(Value::Double(0.1), lc(1, 24)))
             .expect_instr(12, Instruction::AddDoubles(lc(1, 14)))
@@ -2900,13 +2812,7 @@ mod tests {
             .parse("IF FALSE THEN: FOO: END IF")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(false), lc(1, 4)))
-            .expect_instr(
-                1,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 3,
-                    error_msg: "IF/ELSEIF require a boolean condition",
-                }),
-            )
+            .expect_instr(1, Instruction::JumpIfNotTrue(3))
             .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(1, 16), 0))
             .check();
     }
@@ -2920,33 +2826,15 @@ mod tests {
             .parse("IF FALSE THEN\nFOO\nELSEIF TRUE THEN\nBAR\nELSE\nBAZ\nEND IF")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(false), lc(1, 4)))
-            .expect_instr(
-                1,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 4,
-                    error_msg: "IF/ELSEIF require a boolean condition",
-                }),
-            )
+            .expect_instr(1, Instruction::JumpIfNotTrue(4))
             .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 11 }))
             .expect_instr(4, Instruction::Push(Value::Boolean(true), lc(3, 8)))
-            .expect_instr(
-                5,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 8,
-                    error_msg: "IF/ELSEIF require a boolean condition",
-                }),
-            )
+            .expect_instr(5, Instruction::JumpIfNotTrue(8))
             .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("BAR"), lc(4, 1), 0))
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 11 }))
             .expect_instr(8, Instruction::Push(Value::Boolean(true), lc(5, 1)))
-            .expect_instr(
-                9,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 11,
-                    error_msg: "IF/ELSEIF require a boolean condition",
-                }),
-            )
+            .expect_instr(9, Instruction::JumpIfNotTrue(11))
             .expect_instr(10, Instruction::BuiltinCall(SymbolKey::from("BAZ"), lc(6, 1), 0))
             .check();
     }
@@ -3003,19 +2891,13 @@ mod tests {
             t = t.expect_instr(n, instr);
             n += 1;
         }
-        t.expect_instr(
-            n,
-            Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                addr: n + 2,
-                error_msg: "SELECT requires a boolean condition",
-            }),
-        )
-        .expect_instr(n + 1, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
-        .expect_instr(
-            n + 2,
-            Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
-        )
-        .check();
+        t.expect_instr(n, Instruction::JumpIfNotTrue(n + 2))
+            .expect_instr(n + 1, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
+            .expect_instr(
+                n + 2,
+                Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
+            )
+            .check();
     }
 
     #[test]
@@ -3150,13 +3032,7 @@ mod tests {
             .expect_instr(2, Instruction::Load(SymbolKey::from("0select1"), lc(2, 6)))
             .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
             .expect_instr(4, Instruction::EqualIntegers(lc(2, 6)))
-            .expect_instr(
-                5,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 7,
-                    error_msg: "SELECT requires a boolean condition",
-                }),
-            )
+            .expect_instr(5, Instruction::JumpIfNotTrue(7))
             .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
             .expect_instr(
                 7,
@@ -3208,25 +3084,13 @@ mod tests {
             .expect_instr(2, Instruction::Load(SymbolKey::from("0select1"), lc(2, 6)))
             .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
             .expect_instr(4, Instruction::EqualIntegers(lc(2, 6)))
-            .expect_instr(
-                5,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 8,
-                    error_msg: "SELECT requires a boolean condition",
-                }),
-            )
+            .expect_instr(5, Instruction::JumpIfNotTrue(8))
             .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 13 }))
             .expect_instr(8, Instruction::Load(SymbolKey::from("0select1"), lc(4, 12)))
             .expect_instr(9, Instruction::Push(Value::Integer(8), lc(4, 12)))
             .expect_instr(10, Instruction::NotEqualIntegers(lc(4, 12)))
-            .expect_instr(
-                11,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 13,
-                    error_msg: "SELECT requires a boolean condition",
-                }),
-            )
+            .expect_instr(11, Instruction::JumpIfNotTrue(13))
             .expect_instr(12, Instruction::BuiltinCall(SymbolKey::from("BAR"), lc(5, 1), 0))
             .expect_instr(
                 13,
@@ -3247,13 +3111,7 @@ mod tests {
             .expect_instr(2, Instruction::Load(SymbolKey::from("0select1"), lc(2, 6)))
             .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
             .expect_instr(4, Instruction::EqualIntegers(lc(2, 6)))
-            .expect_instr(
-                5,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 8,
-                    error_msg: "SELECT requires a boolean condition",
-                }),
-            )
+            .expect_instr(5, Instruction::JumpIfNotTrue(8))
             .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 9 }))
             .expect_instr(8, Instruction::BuiltinCall(SymbolKey::from("BAR"), lc(5, 1), 0))
@@ -3291,13 +3149,7 @@ mod tests {
             .parse("WHILE TRUE\nFOO\nWEND")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 7)))
-            .expect_instr(
-                1,
-                Instruction::JumpIfNotTrue(JumpIfBoolISpan {
-                    addr: 4,
-                    error_msg: "WHILE requires a boolean condition",
-                }),
-            )
+            .expect_instr(1, Instruction::JumpIfNotTrue(4))
             .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
             .check();
