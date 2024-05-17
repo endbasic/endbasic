@@ -55,7 +55,8 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - run: brew install sdl2 sdl2_ttf
-            - run: ./.github/workflows/release.sh macos-x86_64-sdl
+            - run: LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
+                ./.github/workflows/release.sh macos-x86_64-sdl
             - uses: actions/upload-artifact@v2
               with:
                 name: endbasic-macos-x86_64-sdl
