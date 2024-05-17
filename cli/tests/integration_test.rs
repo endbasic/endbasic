@@ -425,6 +425,18 @@ fn test_lang_control_flow() {
 }
 
 #[test]
+fn test_lang_control_flow_errors() {
+    check(
+        bin_path("endbasic"),
+        &["--local-drive=memory://"],
+        0,
+        Behavior::File(src_path("cli/tests/lang/control-flow-errors.in")),
+        Behavior::File(src_path("cli/tests/lang/control-flow-errors.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_lang_exec_error() {
     check(
         bin_path("endbasic"),

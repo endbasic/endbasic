@@ -13,8 +13,21 @@
 ' License for the specific language governing permissions and limitations
 ' under the License.
 
-PRINT "foo"
-IF 2 / 0 = 0 THEN ' Invalid values in expression.
-    PRINT "bar"
-END IF
-PRINT "baz"
+' Tests for control flow errors.
+'
+' This is must be run through the REPL (as opposed to running as a script)
+' because the statements below may trigger compilation errors and abort
+' execution right away.  The REPL compiles each statement separately so it
+' can print those errors.
+
+IF 3 THEN PRINT
+IF "foo" THEN: PRINT: END IF
+
+FOR i = FALSE TO TRUE: NEXT
+
+WHILE 3: WEND
+
+DO: LOOP UNTIL 3
+DO: LOOP WHILE "foo"
+DO UNTIL "foo": LOOP
+DO WHILE 3: LOOP

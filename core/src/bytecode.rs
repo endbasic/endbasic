@@ -59,16 +59,6 @@ pub struct JumpIfDefinedISpan {
     pub addr: Address,
 }
 
-/// Components of a conditional jump that depends on a boolean expression.
-#[cfg_attr(test, derive(Debug, PartialEq))]
-pub struct JumpIfBoolISpan {
-    /// The address to jump to.
-    pub addr: Address,
-
-    /// The message to emit if the condition is not boolean.
-    pub error_msg: &'static str,
-}
-
 /// Components of a change to the error handler.
 #[derive(Clone, Copy)]
 #[cfg_attr(test, derive(Debug, Eq, PartialEq))]
@@ -275,10 +265,10 @@ pub enum Instruction {
     JumpIfDefined(JumpIfDefinedISpan),
 
     /// Represents an conditional jump that jumps if the condition is met.
-    JumpIfTrue(JumpIfBoolISpan),
+    JumpIfTrue(Address),
 
     /// Represents an conditional jump that jumps if the condition is not met.
-    JumpIfNotTrue(JumpIfBoolISpan),
+    JumpIfNotTrue(Address),
 
     /// Represents a load of a variable's value from main memory into the stack.
     Load(SymbolKey, LineCol),
