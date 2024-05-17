@@ -446,12 +446,11 @@ impl Symbols {
         }
     }
 
-    /// Unsets the symbol `name` irrespective of its type.
-    pub fn unset(&mut self, name: &str) -> Result<()> {
-        let key = name.to_ascii_uppercase();
-        match self.by_name.remove(&key) {
+    /// Unsets the symbol `key` irrespective of its type.
+    pub fn unset(&mut self, key: &SymbolKey) -> Result<()> {
+        match self.by_name.remove(&key.0) {
             Some(_) => Ok(()),
-            None => Err(Error::new(format!("{} is not defined", name))),
+            None => Err(Error::new(format!("{} is not defined", key))),
         }
     }
 
@@ -1295,7 +1294,7 @@ mod tests {
 
         let mut count = 4;
         for name in ["SomeArray", "Out", "Sum", "SomeVar"] {
-            syms.unset(name).unwrap();
+            syms.unset(&SymbolKey::from(name)).unwrap();
             count -= 1;
             assert_eq!(count, syms.as_hashmap().len());
         }
@@ -1305,7 +1304,7 @@ mod tests {
     #[test]
     fn test_symbols_unset_undefined() {
         let mut syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
-        syms.unset("FOO").unwrap_err();
+        syms.unset(&SymbolKey::from("FOO")).unwrap_err();
         assert_eq!(1, syms.as_hashmap().len());
     }
 }

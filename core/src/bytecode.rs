@@ -53,7 +53,7 @@ pub struct JumpISpan {
 #[cfg_attr(test, derive(Debug, Eq, PartialEq))]
 pub struct JumpIfDefinedISpan {
     /// The variable to check for nonexistence.
-    pub var: String,
+    pub var: SymbolKey,
 
     /// The address to jump to.
     pub addr: Address,
@@ -77,7 +77,7 @@ pub enum ErrorHandlerISpan {
 #[cfg_attr(test, derive(Debug, Eq, PartialEq))]
 pub struct UnsetISpan {
     /// Name of the variable to unset.
-    pub name: String,
+    pub name: SymbolKey,
 
     /// Position of where this instruction was requested.
     pub pos: LineCol,

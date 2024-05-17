@@ -528,16 +528,14 @@ impl Compiler {
             let key = SymbolKey::from(span.iter.name());
             let skip_pc = self.emit(Instruction::Nop);
 
+            let iter_key = SymbolKey::from(span.iter.name());
             if self.symtable.get(&key).is_none() {
                 self.emit(Instruction::Dim(key, VarType::Double));
-                self.symtable.insert(
-                    SymbolKey::from(span.iter.name()),
-                    SymbolPrototype::Variable(ExprType::Double),
-                );
+                self.symtable.insert(iter_key.clone(), SymbolPrototype::Variable(ExprType::Double));
             }
 
             self.instrs[skip_pc] = Instruction::JumpIfDefined(JumpIfDefinedISpan {
-                var: span.iter.name().to_owned(),
+                var: iter_key,
                 addr: self.next_pc,
             });
         }
@@ -700,10 +698,7 @@ impl Compiler {
         }
 
         let test_key = SymbolKey::from(test_vref.name());
-        self.emit(Instruction::Unset(UnsetISpan {
-            name: test_vref.take_name(),
-            pos: span.end_pos,
-        }));
+        self.emit(Instruction::Unset(UnsetISpan { name: test_key.clone(), pos: span.end_pos }));
         self.symtable.remove(test_key);
 
         Ok(())
@@ -2754,7 +2749,10 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::JumpIfDefined(JumpIfDefinedISpan { var: "iter".to_owned(), addr: 2 }),
+                Instruction::JumpIfDefined(JumpIfDefinedISpan {
+                    var: SymbolKey::from("iter"),
+                    addr: 2,
+                }),
             )
             .expect_instr(1, Instruction::Dim(SymbolKey::from("iter"), VarType::Double))
             .expect_instr(2, Instruction::Push(Value::Integer(0), lc(1, 12)))
@@ -2895,7 +2893,7 @@ mod tests {
             .expect_instr(n + 1, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
             .expect_instr(
                 n + 2,
-                Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
+                Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(4, 1) }),
             )
             .check();
     }
@@ -3016,7 +3014,10 @@ mod tests {
             .expect_instr(3, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(
                 4,
-                Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(1, 20) }),
+                Instruction::Unset(UnsetISpan {
+                    name: SymbolKey::from("0select1"),
+                    pos: lc(1, 20),
+                }),
             )
             .check();
     }
@@ -3036,7 +3037,7 @@ mod tests {
             .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
             .expect_instr(
                 7,
-                Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
+                Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(4, 1) }),
             )
             .check();
     }
@@ -3051,7 +3052,10 @@ mod tests {
             .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(
                 2,
-                Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(1, 16) }),
+                Instruction::Unset(UnsetISpan {
+                    name: SymbolKey::from("0select1"),
+                    pos: lc(1, 16),
+                }),
             )
             .check();
     }
@@ -3067,7 +3071,7 @@ mod tests {
             .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
             .expect_instr(
                 3,
-                Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(4, 1) }),
+                Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(4, 1) }),
             )
             .check();
     }
@@ -3094,7 +3098,7 @@ mod tests {
             .expect_instr(12, Instruction::BuiltinCall(SymbolKey::from("BAR"), lc(5, 1), 0))
             .expect_instr(
                 13,
-                Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(6, 1) }),
+                Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(6, 1) }),
             )
             .check();
     }
@@ -3117,7 +3121,7 @@ mod tests {
             .expect_instr(8, Instruction::BuiltinCall(SymbolKey::from("BAR"), lc(5, 1), 0))
             .expect_instr(
                 9,
-                Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(6, 1) }),
+                Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(6, 1) }),
             )
             .check();
     }
@@ -3131,13 +3135,19 @@ mod tests {
             .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(
                 2,
-                Instruction::Unset(UnsetISpan { name: "0select1".to_owned(), pos: lc(1, 16) }),
+                Instruction::Unset(UnsetISpan {
+                    name: SymbolKey::from("0select1"),
+                    pos: lc(1, 16),
+                }),
             )
             .expect_instr(3, Instruction::Push(Value::Integer(0), lc(2, 13)))
             .expect_instr(4, Instruction::Assign(SymbolKey::from("0select2")))
             .expect_instr(
                 5,
-                Instruction::Unset(UnsetISpan { name: "0select2".to_owned(), pos: lc(2, 16) }),
+                Instruction::Unset(UnsetISpan {
+                    name: SymbolKey::from("0select2"),
+                    pos: lc(2, 16),
+                }),
             )
             .check();
     }
