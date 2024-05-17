@@ -211,6 +211,7 @@ pub struct Machine {
     clearables: Vec<Box<dyn Clearable>>,
     yield_now_fn: Option<YieldNowFn>,
     signals_chan: (Sender<Signal>, Receiver<Signal>),
+    check_stop: bool,
     stop_reason: Option<StopReason>,
     data: Vec<Option<Value>>,
 }
@@ -224,14 +225,7 @@ impl Default for Machine {
 impl Machine {
     /// Constructs a new empty machine with the given signals communication channel.
     pub fn with_signals_chan(signals: (Sender<Signal>, Receiver<Signal>)) -> Self {
-        Self {
-            symbols: Symbols::default(),
-            clearables: vec![],
-            yield_now_fn: None,
-            signals_chan: signals,
-            stop_reason: None,
-            data: vec![],
-        }
+        Self::with_signals_chan_and_yield_now_fn(signals, None)
     }
 
     /// Constructs a new empty machine with the given signals communication channel and yielding
@@ -245,6 +239,7 @@ impl Machine {
             clearables: vec![],
             yield_now_fn,
             signals_chan: signals,
+            check_stop: false,
             stop_reason: None,
             data: vec![],
         }
@@ -360,7 +355,10 @@ impl Machine {
         }
 
         match self.signals_chan.1.try_recv() {
-            Ok(Signal::Break) => self.stop_reason = Some(StopReason::Break),
+            Ok(Signal::Break) => {
+                self.check_stop = true;
+                self.stop_reason = Some(StopReason::Break)
+            }
             Err(TryRecvError::Empty) => (),
             Err(TryRecvError::Closed) => panic!("Channel unexpectedly closed"),
         }
@@ -477,6 +475,7 @@ impl Machine {
         } else {
             0
         };
+        self.check_stop = true;
         self.stop_reason = Some(StopReason::Exited(code));
         Ok(())
     }
@@ -962,11 +961,17 @@ impl Machine {
             }
 
             Instruction::Jump(span) => {
+                if span.addr <= context.pc {
+                    self.check_stop = true;
+                }
                 context.pc = span.addr;
             }
 
             Instruction::JumpIfDefined(span) => {
                 if self.symbols.load(&span.var).is_some() {
+                    if span.addr <= context.pc {
+                        self.check_stop = true;
+                    }
                     context.pc = span.addr;
                 } else {
                     context.pc += 1;
@@ -981,6 +986,9 @@ impl Machine {
                 };
 
                 if cond {
+                    if *addr <= context.pc {
+                        self.check_stop = true;
+                    }
                     context.pc = *addr;
                 } else {
                     context.pc += 1;
@@ -997,6 +1005,9 @@ impl Machine {
                 if cond {
                     context.pc += 1;
                 } else {
+                    if *addr <= context.pc {
+                        self.check_stop = true;
+                    }
                     context.pc = *addr;
                 }
             }
@@ -1040,7 +1051,10 @@ impl Machine {
             }
 
             Instruction::Return(pos) => match context.addr_stack.pop() {
-                Some(addr) => context.pc = addr,
+                Some(addr) => {
+                    self.check_stop = true;
+                    context.pc = addr
+                }
                 None => return new_syntax_error(*pos, "No address to return to".to_owned()),
             },
 
@@ -1098,6 +1112,7 @@ impl Machine {
     /// Note that this does not consume `self`.  As a result, it is possible to execute multiple
     /// different programs on the same machine, all sharing state.
     pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<StopReason> {
+        debug_assert!(!self.check_stop);
         debug_assert!(self.stop_reason.is_none());
 
         // TODO(jmmv): It should be possible to make the parser return statements one at a time and
@@ -1111,8 +1126,12 @@ impl Machine {
         let mut context = Context::default();
         let mut result = Ok(());
         while result.is_ok() && context.pc < image.instrs.len() {
-            if image.instrs[context.pc].is_statement() && self.should_stop().await {
-                break;
+            debug_assert!(self.stop_reason.is_none() || self.check_stop);
+            if self.check_stop && image.instrs[context.pc].is_statement() {
+                if self.should_stop().await {
+                    break;
+                }
+                self.check_stop = false;
             }
 
             result = self.exec_one(&mut context, &image.instrs).await;
@@ -1121,6 +1140,7 @@ impl Machine {
         self.data.clear();
         result?;
 
+        self.check_stop = false;
         Ok(self.stop_reason.take().unwrap_or(StopReason::Eof))
     }
 }
@@ -1618,6 +1638,86 @@ mod tests {
             let result = future.await;
             assert_eq!(StopReason::Break, result.unwrap());
         }
+    }
+
+    async fn do_no_check_stop_test(code: &str) {
+        let (tx, rx) = async_channel::unbounded();
+        let mut machine = Machine::with_signals_chan_and_yield_now_fn((tx.clone(), rx), None);
+
+        tx.send(Signal::Break).await.unwrap();
+
+        let input = &mut code.as_bytes();
+        assert_eq!(StopReason::Eof, machine.exec(input).await.unwrap());
+
+        assert_eq!(1, tx.len());
+    }
+
+    #[tokio::test]
+    async fn test_goto_forward_does_not_check_stop() {
+        do_no_check_stop_test("GOTO @after: a = 1: @after").await;
+    }
+
+    #[tokio::test]
+    async fn test_if_taken_does_not_check_stop() {
+        do_no_check_stop_test("a = 3: IF a = 3 THEN b = 0 ELSE b = 1: a = 7").await;
+    }
+
+    #[tokio::test]
+    async fn test_if_not_taken_does_not_check_stop() {
+        do_no_check_stop_test("a = 3: IF a = 5 THEN b = 0 ELSE b = 1: a = 7").await;
+    }
+
+    async fn do_check_stop_test(code: &str) {
+        let (tx, rx) = async_channel::unbounded();
+        let mut machine = Machine::with_signals_chan_and_yield_now_fn((tx.clone(), rx), None);
+
+        tx.send(Signal::Break).await.unwrap();
+
+        let input = &mut code.as_bytes();
+        assert_eq!(StopReason::Break, machine.exec(input).await.unwrap());
+
+        assert_eq!(0, tx.len());
+    }
+
+    #[tokio::test]
+    async fn goto_checks_stop() {
+        do_check_stop_test("@here: GOTO @here").await;
+        do_check_stop_test("@before: a = 1: GOTO @before").await;
+    }
+
+    #[tokio::test]
+    async fn gosub_checks_stop() {
+        do_check_stop_test("GOTO @skip: @sub: a = 1: RETURN: @skip: GOSUB @sub: a = 1").await;
+    }
+
+    #[tokio::test]
+    async fn do_checks_stop() {
+        do_check_stop_test("DO: LOOP").await;
+        do_check_stop_test("DO: a = 1: LOOP").await;
+
+        do_check_stop_test("DO UNTIL FALSE: LOOP").await;
+        do_check_stop_test("DO UNTIL FALSE: a = 1: LOOP").await;
+
+        do_check_stop_test("DO WHILE TRUE: LOOP").await;
+        do_check_stop_test("DO WHILE TRUE: a = 1: LOOP").await;
+
+        do_check_stop_test("DO: LOOP UNTIL FALSE").await;
+        do_check_stop_test("DO: a = 1: LOOP UNTIL FALSE").await;
+
+        do_check_stop_test("DO: LOOP WHILE TRUE").await;
+        do_check_stop_test("DO: a = 1: LOOP WHILE TRUE").await;
+    }
+
+    #[tokio::test]
+    async fn for_checks_stop() {
+        do_check_stop_test("FOR a = 1 TO 10: NEXT").await;
+        do_check_stop_test("FOR a = 1 TO 10: B = 2: NEXT").await;
+    }
+
+    #[tokio::test]
+    async fn while_checks_stop() {
+        do_check_stop_test("WHILE TRUE: WEND").await;
+        do_check_stop_test("WHILE TRUE: a = 1: WEND").await;
     }
 
     #[test]
