@@ -86,20 +86,27 @@ main() {
             ;;
 
         macos*)
-            ( cd cli && cargo build --release --features=sdl )
+            brew install sdl2 sdl2_ttf
+
+            local brew="$(brew --prefix)"
+            (
+                cd cli
+                export LIBRARY_PATH="${brew}/lib"
+                cargo build --release --features=sdl
+            )
 
             cp ./target/release/endbasic "${distname}/endbasic.bin"
             cp .github/workflows/macos-launcher.sh "${distname}/endbasic"
 
             # Bundle the necessary shared libraries as provided by Homebrew.
-            cp /usr/local/opt/sdl2/lib/libSDL2-*.dylib "${distname}"
-            cp /usr/local/opt/sdl2/LICENSE.txt "${distname}/LICENSE.sdl2"
-            cp /usr/local/opt/sdl2_ttf/lib/libSDL2_ttf-*.dylib "${distname}"
-            cp /usr/local/opt/sdl2_ttf/LICENSE.txt "${distname}/LICENSE.sdl2_ttf"
-            cp /usr/local/opt/freetype/lib/libfreetype.*.dylib "${distname}"
-            cp /usr/local/opt/freetype/LICENSE.TXT "${distname}/LICENSE.freetype"
-            cp /usr/local/opt/libpng/lib/libpng16.*.dylib "${distname}"
-            cp /usr/local/opt/libpng/LICENSE "${distname}/LICENSE.libpng"
+            cp "${brew}"/Cellar/sdl2/*/lib/libSDL2-*.dylib "${distname}"
+            cp "${brew}"/Cellar/sdl2/*/LICENSE.txt "${distname}/LICENSE.sdl2"
+            cp "${brew}"/Cellar/sdl2_ttf/*/lib/libSDL2_ttf-*.dylib "${distname}"
+            cp "${brew}"/Cellar/sdl2_ttf/*/LICENSE.txt "${distname}/LICENSE.sdl2_ttf"
+            cp "${brew}"/Cellar/freetype/*/lib/libfreetype.*.dylib "${distname}"
+            cp "${brew}"/Cellar/freetype/*/LICENSE.TXT "${distname}/LICENSE.freetype"
+            cp "${brew}"/Cellar/libpng/*/lib/libpng16.*.dylib "${distname}"
+            cp "${brew}"/Cellar/libpng/*/LICENSE "${distname}/LICENSE.libpng"
 
             brew uninstall --ignore-dependencies sdl2 sdl2_ttf freetype libpng
             sanity_check "${distname}/endbasic"

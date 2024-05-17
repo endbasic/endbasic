@@ -391,7 +391,7 @@ impl fmt::Display for Value {
             Value::Boolean(false) => write!(f, "FALSE"),
             Value::Double(d) => {
                 let mut s = format!("{}", d);
-                if !s.contains('.') {
+                if d.is_finite() && !d.is_nan() && !s.contains('.') {
                     s += ".0";
                 }
                 write!(f, "{}", s)
@@ -433,7 +433,7 @@ impl Value {
         match self {
             Value::Boolean(true) => "TRUE".to_owned(),
             Value::Boolean(false) => "FALSE".to_owned(),
-            Value::Double(d) if d.is_sign_negative() => format!("{}", d),
+            Value::Double(d) if !d.is_nan() && d.is_sign_negative() => format!("{}", d),
             Value::Double(d) => format!(" {}", d),
             Value::Integer(i) if i.is_negative() => format!("{}", i),
             Value::Integer(i) => format!(" {}", i),
@@ -897,7 +897,26 @@ mod tests {
         assert_eq!("3.0", format!("{}", Value::Double(3.0)));
         assert_eq!("3.1", format!("{}", Value::Double(3.1)));
         assert_eq!("0.51", format!("{}", Value::Double(0.51)));
+        assert_eq!("inf", format!("{}", Value::Double(f64::INFINITY)));
+        assert_eq!("-inf", format!("{}", Value::Double(f64::NEG_INFINITY)));
+        assert_eq!("NaN", format!("{}", Value::Double(f64::NAN)));
+        assert_eq!("NaN", format!("{}", Value::Double(-f64::NAN)));
         assert_eq!("-56", format!("{}", Value::Integer(-56)));
         assert_eq!("\"some words\"", format!("{}", Value::Text("some words".to_owned())));
+    }
+
+    #[test]
+    fn test_value_to_text() {
+        assert_eq!("TRUE", Value::Boolean(true).to_text());
+        assert_eq!("FALSE", Value::Boolean(false).to_text());
+        assert_eq!(" 3", Value::Double(3.0).to_text());
+        assert_eq!(" 3.1", Value::Double(3.1).to_text());
+        assert_eq!(" 0.51", Value::Double(0.51).to_text());
+        assert_eq!(" inf", Value::Double(f64::INFINITY).to_text());
+        assert_eq!("-inf", Value::Double(f64::NEG_INFINITY).to_text());
+        assert_eq!(" NaN", Value::Double(f64::NAN).to_text());
+        assert_eq!(" NaN", Value::Double(-f64::NAN).to_text());
+        assert_eq!("-56", Value::Integer(-56).to_text());
+        assert_eq!("some words", Value::Text("some words".to_owned()).to_text());
     }
 }
