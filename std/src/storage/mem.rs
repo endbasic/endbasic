@@ -74,7 +74,7 @@ impl Drive for InMemoryDrive {
 
     async fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
         if let Some((prev_content, _readers)) = self.programs.get_mut(name) {
-            *prev_content = content.to_owned();
+            content.clone_into(prev_content);
             return Ok(());
         };
         self.programs.insert(name.to_owned(), (content.to_owned(), HashSet::new()));

@@ -164,7 +164,7 @@ impl Service for CloudService {
             .await
             .map_err(reqwest_error_to_io_error)?;
         match response.status() {
-            reqwest::StatusCode::OK => Ok(()),
+            StatusCode::OK => Ok(()),
             _ => Err(http_response_to_io_error(response).await),
         }
     }
@@ -185,7 +185,7 @@ impl Service for CloudService {
             .await
             .map_err(reqwest_error_to_io_error)?;
         match response.status() {
-            reqwest::StatusCode::OK => {
+            StatusCode::OK => {
                 let bytes = response.bytes().await.map_err(reqwest_error_to_io_error)?;
                 let response: LoginResponse = serde_json::from_reader(bytes.reader())?;
                 let auth_data = AuthData {
@@ -213,7 +213,7 @@ impl Service for CloudService {
                 .map_err(reqwest_error_to_io_error)?
         };
         match response.status() {
-            reqwest::StatusCode::OK => {
+            StatusCode::OK => {
                 *auth_data = None;
                 Ok(())
             }
@@ -239,7 +239,7 @@ impl Service for CloudService {
         }
         let response = builder.send().await.map_err(reqwest_error_to_io_error)?;
         match response.status() {
-            reqwest::StatusCode::OK => {
+            StatusCode::OK => {
                 let bytes = response.bytes().await.map_err(reqwest_error_to_io_error)?;
                 let response: GetFilesResponse = serde_json::from_reader(bytes.reader())?;
                 Ok(response)
@@ -264,7 +264,7 @@ impl Service for CloudService {
         }
         let response = builder.send().await.map_err(reqwest_error_to_io_error)?;
         match response.status() {
-            reqwest::StatusCode::OK => {
+            StatusCode::OK => {
                 let bytes = response.bytes().await.map_err(reqwest_error_to_io_error)?;
                 let response: GetFileResponse = serde_json::from_reader(bytes.reader())?;
                 Ok(response)
@@ -292,7 +292,7 @@ impl Service for CloudService {
             .await
             .map_err(reqwest_error_to_io_error)?;
         match response.status() {
-            reqwest::StatusCode::OK | reqwest::StatusCode::CREATED => Ok(()),
+            StatusCode::OK | StatusCode::CREATED => Ok(()),
             _ => Err(http_response_to_io_error(response).await),
         }
     }
@@ -310,7 +310,7 @@ impl Service for CloudService {
             .await
             .map_err(reqwest_error_to_io_error)?;
         match response.status() {
-            reqwest::StatusCode::OK => Ok(()),
+            StatusCode::OK => Ok(()),
             _ => Err(http_response_to_io_error(response).await),
         }
     }

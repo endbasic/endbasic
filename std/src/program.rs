@@ -90,7 +90,7 @@ impl Program for ImmutableProgram {
 
     fn load(&mut self, name: Option<&str>, text: &str) {
         self.name = name.map(str::to_owned);
-        self.text = text.to_owned();
+        text.clone_into(&mut self.text);
     }
 
     fn name(&self) -> Option<&str> {
