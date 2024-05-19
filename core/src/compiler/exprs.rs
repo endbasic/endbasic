@@ -779,3 +779,434 @@ pub(crate) fn compile_expr_in_command(
         expr => compile_expr(instrs, symtable, expr, false),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compiler::testutils::*;
+    use crate::compiler::CallableType;
+
+    #[test]
+    fn test_compile_expr_literals() {
+        Tester::default()
+            .parse("b = TRUE\nd = 2.3\ni = 5\nt = \"foo\"")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 5)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("b")))
+            .expect_instr(2, Instruction::Push(Value::Double(2.3), lc(2, 5)))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("d")))
+            .expect_instr(4, Instruction::Push(Value::Integer(5), lc(3, 5)))
+            .expect_instr(5, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(6, Instruction::Push(Value::Text("foo".to_owned()), lc(4, 5)))
+            .expect_instr(7, Instruction::Assign(SymbolKey::from("t")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_varrefs_are_evaluated() {
+        Tester::default()
+            .define("j", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("i = j")
+            .compile()
+            .expect_instr(0, Instruction::Load(SymbolKey::from("j"), lc(1, 5)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_argless_call_ok() {
+        Tester::default()
+            .define("f", SymbolPrototype::Callable(CallableType::Integer, true))
+            .parse("i = f")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::FunctionCall(SymbolKey::from("f"), VarType::Integer, lc(1, 5), 0),
+            )
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_argless_call_not_argless() {
+        Tester::default()
+            .define("f", SymbolPrototype::Callable(CallableType::Integer, false))
+            .parse("i = f")
+            .compile()
+            .expect_err("1:5: In call to f: function requires arguments")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_ref_argless_call_ok() {
+        Tester::default()
+            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, false))
+            .define("f", SymbolPrototype::Callable(CallableType::Integer, true))
+            .parse("c f")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::FunctionCall(SymbolKey::from("f"), VarType::Integer, lc(1, 3), 0),
+            )
+            .expect_instr(1, Instruction::BuiltinCall(SymbolKey::from("C"), lc(1, 1), 1))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_ref_argless_call_not_argless() {
+        Tester::default()
+            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, false))
+            .define("f", SymbolPrototype::Callable(CallableType::Integer, false))
+            .parse("c f")
+            .compile()
+            .expect_err("1:3: In call to f: function requires arguments")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_bad_annotation_in_varref() {
+        Tester::default()
+            .parse("a = 3: b = a$ + 1")
+            .compile()
+            .expect_err("1:12: Incompatible type annotation in a$ reference")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_bad_annotation_in_argless_call() {
+        Tester::default()
+            .define(SymbolKey::from("f"), SymbolPrototype::Callable(CallableType::Integer, true))
+            .parse("a = f$ + 1")
+            .compile()
+            .expect_err("1:5: Incompatible type annotation in f$ reference")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_ref_bad_annotation_in_varref() {
+        Tester::default()
+            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, false))
+            .parse("a = 3: c a$")
+            .compile()
+            .expect_err("1:10: Incompatible type annotation in a$ reference")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_ref_bad_annotation_in_argless_call() {
+        Tester::default()
+            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, false))
+            .define(SymbolKey::from("f"), SymbolPrototype::Callable(CallableType::Integer, false))
+            .parse("c f$")
+            .compile()
+            .expect_err("1:3: Incompatible type annotation in f$ reference")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_try_load_array_as_var() {
+        Tester::default()
+            .define(SymbolKey::from("a"), SymbolPrototype::Array(ExprType::Integer, 2))
+            .parse("b = a")
+            .compile()
+            .expect_err("1:5: a is not a variable")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_ref_try_load_array_as_var() {
+        Tester::default()
+            .define(SymbolKey::from("a"), SymbolPrototype::Array(ExprType::Integer, 1))
+            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, false))
+            .parse("c a")
+            .compile()
+            .expect_instr(0, Instruction::LoadRef(VarRef::new("a", VarType::Auto), lc(1, 3)))
+            .expect_instr(1, Instruction::BuiltinCall(SymbolKey::from("C"), lc(1, 1), 1))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_try_load_command_as_var() {
+        Tester::default()
+            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, true))
+            .parse("b = c")
+            .compile()
+            .expect_err("1:5: c is not an array nor a function")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_ref_try_load_command_as_var() {
+        Tester::default()
+            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, false))
+            .parse("c c")
+            .compile()
+            .expect_err("1:3: c is not an array nor a function")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_logical_ops() {
+        Tester::default()
+            .define("x", SymbolPrototype::Variable(ExprType::Boolean))
+            .define("y", SymbolPrototype::Variable(ExprType::Boolean))
+            .define("z", SymbolPrototype::Variable(ExprType::Boolean))
+            .parse("b = true OR x AND y XOR NOT z")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 5)))
+            .expect_instr(1, Instruction::Load(SymbolKey::from("x"), lc(1, 13)))
+            .expect_instr(2, Instruction::LogicalOr(lc(1, 10)))
+            .expect_instr(3, Instruction::Load(SymbolKey::from("y"), lc(1, 19)))
+            .expect_instr(4, Instruction::LogicalAnd(lc(1, 15)))
+            .expect_instr(5, Instruction::Load(SymbolKey::from("z"), lc(1, 29)))
+            .expect_instr(6, Instruction::LogicalNot(lc(1, 25)))
+            .expect_instr(7, Instruction::LogicalXor(lc(1, 21)))
+            .expect_instr(8, Instruction::Assign(SymbolKey::from("b")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_bitwise_ops() {
+        Tester::default()
+            .define("a", SymbolPrototype::Variable(ExprType::Integer))
+            .define("b", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("i = a >> 5 << b")
+            .compile()
+            .expect_instr(0, Instruction::Load(SymbolKey::from("a"), lc(1, 5)))
+            .expect_instr(1, Instruction::Push(Value::Integer(5), lc(1, 10)))
+            .expect_instr(2, Instruction::ShiftRight(lc(1, 7)))
+            .expect_instr(3, Instruction::Load(SymbolKey::from("b"), lc(1, 15)))
+            .expect_instr(4, Instruction::ShiftLeft(lc(1, 12)))
+            .expect_instr(5, Instruction::Assign(SymbolKey::from("i")))
+            .check();
+    }
+
+    /// Tests the behavior of one binary operator.
+    ///
+    /// `make_inst` is the instruction to expect.  `op_name` is the literal name of the operator as
+    /// it appears in EndBASIC code.  `test_value` is a value of the right type to use with the
+    /// operator call and `test_value_str` is the same value as represented in EndBASIC code.
+    fn do_op_test<F: Fn(LineCol) -> Instruction>(
+        make_inst: F,
+        op_name: &str,
+        test_value: Value,
+        test_value_str: &str,
+    ) {
+        Tester::default()
+            .define("a", SymbolPrototype::Variable(test_value.as_vartype().into()))
+            .parse(&format!("b = a {} {}", op_name, test_value_str))
+            .compile()
+            .expect_instr(0, Instruction::Load(SymbolKey::from("a"), lc(1, 5)))
+            .expect_instr(1, Instruction::Push(test_value, lc(1, 8 + op_name.len())))
+            .expect_instr(2, make_inst(lc(1, 7)))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("b")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_equality_ops() {
+        do_op_test(Instruction::EqualBooleans, "=", Value::Boolean(true), "TRUE");
+        do_op_test(Instruction::NotEqualBooleans, "<>", Value::Boolean(true), "TRUE");
+
+        do_op_test(Instruction::EqualDoubles, "=", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::NotEqualDoubles, "<>", Value::Double(10.2), "10.2");
+
+        do_op_test(Instruction::EqualIntegers, "=", Value::Integer(10), "10");
+        do_op_test(Instruction::NotEqualIntegers, "<>", Value::Integer(10), "10");
+
+        do_op_test(Instruction::EqualStrings, "=", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(Instruction::NotEqualStrings, "<>", Value::Text("foo".to_owned()), "\"foo\"");
+    }
+
+    #[test]
+    fn test_compile_expr_relational_ops() {
+        do_op_test(Instruction::LessDoubles, "<", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::LessEqualDoubles, "<=", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::GreaterDoubles, ">", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::GreaterEqualDoubles, ">=", Value::Double(10.2), "10.2");
+
+        do_op_test(Instruction::LessIntegers, "<", Value::Integer(10), "10");
+        do_op_test(Instruction::LessEqualIntegers, "<=", Value::Integer(10), "10");
+        do_op_test(Instruction::GreaterIntegers, ">", Value::Integer(10), "10");
+        do_op_test(Instruction::GreaterEqualIntegers, ">=", Value::Integer(10), "10");
+
+        do_op_test(Instruction::LessStrings, "<", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(Instruction::LessEqualStrings, "<=", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(Instruction::GreaterStrings, ">", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(
+            Instruction::GreaterEqualStrings,
+            ">=",
+            Value::Text("foo".to_owned()),
+            "\"foo\"",
+        );
+    }
+
+    #[test]
+    fn test_compile_expr_arithmetic_ops() {
+        do_op_test(Instruction::AddDoubles, "+", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::SubtractDoubles, "-", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::MultiplyDoubles, "*", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::DivideDoubles, "/", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::ModuloDoubles, "MOD", Value::Double(10.2), "10.2");
+        do_op_test(Instruction::PowerDoubles, "^", Value::Double(10.2), "10.2");
+        Tester::default()
+            .define("a", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("i = -60.2")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Double(60.2), lc(1, 6)))
+            .expect_instr(1, Instruction::NegateDouble(lc(1, 5)))
+            .expect_instr(2, Instruction::Assign(SymbolKey::from("i")))
+            .check();
+
+        do_op_test(Instruction::AddIntegers, "+", Value::Integer(10), "10");
+        do_op_test(Instruction::SubtractIntegers, "-", Value::Integer(10), "10");
+        do_op_test(Instruction::MultiplyIntegers, "*", Value::Integer(10), "10");
+        do_op_test(Instruction::DivideIntegers, "/", Value::Integer(10), "10");
+        do_op_test(Instruction::ModuloIntegers, "MOD", Value::Integer(10), "10");
+        do_op_test(Instruction::PowerIntegers, "^", Value::Integer(10), "10");
+        Tester::default()
+            .define("a", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("i = -60")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(60), lc(1, 6)))
+            .expect_instr(1, Instruction::NegateInteger(lc(1, 5)))
+            .expect_instr(2, Instruction::Assign(SymbolKey::from("i")))
+            .check();
+
+        do_op_test(Instruction::ConcatStrings, "+", Value::Text("foo".to_owned()), "\"foo\"");
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_exprs() {
+        Tester::default()
+            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 3))
+            .define("j", SymbolPrototype::Variable(ExprType::Integer))
+            .define("k", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("i = FOO(3, j, k + 1)")
+            .compile()
+            .expect_instr(0, Instruction::Load(SymbolKey::from("k"), lc(1, 15)))
+            .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 19)))
+            .expect_instr(2, Instruction::AddIntegers(lc(1, 17)))
+            .expect_instr(3, Instruction::Load(SymbolKey::from("j"), lc(1, 12)))
+            .expect_instr(4, Instruction::Push(Value::Integer(3), lc(1, 9)))
+            .expect_instr(5, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 3))
+            .expect_instr(6, Instruction::Assign(SymbolKey::from("i")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_ok_annotation() {
+        Tester::default()
+            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 1))
+            .parse("i = FOO%(3)")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Integer(3), lc(1, 10)))
+            .expect_instr(1, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 1))
+            .expect_instr(2, Instruction::Assign(SymbolKey::from("i")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_bad_annotation() {
+        Tester::default()
+            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 1))
+            .parse("i = FOO#(3)")
+            .compile()
+            .expect_err("1:5: Incompatible type annotation in FOO# reference")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_index_double() {
+        Tester::default()
+            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 1))
+            .parse("i = FOO(3.8)")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Double(3.8), lc(1, 9)))
+            .expect_instr(1, Instruction::DoubleToInteger)
+            .expect_instr(2, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 1))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("i")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_index_bad_type() {
+        Tester::default()
+            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 1))
+            .parse("i = FOO(FALSE)")
+            .compile()
+            .expect_err("1:9: Array index must be INTEGER, not BOOLEAN")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_bad_dimensions() {
+        Tester::default()
+            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 3))
+            .parse("i = FOO#(3, 4)")
+            .compile()
+            .expect_err("1:5: Cannot index array with 2 subscripts; need 3")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_not_defined() {
+        Tester::default()
+            .parse("i = a(4)")
+            .compile()
+            .expect_err("1:5: Unknown function or array a")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_ref_not_an_array() {
+        Tester::default()
+            .define("a", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("i = a(3)")
+            .compile()
+            .expect_err("1:5: a is not an array nor a function")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_function_call() {
+        Tester::default()
+            .define("FOO", SymbolPrototype::Callable(CallableType::Integer, false))
+            .define("j", SymbolPrototype::Variable(ExprType::Text))
+            .define("k", SymbolPrototype::Variable(ExprType::Double))
+            .parse("i = FOO(3, j, k + 1)")
+            .compile()
+            .expect_instr(0, Instruction::Load(SymbolKey::from("k"), lc(1, 15)))
+            .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 19)))
+            .expect_instr(2, Instruction::IntegerToDouble)
+            .expect_instr(3, Instruction::AddDoubles(lc(1, 17)))
+            .expect_instr(4, Instruction::LoadRef(VarRef::new("j", VarType::Auto), lc(1, 12)))
+            .expect_instr(5, Instruction::Push(Value::Integer(3), lc(1, 9)))
+            .expect_instr(
+                6,
+                Instruction::FunctionCall(SymbolKey::from("FOO"), VarType::Integer, lc(1, 5), 3),
+            )
+            .expect_instr(7, Instruction::Assign(SymbolKey::from("i")))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_or_function_not_defined() {
+        Tester::default()
+            .define("j", SymbolPrototype::Variable(ExprType::Integer))
+            .define("k", SymbolPrototype::Variable(ExprType::Integer))
+            .parse("i = FOO(3, j, k + 1)")
+            .compile()
+            .expect_err("1:5: Unknown function or array FOO")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_expr_array_or_function_references_variable() {
+        Tester::default()
+            .parse("i = 3: j = i()")
+            .compile()
+            .expect_err("1:12: i is not an array nor a function")
+            .check();
+    }
+}
