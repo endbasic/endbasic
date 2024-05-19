@@ -1660,7 +1660,10 @@ mod tests {
             .define("f", SymbolPrototype::Callable(CallableType::Integer, true))
             .parse("c f")
             .compile()
-            .expect_instr(0, Instruction::LoadRef(VarRef::new("f", VarType::Auto), lc(1, 3)))
+            .expect_instr(
+                0,
+                Instruction::FunctionCall(SymbolKey::from("f"), VarType::Integer, lc(1, 3), 0),
+            )
             .expect_instr(1, Instruction::BuiltinCall(SymbolKey::from("C"), lc(1, 1), 1))
             .check();
     }

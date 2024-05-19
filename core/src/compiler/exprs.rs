@@ -404,7 +404,7 @@ fn compile_expr_symbol_ref(
     span: SymbolSpan,
 ) -> Result<ExprType> {
     let key = SymbolKey::from(span.vref.name());
-    let result = match symtable.get(&key) {
+    match symtable.get(&key) {
         None => {
             let vtype = if span.vref.ref_type() == VarType::Auto {
                 ExprType::Integer
@@ -420,7 +420,8 @@ fn compile_expr_symbol_ref(
             }
 
             symtable.insert(key, SymbolPrototype::Variable(vtype));
-            vtype
+            instrs.push(Instruction::LoadRef(span.vref, span.pos));
+            Ok(vtype)
         }
 
         Some(SymbolPrototype::Array(vtype, _)) | Some(SymbolPrototype::Variable(vtype)) => {
@@ -431,7 +432,8 @@ fn compile_expr_symbol_ref(
                 ));
             }
 
-            vtype
+            instrs.push(Instruction::LoadRef(span.vref, span.pos));
+            Ok(vtype)
         }
 
         Some(SymbolPrototype::Callable(ctype, is_argless)) => match ctype.as_expr_type() {
@@ -450,21 +452,15 @@ fn compile_expr_symbol_ref(
                     ));
                 }
 
-                // TODO(jmmv): This is wrong.  We should not be trying to load a reference to a
-                // callable.
-
-                etype
+                instrs.push(Instruction::FunctionCall(key, ctype.into(), span.pos, 0));
+                Ok(etype)
             }
-            None => {
-                return Err(Error::new(
-                    span.pos,
-                    format!("{} is not an array nor a function", span.vref.name()),
-                ));
-            }
+            None => Err(Error::new(
+                span.pos,
+                format!("{} is not an array nor a function", span.vref.name()),
+            )),
         },
-    };
-    instrs.push(Instruction::LoadRef(span.vref, span.pos));
-    Ok(result)
+    }
 }
 
 /// Compiles an array access.
