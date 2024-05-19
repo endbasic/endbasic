@@ -225,7 +225,7 @@ mod tests {
 
         Tester::default()
             .run(&format!("result = {}(x)", func))
-            .expect_err(format!("1:10: In call to {}: 1:17: x is not defined", func))
+            .expect_compilation_err("1:17: Undefined variable x")
             .check();
 
         Tester::default()
