@@ -383,6 +383,11 @@ fn compile_expr_symbol(
                 ));
             }
 
+            let nargs = md
+                .args_compiler()
+                .compile_simple(instrs, symtable, span.pos, vec![])
+                .map_err(|e| Error::from_call_error(md, e, span.pos))?;
+            debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
             (Instruction::FunctionCall(key, md.return_type(), span.pos, 0), md.return_type().into())
         }
     };
@@ -459,7 +464,12 @@ fn compile_expr_symbol_ref(
                 ));
             }
 
-            instrs.push(Instruction::FunctionCall(key, md.return_type(), span.pos, 0));
+            let nargs = md
+                .args_compiler()
+                .compile_simple(instrs, symtable, span.pos, vec![])
+                .map_err(|e| Error::from_call_error(md, e, span.pos))?;
+            debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
+            instrs.push(Instruction::FunctionCall(key, md.return_type(), span.pos, nargs));
             Ok(md.return_type().into())
         }
     }
@@ -493,7 +503,7 @@ fn compile_array_ref(
 /// `allow_varrefs` should be true for top-level expression compilations within function arguments.
 /// In that specific case, we must leave bare variable and array references unevaluated because we
 /// don't know if the function wants to take the reference or the value.
-pub(crate) fn compile_expr(
+pub fn compile_expr(
     instrs: &mut Vec<Instruction>,
     symtable: &SymbolsTable,
     expr: Expr,
@@ -715,11 +725,6 @@ pub(crate) fn compile_expr(
                 }
 
                 Some(SymbolPrototype::Callable(md)) => {
-                    let nargs = span.args.len();
-                    for arg in span.args.into_iter().rev() {
-                        compile_expr(instrs, symtable, arg, true)?;
-                    }
-
                     if !span.fref.accepts(md.return_type()) {
                         return Err(Error::new(
                             span.pos,
@@ -745,7 +750,12 @@ pub(crate) fn compile_expr(
                         ));
                     }
 
-                    instrs.push(Instruction::FunctionCall(key, md.return_type(), span.pos, nargs));
+                    let span_pos = span.pos;
+                    let nargs = md
+                        .args_compiler()
+                        .compile_simple(instrs, symtable, span_pos, span.args)
+                        .map_err(|e| Error::from_call_error(md, e, span_pos))?;
+                    instrs.push(Instruction::FunctionCall(key, md.return_type(), span_pos, nargs));
                     Ok(vtype)
                 }
 
@@ -769,7 +779,7 @@ pub(crate) fn compile_expr(
 /// This function should be used only when compiling the arguments to a builtin command, because
 /// in that context, we need mutable access to the `symtable`in order to define output variables
 /// (if any).
-pub(crate) fn compile_expr_in_command(
+pub fn compile_expr_in_command(
     instrs: &mut Vec<Instruction>,
     symtable: &mut SymbolsTable,
     expr: Expr,

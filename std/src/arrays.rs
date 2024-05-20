@@ -220,12 +220,18 @@ mod tests {
 
         Tester::default()
             .run(&format!("i = 0: result = {}(i$)", func))
-            .expect_compilation_err("1:24: Incompatible type annotation in i$ reference")
+            .expect_compilation_err(format!(
+                "1:17: In call to {}: 1:24: Incompatible type annotation in i$ reference",
+                func
+            ))
             .check();
 
         Tester::default()
             .run(&format!("result = {}(x)", func))
-            .expect_compilation_err("1:17: Undefined variable x")
+            .expect_compilation_err(format!(
+                "1:10: In call to {}: 1:17: Undefined variable x",
+                func
+            ))
             .check();
 
         Tester::default()

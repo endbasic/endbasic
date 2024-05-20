@@ -167,7 +167,7 @@ pub enum Expr {
 
 impl Expr {
     /// Returns the start position of the expression.
-    pub(crate) fn start_pos(&self) -> LineCol {
+    pub fn start_pos(&self) -> LineCol {
         match self {
             Expr::Boolean(span) => span.pos,
             Expr::Double(span) => span.pos,
