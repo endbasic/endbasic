@@ -351,7 +351,7 @@ fn compile_expr_symbol(
 
         Some(SymbolPrototype::Array(atype, _dims)) => {
             if allow_varrefs {
-                (Instruction::LoadRef(span.vref.clone(), span.pos), atype)
+                (Instruction::LoadRef(span.vref.clone(), span.pos), *atype)
             } else {
                 return Err(Error::new(
                     span.pos,
@@ -362,13 +362,15 @@ fn compile_expr_symbol(
 
         Some(SymbolPrototype::Variable(vtype)) => {
             if allow_varrefs {
-                (Instruction::LoadRef(span.vref.clone(), span.pos), vtype)
+                (Instruction::LoadRef(span.vref.clone(), span.pos), *vtype)
             } else {
-                (Instruction::Load(key, span.pos), vtype)
+                (Instruction::Load(key, span.pos), *vtype)
             }
         }
 
         Some(SymbolPrototype::Callable(ctype, is_argless)) => {
+            let (ctype, is_argless) = (*ctype, *is_argless);
+
             if !is_argless {
                 return Err(Error::new(
                     span.pos,
@@ -425,6 +427,8 @@ fn compile_expr_symbol_ref(
         }
 
         Some(SymbolPrototype::Array(vtype, _)) | Some(SymbolPrototype::Variable(vtype)) => {
+            let vtype = *vtype;
+
             if !span.vref.accepts(vtype.into()) {
                 return Err(Error::new(
                     span.pos,
@@ -452,7 +456,7 @@ fn compile_expr_symbol_ref(
                     ));
                 }
 
-                instrs.push(Instruction::FunctionCall(key, ctype.into(), span.pos, 0));
+                instrs.push(Instruction::FunctionCall(key, (*ctype).into(), span.pos, 0));
                 Ok(etype)
             }
             None => Err(Error::new(
@@ -709,16 +713,18 @@ pub(crate) fn compile_expr(
             let key = SymbolKey::from(span.fref.name());
             match symtable.get(&key) {
                 Some(SymbolPrototype::Array(vtype, dims)) => {
-                    compile_array_ref(instrs, symtable, span, key, vtype, dims)
+                    compile_array_ref(instrs, symtable, span, key, *vtype, *dims)
                 }
 
                 Some(SymbolPrototype::Callable(ctype, is_argless)) => {
+                    let (ctype, is_argless) = (*ctype, *is_argless);
+
                     let nargs = span.args.len();
                     for arg in span.args.into_iter().rev() {
                         compile_expr(instrs, symtable, arg, true)?;
                     }
 
-                    if !span.fref.accepts((ctype).into()) {
+                    if !span.fref.accepts(ctype.into()) {
                         return Err(Error::new(
                             span.pos,
                             format!("Incompatible type annotation in {} reference", span.fref),
