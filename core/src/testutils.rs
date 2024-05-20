@@ -91,9 +91,7 @@ impl Callable for ClearCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        assert!(args.is_empty());
         machine.clear();
         Ok(Value::Void)
     }
@@ -121,9 +119,7 @@ impl Callable for CountFunction {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        assert!(args.is_empty());
         let mut counter = self.counter.borrow_mut();
         *counter += 1;
         debug_assert!(*counter >= 0);
@@ -250,15 +246,13 @@ impl Callable for GetHiddenFunction {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        if args.len() != 1 {
-            return Err(CallError::SyntaxError);
-        }
+        assert_eq!(1, args.len());
         match &args[0] {
-            (Value::Text(name), pos) => match machine.get_var(&VarRef::new(name, VarType::Text)) {
+            (Value::Text(name), _pos) => match machine.get_var(&VarRef::new(name, VarType::Text)) {
                 Ok(t) => Ok(t.clone()),
-                Err(e) => Err(CallError::EvalError(*pos, e.to_string())),
+                Err(_) => panic!("Invalid argument"),
             },
-            _ => Err(CallError::SyntaxError),
+            _ => panic!("Invalid argument"),
         }
     }
 }
@@ -286,9 +280,7 @@ impl Callable for GetDataCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        assert!(args.is_empty());
         *self.data.borrow_mut() = machine.get_data().to_vec();
         Ok(Value::Void)
     }
@@ -323,10 +315,10 @@ impl Callable for InCommand {
         let mut iter = args.into_iter();
         let (vref, pos) = match iter.next() {
             Some((Value::VarRef(vref), pos)) => (vref, pos),
-            _ => return Err(CallError::SyntaxError),
+            _ => panic!("Invalid arguments"),
         };
         if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
+            panic!("Invalid arguments");
         }
 
         let mut data = self.data.borrow_mut();
@@ -373,12 +365,12 @@ impl Callable for OutCommand {
                 Some((value, _pos)) => {
                     format_value(value, &mut text);
                 }
-                _ => return Err(CallError::SyntaxError),
+                _ => panic!("Invalid arguments"),
             }
             match iter.next() {
                 None => break,
                 Some((Value::Separator(ArgSep::Short), _pos)) => text += " ",
-                _ => return Err(CallError::SyntaxError),
+                _ => panic!("Invalid arguments"),
             }
         }
         self.data.borrow_mut().push(text);
@@ -412,14 +404,12 @@ impl Callable for OutfFunction {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        if args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        assert!(!args.is_empty());
 
         let mut iter = machine.load_all(args)?.into_iter();
         let result = match iter.next() {
             Some((v @ Value::Integer(_), _pos)) => v,
-            _ => return Err(CallError::SyntaxError),
+            _ => unreachable!("Only supports printing integers"),
         };
 
         let mut text = String::new();

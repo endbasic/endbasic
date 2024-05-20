@@ -18,26 +18,65 @@
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::reader::LineCol;
+use crate::syms::CallError;
 use crate::syms::CallableMetadata;
 use crate::syms::{Symbol, SymbolKey, Symbols};
 use std::collections::HashMap;
 use std::fmt;
 
+mod args;
+pub(crate) use args::*;
 mod exprs;
+pub use exprs::{compile_expr, compile_expr_in_command};
 
 /// Compilation errors.
 #[derive(Debug, thiserror::Error)]
 #[error("{}:{}: {}", pos.line, pos.col, message)]
 pub struct Error {
-    pos: LineCol,
-    message: String,
+    pub(crate) pos: LineCol,
+    pub(crate) message: String,
 }
 
 impl Error {
     /// Constructs a new compilation error from its parts.
-    fn new<S: Into<String>>(pos: LineCol, message: S) -> Self {
+    pub(crate) fn new<S: Into<String>>(pos: LineCol, message: S) -> Self {
         let message = message.into();
         Self { pos, message }
+    }
+
+    /// Annotates a call evaluation error with the command's metadata.
+    // TODO(jmmv): This is a hack to support the transition to a parameterized arguments compilers
+    // in callables.  Should be removed and/or somehow unified with the `Error` in this module given
+    // that `CallError` can specify errors that make no sense in this context.
+    fn from_call_error(md: &CallableMetadata, e: CallError, pos: LineCol) -> Self {
+        match e {
+            CallError::ArgumentError(pos2, e) => Self::new(
+                pos,
+                format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
+            ),
+            CallError::EvalError(pos2, e) => {
+                if md.return_type() == VarType::Void {
+                    Self::new(pos2, e)
+                } else {
+                    Self::new(
+                        pos,
+                        format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
+                    )
+                }
+            }
+            CallError::InternalError(pos2, e) => Self::new(
+                pos,
+                format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
+            ),
+            CallError::IoError(_) => unreachable!("I/O errors are not possible during compilation"),
+            CallError::NestedError(_) => unreachable!("Nested are not possible during compilation"),
+            CallError::SyntaxError if md.syntax().is_empty() => {
+                Self::new(pos, format!("In call to {}: expected no arguments", md.name()))
+            }
+            CallError::SyntaxError => {
+                Self::new(pos, format!("In call to {}: expected {}", md.name(), md.syntax()))
+            }
+        }
     }
 }
 
@@ -46,10 +85,17 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Represents type of an expression.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum ExprType {
+pub enum ExprType {
+    /// Type for an expression that evaluates to a boolean.
     Boolean,
+
+    /// Type for an expression that evaluates to a double.
     Double,
+
+    /// Type for an expression that evaluates to an integer.
     Integer,
+
+    /// Type for an expression that evaluates to a string.
     Text,
 }
 
@@ -94,11 +140,20 @@ impl fmt::Display for ExprType {
 /// commands.
 #[derive(Clone, Copy, PartialEq)]
 #[cfg_attr(any(debug_assertions, test), derive(Debug))]
-pub(crate) enum CallableType {
+pub enum CallableType {
+    /// Type for a function that returns a boolean.
     Boolean,
+
+    /// Type for a function that returns a double.
     Double,
+
+    /// Type for a function that returns an integer.
     Integer,
+
+    /// Type for a function that returns a string.
     Text,
+
+    /// Type for a builtin command.
     Void,
 }
 
@@ -127,9 +182,43 @@ impl From<CallableType> for VarType {
     }
 }
 
+/// Hooks to implement compile-time parsing of callable arguments.
+// TODO(jmmv): This is a transitional type while we refactor all functions and commands to split
+// argument parsing between compile-time and runtime aspects.  Once that's done, this type should
+// be folded into the `Callable` per se.
+pub trait CallableArgsCompiler: fmt::Debug {
+    /// Parses the arguments to a function and generates expressions to compute them.
+    ///
+    /// This can be used to help the runtime by doing type checking during compilation and then
+    /// allowing the runtime to assume that the values on the stack are correctly typed.
+    fn compile_simple(
+        &self,
+        _instrs: &mut Vec<Instruction>,
+        _symtable: &SymbolsTable,
+        _pos: LineCol,
+        _args: Vec<Expr>,
+    ) -> std::result::Result<usize, CallError> {
+        unreachable!();
+    }
+
+    /// Parses the arguments to a buitin command and generates expressions to compute them.
+    ///
+    /// This can be used to help the runtime by doing type checking during compilation and then
+    /// allowing the runtime to assume that the values on the stack are correctly typed.
+    fn compile_complex(
+        &self,
+        _instrs: &mut Vec<Instruction>,
+        _symtable: &mut SymbolsTable,
+        _pos: LineCol,
+        _args: Vec<ArgSpan>,
+    ) -> std::result::Result<usize, CallError> {
+        unreachable!();
+    }
+}
+
 /// Information about a symbol in the symbols table.
 #[derive(Clone)]
-pub(crate) enum SymbolPrototype {
+pub enum SymbolPrototype {
     /// Information about an array.  The integer indicates the number of dimensions in the array.
     Array(ExprType, usize),
 
@@ -142,7 +231,7 @@ pub(crate) enum SymbolPrototype {
 
 /// Type for the symbols table.
 #[derive(Default)]
-pub(crate) struct SymbolsTable {
+pub struct SymbolsTable {
     table: HashMap<SymbolKey, SymbolPrototype>,
 }
 
@@ -699,9 +788,9 @@ impl Compiler {
     /// the reference or the value.
     fn compile_expr(&mut self, expr: Expr, allow_varrefs: bool) -> Result<ExprType> {
         let result = if allow_varrefs {
-            exprs::compile_expr_in_command(&mut self.instrs, &mut self.symtable, expr)
+            compile_expr_in_command(&mut self.instrs, &mut self.symtable, expr)
         } else {
-            exprs::compile_expr(&mut self.instrs, &self.symtable, expr, false)
+            compile_expr(&mut self.instrs, &self.symtable, expr, false)
         };
         match result {
             Ok(result) => {
@@ -735,7 +824,7 @@ impl Compiler {
 
             Statement::BuiltinCall(span) => {
                 let key = SymbolKey::from(&span.name);
-                match self.symtable.get(&key) {
+                let md = match self.symtable.get(&key) {
                     Some(SymbolPrototype::Callable(md)) => {
                         if md.return_type() != VarType::Void {
                             return Err(Error::new(
@@ -743,6 +832,7 @@ impl Compiler {
                                 format!("{} is not a command", span.name),
                             ));
                         }
+                        md.clone()
                     }
 
                     Some(_) => {
@@ -756,31 +846,16 @@ impl Compiler {
                         return Err(Error::new(
                             span.name_pos,
                             format!("Unknown builtin {}", span.name),
-                        ));
+                        ))
                     }
-                }
+                };
 
-                let mut nargs = 0;
-                for argspan in span.args.into_iter().rev() {
-                    if argspan.sep != ArgSep::End {
-                        self.emit(Instruction::Push(
-                            Value::Separator(argspan.sep),
-                            argspan.sep_pos,
-                        ));
-                        nargs += 1;
-                    }
-
-                    match argspan.expr {
-                        Some(expr) => {
-                            self.compile_expr(expr, true)?;
-                        }
-                        None => {
-                            self.emit(Instruction::Push(Value::Missing, argspan.sep_pos));
-                        }
-                    }
-                    nargs += 1;
-                }
-
+                let name_pos = span.name_pos;
+                let nargs = md
+                    .args_compiler()
+                    .compile_complex(&mut self.instrs, &mut self.symtable, name_pos, span.args)
+                    .map_err(|e| Error::from_call_error(&md, e, name_pos))?;
+                self.next_pc = self.instrs.len();
                 self.emit(Instruction::BuiltinCall(key, span.name_pos, nargs));
             }
 
@@ -1325,6 +1400,21 @@ mod tests {
             .expect_instr(7, Instruction::Push(Value::Separator(ArgSep::Short), lc(1, 6)))
             .expect_instr(8, Instruction::LoadRef(VarRef::new("a", VarType::Auto), lc(1, 5)))
             .expect_instr(9, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 1), 9))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_builtin_call_increments_next_pc() {
+        Tester::default()
+            .define_callable(CallableMetadataBuilder::new("CMD", VarType::Void))
+            .parse("IF TRUE THEN: CMD 1, 2: END IF")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 4)))
+            .expect_instr(1, Instruction::JumpIfNotTrue(6))
+            .expect_instr(2, Instruction::Push(Value::Integer(2), lc(1, 22)))
+            .expect_instr(3, Instruction::Push(Value::Separator(ArgSep::Long), lc(1, 20)))
+            .expect_instr(4, Instruction::Push(Value::Integer(1), lc(1, 19)))
+            .expect_instr(5, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 15), 3))
             .check();
     }
 
