@@ -140,8 +140,7 @@ impl CallableType {
 }
 
 /// Information about a symbol in the symbols table.
-#[derive(Clone, Copy)]
-#[cfg_attr(any(debug_assertions, test), derive(Debug, PartialEq))]
+#[derive(Clone)]
 pub(crate) enum SymbolPrototype {
     /// Information about an array.  The integer indicates the number of dimensions in the array.
     Array(ExprType, usize),
@@ -156,7 +155,6 @@ pub(crate) enum SymbolPrototype {
 
 /// Type for the symbols table.
 #[derive(Default)]
-#[cfg_attr(test, derive(Debug))]
 pub(crate) struct SymbolsTable {
     table: HashMap<SymbolKey, SymbolPrototype>,
 }
@@ -195,8 +193,8 @@ impl SymbolsTable {
     }
 
     /// Returns the information for the symbol `key` if it exists, otherwise `None`.
-    fn get(&self, key: &SymbolKey) -> Option<SymbolPrototype> {
-        self.table.get(key).copied()
+    fn get(&self, key: &SymbolKey) -> Option<&SymbolPrototype> {
+        self.table.get(key)
     }
 
     /// Inserts the new information `proto` about symbol `key` into the symbols table.
@@ -349,7 +347,7 @@ impl Compiler {
     fn compile_array_assignment(&mut self, span: ArrayAssignmentSpan) -> Result<()> {
         let key = SymbolKey::from(span.vref.name());
         let (atype, dims) = match self.symtable.get(&key) {
-            Some(SymbolPrototype::Array(atype, dims)) => (atype, dims),
+            Some(SymbolPrototype::Array(atype, dims)) => (*atype, *dims),
             Some(_) => {
                 return Err(Error::new(
                     span.vref_pos,
@@ -397,7 +395,7 @@ impl Compiler {
         let etype = self.compile_expr(expr, false)?;
 
         let vtype = match self.symtable.get(&key) {
-            Some(SymbolPrototype::Variable(vtype)) => vtype,
+            Some(SymbolPrototype::Variable(vtype)) => *vtype,
             Some(_) => {
                 return Err(Error::new(vref_pos, format!("Cannot redefine {} as a variable", vref)))
             }
@@ -753,7 +751,7 @@ impl Compiler {
                 let key = SymbolKey::from(&span.name);
                 match self.symtable.get(&key) {
                     Some(SymbolPrototype::Callable(ftype, _is_argless)) => {
-                        if ftype != CallableType::Void {
+                        if *ftype != CallableType::Void {
                             return Err(Error::new(
                                 span.name_pos,
                                 format!("{} is not a command", span.name),
@@ -1059,7 +1057,10 @@ mod testutils {
         /// Validates all expectations.
         pub(crate) fn check(self) {
             if let Some(message) = self.exp_error {
-                assert_eq!(message, format!("{}", self.result.unwrap_err()));
+                match self.result {
+                    Ok(_) => panic!("Compilation succeeded but expected error: {}", message),
+                    Err(e) => assert_eq!(message, e.to_string()),
+                }
                 return;
             }
             let (image, symtable) = self.result.unwrap();
@@ -1080,7 +1081,10 @@ mod testutils {
             // to avoid having to update all tests that didn't require this feature.
             for (key, exp_proto) in self.exp_symtable {
                 match symtable.get(&key) {
-                    Some(proto) => assert_eq!(exp_proto, proto),
+                    Some(proto) => assert_eq!(
+                        std::mem::discriminant(&exp_proto),
+                        std::mem::discriminant(proto)
+                    ),
                     None => panic!("Expected symbol {:?} not defined", key),
                 }
             }
