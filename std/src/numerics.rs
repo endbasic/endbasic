@@ -17,6 +17,7 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
+use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
@@ -52,21 +53,13 @@ impl Clearable for ClearableAngleMode {
 
 /// Gets the single argument to a trigonometric function, which is its angle.  Applies units
 /// conversion based on `angle_mode`.
-async fn get_angle(
-    args: Vec<(Value, LineCol)>,
-    machine: &Machine,
-    angle_mode: &AngleMode,
-) -> Result<f64, CallError> {
-    let mut iter = machine.load_all(args)?.into_iter();
+async fn get_angle(args: Vec<(Value, LineCol)>, angle_mode: &AngleMode) -> Result<f64, CallError> {
+    let mut iter = args.into_iter();
     let angle = match iter.next() {
-        Some((value, pos)) => {
-            value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?
-        }
-        _ => return Err(CallError::SyntaxError),
+        Some((Value::Double(n), _pos)) => n,
+        _ => unreachable!(),
     };
-    if iter.next().is_some() {
-        return Err(CallError::SyntaxError);
-    }
+    debug_assert!(iter.next().is_none());
 
     match angle_mode {
         AngleMode::Degrees => Ok(angle.to_radians()),
@@ -121,6 +114,7 @@ impl AtnFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("ATN", VarType::Double)
                 .with_syntax("n<%|#>")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
                 .with_category(CATEGORY)
                 .with_description(
                     "Computes the arc-tangent of a number.
@@ -139,17 +133,13 @@ impl Callable for AtnFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let n = match iter.next() {
-            Some((value @ Value::Integer(_) | value @ Value::Double(_), pos)) => {
-                value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?
-            }
-            _ => return Err(CallError::SyntaxError),
+            Some((Value::Double(n), _pos)) => n,
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         match *self.angle_mode.borrow() {
             AngleMode::Degrees => Ok(Value::Double(n.atan().to_degrees())),
@@ -169,6 +159,7 @@ impl CintFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CINT", VarType::Integer)
                 .with_syntax("expr<%|#>")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
                 .with_category(CATEGORY)
                 .with_description(
                     "Casts the given numeric expression to an integer (with rounding).
@@ -186,22 +177,16 @@ impl Callable for CintFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-        let value = match iter.next() {
-            Some((value, pos)) => value
-                .maybe_cast(VarType::Integer)
-                .map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?,
-            _ => return Err(CallError::SyntaxError),
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
+        let (value, pos) = match iter.next() {
+            Some((d @ Value::Double(_), pos)) => (d, pos),
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
-
-        match value {
-            Value::Double(_) | Value::Integer(_) => Ok(value),
-            _ => Err(CallError::SyntaxError),
-        }
+        debug_assert!(iter.next().is_none());
+        Ok(Value::Integer(
+            value.as_i32().map_err(|e| CallError::ArgumentError(pos, e.to_string()))?,
+        ))
     }
 }
 
@@ -217,6 +202,7 @@ impl CosFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("COS", VarType::Double)
                 .with_syntax("angle<%|#>")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
                 .with_category(CATEGORY)
                 .with_description(
                     "Computes the cosine of an angle.
@@ -235,8 +221,8 @@ impl Callable for CosFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let angle = get_angle(args, machine, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let angle = get_angle(args, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.cos()))
     }
 }
@@ -253,6 +239,7 @@ impl DegCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DEG", VarType::Void)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Sets degrees mode of calculation.
@@ -272,9 +259,7 @@ impl Callable for DegCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
         *self.angle_mode.borrow_mut() = AngleMode::Degrees;
         Ok(Value::Void)
     }
@@ -291,6 +276,7 @@ impl IntFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("INT", VarType::Integer)
                 .with_syntax("expr<%|#>")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
                 .with_category(CATEGORY)
                 .with_description(
                     "Casts the given numeric expression to an integer (with truncation).
@@ -308,24 +294,17 @@ impl Callable for IntFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-        let (value, valuepos) = match iter.next() {
-            Some((Value::Double(d), pos)) => (Value::Double(d.floor()), pos),
-            Some((v, pos)) => (v, pos),
-            _ => return Err(CallError::SyntaxError),
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
+        let (value, pos) = match iter.next() {
+            Some((Value::Double(d), pos)) => (d, pos),
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
-        let value = value
+        Ok(Value::Double(value.floor())
             .maybe_cast(VarType::Integer)
-            .map_err(|e| CallError::ArgumentError(valuepos, format!("{}", e)))?;
-        match value {
-            Value::Double(_) | Value::Integer(_) => Ok(value),
-            _ => Err(CallError::SyntaxError),
-        }
+            .map_err(|e| CallError::ArgumentError(pos, e.to_string()))?)
     }
 }
 
@@ -340,6 +319,7 @@ impl MaxFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("MAX", VarType::Double)
                 .with_syntax("expr<%|#>[, .., expr<%|#>]")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, usize::MAX, ExprType::Double))
                 .with_category(CATEGORY)
                 .with_description("Returns the maximum number out of a set of numbers.")
                 .build(),
@@ -353,13 +333,13 @@ impl Callable for MaxFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        if args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         let mut max = f64::MIN;
-        for (value, pos) in machine.load_all(args)?.into_iter() {
-            let n = value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
+        for (value, _pos) in args.into_iter() {
+            let n = match value {
+                Value::Double(d) => d,
+                _ => unreachable!(),
+            };
             if n > max {
                 max = n;
             }
@@ -379,6 +359,7 @@ impl MinFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("MIN", VarType::Double)
                 .with_syntax("expr<%|#>[, .., expr<%|#>]")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, usize::MAX, ExprType::Double))
                 .with_category(CATEGORY)
                 .with_description("Returns the minimum number out of a set of numbers.")
                 .build(),
@@ -392,13 +373,13 @@ impl Callable for MinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        if args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         let mut min = f64::MAX;
-        for (value, pos) in machine.load_all(args)?.into_iter() {
-            let n = value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
+        for (value, _pos) in args.into_iter() {
+            let n = match value {
+                Value::Double(d) => d,
+                _ => unreachable!(),
+            };
             if n < min {
                 min = n;
             }
@@ -418,6 +399,7 @@ impl PiFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("PI", VarType::Double)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description("Returns the Archimedes' constant.")
                 .build(),
@@ -432,9 +414,7 @@ impl Callable for PiFunction {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
         Ok(Value::Double(std::f64::consts::PI))
     }
 }
@@ -451,6 +431,7 @@ impl RadCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RAD", VarType::Void)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Sets radians mode of calculation.
@@ -470,9 +451,7 @@ impl Callable for RadCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
         *self.angle_mode.borrow_mut() = AngleMode::Radians;
         Ok(Value::Void)
     }
@@ -490,6 +469,7 @@ impl RandomizeCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RANDOMIZE", VarType::Void)
                 .with_syntax("[seed%]")
+                .with_args_compiler(SameTypeArgsCompiler::new(0, 1, ExprType::Integer))
                 .with_category(CATEGORY)
                 .with_description(
                     "Reinitializes the pseudo-random number generator.
@@ -508,26 +488,17 @@ impl Callable for RandomizeCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         match iter.next() {
             None => {
                 *self.prng.borrow_mut() = Prng::new_from_entryopy();
             }
-            Some((Value::Missing, _pos)) => {
-                return Err(CallError::SyntaxError);
-            }
-            Some((value, pos)) => {
-                let n =
-                    value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
-
-                if iter.next().is_some() {
-                    return Err(CallError::SyntaxError);
-                }
-
+            Some((Value::Integer(n), _pos)) => {
+                debug_assert!(iter.next().is_none());
                 *self.prng.borrow_mut() = Prng::new_from_seed(n);
             }
+            _ => unreachable!(),
         }
         Ok(Value::Void)
     }
@@ -544,12 +515,13 @@ impl RndFunction {
     pub fn new(prng: Rc<RefCell<Prng>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RND", VarType::Double)
-                .with_syntax("n%")
+                .with_syntax("[n%]")
+                .with_args_compiler(SameTypeArgsCompiler::new(0, 1, ExprType::Integer))
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns a random number in the [0..1] range.
-If n% is zero, returns the previously generated random number.  If n% is positive, returns a new \
-random number.
+If n% is zero, returns the previously generated random number.  If n% is positive or is not \
+specified, returns a new random number.
 If you need to generate an integer random number within a specific range, say [0..100], compute it \
 with an expression like CINT%(RND#(1) * 100.0).
 WARNING: These random numbers offer no cryptographic guarantees.",
@@ -566,27 +538,20 @@ impl Callable for RndFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let result = match iter.next() {
             None => Value::Double(self.prng.borrow_mut().next()),
-            Some((n, npos)) => {
-                let n = n.as_i32().map_err(|e| CallError::ArgumentError(npos, format!("{}", e)))?;
-                match n.cmp(&0) {
-                    Ordering::Equal => Value::Double(self.prng.borrow_mut().last()),
-                    Ordering::Greater => Value::Double(self.prng.borrow_mut().next()),
-                    Ordering::Less => {
-                        return Err(CallError::ArgumentError(
-                            npos,
-                            "n% cannot be negative".to_owned(),
-                        ))
-                    }
+            Some((Value::Integer(n), npos)) => match n.cmp(&0) {
+                Ordering::Equal => Value::Double(self.prng.borrow_mut().last()),
+                Ordering::Greater => Value::Double(self.prng.borrow_mut().next()),
+                Ordering::Less => {
+                    return Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
                 }
-            }
+            },
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
         Ok(result)
     }
 }
@@ -603,6 +568,7 @@ impl SinFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SIN", VarType::Double)
                 .with_syntax("angle<%|#>")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
                 .with_category(CATEGORY)
                 .with_description(
                     "Computes the sine of an angle.
@@ -621,8 +587,8 @@ impl Callable for SinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let angle = get_angle(args, machine, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let angle = get_angle(args, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.sin()))
     }
 }
@@ -638,6 +604,7 @@ impl SqrFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SQR", VarType::Double)
                 .with_syntax("num<%|#>")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
                 .with_category(CATEGORY)
                 .with_description("Computes the square root of the given number.")
                 .build(),
@@ -651,17 +618,13 @@ impl Callable for SqrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let (num, numpos) = match iter.next() {
-            Some((value @ Value::Integer(_) | value @ Value::Double(_), pos)) => {
-                (value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
-            }
-            _ => return Err(CallError::SyntaxError),
+            Some((Value::Double(d), pos)) => (d, pos),
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         if num < 0.0 {
             return Err(CallError::ArgumentError(
@@ -685,6 +648,7 @@ impl TanFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("TAN", VarType::Double)
                 .with_syntax("angle<%|#>")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
                 .with_category(CATEGORY)
                 .with_description(
                     "Computes the tangent of an angle.
@@ -703,8 +667,8 @@ impl Callable for TanFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let angle = get_angle(args, machine, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let angle = get_angle(args, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.tan()))
     }
 }
@@ -741,9 +705,12 @@ mod tests {
 
         check_expr_ok_with_vars(123f64.atan(), "ATN(a)", [("a", 123i32.into())]);
 
-        check_expr_error("1:10: In call to ATN: expected n<%|#>", "ATN()");
-        check_expr_error("1:10: In call to ATN: expected n<%|#>", "ATN(FALSE)");
-        check_expr_error("1:10: In call to ATN: expected n<%|#>", "ATN(3, 4)");
+        check_expr_compilation_error("1:10: In call to ATN: expected n<%|#>", "ATN()");
+        check_expr_compilation_error(
+            "1:10: In call to ATN: 1:14: BOOLEAN is not a number",
+            "ATN(FALSE)",
+        );
+        check_expr_compilation_error("1:10: In call to ATN: expected n<%|#>", "ATN(3, 4)");
     }
 
     #[test]
@@ -755,9 +722,12 @@ mod tests {
 
         check_expr_ok_with_vars(1, "CINT(d)", [("d", 0.9f64.into())]);
 
-        check_expr_error("1:10: In call to CINT: expected expr<%|#>", "CINT()");
-        check_expr_error("1:10: In call to CINT: expected expr<%|#>", "CINT(FALSE)");
-        check_expr_error("1:10: In call to CINT: expected expr<%|#>", "CINT(3.0, 4)");
+        check_expr_compilation_error("1:10: In call to CINT: expected expr<%|#>", "CINT()");
+        check_expr_compilation_error(
+            "1:10: In call to CINT: 1:15: BOOLEAN is not a number",
+            "CINT(FALSE)",
+        );
+        check_expr_compilation_error("1:10: In call to CINT: expected expr<%|#>", "CINT(3.0, 4)");
 
         check_expr_error(
             "1:10: In call to CINT: 1:15: Cannot cast -1234567890123456 to integer due to overflow",
@@ -772,9 +742,12 @@ mod tests {
 
         check_expr_ok_with_vars(123f64.cos(), "COS(i)", [("i", 123i32.into())]);
 
-        check_expr_error("1:10: In call to COS: expected angle<%|#>", "COS()");
-        check_expr_error("1:10: In call to COS: 1:14: FALSE is not a number", "COS(FALSE)");
-        check_expr_error("1:10: In call to COS: expected angle<%|#>", "COS(3, 4)");
+        check_expr_compilation_error("1:10: In call to COS: expected angle<%|#>", "COS()");
+        check_expr_compilation_error(
+            "1:10: In call to COS: 1:14: BOOLEAN is not a number",
+            "COS(FALSE)",
+        );
+        check_expr_compilation_error("1:10: In call to COS: expected angle<%|#>", "COS(3, 4)");
     }
 
     #[test]
@@ -795,8 +768,8 @@ mod tests {
 
     #[test]
     fn test_deg_rad_errors() {
-        check_stmt_err("1:1: In call to DEG: expected no arguments", "DEG 1");
-        check_stmt_err("1:1: In call to RAD: expected no arguments", "RAD 1");
+        check_stmt_compilation_err("1:1: In call to DEG: expected no arguments", "DEG 1");
+        check_stmt_compilation_err("1:1: In call to RAD: expected no arguments", "RAD 1");
     }
 
     #[test]
@@ -808,9 +781,12 @@ mod tests {
 
         check_expr_ok_with_vars(0, "INT(d)", [("d", 0.9f64.into())]);
 
-        check_expr_error("1:10: In call to INT: expected expr<%|#>", "INT()");
-        check_expr_error("1:10: In call to INT: expected expr<%|#>", "INT(FALSE)");
-        check_expr_error("1:10: In call to INT: expected expr<%|#>", "INT(3.0, 4)");
+        check_expr_compilation_error("1:10: In call to INT: expected expr<%|#>", "INT()");
+        check_expr_compilation_error(
+            "1:10: In call to INT: 1:14: BOOLEAN is not a number",
+            "INT(FALSE)",
+        );
+        check_expr_compilation_error("1:10: In call to INT: expected expr<%|#>", "INT(3.0, 4)");
 
         check_expr_error(
             "1:10: In call to INT: 1:14: Cannot cast -1234567890123456 to integer due to overflow",
@@ -842,8 +818,14 @@ mod tests {
             [("i", 5i32.into()), ("j", 3i32.into()), ("k", 4i32.into())],
         );
 
-        check_expr_error("1:10: In call to MAX: expected expr<%|#>[, .., expr<%|#>]", "MAX()");
-        check_expr_error("1:10: In call to MAX: 1:14: FALSE is not a number", "MAX(FALSE)");
+        check_expr_compilation_error(
+            "1:10: In call to MAX: expected expr<%|#>[, .., expr<%|#>]",
+            "MAX()",
+        );
+        check_expr_compilation_error(
+            "1:10: In call to MAX: 1:14: BOOLEAN is not a number",
+            "MAX(FALSE)",
+        );
     }
 
     #[test]
@@ -870,8 +852,14 @@ mod tests {
             [("i", 5i32.into()), ("j", 3i32.into()), ("k", 4i32.into())],
         );
 
-        check_expr_error("1:10: In call to MIN: expected expr<%|#>[, .., expr<%|#>]", "MIN()");
-        check_expr_error("1:10: In call to MIN: 1:14: FALSE is not a number", "MIN(FALSE)");
+        check_expr_compilation_error(
+            "1:10: In call to MIN: expected expr<%|#>[, .., expr<%|#>]",
+            "MIN()",
+        );
+        check_expr_compilation_error(
+            "1:10: In call to MIN: 1:14: BOOLEAN is not a number",
+            "MIN(FALSE)",
+        );
     }
 
     #[test]
@@ -909,12 +897,18 @@ mod tests {
 
         t.run("result = RND(1)").expect_var("result", 0.7097578208683426).check();
 
-        check_expr_error("1:10: In call to RND: expected n%", "RND(1, 7)");
-        check_expr_error("1:10: In call to RND: 1:14: FALSE is not a number", "RND(FALSE)");
+        check_expr_compilation_error("1:10: In call to RND: expected [n%]", "RND(1, 7)");
+        check_expr_compilation_error(
+            "1:10: In call to RND: 1:14: BOOLEAN is not a number",
+            "RND(FALSE)",
+        );
         check_expr_error("1:10: In call to RND: 1:14: n% cannot be negative", "RND(-1)");
 
-        check_stmt_err("1:1: In call to RANDOMIZE: expected [seed%]", "RANDOMIZE ,");
-        check_stmt_err("1:1: In call to RANDOMIZE: 1:11: TRUE is not a number", "RANDOMIZE TRUE");
+        check_stmt_compilation_err("1:1: In call to RANDOMIZE: expected [seed%]", "RANDOMIZE ,");
+        check_stmt_compilation_err(
+            "1:1: In call to RANDOMIZE: 1:11: BOOLEAN is not a number",
+            "RANDOMIZE TRUE",
+        );
     }
 
     #[test]
@@ -924,9 +918,12 @@ mod tests {
 
         check_expr_ok_with_vars(123f64.sin(), "SIN(i)", [("i", 123i32.into())]);
 
-        check_expr_error("1:10: In call to SIN: expected angle<%|#>", "SIN()");
-        check_expr_error("1:10: In call to SIN: 1:14: FALSE is not a number", "SIN(FALSE)");
-        check_expr_error("1:10: In call to SIN: expected angle<%|#>", "SIN(3, 4)");
+        check_expr_compilation_error("1:10: In call to SIN: expected angle<%|#>", "SIN()");
+        check_expr_compilation_error(
+            "1:10: In call to SIN: 1:14: BOOLEAN is not a number",
+            "SIN(FALSE)",
+        );
+        check_expr_compilation_error("1:10: In call to SIN: expected angle<%|#>", "SIN(3, 4)");
     }
 
     #[test]
@@ -938,9 +935,12 @@ mod tests {
 
         check_expr_ok_with_vars(9f64.sqrt(), "SQR(i)", [("i", 9i32.into())]);
 
-        check_expr_error("1:10: In call to SQR: expected num<%|#>", "SQR()");
-        check_expr_error("1:10: In call to SQR: expected num<%|#>", "SQR(FALSE)");
-        check_expr_error("1:10: In call to SQR: expected num<%|#>", "SQR(3, 4)");
+        check_expr_compilation_error("1:10: In call to SQR: expected num<%|#>", "SQR()");
+        check_expr_compilation_error(
+            "1:10: In call to SQR: 1:14: BOOLEAN is not a number",
+            "SQR(FALSE)",
+        );
+        check_expr_compilation_error("1:10: In call to SQR: expected num<%|#>", "SQR(3, 4)");
         check_expr_error(
             "1:10: In call to SQR: 1:14: Cannot take square root of a negative number",
             "SQR(-3)",
@@ -958,8 +958,11 @@ mod tests {
 
         check_expr_ok_with_vars(123f64.tan(), "TAN(i)", [("i", 123i32.into())]);
 
-        check_expr_error("1:10: In call to TAN: expected angle<%|#>", "TAN()");
-        check_expr_error("1:10: In call to TAN: 1:14: FALSE is not a number", "TAN(FALSE)");
-        check_expr_error("1:10: In call to TAN: expected angle<%|#>", "TAN(3, 4)");
+        check_expr_compilation_error("1:10: In call to TAN: expected angle<%|#>", "TAN()");
+        check_expr_compilation_error(
+            "1:10: In call to TAN: 1:14: BOOLEAN is not a number",
+            "TAN(FALSE)",
+        );
+        check_expr_compilation_error("1:10: In call to TAN: expected angle<%|#>", "TAN(3, 4)");
     }
 }

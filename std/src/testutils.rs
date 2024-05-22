@@ -783,6 +783,12 @@ pub fn check_stmt_err<S: Into<String>>(exp_error: S, stmt: &str) {
     Tester::default().run(stmt).expect_err(exp_error).check();
 }
 
+/// Executes `stmt` on a default `Tester` instance and checks that it fails with `exp_error`
+/// during compilation.
+pub fn check_stmt_compilation_err<S: Into<String>>(exp_error: S, stmt: &str) {
+    Tester::default().run(stmt).expect_compilation_err(exp_error).check();
+}
+
 /// Executes `stmt` on a default `Tester` instance and checks that it fails with
 /// `exp_uncatchable_error`.
 pub fn check_stmt_uncatchable_err<S: Into<String>>(exp_error: S, stmt: &str) {
