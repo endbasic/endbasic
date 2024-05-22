@@ -18,6 +18,7 @@
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::reader::LineCol;
+use crate::syms::CallableMetadata;
 use crate::syms::{Symbol, SymbolKey, Symbols};
 use std::collections::HashMap;
 use std::fmt;
@@ -126,31 +127,17 @@ impl From<CallableType> for VarType {
     }
 }
 
-impl CallableType {
-    /// Returns the expression type of this callable, or `None` if this corresponds to a command.
-    fn as_expr_type(self) -> Option<ExprType> {
-        match self {
-            CallableType::Boolean => Some(ExprType::Boolean),
-            CallableType::Double => Some(ExprType::Double),
-            CallableType::Integer => Some(ExprType::Integer),
-            CallableType::Text => Some(ExprType::Text),
-            CallableType::Void => None,
-        }
-    }
-}
-
 /// Information about a symbol in the symbols table.
 #[derive(Clone)]
 pub(crate) enum SymbolPrototype {
     /// Information about an array.  The integer indicates the number of dimensions in the array.
     Array(ExprType, usize),
 
-    /// Information about a callable.  The boolean indicates if this callable is an argless function
-    /// or not.
-    Callable(CallableType, bool),
+    /// Information about a callable.
+    Callable(CallableMetadata),
 
     /// Information about a variable.
-    Variable(#[allow(unused)] ExprType),
+    Variable(ExprType),
 }
 
 /// Type for the symbols table.
@@ -174,8 +161,7 @@ impl From<&Symbols> for SymbolsTable {
                     SymbolPrototype::Array(array.subtype().into(), array.dimensions().len())
                 }
                 Symbol::Callable(callable) => {
-                    let md = callable.metadata();
-                    SymbolPrototype::Callable(md.return_type().into(), md.is_argless())
+                    SymbolPrototype::Callable(callable.metadata().clone())
                 }
                 Symbol::Variable(var) => SymbolPrototype::Variable(var.as_vartype().into()),
             };
@@ -750,8 +736,8 @@ impl Compiler {
             Statement::BuiltinCall(span) => {
                 let key = SymbolKey::from(&span.name);
                 match self.symtable.get(&key) {
-                    Some(SymbolPrototype::Callable(ftype, _is_argless)) => {
-                        if *ftype != CallableType::Void {
+                    Some(SymbolPrototype::Callable(md)) => {
+                        if md.return_type() != VarType::Void {
                             return Err(Error::new(
                                 span.name_pos,
                                 format!("{} is not a command", span.name),
@@ -963,6 +949,7 @@ pub fn compile(stmts: Vec<Statement>, syms: &Symbols) -> Result<Image> {
 mod testutils {
     use super::*;
     use crate::parser;
+    use crate::syms::CallableMetadataBuilder;
 
     /// Builder pattern to prepare the compiler for testing purposes.
     #[derive(Default)]
@@ -980,6 +967,16 @@ mod testutils {
             proto: SymbolPrototype,
         ) -> Self {
             self.symtable.insert(name.into(), proto);
+            self
+        }
+
+        /// Inserts `name` into the symbols table as a callable.
+        ///
+        /// This is syntactic sugar over `define` to simplify the definition of callables.
+        pub(crate) fn define_callable(mut self, builder: CallableMetadataBuilder) -> Self {
+            let md = builder.test_build();
+            let key = SymbolKey::from(md.name());
+            self.symtable.insert(key, SymbolPrototype::Callable(md));
             self
         }
 
@@ -1101,6 +1098,7 @@ mod testutils {
 mod tests {
     use super::testutils::*;
     use super::*;
+    use crate::syms::CallableMetadataBuilder;
 
     #[test]
     fn test_compile_nothing() {
@@ -1304,7 +1302,7 @@ mod tests {
     #[test]
     fn test_compile_builtin_call_no_args() {
         Tester::default()
-            .define("CMD", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("CMD", VarType::Void))
             .parse("CMD")
             .compile()
             .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 1), 0))
@@ -1314,7 +1312,7 @@ mod tests {
     #[test]
     fn test_compile_builtin_call_separator_types() {
         Tester::default()
-            .define("CMD", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("CMD", VarType::Void))
             .parse("CMD a;;b,c AS d")
             .compile()
             .expect_instr(0, Instruction::LoadRef(VarRef::new("d", VarType::Auto), lc(1, 15)))
@@ -1400,7 +1398,7 @@ mod tests {
             .check();
 
         Tester::default()
-            .define("Out", SymbolPrototype::Callable(CallableType::Integer, false))
+            .define_callable(CallableMetadataBuilder::new("OUT", VarType::Integer))
             .parse("DIM OuT")
             .compile()
             .expect_err("1:5: Cannot DIM already-defined symbol OuT")
@@ -1459,7 +1457,7 @@ mod tests {
     #[test]
     fn test_compile_do_infinite() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse("DO\nFOO\nLOOP")
             .compile()
             .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
@@ -1470,7 +1468,7 @@ mod tests {
     #[test]
     fn test_compile_do_pre_guard() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse("DO WHILE TRUE\nFOO\nLOOP")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
@@ -1483,7 +1481,7 @@ mod tests {
     #[test]
     fn test_compile_do_post_guard() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse("DO\nFOO\nLOOP WHILE TRUE")
             .compile()
             .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
@@ -1720,7 +1718,7 @@ mod tests {
     #[test]
     fn test_compile_gosub_and_return() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse("@sub\nFOO\nRETURN\nGOSUB @sub")
             .compile()
             .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
@@ -1741,7 +1739,7 @@ mod tests {
     #[test]
     fn test_compile_if_one_branch() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse("IF FALSE THEN: FOO: END IF")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(false), lc(1, 4)))
@@ -1753,9 +1751,9 @@ mod tests {
     #[test]
     fn test_compile_if_many_branches() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
-            .define("BAR", SymbolPrototype::Callable(CallableType::Void, false))
-            .define("BAZ", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("BAR", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("BAZ", VarType::Void))
             .parse("IF FALSE THEN\nFOO\nELSEIF TRUE THEN\nBAR\nELSE\nBAZ\nEND IF")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(false), lc(1, 4)))
@@ -1814,7 +1812,7 @@ mod tests {
     /// `exp_expr` must assume that its position starts at `(2, 6)`.
     fn do_compile_case_guard_test(guards: &str, exp_expr_instrs: Vec<Instruction>) {
         let mut t = Tester::default()
-            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse(&format!("SELECT CASE 5\nCASE {}\nFOO\nEND SELECT", guards))
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -1960,7 +1958,7 @@ mod tests {
     #[test]
     fn test_compile_select_one_case() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -1998,7 +1996,7 @@ mod tests {
     #[test]
     fn test_compile_select_only_case_else() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse("SELECT CASE 5\nCASE ELSE\nFOO\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -2014,8 +2012,8 @@ mod tests {
     #[test]
     fn test_compile_select_many_cases_without_else() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
-            .define("BAR", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("BAR", VarType::Void))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE IS <> 8\nBAR\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -2041,8 +2039,8 @@ mod tests {
     #[test]
     fn test_compile_select_many_cases_with_else() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
-            .define("BAR", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("BAR", VarType::Void))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE ELSE\nBAR\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
@@ -2090,7 +2088,7 @@ mod tests {
     #[test]
     fn test_compile_while() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse("WHILE TRUE\nFOO\nWEND")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 7)))
