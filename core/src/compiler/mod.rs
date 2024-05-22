@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 mod args;
-pub(crate) use args::*;
+pub use args::*;
 mod exprs;
 pub use exprs::{compile_expr, compile_expr_in_command};
 
@@ -97,6 +97,13 @@ pub enum ExprType {
 
     /// Type for an expression that evaluates to a string.
     Text,
+}
+
+impl ExprType {
+    /// Returns true if this expression type is numerical.
+    fn is_numerical(self) -> bool {
+        self == Self::Double || self == Self::Integer
+    }
 }
 
 impl From<VarType> for ExprType {
