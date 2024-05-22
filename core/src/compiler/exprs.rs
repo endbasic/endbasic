@@ -368,25 +368,22 @@ fn compile_expr_symbol(
             }
         }
 
-        Some(SymbolPrototype::Callable(ctype, is_argless)) => {
-            let (ctype, is_argless) = (*ctype, *is_argless);
+        Some(SymbolPrototype::Callable(md)) => {
+            if md.return_type() == VarType::Void {
+                return Err(Error::new(
+                    span.pos,
+                    format!("{} is not an array nor a function", span.vref.name()),
+                ));
+            }
 
-            if !is_argless {
+            if !md.is_argless() {
                 return Err(Error::new(
                     span.pos,
                     format!("In call to {}: function requires arguments", span.vref.name()),
                 ));
             }
 
-            match ctype.as_expr_type() {
-                Some(etype) => (Instruction::FunctionCall(key, ctype.into(), span.pos, 0), etype),
-                None => {
-                    return Err(Error::new(
-                        span.pos,
-                        format!("{} is not an array nor a function", span.vref.name()),
-                    ));
-                }
-            }
+            (Instruction::FunctionCall(key, md.return_type(), span.pos, 0), md.return_type().into())
         }
     };
     if !span.vref.accepts(vtype.into()) {
@@ -440,30 +437,31 @@ fn compile_expr_symbol_ref(
             Ok(vtype)
         }
 
-        Some(SymbolPrototype::Callable(ctype, is_argless)) => match ctype.as_expr_type() {
-            Some(etype) => {
-                if !span.vref.accepts(etype.into()) {
-                    return Err(Error::new(
-                        span.pos,
-                        format!("Incompatible type annotation in {} reference", span.vref),
-                    ));
-                }
-
-                if !is_argless {
-                    return Err(Error::new(
-                        span.pos,
-                        format!("In call to {}: function requires arguments", span.vref.name()),
-                    ));
-                }
-
-                instrs.push(Instruction::FunctionCall(key, (*ctype).into(), span.pos, 0));
-                Ok(etype)
+        Some(SymbolPrototype::Callable(md)) => {
+            if !span.vref.accepts(md.return_type()) {
+                return Err(Error::new(
+                    span.pos,
+                    format!("Incompatible type annotation in {} reference", span.vref),
+                ));
             }
-            None => Err(Error::new(
-                span.pos,
-                format!("{} is not an array nor a function", span.vref.name()),
-            )),
-        },
+
+            if md.return_type() == VarType::Void {
+                return Err(Error::new(
+                    span.pos,
+                    format!("{} is not an array nor a function", span.vref.name()),
+                ));
+            }
+
+            if !md.is_argless() {
+                return Err(Error::new(
+                    span.pos,
+                    format!("In call to {}: function requires arguments", span.vref.name()),
+                ));
+            }
+
+            instrs.push(Instruction::FunctionCall(key, md.return_type(), span.pos, 0));
+            Ok(md.return_type().into())
+        }
     }
 }
 
@@ -716,32 +714,28 @@ pub(crate) fn compile_expr(
                     compile_array_ref(instrs, symtable, span, key, *vtype, *dims)
                 }
 
-                Some(SymbolPrototype::Callable(ctype, is_argless)) => {
-                    let (ctype, is_argless) = (*ctype, *is_argless);
-
+                Some(SymbolPrototype::Callable(md)) => {
                     let nargs = span.args.len();
                     for arg in span.args.into_iter().rev() {
                         compile_expr(instrs, symtable, arg, true)?;
                     }
 
-                    if !span.fref.accepts(ctype.into()) {
+                    if !span.fref.accepts(md.return_type()) {
                         return Err(Error::new(
                             span.pos,
                             format!("Incompatible type annotation in {} reference", span.fref),
                         ));
                     }
 
-                    let vtype = match ctype.as_expr_type() {
-                        Some(vtype) => vtype,
-                        None => {
-                            return Err(Error::new(
-                                span.pos,
-                                format!("{} is not an array nor a function", span.fref.name()),
-                            ));
-                        }
-                    };
+                    if md.return_type() == VarType::Void {
+                        return Err(Error::new(
+                            span.pos,
+                            format!("{} is not an array nor a function", span.fref.name()),
+                        ));
+                    }
+                    let vtype = md.return_type().into();
 
-                    if is_argless {
+                    if md.is_argless() {
                         return Err(Error::new(
                             span.pos,
                             format!(
@@ -751,7 +745,7 @@ pub(crate) fn compile_expr(
                         ));
                     }
 
-                    instrs.push(Instruction::FunctionCall(key, ctype.into(), span.pos, nargs));
+                    instrs.push(Instruction::FunctionCall(key, md.return_type(), span.pos, nargs));
                     Ok(vtype)
                 }
 
@@ -790,7 +784,7 @@ pub(crate) fn compile_expr_in_command(
 mod tests {
     use super::*;
     use crate::compiler::testutils::*;
-    use crate::compiler::CallableType;
+    use crate::syms::CallableMetadataBuilder;
 
     #[test]
     fn test_compile_expr_literals() {
@@ -822,7 +816,7 @@ mod tests {
     #[test]
     fn test_compile_expr_argless_call_ok() {
         Tester::default()
-            .define("f", SymbolPrototype::Callable(CallableType::Integer, true))
+            .define_callable(CallableMetadataBuilder::new("F", VarType::Integer))
             .parse("i = f")
             .compile()
             .expect_instr(
@@ -836,7 +830,7 @@ mod tests {
     #[test]
     fn test_compile_expr_argless_call_not_argless() {
         Tester::default()
-            .define("f", SymbolPrototype::Callable(CallableType::Integer, false))
+            .define_callable(CallableMetadataBuilder::new("F", VarType::Integer).with_syntax("n%"))
             .parse("i = f")
             .compile()
             .expect_err("1:5: In call to f: function requires arguments")
@@ -846,8 +840,8 @@ mod tests {
     #[test]
     fn test_compile_expr_ref_argless_call_ok() {
         Tester::default()
-            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, false))
-            .define("f", SymbolPrototype::Callable(CallableType::Integer, true))
+            .define_callable(CallableMetadataBuilder::new("C", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("F", VarType::Integer))
             .parse("c f")
             .compile()
             .expect_instr(
@@ -861,8 +855,8 @@ mod tests {
     #[test]
     fn test_compile_expr_ref_argless_call_not_argless() {
         Tester::default()
-            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, false))
-            .define("f", SymbolPrototype::Callable(CallableType::Integer, false))
+            .define_callable(CallableMetadataBuilder::new("C", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("F", VarType::Integer).with_syntax("n%"))
             .parse("c f")
             .compile()
             .expect_err("1:3: In call to f: function requires arguments")
@@ -881,7 +875,7 @@ mod tests {
     #[test]
     fn test_compile_expr_bad_annotation_in_argless_call() {
         Tester::default()
-            .define(SymbolKey::from("f"), SymbolPrototype::Callable(CallableType::Integer, true))
+            .define_callable(CallableMetadataBuilder::new("F", VarType::Integer))
             .parse("a = f$ + 1")
             .compile()
             .expect_err("1:5: Incompatible type annotation in f$ reference")
@@ -891,7 +885,7 @@ mod tests {
     #[test]
     fn test_compile_expr_ref_bad_annotation_in_varref() {
         Tester::default()
-            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("C", VarType::Void))
             .parse("a = 3: c a$")
             .compile()
             .expect_err("1:10: Incompatible type annotation in a$ reference")
@@ -901,8 +895,8 @@ mod tests {
     #[test]
     fn test_compile_expr_ref_bad_annotation_in_argless_call() {
         Tester::default()
-            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, false))
-            .define(SymbolKey::from("f"), SymbolPrototype::Callable(CallableType::Integer, false))
+            .define_callable(CallableMetadataBuilder::new("C", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("F", VarType::Integer))
             .parse("c f$")
             .compile()
             .expect_err("1:3: Incompatible type annotation in f$ reference")
@@ -923,7 +917,7 @@ mod tests {
     fn test_compile_expr_ref_try_load_array_as_var() {
         Tester::default()
             .define(SymbolKey::from("a"), SymbolPrototype::Array(ExprType::Integer, 1))
-            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("C", VarType::Void))
             .parse("c a")
             .compile()
             .expect_instr(0, Instruction::LoadRef(VarRef::new("a", VarType::Auto), lc(1, 3)))
@@ -934,7 +928,7 @@ mod tests {
     #[test]
     fn test_compile_expr_try_load_command_as_var() {
         Tester::default()
-            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, true))
+            .define_callable(CallableMetadataBuilder::new("C", VarType::Void))
             .parse("b = c")
             .compile()
             .expect_err("1:5: c is not an array nor a function")
@@ -944,7 +938,7 @@ mod tests {
     #[test]
     fn test_compile_expr_ref_try_load_command_as_var() {
         Tester::default()
-            .define(SymbolKey::from("c"), SymbolPrototype::Callable(CallableType::Void, false))
+            .define_callable(CallableMetadataBuilder::new("C", VarType::Void))
             .parse("c c")
             .compile()
             .expect_err("1:3: c is not an array nor a function")
@@ -1177,7 +1171,9 @@ mod tests {
     #[test]
     fn test_compile_expr_function_call() {
         Tester::default()
-            .define("FOO", SymbolPrototype::Callable(CallableType::Integer, false))
+            .define_callable(
+                CallableMetadataBuilder::new("FOO", VarType::Integer).with_syntax("a, b, c"),
+            )
             .define("j", SymbolPrototype::Variable(ExprType::Text))
             .define("k", SymbolPrototype::Variable(ExprType::Double))
             .parse("i = FOO(3, j, k + 1)")
