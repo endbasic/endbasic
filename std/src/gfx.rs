@@ -17,7 +17,8 @@
 
 use crate::console::{Console, PixelsXY};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::ast::{Value, VarType};
+use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
@@ -37,30 +38,22 @@ described in this section.";
 /// Extracts an `x, y` argument pair from the list of command arguments.
 fn extract_xy<I: Iterator<Item = (Value, LineCol)>>(
     iter: &mut I,
-) -> Result<(Value, LineCol, Value, LineCol), CallError> {
+) -> Result<(i32, LineCol, i32, LineCol), CallError> {
     let (xvalue, xpos) = match iter.next() {
-        Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-        Some((value, pos)) => (value, pos),
-        _ => return Err(CallError::SyntaxError),
-    };
-
-    match iter.next() {
-        Some((Value::Separator(ArgSep::Long), _pos)) => (),
-        _ => return Err(CallError::SyntaxError),
+        Some((Value::Integer(i), pos)) => (i, pos),
+        _ => unreachable!(),
     };
 
     let (yvalue, ypos) = match iter.next() {
-        Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-        Some((value, pos)) => (value, pos),
-        _ => return Err(CallError::SyntaxError),
+        Some((Value::Integer(i), pos)) => (i, pos),
+        _ => unreachable!(),
     };
 
     Ok((xvalue, xpos, yvalue, ypos))
 }
 
 /// Parses an expression that represents a single coordinate.
-fn parse_coordinate(value: Value, pos: LineCol) -> Result<i16, CallError> {
-    let i = value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
+fn parse_coordinate(i: i32, pos: LineCol) -> Result<i16, CallError> {
     match i16::try_from(i) {
         Ok(i) => Ok(i),
         Err(_) => Err(CallError::ArgumentError(pos, format!("Coordinate {} out of range", i))),
@@ -69,17 +62,16 @@ fn parse_coordinate(value: Value, pos: LineCol) -> Result<i16, CallError> {
 
 /// Parses a pair of expressions that represent an (x,y) coordinate pair.
 fn parse_coordinates(
-    xvalue: Value,
+    xvalue: i32,
     xpos: LineCol,
-    yvalue: Value,
+    yvalue: i32,
     ypos: LineCol,
 ) -> Result<PixelsXY, CallError> {
     Ok(PixelsXY { x: parse_coordinate(xvalue, xpos)?, y: parse_coordinate(yvalue, ypos)? })
 }
 
 /// Parses an expression that represents a radius.
-fn parse_radius(value: Value, pos: LineCol) -> Result<u16, CallError> {
-    let i = value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
+fn parse_radius(i: i32, pos: LineCol) -> Result<u16, CallError> {
     match u16::try_from(i) {
         Ok(i) => Ok(i),
         Err(_) if i < 0 => {
@@ -101,6 +93,7 @@ impl GfxCircleCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_CIRCLE", VarType::Void)
                 .with_syntax("x%, y%, r%")
+                .with_args_compiler(SameTypeArgsCompiler::new(3, 3, ExprType::Integer))
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a circle of radius r centered at (x,y).
@@ -119,25 +112,14 @@ impl Callable for GfxCircleCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let (xvalue, xpos, yvalue, ypos) = extract_xy(&mut iter)?;
-
-        match iter.next() {
-            Some((Value::Separator(ArgSep::Long), _pos)) => (),
-            _ => return Err(CallError::SyntaxError),
-        };
-
         let (rvalue, rpos) = match iter.next() {
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => (value, pos),
-            _ => return Err(CallError::SyntaxError),
+            Some((Value::Integer(i), pos)) => (i, pos),
+            _ => unreachable!(),
         };
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
         let r = parse_radius(rvalue, rpos)?;
@@ -159,6 +141,7 @@ impl GfxCirclefCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_CIRCLEF", VarType::Void)
                 .with_syntax("x%, y%, r%")
+                .with_args_compiler(SameTypeArgsCompiler::new(3, 3, ExprType::Integer))
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a filled circle of radius r centered at (x,y).
@@ -176,25 +159,14 @@ impl Callable for GfxCirclefCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let (xvalue, xpos, yvalue, ypos) = extract_xy(&mut iter)?;
-
-        match iter.next() {
-            Some((Value::Separator(ArgSep::Long), _pos)) => (),
-            _ => return Err(CallError::SyntaxError),
-        };
-
         let (rvalue, rpos) = match iter.next() {
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => (value, pos),
-            _ => return Err(CallError::SyntaxError),
+            Some((Value::Integer(i), pos)) => (i, pos),
+            _ => unreachable!(),
         };
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
         let r = parse_radius(rvalue, rpos)?;
@@ -216,6 +188,7 @@ impl GfxHeightFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_HEIGHT", VarType::Integer)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the height in pixels of the graphical console.
@@ -234,9 +207,7 @@ impl Callable for GfxHeightFunction {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
         let size = self.console.borrow().size_pixels()?;
         Ok(Value::Integer(i32::from(size.height)))
     }
@@ -254,6 +225,7 @@ impl GfxLineCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_LINE", VarType::Void)
                 .with_syntax("x1%, y1%, x2%, y2%")
+                .with_args_compiler(SameTypeArgsCompiler::new(4, 4, ExprType::Integer))
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a line from (x1,y1) to (x2,y2).
@@ -271,21 +243,11 @@ impl Callable for GfxLineCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let (x1value, x1pos, y1value, y1pos) = extract_xy(&mut iter)?;
-
-        match iter.next() {
-            Some((Value::Separator(ArgSep::Long), _pos)) => (),
-            _ => return Err(CallError::SyntaxError),
-        };
-
         let (x2value, x2pos, y2value, y2pos) = extract_xy(&mut iter)?;
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
@@ -307,6 +269,7 @@ impl GfxPixelCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_PIXEL", VarType::Void)
                 .with_syntax("x%, y%")
+                .with_args_compiler(SameTypeArgsCompiler::new(2, 2, ExprType::Integer))
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a pixel at (x,y).
@@ -324,14 +287,10 @@ impl Callable for GfxPixelCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let (xvalue, xpos, yvalue, ypos) = extract_xy(&mut iter)?;
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
 
@@ -352,6 +311,7 @@ impl GfxRectCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_RECT", VarType::Void)
                 .with_syntax("x1%, y1%, x2%, y2%")
+                .with_args_compiler(SameTypeArgsCompiler::new(4, 4, ExprType::Integer))
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a rectangle from (x1,y1) to (x2,y2).
@@ -370,21 +330,11 @@ impl Callable for GfxRectCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let (x1value, x1pos, y1value, y1pos) = extract_xy(&mut iter)?;
-
-        match iter.next() {
-            Some((Value::Separator(ArgSep::Long), _pos)) => (),
-            _ => return Err(CallError::SyntaxError),
-        };
-
         let (x2value, x2pos, y2value, y2pos) = extract_xy(&mut iter)?;
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
@@ -406,6 +356,7 @@ impl GfxRectfCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_RECTF", VarType::Void)
                 .with_syntax("x1%, y1%, x2%, y2%")
+                .with_args_compiler(SameTypeArgsCompiler::new(4, 4, ExprType::Integer))
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a filled rectangle from (x1,y1) to (x2,y2).
@@ -423,21 +374,11 @@ impl Callable for GfxRectfCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let (x1value, x1pos, y1value, y1pos) = extract_xy(&mut iter)?;
-
-        match iter.next() {
-            Some((Value::Separator(ArgSep::Long), _pos)) => (),
-            _ => return Err(CallError::SyntaxError),
-        };
-
         let (x2value, x2pos, y2value, y2pos) = extract_xy(&mut iter)?;
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
@@ -459,6 +400,7 @@ impl GfxSyncCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_SYNC", VarType::Void)
                 .with_syntax("[enabled?]")
+                .with_args_compiler(SameTypeArgsCompiler::new(0, 1, ExprType::Boolean))
                 .with_category(CATEGORY)
                 .with_description(
                     "Controls the video syncing flag and/or forces a sync.
@@ -488,31 +430,17 @@ impl Callable for GfxSyncCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
-        let (enabled, pos) = match iter.next() {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
+        let enabled = match iter.next() {
             None => {
                 self.console.borrow_mut().sync_now()?;
                 return Ok(Value::Void);
             }
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => (value, pos),
+            Some((Value::Boolean(b), _pos)) => b,
+            _ => unreachable!(),
         };
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
-
-        let enabled = match enabled {
-            Value::Boolean(b) => b,
-            _ => {
-                return Err(CallError::ArgumentError(
-                    pos,
-                    "Argument to GFX_SYNC must be a boolean".to_owned(),
-                ));
-            }
-        };
+        debug_assert!(iter.next().is_none());
 
         let mut console = self.console.borrow_mut();
         if enabled {
@@ -537,6 +465,7 @@ impl GfxWidthFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_WIDTH", VarType::Integer)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the width in pixels of the graphical console.
@@ -555,9 +484,7 @@ impl Callable for GfxWidthFunction {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
         let size = self.console.borrow().size_pixels()?;
         Ok(Value::Integer(i32::from(size.width)))
     }
@@ -585,7 +512,7 @@ mod tests {
     /// Verifies error conditions for a command named `name` that takes to X/Y pairs.
     fn check_errors_two_xy(name: &'static str) {
         for args in &["1, 2, , 4", "1, 2, 3", "1, 2, 3, 4, 5", "2; 3, 4"] {
-            check_stmt_err(
+            check_stmt_compilation_err(
                 format!("1:1: In call to {}: expected x1%, y1%, x2%, y2%", name),
                 &format!("{} {}", name, args),
             );
@@ -610,8 +537,8 @@ mod tests {
         for args in &["\"a\", 1, 1, 1", "1, \"a\", 1, 1", "1, 1, \"a\", 1", "1, 1, 1, \"a\""] {
             let stmt = &format!("{} {}", name, args);
             let pos = stmt.find('"').unwrap() + 1;
-            check_stmt_err(
-                format!("1:1: In call to {}: 1:{}: \"a\" is not a number", name, pos),
+            check_stmt_compilation_err(
+                format!("1:1: In call to {}: 1:{}: STRING is not a number", name, pos),
                 stmt,
             );
         }
@@ -620,7 +547,7 @@ mod tests {
     /// Verifies error conditions for a command named `name` that takes an X/Y pair and a radius.
     fn check_errors_xy_radius(name: &'static str) {
         for args in &["1, , 3", "1, 2", "1, 2, 3, 4", "2; 3, 4"] {
-            check_stmt_err(
+            check_stmt_compilation_err(
                 format!("1:1: In call to {}: expected x%, y%, r%", name),
                 &format!("{} {}", name, args),
             );
@@ -657,8 +584,8 @@ mod tests {
         for args in &["\"a\", 1, 1", "1, \"a\", 1", "1, 1, \"a\""] {
             let stmt = &format!("{} {}", name, args);
             let pos = stmt.find('"').unwrap() + 1;
-            check_stmt_err(
-                format!("1:1: In call to {}: 1:{}: \"a\" is not a number", name, pos),
+            check_stmt_compilation_err(
+                format!("1:1: In call to {}: 1:{}: STRING is not a number", name, pos),
                 stmt,
             );
         }
@@ -784,7 +711,7 @@ mod tests {
     #[test]
     fn test_gfx_pixel_errors() {
         for cmd in &["GFX_PIXEL , 2", "GFX_PIXEL 1, 2, 3", "GFX_PIXEL 1", "GFX_PIXEL 1; 2"] {
-            check_stmt_err("1:1: In call to GFX_PIXEL: expected x%, y%", cmd);
+            check_stmt_compilation_err("1:1: In call to GFX_PIXEL: expected x%, y%", cmd);
         }
 
         for cmd in &["GFX_PIXEL -40000, 1", "GFX_PIXEL 1, -40000"] {
@@ -799,8 +726,8 @@ mod tests {
 
         for cmd in &["GFX_PIXEL \"a\", 1", "GFX_PIXEL 1, \"a\""] {
             let pos = cmd.find('"').unwrap() + 1;
-            check_stmt_err(
-                format!("1:1: In call to GFX_PIXEL: 1:{}: \"a\" is not a number", pos),
+            check_stmt_compilation_err(
+                format!("1:1: In call to GFX_PIXEL: 1:{}: STRING is not a number", pos),
                 cmd,
             );
         }
@@ -869,9 +796,12 @@ mod tests {
 
     #[test]
     fn test_gfx_sync_errors() {
-        check_stmt_err("1:1: In call to GFX_SYNC: expected [enabled?]", "GFX_SYNC 2, 3");
-        check_stmt_err(
-            "1:1: In call to GFX_SYNC: 1:10: Argument to GFX_SYNC must be a boolean",
+        check_stmt_compilation_err(
+            "1:1: In call to GFX_SYNC: expected [enabled?]",
+            "GFX_SYNC 2, 3",
+        );
+        check_stmt_compilation_err(
+            "1:1: In call to GFX_SYNC: 1:10: INTEGER is not a BOOLEAN",
             "GFX_SYNC 2",
         );
     }
