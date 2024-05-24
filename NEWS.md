@@ -53,6 +53,9 @@ for the time being.**
 *   Major performance improvements: type checking now happens at compilation time
     and the interpreter checks for interrupts more rarely now.
 
+*   Fixed the `MID` function so that the `length%` parameter is actually optional
+    as the documentation claimed.
+
 ## Changes in version 0.10.0
 
 **Released on 2022-12-27.**
