@@ -27,7 +27,7 @@ use std::fmt;
 mod args;
 pub use args::*;
 mod exprs;
-pub use exprs::{compile_expr, compile_expr_in_command};
+pub use exprs::{compile_expr, compile_expr_in_command, compile_expr_symbol_ref};
 
 /// Compilation errors.
 #[derive(Debug, thiserror::Error)]
