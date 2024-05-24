@@ -4,6 +4,8 @@
 
     Type HELP for interactive usage information.
 
+>>> Symbol references
+ERROR: 1:7: Undefined variable x
 >>> Logical operations
 ERROR: 1:13: Cannot AND BOOLEAN and INTEGER
 ERROR: 1:13: Cannot OR BOOLEAN and INTEGER

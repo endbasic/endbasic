@@ -402,7 +402,7 @@ fn compile_expr_symbol(
 }
 
 /// Compiles the load of a symbol in the context of a command argument.
-fn compile_expr_symbol_ref(
+pub fn compile_expr_symbol_ref(
     instrs: &mut Vec<Instruction>,
     symtable: &mut SymbolsTable,
     span: SymbolSpan,

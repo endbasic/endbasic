@@ -110,7 +110,7 @@ impl CallableArgsCompiler for NoArgsCompiler {
 
 /// Compiles a single expression, expecting it to be of a `target` type.  Applies casts if
 /// possible.
-fn compile_arg_expr(
+pub fn compile_arg_expr(
     instrs: &mut Vec<Instruction>,
     symtable: &SymbolsTable,
     expr: Expr,

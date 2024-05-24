@@ -26,6 +26,9 @@
 ' execution engine.  As a result, it is much simpler to validate these cases
 ' with an integration test.
 
+PRINT ">>> Symbol references"
+PRINT x: PRINT ERRMSG
+
 PRINT ">>> Logical operations"
 ' These tests just make sure that the expression evaluator delegates to the
 ' Value operations for each expression operator to essentially avoid duplicating

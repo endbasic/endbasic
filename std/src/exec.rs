@@ -227,14 +227,9 @@ mod tests {
     #[test]
     fn test_errmsg_after_error() {
         Tester::default()
-            .run("ON ERROR RESUME NEXT: INPUT 3: PRINT \"Captured: \"; ERRMSG")
-            .expect_var(
-                "0ERRMSG",
-                "1:23: In call to INPUT: 1:29: INPUT requires a variable reference",
-            )
-            .expect_prints([
-                "Captured: 1:23: In call to INPUT: 1:29: INPUT requires a variable reference",
-            ])
+            .run("ON ERROR RESUME NEXT: COLOR -1: PRINT \"Captured: \"; ERRMSG")
+            .expect_var("0ERRMSG", "1:23: In call to COLOR: 1:29: Color out of range")
+            .expect_prints(["Captured: 1:23: In call to COLOR: 1:29: Color out of range"])
             .check();
     }
 

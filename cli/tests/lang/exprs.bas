@@ -34,7 +34,6 @@ b = TRUE: PRINT b
 d = 0.0: PRINT d
 i = 0: PRINT i
 s = "z": PRINT s
-PRINT x: PRINT ERRMSG
 
 PRINT ">>> Operations and variables"
 x = 10
