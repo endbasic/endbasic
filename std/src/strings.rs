@@ -16,7 +16,11 @@
 //! String functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{Value, VarType};
+use endbasic_core::ast::{Expr, Value, VarType};
+use endbasic_core::bytecode::Instruction;
+use endbasic_core::compiler::{
+    compile_arg, compile_expr, CallableArgsCompiler, ExprType, SameTypeArgsCompiler, SymbolsTable,
+};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
@@ -29,6 +33,32 @@ use std::rc::Rc;
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "String and character functions";
 
+/// An arguments compiler for the `LEFT` and `RIGHT` functions.
+#[derive(Debug, Default)]
+struct LeftRightArgsCompiler {}
+
+impl CallableArgsCompiler for LeftRightArgsCompiler {
+    fn compile_simple(
+        &self,
+        instrs: &mut Vec<Instruction>,
+        symtable: &SymbolsTable,
+        _pos: LineCol,
+        args: Vec<Expr>,
+    ) -> Result<usize, CallError> {
+        let nargs = args.len();
+        if nargs != 2 {
+            return Err(CallError::SyntaxError);
+        }
+
+        let mut iter = args.into_iter().rev();
+        compile_arg(instrs, symtable, &mut iter, ExprType::Integer)?;
+        compile_arg(instrs, symtable, &mut iter, ExprType::Text)?;
+        debug_assert!(iter.next().is_none());
+
+        Ok(nargs)
+    }
+}
+
 /// The `ASC` function.
 pub struct AscFunction {
     metadata: CallableMetadata,
@@ -40,6 +70,7 @@ impl AscFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("ASC", VarType::Integer)
                 .with_syntax("char$")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the UTF character code of the input character.
@@ -59,15 +90,13 @@ impl Callable for AscFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let (s, spos) = match iter.next() {
             Some((Value::Text(s), pos)) => (s, pos),
-            _ => return Err(CallError::SyntaxError),
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         let mut chars = s.chars();
         let ch = match chars.next() {
@@ -106,6 +135,7 @@ impl ChrFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CHR", VarType::Text)
                 .with_syntax("code%")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Integer))
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the UTF character that corresponds to the given code.
@@ -122,17 +152,13 @@ impl Callable for ChrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let (i, ipos) = match iter.next() {
-            Some((value @ Value::Integer(_) | value @ Value::Double(_), pos)) => {
-                (value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
-            }
-            _ => return Err(CallError::SyntaxError),
+            Some((Value::Integer(i), pos)) => (i, pos),
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         if i < 0 {
             return Err(CallError::ArgumentError(
@@ -160,6 +186,7 @@ impl LeftFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LEFT", VarType::Text)
                 .with_syntax("expr$, n%")
+                .with_args_compiler(LeftRightArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns a given number of characters from the left side of a string.
@@ -177,21 +204,17 @@ impl Callable for LeftFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let s = match iter.next() {
             Some((Value::Text(s), _pos)) => s,
-            _ => return Err(CallError::SyntaxError),
+            _ => unreachable!(),
         };
         let (n, npos) = match iter.next() {
-            Some((value, pos)) => {
-                (value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
-            }
-            _ => return Err(CallError::SyntaxError),
+            Some((Value::Integer(i), pos)) => (i, pos),
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         if n < 0 {
             Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
@@ -213,6 +236,7 @@ impl LenFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LEN", VarType::Integer)
                 .with_syntax("expr$")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
                 .with_category(CATEGORY)
                 .with_description("Returns the length of the string in expr$.")
                 .build(),
@@ -226,15 +250,13 @@ impl Callable for LenFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let (s, spos) = match iter.next() {
             Some((Value::Text(s), pos)) => (s, pos),
-            _ => return Err(CallError::SyntaxError),
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         if s.len() > std::i32::MAX as usize {
             Err(CallError::InternalError(spos, "String too long".to_owned()))
@@ -255,6 +277,7 @@ impl LtrimFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LTRIM", VarType::Text)
                 .with_syntax("expr$")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
                 .with_category(CATEGORY)
                 .with_description("Returns a copy of a string with leading whitespace removed.")
                 .build(),
@@ -268,17 +291,44 @@ impl Callable for LtrimFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let s = match iter.next() {
             Some((Value::Text(s), _pos)) => s,
-            _ => return Err(CallError::SyntaxError),
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
+        debug_assert!(iter.next().is_none());
+
+        Ok(Value::Text(s.trim_start().to_owned()))
+    }
+}
+
+/// An arguments compiler for the `MID` function.
+#[derive(Debug, Default)]
+struct MidArgsCompiler {}
+
+impl CallableArgsCompiler for MidArgsCompiler {
+    fn compile_simple(
+        &self,
+        instrs: &mut Vec<Instruction>,
+        symtable: &SymbolsTable,
+        _pos: LineCol,
+        args: Vec<Expr>,
+    ) -> Result<usize, CallError> {
+        let nargs = args.len();
+        if !(2..=3).contains(&nargs) {
             return Err(CallError::SyntaxError);
         }
 
-        Ok(Value::Text(s.trim_start().to_owned()))
+        let mut iter = args.into_iter().rev();
+        compile_arg(instrs, symtable, &mut iter, ExprType::Integer)?;
+        if nargs == 3 {
+            compile_arg(instrs, symtable, &mut iter, ExprType::Integer)?;
+        }
+        compile_arg(instrs, symtable, &mut iter, ExprType::Text)?;
+        debug_assert!(iter.next().is_none());
+
+        Ok(nargs)
     }
 }
 
@@ -293,6 +343,7 @@ impl MidFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("MID", VarType::Text)
                 .with_syntax("expr$, start%[, length%]")
+                .with_args_compiler(MidArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns a portion of a string.
@@ -311,37 +362,43 @@ impl Callable for MidFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let s = match iter.next() {
             Some((Value::Text(s), _pos)) => s,
-            _ => return Err(CallError::SyntaxError),
+            _ => unreachable!(),
         };
         let (start, startpos) = match iter.next() {
-            Some((value, pos)) => {
-                (value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
-            }
-            _ => return Err(CallError::SyntaxError),
+            Some((Value::Integer(i), pos)) => (i, pos),
+            _ => unreachable!(),
         };
-        let (length, lengthpos) = match iter.next() {
-            Some((value, pos)) => {
-                (value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
+        let lengtharg = match iter.next() {
+            Some((Value::Integer(i), pos)) => {
+                debug_assert!(iter.next().is_none());
+                Some((i, pos))
             }
-            _ => return Err(CallError::SyntaxError),
+            None => None,
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
 
         if start < 0 {
-            Err(CallError::ArgumentError(startpos, "start% cannot be negative".to_owned()))
-        } else if length < 0 {
-            Err(CallError::ArgumentError(lengthpos, "length% cannot be negative".to_owned()))
-        } else {
-            let start = min(s.len(), start as usize);
-            let end = min(start + (length as usize), s.len());
-            Ok(Value::Text(s[start..end].to_owned()))
+            return Err(CallError::ArgumentError(startpos, "start% cannot be negative".to_owned()));
         }
+        let start = min(s.len(), start as usize);
+
+        let end = if let Some((length, lengthpos)) = lengtharg {
+            if length < 0 {
+                return Err(CallError::ArgumentError(
+                    lengthpos,
+                    "length% cannot be negative".to_owned(),
+                ));
+            }
+            min(start + (length as usize), s.len())
+        } else {
+            s.len()
+        };
+
+        Ok(Value::Text(s[start..end].to_owned()))
     }
 }
 
@@ -356,6 +413,7 @@ impl RightFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RIGHT", VarType::Text)
                 .with_syntax("expr$, n%")
+                .with_args_compiler(LeftRightArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns a given number of characters from the right side of a string.
@@ -373,21 +431,17 @@ impl Callable for RightFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let s = match iter.next() {
             Some((Value::Text(s), _pos)) => s,
-            _ => return Err(CallError::SyntaxError),
+            _ => unreachable!(),
         };
         let (n, npos) = match iter.next() {
-            Some((value, pos)) => {
-                (value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?, pos)
-            }
-            _ => return Err(CallError::SyntaxError),
+            Some((Value::Integer(i), pos)) => (i, pos),
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         if n < 0 {
             Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
@@ -409,6 +463,7 @@ impl RtrimFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RTRIM", VarType::Text)
                 .with_syntax("expr$")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
                 .with_category(CATEGORY)
                 .with_description("Returns a copy of a string with trailing whitespace removed.")
                 .build(),
@@ -422,17 +477,40 @@ impl Callable for RtrimFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let s = match iter.next() {
             Some((Value::Text(s), _pos)) => s,
-            _ => return Err(CallError::SyntaxError),
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
+        debug_assert!(iter.next().is_none());
+
+        Ok(Value::Text(s.trim_end().to_owned()))
+    }
+}
+
+/// An arguments compiler for the `STR` function.
+#[derive(Debug, Default)]
+struct StrArgsCompiler {}
+
+impl CallableArgsCompiler for StrArgsCompiler {
+    fn compile_simple(
+        &self,
+        instrs: &mut Vec<Instruction>,
+        symtable: &SymbolsTable,
+        _pos: LineCol,
+        args: Vec<Expr>,
+    ) -> Result<usize, CallError> {
+        let nargs = args.len();
+        if nargs != 1 {
             return Err(CallError::SyntaxError);
         }
 
-        Ok(Value::Text(s.trim_end().to_owned()))
+        let mut iter = args.into_iter().rev();
+        compile_expr(instrs, symtable, iter.next().unwrap(), false)?;
+        debug_assert!(iter.next().is_none());
+
+        Ok(nargs)
     }
 }
 
@@ -447,6 +525,7 @@ impl StrFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("STR", VarType::Text)
                 .with_syntax("expr")
+                .with_args_compiler(StrArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Formats a scalar value as a string.
@@ -469,15 +548,13 @@ impl Callable for StrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let value = match iter.next() {
             Some((value, _pos)) => value,
             None => return Err(CallError::SyntaxError),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
         Ok(Value::Text(value.to_text()))
     }
 }
@@ -507,9 +584,12 @@ mod tests {
 
         check_expr_ok_with_vars('a' as i32, r#"ASC(s)"#, [("s", "a".into())]);
 
-        check_expr_error("1:10: In call to ASC: expected char$", r#"ASC()"#);
-        check_expr_error("1:10: In call to ASC: expected char$", r#"ASC(3)"#);
-        check_expr_error("1:10: In call to ASC: expected char$", r#"ASC("a", 1)"#);
+        check_expr_compilation_error("1:10: In call to ASC: expected char$", r#"ASC()"#);
+        check_expr_compilation_error(
+            "1:10: In call to ASC: 1:14: INTEGER is not a STRING",
+            r#"ASC(3)"#,
+        );
+        check_expr_compilation_error("1:10: In call to ASC: expected char$", r#"ASC("a", 1)"#);
         check_expr_error(
             "1:10: In call to ASC: 1:14: Input string \"\" must be 1-character long",
             r#"ASC("")"#,
@@ -529,9 +609,12 @@ mod tests {
 
         check_expr_ok_with_vars(" ", r#"CHR(i)"#, [("i", 32.into())]);
 
-        check_expr_error("1:10: In call to CHR: expected code%", r#"CHR()"#);
-        check_expr_error("1:10: In call to CHR: expected code%", r#"CHR(FALSE)"#);
-        check_expr_error("1:10: In call to CHR: expected code%", r#"CHR("a", 1)"#);
+        check_expr_compilation_error("1:10: In call to CHR: expected code%", r#"CHR()"#);
+        check_expr_compilation_error(
+            "1:10: In call to CHR: 1:14: BOOLEAN is not a number",
+            r#"CHR(FALSE)"#,
+        );
+        check_expr_compilation_error("1:10: In call to CHR: expected code%", r#"CHR("a", 1)"#);
         check_expr_error(
             "1:10: In call to CHR: 1:14: Character code -1 must be positive",
             r#"CHR(-1)"#,
@@ -558,10 +641,19 @@ mod tests {
 
         check_expr_ok_with_vars("abc", r#"LEFT(s, i)"#, [("s", "abcdef".into()), ("i", 3.into())]);
 
-        check_expr_error("1:10: In call to LEFT: expected expr$, n%", r#"LEFT()"#);
-        check_expr_error("1:10: In call to LEFT: expected expr$, n%", r#"LEFT("", 1, 2)"#);
-        check_expr_error("1:10: In call to LEFT: expected expr$, n%", r#"LEFT(1, 2)"#);
-        check_expr_error("1:10: In call to LEFT: 1:19: \"\" is not a number", r#"LEFT("", "")"#);
+        check_expr_compilation_error("1:10: In call to LEFT: expected expr$, n%", r#"LEFT()"#);
+        check_expr_compilation_error(
+            "1:10: In call to LEFT: expected expr$, n%",
+            r#"LEFT("", 1, 2)"#,
+        );
+        check_expr_compilation_error(
+            "1:10: In call to LEFT: 1:15: INTEGER is not a STRING",
+            r#"LEFT(1, 2)"#,
+        );
+        check_expr_compilation_error(
+            "1:10: In call to LEFT: 1:19: STRING is not a number",
+            r#"LEFT("", "")"#,
+        );
         check_expr_error(
             "1:10: In call to LEFT: 1:25: n% cannot be negative",
             r#"LEFT("abcdef", -5)"#,
@@ -576,9 +668,12 @@ mod tests {
 
         check_expr_ok_with_vars(4, r#"LEN(s)"#, [("s", "1234".into())]);
 
-        check_expr_error("1:10: In call to LEN: expected expr$", r#"LEN()"#);
-        check_expr_error("1:10: In call to LEN: expected expr$", r#"LEN(3)"#);
-        check_expr_error("1:10: In call to LEN: expected expr$", r#"LEN(" ", 1)"#);
+        check_expr_compilation_error("1:10: In call to LEN: expected expr$", r#"LEN()"#);
+        check_expr_compilation_error(
+            "1:10: In call to LEN: 1:14: INTEGER is not a STRING",
+            r#"LEN(3)"#,
+        );
+        check_expr_compilation_error("1:10: In call to LEN: expected expr$", r#"LEN(" ", 1)"#);
     }
 
     #[test]
@@ -590,9 +685,12 @@ mod tests {
 
         check_expr_ok_with_vars("foo ", r#"LTRIM(s)"#, [("s", " foo ".into())]);
 
-        check_expr_error("1:10: In call to LTRIM: expected expr$", r#"LTRIM()"#);
-        check_expr_error("1:10: In call to LTRIM: expected expr$", r#"LTRIM(3)"#);
-        check_expr_error("1:10: In call to LTRIM: expected expr$", r#"LTRIM(" ", 1)"#);
+        check_expr_compilation_error("1:10: In call to LTRIM: expected expr$", r#"LTRIM()"#);
+        check_expr_compilation_error(
+            "1:10: In call to LTRIM: 1:16: INTEGER is not a STRING",
+            r#"LTRIM(3)"#,
+        );
+        check_expr_compilation_error("1:10: In call to LTRIM: expected expr$", r#"LTRIM(" ", 1)"#);
     }
 
     #[test]
@@ -605,6 +703,7 @@ mod tests {
         check_expr_ok("asic", r#"MID("basic", 1, 4)"#);
         check_expr_ok("asi", r#"MID("basic", 0.8, 3.2)"#);
         check_expr_ok("asic", r#"MID("basic", 1, 10)"#);
+        check_expr_ok("asic", r#"MID("basic", 1)"#);
         check_expr_ok("", r#"MID("basic", 100, 10)"#);
 
         check_expr_ok_with_vars(
@@ -613,18 +712,24 @@ mod tests {
             [("s", "basic".into()), ("i", 1.into()), ("j", 4.into())],
         );
 
-        check_expr_error("1:10: In call to MID: expected expr$, start%[, length%]", r#"MID()"#);
-        check_expr_error("1:10: In call to MID: expected expr$, start%[, length%]", r#"MID(3)"#);
-        check_expr_error(
+        check_expr_compilation_error(
+            "1:10: In call to MID: expected expr$, start%[, length%]",
+            r#"MID()"#,
+        );
+        check_expr_compilation_error(
+            "1:10: In call to MID: expected expr$, start%[, length%]",
+            r#"MID(3)"#,
+        );
+        check_expr_compilation_error(
             "1:10: In call to MID: expected expr$, start%[, length%]",
             r#"MID(" ", 1, 1, 10)"#,
         );
-        check_expr_error(
-            "1:10: In call to MID: 1:19: \"1\" is not a number",
+        check_expr_compilation_error(
+            "1:10: In call to MID: 1:19: STRING is not a number",
             r#"MID(" ", "1", 2)"#,
         );
-        check_expr_error(
-            "1:10: In call to MID: 1:22: \"2\" is not a number",
+        check_expr_compilation_error(
+            "1:10: In call to MID: 1:22: STRING is not a number",
             r#"MID(" ", 1, "2")"#,
         );
         check_expr_error(
@@ -647,10 +752,19 @@ mod tests {
 
         check_expr_ok_with_vars("def", r#"RIGHT(s, i)"#, [("s", "abcdef".into()), ("i", 3.into())]);
 
-        check_expr_error("1:10: In call to RIGHT: expected expr$, n%", r#"RIGHT()"#);
-        check_expr_error("1:10: In call to RIGHT: expected expr$, n%", r#"RIGHT("", 1, 2)"#);
-        check_expr_error("1:10: In call to RIGHT: expected expr$, n%", r#"RIGHT(1, 2)"#);
-        check_expr_error("1:10: In call to RIGHT: 1:20: \"\" is not a number", r#"RIGHT("", "")"#);
+        check_expr_compilation_error("1:10: In call to RIGHT: expected expr$, n%", r#"RIGHT()"#);
+        check_expr_compilation_error(
+            "1:10: In call to RIGHT: expected expr$, n%",
+            r#"RIGHT("", 1, 2)"#,
+        );
+        check_expr_compilation_error(
+            "1:10: In call to RIGHT: 1:16: INTEGER is not a STRING",
+            r#"RIGHT(1, 2)"#,
+        );
+        check_expr_compilation_error(
+            "1:10: In call to RIGHT: 1:20: STRING is not a number",
+            r#"RIGHT("", "")"#,
+        );
         check_expr_error(
             "1:10: In call to RIGHT: 1:26: n% cannot be negative",
             r#"RIGHT("abcdef", -5)"#,
@@ -666,9 +780,12 @@ mod tests {
 
         check_expr_ok_with_vars(" foo", r#"RTRIM(s)"#, [("s", " foo ".into())]);
 
-        check_expr_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM()"#);
-        check_expr_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM(3)"#);
-        check_expr_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM(" ", 1)"#);
+        check_expr_compilation_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM()"#);
+        check_expr_compilation_error(
+            "1:10: In call to RTRIM: 1:16: INTEGER is not a STRING",
+            r#"RTRIM(3)"#,
+        );
+        check_expr_compilation_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM(" ", 1)"#);
     }
 
     #[test]
@@ -690,8 +807,8 @@ mod tests {
 
         check_expr_ok_with_vars(" 1", r#"STR(i)"#, [("i", 1.into())]);
 
-        check_expr_error("1:10: In call to STR: expected expr", r#"STR()"#);
-        check_expr_error("1:10: In call to STR: expected expr", r#"STR(" ", 1)"#);
+        check_expr_compilation_error("1:10: In call to STR: expected expr", r#"STR()"#);
+        check_expr_compilation_error("1:10: In call to STR: expected expr", r#"STR(" ", 1)"#);
     }
 
     #[test]
