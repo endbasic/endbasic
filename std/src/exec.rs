@@ -17,6 +17,7 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
+use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
@@ -41,6 +42,7 @@ impl ClearCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Restores initial machine state but keeps the stored program.
@@ -63,9 +65,7 @@ impl Callable for ClearCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
         machine.clear();
         Ok(Value::Void)
     }
@@ -82,6 +82,7 @@ impl ErrmsgFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("ERRMSG", VarType::Text)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the last captured error message.
@@ -101,9 +102,8 @@ impl Callable for ErrmsgFunction {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
+
         // TODO(jmmv): Instead of abusing a private variable to propagate the error message from
         // the machine to here, we should query the last error message from the machine itself via
         // a method, but this is difficult (from a refactoring perspective) because a function's
@@ -140,6 +140,7 @@ impl SleepCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SLEEP", VarType::Void)
                 .with_syntax("seconds<%|#>")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
                 .with_category(CATEGORY)
                 .with_description(
                     "Suspends program execution.
@@ -158,13 +159,11 @@ impl Callable for SleepCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
 
         let (duration, pos) = match iter.next() {
-            Some((value, pos)) => {
-                let n =
-                    value.as_f64().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
+            Some((Value::Double(n), pos)) => {
                 if n < 0.0 {
                     return Err(CallError::ArgumentError(
                         pos,
@@ -173,12 +172,9 @@ impl Callable for SleepCommand {
                 }
                 (Duration::from_secs_f64(n), pos)
             }
-            _ => return Err(CallError::SyntaxError),
+            _ => unreachable!(),
         };
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         (self.sleep_fn)(duration, pos).await
     }
@@ -216,7 +212,7 @@ mod tests {
 
     #[test]
     fn test_clear_errors() {
-        check_stmt_err("1:1: In call to CLEAR: expected no arguments", "CLEAR 123");
+        check_stmt_compilation_err("1:1: In call to CLEAR: expected no arguments", "CLEAR 123");
     }
 
     #[test]
@@ -283,10 +279,13 @@ mod tests {
 
     #[test]
     fn test_sleep_errors() {
-        check_stmt_err("1:1: In call to SLEEP: expected seconds<%|#>", "SLEEP");
-        check_stmt_err("1:1: In call to SLEEP: expected seconds<%|#>", "SLEEP 2, 3");
-        check_stmt_err("1:1: In call to SLEEP: expected seconds<%|#>", "SLEEP 2; 3");
-        check_stmt_err("1:1: In call to SLEEP: 1:7: \"foo\" is not a number", "SLEEP \"foo\"");
+        check_stmt_compilation_err("1:1: In call to SLEEP: expected seconds<%|#>", "SLEEP");
+        check_stmt_compilation_err("1:1: In call to SLEEP: expected seconds<%|#>", "SLEEP 2, 3");
+        check_stmt_compilation_err("1:1: In call to SLEEP: expected seconds<%|#>", "SLEEP 2; 3");
+        check_stmt_compilation_err(
+            "1:1: In call to SLEEP: 1:7: STRING is not a number",
+            "SLEEP \"foo\"",
+        );
         check_stmt_err("1:1: In call to SLEEP: 1:7: Sleep time must be positive", "SLEEP -1");
         check_stmt_err("1:1: In call to SLEEP: 1:7: Sleep time must be positive", "SLEEP -0.001");
     }
