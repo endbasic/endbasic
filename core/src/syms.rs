@@ -460,26 +460,6 @@ impl Symbols {
             None => Err(Error::new(format!("{} is not defined", key))),
         }
     }
-
-    /// Given a collection of arguments (values), loads all of those that are variable references.
-    ///
-    /// All functions should use this before inspecting their arguments, unless they care about
-    /// using values by reference.
-    pub fn load_all(
-        &self,
-        mut args: Vec<(Value, LineCol)>,
-    ) -> std::result::Result<Vec<(Value, LineCol)>, CallError> {
-        for arg in &mut args {
-            let new_value = match &arg.0 {
-                Value::VarRef(vref) => self
-                    .get_var(vref)
-                    .map_err(|e| CallError::ArgumentError(arg.1, e.to_string()))?,
-                _ => continue,
-            };
-            arg.0 = new_value.clone();
-        }
-        Ok(args)
-    }
 }
 
 /// Builder pattern for a callable's metadata.

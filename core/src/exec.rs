@@ -337,17 +337,6 @@ impl Machine {
         }
     }
 
-    /// Given a collection of arguments (values), loads all of those that are variable references.
-    ///
-    /// All commands should use this before inspecting their arguments, unless they care about
-    /// using values by reference.
-    pub fn load_all(
-        &self,
-        args: Vec<(Value, LineCol)>,
-    ) -> std::result::Result<Vec<(Value, LineCol)>, CallError> {
-        self.symbols.load_all(args)
-    }
-
     /// Returns true if execution should stop because we have hit a stop condition.
     async fn should_stop(&mut self) -> bool {
         if let Some(yield_now) = self.yield_now_fn.as_ref() {
