@@ -15,7 +15,12 @@
 
 //! Test utilities.
 
-use crate::ast::{ArgSep, Value, VarRef, VarType};
+use crate::ast::{ArgSpan, Expr, Value, VarRef, VarType};
+use crate::bytecode::Instruction;
+use crate::compiler::{
+    compile_expr, compile_expr_symbol_ref, CallableArgsCompiler, ExprType, NoArgsCompiler,
+    SameTypeArgsCompiler, SymbolsTable,
+};
 use crate::exec::Machine;
 use crate::syms::{
     Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
@@ -53,7 +58,9 @@ pub struct ArglessFunction {
 impl ArglessFunction {
     pub fn new(value: Value) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("ARGLESS", value.as_vartype()).test_build(),
+            metadata: CallableMetadataBuilder::new("ARGLESS", value.as_vartype())
+                .with_args_compiler(NoArgsCompiler::default())
+                .test_build(),
             value,
         })
     }
@@ -79,7 +86,9 @@ pub(crate) struct ClearCommand {
 impl ClearCommand {
     pub(crate) fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void).test_build(),
+            metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void)
+                .with_args_compiler(NoArgsCompiler::default())
+                .test_build(),
         })
     }
 }
@@ -106,7 +115,9 @@ pub(crate) struct CountFunction {
 impl CountFunction {
     pub(crate) fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("COUNT", VarType::Integer).test_build(),
+            metadata: CallableMetadataBuilder::new("COUNT", VarType::Integer)
+                .with_args_compiler(NoArgsCompiler::default())
+                .test_build(),
             counter: Rc::from(RefCell::from(0)),
         })
     }
@@ -137,6 +148,7 @@ impl RaisefFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RAISEF", VarType::Boolean)
                 .with_syntax("arg1$")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
                 .test_build(),
         })
     }
@@ -148,8 +160,8 @@ impl Callable for RaisefFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let result = match iter.next().expect("Invalid arguments") {
             (Value::Text(s), pos) => {
                 if s == "argument" {
@@ -185,6 +197,7 @@ impl RaiseCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RAISE", VarType::Void)
                 .with_syntax("arg1$")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
                 .test_build(),
         })
     }
@@ -196,8 +209,8 @@ impl Callable for RaiseCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let result = match iter.next().expect("Invalid arguments") {
             (Value::Text(s), pos) => {
                 if s == "argument" {
@@ -234,6 +247,7 @@ impl GetHiddenFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GETHIDDEN", VarType::Text)
                 .with_syntax("varname$")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
                 .test_build(),
         })
     }
@@ -267,7 +281,9 @@ impl GetDataCommand {
     /// Creates a new command that sets aside all data values.
     pub(crate) fn new(data: Rc<RefCell<Vec<Option<Value>>>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GETDATA", VarType::Void).test_build(),
+            metadata: CallableMetadataBuilder::new("GETDATA", VarType::Void)
+                .with_args_compiler(NoArgsCompiler::default())
+                .test_build(),
             data,
         })
     }
@@ -286,6 +302,33 @@ impl Callable for GetDataCommand {
     }
 }
 
+/// An arguments compiler for the `OUT` command.
+#[derive(Debug, Default)]
+struct InArgsCompiler {}
+
+impl CallableArgsCompiler for InArgsCompiler {
+    fn compile_complex(
+        &self,
+        instrs: &mut Vec<Instruction>,
+        symtable: &mut SymbolsTable,
+        _pos: LineCol,
+        args: Vec<ArgSpan>,
+    ) -> Result<usize, CallError> {
+        let mut iter = args.into_iter();
+
+        let span = iter.next().expect("Requires one argument");
+        let expr = span.expr.expect("Optional expressions not supported");
+        match expr {
+            Expr::Symbol(span) => {
+                compile_expr_symbol_ref(instrs, symtable, span)?;
+            }
+            _ => panic!("Requires a variable reference"),
+        }
+        assert!(iter.next().is_none(), "Only one argument allowed");
+        Ok(1)
+    }
+}
+
 /// Simplified version of `INPUT` to feed input values based on some golden `data`.
 ///
 /// Every time this command is invoked, it yields the next value from the `data` iterator and
@@ -299,7 +342,10 @@ impl InCommand {
     /// Creates a new command with the golden `data`.
     pub fn new(data: Box<RefCell<dyn Iterator<Item = &'static &'static str>>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("IN", VarType::Void).test_build(),
+            metadata: CallableMetadataBuilder::new("IN", VarType::Void)
+                .with_syntax("vref")
+                .with_args_compiler(InArgsCompiler::default())
+                .test_build(),
             data,
         })
     }
@@ -330,6 +376,27 @@ impl Callable for InCommand {
     }
 }
 
+/// An arguments compiler for the `OUT` command.
+#[derive(Debug, Default)]
+struct OutArgsCompiler {}
+
+impl CallableArgsCompiler for OutArgsCompiler {
+    fn compile_complex(
+        &self,
+        instrs: &mut Vec<Instruction>,
+        symtable: &mut SymbolsTable,
+        _pos: LineCol,
+        args: Vec<ArgSpan>,
+    ) -> Result<usize, CallError> {
+        let nargs = args.len();
+        for arg in args.into_iter().rev() {
+            let expr = arg.expr.expect("Empty arguments not expected in tests");
+            compile_expr(instrs, symtable, expr, false)?;
+        }
+        Ok(nargs)
+    }
+}
+
 /// Simplified version of `PRINT` that captures all calls to it into `data`.
 ///
 /// This command only accepts arguments separated by the `;` short separator and concatenates
@@ -344,7 +411,8 @@ impl OutCommand {
     pub fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("OUT", VarType::Void)
-                .with_syntax("[arg1 <;|,> argN]")
+                .with_syntax("[arg1[; .. argN]]")
+                .with_args_compiler(OutArgsCompiler::default())
                 .test_build(),
             data,
         })
@@ -357,21 +425,13 @@ impl Callable for OutCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         let mut text = String::new();
-        loop {
-            match iter.next() {
-                Some((value, _pos)) => {
-                    format_value(value, &mut text);
-                }
-                _ => panic!("Invalid arguments"),
+        for (i, arg) in args.into_iter().enumerate() {
+            if i > 0 {
+                text += " ";
             }
-            match iter.next() {
-                None => break,
-                Some((Value::Separator(ArgSep::Short), _pos)) => text += " ",
-                _ => panic!("Invalid arguments"),
-            }
+            format_value(arg.0, &mut text);
         }
         self.data.borrow_mut().push(text);
         Ok(Value::Void)
@@ -390,7 +450,8 @@ impl OutfFunction {
     pub fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("OUTF", VarType::Integer)
-                .with_syntax("arg1 [<;|,> argN]")
+                .with_syntax("[arg1[, .. argN]]")
+                .with_args_compiler(SameTypeArgsCompiler::new(0, usize::MAX, ExprType::Integer))
                 .test_build(),
             data,
         })
@@ -403,10 +464,10 @@ impl Callable for OutfFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         assert!(!args.is_empty());
 
-        let mut iter = machine.load_all(args)?.into_iter();
+        let mut iter = args.into_iter();
         let result = match iter.next() {
             Some((v @ Value::Integer(_), _pos)) => v,
             _ => unreachable!("Only supports printing integers"),
@@ -436,7 +497,8 @@ impl SumFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SUM", VarType::Integer)
-                .with_syntax("[n1% .. nN%]")
+                .with_syntax("[n1%[, .. nN%]]")
+                .with_args_compiler(SameTypeArgsCompiler::new(0, usize::MAX, ExprType::Integer))
                 .test_build(),
         })
     }
@@ -448,9 +510,9 @@ impl Callable for SumFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         let mut result = Value::Integer(0);
-        for (value, pos) in machine.load_all(args)? {
+        for (value, pos) in args {
             result = value::add_integer(result, value)
                 .map_err(|e| CallError::EvalError(pos, e.message))?;
         }
@@ -509,7 +571,9 @@ pub struct TypeCheckFunction {
 impl TypeCheckFunction {
     pub fn new(value: Value) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("TYPE_CHECK", VarType::Boolean).test_build(),
+            metadata: CallableMetadataBuilder::new("TYPE_CHECK", VarType::Boolean)
+                .with_args_compiler(NoArgsCompiler::default())
+                .test_build(),
             value,
         })
     }
