@@ -23,6 +23,7 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
+use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
@@ -61,6 +62,7 @@ impl NumLightsFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("NUM_LIGHTS", VarType::Integer)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category("Demonstration")
                 .with_description("Returns the number of available lights.")
                 .build(),
@@ -76,9 +78,7 @@ impl Callable for NumLightsFunction {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
         let num = self.lights.borrow().len();
         assert!(num <= std::i32::MAX as usize, "Ended up with too many lights");
         Ok(Value::Integer(num as i32))
@@ -97,6 +97,7 @@ impl SwitchLightCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SWITCH_LIGHT", VarType::Void)
                 .with_syntax("id")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Integer))
                 .with_category("Demonstration")
                 .with_description("Turns the light identified by 'id' on or off.")
                 .build(),
@@ -111,15 +112,13 @@ impl Callable for SwitchLightCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let (i, ipos) = match iter.next() {
             Some((Value::Integer(i), pos)) => (i, pos),
-            _ => return Err(CallError::SyntaxError),
+            _ => unreachable!(),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         let lights = &mut *self.lights.borrow_mut();
         if i < 1 {
