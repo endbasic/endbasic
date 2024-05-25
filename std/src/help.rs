@@ -19,6 +19,7 @@ use crate::console::{refill_and_print, AnsiColor, Console};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
+use endbasic_core::compiler::{ExprType, SameTypeArgsCompiler};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
@@ -411,6 +412,7 @@ impl HelpCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("HELP", VarType::Void)
                 .with_syntax("[topic$]")
+                .with_args_compiler(SameTypeArgsCompiler::new(0, 1, ExprType::Text))
                 .with_category(CATEGORY)
                 .with_description(
                     "Prints interactive help.
@@ -479,9 +481,7 @@ impl Callable for HelpCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        // TODO(jmmv): Now that we can "see" unexpanded variable references, it might be interesting
-        // to restore the previous "HELP foo" functionality (without double quotes).
-        let mut iter = machine.load_all(args)?.into_iter();
+        let mut iter = args.into_iter();
 
         let topics = Topics::new(machine.get_symbols());
 
@@ -505,7 +505,7 @@ impl Callable for HelpCommand {
                 console.set_sync(previous)?;
                 result?;
             }
-            _ => return Err(CallError::SyntaxError),
+            _ => unreachable!(),
         }
 
         Ok(Value::Void)
@@ -539,6 +539,7 @@ pub(crate) mod testutils {
             Rc::from(Self {
                 metadata: CallableMetadataBuilder::new(name, VarType::Void)
                     .with_syntax("this [would] <be|the> syntax \"specification\"")
+                    .with_args_compiler(SameTypeArgsCompiler::new(0, usize::MAX, ExprType::Integer))
                     .with_category(
                         "Testing
 This is a sample category for testing.",
@@ -580,6 +581,7 @@ Second paragraph of the extended description.",
             Rc::from(Self {
                 metadata: CallableMetadataBuilder::new(name, VarType::Text)
                     .with_syntax("this [would] <be|the> syntax \"specification\"")
+                    .with_args_compiler(SameTypeArgsCompiler::new(0, usize::MAX, ExprType::Integer))
                     .with_category(
                         "Testing
 This is a sample category for testing.",
@@ -934,12 +936,14 @@ This is the first and only topic with just one line.
         t.run(r#"HELP foo bar"#)
             .expect_uncatchable_err("1:10: Unexpected value in expression")
             .check();
-        t.run(r#"HELP foo"#)
-            .expect_err("1:1: In call to HELP: 1:6: Undefined variable foo")
-            .check();
+        t.run(r#"HELP foo"#).expect_compilation_err("1:6: Undefined variable foo").check();
 
-        t.run(r#"HELP "foo", 3"#).expect_err("1:1: In call to HELP: expected [topic$]").check();
-        t.run(r#"HELP 3"#).expect_err("1:1: In call to HELP: expected [topic$]").check();
+        t.run(r#"HELP "foo", 3"#)
+            .expect_compilation_err("1:1: In call to HELP: expected [topic$]")
+            .check();
+        t.run(r#"HELP 3"#)
+            .expect_compilation_err("1:1: In call to HELP: 1:6: INTEGER is not a STRING")
+            .check();
 
         t.run(r#"HELP "lang%""#)
             .expect_err("1:1: In call to HELP: 1:6: Unknown help topic lang%")
