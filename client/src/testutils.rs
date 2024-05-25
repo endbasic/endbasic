@@ -295,6 +295,15 @@ impl<'a> ClientChecker<'a> {
     }
 
     /// See the wrapped `Checker::expect_err` function for details.
+    pub fn expect_compilation_err<S: Into<String>>(self, message: S) -> Self {
+        Self {
+            checker: self.checker.expect_compilation_err(message),
+            service: self.service,
+            exp_access_token: self.exp_access_token,
+        }
+    }
+
+    /// See the wrapped `Checker::expect_err` function for details.
     pub fn expect_err<S: Into<String>>(self, message: S) -> Self {
         Self {
             checker: self.checker.expect_err(message),
@@ -344,6 +353,11 @@ impl<'a> ClientChecker<'a> {
         assert_eq!(self.exp_access_token, service.access_token);
         service.verify_all_used();
     }
+}
+
+/// See the wrapped `check_stmt_compilation_err` function for details.
+pub fn client_check_stmt_compilation_err<S: Into<String>>(exp_error: S, stmt: &str) {
+    ClientTester::default().run(stmt).expect_compilation_err(exp_error).check();
 }
 
 /// See the wrapped `check_stmt_err` function for details.
