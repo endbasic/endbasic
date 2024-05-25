@@ -17,7 +17,8 @@
 
 use crate::*;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::ast::{Value, VarType};
+use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
@@ -62,6 +63,7 @@ impl LoginCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOGIN", VarType::Void)
                 .with_syntax("username$[, password$]")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 2, ExprType::Text))
                 .with_category(CATEGORY)
                 .with_description(
                     "Logs into the user's account.
@@ -107,7 +109,7 @@ impl Callable for LoginCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
         if self.service.borrow().is_logged_in() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -116,37 +118,18 @@ impl Callable for LoginCommand {
             .into());
         }
 
-        let mut iter = machine.load_all(args)?.into_iter();
-
+        let mut iter = args.into_iter();
         let username = match iter.next() {
-            None => return Err(CallError::SyntaxError),
             Some((Value::Text(t), _pos)) => t,
-            Some((_value, pos)) => {
-                return Err(CallError::ArgumentError(
-                    pos,
-                    "LOGIN requires a string as the username".to_owned(),
-                ))
-            }
+            _ => unreachable!(),
         };
-
         let password = match iter.next() {
             None => read_line_secure(&mut *self.console.borrow_mut(), "Password: ").await?,
-            Some((Value::Separator(ArgSep::Long), _pos)) => match iter.next() {
-                None => return Err(CallError::SyntaxError),
-                Some((Value::Text(t), _pos)) => {
-                    if iter.next().is_some() {
-                        return Err(CallError::SyntaxError);
-                    }
-                    t
-                }
-                Some((_value, pos)) => {
-                    return Err(CallError::ArgumentError(
-                        pos,
-                        "LOGIN requires a string as the password".to_owned(),
-                    ))
-                }
-            },
-            Some((_value, _pos)) => return Err(CallError::SyntaxError),
+            Some((Value::Text(t), _pos)) => {
+                debug_assert!(iter.next().is_none());
+                t
+            }
+            _ => unreachable!(),
         };
 
         self.do_login(&username, &password).await
@@ -171,6 +154,7 @@ impl LogoutCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOGOUT", VarType::Void)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Logs the user out of their account.
@@ -192,9 +176,7 @@ impl Callable for LogoutCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
 
         if !self.service.borrow().is_logged_in() {
             // TODO(jmmv): Now that the access tokens are part of the service, we can easily allow
@@ -259,6 +241,7 @@ impl ShareCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SHARE", VarType::Void)
                 .with_syntax("filename$[, acl1$, .., aclN$]")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, usize::MAX, ExprType::Text))
                 .with_category(CATEGORY)
                 .with_description(
                     "Displays or modifies the ACLs of a file.
@@ -345,51 +328,22 @@ impl Callable for ShareCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
-        let (filename, filenamepos) = match iter.next() {
-            None => return Err(CallError::SyntaxError),
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => (value, pos),
-        };
-
-        let mut acls = Vec::new();
-        loop {
-            match iter.next() {
-                None => break,
-                Some((Value::Separator(ArgSep::Long), _pos)) => (),
-                Some((_value, _pos)) => return Err(CallError::SyntaxError),
-            }
-
-            match iter.next() {
-                None => return Err(CallError::SyntaxError),
-                Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-                Some((value, pos)) => acls.push((value, pos)),
-            }
-        }
-
-        let filename = match filename {
-            Value::Text(t) => t,
-            _ => {
-                return Err(CallError::ArgumentError(
-                    filenamepos,
-                    "SHARE requires a string as the filename".to_owned(),
-                ))
-            }
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
+        let filename = match iter.next() {
+            Some((Value::Text(t), _pos)) => t,
+            _ => unreachable!(),
         };
 
         let mut add = FileAcls::default();
         let mut remove = FileAcls::default();
-        for (acl, aclpos) in acls {
-            match acl {
-                Value::Text(t) => ShareCommand::parse_acl(t, aclpos, &mut add, &mut remove)?,
-                _ => {
-                    return Err(CallError::ArgumentError(
-                        aclpos,
-                        "SHARE requires strings as ACL changes".to_owned(),
-                    ))
+        loop {
+            match iter.next() {
+                None => break,
+                Some((Value::Text(t), pos)) => {
+                    ShareCommand::parse_acl(t, pos, &mut add, &mut remove)?;
                 }
+                _ => unreachable!(),
             }
         }
 
@@ -467,6 +421,7 @@ impl SignupCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SIGNUP", VarType::Void)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Creates a new user account interactively.
@@ -526,9 +481,7 @@ impl Callable for SignupCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
 
         let console = &mut *self.console.borrow_mut();
         console.print("")?;
@@ -763,21 +716,32 @@ mod tests {
 
     #[test]
     fn test_login_errors() {
-        client_check_stmt_err("1:1: In call to LOGIN: expected username$[, password$]", r#"LOGIN"#);
-        client_check_stmt_err(
+        client_check_stmt_compilation_err(
+            "1:1: In call to LOGIN: expected username$[, password$]",
+            r#"LOGIN"#,
+        );
+        client_check_stmt_compilation_err(
             "1:1: In call to LOGIN: expected username$[, password$]",
             r#"LOGIN "a", "b", "c""#,
         );
-        client_check_stmt_err(
-            "1:1: In call to LOGIN: 1:7: LOGIN requires a string as the username",
+        client_check_stmt_compilation_err(
+            "1:1: In call to LOGIN: expected username$[, password$]",
+            r#"LOGIN , "c""#,
+        );
+        client_check_stmt_compilation_err(
+            "1:1: In call to LOGIN: expected username$[, password$]",
+            r#"LOGIN ;"#,
+        );
+        client_check_stmt_compilation_err(
+            "1:1: In call to LOGIN: 1:7: INTEGER is not a STRING",
             r#"LOGIN 3"#,
         );
-        client_check_stmt_err(
-            "1:1: In call to LOGIN: 1:7: LOGIN requires a string as the username",
+        client_check_stmt_compilation_err(
+            "1:1: In call to LOGIN: 1:7: INTEGER is not a STRING",
             r#"LOGIN 3, "a""#,
         );
-        client_check_stmt_err(
-            "1:1: In call to LOGIN: 1:12: LOGIN requires a string as the password",
+        client_check_stmt_compilation_err(
+            "1:1: In call to LOGIN: 1:12: INTEGER is not a STRING",
             r#"LOGIN "a", 3"#,
         );
     }
@@ -816,7 +780,10 @@ mod tests {
 
     #[test]
     fn test_logout_errors() {
-        client_check_stmt_err("1:1: In call to LOGOUT: expected no arguments", r#"LOGOUT "a""#);
+        client_check_stmt_compilation_err(
+            "1:1: In call to LOGOUT: expected no arguments",
+            r#"LOGOUT "a""#,
+        );
         client_check_stmt_err("1:1: In call to LOGOUT: Must LOGIN first", r#"LOGOUT"#);
     }
 
@@ -950,32 +917,32 @@ mod tests {
 
     #[test]
     fn test_share_errors() {
-        client_check_stmt_err(
+        client_check_stmt_compilation_err(
             "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
             r#"SHARE"#,
         );
-        client_check_stmt_err(
-            "1:1: In call to SHARE: 1:7: SHARE requires a string as the filename",
+        client_check_stmt_compilation_err(
+            "1:1: In call to SHARE: 1:7: INTEGER is not a STRING",
             r#"SHARE 1"#,
         );
-        client_check_stmt_err(
+        client_check_stmt_compilation_err(
             "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
             r#"SHARE , "a""#,
         );
-        client_check_stmt_err(
+        client_check_stmt_compilation_err(
             "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
             r#"SHARE "a"; "b""#,
         );
-        client_check_stmt_err(
+        client_check_stmt_compilation_err(
             "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
             r#"SHARE "a", "b"; "c""#,
         );
-        client_check_stmt_err(
+        client_check_stmt_compilation_err(
             "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
             r#"SHARE "a", , "b""#,
         );
-        client_check_stmt_err(
-            "1:1: In call to SHARE: 1:12: SHARE requires strings as ACL changes",
+        client_check_stmt_compilation_err(
+            "1:1: In call to SHARE: 1:12: INTEGER is not a STRING",
             r#"SHARE "a", 3, "b""#,
         );
         client_check_stmt_err(
@@ -1121,7 +1088,10 @@ mod tests {
 
     #[test]
     fn test_singup_errors() {
-        client_check_stmt_err("1:1: In call to SIGNUP: expected no arguments", r#"SIGNUP "a""#);
+        client_check_stmt_compilation_err(
+            "1:1: In call to SIGNUP: expected no arguments",
+            r#"SIGNUP "a""#,
+        );
     }
 
     #[test]
