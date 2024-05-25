@@ -19,6 +19,7 @@ use crate::console::{read_line, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
+use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
@@ -165,6 +166,7 @@ impl KillCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("KILL", VarType::Void)
                 .with_syntax("filename$")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
                 .with_category(CATEGORY)
                 .with_description(
                     "Deletes the given program.
@@ -184,24 +186,13 @@ impl Callable for KillCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let name = match iter.next() {
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
             Some((Value::Text(t), _pos)) => t,
-            Some((_value, pos)) => {
-                return Err(CallError::ArgumentError(
-                    pos,
-                    "KILL requires a string as the filename".to_owned(),
-                ))
-            }
-            None => return Err(CallError::SyntaxError),
+            _ => unreachable!(),
         };
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         let name = add_extension(name)?;
         self.storage.borrow_mut().delete(&name).await?;
@@ -223,6 +214,7 @@ impl EditCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("EDIT", VarType::Void)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description("Interactively edits the stored program.")
                 .build(),
@@ -239,9 +231,7 @@ impl Callable for EditCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
 
         let mut console = self.console.borrow_mut();
         let mut program = self.program.borrow_mut();
@@ -263,6 +253,7 @@ impl ListCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LIST", VarType::Void)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description("Prints the currently-loaded program.")
                 .build(),
@@ -279,9 +270,8 @@ impl Callable for ListCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
+
         let mut console = self.console.borrow_mut();
         for line in self.program.borrow().text().lines() {
             console.print(line)?;
@@ -309,6 +299,7 @@ impl LoadCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOAD", VarType::Void)
                 .with_syntax("filename$")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
                 .with_category(CATEGORY)
                 .with_description(
                     "Loads the given program.
@@ -333,23 +324,12 @@ impl Callable for LoadCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
+        let mut iter = args.into_iter();
         let pathname = match iter.next() {
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
             Some((Value::Text(t), _pos)) => t,
-            Some((_value, pos)) => {
-                return Err(CallError::ArgumentError(
-                    pos,
-                    "LOAD requires a string as the filename".to_owned(),
-                ))
-            }
-            None => return Err(CallError::SyntaxError),
+            _ => unreachable!(),
         };
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut()).await? {
             let pathname = add_extension(pathname)?;
@@ -380,6 +360,7 @@ impl NewCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("NEW", VarType::Void)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Restores initial machine state and creates a new program.
@@ -404,9 +385,7 @@ impl Callable for NewCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
 
         if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut()).await? {
             self.program.borrow_mut().load(None, "");
@@ -435,6 +414,7 @@ impl RunCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RUN", VarType::Void)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Runs the stored program.
@@ -455,9 +435,8 @@ impl Callable for RunCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
+
         machine.clear();
         let program = self.program.borrow().text();
         let stop_reason = match machine.exec(&mut program.as_bytes()).await {
@@ -497,6 +476,7 @@ impl SaveCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SAVE", VarType::Void)
                 .with_syntax("[filename$]")
+                .with_args_compiler(SameTypeArgsCompiler::new(0, 1, ExprType::Text))
                 .with_category(CATEGORY)
                 .with_description(
                     "Saves the current program in memory to the given filename.
@@ -520,18 +500,11 @@ impl Callable for SaveCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
         let name = match iter.next() {
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
             Some((Value::Text(t), _pos)) => t,
-            Some((_value, pos)) => {
-                return Err(CallError::ArgumentError(
-                    pos,
-                    "SAVE requires a string as the filename".to_owned(),
-                ))
-            }
+            Some(_) => unreachable!(),
             None => match self.program.borrow().name() {
                 Some(name) => name.to_owned(),
                 None => {
@@ -542,10 +515,7 @@ impl Callable for SaveCommand {
                 }
             },
         };
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         let name = add_extension(name)?;
         let full_name = self.storage.borrow().make_canonical(&name)?;
@@ -606,7 +576,7 @@ mod tests {
 
         Tester::default()
             .run("KILL")
-            .expect_err("1:1: In call to KILL: expected filename$")
+            .expect_compilation_err("1:1: In call to KILL: expected filename$")
             .check();
 
         check_stmt_err("1:1: In call to KILL: Entry not found", r#"KILL "missing-file""#);
@@ -631,7 +601,7 @@ mod tests {
 
     #[test]
     fn test_edit_errors() {
-        check_stmt_err("1:1: In call to EDIT: expected no arguments", "EDIT 1");
+        check_stmt_compilation_err("1:1: In call to EDIT: expected no arguments", "EDIT 1");
     }
 
     #[test]
@@ -648,7 +618,7 @@ mod tests {
 
     #[test]
     fn test_list_errors() {
-        check_stmt_err("1:1: In call to LIST: expected no arguments", "LIST 2");
+        check_stmt_compilation_err("1:1: In call to LIST: expected no arguments", "LIST 2");
     }
 
     #[test]
@@ -754,11 +724,10 @@ mod tests {
     fn check_load_save_common_errors(cmd: &str) {
         Tester::default()
             .run(format!("{} 3", cmd))
-            .expect_err(format!(
-                "1:1: In call to {}: 1:{}: {} requires a string as the filename",
+            .expect_compilation_err(format!(
+                "1:1: In call to {}: 1:{}: INTEGER is not a STRING",
                 cmd,
                 cmd.len() + 2,
-                cmd
             ))
             .check();
 
@@ -781,7 +750,7 @@ mod tests {
 
         Tester::default()
             .run("LOAD")
-            .expect_err("1:1: In call to LOAD: expected filename$")
+            .expect_compilation_err("1:1: In call to LOAD: expected filename$")
             .check();
 
         check_stmt_err("1:1: In call to LOAD: Entry not found", r#"LOAD "missing-file""#);
@@ -873,7 +842,7 @@ mod tests {
 
     #[test]
     fn test_new_errors() {
-        check_stmt_err("1:1: In call to NEW: expected no arguments", "NEW 10");
+        check_stmt_compilation_err("1:1: In call to NEW: expected no arguments", "NEW 10");
     }
 
     #[test]
@@ -912,7 +881,7 @@ mod tests {
 
     #[test]
     fn test_run_errors() {
-        check_stmt_err("1:1: In call to RUN: expected no arguments", "RUN 10");
+        check_stmt_compilation_err("1:1: In call to RUN: expected no arguments", "RUN 10");
     }
 
     #[test]
