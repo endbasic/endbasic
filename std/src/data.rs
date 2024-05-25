@@ -16,7 +16,11 @@
 //! Commands to interact with the data provided by `DATA` statements.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, Expr, Value, VarType};
+use endbasic_core::bytecode::Instruction;
+use endbasic_core::compiler::{
+    compile_expr_symbol_ref, CallableArgsCompiler, NoArgsCompiler, SymbolsTable,
+};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
@@ -36,6 +40,41 @@ impl Clearable for ClearableIndex {
     }
 }
 
+/// An arguments compiler for the `READ` command.
+#[derive(Debug, Default)]
+struct ReadArgsCompiler {}
+
+impl CallableArgsCompiler for ReadArgsCompiler {
+    fn compile_complex(
+        &self,
+        instrs: &mut Vec<Instruction>,
+        symtable: &mut SymbolsTable,
+        _pos: LineCol,
+        args: Vec<ArgSpan>,
+    ) -> Result<usize, CallError> {
+        let nargs = args.len();
+        if nargs == 0 {
+            return Err(CallError::SyntaxError);
+        }
+
+        for arg in args.into_iter().rev() {
+            match arg.sep {
+                ArgSep::Long | ArgSep::End => (),
+                _ => return Err(CallError::SyntaxError),
+            }
+
+            match arg.expr {
+                Some(Expr::Symbol(span)) => {
+                    compile_expr_symbol_ref(instrs, symtable, span)?;
+                }
+                _ => return Err(CallError::SyntaxError),
+            }
+        }
+
+        Ok(nargs)
+    }
+}
+
 /// The `READ` command.
 pub struct ReadCommand {
     metadata: CallableMetadata,
@@ -48,6 +87,7 @@ impl ReadCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("READ", VarType::Void)
                 .with_syntax("vref1 [, .., vrefN]")
+                .with_args_compiler(ReadArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Extracts data values from DATA statements.
@@ -81,19 +121,13 @@ impl Callable for ReadCommand {
         }
 
         let mut vrefs = Vec::with_capacity(args.len());
-        let mut iter = args.into_iter();
+        let iter = args.into_iter();
         let mut index = self.index.borrow_mut();
 
-        while let Some((value, pos)) = iter.next() {
+        for (value, pos) in iter {
             match value {
                 Value::VarRef(vref) => vrefs.push((vref, pos)),
-                _ => return Err(CallError::SyntaxError),
-            }
-
-            match iter.next() {
-                None => break,
-                Some((Value::Separator(ArgSep::Long), _pos)) => (),
-                _ => return Err(CallError::SyntaxError),
+                _ => unreachable!(),
             }
         }
 
@@ -152,6 +186,7 @@ impl RestoreCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RESTORE", VarType::Void)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Resets the index of the data element to be returned.
@@ -171,9 +206,7 @@ impl Callable for RestoreCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
         *self.index.borrow_mut() = 0;
         Ok(Value::Void)
     }
@@ -331,8 +364,12 @@ mod tests {
 
     #[test]
     fn test_read_errors() {
-        check_stmt_err("1:1: In call to READ: expected vref1 [, .., vrefN]", "READ");
-        check_stmt_err("1:1: In call to READ: expected vref1 [, .., vrefN]", "READ i; j");
+        check_stmt_compilation_err("1:1: In call to READ: expected vref1 [, .., vrefN]", "READ");
+        check_stmt_compilation_err("1:1: In call to READ: expected vref1 [, .., vrefN]", "READ 3");
+        check_stmt_compilation_err(
+            "1:1: In call to READ: expected vref1 [, .., vrefN]",
+            "READ i; j",
+        );
 
         check_stmt_err(
             "1:13: In call to READ: 1:18: Cannot assign value of type BOOLEAN to variable of type INTEGER",
@@ -379,6 +416,6 @@ mod tests {
 
     #[test]
     fn test_restore_errors() {
-        check_stmt_err("1:1: In call to RESTORE: expected no arguments", "RESTORE 123");
+        check_stmt_compilation_err("1:1: In call to RESTORE: expected no arguments", "RESTORE 123");
     }
 }
