@@ -18,7 +18,12 @@
 use crate::console::{is_narrow, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, Value, VarType};
+use endbasic_core::bytecode::Instruction;
+use endbasic_core::compiler::{
+    compile_arg_expr, CallableArgsCompiler, ExprType, NoArgsCompiler, SameTypeArgsCompiler,
+    SymbolsTable,
+};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
@@ -132,6 +137,7 @@ impl CdCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CD", VarType::Void)
                 .with_syntax("path$")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
                 .with_category(CATEGORY)
                 .with_description("Changes the current path.")
                 .build(),
@@ -146,28 +152,13 @@ impl Callable for CdCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
-        let (target, pos) = match iter.next() {
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => (value, pos),
-            None => return Err(CallError::SyntaxError),
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
+        let target = match iter.next() {
+            Some((Value::Text(t), _pos)) => t,
+            _ => unreachable!(),
         };
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
-
-        let target = match target {
-            Value::Text(t) => t,
-            _ => {
-                return Err(CallError::ArgumentError(
-                    pos,
-                    "CD requires a string as the path".to_owned(),
-                ))
-            }
-        };
+        debug_assert!(iter.next().is_none());
 
         self.storage.borrow_mut().cd(&target)?;
 
@@ -188,6 +179,7 @@ impl DirCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DIR", VarType::Void)
                 .with_syntax("[path$]")
+                .with_args_compiler(SameTypeArgsCompiler::new(0, 1, ExprType::Text))
                 .with_category(CATEGORY)
                 .with_description("Displays the list of files on the current or given path.")
                 .build(),
@@ -203,33 +195,67 @@ impl Callable for DirCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
-        let maybe_path = match iter.next() {
-            None => None,
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => Some((value, pos)),
-        };
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
-
-        let path = match maybe_path {
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
+        let path = match iter.next() {
             None => "".to_owned(),
-            Some((Value::Text(path), _pos)) => path,
-            Some((_value, pos)) => {
-                return Err(CallError::ArgumentError(
-                    pos,
-                    "DIR requires a string as the path".to_owned(),
-                ))
-            }
+            Some((Value::Text(t), _pos)) => t,
+            _ => unreachable!(),
         };
+        debug_assert!(iter.next().is_none());
 
         show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), &path).await?;
 
         Ok(Value::Void)
+    }
+}
+
+/// An arguments compiler for the `MOUNT` command.
+#[derive(Debug, Default)]
+struct MountArgsCompiler {}
+
+impl CallableArgsCompiler for MountArgsCompiler {
+    fn compile_complex(
+        &self,
+        instrs: &mut Vec<Instruction>,
+        symtable: &mut SymbolsTable,
+        _pos: LineCol,
+        args: Vec<ArgSpan>,
+    ) -> Result<usize, CallError> {
+        let nargs = args.len();
+        if nargs == 0 {
+            Ok(0)
+        } else if nargs == 2 {
+            let mut iter = args.into_iter().rev();
+
+            let span = iter.next().unwrap();
+            debug_assert_eq!(ArgSep::End, span.sep);
+            match span.expr {
+                Some(expr) => {
+                    compile_arg_expr(instrs, symtable, expr, ExprType::Text)?;
+                }
+                None => {
+                    return Err(CallError::SyntaxError);
+                }
+            }
+
+            let span = iter.next().unwrap();
+            if span.sep != ArgSep::As {
+                return Err(CallError::SyntaxError);
+            }
+            match span.expr {
+                Some(expr) => {
+                    compile_arg_expr(instrs, symtable, expr, ExprType::Text)?;
+                }
+                None => {
+                    return Err(CallError::SyntaxError);
+                }
+            }
+
+            Ok(2)
+        } else {
+            Err(CallError::SyntaxError)
+        }
     }
 }
 
@@ -246,6 +272,7 @@ impl MountCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("MOUNT", VarType::Void)
                 .with_syntax("[target$ AS drive_name$]")
+                .with_args_compiler(MountArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Lists the mounted drives or mounts a new drive.
@@ -266,52 +293,22 @@ impl Callable for MountCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
-        let (target, targetpos) = match iter.next() {
-            None => {
-                show_drives(&self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
-                return Ok(Value::Void);
-            }
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => (value, pos),
-        };
-
-        match iter.next() {
-            Some((Value::Separator(ArgSep::As), _pos)) => (),
-            _ => return Err(CallError::SyntaxError),
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        if args.is_empty() {
+            show_drives(&self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
+            return Ok(Value::Void);
         }
 
-        let (name, namepos) = match iter.next() {
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => (value, pos),
-            _ => return Err(CallError::SyntaxError),
+        let mut iter = args.into_iter();
+        let target = match iter.next() {
+            Some((Value::Text(t), _pos)) => t,
+            _ => unreachable!(),
         };
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
-
-        let target = match target {
-            Value::Text(s) => s,
-            _ => {
-                return Err(CallError::ArgumentError(
-                    targetpos,
-                    "Mount target must be a string".to_owned(),
-                ));
-            }
+        let name = match iter.next() {
+            Some((Value::Text(t), _pos)) => t,
+            _ => unreachable!(),
         };
-
-        let name = match name {
-            Value::Text(s) => s,
-            _ => {
-                return Err(CallError::ArgumentError(
-                    namepos,
-                    "Drive name must be a string".to_owned(),
-                ));
-            }
-        };
+        debug_assert!(iter.next().is_none());
 
         self.storage.borrow_mut().mount(&name, &target)?;
 
@@ -332,6 +329,7 @@ impl PwdCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("PWD", VarType::Void)
                 .with_syntax("")
+                .with_args_compiler(NoArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Prints the current working location.
@@ -352,9 +350,7 @@ impl Callable for PwdCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if !args.is_empty() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(args.is_empty());
 
         let storage = self.storage.borrow();
         let cwd = storage.cwd();
@@ -385,6 +381,7 @@ impl UnmountCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("UNMOUNT", VarType::Void)
                 .with_syntax("drive_name$")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
                 .with_category(CATEGORY)
                 .with_description(
                     "Unmounts the given drive.
@@ -402,25 +399,13 @@ impl Callable for UnmountCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
-        let (drive, pos) = match iter.next() {
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => (value, pos),
-            None => return Err(CallError::SyntaxError),
+    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        let mut iter = args.into_iter();
+        let drive = match iter.next() {
+            Some((Value::Text(t), _pos)) => t,
+            _ => unreachable!(),
         };
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
-
-        let drive = match drive {
-            Value::Text(t) => t,
-            _ => {
-                return Err(CallError::ArgumentError(pos, "Drive name must be a string".to_owned()))
-            }
-        };
+        debug_assert!(iter.next().is_none());
 
         self.storage.borrow_mut().unmount(&drive)?;
 
@@ -463,9 +448,9 @@ mod tests {
     #[test]
     fn test_cd_errors() {
         check_stmt_err("1:1: In call to CD: Drive 'A' is not mounted", "CD \"A:\"");
-        check_stmt_err("1:1: In call to CD: expected path$", "CD");
-        check_stmt_err("1:1: In call to CD: expected path$", "CD 2, 3");
-        check_stmt_err("1:1: In call to CD: 1:4: CD requires a string as the path", "CD 2");
+        check_stmt_compilation_err("1:1: In call to CD: expected path$", "CD");
+        check_stmt_compilation_err("1:1: In call to CD: expected path$", "CD 2, 3");
+        check_stmt_compilation_err("1:1: In call to CD: 1:4: INTEGER is not a STRING", "CD 2");
     }
 
     #[test]
@@ -645,8 +630,8 @@ mod tests {
 
     #[test]
     fn test_dir_errors() {
-        check_stmt_err("1:1: In call to DIR: expected [path$]", "DIR 2, 3");
-        check_stmt_err("1:1: In call to DIR: 1:5: DIR requires a string as the path", "DIR 2");
+        check_stmt_compilation_err("1:1: In call to DIR: expected [path$]", "DIR 2, 3");
+        check_stmt_compilation_err("1:1: In call to DIR: 1:5: INTEGER is not a STRING", "DIR 2");
     }
 
     #[test]
@@ -692,15 +677,21 @@ mod tests {
 
     #[test]
     fn test_mount_errors() {
-        check_stmt_err("1:1: In call to MOUNT: expected [target$ AS drive_name$]", "MOUNT 1");
-        check_stmt_err("1:1: In call to MOUNT: expected [target$ AS drive_name$]", "MOUNT 1, 2, 3");
+        check_stmt_compilation_err(
+            "1:1: In call to MOUNT: expected [target$ AS drive_name$]",
+            "MOUNT 1",
+        );
+        check_stmt_compilation_err(
+            "1:1: In call to MOUNT: expected [target$ AS drive_name$]",
+            "MOUNT 1, 2, 3",
+        );
 
-        check_stmt_err(
-            "1:1: In call to MOUNT: 1:14: Drive name must be a string",
+        check_stmt_compilation_err(
+            "1:1: In call to MOUNT: 1:14: INTEGER is not a STRING",
             r#"MOUNT "a" AS 1"#,
         );
-        check_stmt_err(
-            "1:1: In call to MOUNT: 1:7: Mount target must be a string",
+        check_stmt_compilation_err(
+            "1:1: In call to MOUNT: 1:7: INTEGER is not a STRING",
             r#"MOUNT 1 AS "a""#,
         );
 
@@ -770,10 +761,13 @@ mod tests {
 
     #[test]
     fn test_unmount_errors() {
-        check_stmt_err("1:1: In call to UNMOUNT: expected drive_name$", "UNMOUNT");
-        check_stmt_err("1:1: In call to UNMOUNT: expected drive_name$", "UNMOUNT 2, 3");
+        check_stmt_compilation_err("1:1: In call to UNMOUNT: expected drive_name$", "UNMOUNT");
+        check_stmt_compilation_err("1:1: In call to UNMOUNT: expected drive_name$", "UNMOUNT 2, 3");
 
-        check_stmt_err("1:1: In call to UNMOUNT: 1:9: Drive name must be a string", "UNMOUNT 1");
+        check_stmt_compilation_err(
+            "1:1: In call to UNMOUNT: 1:9: INTEGER is not a STRING",
+            "UNMOUNT 1",
+        );
 
         check_stmt_err("1:1: In call to UNMOUNT: Invalid drive name 'a:'", "UNMOUNT \"a:\"");
         check_stmt_err("1:1: In call to UNMOUNT: Drive 'a' is not mounted", "UNMOUNT \"a\"");
