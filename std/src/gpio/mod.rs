@@ -16,7 +16,11 @@
 //! GPIO access functions and commands for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::ast::{ArgSep, ArgSpan, Value, VarType};
+use endbasic_core::bytecode::Instruction;
+use endbasic_core::compiler::{
+    compile_arg_expr, CallableArgsCompiler, ExprType, SameTypeArgsCompiler, SymbolsTable,
+};
 use endbasic_core::exec::{Clearable, Machine};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
@@ -54,12 +58,6 @@ impl Pin {
         }
         Ok(Self(i as u8))
     }
-
-    /// Obtains a pin number from a value.
-    fn parse(value: Value, pos: LineCol) -> Result<Pin, CallError> {
-        let n = value.as_i32().map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
-        Pin::from_i32(n, pos)
-    }
 }
 
 /// Pin configuration, which includes mode and bias.
@@ -80,25 +78,14 @@ pub enum PinMode {
 
 impl PinMode {
     /// Obtains a `PinMode` from a value.
-    fn parse(value: Value, pos: LineCol) -> Result<PinMode, CallError> {
-        match value {
-            Value::Text(s) => match s.to_ascii_uppercase().as_ref() {
-                "IN" => Ok(PinMode::In),
-                "IN-PULL-UP" => Ok(PinMode::InPullUp),
-                "IN-PULL-DOWN" => Ok(PinMode::InPullDown),
-                "OUT" => Ok(PinMode::Out),
-                s => Err(CallError::ArgumentError(pos, format!("Unknown pin mode {}", s))),
-            },
-            v => Err(CallError::ArgumentError(pos, format!("Pin mode {} must be a string", v))),
+    fn parse(s: &str, pos: LineCol) -> Result<PinMode, CallError> {
+        match s.to_ascii_uppercase().as_ref() {
+            "IN" => Ok(PinMode::In),
+            "IN-PULL-UP" => Ok(PinMode::InPullUp),
+            "IN-PULL-DOWN" => Ok(PinMode::InPullDown),
+            "OUT" => Ok(PinMode::Out),
+            s => Err(CallError::ArgumentError(pos, format!("Unknown pin mode {}", s))),
         }
-    }
-}
-
-/// Obtains a pin value from a value.
-fn parse_value(value: Value, pos: LineCol) -> Result<bool, CallError> {
-    match value {
-        Value::Boolean(b) => Ok(b),
-        v => Err(CallError::ArgumentError(pos, format!("Pin value {} must be boolean", v))),
     }
 }
 
@@ -145,6 +132,55 @@ impl Clearable for PinsClearable {
     }
 }
 
+/// An arguments compiler for a command that takes two arguments of different type.
+#[derive(Debug)]
+struct TwoArgsCompiler {
+    type1: ExprType,
+    type2: ExprType,
+}
+
+impl CallableArgsCompiler for TwoArgsCompiler {
+    fn compile_complex(
+        &self,
+        instrs: &mut Vec<Instruction>,
+        symtable: &mut SymbolsTable,
+        _pos: LineCol,
+        args: Vec<ArgSpan>,
+    ) -> Result<usize, CallError> {
+        if args.len() != 2 {
+            return Err(CallError::SyntaxError);
+        }
+
+        let mut iter = args.into_iter().rev();
+
+        let span = iter.next().unwrap();
+        debug_assert_eq!(ArgSep::End, span.sep);
+        match span.expr {
+            Some(expr) => {
+                compile_arg_expr(instrs, symtable, expr, self.type2)?;
+            }
+            None => {
+                return Err(CallError::SyntaxError);
+            }
+        }
+
+        let span = iter.next().unwrap();
+        if span.sep != ArgSep::Long {
+            return Err(CallError::SyntaxError);
+        }
+        match span.expr {
+            Some(expr) => {
+                compile_arg_expr(instrs, symtable, expr, self.type1)?;
+            }
+            None => {
+                return Err(CallError::SyntaxError);
+            }
+        }
+
+        Ok(2)
+    }
+}
+
 /// The `GPIO_SETUP` command.
 pub struct GpioSetupCommand {
     metadata: CallableMetadata,
@@ -157,6 +193,10 @@ impl GpioSetupCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_SETUP", VarType::Void)
                 .with_syntax("pin%, mode$")
+                .with_args_compiler(TwoArgsCompiler {
+                    type1: ExprType::Integer,
+                    type2: ExprType::Text,
+                })
                 .with_category(CATEGORY)
                 .with_description(
                     "Configures a GPIO pin for input or output.
@@ -181,31 +221,16 @@ impl Callable for GpioSetupCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
-        let (pin, pinpos) = match iter.next() {
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => (value, pos),
-            None => return Err(CallError::SyntaxError),
+        let mut iter = args.into_iter();
+        let pin = match iter.next() {
+            Some((Value::Integer(i), pos)) => Pin::from_i32(i, pos)?,
+            _ => unreachable!(),
         };
-
-        match iter.next() {
-            Some((Value::Separator(ArgSep::Long), _pos)) => (),
-            _ => return Err(CallError::SyntaxError),
-        }
-
-        let (mode, modepos) = match iter.next() {
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => (value, pos),
-            None => return Err(CallError::SyntaxError),
+        let mode = match iter.next() {
+            Some((Value::Text(t), pos)) => PinMode::parse(&t, pos)?,
+            _ => unreachable!(),
         };
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
-
-        let pin = Pin::parse(pin, pinpos)?;
-        let mode = PinMode::parse(mode, modepos)?;
+        debug_assert!(iter.next().is_none());
 
         match MockPins::try_new(machine.get_mut_symbols()) {
             Some(mut pins) => pins.setup(pin, mode)?,
@@ -227,6 +252,7 @@ impl GpioClearCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_CLEAR", VarType::Void)
                 .with_syntax("[pin%]")
+                .with_args_compiler(SameTypeArgsCompiler::new(0, 1, ExprType::Integer))
                 .with_category(CATEGORY)
                 .with_description(
                     "Resets the GPIO chip or a specific pin.
@@ -247,7 +273,7 @@ impl Callable for GpioClearCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+        let mut iter = args.into_iter();
 
         match iter.next() {
             None => {
@@ -256,19 +282,17 @@ impl Callable for GpioClearCommand {
                     None => self.pins.borrow_mut().clear_all()?,
                 };
             }
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => {
-                let pin = Pin::parse(value, pos)?;
+            Some((Value::Integer(i), pos)) => {
+                debug_assert!(iter.next().is_none());
 
-                if iter.next().is_some() {
-                    return Err(CallError::SyntaxError);
-                }
+                let pin = Pin::from_i32(i, pos)?;
 
                 match MockPins::try_new(machine.get_mut_symbols()) {
                     Some(mut pins) => pins.clear(pin)?,
                     None => self.pins.borrow_mut().clear(pin)?,
                 };
             }
+            _ => unreachable!(),
         }
 
         Ok(Value::Void)
@@ -287,6 +311,7 @@ impl GpioReadFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_READ", VarType::Boolean)
                 .with_syntax("pin%")
+                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Integer))
                 .with_category(CATEGORY)
                 .with_description(
                     "Reads the state of a GPIO pin.
@@ -305,15 +330,12 @@ impl Callable for GpioReadFunction {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
+        let mut iter = args.into_iter();
         let pin = match iter.next() {
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => Pin::parse(value, pos)?,
+            Some((Value::Integer(i), pos)) => Pin::from_i32(i, pos)?,
             _ => return Err(CallError::SyntaxError),
         };
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         let value = match MockPins::try_new(machine.get_mut_symbols()) {
             Some(mut pins) => pins.read(pin)?,
@@ -335,6 +357,10 @@ impl GpioWriteCommand {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_WRITE", VarType::Void)
                 .with_syntax("pin%, value?")
+                .with_args_compiler(TwoArgsCompiler {
+                    type1: ExprType::Integer,
+                    type2: ExprType::Boolean,
+                })
                 .with_category(CATEGORY)
                 .with_description(
                     "Sets the state of a GPIO pin.
@@ -353,28 +379,16 @@ impl Callable for GpioWriteCommand {
     }
 
     async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = machine.load_all(args)?.into_iter();
-
+        let mut iter = args.into_iter();
         let pin = match iter.next() {
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => Pin::parse(value, pos)?,
-            None => return Err(CallError::SyntaxError),
+            Some((Value::Integer(i), pos)) => Pin::from_i32(i, pos)?,
+            _ => unreachable!(),
         };
-
-        match iter.next() {
-            Some((Value::Separator(ArgSep::Long), _pos)) => (),
-            _ => return Err(CallError::SyntaxError),
-        }
-
         let value = match iter.next() {
-            Some((Value::Missing, _pos)) => return Err(CallError::SyntaxError),
-            Some((value, pos)) => parse_value(value, pos)?,
-            None => return Err(CallError::SyntaxError),
+            Some((Value::Boolean(b), _pos)) => b,
+            _ => unreachable!(),
         };
-
-        if iter.next().is_some() {
-            return Err(CallError::SyntaxError);
-        }
+        debug_assert!(iter.next().is_none());
 
         match MockPins::try_new(machine.get_mut_symbols()) {
             Some(mut pins) => pins.write(pin, value)?,
@@ -403,7 +417,10 @@ mod tests {
     /// The given input `fmt` string contains the command to test with a placeholder `_PIN` for
     /// where the pin number goes.  The `prefix` contains a possible prefix for the error messages.
     fn check_pin_validation(prefix: &str, fmt: &str) {
-        check_stmt_err(format!(r#"{}TRUE is not a number"#, prefix), &fmt.replace("_PIN_", "TRUE"));
+        check_stmt_compilation_err(
+            format!(r#"{}BOOLEAN is not a number"#, prefix),
+            &fmt.replace("_PIN_", "TRUE"),
+        );
         check_stmt_err(
             format!(r#"{}Pin number 123456789 is too large"#, prefix),
             &fmt.replace("_PIN_", "123456789"),
@@ -501,10 +518,22 @@ mod tests {
 
     #[test]
     fn test_gpio_setup_errors() {
-        check_stmt_err("1:1: In call to GPIO_SETUP: expected pin%, mode$", r#"GPIO_SETUP"#);
-        check_stmt_err("1:1: In call to GPIO_SETUP: expected pin%, mode$", r#"GPIO_SETUP 1"#);
-        check_stmt_err("1:1: In call to GPIO_SETUP: expected pin%, mode$", r#"GPIO_SETUP 1; 2"#);
-        check_stmt_err("1:1: In call to GPIO_SETUP: expected pin%, mode$", r#"GPIO_SETUP 1, 2, 3"#);
+        check_stmt_compilation_err(
+            "1:1: In call to GPIO_SETUP: expected pin%, mode$",
+            r#"GPIO_SETUP"#,
+        );
+        check_stmt_compilation_err(
+            "1:1: In call to GPIO_SETUP: expected pin%, mode$",
+            r#"GPIO_SETUP 1"#,
+        );
+        check_stmt_compilation_err(
+            "1:1: In call to GPIO_SETUP: 1:15: INTEGER is not a STRING",
+            r#"GPIO_SETUP 1; 2"#,
+        );
+        check_stmt_compilation_err(
+            "1:1: In call to GPIO_SETUP: expected pin%, mode$",
+            r#"GPIO_SETUP 1, 2, 3"#,
+        );
 
         check_pin_validation("1:1: In call to GPIO_SETUP: 1:12: ", r#"GPIO_SETUP _PIN_, "IN""#);
 
@@ -527,8 +556,14 @@ mod tests {
 
     #[test]
     fn test_gpio_clear_errors() {
-        check_stmt_err("1:1: In call to GPIO_CLEAR: expected [pin%]", r#"GPIO_CLEAR 1,"#);
-        check_stmt_err("1:1: In call to GPIO_CLEAR: expected [pin%]", r#"GPIO_CLEAR 1, 2"#);
+        check_stmt_compilation_err(
+            "1:1: In call to GPIO_CLEAR: expected [pin%]",
+            r#"GPIO_CLEAR 1,"#,
+        );
+        check_stmt_compilation_err(
+            "1:1: In call to GPIO_CLEAR: expected [pin%]",
+            r#"GPIO_CLEAR 1, 2"#,
+        );
 
         check_pin_validation("1:1: In call to GPIO_CLEAR: 1:12: ", r#"GPIO_CLEAR _PIN_"#);
     }
@@ -547,8 +582,11 @@ mod tests {
 
     #[test]
     fn test_gpio_read_errors() {
-        check_expr_error("1:10: In call to GPIO_READ: expected pin%", r#"GPIO_READ()"#);
-        check_expr_error("1:10: In call to GPIO_READ: expected pin%", r#"GPIO_READ(1, 2)"#);
+        check_expr_compilation_error("1:10: In call to GPIO_READ: expected pin%", r#"GPIO_READ()"#);
+        check_expr_compilation_error(
+            "1:10: In call to GPIO_READ: expected pin%",
+            r#"GPIO_READ(1, 2)"#,
+        );
 
         check_pin_validation("1:5: In call to GPIO_READ: 1:15: ", r#"v = GPIO_READ(_PIN_)"#);
     }
@@ -560,21 +598,27 @@ mod tests {
 
     #[test]
     fn test_gpio_write_errors() {
-        check_stmt_err("1:1: In call to GPIO_WRITE: expected pin%, value?", r#"GPIO_WRITE"#);
-        check_stmt_err("1:1: In call to GPIO_WRITE: expected pin%, value?", r#"GPIO_WRITE 2,"#);
-        check_stmt_err(
+        check_stmt_compilation_err(
+            "1:1: In call to GPIO_WRITE: expected pin%, value?",
+            r#"GPIO_WRITE"#,
+        );
+        check_stmt_compilation_err(
+            "1:1: In call to GPIO_WRITE: expected pin%, value?",
+            r#"GPIO_WRITE 2,"#,
+        );
+        check_stmt_compilation_err(
             "1:1: In call to GPIO_WRITE: expected pin%, value?",
             r#"GPIO_WRITE 1, TRUE, 2"#,
         );
-        check_stmt_err(
+        check_stmt_compilation_err(
             "1:1: In call to GPIO_WRITE: expected pin%, value?",
             r#"GPIO_WRITE 1; TRUE"#,
         );
 
         check_pin_validation("1:1: In call to GPIO_WRITE: 1:12: ", r#"GPIO_WRITE _PIN_, TRUE"#);
 
-        check_stmt_err(
-            "1:1: In call to GPIO_WRITE: 1:15: Pin value 5 must be boolean",
+        check_stmt_compilation_err(
+            "1:1: In call to GPIO_WRITE: 1:15: INTEGER is not a BOOLEAN",
             r#"GPIO_WRITE 1, 5"#,
         );
     }
