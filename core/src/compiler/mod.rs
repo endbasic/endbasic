@@ -1033,6 +1033,57 @@ mod testutils {
     use crate::parser;
     use crate::syms::CallableMetadataBuilder;
 
+    /// A callable arguments compiler that just passes through all arguments to the runtime `exec`
+    /// method.
+    ///
+    /// This exists for transitional reasons only until all callables have migrated to doing
+    /// compile-time validation of their arguments.
+    #[derive(Debug, Default)]
+    pub(crate) struct PassthroughArgsCompiler {}
+
+    impl CallableArgsCompiler for PassthroughArgsCompiler {
+        fn compile_complex(
+            &self,
+            instrs: &mut Vec<Instruction>,
+            symtable: &mut SymbolsTable,
+            _pos: LineCol,
+            args: Vec<ArgSpan>,
+        ) -> std::result::Result<usize, CallError> {
+            let mut nargs = 0;
+            for argspan in args.into_iter().rev() {
+                if argspan.sep != ArgSep::End {
+                    instrs.push(Instruction::Push(Value::Separator(argspan.sep), argspan.sep_pos));
+                    nargs += 1;
+                }
+
+                match argspan.expr {
+                    Some(expr) => {
+                        compile_expr_in_command(instrs, symtable, expr)?;
+                    }
+                    None => {
+                        instrs.push(Instruction::Push(Value::Missing, argspan.sep_pos));
+                    }
+                }
+                nargs += 1;
+            }
+            Ok(nargs)
+        }
+
+        fn compile_simple(
+            &self,
+            instrs: &mut Vec<Instruction>,
+            symtable: &SymbolsTable,
+            _pos: LineCol,
+            args: Vec<Expr>,
+        ) -> std::result::Result<usize, CallError> {
+            let nargs = args.len();
+            for arg in args.into_iter().rev() {
+                compile_expr(instrs, symtable, arg, true)?;
+            }
+            Ok(nargs)
+        }
+    }
+
     /// Builder pattern to prepare the compiler for testing purposes.
     #[derive(Default)]
     #[must_use]
@@ -1056,7 +1107,7 @@ mod testutils {
         ///
         /// This is syntactic sugar over `define` to simplify the definition of callables.
         pub(crate) fn define_callable(mut self, builder: CallableMetadataBuilder) -> Self {
-            let md = builder.test_build();
+            let md = builder.with_args_compiler(PassthroughArgsCompiler::default()).test_build();
             let key = SymbolKey::from(md.name());
             self.symtable.insert(key, SymbolPrototype::Callable(md));
             self
