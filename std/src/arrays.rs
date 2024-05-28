@@ -16,17 +16,97 @@
 //! Array-related functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{Value, VarType};
+use endbasic_core::ast::{Expr, Value, VarType};
+use endbasic_core::bytecode::Instruction;
+use endbasic_core::compiler::{
+    compile_arg, CallableArgsCompiler, ExprType, SymbolPrototype, SymbolsTable,
+};
 use endbasic_core::exec::Machine;
 use endbasic_core::syms::{
     Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
-    Symbols,
+    SymbolKey, Symbols,
 };
 use endbasic_core::LineCol;
 use std::rc::Rc;
 
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "Array functions";
+
+/// An arguments compiler for the `LBOUND` and `UBOUND` functions.
+#[derive(Debug, Default)]
+struct BoundsArgsCompiler {}
+
+impl CallableArgsCompiler for BoundsArgsCompiler {
+    fn compile_simple(
+        &self,
+        instrs: &mut Vec<Instruction>,
+        symtable: &SymbolsTable,
+        _pos: LineCol,
+        args: Vec<Expr>,
+    ) -> Result<usize, CallError> {
+        let nargs = args.len();
+        if !(1..=2).contains(&nargs) {
+            return Err(CallError::SyntaxError);
+        }
+
+        let mut iter = args.into_iter().rev();
+
+        if nargs == 2 {
+            compile_arg(instrs, symtable, &mut iter, ExprType::Integer)?;
+        }
+
+        let expr = iter.next().unwrap();
+        match expr {
+            Expr::Symbol(span) => {
+                let key = SymbolKey::from(span.vref.name());
+                match symtable.get(&key) {
+                    Some(SymbolPrototype::Array(vtype, dims)) => {
+                        if !span.vref.accepts((*vtype).into()) {
+                            return Err(CallError::ArgumentError(
+                                span.pos,
+                                format!("Incompatible type annotation in {} reference", span.vref),
+                            ));
+                        }
+
+                        if *dims > 1 && nargs == 1 {
+                            return Err(CallError::ArgumentError(
+                                span.pos,
+                                "Requires a dimension for multidimensional arrays".to_owned(),
+                            ));
+                        }
+
+                        instrs.push(Instruction::LoadRef(span.vref, span.pos));
+                    }
+                    None => {
+                        return Err(CallError::ArgumentError(
+                            span.pos,
+                            format!("Undefined variable {}", span.vref.name()),
+                        ))
+                    }
+                    _ => {
+                        // TODO(jmmv): For consistency with other argument compilation, this should
+                        // check type annotations first, but doing so here is not very interesting.
+                        // Keep this in mind when trying to unify all arguments compilers.
+                        return Err(CallError::ArgumentError(
+                            span.pos,
+                            format!("{} must be an array reference", span.vref),
+                        ));
+                    }
+                }
+            }
+            _ => {
+                return Err(CallError::ArgumentError(
+                    expr.start_pos(),
+                    "First argument must be an array reference".to_owned(),
+                ))
+            }
+        }
+
+        debug_assert!(iter.next().is_none());
+
+        Ok(nargs)
+    }
+}
 
 /// Extracts the array reference and the dimension number from the list of arguments passed to
 /// either `LBOUND` or `UBOUND`.
@@ -36,71 +116,51 @@ fn parse_bound_args<'a>(
     symbols: &'a Symbols,
 ) -> Result<(&'a Array, usize), CallError> {
     let mut iter = args.iter();
-
     let (arrayref, arraypos) = match iter.next() {
         Some((Value::VarRef(vref), pos)) => (vref, *pos),
-        _ => return Err(CallError::SyntaxError),
+        _ => unreachable!(),
     };
-
-    let dim = match iter.next() {
-        Some((value, pos)) => {
-            let i = value.as_i32().map_err(|e| CallError::ArgumentError(*pos, format!("{}", e)))?;
-            if i < 0 {
-                return Err(CallError::ArgumentError(
-                    *pos,
-                    format!("Dimension {} must be positive", i),
-                ));
-            }
-            Some((i as usize, *pos))
-        }
-        None => None,
-    };
-
-    if iter.next().is_some() {
-        return Err(CallError::SyntaxError);
-    }
 
     let array = match symbols
         .get(arrayref)
         .map_err(|e| CallError::ArgumentError(arraypos, format!("{}", e)))?
     {
         Some(Symbol::Array(array)) => array,
-        Some(_) => {
-            return Err(CallError::ArgumentError(
-                arraypos,
-                format!("{} must be an array reference", arrayref),
-            ))
-        }
-        _ => {
-            return Err(CallError::ArgumentError(arraypos, format!("{} is not defined", arrayref)))
-        }
+        _ => unreachable!(),
     };
 
-    match dim {
-        Some(dim) => {
-            if dim.0 > array.dimensions().len() {
+    let result = match iter.next() {
+        Some((Value::Integer(i), pos)) => {
+            let (i, pos) = (*i, *pos);
+
+            if i < 0 {
                 return Err(CallError::ArgumentError(
-                    dim.1,
+                    pos,
+                    format!("Dimension {} must be positive", i),
+                ));
+            }
+            let i = i as usize;
+
+            if i > array.dimensions().len() {
+                return Err(CallError::ArgumentError(
+                    pos,
                     format!(
                         "Array {} has only {} dimensions but asked for {}",
                         arrayref,
                         array.dimensions().len(),
-                        dim.0
+                        i,
                     ),
                 ));
             }
+            (array, i)
         }
-        None => {
-            if array.dimensions().len() != 1 {
-                return Err(CallError::ArgumentError(
-                    arraypos,
-                    "Requires a dimension for multidimensional arrays".to_owned(),
-                ));
-            }
-        }
-    }
+        Some((_value, _pos)) => unreachable!(),
+        None => (array, 1),
+    };
 
-    Ok((array, dim.map(|(i, _pos)| i).unwrap_or(1)))
+    debug_assert!(iter.next().is_none());
+
+    Ok(result)
 }
 
 /// The `LBOUND` function.
@@ -114,6 +174,7 @@ impl LboundFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LBOUND", VarType::Integer)
                 .with_syntax("array[, dimension%]")
+                .with_args_compiler(BoundsArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the lower bound for the given dimension of the array.
@@ -150,6 +211,7 @@ impl UboundFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("UBOUND", VarType::Integer)
                 .with_syntax("array[, dimension%]")
+                .with_args_compiler(BoundsArgsCompiler::default())
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the upper bound for the given dimension of the array.
@@ -184,20 +246,24 @@ pub fn add_all(machine: &mut Machine) {
 #[cfg(test)]
 mod tests {
     use crate::testutils::*;
-    use endbasic_core::ast::{Value, VarType};
+    use endbasic_core::ast::VarType;
 
     /// Validates error handling of `LBOUND` and `UBOUND` as given in `func`.
     fn do_bound_errors_test(func: &str) {
         Tester::default()
             .run(&format!("DIM x(2): result = {}()", func))
-            .expect_err(format!("1:20: In call to {}: expected array[, dimension%]", func))
-            .expect_array("x", VarType::Integer, &[2], vec![])
+            .expect_compilation_err(format!(
+                "1:20: In call to {}: expected array[, dimension%]",
+                func
+            ))
             .check();
 
         Tester::default()
             .run(&format!("DIM x(2): result = {}(x, 1, 2)", func))
-            .expect_err(format!("1:20: In call to {}: expected array[, dimension%]", func))
-            .expect_array("x", VarType::Integer, &[2], vec![])
+            .expect_compilation_err(format!(
+                "1:20: In call to {}: expected array[, dimension%]",
+                func
+            ))
             .check();
 
         Tester::default()
@@ -208,20 +274,40 @@ mod tests {
 
         Tester::default()
             .run(&format!("DIM x(2): result = {}(x, TRUE)", func))
-            .expect_err(format!("1:20: In call to {}: 1:30: TRUE is not a number", func))
-            .expect_array("x", VarType::Integer, &[2], vec![])
+            .expect_compilation_err(format!(
+                "1:20: In call to {}: 1:30: BOOLEAN is not a number",
+                func
+            ))
             .check();
 
         Tester::default()
             .run(&format!("i = 0: result = {}(i)", func))
-            .expect_err(format!("1:17: In call to {}: 1:24: i must be an array reference", func))
-            .expect_var("i", Value::Integer(0))
+            .expect_compilation_err(format!(
+                "1:17: In call to {}: 1:24: i must be an array reference",
+                func
+            ))
+            .check();
+
+        Tester::default()
+            .run(&format!("result = {}(3)", func))
+            .expect_compilation_err(format!(
+                "1:10: In call to {}: 1:17: First argument must be an array reference",
+                func
+            ))
             .check();
 
         Tester::default()
             .run(&format!("i = 0: result = {}(i$)", func))
             .expect_compilation_err(format!(
-                "1:17: In call to {}: 1:24: Incompatible type annotation in i$ reference",
+                "1:17: In call to {}: 1:24: i$ must be an array reference",
+                func
+            ))
+            .check();
+
+        Tester::default()
+            .run(&format!("DIM i(3) AS BOOLEAN: result = {}(i$)", func))
+            .expect_compilation_err(format!(
+                "1:31: In call to {}: 1:38: Incompatible type annotation in i$ reference",
                 func
             ))
             .check();
@@ -236,11 +322,10 @@ mod tests {
 
         Tester::default()
             .run(&format!("DIM x(2, 3, 4): result = {}(x)", func))
-            .expect_err(format!(
+            .expect_compilation_err(format!(
                 "1:26: In call to {}: 1:33: Requires a dimension for multidimensional arrays",
                 func
             ))
-            .expect_array("x", VarType::Integer, &[2, 3, 4], vec![])
             .check();
 
         Tester::default()

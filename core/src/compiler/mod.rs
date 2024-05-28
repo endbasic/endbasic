@@ -270,12 +270,12 @@ impl From<&Symbols> for SymbolsTable {
 
 impl SymbolsTable {
     /// Returns true if the symbols table contains `key`.
-    fn contains_key(&mut self, key: &SymbolKey) -> bool {
+    pub fn contains_key(&mut self, key: &SymbolKey) -> bool {
         self.table.contains_key(key)
     }
 
     /// Returns the information for the symbol `key` if it exists, otherwise `None`.
-    fn get(&self, key: &SymbolKey) -> Option<&SymbolPrototype> {
+    pub fn get(&self, key: &SymbolKey) -> Option<&SymbolPrototype> {
         self.table.get(key)
     }
 
