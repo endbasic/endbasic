@@ -16,7 +16,7 @@
 //! Symbol definitions and symbols table representation.
 
 use crate::ast::{Value, VarRef, VarType};
-use crate::compiler::{self, CallableArgsCompiler, PassthroughArgsCompiler};
+use crate::compiler::{self, CallableArgsCompiler};
 use crate::exec::Machine;
 use crate::reader::LineCol;
 use crate::value::{Error, Result};
@@ -538,7 +538,7 @@ impl CallableMetadataBuilder {
             args_compiler: self
                 .args_compiler
                 .take()
-                .unwrap_or_else(|| Rc::from(PassthroughArgsCompiler::default())),
+                .expect("All callables must specify an arguments parser"),
         }
     }
 
@@ -554,7 +554,7 @@ impl CallableMetadataBuilder {
             args_compiler: self
                 .args_compiler
                 .take()
-                .unwrap_or_else(|| Rc::from(PassthroughArgsCompiler::default())),
+                .expect("All callables must specify an arguments parser"),
         }
     }
 }

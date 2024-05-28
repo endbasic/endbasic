@@ -16,7 +16,7 @@
 //! Common compilers for callable arguments.
 
 use super::ExprType;
-use super::{compile_expr, compile_expr_in_command, CallableArgsCompiler, SymbolsTable};
+use super::{compile_expr, CallableArgsCompiler, SymbolsTable};
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::reader::LineCol;
@@ -24,57 +24,6 @@ use crate::syms::CallError;
 
 /// Result for argument compilation return values.
 pub type Result<T> = std::result::Result<T, CallError>;
-
-/// A callable arguments compiler that just passes through all arguments to the runtime `exec`
-/// method.
-///
-/// This exists for transitional reasons only until all callables have migrated to doing
-/// compile-time validation of their arguments.
-#[derive(Debug, Default)]
-pub(crate) struct PassthroughArgsCompiler {}
-
-impl CallableArgsCompiler for PassthroughArgsCompiler {
-    fn compile_complex(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &mut SymbolsTable,
-        _pos: LineCol,
-        args: Vec<ArgSpan>,
-    ) -> Result<usize> {
-        let mut nargs = 0;
-        for argspan in args.into_iter().rev() {
-            if argspan.sep != ArgSep::End {
-                instrs.push(Instruction::Push(Value::Separator(argspan.sep), argspan.sep_pos));
-                nargs += 1;
-            }
-
-            match argspan.expr {
-                Some(expr) => {
-                    compile_expr_in_command(instrs, symtable, expr)?;
-                }
-                None => {
-                    instrs.push(Instruction::Push(Value::Missing, argspan.sep_pos));
-                }
-            }
-            nargs += 1;
-        }
-        Ok(nargs)
-    }
-
-    fn compile_simple(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &SymbolsTable,
-        _pos: LineCol,
-        args: Vec<Expr>,
-    ) -> Result<usize> {
-        let nargs = args.len();
-        for arg in args.into_iter().rev() {
-            compile_expr(instrs, symtable, arg, true)?;
-        }
-        Ok(nargs)
-    }
-}
 
 /// An arguments compiler for a callable that receives no arguments.
 #[derive(Debug, Default)]
