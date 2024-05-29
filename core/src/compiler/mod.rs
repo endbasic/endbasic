@@ -1036,8 +1036,8 @@ mod testutils {
     /// A callable arguments compiler that just passes through all arguments to the runtime `exec`
     /// method.
     ///
-    /// This exists for transitional reasons only until all callables have migrated to doing
-    /// compile-time validation of their arguments.
+    /// In the case of commands, argument separators and missing values are passed through as
+    /// strings, which is sufficient for testing.
     #[derive(Debug, Default)]
     pub(crate) struct PassthroughArgsCompiler {}
 
@@ -1052,7 +1052,10 @@ mod testutils {
             let mut nargs = 0;
             for argspan in args.into_iter().rev() {
                 if argspan.sep != ArgSep::End {
-                    instrs.push(Instruction::Push(Value::Separator(argspan.sep), argspan.sep_pos));
+                    instrs.push(Instruction::Push(
+                        Value::Text(argspan.sep.to_string()),
+                        argspan.sep_pos,
+                    ));
                     nargs += 1;
                 }
 
@@ -1061,7 +1064,10 @@ mod testutils {
                         compile_expr_in_command(instrs, symtable, expr)?;
                     }
                     None => {
-                        instrs.push(Instruction::Push(Value::Missing, argspan.sep_pos));
+                        instrs.push(Instruction::Push(
+                            Value::Text("MISSING".to_owned()),
+                            argspan.sep_pos,
+                        ));
                     }
                 }
                 nargs += 1;
@@ -1449,13 +1455,13 @@ mod tests {
             .parse("CMD a;;b,c AS d")
             .compile()
             .expect_instr(0, Instruction::LoadRef(VarRef::new("d", VarType::Auto), lc(1, 15)))
-            .expect_instr(1, Instruction::Push(Value::Separator(ArgSep::As), lc(1, 12)))
+            .expect_instr(1, Instruction::Push(Value::Text("AS".to_owned()), lc(1, 12)))
             .expect_instr(2, Instruction::LoadRef(VarRef::new("c", VarType::Auto), lc(1, 10)))
-            .expect_instr(3, Instruction::Push(Value::Separator(ArgSep::Long), lc(1, 9)))
+            .expect_instr(3, Instruction::Push(Value::Text(",".to_owned()), lc(1, 9)))
             .expect_instr(4, Instruction::LoadRef(VarRef::new("b", VarType::Auto), lc(1, 8)))
-            .expect_instr(5, Instruction::Push(Value::Separator(ArgSep::Short), lc(1, 7)))
-            .expect_instr(6, Instruction::Push(Value::Missing, lc(1, 7)))
-            .expect_instr(7, Instruction::Push(Value::Separator(ArgSep::Short), lc(1, 6)))
+            .expect_instr(5, Instruction::Push(Value::Text(";".to_owned()), lc(1, 7)))
+            .expect_instr(6, Instruction::Push(Value::Text("MISSING".to_owned()), lc(1, 7)))
+            .expect_instr(7, Instruction::Push(Value::Text(";".to_owned()), lc(1, 6)))
             .expect_instr(8, Instruction::LoadRef(VarRef::new("a", VarType::Auto), lc(1, 5)))
             .expect_instr(9, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 1), 9))
             .check();
@@ -1470,7 +1476,7 @@ mod tests {
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 4)))
             .expect_instr(1, Instruction::JumpIfNotTrue(6))
             .expect_instr(2, Instruction::Push(Value::Integer(2), lc(1, 22)))
-            .expect_instr(3, Instruction::Push(Value::Separator(ArgSep::Long), lc(1, 20)))
+            .expect_instr(3, Instruction::Push(Value::Text(",".to_owned()), lc(1, 20)))
             .expect_instr(4, Instruction::Push(Value::Integer(1), lc(1, 19)))
             .expect_instr(5, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 15), 3))
             .check();
