@@ -21,7 +21,7 @@ use endbasic_core::bytecode::Instruction;
 use endbasic_core::compiler::{
     compile_expr_symbol_ref, CallableArgsCompiler, NoArgsCompiler, SymbolsTable,
 };
-use endbasic_core::exec::{Clearable, Machine};
+use endbasic_core::exec::{Clearable, Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
@@ -115,22 +115,15 @@ impl Callable for ReadCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        if args.is_empty() {
-            return Err(CallError::SyntaxError);
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        debug_assert_ne!(0, scope.nargs());
+
+        let mut vrefs = Vec::with_capacity(scope.nargs());
+        while scope.nargs() > 0 {
+            vrefs.push(scope.pop_varref_with_pos());
         }
 
-        let mut vrefs = Vec::with_capacity(args.len());
-        let iter = args.into_iter();
         let mut index = self.index.borrow_mut();
-
-        for (value, pos) in iter {
-            match value {
-                Value::VarRef(vref) => vrefs.push((vref, pos)),
-                _ => unreachable!(),
-            }
-        }
-
         for (vref, pos) in vrefs {
             let datum = {
                 let data = machine.get_data();
@@ -205,8 +198,8 @@ impl Callable for RestoreCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
         *self.index.borrow_mut() = 0;
         Ok(Value::Void)
     }

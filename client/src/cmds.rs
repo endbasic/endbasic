@@ -19,7 +19,7 @@ use crate::*;
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
-use endbasic_core::exec::Machine;
+use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
@@ -109,7 +109,7 @@ impl Callable for LoginCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         if self.service.borrow().is_logged_in() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -118,18 +118,12 @@ impl Callable for LoginCommand {
             .into());
         }
 
-        let mut iter = args.into_iter();
-        let username = match iter.next() {
-            Some((Value::Text(t), _pos)) => t,
-            _ => unreachable!(),
-        };
-        let password = match iter.next() {
-            None => read_line_secure(&mut *self.console.borrow_mut(), "Password: ").await?,
-            Some((Value::Text(t), _pos)) => {
-                debug_assert!(iter.next().is_none());
-                t
-            }
-            _ => unreachable!(),
+        let username = scope.pop_string();
+        let password = if scope.nargs() == 0 {
+            read_line_secure(&mut *self.console.borrow_mut(), "Password: ").await?
+        } else {
+            debug_assert_eq!(1, scope.nargs());
+            scope.pop_string()
         };
 
         self.do_login(&username, &password).await
@@ -175,8 +169,8 @@ impl Callable for LogoutCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
 
         if !self.service.borrow().is_logged_in() {
             // TODO(jmmv): Now that the access tokens are part of the service, we can easily allow
@@ -328,23 +322,15 @@ impl Callable for ShareCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let filename = match iter.next() {
-            Some((Value::Text(t), _pos)) => t,
-            _ => unreachable!(),
-        };
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_ne!(0, scope.nargs());
+        let filename = scope.pop_string();
 
         let mut add = FileAcls::default();
         let mut remove = FileAcls::default();
-        loop {
-            match iter.next() {
-                None => break,
-                Some((Value::Text(t), pos)) => {
-                    ShareCommand::parse_acl(t, pos, &mut add, &mut remove)?;
-                }
-                _ => unreachable!(),
-            }
+        while scope.nargs() > 0 {
+            let (t, pos) = scope.pop_string_with_pos();
+            ShareCommand::parse_acl(t, pos, &mut add, &mut remove)?;
         }
 
         if add.is_empty() && remove.is_empty() {
@@ -480,8 +466,8 @@ impl Callable for SignupCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
 
         let console = &mut *self.console.borrow_mut();
         console.print("")?;

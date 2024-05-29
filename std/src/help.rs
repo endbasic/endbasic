@@ -20,7 +20,7 @@ use crate::exec::CATEGORY;
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::compiler::{ExprType, SameTypeArgsCompiler};
-use endbasic_core::exec::Machine;
+use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
 };
@@ -480,32 +480,25 @@ impl Callable for HelpCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
         let topics = Topics::new(machine.get_symbols());
 
-        match iter.next() {
-            None => {
-                let mut console = self.console.borrow_mut();
-                let previous = console.set_sync(false)?;
-                let result = self.summary(&topics, &mut *console);
-                console.set_sync(previous)?;
-                result?;
-            }
-            Some((Value::Text(t), pos)) => {
-                if iter.next().is_some() {
-                    return Err(CallError::SyntaxError);
-                }
+        if scope.nargs() == 0 {
+            let mut console = self.console.borrow_mut();
+            let previous = console.set_sync(false)?;
+            let result = self.summary(&topics, &mut *console);
+            console.set_sync(previous)?;
+            result?;
+        } else {
+            debug_assert_eq!(1, scope.nargs());
+            let (t, pos) = scope.pop_string_with_pos();
 
-                let topic = topics.find(&t, pos)?;
-                let mut console = self.console.borrow_mut();
-                let previous = console.set_sync(false)?;
-                let result = topic.describe(&mut *console);
-                console.set_sync(previous)?;
-                result?;
-            }
-            _ => unreachable!(),
+            let topic = topics.find(&t, pos)?;
+            let mut console = self.console.borrow_mut();
+            let previous = console.set_sync(false)?;
+            let result = topic.describe(&mut *console);
+            console.set_sync(previous)?;
+            result?;
         }
 
         Ok(Value::Void)
@@ -560,7 +553,7 @@ Second paragraph of the extended description.",
             &self.metadata
         }
 
-        async fn exec(&self, _args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        async fn exec(&self, _scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
             Ok(Value::Void)
         }
     }
@@ -602,7 +595,7 @@ Second paragraph of the extended description.",
             &self.metadata
         }
 
-        async fn exec(&self, _args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+        async fn exec(&self, _scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
             Ok(Value::Text("irrelevant".to_owned()))
         }
     }

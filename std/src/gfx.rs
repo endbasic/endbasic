@@ -19,7 +19,7 @@ use crate::console::{Console, PixelsXY};
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
-use endbasic_core::exec::Machine;
+use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
@@ -34,23 +34,6 @@ The EndBASIC console overlays text and graphics in the same canvas.  The consequ
 design choice is that the console has two coordinate systems: the character-based system, used by
 the commands described in HELP \"CONSOLE\", and the pixel-based system, used by the commands \
 described in this section.";
-
-/// Extracts an `x, y` argument pair from the list of command arguments.
-fn extract_xy<I: Iterator<Item = (Value, LineCol)>>(
-    iter: &mut I,
-) -> Result<(i32, LineCol, i32, LineCol), CallError> {
-    let (xvalue, xpos) = match iter.next() {
-        Some((Value::Integer(i), pos)) => (i, pos),
-        _ => unreachable!(),
-    };
-
-    let (yvalue, ypos) = match iter.next() {
-        Some((Value::Integer(i), pos)) => (i, pos),
-        _ => unreachable!(),
-    };
-
-    Ok((xvalue, xpos, yvalue, ypos))
-}
 
 /// Parses an expression that represents a single coordinate.
 fn parse_coordinate(i: i32, pos: LineCol) -> Result<i16, CallError> {
@@ -112,14 +95,11 @@ impl Callable for GfxCircleCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let (xvalue, xpos, yvalue, ypos) = extract_xy(&mut iter)?;
-        let (rvalue, rpos) = match iter.next() {
-            Some((Value::Integer(i), pos)) => (i, pos),
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(3, scope.nargs());
+        let (xvalue, xpos) = scope.pop_integer_with_pos();
+        let (yvalue, ypos) = scope.pop_integer_with_pos();
+        let (rvalue, rpos) = scope.pop_integer_with_pos();
 
         let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
         let r = parse_radius(rvalue, rpos)?;
@@ -159,14 +139,11 @@ impl Callable for GfxCirclefCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let (xvalue, xpos, yvalue, ypos) = extract_xy(&mut iter)?;
-        let (rvalue, rpos) = match iter.next() {
-            Some((Value::Integer(i), pos)) => (i, pos),
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(3, scope.nargs());
+        let (xvalue, xpos) = scope.pop_integer_with_pos();
+        let (yvalue, ypos) = scope.pop_integer_with_pos();
+        let (rvalue, rpos) = scope.pop_integer_with_pos();
 
         let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
         let r = parse_radius(rvalue, rpos)?;
@@ -206,8 +183,8 @@ impl Callable for GfxHeightFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
         let size = self.console.borrow().size_pixels()?;
         Ok(Value::Integer(i32::from(size.height)))
     }
@@ -243,11 +220,12 @@ impl Callable for GfxLineCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let (x1value, x1pos, y1value, y1pos) = extract_xy(&mut iter)?;
-        let (x2value, x2pos, y2value, y2pos) = extract_xy(&mut iter)?;
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(4, scope.nargs());
+        let (x1value, x1pos) = scope.pop_integer_with_pos();
+        let (y1value, y1pos) = scope.pop_integer_with_pos();
+        let (x2value, x2pos) = scope.pop_integer_with_pos();
+        let (y2value, y2pos) = scope.pop_integer_with_pos();
 
         let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
@@ -287,10 +265,10 @@ impl Callable for GfxPixelCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let (xvalue, xpos, yvalue, ypos) = extract_xy(&mut iter)?;
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(2, scope.nargs());
+        let (xvalue, xpos) = scope.pop_integer_with_pos();
+        let (yvalue, ypos) = scope.pop_integer_with_pos();
 
         let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
 
@@ -330,11 +308,12 @@ impl Callable for GfxRectCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let (x1value, x1pos, y1value, y1pos) = extract_xy(&mut iter)?;
-        let (x2value, x2pos, y2value, y2pos) = extract_xy(&mut iter)?;
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(4, scope.nargs());
+        let (x1value, x1pos) = scope.pop_integer_with_pos();
+        let (y1value, y1pos) = scope.pop_integer_with_pos();
+        let (x2value, x2pos) = scope.pop_integer_with_pos();
+        let (y2value, y2pos) = scope.pop_integer_with_pos();
 
         let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
@@ -374,11 +353,12 @@ impl Callable for GfxRectfCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let (x1value, x1pos, y1value, y1pos) = extract_xy(&mut iter)?;
-        let (x2value, x2pos, y2value, y2pos) = extract_xy(&mut iter)?;
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(4, scope.nargs());
+        let (x1value, x1pos) = scope.pop_integer_with_pos();
+        let (y1value, y1pos) = scope.pop_integer_with_pos();
+        let (x2value, x2pos) = scope.pop_integer_with_pos();
+        let (y2value, y2pos) = scope.pop_integer_with_pos();
 
         let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
@@ -430,26 +410,23 @@ impl Callable for GfxSyncCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let enabled = match iter.next() {
-            None => {
-                self.console.borrow_mut().sync_now()?;
-                return Ok(Value::Void);
-            }
-            Some((Value::Boolean(b), _pos)) => b,
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
-
-        let mut console = self.console.borrow_mut();
-        if enabled {
-            console.show_cursor()?;
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        if scope.nargs() == 0 {
+            self.console.borrow_mut().sync_now()?;
+            Ok(Value::Void)
         } else {
-            console.hide_cursor()?;
+            debug_assert_eq!(1, scope.nargs());
+            let enabled = scope.pop_boolean();
+
+            let mut console = self.console.borrow_mut();
+            if enabled {
+                console.show_cursor()?;
+            } else {
+                console.hide_cursor()?;
+            }
+            console.set_sync(enabled)?;
+            Ok(Value::Void)
         }
-        console.set_sync(enabled)?;
-        Ok(Value::Void)
     }
 }
 
@@ -483,8 +460,8 @@ impl Callable for GfxWidthFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
         let size = self.console.borrow().size_pixels()?;
         Ok(Value::Integer(i32::from(size.width)))
     }

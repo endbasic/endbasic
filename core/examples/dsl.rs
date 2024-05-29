@@ -24,11 +24,10 @@
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
-use endbasic_core::exec::{Machine, StopReason};
+use endbasic_core::exec::{Machine, Scope, StopReason};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
-use endbasic_core::LineCol;
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -77,8 +76,8 @@ impl Callable for NumLightsFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
         let num = self.lights.borrow().len();
         assert!(num <= std::i32::MAX as usize, "Ended up with too many lights");
         Ok(Value::Integer(num as i32))
@@ -112,13 +111,9 @@ impl Callable for SwitchLightCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let (i, ipos) = match iter.next() {
-            Some((Value::Integer(i), pos)) => (i, pos),
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let (i, ipos) = scope.pop_integer_with_pos();
 
         let lights = &mut *self.lights.borrow_mut();
         if i < 1 {

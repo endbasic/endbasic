@@ -21,7 +21,7 @@ use endbasic_core::bytecode::Instruction;
 use endbasic_core::compiler::{
     compile_arg_expr, CallableArgsCompiler, ExprType, SameTypeArgsCompiler, SymbolsTable,
 };
-use endbasic_core::exec::{Clearable, Machine};
+use endbasic_core::exec::{Clearable, Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
 };
@@ -220,17 +220,16 @@ impl Callable for GpioSetupCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let pin = match iter.next() {
-            Some((Value::Integer(i), pos)) => Pin::from_i32(i, pos)?,
-            _ => unreachable!(),
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(2, scope.nargs());
+        let pin = {
+            let (i, pos) = scope.pop_integer_with_pos();
+            Pin::from_i32(i, pos)?
         };
-        let mode = match iter.next() {
-            Some((Value::Text(t), pos)) => PinMode::parse(&t, pos)?,
-            _ => unreachable!(),
+        let mode = {
+            let (t, pos) = scope.pop_string_with_pos();
+            PinMode::parse(&t, pos)?
         };
-        debug_assert!(iter.next().is_none());
 
         match MockPins::try_new(machine.get_mut_symbols()) {
             Some(mut pins) => pins.setup(pin, mode)?,
@@ -272,27 +271,23 @@ impl Callable for GpioClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        if scope.nargs() == 0 {
+            match MockPins::try_new(machine.get_mut_symbols()) {
+                Some(mut pins) => pins.clear_all()?,
+                None => self.pins.borrow_mut().clear_all()?,
+            };
+        } else {
+            debug_assert_eq!(1, scope.nargs());
+            let pin = {
+                let (i, pos) = scope.pop_integer_with_pos();
+                Pin::from_i32(i, pos)?
+            };
 
-        match iter.next() {
-            None => {
-                match MockPins::try_new(machine.get_mut_symbols()) {
-                    Some(mut pins) => pins.clear_all()?,
-                    None => self.pins.borrow_mut().clear_all()?,
-                };
-            }
-            Some((Value::Integer(i), pos)) => {
-                debug_assert!(iter.next().is_none());
-
-                let pin = Pin::from_i32(i, pos)?;
-
-                match MockPins::try_new(machine.get_mut_symbols()) {
-                    Some(mut pins) => pins.clear(pin)?,
-                    None => self.pins.borrow_mut().clear(pin)?,
-                };
-            }
-            _ => unreachable!(),
+            match MockPins::try_new(machine.get_mut_symbols()) {
+                Some(mut pins) => pins.clear(pin)?,
+                None => self.pins.borrow_mut().clear(pin)?,
+            };
         }
 
         Ok(Value::Void)
@@ -329,13 +324,12 @@ impl Callable for GpioReadFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let pin = match iter.next() {
-            Some((Value::Integer(i), pos)) => Pin::from_i32(i, pos)?,
-            _ => return Err(CallError::SyntaxError),
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let pin = {
+            let (i, pos) = scope.pop_integer_with_pos();
+            Pin::from_i32(i, pos)?
         };
-        debug_assert!(iter.next().is_none());
 
         let value = match MockPins::try_new(machine.get_mut_symbols()) {
             Some(mut pins) => pins.read(pin)?,
@@ -378,17 +372,13 @@ impl Callable for GpioWriteCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let pin = match iter.next() {
-            Some((Value::Integer(i), pos)) => Pin::from_i32(i, pos)?,
-            _ => unreachable!(),
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(2, scope.nargs());
+        let pin = {
+            let (i, pos) = scope.pop_integer_with_pos();
+            Pin::from_i32(i, pos)?
         };
-        let value = match iter.next() {
-            Some((Value::Boolean(b), _pos)) => b,
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+        let value = scope.pop_boolean();
 
         match MockPins::try_new(machine.get_mut_symbols()) {
             Some(mut pins) => pins.write(pin, value)?,

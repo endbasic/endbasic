@@ -20,11 +20,10 @@ use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
-use endbasic_core::exec::{Machine, StopReason};
+use endbasic_core::exec::{Machine, Scope, StopReason};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
-use endbasic_core::LineCol;
 use std::cell::RefCell;
 use std::io;
 use std::path::PathBuf;
@@ -186,13 +185,9 @@ impl Callable for KillCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let name = match iter.next() {
-            Some((Value::Text(t), _pos)) => t,
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let name = scope.pop_string();
 
         let name = add_extension(name)?;
         self.storage.borrow_mut().delete(&name).await?;
@@ -230,8 +225,8 @@ impl Callable for EditCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
 
         let mut console = self.console.borrow_mut();
         let mut program = self.program.borrow_mut();
@@ -269,8 +264,8 @@ impl Callable for ListCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
 
         let mut console = self.console.borrow_mut();
         for line in self.program.borrow().text().lines() {
@@ -323,13 +318,9 @@ impl Callable for LoadCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let pathname = match iter.next() {
-            Some((Value::Text(t), _pos)) => t,
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let pathname = scope.pop_string();
 
         if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut()).await? {
             let pathname = add_extension(pathname)?;
@@ -384,8 +375,8 @@ impl Callable for NewCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
 
         if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut()).await? {
             self.program.borrow_mut().load(None, "");
@@ -434,8 +425,8 @@ impl Callable for RunCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
 
         machine.clear();
         let program = self.program.borrow().text();
@@ -500,12 +491,9 @@ impl Callable for SaveCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let name = match iter.next() {
-            Some((Value::Text(t), _pos)) => t,
-            Some(_) => unreachable!(),
-            None => match self.program.borrow().name() {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        let name = if scope.nargs() == 0 {
+            match self.program.borrow().name() {
                 Some(name) => name.to_owned(),
                 None => {
                     return Err(CallError::IoError(io::Error::new(
@@ -513,9 +501,11 @@ impl Callable for SaveCommand {
                         "Unnamed program; please provide a filename".to_owned(),
                     )));
                 }
-            },
+            }
+        } else {
+            debug_assert_eq!(1, scope.nargs());
+            scope.pop_string()
         };
-        debug_assert!(iter.next().is_none());
 
         let name = add_extension(name)?;
         let full_name = self.storage.borrow().make_canonical(&name)?;
