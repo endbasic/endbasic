@@ -41,8 +41,6 @@ fn format_value(v: Value, o: &mut String) {
         Value::Boolean(false) => o.push_str("FALSE"),
         Value::Double(d) => o.push_str(&format!("{}", d)),
         Value::Integer(i) => o.push_str(&format!("{}", i)),
-        Value::Missing => panic!("Should never try to format missing arguments in tests"),
-        Value::Separator(s) => o.push_str(&format!("{:?}", s)),
         Value::Text(s) => o.push_str(&s),
         Value::VarRef(v) => o.push_str(&format!("{}", v)),
         Value::Void => panic!("Should never try to format void in tests"),
