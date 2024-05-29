@@ -186,6 +186,150 @@ pub trait Clearable {
 /// Type of the function used by the execution loop to yield execution.
 pub type YieldNowFn = Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()> + 'static>>>;
 
+/// Provides controlled access to the parameters passed to a callable.
+pub struct Scope<'s> {
+    stack: &'s mut Vec<(Value, LineCol)>,
+    nargs: usize,
+}
+
+impl<'s> Drop for Scope<'s> {
+    fn drop(&mut self) {
+        self.stack.truncate(self.stack.len() - self.nargs)
+    }
+}
+
+impl<'s> Scope<'s> {
+    /// Creates a new scope that wraps `nargs` arguments at the top of `stack`.
+    fn new(stack: &'s mut Vec<(Value, LineCol)>, nargs: usize) -> Self {
+        debug_assert!(nargs <= stack.len());
+        Self { stack, nargs }
+    }
+
+    /// Returns the number of arguments that can still be consumed.
+    pub fn nargs(&self) -> usize {
+        self.nargs
+    }
+
+    /// Pops the top of the stack as the original unwrapped `Value` type.
+    pub fn pop_any(&mut self) -> Value {
+        self.pop_any_with_pos().0
+    }
+
+    /// Pops the top of the stack as the original unwrapped `Value` type.
+    //
+    // TODO(jmmv): Remove this variant once the stack values do not carry position
+    // information any longer.
+    pub fn pop_any_with_pos(&mut self) -> (Value, LineCol) {
+        debug_assert!(self.nargs > 0, "Not enough arguments in scope");
+        self.nargs -= 1;
+
+        match self.stack.pop() {
+            Some((value, pos)) => (value, pos),
+            _ => panic!("Not enough arguments to pop"),
+        }
+    }
+
+    /// Pops the top of the stack as a boolean value.
+    pub fn pop_boolean(&mut self) -> bool {
+        self.pop_boolean_with_pos().0
+    }
+
+    /// Pops the top of the stack as a boolean value.
+    //
+    // TODO(jmmv): Remove this variant once the stack values do not carry position
+    // information any longer.
+    pub fn pop_boolean_with_pos(&mut self) -> (bool, LineCol) {
+        debug_assert!(self.nargs > 0, "Not enough arguments in scope");
+        self.nargs -= 1;
+
+        match self.stack.pop() {
+            Some((Value::Boolean(b), pos)) => (b, pos),
+            Some((_, _)) => panic!("Type mismatch"),
+            _ => panic!("Not enough arguments to pop"),
+        }
+    }
+
+    /// Pops the top of the stack as a double value.
+    pub fn pop_double(&mut self) -> f64 {
+        self.pop_double_with_pos().0
+    }
+
+    /// Pops the top of the stack as a double value.
+    //
+    // TODO(jmmv): Remove this variant once the stack values do not carry position
+    // information any longer.
+    pub fn pop_double_with_pos(&mut self) -> (f64, LineCol) {
+        debug_assert!(self.nargs > 0, "Not enough arguments in scope");
+        self.nargs -= 1;
+
+        match self.stack.pop() {
+            Some((Value::Double(d), pos)) => (d, pos),
+            Some((_, _)) => panic!("Type mismatch"),
+            _ => panic!("Not enough arguments to pop"),
+        }
+    }
+
+    /// Pops the top of the stack as an integer value.
+    pub fn pop_integer(&mut self) -> i32 {
+        self.pop_integer_with_pos().0
+    }
+
+    /// Pops the top of the stack as an integer value.
+    //
+    // TODO(jmmv): Remove this variant once the stack values do not carry position
+    // information any longer.
+    pub fn pop_integer_with_pos(&mut self) -> (i32, LineCol) {
+        debug_assert!(self.nargs > 0, "Not enough arguments in scope");
+        self.nargs -= 1;
+
+        match self.stack.pop() {
+            Some((Value::Integer(i), pos)) => (i, pos),
+            Some((_, _)) => panic!("Type mismatch"),
+            _ => panic!("Not enough arguments to pop"),
+        }
+    }
+
+    /// Pops the top of the stack as a string value.
+    pub fn pop_string(&mut self) -> String {
+        self.pop_string_with_pos().0
+    }
+
+    /// Pops the top of the stack as a string value.
+    //
+    // TODO(jmmv): Remove this variant once the stack values do not carry position
+    // information any longer.
+    pub fn pop_string_with_pos(&mut self) -> (String, LineCol) {
+        debug_assert!(self.nargs > 0, "Not enough arguments in scope");
+        self.nargs -= 1;
+
+        match self.stack.pop() {
+            Some((Value::Text(s), pos)) => (s, pos),
+            Some((_, _)) => panic!("Type mismatch"),
+            _ => panic!("Not enough arguments to pop"),
+        }
+    }
+
+    /// Pops the top of the stack as a variable reference.
+    pub fn pop_varref(&mut self) -> VarRef {
+        self.pop_varref_with_pos().0
+    }
+
+    /// Pops the top of the stack as a variable reference.
+    //
+    // TODO(jmmv): Remove this variant once the stack values do not carry position
+    // information any longer.
+    pub fn pop_varref_with_pos(&mut self) -> (VarRef, LineCol) {
+        debug_assert!(self.nargs > 0, "Not enough arguments in scope");
+        self.nargs -= 1;
+
+        match self.stack.pop() {
+            Some((Value::VarRef(vref), pos)) => (vref, pos),
+            Some((_, _)) => panic!("Type mismatch"),
+            _ => panic!("Not enough arguments to pop"),
+        }
+    }
+}
+
 /// Machine state for the execution of an individual chunk of code.
 struct Context {
     pc: Address,
@@ -399,15 +543,11 @@ impl Machine {
         let metadata = b.metadata();
         debug_assert_eq!(VarType::Void, metadata.return_type());
 
-        let mut args = Vec::with_capacity(nargs);
-        for _ in 0..nargs {
-            let (value, pos) = context.value_stack.pop().unwrap();
-            args.push((value, pos));
-        }
+        let scope = Scope::new(&mut context.value_stack, nargs);
 
         let b = b.clone();
         let value = b
-            .exec(args, self)
+            .exec(scope, self)
             .await
             .map_err(|e| Error::from_call_error(b.metadata(), e, bref_pos))?;
         assert_eq!(value, Value::Void, "Commands do return values");
@@ -543,13 +683,8 @@ impl Machine {
         let metadata = f.metadata();
         debug_assert_eq!(return_type, metadata.return_type());
 
-        let mut args = Vec::with_capacity(nargs);
-        for _ in 0..nargs {
-            let (value, pos) = context.value_stack.pop().unwrap();
-            args.push((value, pos));
-        }
-
-        let result = f.exec(args, self).await;
+        let scope = Scope::new(&mut context.value_stack, nargs);
+        let result = f.exec(scope, self).await;
         match result {
             Ok(value) => {
                 debug_assert!(metadata.return_type() != VarType::Auto);
@@ -623,12 +758,14 @@ impl Machine {
     /// Evaluates a call to an argless function.
     async fn argless_function_call(
         &mut self,
+        context: &mut Context,
         fref: VarRef,
         fref_pos: LineCol,
         f: Rc<dyn Callable>,
     ) -> Result<Value> {
         let metadata = f.metadata();
-        let result = f.exec(vec![], self).await;
+        let scope = Scope::new(&mut context.value_stack, 0);
+        let result = f.exec(scope, self).await;
         match result {
             Ok(value) => {
                 debug_assert!(metadata.return_type() != VarType::Auto);
@@ -1019,7 +1156,8 @@ impl Machine {
                 if let Some(Symbol::Callable(f)) = sym {
                     if f.metadata().is_argless() {
                         let f = f.clone();
-                        let value = self.argless_function_call(vref.clone(), *pos, f).await?;
+                        let value =
+                            self.argless_function_call(context, vref.clone(), *pos, f).await?;
                         context.value_stack.push((value, *pos));
                         context.pc += 1;
                         return Ok(());
@@ -1155,6 +1293,100 @@ mod tests {
 
             *self.cleared.borrow_mut() = true;
         }
+    }
+
+    #[test]
+    fn test_scope_and_stack_empty() {
+        let mut stack = vec![];
+        let scope = Scope::new(&mut stack, 0);
+        drop(scope);
+        assert_eq!(0, stack.len());
+    }
+
+    #[test]
+    fn test_scope_no_args() {
+        let mut stack = vec![(Value::Integer(3), LineCol { line: 1, col: 2 })];
+        let scope = Scope::new(&mut stack, 0);
+        drop(scope);
+        assert_eq!(1, stack.len());
+    }
+
+    #[test]
+    fn test_scope_pop_remaining_on_drop() {
+        let mut stack = vec![
+            (Value::Integer(3), LineCol { line: 1, col: 2 }),
+            (Value::Integer(1), LineCol { line: 1, col: 2 }),
+            (Value::Integer(2), LineCol { line: 1, col: 2 }),
+            (Value::Integer(4), LineCol { line: 1, col: 2 }),
+        ];
+        let mut scope = Scope::new(&mut stack, 3);
+        assert_eq!(3, scope.nargs());
+        assert_eq!(4, scope.pop_integer());
+        assert_eq!(2, scope.nargs());
+        assert_eq!(2, scope.pop_integer());
+        assert_eq!(1, scope.nargs());
+        drop(scope);
+        assert_eq!(1, stack.len());
+        assert_eq!((Value::Integer(3), LineCol { line: 1, col: 2 }), stack[0]);
+    }
+
+    #[test]
+    fn test_scope_pop_any() {
+        let mut stack = vec![
+            (Value::Boolean(false), LineCol { line: 1, col: 2 }),
+            (Value::Double(1.2), LineCol { line: 1, col: 2 }),
+        ];
+        let mut scope = Scope::new(&mut stack, 2);
+        assert_eq!(Value::Double(1.2), scope.pop_any());
+        assert_eq!(Value::Boolean(false), scope.pop_any());
+    }
+
+    #[test]
+    fn test_scope_pop_any_with_pos() {
+        let mut stack = vec![
+            (Value::Boolean(false), LineCol { line: 9, col: 8 }),
+            (Value::Double(1.2), LineCol { line: 1, col: 2 }),
+        ];
+        let mut scope = Scope::new(&mut stack, 2);
+        assert_eq!((Value::Double(1.2), LineCol { line: 1, col: 2 }), scope.pop_any_with_pos());
+        assert_eq!((Value::Boolean(false), LineCol { line: 9, col: 8 }), scope.pop_any_with_pos());
+    }
+
+    #[test]
+    fn test_scope_pop_types() {
+        let mut stack = vec![
+            (Value::Boolean(false), LineCol { line: 1, col: 2 }),
+            (Value::Double(1.2), LineCol { line: 1, col: 2 }),
+            (Value::Integer(2), LineCol { line: 1, col: 2 }),
+            (Value::Text("foo".to_owned()), LineCol { line: 1, col: 2 }),
+            (Value::VarRef(VarRef::new("foo", VarType::Auto)), LineCol { line: 1, col: 2 }),
+        ];
+        let mut scope = Scope::new(&mut stack, 5);
+        assert_eq!(VarRef::new("foo", VarType::Auto), scope.pop_varref());
+        assert_eq!("foo", scope.pop_string());
+        assert_eq!(2, scope.pop_integer());
+        assert_eq!(1.2, scope.pop_double());
+        assert!(!scope.pop_boolean());
+    }
+
+    #[test]
+    fn test_scope_pop_types_with_pos() {
+        let mut stack = vec![
+            (Value::Boolean(false), LineCol { line: 1, col: 2 }),
+            (Value::Double(1.2), LineCol { line: 3, col: 4 }),
+            (Value::Integer(2), LineCol { line: 5, col: 6 }),
+            (Value::Text("foo".to_owned()), LineCol { line: 7, col: 8 }),
+            (Value::VarRef(VarRef::new("foo", VarType::Auto)), LineCol { line: 9, col: 10 }),
+        ];
+        let mut scope = Scope::new(&mut stack, 5);
+        assert_eq!(
+            (VarRef::new("foo", VarType::Auto), LineCol { line: 9, col: 10 }),
+            scope.pop_varref_with_pos()
+        );
+        assert_eq!(("foo".to_owned(), LineCol { line: 7, col: 8 }), scope.pop_string_with_pos());
+        assert_eq!((2, LineCol { line: 5, col: 6 }), scope.pop_integer_with_pos());
+        assert_eq!((1.2, LineCol { line: 3, col: 4 }), scope.pop_double_with_pos());
+        assert_eq!((false, LineCol { line: 1, col: 2 }), scope.pop_boolean_with_pos());
     }
 
     #[test]

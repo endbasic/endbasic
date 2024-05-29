@@ -21,7 +21,7 @@ use endbasic_core::bytecode::Instruction;
 use endbasic_core::compiler::{
     compile_arg, compile_expr, CallableArgsCompiler, ExprType, SameTypeArgsCompiler, SymbolsTable,
 };
-use endbasic_core::exec::Machine;
+use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
@@ -90,13 +90,9 @@ impl Callable for AscFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let (s, spos) = match iter.next() {
-            Some((Value::Text(s), pos)) => (s, pos),
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let (s, spos) = scope.pop_string_with_pos();
 
         let mut chars = s.chars();
         let ch = match chars.next() {
@@ -152,13 +148,9 @@ impl Callable for ChrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let (i, ipos) = match iter.next() {
-            Some((Value::Integer(i), pos)) => (i, pos),
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let (i, ipos) = scope.pop_integer_with_pos();
 
         if i < 0 {
             return Err(CallError::ArgumentError(
@@ -204,17 +196,10 @@ impl Callable for LeftFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let s = match iter.next() {
-            Some((Value::Text(s), _pos)) => s,
-            _ => unreachable!(),
-        };
-        let (n, npos) = match iter.next() {
-            Some((Value::Integer(i), pos)) => (i, pos),
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(2, scope.nargs());
+        let s = scope.pop_string();
+        let (n, npos) = scope.pop_integer_with_pos();
 
         if n < 0 {
             Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
@@ -250,13 +235,9 @@ impl Callable for LenFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let (s, spos) = match iter.next() {
-            Some((Value::Text(s), pos)) => (s, pos),
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let (s, spos) = scope.pop_string_with_pos();
 
         if s.len() > std::i32::MAX as usize {
             Err(CallError::InternalError(spos, "String too long".to_owned()))
@@ -291,13 +272,9 @@ impl Callable for LtrimFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let s = match iter.next() {
-            Some((Value::Text(s), _pos)) => s,
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let s = scope.pop_string();
 
         Ok(Value::Text(s.trim_start().to_owned()))
     }
@@ -362,24 +339,12 @@ impl Callable for MidFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let s = match iter.next() {
-            Some((Value::Text(s), _pos)) => s,
-            _ => unreachable!(),
-        };
-        let (start, startpos) = match iter.next() {
-            Some((Value::Integer(i), pos)) => (i, pos),
-            _ => unreachable!(),
-        };
-        let lengtharg = match iter.next() {
-            Some((Value::Integer(i), pos)) => {
-                debug_assert!(iter.next().is_none());
-                Some((i, pos))
-            }
-            None => None,
-            _ => unreachable!(),
-        };
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert!(scope.nargs() >= 2);
+        let s = scope.pop_string();
+        let (start, startpos) = scope.pop_integer_with_pos();
+        let lengtharg = if scope.nargs() > 0 { Some(scope.pop_integer_with_pos()) } else { None };
+        debug_assert_eq!(0, scope.nargs());
 
         if start < 0 {
             return Err(CallError::ArgumentError(startpos, "start% cannot be negative".to_owned()));
@@ -431,17 +396,10 @@ impl Callable for RightFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let s = match iter.next() {
-            Some((Value::Text(s), _pos)) => s,
-            _ => unreachable!(),
-        };
-        let (n, npos) = match iter.next() {
-            Some((Value::Integer(i), pos)) => (i, pos),
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(2, scope.nargs());
+        let s = scope.pop_string();
+        let (n, npos) = scope.pop_integer_with_pos();
 
         if n < 0 {
             Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
@@ -477,13 +435,9 @@ impl Callable for RtrimFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let s = match iter.next() {
-            Some((Value::Text(s), _pos)) => s,
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let s = scope.pop_string();
 
         Ok(Value::Text(s.trim_end().to_owned()))
     }
@@ -548,13 +502,10 @@ impl Callable for StrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let value = match iter.next() {
-            Some((value, _pos)) => value,
-            None => return Err(CallError::SyntaxError),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let value = scope.pop_any();
+
         Ok(Value::Text(value.to_text()))
     }
 }

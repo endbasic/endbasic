@@ -24,7 +24,7 @@ use endbasic_core::compiler::{
     compile_arg_expr, CallableArgsCompiler, ExprType, NoArgsCompiler, SameTypeArgsCompiler,
     SymbolsTable,
 };
-use endbasic_core::exec::Machine;
+use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
@@ -152,13 +152,9 @@ impl Callable for CdCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let target = match iter.next() {
-            Some((Value::Text(t), _pos)) => t,
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let target = scope.pop_string();
 
         self.storage.borrow_mut().cd(&target)?;
 
@@ -195,14 +191,13 @@ impl Callable for DirCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let path = match iter.next() {
-            None => "".to_owned(),
-            Some((Value::Text(t), _pos)) => t,
-            _ => unreachable!(),
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        let path = if scope.nargs() == 0 {
+            "".to_owned()
+        } else {
+            debug_assert_eq!(1, scope.nargs());
+            scope.pop_string()
         };
-        debug_assert!(iter.next().is_none());
 
         show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), &path).await?;
 
@@ -293,26 +288,18 @@ impl Callable for MountCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        if args.is_empty() {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        if scope.nargs() == 0 {
             show_drives(&self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
-            return Ok(Value::Void);
+            Ok(Value::Void)
+        } else {
+            debug_assert_eq!(2, scope.nargs());
+            let target = scope.pop_string();
+            let name = scope.pop_string();
+
+            self.storage.borrow_mut().mount(&name, &target)?;
+            Ok(Value::Void)
         }
-
-        let mut iter = args.into_iter();
-        let target = match iter.next() {
-            Some((Value::Text(t), _pos)) => t,
-            _ => unreachable!(),
-        };
-        let name = match iter.next() {
-            Some((Value::Text(t), _pos)) => t,
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
-
-        self.storage.borrow_mut().mount(&name, &target)?;
-
-        Ok(Value::Void)
     }
 }
 
@@ -349,8 +336,8 @@ impl Callable for PwdCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
 
         let storage = self.storage.borrow();
         let cwd = storage.cwd();
@@ -399,13 +386,9 @@ impl Callable for UnmountCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let drive = match iter.next() {
-            Some((Value::Text(t), _pos)) => t,
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let drive = scope.pop_string();
 
         self.storage.borrow_mut().unmount(&drive)?;
 

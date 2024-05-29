@@ -18,11 +18,10 @@
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
-use endbasic_core::exec::{Clearable, Machine};
+use endbasic_core::exec::{Clearable, Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
 };
-use endbasic_core::LineCol;
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
 use std::cell::RefCell;
@@ -53,13 +52,9 @@ impl Clearable for ClearableAngleMode {
 
 /// Gets the single argument to a trigonometric function, which is its angle.  Applies units
 /// conversion based on `angle_mode`.
-async fn get_angle(args: Vec<(Value, LineCol)>, angle_mode: &AngleMode) -> Result<f64, CallError> {
-    let mut iter = args.into_iter();
-    let angle = match iter.next() {
-        Some((Value::Double(n), _pos)) => n,
-        _ => unreachable!(),
-    };
-    debug_assert!(iter.next().is_none());
+async fn get_angle(mut scope: Scope<'_>, angle_mode: &AngleMode) -> Result<f64, CallError> {
+    debug_assert_eq!(1, scope.nargs());
+    let angle = scope.pop_double();
 
     match angle_mode {
         AngleMode::Degrees => Ok(angle.to_radians()),
@@ -133,13 +128,9 @@ impl Callable for AtnFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let n = match iter.next() {
-            Some((Value::Double(n), _pos)) => n,
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let n = scope.pop_double();
 
         match *self.angle_mode.borrow() {
             AngleMode::Degrees => Ok(Value::Double(n.atan().to_degrees())),
@@ -177,15 +168,14 @@ impl Callable for CintFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let (value, pos) = match iter.next() {
-            Some((d @ Value::Double(_), pos)) => (d, pos),
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let (value, pos) = scope.pop_double_with_pos();
+
         Ok(Value::Integer(
-            value.as_i32().map_err(|e| CallError::ArgumentError(pos, e.to_string()))?,
+            Value::Double(value)
+                .as_i32()
+                .map_err(|e| CallError::ArgumentError(pos, e.to_string()))?,
         ))
     }
 }
@@ -221,8 +211,8 @@ impl Callable for CosFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let angle = get_angle(args, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        let angle = get_angle(scope, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.cos()))
     }
 }
@@ -258,8 +248,8 @@ impl Callable for DegCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
         *self.angle_mode.borrow_mut() = AngleMode::Degrees;
         Ok(Value::Void)
     }
@@ -294,13 +284,9 @@ impl Callable for IntFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let (value, pos) = match iter.next() {
-            Some((Value::Double(d), pos)) => (d, pos),
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let (value, pos) = scope.pop_double_with_pos();
 
         Ok(Value::Double(value.floor())
             .maybe_cast(VarType::Integer)
@@ -333,13 +319,10 @@ impl Callable for MaxFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         let mut max = f64::MIN;
-        for (value, _pos) in args.into_iter() {
-            let n = match value {
-                Value::Double(d) => d,
-                _ => unreachable!(),
-            };
+        while scope.nargs() > 0 {
+            let n = scope.pop_double();
             if n > max {
                 max = n;
             }
@@ -373,13 +356,10 @@ impl Callable for MinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         let mut min = f64::MAX;
-        for (value, _pos) in args.into_iter() {
-            let n = match value {
-                Value::Double(d) => d,
-                _ => unreachable!(),
-            };
+        while scope.nargs() > 0 {
+            let n = scope.pop_double();
             if n < min {
                 min = n;
             }
@@ -413,8 +393,8 @@ impl Callable for PiFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
         Ok(Value::Double(std::f64::consts::PI))
     }
 }
@@ -450,8 +430,8 @@ impl Callable for RadCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
         *self.angle_mode.borrow_mut() = AngleMode::Radians;
         Ok(Value::Void)
     }
@@ -488,17 +468,13 @@ impl Callable for RandomizeCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        match iter.next() {
-            None => {
-                *self.prng.borrow_mut() = Prng::new_from_entryopy();
-            }
-            Some((Value::Integer(n), _pos)) => {
-                debug_assert!(iter.next().is_none());
-                *self.prng.borrow_mut() = Prng::new_from_seed(n);
-            }
-            _ => unreachable!(),
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        if scope.nargs() == 0 {
+            *self.prng.borrow_mut() = Prng::new_from_entryopy();
+        } else {
+            debug_assert_eq!(1, scope.nargs());
+            let n = scope.pop_integer();
+            *self.prng.borrow_mut() = Prng::new_from_seed(n);
         }
         Ok(Value::Void)
     }
@@ -538,21 +514,20 @@ impl Callable for RndFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let result = match iter.next() {
-            None => Value::Double(self.prng.borrow_mut().next()),
-            Some((Value::Integer(n), npos)) => match n.cmp(&0) {
-                Ordering::Equal => Value::Double(self.prng.borrow_mut().last()),
-                Ordering::Greater => Value::Double(self.prng.borrow_mut().next()),
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        if scope.nargs() == 0 {
+            Ok(Value::Double(self.prng.borrow_mut().next()))
+        } else {
+            debug_assert_eq!(1, scope.nargs());
+            let (n, npos) = scope.pop_integer_with_pos();
+            match n.cmp(&0) {
+                Ordering::Equal => Ok(Value::Double(self.prng.borrow_mut().last())),
+                Ordering::Greater => Ok(Value::Double(self.prng.borrow_mut().next())),
                 Ordering::Less => {
-                    return Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
+                    Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
                 }
-            },
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
-        Ok(result)
+            }
+        }
     }
 }
 
@@ -587,8 +562,8 @@ impl Callable for SinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let angle = get_angle(args, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        let angle = get_angle(scope, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.sin()))
     }
 }
@@ -618,13 +593,9 @@ impl Callable for SqrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let (num, numpos) = match iter.next() {
-            Some((Value::Double(d), pos)) => (d, pos),
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let (num, numpos) = scope.pop_double_with_pos();
 
         if num < 0.0 {
             return Err(CallError::ArgumentError(
@@ -667,8 +638,8 @@ impl Callable for TanFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let angle = get_angle(args, &self.angle_mode.borrow()).await?;
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        let angle = get_angle(scope, &self.angle_mode.borrow()).await?;
         Ok(Value::Double(angle.tan()))
     }
 }

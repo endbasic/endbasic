@@ -24,7 +24,7 @@ use endbasic_core::compiler::{
     compile_arg_expr, compile_expr, compile_expr_symbol_ref, CallableArgsCompiler, ExprType,
     NoArgsCompiler, SameTypeArgsCompiler, SymbolsTable,
 };
-use endbasic_core::exec::Machine;
+use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
@@ -79,8 +79,8 @@ impl Callable for ClsCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
         self.console.borrow_mut().clear(ClearType::All)?;
         Ok(Value::Void)
     }
@@ -188,12 +188,8 @@ impl Callable for ColorCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        fn get_color((value, pos): (Value, LineCol)) -> Result<Option<u8>, CallError> {
-            let i = match value {
-                Value::Integer(i) => i,
-                _ => unreachable!(),
-            };
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        fn get_color((i, pos): (i32, LineCol)) -> Result<Option<u8>, CallError> {
             if i >= 0 && i <= std::u8::MAX as i32 {
                 Ok(Some(i as u8))
             } else {
@@ -201,23 +197,19 @@ impl Callable for ColorCommand {
             }
         }
 
-        let mut iter = args.into_iter();
-        let args_type = match iter.next() {
-            Some((Value::Integer(i), _pos)) => i,
-            _ => unreachable!(),
-        };
+        let args_type = scope.pop_integer();
         let (fg, bg) = match args_type {
             ColorArgsCompiler::NONE => (None, None),
-            ColorArgsCompiler::ONLY_FG => (get_color(iter.next().unwrap())?, None),
-            ColorArgsCompiler::ONLY_BG => (None, get_color(iter.next().unwrap())?),
+            ColorArgsCompiler::ONLY_FG => (get_color(scope.pop_integer_with_pos())?, None),
+            ColorArgsCompiler::ONLY_BG => (None, get_color(scope.pop_integer_with_pos())?),
             ColorArgsCompiler::BOTH => {
-                let fg = get_color(iter.next().unwrap())?;
-                let bg = get_color(iter.next().unwrap())?;
+                let fg = get_color(scope.pop_integer_with_pos())?;
+                let bg = get_color(scope.pop_integer_with_pos())?;
                 (fg, bg)
             }
             _ => unreachable!(),
         };
-        debug_assert!(iter.next().is_none());
+        debug_assert_eq!(0, scope.nargs());
 
         self.console.borrow_mut().set_color(fg, bg)?;
         Ok(Value::Void)
@@ -264,8 +256,8 @@ impl Callable for InKeyFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
 
         let key = self.console.borrow_mut().poll_key().await?;
         Ok(match key {
@@ -390,25 +382,14 @@ impl Callable for InputCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
-        let mut prompt = match iter.next() {
-            Some((Value::Text(prompt), _pos)) => prompt,
-            _ => unreachable!(),
-        };
-        match iter.next() {
-            Some((Value::Text(qmark), _pos)) => {
-                if !qmark.is_empty() {
-                    prompt.push_str(&qmark);
-                }
-            }
-            _ => unreachable!(),
-        };
-        let (vref, pos) = match iter.next() {
-            Some((Value::VarRef(vref), pos)) => (vref, pos),
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(3, scope.nargs());
+        let mut prompt = scope.pop_string();
+        let qmark = scope.pop_string();
+        if !qmark.is_empty() {
+            prompt.push_str(&qmark);
+        }
+        let (vref, pos) = scope.pop_varref_with_pos();
 
         let vref = machine
             .get_symbols()
@@ -468,25 +449,17 @@ impl Callable for LocateCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        fn get_coord(
-            (value, pos): (Value, LineCol),
-            name: &str,
-        ) -> Result<(u16, LineCol), CallError> {
-            let i = match value {
-                Value::Integer(i) => i,
-                _ => unreachable!(),
-            };
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        fn get_coord((i, pos): (i32, LineCol), name: &str) -> Result<(u16, LineCol), CallError> {
             match u16::try_from(i) {
                 Ok(v) => Ok((v, pos)),
                 Err(_) => Err(CallError::ArgumentError(pos, format!("{} out of range", name))),
             }
         }
 
-        let mut iter = args.into_iter();
-        let (column, column_pos) = get_coord(iter.next().unwrap(), "Column")?;
-        let (row, row_pos) = get_coord(iter.next().unwrap(), "Row")?;
-        debug_assert!(iter.next().is_none());
+        debug_assert_eq!(2, scope.nargs());
+        let (column, column_pos) = get_coord(scope.pop_integer_with_pos(), "Column")?;
+        let (row, row_pos) = get_coord(scope.pop_integer_with_pos(), "Row")?;
 
         let mut console = self.console.borrow_mut();
         let size = console.size_chars()?;
@@ -595,40 +568,38 @@ impl Callable for PrintCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         let mut text = String::new();
         let mut nl = true;
-        debug_assert_eq!(0, args.len() % 2);
-        let mut iter = args.into_iter();
-        loop {
+        debug_assert_eq!(0, scope.nargs() % 2);
+        while scope.nargs() > 0 {
             let mut add_space = false;
-            match iter.next() {
-                Some((Value::Text(t), _pos)) => {
+            match scope.pop_any() {
+                Value::Text(t) => {
                     text += &t;
                 }
-                Some((value, _pos)) => {
+                value => {
                     add_space = true;
                     text += &value.to_text();
                 }
-                None => break,
             }
 
-            match iter.next().unwrap() {
-                (Value::Integer(PrintArgsCompiler::SHORT), _pos) => {
+            match scope.pop_integer() {
+                PrintArgsCompiler::SHORT => {
                     if add_space {
                         text += " "
                     }
                 }
-                (Value::Integer(PrintArgsCompiler::LONG), _pos) => {
+                PrintArgsCompiler::LONG => {
                     text += " ";
                     while text.len() % 14 != 0 {
                         text += " ";
                     }
                 }
-                (Value::Integer(PrintArgsCompiler::NEWLINE), _pos) => {
+                PrintArgsCompiler::NEWLINE => {
                     debug_assert!(nl);
                 }
-                (Value::Integer(PrintArgsCompiler::NO_NEWLINE), _pos) => {
+                PrintArgsCompiler::NO_NEWLINE => {
                     nl = false;
                 }
                 _ => unreachable!(),
@@ -674,8 +645,8 @@ impl Callable for ScrColsFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
         let size = self.console.borrow().size_chars()?;
         Ok(Value::Integer(i32::from(size.x)))
     }
@@ -711,8 +682,8 @@ impl Callable for ScrRowsFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
         let size = self.console.borrow().size_chars()?;
         Ok(Value::Integer(i32::from(size.y)))
     }

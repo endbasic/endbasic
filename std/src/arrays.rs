@@ -21,7 +21,7 @@ use endbasic_core::bytecode::Instruction;
 use endbasic_core::compiler::{
     compile_arg, CallableArgsCompiler, ExprType, SymbolPrototype, SymbolsTable,
 };
-use endbasic_core::exec::Machine;
+use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
     Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
     SymbolKey, Symbols,
@@ -112,55 +112,43 @@ impl CallableArgsCompiler for BoundsArgsCompiler {
 /// either `LBOUND` or `UBOUND`.
 #[allow(clippy::needless_lifetimes)]
 fn parse_bound_args<'a>(
-    args: Vec<(Value, LineCol)>,
+    mut scope: Scope<'_>,
     symbols: &'a Symbols,
 ) -> Result<(&'a Array, usize), CallError> {
-    let mut iter = args.iter();
-    let (arrayref, arraypos) = match iter.next() {
-        Some((Value::VarRef(vref), pos)) => (vref, *pos),
-        _ => unreachable!(),
-    };
+    let (arrayref, arraypos) = scope.pop_varref_with_pos();
 
     let array = match symbols
-        .get(arrayref)
+        .get(&arrayref)
         .map_err(|e| CallError::ArgumentError(arraypos, format!("{}", e)))?
     {
         Some(Symbol::Array(array)) => array,
         _ => unreachable!(),
     };
 
-    let result = match iter.next() {
-        Some((Value::Integer(i), pos)) => {
-            let (i, pos) = (*i, *pos);
+    if scope.nargs() == 1 {
+        let (i, pos) = scope.pop_integer_with_pos();
 
-            if i < 0 {
-                return Err(CallError::ArgumentError(
-                    pos,
-                    format!("Dimension {} must be positive", i),
-                ));
-            }
-            let i = i as usize;
-
-            if i > array.dimensions().len() {
-                return Err(CallError::ArgumentError(
-                    pos,
-                    format!(
-                        "Array {} has only {} dimensions but asked for {}",
-                        arrayref,
-                        array.dimensions().len(),
-                        i,
-                    ),
-                ));
-            }
-            (array, i)
+        if i < 0 {
+            return Err(CallError::ArgumentError(pos, format!("Dimension {} must be positive", i)));
         }
-        Some((_value, _pos)) => unreachable!(),
-        None => (array, 1),
-    };
+        let i = i as usize;
 
-    debug_assert!(iter.next().is_none());
-
-    Ok(result)
+        if i > array.dimensions().len() {
+            return Err(CallError::ArgumentError(
+                pos,
+                format!(
+                    "Array {} has only {} dimensions but asked for {}",
+                    arrayref,
+                    array.dimensions().len(),
+                    i,
+                ),
+            ));
+        }
+        Ok((array, i))
+    } else {
+        debug_assert_eq!(0, scope.nargs());
+        Ok((array, 1))
+    }
 }
 
 /// The `LBOUND` function.
@@ -194,8 +182,8 @@ impl Callable for LboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let (_array, _dim) = parse_bound_args(args, machine.get_symbols())?;
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        let (_array, _dim) = parse_bound_args(scope, machine.get_symbols())?;
         Ok(Value::Integer(0))
     }
 }
@@ -231,8 +219,8 @@ impl Callable for UboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        let (array, dim) = parse_bound_args(args, machine.get_symbols())?;
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        let (array, dim) = parse_bound_args(scope, machine.get_symbols())?;
         Ok(Value::Integer((array.dimensions()[dim - 1] - 1) as i32))
     }
 }

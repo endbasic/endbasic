@@ -18,7 +18,7 @@
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
 use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
-use endbasic_core::exec::Machine;
+use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
 };
@@ -64,8 +64,8 @@ impl Callable for ClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
         machine.clear();
         Ok(Value::Void)
     }
@@ -101,8 +101,8 @@ impl Callable for ErrmsgFunction {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult {
-        debug_assert!(args.is_empty());
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(0, scope.nargs());
 
         // TODO(jmmv): Instead of abusing a private variable to propagate the error message from
         // the machine to here, we should query the last error message from the machine itself via
@@ -159,24 +159,15 @@ impl Callable for SleepCommand {
         &self.metadata
     }
 
-    async fn exec(&self, args: Vec<(Value, LineCol)>, _machine: &mut Machine) -> CallResult {
-        let mut iter = args.into_iter();
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        debug_assert_eq!(1, scope.nargs());
+        let (n, pos) = scope.pop_double_with_pos();
 
-        let (duration, pos) = match iter.next() {
-            Some((Value::Double(n), pos)) => {
-                if n < 0.0 {
-                    return Err(CallError::ArgumentError(
-                        pos,
-                        "Sleep time must be positive".to_owned(),
-                    ));
-                }
-                (Duration::from_secs_f64(n), pos)
-            }
-            _ => unreachable!(),
-        };
-        debug_assert!(iter.next().is_none());
+        if n < 0.0 {
+            return Err(CallError::ArgumentError(pos, "Sleep time must be positive".to_owned()));
+        }
 
-        (self.sleep_fn)(duration, pos).await
+        (self.sleep_fn)(Duration::from_secs_f64(n), pos).await
     }
 }
 

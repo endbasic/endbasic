@@ -17,7 +17,7 @@
 
 use crate::ast::{Value, VarRef, VarType};
 use crate::compiler::{self, CallableArgsCompiler};
-use crate::exec::Machine;
+use crate::exec::{Machine, Scope};
 use crate::reader::LineCol;
 use crate::value::{Error, Result};
 use async_trait::async_trait;
@@ -638,7 +638,7 @@ pub trait Callable {
     /// `args` contains the arguments to the function call.
     ///
     /// `machine` provides mutable access to the current state of the machine invoking the function.
-    async fn exec(&self, args: Vec<(Value, LineCol)>, machine: &mut Machine) -> CallResult;
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult;
 }
 
 #[cfg(test)]
