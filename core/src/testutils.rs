@@ -21,7 +21,7 @@ use crate::compiler::{
     compile_expr, compile_expr_symbol_ref, CallableArgsCompiler, ExprType, NoArgsCompiler,
     SameTypeArgsCompiler, SymbolsTable,
 };
-use crate::exec::{Machine, Scope};
+use crate::exec::{Machine, Scope, ValueTag};
 use crate::syms::{
     Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
     SymbolKey, Symbols,
@@ -33,19 +33,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
-
-/// Formats a value `v` as text and appends it to a string `o`.
-fn format_value(v: Value, o: &mut String) {
-    match v {
-        Value::Boolean(true) => o.push_str("TRUE"),
-        Value::Boolean(false) => o.push_str("FALSE"),
-        Value::Double(d) => o.push_str(&format!("{}", d)),
-        Value::Integer(i) => o.push_str(&format!("{}", i)),
-        Value::Text(s) => o.push_str(&s),
-        Value::VarRef(v) => o.push_str(&format!("{}", v)),
-        Value::Void => panic!("Should never try to format void in tests"),
-    }
-}
 
 /// Returns a constant value.
 pub struct ArglessFunction {
@@ -355,9 +342,12 @@ impl CallableArgsCompiler for OutArgsCompiler {
         let nargs = args.len();
         for arg in args.into_iter().rev() {
             let expr = arg.expr.expect("Empty arguments not expected in tests");
-            compile_expr(instrs, symtable, expr, false)?;
+            let pos = expr.start_pos();
+            let etype = compile_expr(instrs, symtable, expr, false)?;
+            let tag = ValueTag::from(etype);
+            instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
         }
-        Ok(nargs)
+        Ok(nargs * 2)
     }
 }
 
@@ -393,14 +383,36 @@ impl Callable for OutCommand {
         let mut first = true;
         let mut text = String::new();
         while scope.nargs() > 0 {
-            let arg = scope.pop_any();
-
             if !first {
                 text += " ";
             }
             first = false;
 
-            format_value(arg, &mut text);
+            match scope.pop_value_tag() {
+                ValueTag::Boolean => {
+                    let b = scope.pop_boolean();
+                    if b {
+                        text.push_str("TRUE");
+                    } else {
+                        text.push_str("FALSE");
+                    }
+                }
+                ValueTag::Double => {
+                    let d = scope.pop_double();
+                    text.push_str(&d.to_string());
+                }
+                ValueTag::Integer => {
+                    let i = scope.pop_integer();
+                    text.push_str(&i.to_string());
+                }
+                ValueTag::Text => {
+                    let s = scope.pop_string();
+                    text.push_str(&s);
+                }
+                ValueTag::Missing => {
+                    unreachable!("Missing expressions aren't allowed in function calls");
+                }
+            }
         }
         self.data.borrow_mut().push(text);
         Ok(Value::Void)
@@ -441,14 +453,14 @@ impl Callable for OutfFunction {
         let mut text = String::new();
         let mut first = true;
         while scope.nargs() > 0 {
-            let arg = scope.pop_any();
+            let arg = scope.pop_integer();
 
             if !first {
                 text += " ";
             }
             first = false;
 
-            format_value(arg, &mut text);
+            text.push_str(&arg.to_string());
         }
         self.data.borrow_mut().push(text);
         Ok(Value::Integer(result))

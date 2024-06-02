@@ -17,6 +17,7 @@
 
 use crate::console::readline::read_line;
 use crate::console::{CharsXY, ClearType, Console, ConsoleClearable, Key};
+use crate::strings::{format_boolean, format_double, format_integer};
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, ArgSpan, Expr, Value, VarType};
 use endbasic_core::bytecode::Instruction;
@@ -24,7 +25,7 @@ use endbasic_core::compiler::{
     compile_arg_expr, compile_expr, compile_expr_symbol_ref, CallableArgsCompiler, ExprType,
     NoArgsCompiler, SameTypeArgsCompiler, SymbolsTable,
 };
-use endbasic_core::exec::{Machine, Scope};
+use endbasic_core::exec::{Machine, Scope, ValueTag};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
@@ -501,7 +502,7 @@ impl CallableArgsCompiler for PrintArgsCompiler {
         pos: LineCol,
         args: Vec<ArgSpan>,
     ) -> Result<usize, CallError> {
-        let nargs = args.len();
+        let mut nargs = 0;
         for arg in args.into_iter().rev() {
             match arg.sep {
                 ArgSep::Short => {
@@ -519,14 +520,21 @@ impl CallableArgsCompiler for PrintArgsCompiler {
 
             match arg.expr {
                 Some(expr) => {
-                    compile_expr(instrs, symtable, expr, false)?;
+                    let pos = expr.start_pos();
+                    let etype = compile_expr(instrs, symtable, expr, false)?;
+
+                    let tag = ValueTag::from(etype);
+                    instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
+
+                    nargs += 3;
                 }
                 None => {
-                    instrs.push(Instruction::Push(Value::Text("".to_owned()), pos));
+                    instrs.push(Instruction::Push(Value::Integer(ValueTag::Missing as i32), pos));
+                    nargs += 2;
                 }
             };
         }
-        Ok(nargs * 2)
+        Ok(nargs)
     }
 }
 
@@ -571,17 +579,30 @@ impl Callable for PrintCommand {
     async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         let mut text = String::new();
         let mut nl = true;
-        debug_assert_eq!(0, scope.nargs() % 2);
         while scope.nargs() > 0 {
             let mut add_space = false;
-            match scope.pop_any() {
-                Value::Text(t) => {
-                    text += &t;
-                }
-                value => {
+
+            match scope.pop_value_tag() {
+                ValueTag::Boolean => {
+                    let b = scope.pop_boolean();
                     add_space = true;
-                    text += &value.to_text();
+                    text += format_boolean(b);
                 }
+                ValueTag::Double => {
+                    let d = scope.pop_double();
+                    add_space = true;
+                    text += &format_double(d);
+                }
+                ValueTag::Integer => {
+                    let i = scope.pop_integer();
+                    add_space = true;
+                    text += &format_integer(i);
+                }
+                ValueTag::Text => {
+                    let s = scope.pop_string();
+                    text += &s;
+                }
+                ValueTag::Missing => (),
             }
 
             match scope.pop_integer() {
