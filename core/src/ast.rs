@@ -402,28 +402,6 @@ impl Value {
             Value::Void => VarType::Void,
         }
     }
-
-    /// Consumes the value and converts it to a string value.  This is slightly different from the
-    /// `Display` implementation because strings aren't double-quoted.
-    ///
-    /// The output of this function is used anywhere a value is converted to a string, say as the
-    /// output of `PRINT`.
-    ///
-    /// This is *not* named `to_string` to prevent confusion with the behavior of a traditional
-    /// method named like that, and to avoid conflicts with the `Display` implementation.
-    pub fn to_text(self) -> String {
-        match self {
-            Value::Boolean(true) => "TRUE".to_owned(),
-            Value::Boolean(false) => "FALSE".to_owned(),
-            Value::Double(d) if !d.is_nan() && d.is_sign_negative() => format!("{}", d),
-            Value::Double(d) => format!(" {}", d),
-            Value::Integer(i) if i.is_negative() => format!("{}", i),
-            Value::Integer(i) => format!(" {}", i),
-            Value::Text(s) => s,
-            Value::VarRef(v) => format!("{}", v),
-            Value::Void => panic!("Void should not be printed"),
-        }
-    }
 }
 
 /// Types of separators between arguments to a `BuiltinCall`.
@@ -883,20 +861,5 @@ mod tests {
         assert_eq!("NaN", format!("{}", Value::Double(-f64::NAN)));
         assert_eq!("-56", format!("{}", Value::Integer(-56)));
         assert_eq!("\"some words\"", format!("{}", Value::Text("some words".to_owned())));
-    }
-
-    #[test]
-    fn test_value_to_text() {
-        assert_eq!("TRUE", Value::Boolean(true).to_text());
-        assert_eq!("FALSE", Value::Boolean(false).to_text());
-        assert_eq!(" 3", Value::Double(3.0).to_text());
-        assert_eq!(" 3.1", Value::Double(3.1).to_text());
-        assert_eq!(" 0.51", Value::Double(0.51).to_text());
-        assert_eq!(" inf", Value::Double(f64::INFINITY).to_text());
-        assert_eq!("-inf", Value::Double(f64::NEG_INFINITY).to_text());
-        assert_eq!(" NaN", Value::Double(f64::NAN).to_text());
-        assert_eq!(" NaN", Value::Double(-f64::NAN).to_text());
-        assert_eq!("-56", Value::Integer(-56).to_text());
-        assert_eq!("some words", Value::Text("some words".to_owned()).to_text());
     }
 }

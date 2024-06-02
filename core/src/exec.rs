@@ -18,6 +18,7 @@
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::compiler;
+use crate::compiler::ExprType;
 use crate::parser;
 use crate::reader::LineCol;
 use crate::syms::SymbolKey;
@@ -186,6 +187,35 @@ pub trait Clearable {
 /// Type of the function used by the execution loop to yield execution.
 pub type YieldNowFn = Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()> + 'static>>>;
 
+/// Tags used in the value stack to identify the type of their corresponding value.
+pub enum ValueTag {
+    /// Represents that there is no next value to consume.  Can only appear for command invocations.
+    Missing = 0,
+
+    /// Represents that the next value to consume is a boolean.
+    Boolean = 1,
+
+    /// Represents that the next value to consume is a double.
+    Double = 2,
+
+    /// Represents that the next value to consume is an integer
+    Integer = 3,
+
+    /// Represents that the next value to consume is a string.
+    Text = 4,
+}
+
+impl From<ExprType> for ValueTag {
+    fn from(value: ExprType) -> Self {
+        match value {
+            ExprType::Boolean => ValueTag::Boolean,
+            ExprType::Double => ValueTag::Double,
+            ExprType::Integer => ValueTag::Integer,
+            ExprType::Text => ValueTag::Text,
+        }
+    }
+}
+
 /// Provides controlled access to the parameters passed to a callable.
 pub struct Scope<'s> {
     stack: &'s mut Vec<(Value, LineCol)>,
@@ -208,25 +238,6 @@ impl<'s> Scope<'s> {
     /// Returns the number of arguments that can still be consumed.
     pub fn nargs(&self) -> usize {
         self.nargs
-    }
-
-    /// Pops the top of the stack as the original unwrapped `Value` type.
-    pub fn pop_any(&mut self) -> Value {
-        self.pop_any_with_pos().0
-    }
-
-    /// Pops the top of the stack as the original unwrapped `Value` type.
-    //
-    // TODO(jmmv): Remove this variant once the stack values do not carry position
-    // information any longer.
-    pub fn pop_any_with_pos(&mut self) -> (Value, LineCol) {
-        debug_assert!(self.nargs > 0, "Not enough arguments in scope");
-        self.nargs -= 1;
-
-        match self.stack.pop() {
-            Some((value, pos)) => (value, pos),
-            _ => panic!("Not enough arguments to pop"),
-        }
     }
 
     /// Pops the top of the stack as a boolean value.
@@ -306,6 +317,24 @@ impl<'s> Scope<'s> {
             Some((Value::Text(s), pos)) => (s, pos),
             Some((_, _)) => panic!("Type mismatch"),
             _ => panic!("Not enough arguments to pop"),
+        }
+    }
+
+    /// Pops the top of the stack as a value tag.
+    pub fn pop_value_tag(&mut self) -> ValueTag {
+        const MISSING_I32: i32 = ValueTag::Missing as i32;
+        const BOOLEAN_I32: i32 = ValueTag::Boolean as i32;
+        const DOUBLE_I32: i32 = ValueTag::Double as i32;
+        const INTEGER_I32: i32 = ValueTag::Integer as i32;
+        const TEXT_I32: i32 = ValueTag::Text as i32;
+
+        match self.pop_integer() {
+            MISSING_I32 => ValueTag::Missing,
+            BOOLEAN_I32 => ValueTag::Boolean,
+            DOUBLE_I32 => ValueTag::Double,
+            INTEGER_I32 => ValueTag::Integer,
+            TEXT_I32 => ValueTag::Text,
+            _ => unreachable!(),
         }
     }
 
@@ -1328,28 +1357,6 @@ mod tests {
         drop(scope);
         assert_eq!(1, stack.len());
         assert_eq!((Value::Integer(3), LineCol { line: 1, col: 2 }), stack[0]);
-    }
-
-    #[test]
-    fn test_scope_pop_any() {
-        let mut stack = vec![
-            (Value::Boolean(false), LineCol { line: 1, col: 2 }),
-            (Value::Double(1.2), LineCol { line: 1, col: 2 }),
-        ];
-        let mut scope = Scope::new(&mut stack, 2);
-        assert_eq!(Value::Double(1.2), scope.pop_any());
-        assert_eq!(Value::Boolean(false), scope.pop_any());
-    }
-
-    #[test]
-    fn test_scope_pop_any_with_pos() {
-        let mut stack = vec![
-            (Value::Boolean(false), LineCol { line: 9, col: 8 }),
-            (Value::Double(1.2), LineCol { line: 1, col: 2 }),
-        ];
-        let mut scope = Scope::new(&mut stack, 2);
-        assert_eq!((Value::Double(1.2), LineCol { line: 1, col: 2 }), scope.pop_any_with_pos());
-        assert_eq!((Value::Boolean(false), LineCol { line: 9, col: 8 }), scope.pop_any_with_pos());
     }
 
     #[test]

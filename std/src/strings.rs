@@ -21,7 +21,7 @@ use endbasic_core::bytecode::Instruction;
 use endbasic_core::compiler::{
     compile_arg, compile_expr, CallableArgsCompiler, ExprType, SameTypeArgsCompiler, SymbolsTable,
 };
-use endbasic_core::exec::{Machine, Scope};
+use endbasic_core::exec::{Machine, Scope, ValueTag};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
@@ -32,6 +32,33 @@ use std::rc::Rc;
 
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "String and character functions";
+
+/// Formats a boolean `b` for display.
+pub fn format_boolean(b: bool) -> &'static str {
+    if b {
+        "TRUE"
+    } else {
+        "FALSE"
+    }
+}
+
+/// Formats a double `d` for display.
+pub fn format_double(d: f64) -> String {
+    if !d.is_nan() && d.is_sign_negative() {
+        d.to_string()
+    } else {
+        format!(" {}", d)
+    }
+}
+
+/// Formats an integer `i` for display.
+pub fn format_integer(i: i32) -> String {
+    if i.is_negative() {
+        i.to_string()
+    } else {
+        format!(" {}", i)
+    }
+}
 
 /// An arguments compiler for the `LEFT` and `RIGHT` functions.
 #[derive(Debug, Default)]
@@ -461,10 +488,15 @@ impl CallableArgsCompiler for StrArgsCompiler {
         }
 
         let mut iter = args.into_iter().rev();
-        compile_expr(instrs, symtable, iter.next().unwrap(), false)?;
+        let expr = iter.next().unwrap();
+        let pos = expr.start_pos();
+        let etype = compile_expr(instrs, symtable, expr, false)?;
         debug_assert!(iter.next().is_none());
 
-        Ok(nargs)
+        let tag = ValueTag::from(etype);
+        instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
+
+        Ok(2)
     }
 }
 
@@ -503,10 +535,28 @@ impl Callable for StrFunction {
     }
 
     async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
-        debug_assert_eq!(1, scope.nargs());
-        let value = scope.pop_any();
-
-        Ok(Value::Text(value.to_text()))
+        debug_assert_eq!(2, scope.nargs());
+        match scope.pop_value_tag() {
+            ValueTag::Boolean => {
+                let b = scope.pop_boolean();
+                Ok(Value::Text(format_boolean(b).to_owned()))
+            }
+            ValueTag::Double => {
+                let d = scope.pop_double();
+                Ok(Value::Text(format_double(d)))
+            }
+            ValueTag::Integer => {
+                let i = scope.pop_integer();
+                Ok(Value::Text(format_integer(i)))
+            }
+            ValueTag::Text => {
+                let s = scope.pop_string();
+                Ok(Value::Text(s))
+            }
+            ValueTag::Missing => {
+                unreachable!("Missing expressions aren't allowed in function calls");
+            }
+        }
     }
 }
 
