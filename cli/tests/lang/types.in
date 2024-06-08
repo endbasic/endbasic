@@ -51,3 +51,6 @@ PRINT PRINT
 PRINT ">>> Argless function calls"
 PRINT PI
 PRINT PI()
+
+PRINT ">>> Function references"
+INPUT PI
