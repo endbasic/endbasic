@@ -29,4 +29,6 @@ ERROR: 1:7: PRINT is not an array nor a function
 >>> Argless function calls
  3.141592653589793
 ERROR: 1:7: In call to PI: expected no arguments nor parenthesis
+>>> Function references
+ERROR: 1:7: PI is not an array nor a function
 End of input by CTRL-D

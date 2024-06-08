@@ -450,27 +450,10 @@ pub fn compile_expr_symbol_ref(
                 ));
             }
 
-            if md.return_type() == VarType::Void {
-                return Err(Error::new(
-                    span.pos,
-                    format!("{} is not an array nor a function", span.vref.name()),
-                ));
-            }
-
-            if !md.is_argless() {
-                return Err(Error::new(
-                    span.pos,
-                    format!("In call to {}: function requires arguments", span.vref.name()),
-                ));
-            }
-
-            let nargs = md
-                .args_compiler()
-                .compile_simple(instrs, symtable, span.pos, vec![])
-                .map_err(|e| Error::from_call_error(md, e, span.pos))?;
-            debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
-            instrs.push(Instruction::FunctionCall(key, md.return_type(), span.pos, nargs));
-            Ok(md.return_type().into())
+            Err(Error::new(
+                span.pos,
+                format!("{} is not an array nor a function", span.vref.name()),
+            ))
         }
     }
 }
@@ -848,28 +831,13 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_expr_ref_argless_call_ok() {
+    fn test_compile_expr_ref_argless_not_allowed() {
         Tester::default()
             .define_callable(CallableMetadataBuilder::new("C", VarType::Void))
             .define_callable(CallableMetadataBuilder::new("F", VarType::Integer))
             .parse("c f")
             .compile()
-            .expect_instr(
-                0,
-                Instruction::FunctionCall(SymbolKey::from("f"), VarType::Integer, lc(1, 3), 0),
-            )
-            .expect_instr(1, Instruction::BuiltinCall(SymbolKey::from("C"), lc(1, 1), 1))
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_ref_argless_call_not_argless() {
-        Tester::default()
-            .define_callable(CallableMetadataBuilder::new("C", VarType::Void))
-            .define_callable(CallableMetadataBuilder::new("F", VarType::Integer).with_syntax("n%"))
-            .parse("c f")
-            .compile()
-            .expect_err("1:3: In call to f: function requires arguments")
+            .expect_err("1:3: f is not an array nor a function")
             .check();
     }
 
