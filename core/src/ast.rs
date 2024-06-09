@@ -405,29 +405,44 @@ impl Value {
 }
 
 /// Types of separators between arguments to a `BuiltinCall`.
-#[repr(i32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ArgSep {
     /// Filler for the separator in the last argument.
-    End,
+    End = 0,
 
     /// Short separator (`;`).
-    Short,
+    Short = 1,
 
     /// Long separator (`,`).
-    Long,
+    Long = 2,
 
     /// `AS` separator.
-    As,
+    As = 3,
 }
 
 impl fmt::Display for ArgSep {
+    // TODO(jmmv): Can this be removed in favor of describe()?
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ArgSep::End => write!(f, "<END OF STATEMENT>"),
             ArgSep::Short => write!(f, ";"),
             ArgSep::Long => write!(f, ","),
             ArgSep::As => write!(f, "AS"),
+        }
+    }
+}
+
+impl ArgSep {
+    /// Formats the separator for a syntax specification.
+    ///
+    /// The return value contains the textual representation of the separator and a boolean that
+    /// indicates whether the separator requires a leading space.
+    pub(crate) fn describe(&self) -> (&str, bool) {
+        match self {
+            ArgSep::End => ("", false),
+            ArgSep::Short => (";", false),
+            ArgSep::Long => (",", false),
+            ArgSep::As => ("AS", true),
         }
     }
 }

@@ -300,6 +300,22 @@ impl<'s> Scope<'s> {
         }
     }
 
+    /// Pops the top of the stack as a separator tag.
+    pub fn pop_sep_tag(&mut self) -> ArgSep {
+        const END_I32: i32 = ArgSep::End as i32;
+        const SHORT_I32: i32 = ArgSep::Short as i32;
+        const LONG_I32: i32 = ArgSep::Long as i32;
+        const AS_I32: i32 = ArgSep::As as i32;
+
+        match self.pop_integer() {
+            END_I32 => ArgSep::End,
+            SHORT_I32 => ArgSep::Short,
+            LONG_I32 => ArgSep::Long,
+            AS_I32 => ArgSep::As,
+            _ => unreachable!(),
+        }
+    }
+
     /// Pops the top of the stack as a string value.
     pub fn pop_string(&mut self) -> String {
         self.pop_string_with_pos().0
