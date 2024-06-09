@@ -16,8 +16,11 @@
 //! Numerical functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{Value, VarType};
-use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
+use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::compiler::{
+    ArgSepSyntax, ExprType, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax,
+    SingularArgSyntax,
+};
 use endbasic_core::exec::{Clearable, Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
@@ -108,8 +111,13 @@ impl AtnFunction {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("ATN", VarType::Double)
-                .with_syntax("n<%|#>")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "n", vtype: ExprType::Double },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Computes the arc-tangent of a number.
@@ -149,8 +157,13 @@ impl CintFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CINT", VarType::Integer)
-                .with_syntax("expr<%|#>")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "expr", vtype: ExprType::Double },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Casts the given numeric expression to an integer (with rounding).
@@ -191,8 +204,13 @@ impl CosFunction {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("COS", VarType::Double)
-                .with_syntax("angle<%|#>")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "angle", vtype: ExprType::Double },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Computes the cosine of an angle.
@@ -228,8 +246,7 @@ impl DegCommand {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DEG", VarType::Void)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Sets degrees mode of calculation.
@@ -265,8 +282,13 @@ impl IntFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("INT", VarType::Integer)
-                .with_syntax("expr<%|#>")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "expr", vtype: ExprType::Double },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Casts the given numeric expression to an integer (with truncation).
@@ -304,8 +326,16 @@ impl MaxFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("MAX", VarType::Double)
-                .with_syntax("expr<%|#>[, .., expr<%|#>]")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, usize::MAX, ExprType::Double))
+                .with_typed_syntax(&[(
+                    &[],
+                    Some(&RepeatedSyntax {
+                        name: "expr",
+                        type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Double),
+                        sep: ArgSepSyntax::Exactly(ArgSep::Long),
+                        require_one: true,
+                        allow_missing: false,
+                    }),
+                )])
                 .with_category(CATEGORY)
                 .with_description("Returns the maximum number out of a set of numbers.")
                 .build(),
@@ -341,8 +371,16 @@ impl MinFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("MIN", VarType::Double)
-                .with_syntax("expr<%|#>[, .., expr<%|#>]")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, usize::MAX, ExprType::Double))
+                .with_typed_syntax(&[(
+                    &[],
+                    Some(&RepeatedSyntax {
+                        name: "expr",
+                        type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Double),
+                        sep: ArgSepSyntax::Exactly(ArgSep::Long),
+                        require_one: true,
+                        allow_missing: false,
+                    }),
+                )])
                 .with_category(CATEGORY)
                 .with_description("Returns the minimum number out of a set of numbers.")
                 .build(),
@@ -378,8 +416,7 @@ impl PiFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("PI", VarType::Double)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description("Returns the Archimedes' constant.")
                 .build(),
@@ -410,8 +447,7 @@ impl RadCommand {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RAD", VarType::Void)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Sets radians mode of calculation.
@@ -448,8 +484,16 @@ impl RandomizeCommand {
     pub fn new(prng: Rc<RefCell<Prng>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RANDOMIZE", VarType::Void)
-                .with_syntax("[seed%]")
-                .with_args_compiler(SameTypeArgsCompiler::new(0, 1, ExprType::Integer))
+                .with_typed_syntax(&[
+                    (&[], None),
+                    (
+                        &[SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "seed", vtype: ExprType::Integer },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Reinitializes the pseudo-random number generator.
@@ -491,8 +535,16 @@ impl RndFunction {
     pub fn new(prng: Rc<RefCell<Prng>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RND", VarType::Double)
-                .with_syntax("[n%]")
-                .with_args_compiler(SameTypeArgsCompiler::new(0, 1, ExprType::Integer))
+                .with_typed_syntax(&[
+                    (&[], None),
+                    (
+                        &[SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "n", vtype: ExprType::Integer },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns a random number in the [0..1] range.
@@ -542,8 +594,13 @@ impl SinFunction {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SIN", VarType::Double)
-                .with_syntax("angle<%|#>")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "angle", vtype: ExprType::Double },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Computes the sine of an angle.
@@ -578,8 +635,13 @@ impl SqrFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SQR", VarType::Double)
-                .with_syntax("num<%|#>")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "num", vtype: ExprType::Double },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description("Computes the square root of the given number.")
                 .build(),
@@ -618,8 +680,13 @@ impl TanFunction {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("TAN", VarType::Double)
-                .with_syntax("angle<%|#>")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "angle", vtype: ExprType::Double },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Computes the tangent of an angle.
@@ -676,12 +743,12 @@ mod tests {
 
         check_expr_ok_with_vars(123f64.atan(), "ATN(a)", [("a", 123i32.into())]);
 
-        check_expr_compilation_error("1:10: In call to ATN: expected n<%|#>", "ATN()");
+        check_expr_compilation_error("1:10: In call to ATN: expected n#", "ATN()");
         check_expr_compilation_error(
             "1:10: In call to ATN: 1:14: BOOLEAN is not a number",
             "ATN(FALSE)",
         );
-        check_expr_compilation_error("1:10: In call to ATN: expected n<%|#>", "ATN(3, 4)");
+        check_expr_compilation_error("1:10: In call to ATN: expected n#", "ATN(3, 4)");
     }
 
     #[test]
@@ -693,12 +760,12 @@ mod tests {
 
         check_expr_ok_with_vars(1, "CINT(d)", [("d", 0.9f64.into())]);
 
-        check_expr_compilation_error("1:10: In call to CINT: expected expr<%|#>", "CINT()");
+        check_expr_compilation_error("1:10: In call to CINT: expected expr#", "CINT()");
         check_expr_compilation_error(
             "1:10: In call to CINT: 1:15: BOOLEAN is not a number",
             "CINT(FALSE)",
         );
-        check_expr_compilation_error("1:10: In call to CINT: expected expr<%|#>", "CINT(3.0, 4)");
+        check_expr_compilation_error("1:10: In call to CINT: expected expr#", "CINT(3.0, 4)");
 
         check_expr_error(
             "1:10: In call to CINT: 1:15: Cannot cast -1234567890123456 to integer due to overflow",
@@ -713,12 +780,12 @@ mod tests {
 
         check_expr_ok_with_vars(123f64.cos(), "COS(i)", [("i", 123i32.into())]);
 
-        check_expr_compilation_error("1:10: In call to COS: expected angle<%|#>", "COS()");
+        check_expr_compilation_error("1:10: In call to COS: expected angle#", "COS()");
         check_expr_compilation_error(
             "1:10: In call to COS: 1:14: BOOLEAN is not a number",
             "COS(FALSE)",
         );
-        check_expr_compilation_error("1:10: In call to COS: expected angle<%|#>", "COS(3, 4)");
+        check_expr_compilation_error("1:10: In call to COS: expected angle#", "COS(3, 4)");
     }
 
     #[test]
@@ -752,12 +819,12 @@ mod tests {
 
         check_expr_ok_with_vars(0, "INT(d)", [("d", 0.9f64.into())]);
 
-        check_expr_compilation_error("1:10: In call to INT: expected expr<%|#>", "INT()");
+        check_expr_compilation_error("1:10: In call to INT: expected expr#", "INT()");
         check_expr_compilation_error(
             "1:10: In call to INT: 1:14: BOOLEAN is not a number",
             "INT(FALSE)",
         );
-        check_expr_compilation_error("1:10: In call to INT: expected expr<%|#>", "INT(3.0, 4)");
+        check_expr_compilation_error("1:10: In call to INT: expected expr#", "INT(3.0, 4)");
 
         check_expr_error(
             "1:10: In call to INT: 1:14: Cannot cast -1234567890123456 to integer due to overflow",
@@ -790,7 +857,7 @@ mod tests {
         );
 
         check_expr_compilation_error(
-            "1:10: In call to MAX: expected expr<%|#>[, .., expr<%|#>]",
+            "1:10: In call to MAX: expected expr1#[, .., exprN#]",
             "MAX()",
         );
         check_expr_compilation_error(
@@ -824,7 +891,7 @@ mod tests {
         );
 
         check_expr_compilation_error(
-            "1:10: In call to MIN: expected expr<%|#>[, .., expr<%|#>]",
+            "1:10: In call to MIN: expected expr1#[, .., exprN#]",
             "MIN()",
         );
         check_expr_compilation_error(
@@ -868,14 +935,17 @@ mod tests {
 
         t.run("result = RND(1)").expect_var("result", 0.7097578208683426).check();
 
-        check_expr_compilation_error("1:10: In call to RND: expected [n%]", "RND(1, 7)");
+        check_expr_compilation_error("1:10: In call to RND: expected <> | <n%>", "RND(1, 7)");
         check_expr_compilation_error(
             "1:10: In call to RND: 1:14: BOOLEAN is not a number",
             "RND(FALSE)",
         );
         check_expr_error("1:10: In call to RND: 1:14: n% cannot be negative", "RND(-1)");
 
-        check_stmt_compilation_err("1:1: In call to RANDOMIZE: expected [seed%]", "RANDOMIZE ,");
+        check_stmt_compilation_err(
+            "1:1: In call to RANDOMIZE: expected <> | <seed%>",
+            "RANDOMIZE ,",
+        );
         check_stmt_compilation_err(
             "1:1: In call to RANDOMIZE: 1:11: BOOLEAN is not a number",
             "RANDOMIZE TRUE",
@@ -889,12 +959,12 @@ mod tests {
 
         check_expr_ok_with_vars(123f64.sin(), "SIN(i)", [("i", 123i32.into())]);
 
-        check_expr_compilation_error("1:10: In call to SIN: expected angle<%|#>", "SIN()");
+        check_expr_compilation_error("1:10: In call to SIN: expected angle#", "SIN()");
         check_expr_compilation_error(
             "1:10: In call to SIN: 1:14: BOOLEAN is not a number",
             "SIN(FALSE)",
         );
-        check_expr_compilation_error("1:10: In call to SIN: expected angle<%|#>", "SIN(3, 4)");
+        check_expr_compilation_error("1:10: In call to SIN: expected angle#", "SIN(3, 4)");
     }
 
     #[test]
@@ -906,12 +976,12 @@ mod tests {
 
         check_expr_ok_with_vars(9f64.sqrt(), "SQR(i)", [("i", 9i32.into())]);
 
-        check_expr_compilation_error("1:10: In call to SQR: expected num<%|#>", "SQR()");
+        check_expr_compilation_error("1:10: In call to SQR: expected num#", "SQR()");
         check_expr_compilation_error(
             "1:10: In call to SQR: 1:14: BOOLEAN is not a number",
             "SQR(FALSE)",
         );
-        check_expr_compilation_error("1:10: In call to SQR: expected num<%|#>", "SQR(3, 4)");
+        check_expr_compilation_error("1:10: In call to SQR: expected num#", "SQR(3, 4)");
         check_expr_error(
             "1:10: In call to SQR: 1:14: Cannot take square root of a negative number",
             "SQR(-3)",
@@ -929,11 +999,11 @@ mod tests {
 
         check_expr_ok_with_vars(123f64.tan(), "TAN(i)", [("i", 123i32.into())]);
 
-        check_expr_compilation_error("1:10: In call to TAN: expected angle<%|#>", "TAN()");
+        check_expr_compilation_error("1:10: In call to TAN: expected angle#", "TAN()");
         check_expr_compilation_error(
             "1:10: In call to TAN: 1:14: BOOLEAN is not a number",
             "TAN(FALSE)",
         );
-        check_expr_compilation_error("1:10: In call to TAN: expected angle<%|#>", "TAN(3, 4)");
+        check_expr_compilation_error("1:10: In call to TAN: expected angle#", "TAN(3, 4)");
     }
 }
