@@ -1202,7 +1202,7 @@ Output from HELP "MAX":
 
 Output from HELP "MID":
 
-[38;5;11m    MID$(expr$, start%[, length%])
+[38;5;11m    MID$(<expr$, start%> | <expr$, start%, length%>)
 [39m
     Returns a portion of a string.
 
