@@ -19,11 +19,10 @@ use crate::console::readline::read_line;
 use crate::console::{CharsXY, ClearType, Console, ConsoleClearable, Key};
 use crate::strings::{format_boolean, format_double, format_integer};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, Expr, Value, VarType};
-use endbasic_core::bytecode::Instruction;
+use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::compiler::{
-    compile_arg_expr, compile_expr, compile_expr_symbol_ref, CallableArgsCompiler, ExprType,
-    NoArgsCompiler, SameTypeArgsCompiler, SymbolsTable,
+    ArgSepSyntax, ExprType, OptionalValueSyntax, RepeatedSyntax, RepeatedTypeSyntax,
+    RequiredRefSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
 use endbasic_core::exec::{Machine, Scope, ValueTag};
 use endbasic_core::syms::{
@@ -64,8 +63,7 @@ impl ClsCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CLS", VarType::Void)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description("Clears the screen.")
                 .build(),
@@ -87,76 +85,6 @@ impl Callable for ClsCommand {
     }
 }
 
-/// An arguments compiler for the `COLOR` command.
-#[derive(Debug, Default)]
-struct ColorArgsCompiler {}
-
-impl ColorArgsCompiler {
-    const NONE: i32 = 0;
-    const ONLY_FG: i32 = 1;
-    const ONLY_BG: i32 = 2;
-    const BOTH: i32 = 3;
-}
-
-impl CallableArgsCompiler for ColorArgsCompiler {
-    fn compile_complex(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &mut SymbolsTable,
-        pos: LineCol,
-        args: Vec<ArgSpan>,
-    ) -> Result<usize, CallError> {
-        let nargs = args.len();
-        if nargs > 2 {
-            return Err(CallError::SyntaxError);
-        }
-
-        let mut iter = args.into_iter();
-        let fg_expr = if nargs > 0 {
-            let fg_span = iter.next().unwrap();
-            match fg_span.sep {
-                ArgSep::Long => debug_assert_eq!(2, nargs),
-                ArgSep::End => debug_assert_eq!(1, nargs),
-                _ => return Err(CallError::SyntaxError),
-            }
-            fg_span.expr
-        } else {
-            None
-        };
-
-        let bg_expr = if nargs == 2 {
-            let bg_span = iter.next().unwrap();
-            debug_assert_eq!(ArgSep::End, bg_span.sep);
-            bg_span.expr
-        } else {
-            None
-        };
-
-        match (fg_expr, bg_expr) {
-            (None, None) => {
-                instrs.push(Instruction::Push(Value::Integer(Self::NONE), pos));
-                Ok(1)
-            }
-            (Some(fg), None) => {
-                compile_arg_expr(instrs, symtable, fg, ExprType::Integer)?;
-                instrs.push(Instruction::Push(Value::Integer(Self::ONLY_FG), pos));
-                Ok(2)
-            }
-            (None, Some(bg)) => {
-                compile_arg_expr(instrs, symtable, bg, ExprType::Integer)?;
-                instrs.push(Instruction::Push(Value::Integer(Self::ONLY_BG), pos));
-                Ok(2)
-            }
-            (Some(fg), Some(bg)) => {
-                compile_arg_expr(instrs, symtable, bg, ExprType::Integer)?;
-                compile_arg_expr(instrs, symtable, fg, ExprType::Integer)?;
-                instrs.push(Instruction::Push(Value::Integer(Self::BOTH), pos));
-                Ok(3)
-            }
-        }
-    }
-}
-
 /// The `COLOR` command.
 pub struct ColorCommand {
     metadata: CallableMetadata,
@@ -164,12 +92,46 @@ pub struct ColorCommand {
 }
 
 impl ColorCommand {
+    const NO_COLOR: i32 = 0;
+    const HAS_COLOR: i32 = 1;
+
     /// Creates a new `COLOR` command that changes the color of the `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("COLOR", VarType::Void)
-                .with_syntax("[fg%][, [bg%]]")
-                .with_args_compiler(ColorArgsCompiler::default())
+                .with_typed_syntax(&[
+                    (&[], None),
+                    (
+                        &[SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "fg", vtype: ExprType::Integer },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                    (
+                        &[
+                            SingularArgSyntax::OptionalValue(
+                                OptionalValueSyntax {
+                                    name: "fg",
+                                    vtype: ExprType::Integer,
+                                    missing_value: Self::NO_COLOR,
+                                    present_value: Self::HAS_COLOR,
+                                },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::OptionalValue(
+                                OptionalValueSyntax {
+                                    name: "bg",
+                                    vtype: ExprType::Integer,
+                                    missing_value: Self::NO_COLOR,
+                                    present_value: Self::HAS_COLOR,
+                                },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Sets the foreground and background colors.
@@ -198,19 +160,21 @@ impl Callable for ColorCommand {
             }
         }
 
-        let args_type = scope.pop_integer();
-        let (fg, bg) = match args_type {
-            ColorArgsCompiler::NONE => (None, None),
-            ColorArgsCompiler::ONLY_FG => (get_color(scope.pop_integer_with_pos())?, None),
-            ColorArgsCompiler::ONLY_BG => (None, get_color(scope.pop_integer_with_pos())?),
-            ColorArgsCompiler::BOTH => {
-                let fg = get_color(scope.pop_integer_with_pos())?;
-                let bg = get_color(scope.pop_integer_with_pos())?;
-                (fg, bg)
+        fn get_optional_color(scope: &mut Scope<'_>) -> Result<Option<u8>, CallError> {
+            match scope.pop_integer() {
+                ColorCommand::NO_COLOR => Ok(None),
+                ColorCommand::HAS_COLOR => get_color(scope.pop_integer_with_pos()),
+                _ => unreachable!(),
             }
-            _ => unreachable!(),
+        }
+
+        let (fg, bg) = if scope.nargs() == 0 {
+            (None, None)
+        } else if scope.nargs() == 1 {
+            (get_color(scope.pop_integer_with_pos())?, None)
+        } else {
+            (get_optional_color(&mut scope)?, get_optional_color(&mut scope)?)
         };
-        debug_assert_eq!(0, scope.nargs());
 
         self.console.borrow_mut().set_color(fg, bg)?;
         Ok(Value::Void)
@@ -228,8 +192,7 @@ impl InKeyFunction {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("INKEY", VarType::Text)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Checks for an available key press and returns it.
@@ -286,69 +249,6 @@ impl Callable for InKeyFunction {
     }
 }
 
-/// An arguments compiler for the `INPUT` command.
-#[derive(Debug, Default)]
-struct InputArgsCompiler {}
-
-impl CallableArgsCompiler for InputArgsCompiler {
-    fn compile_complex(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &mut SymbolsTable,
-        pos: LineCol,
-        args: Vec<ArgSpan>,
-    ) -> Result<usize, CallError> {
-        if !(1..=2).contains(&args.len()) {
-            return Err(CallError::SyntaxError);
-        }
-
-        let mut iter = args.into_iter().rev();
-
-        match iter.next() {
-            Some(span) => {
-                debug_assert_eq!(ArgSep::End, span.sep);
-                match span.expr {
-                    Some(Expr::Symbol(vref)) => {
-                        compile_expr_symbol_ref(instrs, symtable, vref)?;
-                    }
-                    Some(expr) => {
-                        return Err(CallError::ArgumentError(
-                            expr.start_pos(),
-                            "INPUT requires a variable reference".to_owned(),
-                        ));
-                    }
-                    None => return Err(CallError::SyntaxError),
-                }
-            }
-            None => unreachable!(),
-        }
-
-        if let Some(span) = iter.next() {
-            match span.sep {
-                ArgSep::Long => {
-                    instrs.push(Instruction::Push(Value::Text("".to_owned()), span.sep_pos));
-                }
-                ArgSep::Short => {
-                    instrs.push(Instruction::Push(Value::Text("? ".to_owned()), span.sep_pos));
-                }
-                _ => return Err(CallError::SyntaxError),
-            }
-
-            match span.expr {
-                Some(expr) => compile_arg_expr(instrs, symtable, expr, ExprType::Text)?,
-                None => instrs.push(Instruction::Push(Value::Text("".to_owned()), span.sep_pos)),
-            }
-        } else {
-            instrs.push(Instruction::Push(Value::Text("? ".to_owned()), pos));
-            instrs.push(Instruction::Push(Value::Text("".to_owned()), pos));
-        }
-
-        debug_assert!(iter.next().is_none());
-
-        Ok(3)
-    }
-}
-
 /// The `INPUT` command.
 pub struct InputCommand {
     metadata: CallableMetadata,
@@ -360,8 +260,41 @@ impl InputCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("INPUT", VarType::Void)
-                .with_syntax("[\"prompt\" <;|,>] variableref")
-                .with_args_compiler(InputArgsCompiler::default())
+                .with_typed_syntax(&[
+                    (
+                        &[SingularArgSyntax::RequiredRef(
+                            RequiredRefSyntax {
+                                name: "vref",
+                                require_array: false,
+                                define_undefined: true,
+                            },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                    (
+                        &[
+                            SingularArgSyntax::OptionalValue(
+                                OptionalValueSyntax {
+                                    name: "prompt",
+                                    vtype: ExprType::Text,
+                                    missing_value: 0,
+                                    present_value: 1,
+                                },
+                                ArgSepSyntax::OneOf(ArgSep::Long, ArgSep::Short),
+                            ),
+                            SingularArgSyntax::RequiredRef(
+                                RequiredRefSyntax {
+                                    name: "vref",
+                                    require_array: false,
+                                    define_undefined: true,
+                                },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Obtains user input from the console.
@@ -384,12 +317,28 @@ impl Callable for InputCommand {
     }
 
     async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
-        debug_assert_eq!(3, scope.nargs());
-        let mut prompt = scope.pop_string();
-        let qmark = scope.pop_string();
-        if !qmark.is_empty() {
-            prompt.push_str(&qmark);
-        }
+        let prompt = if scope.nargs() == 1 {
+            "".to_owned()
+        } else {
+            debug_assert!((3..=4).contains(&scope.nargs()));
+
+            let has_prompt = scope.pop_integer();
+
+            let mut prompt = if has_prompt == 1 {
+                scope.pop_string()
+            } else {
+                debug_assert_eq!(0, has_prompt);
+                String::new()
+            };
+
+            match scope.pop_sep_tag() {
+                ArgSep::Long => (),
+                ArgSep::Short => prompt.push_str("? "),
+                _ => unreachable!(),
+            }
+
+            prompt
+        };
         let (vref, pos) = scope.pop_varref_with_pos();
 
         let vref = machine
@@ -434,8 +383,19 @@ impl LocateCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOCATE", VarType::Void)
-                .with_syntax("column%, row%")
-                .with_args_compiler(SameTypeArgsCompiler::new(2, 2, ExprType::Integer))
+                .with_typed_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "column", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "row", vtype: ExprType::Integer },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description("Moves the cursor to the given position.")
                 .build(),
@@ -483,61 +443,6 @@ impl Callable for LocateCommand {
     }
 }
 
-/// An arguments compiler for the `PRINT` command.
-#[derive(Debug, Default)]
-struct PrintArgsCompiler {}
-
-impl PrintArgsCompiler {
-    const SHORT: i32 = 0;
-    const LONG: i32 = 1;
-    const NEWLINE: i32 = 2;
-    const NO_NEWLINE: i32 = 3;
-}
-
-impl CallableArgsCompiler for PrintArgsCompiler {
-    fn compile_complex(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &mut SymbolsTable,
-        pos: LineCol,
-        args: Vec<ArgSpan>,
-    ) -> Result<usize, CallError> {
-        let mut nargs = 0;
-        for arg in args.into_iter().rev() {
-            match arg.sep {
-                ArgSep::Short => {
-                    instrs.push(Instruction::Push(Value::Integer(Self::SHORT), arg.sep_pos))
-                }
-                ArgSep::Long => {
-                    instrs.push(Instruction::Push(Value::Integer(Self::LONG), arg.sep_pos))
-                }
-                ArgSep::End => {
-                    let nl = if arg.expr.is_some() { Self::NEWLINE } else { Self::NO_NEWLINE };
-                    instrs.push(Instruction::Push(Value::Integer(nl), arg.sep_pos));
-                }
-                _ => return Err(CallError::SyntaxError),
-            }
-
-            match arg.expr {
-                Some(expr) => {
-                    let pos = expr.start_pos();
-                    let etype = compile_expr(instrs, symtable, expr, false)?;
-
-                    let tag = ValueTag::from(etype);
-                    instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
-
-                    nargs += 3;
-                }
-                None => {
-                    instrs.push(Instruction::Push(Value::Integer(ValueTag::Missing as i32), pos));
-                    nargs += 2;
-                }
-            };
-        }
-        Ok(nargs)
-    }
-}
-
 /// The `PRINT` command.
 pub struct PrintCommand {
     metadata: CallableMetadata,
@@ -549,8 +454,16 @@ impl PrintCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("PRINT", VarType::Void)
-                .with_syntax("[expr1 [<;|,> [.. exprN]]]")
-                .with_args_compiler(PrintArgsCompiler::default())
+                .with_typed_syntax(&[(
+                    &[],
+                    Some(&RepeatedSyntax {
+                        name: "expr",
+                        type_syn: RepeatedTypeSyntax::AnyValue,
+                        sep: ArgSepSyntax::OneOf(ArgSep::Long, ArgSep::Short),
+                        require_one: false,
+                        allow_missing: true,
+                    }),
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Prints one or more values to the console.
@@ -586,44 +499,46 @@ impl Callable for PrintCommand {
                 ValueTag::Boolean => {
                     let b = scope.pop_boolean();
                     add_space = true;
+                    nl = true;
                     text += format_boolean(b);
                 }
                 ValueTag::Double => {
                     let d = scope.pop_double();
                     add_space = true;
+                    nl = true;
                     text += &format_double(d);
                 }
                 ValueTag::Integer => {
                     let i = scope.pop_integer();
                     add_space = true;
+                    nl = true;
                     text += &format_integer(i);
                 }
                 ValueTag::Text => {
                     let s = scope.pop_string();
+                    nl = true;
                     text += &s;
                 }
-                ValueTag::Missing => (),
-            }
-
-            match scope.pop_integer() {
-                PrintArgsCompiler::SHORT => {
-                    if add_space {
-                        text += " "
-                    }
-                }
-                PrintArgsCompiler::LONG => {
-                    text += " ";
-                    while text.len() % 14 != 0 {
-                        text += " ";
-                    }
-                }
-                PrintArgsCompiler::NEWLINE => {
-                    debug_assert!(nl);
-                }
-                PrintArgsCompiler::NO_NEWLINE => {
+                ValueTag::Missing => {
                     nl = false;
                 }
-                _ => unreachable!(),
+            }
+
+            if scope.nargs() > 0 {
+                match scope.pop_sep_tag() {
+                    ArgSep::Short => {
+                        if add_space {
+                            text += " "
+                        }
+                    }
+                    ArgSep::Long => {
+                        text += " ";
+                        while text.len() % 14 != 0 {
+                            text += " ";
+                        }
+                    }
+                    _ => unreachable!(),
+                }
             }
         }
 
@@ -647,8 +562,7 @@ impl ScrColsFunction {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SCRCOLS", VarType::Integer)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the number of columns in the text console.
@@ -684,8 +598,7 @@ impl ScrRowsFunction {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SCRROWS", VarType::Integer)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the number of rows in the text console.
@@ -758,10 +671,13 @@ mod tests {
     #[test]
     fn test_color_errors() {
         check_stmt_compilation_err(
-            "1:1: In call to COLOR: expected [fg%][, [bg%]]",
+            "1:1: In call to COLOR: expected <> | <fg%> | <[fg%], [bg%]>",
             "COLOR 1, 2, 3",
         );
-        check_stmt_compilation_err("1:1: In call to COLOR: expected [fg%][, [bg%]]", "COLOR 1; 2");
+        check_stmt_compilation_err(
+            "1:1: In call to COLOR: expected <> | <fg%> | <[fg%], [bg%]>",
+            "COLOR 1; 2",
+        );
 
         check_stmt_err("1:1: In call to COLOR: 1:7: Color out of range", "COLOR 1000, 0");
         check_stmt_err("1:1: In call to COLOR: 1:10: Color out of range", "COLOR 0, 1000");
@@ -899,15 +815,15 @@ mod tests {
     #[test]
     fn test_input_errors() {
         check_stmt_compilation_err(
-            "1:1: In call to INPUT: expected [\"prompt\" <;|,>] variableref",
+            "1:1: In call to INPUT: expected <vref> | <[prompt$] <,|;> vref>",
             "INPUT",
         );
         check_stmt_compilation_err(
-            "1:1: In call to INPUT: expected [\"prompt\" <;|,>] variableref",
+            "1:1: In call to INPUT: expected <vref> | <[prompt$] <,|;> vref>",
             "INPUT ; ,",
         );
         check_stmt_compilation_err(
-            "1:1: In call to INPUT: expected [\"prompt\" <;|,>] variableref",
+            "1:1: In call to INPUT: expected <vref> | <[prompt$] <,|;> vref>",
             "INPUT ;",
         );
         check_stmt_compilation_err(
@@ -915,14 +831,14 @@ mod tests {
             "INPUT 3 ; a",
         );
         check_stmt_compilation_err(
-            "1:1: In call to INPUT: expected [\"prompt\" <;|,>] variableref",
+            "1:1: In call to INPUT: expected <vref> | <[prompt$] <,|;> vref>",
             "INPUT \"foo\" AS bar",
         );
         check_stmt_uncatchable_err("1:7: Undefined variable a", "INPUT a + 1 ; b");
         Tester::default()
             .run("a = 3: INPUT ; a + 1")
             .expect_compilation_err(
-                "1:8: In call to INPUT: 1:16: INPUT requires a variable reference",
+                "1:8: In call to INPUT: 1:16: Requires a variable reference, not a value",
             )
             .check();
         check_stmt_uncatchable_err("1:11: Cannot + STRING and BOOLEAN", "INPUT \"a\" + TRUE; b?");
@@ -1073,11 +989,11 @@ mod tests {
     #[test]
     fn test_print_errors() {
         check_stmt_compilation_err(
-            "1:1: In call to PRINT: expected [expr1 [<;|,> [.. exprN]]]",
+            "1:1: In call to PRINT: expected [expr1 <,|;> .. <,|;> exprN]",
             "PRINT 3 AS 4",
         );
         check_stmt_compilation_err(
-            "1:1: In call to PRINT: expected [expr1 [<;|,> [.. exprN]]]",
+            "1:1: In call to PRINT: expected [expr1 <,|;> .. <,|;> exprN]",
             "PRINT 3, 4 AS 5",
         );
         // Ensure type errors from `Expr` and `Value` bubble up.
