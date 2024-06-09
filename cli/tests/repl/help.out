@@ -921,7 +921,7 @@ Output from HELP "RAD":
 
 Output from HELP "RANDOMIZE":
 
-[38;5;11m    RANDOMIZE [seed%]
+[38;5;11m    RANDOMIZE <> | <seed%>
 [39m
     Reinitializes the pseudo-random number generator.
 
@@ -1052,7 +1052,7 @@ Output from HELP "ASC":
 
 Output from HELP "ATN":
 
-[38;5;11m    ATN#(n<%|#>)
+[38;5;11m    ATN#(n#)
 [39m
     Computes the arc-tangent of a number.
 
@@ -1069,7 +1069,7 @@ Output from HELP "CHR":
 
 Output from HELP "CINT":
 
-[38;5;11m    CINT%(expr<%|#>)
+[38;5;11m    CINT%(expr#)
 [39m
     Casts the given numeric expression to an integer (with rounding).
 
@@ -1079,7 +1079,7 @@ Output from HELP "CINT":
 
 Output from HELP "COS":
 
-[38;5;11m    COS#(angle<%|#>)
+[38;5;11m    COS#(angle#)
 [39m
     Computes the cosine of an angle.
 
@@ -1149,7 +1149,7 @@ Output from HELP "INKEY":
 
 Output from HELP "INT%":
 
-[38;5;11m    INT%(expr<%|#>)
+[38;5;11m    INT%(expr#)
 [39m
     Casts the given numeric expression to an integer (with truncation).
 
@@ -1196,7 +1196,7 @@ Output from HELP "LTRIM":
 
 Output from HELP "MAX":
 
-[38;5;11m    MAX#(expr<%|#>[, .., expr<%|#>])
+[38;5;11m    MAX#(expr1#[, .., exprN#])
 [39m
     Returns the maximum number out of a set of numbers.
 
@@ -1216,7 +1216,7 @@ Output from HELP "MID":
 
 Output from HELP "MIN":
 
-[38;5;11m    MIN#(expr<%|#>[, .., expr<%|#>])
+[38;5;11m    MIN#(expr1#[, .., exprN#])
 [39m
     Returns the minimum number out of a set of numbers.
 
@@ -1239,7 +1239,7 @@ Output from HELP "RIGHT":
 
 Output from HELP "RND":
 
-[38;5;11m    RND#([n%])
+[38;5;11m    RND#(<> | <n%>)
 [39m
     Returns a random number in the [0..1] range.
 
@@ -1276,7 +1276,7 @@ Output from HELP "SCRROWS":
 
 Output from HELP "SIN":
 
-[38;5;11m    SIN#(angle<%|#>)
+[38;5;11m    SIN#(angle#)
 [39m
     Computes the sine of an angle.
 
@@ -1285,7 +1285,7 @@ Output from HELP "SIN":
 
 Output from HELP "SQR":
 
-[38;5;11m    SQR#(num<%|#>)
+[38;5;11m    SQR#(num#)
 [39m
     Computes the square root of the given number.
 
@@ -1308,7 +1308,7 @@ Output from HELP "STR$":
 
 Output from HELP "TAN":
 
-[38;5;11m    TAN#(angle<%|#>)
+[38;5;11m    TAN#(angle#)
 [39m
     Computes the tangent of an angle.
 
