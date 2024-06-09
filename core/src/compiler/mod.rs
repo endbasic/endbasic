@@ -22,6 +22,8 @@ use crate::syms::CallError;
 use crate::syms::CallableMetadata;
 use crate::syms::{Symbol, SymbolKey, Symbols};
 use std::collections::HashMap;
+#[cfg(test)]
+use std::collections::HashSet;
 use std::fmt;
 
 mod args;
@@ -103,6 +105,15 @@ impl ExprType {
     /// Returns true if this expression type is numerical.
     fn is_numerical(self) -> bool {
         self == Self::Double || self == Self::Integer
+    }
+
+    pub(crate) fn annotation(&self) -> char {
+        match self {
+            ExprType::Boolean => '?',
+            ExprType::Double => '#',
+            ExprType::Integer => '%',
+            ExprType::Text => '$',
+        }
     }
 }
 
@@ -290,6 +301,12 @@ impl SymbolsTable {
     fn remove(&mut self, key: SymbolKey) {
         let previous = self.table.remove(&key);
         assert!(previous.is_some(), "Cannot unset a non-existing symbol");
+    }
+
+    /// Returns a view of the keys in the symbols table.
+    #[cfg(test)]
+    fn keys(&self) -> HashSet<&SymbolKey> {
+        self.table.keys().collect()
     }
 }
 

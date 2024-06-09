@@ -16,7 +16,9 @@
 //! Symbol definitions and symbols table representation.
 
 use crate::ast::{Value, VarRef, VarType};
-use crate::compiler::{self, CallableArgsCompiler};
+use crate::compiler::{
+    self, ArgsCompiler, CallableArgsCompiler, CallableSyntax, RepeatedSyntax, SingularArgSyntax,
+};
 use crate::exec::{Machine, Scope};
 use crate::reader::LineCol;
 use crate::value::{Error, Result};
@@ -467,7 +469,7 @@ pub struct CallableMetadataBuilder {
     name: &'static str,
     return_type: VarType,
     category: Option<&'static str>,
-    syntax: Option<&'static str>,
+    syntax: Option<String>,
     description: Option<&'static str>,
     args_compiler: Option<Rc<dyn CallableArgsCompiler>>,
 }
@@ -491,11 +493,36 @@ impl CallableMetadataBuilder {
         }
     }
 
+    /// Sets the syntax specifications for this callable.
+    pub fn with_typed_syntax(
+        mut self,
+        syntaxes: &'static [(&'static [SingularArgSyntax], Option<&'static RepeatedSyntax>)],
+    ) -> Self {
+        let syntaxes =
+            syntaxes.iter().map(|s| CallableSyntax::new(s.0, s.1)).collect::<Vec<CallableSyntax>>();
+        if syntaxes.is_empty() {
+            self.syntax = Some("no arguments".to_owned());
+        } else if syntaxes.len() == 1 {
+            self.syntax = Some(syntaxes.first().unwrap().describe());
+        } else {
+            self.syntax = Some(
+                syntaxes
+                    .iter()
+                    .map(|syn| format!("<{}>", syn.describe()))
+                    .collect::<Vec<String>>()
+                    .join(" | "),
+            );
+        };
+        self.args_compiler = Some(Rc::from(ArgsCompiler::new(syntaxes)));
+        self
+    }
+
     /// Sets the syntax specification for this callable.  The `syntax` is provided as a free-form
     /// string that is expected to use whatever representation suits the function best.
+    // TODO(jmmv): This is now deprecated in favor of `with_typed_syntax`.
     pub fn with_syntax(mut self, syntax: &'static str) -> Self {
         assert!(syntax != "()", "No arguments should be expressed as an empty syntax definition");
-        self.syntax = Some(syntax);
+        self.syntax = Some(syntax.to_owned());
         self
     }
 
@@ -519,6 +546,7 @@ impl CallableMetadataBuilder {
     }
 
     /// Sets the arguments compiler for this callable.
+    // TODO(jmmv): This is now deprecated in favor of `with_typed_syntax`.
     pub fn with_args_compiler<T: CallableArgsCompiler + 'static>(
         mut self,
         args_compiler: T,
@@ -548,7 +576,7 @@ impl CallableMetadataBuilder {
         CallableMetadata {
             name: self.name,
             return_type: self.return_type,
-            syntax: self.syntax.unwrap_or(""),
+            syntax: self.syntax.unwrap_or("".to_owned()),
             category: self.category.unwrap_or(""),
             description: self.description.unwrap_or(""),
             args_compiler: self
@@ -567,7 +595,7 @@ impl CallableMetadataBuilder {
 pub struct CallableMetadata {
     name: &'static str,
     return_type: VarType,
-    syntax: &'static str,
+    syntax: String,
     category: &'static str,
     description: &'static str,
     args_compiler: Rc<dyn CallableArgsCompiler>,
@@ -585,8 +613,8 @@ impl CallableMetadata {
     }
 
     /// Gets the callable's syntax specification.
-    pub fn syntax(&self) -> &'static str {
-        self.syntax
+    pub fn syntax(&self) -> &str {
+        &self.syntax
     }
 
     /// Gets the callable's category as a collection of lines.  The first line is the title of the
