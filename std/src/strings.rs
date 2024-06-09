@@ -16,16 +16,14 @@
 //! String functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{Expr, Value, VarType};
-use endbasic_core::bytecode::Instruction;
+use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::compiler::{
-    compile_arg, compile_expr, CallableArgsCompiler, ExprType, SameTypeArgsCompiler, SymbolsTable,
+    AnyValueSyntax, ArgSepSyntax, ExprType, RequiredValueSyntax, SingularArgSyntax,
 };
 use endbasic_core::exec::{Machine, Scope, ValueTag};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
-use endbasic_core::LineCol;
 use std::cmp::min;
 use std::convert::TryFrom;
 use std::rc::Rc;
@@ -60,32 +58,6 @@ pub fn format_integer(i: i32) -> String {
     }
 }
 
-/// An arguments compiler for the `LEFT` and `RIGHT` functions.
-#[derive(Debug, Default)]
-struct LeftRightArgsCompiler {}
-
-impl CallableArgsCompiler for LeftRightArgsCompiler {
-    fn compile_simple(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &SymbolsTable,
-        _pos: LineCol,
-        args: Vec<Expr>,
-    ) -> Result<usize, CallError> {
-        let nargs = args.len();
-        if nargs != 2 {
-            return Err(CallError::SyntaxError);
-        }
-
-        let mut iter = args.into_iter().rev();
-        compile_arg(instrs, symtable, &mut iter, ExprType::Integer)?;
-        compile_arg(instrs, symtable, &mut iter, ExprType::Text)?;
-        debug_assert!(iter.next().is_none());
-
-        Ok(nargs)
-    }
-}
-
 /// The `ASC` function.
 pub struct AscFunction {
     metadata: CallableMetadata,
@@ -96,8 +68,13 @@ impl AscFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("ASC", VarType::Integer)
-                .with_syntax("char$")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "char", vtype: ExprType::Text },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the UTF character code of the input character.
@@ -157,8 +134,13 @@ impl ChrFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CHR", VarType::Text)
-                .with_syntax("code%")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Integer))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "code", vtype: ExprType::Integer },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the UTF character that corresponds to the given code.
@@ -204,8 +186,19 @@ impl LeftFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LEFT", VarType::Text)
-                .with_syntax("expr$, n%")
-                .with_args_compiler(LeftRightArgsCompiler::default())
+                .with_typed_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "n", vtype: ExprType::Integer },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns a given number of characters from the left side of a string.
@@ -247,8 +240,13 @@ impl LenFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LEN", VarType::Integer)
-                .with_syntax("expr$")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description("Returns the length of the string in expr$.")
                 .build(),
@@ -284,8 +282,13 @@ impl LtrimFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LTRIM", VarType::Text)
-                .with_syntax("expr$")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description("Returns a copy of a string with leading whitespace removed.")
                 .build(),
@@ -307,35 +310,6 @@ impl Callable for LtrimFunction {
     }
 }
 
-/// An arguments compiler for the `MID` function.
-#[derive(Debug, Default)]
-struct MidArgsCompiler {}
-
-impl CallableArgsCompiler for MidArgsCompiler {
-    fn compile_simple(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &SymbolsTable,
-        _pos: LineCol,
-        args: Vec<Expr>,
-    ) -> Result<usize, CallError> {
-        let nargs = args.len();
-        if !(2..=3).contains(&nargs) {
-            return Err(CallError::SyntaxError);
-        }
-
-        let mut iter = args.into_iter().rev();
-        compile_arg(instrs, symtable, &mut iter, ExprType::Integer)?;
-        if nargs == 3 {
-            compile_arg(instrs, symtable, &mut iter, ExprType::Integer)?;
-        }
-        compile_arg(instrs, symtable, &mut iter, ExprType::Text)?;
-        debug_assert!(iter.next().is_none());
-
-        Ok(nargs)
-    }
-}
-
 /// The `MID` function.
 pub struct MidFunction {
     metadata: CallableMetadata,
@@ -346,8 +320,38 @@ impl MidFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("MID", VarType::Text)
-                .with_syntax("expr$, start%[, length%]")
-                .with_args_compiler(MidArgsCompiler::default())
+                .with_typed_syntax(&[
+                    (
+                        &[
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax { name: "start", vtype: ExprType::Integer },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    ),
+                    (
+                        &[
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax { name: "start", vtype: ExprType::Integer },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax { name: "length", vtype: ExprType::Integer },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns a portion of a string.
@@ -367,7 +371,7 @@ impl Callable for MidFunction {
     }
 
     async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
-        debug_assert!(scope.nargs() >= 2);
+        debug_assert!((2..=3).contains(&scope.nargs()));
         let s = scope.pop_string();
         let (start, startpos) = scope.pop_integer_with_pos();
         let lengtharg = if scope.nargs() > 0 { Some(scope.pop_integer_with_pos()) } else { None };
@@ -404,8 +408,19 @@ impl RightFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RIGHT", VarType::Text)
-                .with_syntax("expr$, n%")
-                .with_args_compiler(LeftRightArgsCompiler::default())
+                .with_typed_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "n", vtype: ExprType::Integer },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns a given number of characters from the right side of a string.
@@ -447,8 +462,13 @@ impl RtrimFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RTRIM", VarType::Text)
-                .with_syntax("expr$")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description("Returns a copy of a string with trailing whitespace removed.")
                 .build(),
@@ -470,36 +490,6 @@ impl Callable for RtrimFunction {
     }
 }
 
-/// An arguments compiler for the `STR` function.
-#[derive(Debug, Default)]
-struct StrArgsCompiler {}
-
-impl CallableArgsCompiler for StrArgsCompiler {
-    fn compile_simple(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &SymbolsTable,
-        _pos: LineCol,
-        args: Vec<Expr>,
-    ) -> Result<usize, CallError> {
-        let nargs = args.len();
-        if nargs != 1 {
-            return Err(CallError::SyntaxError);
-        }
-
-        let mut iter = args.into_iter().rev();
-        let expr = iter.next().unwrap();
-        let pos = expr.start_pos();
-        let etype = compile_expr(instrs, symtable, expr, false)?;
-        debug_assert!(iter.next().is_none());
-
-        let tag = ValueTag::from(etype);
-        instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
-
-        Ok(2)
-    }
-}
-
 /// The `STR` function.
 pub struct StrFunction {
     metadata: CallableMetadata,
@@ -510,8 +500,13 @@ impl StrFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("STR", VarType::Text)
-                .with_syntax("expr")
-                .with_args_compiler(StrArgsCompiler::default())
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::AnyValue(
+                        AnyValueSyntax { name: "expr", allow_missing: false },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Formats a scalar value as a string.
@@ -714,15 +709,15 @@ mod tests {
         );
 
         check_expr_compilation_error(
-            "1:10: In call to MID: expected expr$, start%[, length%]",
+            "1:10: In call to MID: expected <expr$, start%> | <expr$, start%, length%>",
             r#"MID()"#,
         );
         check_expr_compilation_error(
-            "1:10: In call to MID: expected expr$, start%[, length%]",
+            "1:10: In call to MID: expected <expr$, start%> | <expr$, start%, length%>",
             r#"MID(3)"#,
         );
         check_expr_compilation_error(
-            "1:10: In call to MID: expected expr$, start%[, length%]",
+            "1:10: In call to MID: expected <expr$, start%> | <expr$, start%, length%>",
             r#"MID(" ", 1, 1, 10)"#,
         );
         check_expr_compilation_error(
