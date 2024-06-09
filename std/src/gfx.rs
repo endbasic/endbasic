@@ -17,8 +17,8 @@
 
 use crate::console::{Console, PixelsXY};
 use async_trait::async_trait;
-use endbasic_core::ast::{Value, VarType};
-use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
+use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::compiler::{ArgSepSyntax, ExprType, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
@@ -75,8 +75,23 @@ impl GfxCircleCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_CIRCLE", VarType::Void)
-                .with_syntax("x%, y%, r%")
-                .with_args_compiler(SameTypeArgsCompiler::new(3, 3, ExprType::Integer))
+                .with_typed_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "x", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "y", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "r", vtype: ExprType::Integer },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a circle of radius r centered at (x,y).
@@ -120,8 +135,23 @@ impl GfxCirclefCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_CIRCLEF", VarType::Void)
-                .with_syntax("x%, y%, r%")
-                .with_args_compiler(SameTypeArgsCompiler::new(3, 3, ExprType::Integer))
+                .with_typed_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "x", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "y", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "r", vtype: ExprType::Integer },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a filled circle of radius r centered at (x,y).
@@ -164,8 +194,7 @@ impl GfxHeightFunction {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_HEIGHT", VarType::Integer)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the height in pixels of the graphical console.
@@ -201,8 +230,27 @@ impl GfxLineCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_LINE", VarType::Void)
-                .with_syntax("x1%, y1%, x2%, y2%")
-                .with_args_compiler(SameTypeArgsCompiler::new(4, 4, ExprType::Integer))
+                .with_typed_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "x1", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "y1", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "x2", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "y2", vtype: ExprType::Integer },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a line from (x1,y1) to (x2,y2).
@@ -246,8 +294,19 @@ impl GfxPixelCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_PIXEL", VarType::Void)
-                .with_syntax("x%, y%")
-                .with_args_compiler(SameTypeArgsCompiler::new(2, 2, ExprType::Integer))
+                .with_typed_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "x", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "y", vtype: ExprType::Integer },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a pixel at (x,y).
@@ -288,8 +347,27 @@ impl GfxRectCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_RECT", VarType::Void)
-                .with_syntax("x1%, y1%, x2%, y2%")
-                .with_args_compiler(SameTypeArgsCompiler::new(4, 4, ExprType::Integer))
+                .with_typed_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "x1", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "y1", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "x2", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "y2", vtype: ExprType::Integer },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a rectangle from (x1,y1) to (x2,y2).
@@ -334,8 +412,27 @@ impl GfxRectfCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_RECTF", VarType::Void)
-                .with_syntax("x1%, y1%, x2%, y2%")
-                .with_args_compiler(SameTypeArgsCompiler::new(4, 4, ExprType::Integer))
+                .with_typed_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "x1", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "y1", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "x2", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "y2", vtype: ExprType::Integer },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a filled rectangle from (x1,y1) to (x2,y2).
@@ -379,8 +476,16 @@ impl GfxSyncCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_SYNC", VarType::Void)
-                .with_syntax("[enabled?]")
-                .with_args_compiler(SameTypeArgsCompiler::new(0, 1, ExprType::Boolean))
+                .with_typed_syntax(&[
+                    (&[], None),
+                    (
+                        &[SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "enabled", vtype: ExprType::Boolean },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Controls the video syncing flag and/or forces a sync.
@@ -441,8 +546,7 @@ impl GfxWidthFunction {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_WIDTH", VarType::Integer)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the width in pixels of the graphical console.
@@ -774,7 +878,7 @@ mod tests {
     #[test]
     fn test_gfx_sync_errors() {
         check_stmt_compilation_err(
-            "1:1: In call to GFX_SYNC: expected [enabled?]",
+            "1:1: In call to GFX_SYNC: expected <> | <enabled?>",
             "GFX_SYNC 2, 3",
         );
         check_stmt_compilation_err(

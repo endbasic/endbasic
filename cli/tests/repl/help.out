@@ -693,7 +693,7 @@ Output from HELP "GFX_RECTF":
 
 Output from HELP "GFX_SYNC":
 
-[38;5;11m    GFX_SYNC [enabled?]
+[38;5;11m    GFX_SYNC <> | <enabled?>
 [39m
     Controls the video syncing flag and/or forces a sync.
 
