@@ -42,7 +42,7 @@ impl ArglessFunction {
     pub fn new(value: Value) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("ARGLESS", value.as_vartype())
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .test_build(),
             value,
         })
@@ -70,7 +70,7 @@ impl ClearCommand {
     pub(crate) fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .test_build(),
         })
     }
@@ -99,7 +99,7 @@ impl CountFunction {
     pub(crate) fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("COUNT", VarType::Integer)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .test_build(),
             counter: Rc::from(RefCell::from(0)),
         })
@@ -130,7 +130,7 @@ impl RaisefFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RAISEF", VarType::Boolean)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "arg", vtype: ExprType::Text },
                         ArgSepSyntax::End,
@@ -171,7 +171,7 @@ impl RaiseCommand {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RAISE", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "arg", vtype: ExprType::Text },
                         ArgSepSyntax::End,
@@ -213,7 +213,7 @@ impl GetHiddenFunction {
     pub(crate) fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GETHIDDEN", VarType::Text)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "varname", vtype: ExprType::Text },
                         ArgSepSyntax::End,
@@ -252,7 +252,7 @@ impl GetDataCommand {
     pub(crate) fn new(data: Rc<RefCell<Vec<Option<Value>>>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GETDATA", VarType::Void)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .test_build(),
             data,
         })
@@ -286,7 +286,7 @@ impl InCommand {
     pub fn new(data: Box<RefCell<dyn Iterator<Item = &'static &'static str>>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("IN", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredRef(
                         RequiredRefSyntax {
                             name: "vref",
@@ -336,7 +336,7 @@ impl OutCommand {
     pub fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("OUT", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
                         name: "arg",
@@ -410,7 +410,7 @@ impl OutfFunction {
     pub fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("OUTF", VarType::Integer)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
                         name: "expr",
@@ -463,7 +463,7 @@ impl SumFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SUM", VarType::Integer)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
                         name: "n",
@@ -547,7 +547,7 @@ impl TypeCheckFunction {
     pub fn new(value: Value) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("TYPE_CHECK", VarType::Boolean)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .test_build(),
             value,
         })

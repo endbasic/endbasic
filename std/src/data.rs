@@ -47,7 +47,7 @@ impl ReadCommand {
     pub fn new(index: Rc<RefCell<usize>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("READ", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
                         name: "vref",
@@ -147,7 +147,7 @@ impl RestoreCommand {
     pub fn new(index: Rc<RefCell<usize>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RESTORE", VarType::Void)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Resets the index of the data element to be returned.

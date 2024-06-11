@@ -1411,18 +1411,16 @@ mod tests {
     #[test]
     fn test_compile_builtin_call_increments_next_pc() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("CMD", VarType::Void).with_typed_syntax(
-                &[(
-                    &[],
-                    Some(&RepeatedSyntax {
-                        name: "expr",
-                        type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                        sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                        require_one: false,
-                        allow_missing: false,
-                    }),
-                )],
-            ))
+            .define_callable(CallableMetadataBuilder::new("CMD", VarType::Void).with_syntax(&[(
+                &[],
+                Some(&RepeatedSyntax {
+                    name: "expr",
+                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
+                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
+                    require_one: false,
+                    allow_missing: false,
+                }),
+            )]))
             .parse("IF TRUE THEN: CMD 1, 2: END IF")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 4)))

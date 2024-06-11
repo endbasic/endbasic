@@ -65,7 +65,7 @@ impl LoginCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOGIN", VarType::Void)
-                .with_typed_syntax(&[
+                .with_syntax(&[
                     (
                         &[SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "username", vtype: ExprType::Text },
@@ -170,7 +170,7 @@ impl LogoutCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOGOUT", VarType::Void)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Logs the user out of their account.
@@ -256,7 +256,7 @@ impl ShareCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SHARE", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "filename", vtype: ExprType::Text },
                         ArgSepSyntax::Exactly(ArgSep::Long),
@@ -439,7 +439,7 @@ impl SignupCommand {
     pub fn new(service: Rc<RefCell<dyn Service>>, console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SIGNUP", VarType::Void)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Creates a new user account interactively.

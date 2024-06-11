@@ -140,7 +140,7 @@ impl GpioSetupCommand {
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_SETUP", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "pin", vtype: ExprType::Integer },
@@ -206,7 +206,7 @@ impl GpioClearCommand {
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_CLEAR", VarType::Void)
-                .with_typed_syntax(&[
+                .with_syntax(&[
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
@@ -269,7 +269,7 @@ impl GpioReadFunction {
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_READ", VarType::Boolean)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "pin", vtype: ExprType::Integer },
                         ArgSepSyntax::End,
@@ -319,7 +319,7 @@ impl GpioWriteCommand {
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_WRITE", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "pin", vtype: ExprType::Integer },

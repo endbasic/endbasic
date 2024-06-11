@@ -68,7 +68,7 @@ impl AscFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("ASC", VarType::Integer)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "char", vtype: ExprType::Text },
                         ArgSepSyntax::End,
@@ -134,7 +134,7 @@ impl ChrFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CHR", VarType::Text)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "code", vtype: ExprType::Integer },
                         ArgSepSyntax::End,
@@ -186,7 +186,7 @@ impl LeftFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LEFT", VarType::Text)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
@@ -240,7 +240,7 @@ impl LenFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LEN", VarType::Integer)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
                         ArgSepSyntax::End,
@@ -282,7 +282,7 @@ impl LtrimFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LTRIM", VarType::Text)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
                         ArgSepSyntax::End,
@@ -320,7 +320,7 @@ impl MidFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("MID", VarType::Text)
-                .with_typed_syntax(&[
+                .with_syntax(&[
                     (
                         &[
                             SingularArgSyntax::RequiredValue(
@@ -408,7 +408,7 @@ impl RightFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RIGHT", VarType::Text)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
@@ -462,7 +462,7 @@ impl RtrimFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RTRIM", VarType::Text)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
                         ArgSepSyntax::End,
@@ -500,7 +500,7 @@ impl StrFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("STR", VarType::Text)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::AnyValue(
                         AnyValueSyntax { name: "expr", allow_missing: false },
                         ArgSepSyntax::End,

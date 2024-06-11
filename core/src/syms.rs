@@ -494,7 +494,7 @@ impl CallableMetadataBuilder {
     }
 
     /// Sets the syntax specifications for this callable.
-    pub fn with_typed_syntax(
+    pub fn with_syntax(
         mut self,
         syntaxes: &'static [(&'static [SingularArgSyntax], Option<&'static RepeatedSyntax>)],
     ) -> Self {
@@ -517,15 +517,6 @@ impl CallableMetadataBuilder {
         self
     }
 
-    /// Sets the syntax specification for this callable.  The `syntax` is provided as a free-form
-    /// string that is expected to use whatever representation suits the function best.
-    // TODO(jmmv): This is now deprecated in favor of `with_typed_syntax`.
-    pub fn with_syntax(mut self, syntax: &'static str) -> Self {
-        assert!(syntax != "()", "No arguments should be expressed as an empty syntax definition");
-        self.syntax = Some(syntax.to_owned());
-        self
-    }
-
     /// Sets the category for this callable.  All callables with the same category name will be
     /// grouped together in help messages.
     pub fn with_category(mut self, category: &'static str) -> Self {
@@ -542,16 +533,6 @@ impl CallableMetadataBuilder {
             assert!(!l.is_empty(), "Description cannot contain empty lines");
         }
         self.description = Some(description);
-        self
-    }
-
-    /// Sets the arguments compiler for this callable.
-    // TODO(jmmv): This is now deprecated in favor of `with_typed_syntax`.
-    pub fn with_args_compiler<T: CallableArgsCompiler + 'static>(
-        mut self,
-        args_compiler: T,
-    ) -> Self {
-        self.args_compiler = Some(Rc::from(args_compiler));
         self
     }
 

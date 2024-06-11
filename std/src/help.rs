@@ -411,7 +411,7 @@ impl HelpCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("HELP", VarType::Void)
-                .with_typed_syntax(&[
+                .with_syntax(&[
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
@@ -539,7 +539,7 @@ pub(crate) mod testutils {
         pub fn new_with_name(name: &'static str) -> Rc<Self> {
             Rc::from(Self {
                 metadata: CallableMetadataBuilder::new(name, VarType::Void)
-                    .with_typed_syntax(&[(
+                    .with_syntax(&[(
                         &[SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "sample", vtype: ExprType::Text },
                             ArgSepSyntax::End,
@@ -586,7 +586,7 @@ Second paragraph of the extended description.",
         pub(crate) fn new_with_name(name: &'static str) -> Rc<Self> {
             Rc::from(Self {
                 metadata: CallableMetadataBuilder::new(name, VarType::Text)
-                    .with_typed_syntax(&[(
+                    .with_syntax(&[(
                         &[SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "sample", vtype: ExprType::Text },
                             ArgSepSyntax::End,

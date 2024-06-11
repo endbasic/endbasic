@@ -164,7 +164,7 @@ impl KillCommand {
     pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("KILL", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "filename", vtype: ExprType::Text },
                         ArgSepSyntax::End,
@@ -213,7 +213,7 @@ impl EditCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("EDIT", VarType::Void)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description("Interactively edits the stored program.")
                 .build(),
@@ -251,7 +251,7 @@ impl ListCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LIST", VarType::Void)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description("Prints the currently-loaded program.")
                 .build(),
@@ -296,7 +296,7 @@ impl LoadCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOAD", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "filename", vtype: ExprType::Text },
                         ArgSepSyntax::End,
@@ -358,7 +358,7 @@ impl NewCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("NEW", VarType::Void)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Restores initial machine state and creates a new program.
@@ -411,7 +411,7 @@ impl RunCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RUN", VarType::Void)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Runs the stored program.
@@ -472,7 +472,7 @@ impl SaveCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SAVE", VarType::Void)
-                .with_typed_syntax(&[
+                .with_syntax(&[
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(

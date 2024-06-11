@@ -75,7 +75,7 @@ impl GfxCircleCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_CIRCLE", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "x", vtype: ExprType::Integer },
@@ -135,7 +135,7 @@ impl GfxCirclefCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_CIRCLEF", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "x", vtype: ExprType::Integer },
@@ -194,7 +194,7 @@ impl GfxHeightFunction {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_HEIGHT", VarType::Integer)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the height in pixels of the graphical console.
@@ -230,7 +230,7 @@ impl GfxLineCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_LINE", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "x1", vtype: ExprType::Integer },
@@ -294,7 +294,7 @@ impl GfxPixelCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_PIXEL", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "x", vtype: ExprType::Integer },
@@ -347,7 +347,7 @@ impl GfxRectCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_RECT", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "x1", vtype: ExprType::Integer },
@@ -412,7 +412,7 @@ impl GfxRectfCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_RECTF", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "x1", vtype: ExprType::Integer },
@@ -476,7 +476,7 @@ impl GfxSyncCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_SYNC", VarType::Void)
-                .with_typed_syntax(&[
+                .with_syntax(&[
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
@@ -546,7 +546,7 @@ impl GfxWidthFunction {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_WIDTH", VarType::Integer)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the width in pixels of the graphical console.
