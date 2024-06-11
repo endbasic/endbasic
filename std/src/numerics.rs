@@ -111,7 +111,7 @@ impl AtnFunction {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("ATN", VarType::Double)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "n", vtype: ExprType::Double },
                         ArgSepSyntax::End,
@@ -157,7 +157,7 @@ impl CintFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CINT", VarType::Integer)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "expr", vtype: ExprType::Double },
                         ArgSepSyntax::End,
@@ -204,7 +204,7 @@ impl CosFunction {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("COS", VarType::Double)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "angle", vtype: ExprType::Double },
                         ArgSepSyntax::End,
@@ -246,7 +246,7 @@ impl DegCommand {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DEG", VarType::Void)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Sets degrees mode of calculation.
@@ -282,7 +282,7 @@ impl IntFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("INT", VarType::Integer)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "expr", vtype: ExprType::Double },
                         ArgSepSyntax::End,
@@ -326,7 +326,7 @@ impl MaxFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("MAX", VarType::Double)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
                         name: "expr",
@@ -371,7 +371,7 @@ impl MinFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("MIN", VarType::Double)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
                         name: "expr",
@@ -416,7 +416,7 @@ impl PiFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("PI", VarType::Double)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description("Returns the Archimedes' constant.")
                 .build(),
@@ -447,7 +447,7 @@ impl RadCommand {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RAD", VarType::Void)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Sets radians mode of calculation.
@@ -484,7 +484,7 @@ impl RandomizeCommand {
     pub fn new(prng: Rc<RefCell<Prng>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RANDOMIZE", VarType::Void)
-                .with_typed_syntax(&[
+                .with_syntax(&[
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
@@ -535,7 +535,7 @@ impl RndFunction {
     pub fn new(prng: Rc<RefCell<Prng>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RND", VarType::Double)
-                .with_typed_syntax(&[
+                .with_syntax(&[
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
@@ -594,7 +594,7 @@ impl SinFunction {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SIN", VarType::Double)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "angle", vtype: ExprType::Double },
                         ArgSepSyntax::End,
@@ -635,7 +635,7 @@ impl SqrFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SQR", VarType::Double)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "num", vtype: ExprType::Double },
                         ArgSepSyntax::End,
@@ -680,7 +680,7 @@ impl TanFunction {
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("TAN", VarType::Double)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "angle", vtype: ExprType::Double },
                         ArgSepSyntax::End,

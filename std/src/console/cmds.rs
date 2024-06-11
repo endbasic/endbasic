@@ -63,7 +63,7 @@ impl ClsCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CLS", VarType::Void)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description("Clears the screen.")
                 .build(),
@@ -99,7 +99,7 @@ impl ColorCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("COLOR", VarType::Void)
-                .with_typed_syntax(&[
+                .with_syntax(&[
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
@@ -192,7 +192,7 @@ impl InKeyFunction {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("INKEY", VarType::Text)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Checks for an available key press and returns it.
@@ -260,7 +260,7 @@ impl InputCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("INPUT", VarType::Void)
-                .with_typed_syntax(&[
+                .with_syntax(&[
                     (
                         &[SingularArgSyntax::RequiredRef(
                             RequiredRefSyntax {
@@ -383,7 +383,7 @@ impl LocateCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOCATE", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "column", vtype: ExprType::Integer },
@@ -454,7 +454,7 @@ impl PrintCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("PRINT", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
                         name: "expr",
@@ -562,7 +562,7 @@ impl ScrColsFunction {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SCRCOLS", VarType::Integer)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the number of columns in the text console.
@@ -598,7 +598,7 @@ impl ScrRowsFunction {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SCRROWS", VarType::Integer)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the number of rows in the text console.

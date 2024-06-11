@@ -91,7 +91,7 @@ impl LboundFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LBOUND", VarType::Integer)
-                .with_typed_syntax(&[
+                .with_syntax(&[
                     (
                         &[SingularArgSyntax::RequiredRef(
                             RequiredRefSyntax {
@@ -156,7 +156,7 @@ impl UboundFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("UBOUND", VarType::Integer)
-                .with_typed_syntax(&[
+                .with_syntax(&[
                     (
                         &[SingularArgSyntax::RequiredRef(
                             RequiredRefSyntax {

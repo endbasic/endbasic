@@ -826,15 +826,13 @@ mod tests {
     #[test]
     fn test_compile_expr_argless_call_not_argless() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("F", VarType::Integer).with_typed_syntax(
-                &[(
-                    &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "i", vtype: ExprType::Integer },
-                        ArgSepSyntax::End,
-                    )],
-                    None,
+            .define_callable(CallableMetadataBuilder::new("F", VarType::Integer).with_syntax(&[(
+                &[SingularArgSyntax::RequiredValue(
+                    RequiredValueSyntax { name: "i", vtype: ExprType::Integer },
+                    ArgSepSyntax::End,
                 )],
-            ))
+                None,
+            )]))
             .parse("i = f")
             .compile()
             .expect_err("1:5: In call to f: function requires arguments")
@@ -844,19 +842,13 @@ mod tests {
     #[test]
     fn test_compile_expr_ref_argless_not_allowed() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("C", VarType::Void).with_typed_syntax(&[
-                (
-                    &[SingularArgSyntax::RequiredRef(
-                        RequiredRefSyntax {
-                            name: "x",
-                            require_array: false,
-                            define_undefined: false,
-                        },
-                        ArgSepSyntax::End,
-                    )],
-                    None,
-                ),
-            ]))
+            .define_callable(CallableMetadataBuilder::new("C", VarType::Void).with_syntax(&[(
+                &[SingularArgSyntax::RequiredRef(
+                    RequiredRefSyntax { name: "x", require_array: false, define_undefined: false },
+                    ArgSepSyntax::End,
+                )],
+                None,
+            )]))
             .define_callable(CallableMetadataBuilder::new("F", VarType::Integer))
             .parse("c f")
             .compile()
@@ -886,19 +878,13 @@ mod tests {
     #[test]
     fn test_compile_expr_ref_bad_annotation_in_varref() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("C", VarType::Void).with_typed_syntax(&[
-                (
-                    &[SingularArgSyntax::RequiredRef(
-                        RequiredRefSyntax {
-                            name: "x",
-                            require_array: false,
-                            define_undefined: false,
-                        },
-                        ArgSepSyntax::End,
-                    )],
-                    None,
-                ),
-            ]))
+            .define_callable(CallableMetadataBuilder::new("C", VarType::Void).with_syntax(&[(
+                &[SingularArgSyntax::RequiredRef(
+                    RequiredRefSyntax { name: "x", require_array: false, define_undefined: false },
+                    ArgSepSyntax::End,
+                )],
+                None,
+            )]))
             .parse("a = 3: c a$")
             .compile()
             .expect_err("1:8: In call to C: 1:10: Incompatible type annotation in a$ reference")
@@ -908,19 +894,13 @@ mod tests {
     #[test]
     fn test_compile_expr_ref_bad_annotation_in_argless_call() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("C", VarType::Void).with_typed_syntax(&[
-                (
-                    &[SingularArgSyntax::RequiredRef(
-                        RequiredRefSyntax {
-                            name: "x",
-                            require_array: false,
-                            define_undefined: false,
-                        },
-                        ArgSepSyntax::End,
-                    )],
-                    None,
-                ),
-            ]))
+            .define_callable(CallableMetadataBuilder::new("C", VarType::Void).with_syntax(&[(
+                &[SingularArgSyntax::RequiredRef(
+                    RequiredRefSyntax { name: "x", require_array: false, define_undefined: false },
+                    ArgSepSyntax::End,
+                )],
+                None,
+            )]))
             .define_callable(CallableMetadataBuilder::new("F", VarType::Integer))
             .parse("c f$")
             .compile()
@@ -942,19 +922,13 @@ mod tests {
     fn test_compile_expr_ref_try_load_array_as_var() {
         Tester::default()
             .define(SymbolKey::from("a"), SymbolPrototype::Array(ExprType::Integer, 1))
-            .define_callable(CallableMetadataBuilder::new("C", VarType::Void).with_typed_syntax(&[
-                (
-                    &[SingularArgSyntax::RequiredRef(
-                        RequiredRefSyntax {
-                            name: "x",
-                            require_array: true,
-                            define_undefined: false,
-                        },
-                        ArgSepSyntax::End,
-                    )],
-                    None,
-                ),
-            ]))
+            .define_callable(CallableMetadataBuilder::new("C", VarType::Void).with_syntax(&[(
+                &[SingularArgSyntax::RequiredRef(
+                    RequiredRefSyntax { name: "x", require_array: true, define_undefined: false },
+                    ArgSepSyntax::End,
+                )],
+                None,
+            )]))
             .parse("c a")
             .compile()
             .expect_instr(0, Instruction::LoadRef(VarRef::new("a", VarType::Auto), lc(1, 3)))
@@ -975,19 +949,13 @@ mod tests {
     #[test]
     fn test_compile_expr_ref_try_load_command_as_var() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("C", VarType::Void).with_typed_syntax(&[
-                (
-                    &[SingularArgSyntax::RequiredRef(
-                        RequiredRefSyntax {
-                            name: "x",
-                            require_array: false,
-                            define_undefined: false,
-                        },
-                        ArgSepSyntax::End,
-                    )],
-                    None,
-                ),
-            ]))
+            .define_callable(CallableMetadataBuilder::new("C", VarType::Void).with_syntax(&[(
+                &[SingularArgSyntax::RequiredRef(
+                    RequiredRefSyntax { name: "x", require_array: false, define_undefined: false },
+                    ArgSepSyntax::End,
+                )],
+                None,
+            )]))
             .parse("c c")
             .compile()
             .expect_err("1:1: In call to C: 1:3: c is not an array nor a function")
@@ -1220,8 +1188,8 @@ mod tests {
     #[test]
     fn test_compile_expr_function_call() {
         Tester::default()
-            .define_callable(
-                CallableMetadataBuilder::new("FOO", VarType::Integer).with_typed_syntax(&[(
+            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Integer).with_syntax(&[
+                (
                     &[],
                     Some(&RepeatedSyntax {
                         name: "expr",
@@ -1230,8 +1198,8 @@ mod tests {
                         require_one: true,
                         allow_missing: false,
                     }),
-                )]),
-            )
+                ),
+            ]))
             .define("j", SymbolPrototype::Variable(ExprType::Integer))
             .define("k", SymbolPrototype::Variable(ExprType::Double))
             .parse("i = FOO(3, j, k + 1)")

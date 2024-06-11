@@ -41,7 +41,7 @@ impl ClearCommand {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Restores initial machine state but keeps the stored program.
@@ -80,7 +80,7 @@ impl ErrmsgFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("ERRMSG", VarType::Text)
-                .with_typed_syntax(&[(&[], None)])
+                .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the last captured error message.
@@ -137,7 +137,7 @@ impl SleepCommand {
     pub fn new(sleep_fn: SleepFn) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SLEEP", VarType::Void)
-                .with_typed_syntax(&[(
+                .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "seconds", vtype: ExprType::Double },
                         ArgSepSyntax::End,
