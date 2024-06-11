@@ -15,11 +15,10 @@
 
 //! Test utilities.
 
-use crate::ast::{ArgSpan, Expr, Value, VarRef, VarType};
-use crate::bytecode::Instruction;
+use crate::ast::{ArgSep, Value, VarRef, VarType};
 use crate::compiler::{
-    compile_expr, compile_expr_symbol_ref, CallableArgsCompiler, ExprType, NoArgsCompiler,
-    SameTypeArgsCompiler, SymbolsTable,
+    ArgSepSyntax, ExprType, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax,
+    RequiredValueSyntax, SingularArgSyntax,
 };
 use crate::exec::{Machine, Scope, ValueTag};
 use crate::syms::{
@@ -27,7 +26,6 @@ use crate::syms::{
     SymbolKey, Symbols,
 };
 use crate::value;
-use crate::LineCol;
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -44,7 +42,7 @@ impl ArglessFunction {
     pub fn new(value: Value) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("ARGLESS", value.as_vartype())
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .test_build(),
             value,
         })
@@ -72,7 +70,7 @@ impl ClearCommand {
     pub(crate) fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void)
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .test_build(),
         })
     }
@@ -101,7 +99,7 @@ impl CountFunction {
     pub(crate) fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("COUNT", VarType::Integer)
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .test_build(),
             counter: Rc::from(RefCell::from(0)),
         })
@@ -132,8 +130,13 @@ impl RaisefFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RAISEF", VarType::Boolean)
-                .with_syntax("arg1$")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "arg", vtype: ExprType::Text },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .test_build(),
         })
     }
@@ -168,8 +171,13 @@ impl RaiseCommand {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RAISE", VarType::Void)
-                .with_syntax("arg1$")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "arg", vtype: ExprType::Text },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .test_build(),
         })
     }
@@ -205,8 +213,13 @@ impl GetHiddenFunction {
     pub(crate) fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GETHIDDEN", VarType::Text)
-                .with_syntax("varname$")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "varname", vtype: ExprType::Text },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .test_build(),
         })
     }
@@ -239,7 +252,7 @@ impl GetDataCommand {
     pub(crate) fn new(data: Rc<RefCell<Vec<Option<Value>>>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GETDATA", VarType::Void)
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .test_build(),
             data,
         })
@@ -259,33 +272,6 @@ impl Callable for GetDataCommand {
     }
 }
 
-/// An arguments compiler for the `OUT` command.
-#[derive(Debug, Default)]
-struct InArgsCompiler {}
-
-impl CallableArgsCompiler for InArgsCompiler {
-    fn compile_complex(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &mut SymbolsTable,
-        _pos: LineCol,
-        args: Vec<ArgSpan>,
-    ) -> Result<usize, CallError> {
-        let mut iter = args.into_iter();
-
-        let span = iter.next().expect("Requires one argument");
-        let expr = span.expr.expect("Optional expressions not supported");
-        match expr {
-            Expr::Symbol(span) => {
-                compile_expr_symbol_ref(instrs, symtable, span)?;
-            }
-            _ => panic!("Requires a variable reference"),
-        }
-        assert!(iter.next().is_none(), "Only one argument allowed");
-        Ok(1)
-    }
-}
-
 /// Simplified version of `INPUT` to feed input values based on some golden `data`.
 ///
 /// Every time this command is invoked, it yields the next value from the `data` iterator and
@@ -300,8 +286,17 @@ impl InCommand {
     pub fn new(data: Box<RefCell<dyn Iterator<Item = &'static &'static str>>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("IN", VarType::Void)
-                .with_syntax("vref")
-                .with_args_compiler(InArgsCompiler::default())
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredRef(
+                        RequiredRefSyntax {
+                            name: "vref",
+                            require_array: false,
+                            define_undefined: true,
+                        },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .test_build(),
             data,
         })
@@ -327,30 +322,6 @@ impl Callable for InCommand {
     }
 }
 
-/// An arguments compiler for the `OUT` command.
-#[derive(Debug, Default)]
-struct OutArgsCompiler {}
-
-impl CallableArgsCompiler for OutArgsCompiler {
-    fn compile_complex(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &mut SymbolsTable,
-        _pos: LineCol,
-        args: Vec<ArgSpan>,
-    ) -> Result<usize, CallError> {
-        let nargs = args.len();
-        for arg in args.into_iter().rev() {
-            let expr = arg.expr.expect("Empty arguments not expected in tests");
-            let pos = expr.start_pos();
-            let etype = compile_expr(instrs, symtable, expr, false)?;
-            let tag = ValueTag::from(etype);
-            instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
-        }
-        Ok(nargs * 2)
-    }
-}
-
 /// Simplified version of `PRINT` that captures all calls to it into `data`.
 ///
 /// This command only accepts arguments separated by the `;` short separator and concatenates
@@ -365,8 +336,16 @@ impl OutCommand {
     pub fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("OUT", VarType::Void)
-                .with_syntax("[arg1[; .. argN]]")
-                .with_args_compiler(OutArgsCompiler::default())
+                .with_typed_syntax(&[(
+                    &[],
+                    Some(&RepeatedSyntax {
+                        name: "arg",
+                        type_syn: RepeatedTypeSyntax::AnyValue,
+                        sep: ArgSepSyntax::Exactly(ArgSep::Short),
+                        require_one: false,
+                        allow_missing: false,
+                    }),
+                )])
                 .test_build(),
             data,
         })
@@ -431,8 +410,16 @@ impl OutfFunction {
     pub fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("OUTF", VarType::Integer)
-                .with_syntax("[arg1[, .. argN]]")
-                .with_args_compiler(SameTypeArgsCompiler::new(0, usize::MAX, ExprType::Integer))
+                .with_typed_syntax(&[(
+                    &[],
+                    Some(&RepeatedSyntax {
+                        name: "expr",
+                        type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
+                        sep: ArgSepSyntax::Exactly(ArgSep::Long),
+                        require_one: false,
+                        allow_missing: false,
+                    }),
+                )])
                 .test_build(),
             data,
         })
@@ -476,8 +463,16 @@ impl SumFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SUM", VarType::Integer)
-                .with_syntax("[n1%[, .. nN%]]")
-                .with_args_compiler(SameTypeArgsCompiler::new(0, usize::MAX, ExprType::Integer))
+                .with_typed_syntax(&[(
+                    &[],
+                    Some(&RepeatedSyntax {
+                        name: "n",
+                        type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
+                        sep: ArgSepSyntax::Exactly(ArgSep::Long),
+                        require_one: false,
+                        allow_missing: false,
+                    }),
+                )])
                 .test_build(),
         })
     }
@@ -552,7 +547,7 @@ impl TypeCheckFunction {
     pub fn new(value: Value) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("TYPE_CHECK", VarType::Boolean)
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .test_build(),
             value,
         })

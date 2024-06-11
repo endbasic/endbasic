@@ -2524,7 +2524,7 @@ mod tests {
             100 OUT GETHIDDEN("0ERRMSG")
             "#,
             &[],
-            &["1", "4:17: In call to RAISEF: expected arg1$"],
+            &["1", "4:17: In call to RAISEF: expected arg$"],
         );
     }
 
@@ -2540,7 +2540,7 @@ mod tests {
             OUT GETHIDDEN("0ERRMSG")
             "#,
             &[],
-            &["1", "4:17: In call to RAISEF: expected arg1$"],
+            &["1", "4:17: In call to RAISEF: expected arg$"],
         );
     }
 
@@ -2558,7 +2558,7 @@ mod tests {
             "#,
             &[],
             &["1", "2"],
-            "8:17: In call to RAISEF: expected arg1$",
+            "8:17: In call to RAISEF: expected arg$",
         );
     }
 
@@ -2572,7 +2572,7 @@ mod tests {
             OUT GETHIDDEN("0ERRMSG")
             "#,
             &[],
-            &["1", "4:17: In call to RAISEF: expected arg1$"],
+            &["1", "4:17: In call to RAISEF: expected arg$"],
         );
     }
 
@@ -2586,7 +2586,7 @@ mod tests {
             OUT GETHIDDEN("0ERRMSG")
             "#,
             &[],
-            &["1", "4:13: In call to RAISE: expected arg1$"],
+            &["1", "4:13: In call to RAISE: expected arg$"],
         );
     }
 
@@ -2598,7 +2598,7 @@ mod tests {
             OUT 1: OUT RAISEF("syntax"): OUT GETHIDDEN("0ERRMSG")
             "#,
             &[],
-            &["1", "3:24: In call to RAISEF: expected arg1$"],
+            &["1", "3:24: In call to RAISEF: expected arg$"],
         );
     }
 
@@ -2610,7 +2610,7 @@ mod tests {
             OUT 1: RAISE "syntax": OUT GETHIDDEN("0ERRMSG")
             "#,
             &[],
-            &["1", "3:20: In call to RAISE: expected arg1$"],
+            &["1", "3:20: In call to RAISE: expected arg$"],
         );
     }
 
@@ -2643,7 +2643,7 @@ mod tests {
         do_ok_test(
             r#"ON ERROR RESUME NEXT: OUT RAISEF("syntax"): OUT GETHIDDEN("0ERRMSG")"#,
             &[],
-            &["1:27: In call to RAISEF: expected arg1$"],
+            &["1:27: In call to RAISEF: expected arg$"],
         );
     }
 
