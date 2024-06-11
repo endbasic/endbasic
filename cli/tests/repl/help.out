@@ -932,7 +932,7 @@ Output from HELP "RANDOMIZE":
 
 Output from HELP "READ":
 
-[38;5;11m    READ vref1 [, .., vrefN]
+[38;5;11m    READ vref1[, .., vrefN]
 [39m
     Extracts data values from DATA statements.
 
