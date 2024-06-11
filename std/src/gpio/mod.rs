@@ -16,11 +16,8 @@
 //! GPIO access functions and commands for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, Value, VarType};
-use endbasic_core::bytecode::Instruction;
-use endbasic_core::compiler::{
-    compile_arg_expr, CallableArgsCompiler, ExprType, SameTypeArgsCompiler, SymbolsTable,
-};
+use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::compiler::{ArgSepSyntax, ExprType, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Clearable, Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
@@ -132,55 +129,6 @@ impl Clearable for PinsClearable {
     }
 }
 
-/// An arguments compiler for a command that takes two arguments of different type.
-#[derive(Debug)]
-struct TwoArgsCompiler {
-    type1: ExprType,
-    type2: ExprType,
-}
-
-impl CallableArgsCompiler for TwoArgsCompiler {
-    fn compile_complex(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &mut SymbolsTable,
-        _pos: LineCol,
-        args: Vec<ArgSpan>,
-    ) -> Result<usize, CallError> {
-        if args.len() != 2 {
-            return Err(CallError::SyntaxError);
-        }
-
-        let mut iter = args.into_iter().rev();
-
-        let span = iter.next().unwrap();
-        debug_assert_eq!(ArgSep::End, span.sep);
-        match span.expr {
-            Some(expr) => {
-                compile_arg_expr(instrs, symtable, expr, self.type2)?;
-            }
-            None => {
-                return Err(CallError::SyntaxError);
-            }
-        }
-
-        let span = iter.next().unwrap();
-        if span.sep != ArgSep::Long {
-            return Err(CallError::SyntaxError);
-        }
-        match span.expr {
-            Some(expr) => {
-                compile_arg_expr(instrs, symtable, expr, self.type1)?;
-            }
-            None => {
-                return Err(CallError::SyntaxError);
-            }
-        }
-
-        Ok(2)
-    }
-}
-
 /// The `GPIO_SETUP` command.
 pub struct GpioSetupCommand {
     metadata: CallableMetadata,
@@ -192,11 +140,19 @@ impl GpioSetupCommand {
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_SETUP", VarType::Void)
-                .with_syntax("pin%, mode$")
-                .with_args_compiler(TwoArgsCompiler {
-                    type1: ExprType::Integer,
-                    type2: ExprType::Text,
-                })
+                .with_typed_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "pin", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "mode", vtype: ExprType::Text },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Configures a GPIO pin for input or output.
@@ -250,8 +206,16 @@ impl GpioClearCommand {
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_CLEAR", VarType::Void)
-                .with_syntax("[pin%]")
-                .with_args_compiler(SameTypeArgsCompiler::new(0, 1, ExprType::Integer))
+                .with_typed_syntax(&[
+                    (&[], None),
+                    (
+                        &[SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "pin", vtype: ExprType::Integer },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Resets the GPIO chip or a specific pin.
@@ -305,8 +269,13 @@ impl GpioReadFunction {
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_READ", VarType::Boolean)
-                .with_syntax("pin%")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Integer))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "pin", vtype: ExprType::Integer },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Reads the state of a GPIO pin.
@@ -350,11 +319,19 @@ impl GpioWriteCommand {
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GPIO_WRITE", VarType::Void)
-                .with_syntax("pin%, value?")
-                .with_args_compiler(TwoArgsCompiler {
-                    type1: ExprType::Integer,
-                    type2: ExprType::Boolean,
-                })
+                .with_typed_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "pin", vtype: ExprType::Integer },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "value", vtype: ExprType::Boolean },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Sets the state of a GPIO pin.
@@ -547,11 +524,11 @@ mod tests {
     #[test]
     fn test_gpio_clear_errors() {
         check_stmt_compilation_err(
-            "1:1: In call to GPIO_CLEAR: expected [pin%]",
+            "1:1: In call to GPIO_CLEAR: expected <> | <pin%>",
             r#"GPIO_CLEAR 1,"#,
         );
         check_stmt_compilation_err(
-            "1:1: In call to GPIO_CLEAR: expected [pin%]",
+            "1:1: In call to GPIO_CLEAR: expected <> | <pin%>",
             r#"GPIO_CLEAR 1, 2"#,
         );
 
