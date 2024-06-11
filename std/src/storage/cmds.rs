@@ -18,17 +18,10 @@
 use crate::console::{is_narrow, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, Value, VarType};
-use endbasic_core::bytecode::Instruction;
-use endbasic_core::compiler::{
-    compile_arg_expr, CallableArgsCompiler, ExprType, NoArgsCompiler, SameTypeArgsCompiler,
-    SymbolsTable,
-};
+use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::compiler::{ArgSepSyntax, ExprType, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope};
-use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
-};
-use endbasic_core::LineCol;
+use endbasic_core::syms::{CallResult, Callable, CallableMetadata, CallableMetadataBuilder};
 use std::cell::RefCell;
 use std::cmp;
 use std::io;
@@ -136,8 +129,13 @@ impl CdCommand {
     pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CD", VarType::Void)
-                .with_syntax("path$")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "path", vtype: ExprType::Text },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description("Changes the current path.")
                 .build(),
@@ -174,8 +172,16 @@ impl DirCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DIR", VarType::Void)
-                .with_syntax("[path$]")
-                .with_args_compiler(SameTypeArgsCompiler::new(0, 1, ExprType::Text))
+                .with_typed_syntax(&[
+                    (&[], None),
+                    (
+                        &[SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "path", vtype: ExprType::Text },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description("Displays the list of files on the current or given path.")
                 .build(),
@@ -205,55 +211,6 @@ impl Callable for DirCommand {
     }
 }
 
-/// An arguments compiler for the `MOUNT` command.
-#[derive(Debug, Default)]
-struct MountArgsCompiler {}
-
-impl CallableArgsCompiler for MountArgsCompiler {
-    fn compile_complex(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &mut SymbolsTable,
-        _pos: LineCol,
-        args: Vec<ArgSpan>,
-    ) -> Result<usize, CallError> {
-        let nargs = args.len();
-        if nargs == 0 {
-            Ok(0)
-        } else if nargs == 2 {
-            let mut iter = args.into_iter().rev();
-
-            let span = iter.next().unwrap();
-            debug_assert_eq!(ArgSep::End, span.sep);
-            match span.expr {
-                Some(expr) => {
-                    compile_arg_expr(instrs, symtable, expr, ExprType::Text)?;
-                }
-                None => {
-                    return Err(CallError::SyntaxError);
-                }
-            }
-
-            let span = iter.next().unwrap();
-            if span.sep != ArgSep::As {
-                return Err(CallError::SyntaxError);
-            }
-            match span.expr {
-                Some(expr) => {
-                    compile_arg_expr(instrs, symtable, expr, ExprType::Text)?;
-                }
-                None => {
-                    return Err(CallError::SyntaxError);
-                }
-            }
-
-            Ok(2)
-        } else {
-            Err(CallError::SyntaxError)
-        }
-    }
-}
-
 /// The `MOUNT` command.
 pub struct MountCommand {
     metadata: CallableMetadata,
@@ -266,8 +223,22 @@ impl MountCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("MOUNT", VarType::Void)
-                .with_syntax("[target$ AS drive_name$]")
-                .with_args_compiler(MountArgsCompiler::default())
+                .with_typed_syntax(&[
+                    (&[], None),
+                    (
+                        &[
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax { name: "target", vtype: ExprType::Text },
+                                ArgSepSyntax::Exactly(ArgSep::As),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax { name: "drive_name", vtype: ExprType::Text },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Lists the mounted drives or mounts a new drive.
@@ -315,8 +286,7 @@ impl PwdCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("PWD", VarType::Void)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Prints the current working location.
@@ -367,8 +337,13 @@ impl UnmountCommand {
     pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("UNMOUNT", VarType::Void)
-                .with_syntax("drive_name$")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Text))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "drive_name", vtype: ExprType::Text },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Unmounts the given drive.
@@ -613,7 +588,7 @@ mod tests {
 
     #[test]
     fn test_dir_errors() {
-        check_stmt_compilation_err("1:1: In call to DIR: expected [path$]", "DIR 2, 3");
+        check_stmt_compilation_err("1:1: In call to DIR: expected <> | <path$>", "DIR 2, 3");
         check_stmt_compilation_err("1:1: In call to DIR: 1:5: INTEGER is not a STRING", "DIR 2");
     }
 
@@ -661,11 +636,11 @@ mod tests {
     #[test]
     fn test_mount_errors() {
         check_stmt_compilation_err(
-            "1:1: In call to MOUNT: expected [target$ AS drive_name$]",
+            "1:1: In call to MOUNT: expected <> | <target$ AS drive_name$>",
             "MOUNT 1",
         );
         check_stmt_compilation_err(
-            "1:1: In call to MOUNT: expected [target$ AS drive_name$]",
+            "1:1: In call to MOUNT: expected <> | <target$ AS drive_name$>",
             "MOUNT 1, 2, 3",
         );
 

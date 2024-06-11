@@ -629,7 +629,7 @@ Output from HELP "DEG":
 
 Output from HELP "DIR":
 
-[38;5;11m    DIR [path$]
+[38;5;11m    DIR <> | <path$>
 [39m
     Displays the list of files on the current or given path.
 
@@ -851,7 +851,7 @@ Output from HELP "LOGOUT":
 
 Output from HELP "MOUNT":
 
-[38;5;11m    MOUNT [target$ AS drive_name$]
+[38;5;11m    MOUNT <> | <target$ AS drive_name$>
 [39m
     Lists the mounted drives or mounts a new drive.
 
