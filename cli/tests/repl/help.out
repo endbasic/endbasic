@@ -721,7 +721,7 @@ Output from HELP "GFX_SYNC":
 
 Output from HELP "GPIO_CLEAR":
 
-[38;5;11m    GPIO_CLEAR [pin%]
+[38;5;11m    GPIO_CLEAR <> | <pin%>
 [39m
     Resets the GPIO chip or a specific pin.
 
