@@ -16,16 +16,12 @@
 //! Commands to interact with the data provided by `DATA` statements.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ArgSpan, Expr, Value, VarType};
-use endbasic_core::bytecode::Instruction;
-use endbasic_core::compiler::{
-    compile_expr_symbol_ref, CallableArgsCompiler, NoArgsCompiler, SymbolsTable,
-};
+use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::compiler::{ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax};
 use endbasic_core::exec::{Clearable, Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
-use endbasic_core::LineCol;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -40,41 +36,6 @@ impl Clearable for ClearableIndex {
     }
 }
 
-/// An arguments compiler for the `READ` command.
-#[derive(Debug, Default)]
-struct ReadArgsCompiler {}
-
-impl CallableArgsCompiler for ReadArgsCompiler {
-    fn compile_complex(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &mut SymbolsTable,
-        _pos: LineCol,
-        args: Vec<ArgSpan>,
-    ) -> Result<usize, CallError> {
-        let nargs = args.len();
-        if nargs == 0 {
-            return Err(CallError::SyntaxError);
-        }
-
-        for arg in args.into_iter().rev() {
-            match arg.sep {
-                ArgSep::Long | ArgSep::End => (),
-                _ => return Err(CallError::SyntaxError),
-            }
-
-            match arg.expr {
-                Some(Expr::Symbol(span)) => {
-                    compile_expr_symbol_ref(instrs, symtable, span)?;
-                }
-                _ => return Err(CallError::SyntaxError),
-            }
-        }
-
-        Ok(nargs)
-    }
-}
-
 /// The `READ` command.
 pub struct ReadCommand {
     metadata: CallableMetadata,
@@ -86,8 +47,16 @@ impl ReadCommand {
     pub fn new(index: Rc<RefCell<usize>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("READ", VarType::Void)
-                .with_syntax("vref1 [, .., vrefN]")
-                .with_args_compiler(ReadArgsCompiler::default())
+                .with_typed_syntax(&[(
+                    &[],
+                    Some(&RepeatedSyntax {
+                        name: "vref",
+                        type_syn: RepeatedTypeSyntax::VariableRef,
+                        sep: ArgSepSyntax::Exactly(ArgSep::Long),
+                        require_one: true,
+                        allow_missing: false,
+                    }),
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Extracts data values from DATA statements.
@@ -178,8 +147,7 @@ impl RestoreCommand {
     pub fn new(index: Rc<RefCell<usize>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RESTORE", VarType::Void)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Resets the index of the data element to be returned.
@@ -357,10 +325,13 @@ mod tests {
 
     #[test]
     fn test_read_errors() {
-        check_stmt_compilation_err("1:1: In call to READ: expected vref1 [, .., vrefN]", "READ");
-        check_stmt_compilation_err("1:1: In call to READ: expected vref1 [, .., vrefN]", "READ 3");
+        check_stmt_compilation_err("1:1: In call to READ: expected vref1[, .., vrefN]", "READ");
         check_stmt_compilation_err(
-            "1:1: In call to READ: expected vref1 [, .., vrefN]",
+            "1:1: In call to READ: 1:6: Requires a variable reference, not a value",
+            "READ 3",
+        );
+        check_stmt_compilation_err(
+            "1:1: In call to READ: expected vref1[, .., vrefN]",
             "READ i; j",
         );
 
