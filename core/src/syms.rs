@@ -579,10 +579,9 @@ impl CallableMetadataBuilder {
             syntax: self.syntax.unwrap_or("".to_owned()),
             category: self.category.unwrap_or(""),
             description: self.description.unwrap_or(""),
-            args_compiler: self
-                .args_compiler
-                .take()
-                .expect("All callables must specify an arguments parser"),
+            args_compiler: self.args_compiler.take().unwrap_or_else(|| {
+                Rc::from(ArgsCompiler::new(vec![CallableSyntax::new(&[], None)]))
+            }),
         }
     }
 }

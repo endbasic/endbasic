@@ -1050,63 +1050,6 @@ mod testutils {
     use crate::parser;
     use crate::syms::CallableMetadataBuilder;
 
-    /// A callable arguments compiler that just passes through all arguments to the runtime `exec`
-    /// method.
-    ///
-    /// In the case of commands, argument separators and missing values are passed through as
-    /// strings, which is sufficient for testing.
-    #[derive(Debug, Default)]
-    pub(crate) struct PassthroughArgsCompiler {}
-
-    impl CallableArgsCompiler for PassthroughArgsCompiler {
-        fn compile_complex(
-            &self,
-            instrs: &mut Vec<Instruction>,
-            symtable: &mut SymbolsTable,
-            _pos: LineCol,
-            args: Vec<ArgSpan>,
-        ) -> std::result::Result<usize, CallError> {
-            let mut nargs = 0;
-            for argspan in args.into_iter().rev() {
-                if argspan.sep != ArgSep::End {
-                    instrs.push(Instruction::Push(
-                        Value::Text(argspan.sep.to_string()),
-                        argspan.sep_pos,
-                    ));
-                    nargs += 1;
-                }
-
-                match argspan.expr {
-                    Some(expr) => {
-                        compile_expr_in_command(instrs, symtable, expr)?;
-                    }
-                    None => {
-                        instrs.push(Instruction::Push(
-                            Value::Text("MISSING".to_owned()),
-                            argspan.sep_pos,
-                        ));
-                    }
-                }
-                nargs += 1;
-            }
-            Ok(nargs)
-        }
-
-        fn compile_simple(
-            &self,
-            instrs: &mut Vec<Instruction>,
-            symtable: &SymbolsTable,
-            _pos: LineCol,
-            args: Vec<Expr>,
-        ) -> std::result::Result<usize, CallError> {
-            let nargs = args.len();
-            for arg in args.into_iter().rev() {
-                compile_expr(instrs, symtable, arg, true)?;
-            }
-            Ok(nargs)
-        }
-    }
-
     /// Builder pattern to prepare the compiler for testing purposes.
     #[derive(Default)]
     #[must_use]
@@ -1130,7 +1073,7 @@ mod testutils {
         ///
         /// This is syntactic sugar over `define` to simplify the definition of callables.
         pub(crate) fn define_callable(mut self, builder: CallableMetadataBuilder) -> Self {
-            let md = builder.with_args_compiler(PassthroughArgsCompiler::default()).test_build();
+            let md = builder.test_build();
             let key = SymbolKey::from(md.name());
             self.symtable.insert(key, SymbolPrototype::Callable(md));
             self
@@ -1466,36 +1409,27 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_builtin_call_separator_types() {
-        Tester::default()
-            .define_callable(CallableMetadataBuilder::new("CMD", VarType::Void))
-            .parse("CMD a;;b,c AS d")
-            .compile()
-            .expect_instr(0, Instruction::LoadRef(VarRef::new("d", VarType::Auto), lc(1, 15)))
-            .expect_instr(1, Instruction::Push(Value::Text("AS".to_owned()), lc(1, 12)))
-            .expect_instr(2, Instruction::LoadRef(VarRef::new("c", VarType::Auto), lc(1, 10)))
-            .expect_instr(3, Instruction::Push(Value::Text(",".to_owned()), lc(1, 9)))
-            .expect_instr(4, Instruction::LoadRef(VarRef::new("b", VarType::Auto), lc(1, 8)))
-            .expect_instr(5, Instruction::Push(Value::Text(";".to_owned()), lc(1, 7)))
-            .expect_instr(6, Instruction::Push(Value::Text("MISSING".to_owned()), lc(1, 7)))
-            .expect_instr(7, Instruction::Push(Value::Text(";".to_owned()), lc(1, 6)))
-            .expect_instr(8, Instruction::LoadRef(VarRef::new("a", VarType::Auto), lc(1, 5)))
-            .expect_instr(9, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 1), 9))
-            .check();
-    }
-
-    #[test]
     fn test_compile_builtin_call_increments_next_pc() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("CMD", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("CMD", VarType::Void).with_typed_syntax(
+                &[(
+                    &[],
+                    Some(&RepeatedSyntax {
+                        name: "expr",
+                        type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
+                        sep: ArgSepSyntax::Exactly(ArgSep::Long),
+                        require_one: false,
+                        allow_missing: false,
+                    }),
+                )],
+            ))
             .parse("IF TRUE THEN: CMD 1, 2: END IF")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 4)))
-            .expect_instr(1, Instruction::JumpIfNotTrue(6))
+            .expect_instr(1, Instruction::JumpIfNotTrue(5))
             .expect_instr(2, Instruction::Push(Value::Integer(2), lc(1, 22)))
-            .expect_instr(3, Instruction::Push(Value::Text(",".to_owned()), lc(1, 20)))
-            .expect_instr(4, Instruction::Push(Value::Integer(1), lc(1, 19)))
-            .expect_instr(5, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 15), 3))
+            .expect_instr(3, Instruction::Push(Value::Integer(1), lc(1, 19)))
+            .expect_instr(4, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 15), 2))
             .check();
     }
 
