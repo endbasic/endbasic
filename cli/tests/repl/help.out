@@ -1161,7 +1161,7 @@ Output from HELP "INT%":
 
 Output from HELP "LBOUND":
 
-[38;5;11m    LBOUND%(array[, dimension%])
+[38;5;11m    LBOUND%(<array> | <array, dimension%>)
 [39m
     Returns the lower bound for the given dimension of the array.
 
@@ -1317,7 +1317,7 @@ Output from HELP "TAN":
 
 Output from HELP "UBOUND":
 
-[38;5;11m    UBOUND%(array[, dimension%])
+[38;5;11m    UBOUND%(<array> | <array, dimension%>)
 [39m
     Returns the upper bound for the given dimension of the array.
 
