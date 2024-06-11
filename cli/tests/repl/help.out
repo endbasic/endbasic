@@ -975,7 +975,7 @@ Output from HELP "RUN":
 
 Output from HELP "SAVE":
 
-[38;5;11m    SAVE [filename$]
+[38;5;11m    SAVE <> | <filename$>
 [39m
     Saves the current program in memory to the given filename.
 
