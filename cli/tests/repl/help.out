@@ -760,7 +760,7 @@ Output from HELP "GPIO_WRITE":
 
 Output from HELP "HELP":
 
-[38;5;11m    HELP [topic$]
+[38;5;11m    HELP <> | <topic$>
 [39m
     Prints interactive help.
 

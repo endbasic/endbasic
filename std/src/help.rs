@@ -19,7 +19,7 @@ use crate::console::{refill_and_print, AnsiColor, Console};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
-use endbasic_core::compiler::{ExprType, SameTypeArgsCompiler};
+use endbasic_core::compiler::{ArgSepSyntax, ExprType, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
@@ -411,8 +411,16 @@ impl HelpCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("HELP", VarType::Void)
-                .with_syntax("[topic$]")
-                .with_args_compiler(SameTypeArgsCompiler::new(0, 1, ExprType::Text))
+                .with_typed_syntax(&[
+                    (&[], None),
+                    (
+                        &[SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "topic", vtype: ExprType::Text },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Prints interactive help.
@@ -531,8 +539,13 @@ pub(crate) mod testutils {
         pub fn new_with_name(name: &'static str) -> Rc<Self> {
             Rc::from(Self {
                 metadata: CallableMetadataBuilder::new(name, VarType::Void)
-                    .with_syntax("this [would] <be|the> syntax \"specification\"")
-                    .with_args_compiler(SameTypeArgsCompiler::new(0, usize::MAX, ExprType::Integer))
+                    .with_typed_syntax(&[(
+                        &[SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "sample", vtype: ExprType::Text },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    )])
                     .with_category(
                         "Testing
 This is a sample category for testing.",
@@ -573,8 +586,13 @@ Second paragraph of the extended description.",
         pub(crate) fn new_with_name(name: &'static str) -> Rc<Self> {
             Rc::from(Self {
                 metadata: CallableMetadataBuilder::new(name, VarType::Text)
-                    .with_syntax("this [would] <be|the> syntax \"specification\"")
-                    .with_args_compiler(SameTypeArgsCompiler::new(0, usize::MAX, ExprType::Integer))
+                    .with_typed_syntax(&[(
+                        &[SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "sample", vtype: ExprType::Text },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    )])
                     .with_category(
                         "Testing
 This is a sample category for testing.",
@@ -777,9 +795,7 @@ This is the first and only topic with just one line.
             .expect_prints([""])
             .expect_output([
                 CapturedOut::SetColor(Some(TITLE_COLOR), Some(21)),
-                CapturedOut::Print(
-                    "    DO_NOTHING this [would] <be|the> syntax \"specification\"".to_owned(),
-                ),
+                CapturedOut::Print("    DO_NOTHING sample$".to_owned()),
                 CapturedOut::SetColor(Some(20), Some(21)),
             ])
             .expect_prints([
@@ -803,9 +819,7 @@ This is the first and only topic with just one line.
             .expect_prints([""])
             .expect_output([
                 CapturedOut::SetColor(Some(TITLE_COLOR), Some(26)),
-                CapturedOut::Print(
-                    "    EMPTY$(this [would] <be|the> syntax \"specification\")".to_owned(),
-                ),
+                CapturedOut::Print("    EMPTY$(sample$)".to_owned()),
                 CapturedOut::SetColor(Some(30), Some(26)),
             ])
             .expect_prints([
@@ -840,9 +854,7 @@ This is the first and only topic with just one line.
             .expect_prints([""])
             .expect_output([
                 CapturedOut::SetColor(Some(TITLE_COLOR), None),
-                CapturedOut::Print(
-                    "    DO_NOTHING this [would] <be|the> syntax \"specification\"".to_owned(),
-                ),
+                CapturedOut::Print("    DO_NOTHING sample$".to_owned()),
                 CapturedOut::SetColor(None, None),
             ])
             .expect_prints([
@@ -863,9 +875,9 @@ This is the first and only topic with just one line.
     fn test_help_prefix_search() {
         fn exp_output(name: &str, is_function: bool) -> Vec<CapturedOut> {
             let spec = if is_function {
-                format!("    {}(this [would] <be|the> syntax \"specification\")", name)
+                format!("    {}(sample$)", name)
             } else {
-                format!("    {} this [would] <be|the> syntax \"specification\"", name)
+                format!("    {} sample$", name)
             };
             vec![
                 CapturedOut::SetSync(false),
@@ -932,7 +944,7 @@ This is the first and only topic with just one line.
         t.run(r#"HELP foo"#).expect_compilation_err("1:6: Undefined variable foo").check();
 
         t.run(r#"HELP "foo", 3"#)
-            .expect_compilation_err("1:1: In call to HELP: expected [topic$]")
+            .expect_compilation_err("1:1: In call to HELP: expected <> | <topic$>")
             .check();
         t.run(r#"HELP 3"#)
             .expect_compilation_err("1:1: In call to HELP: 1:6: INTEGER is not a STRING")
