@@ -17,8 +17,11 @@
 
 use crate::*;
 use async_trait::async_trait;
-use endbasic_core::ast::{Value, VarType};
-use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
+use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::compiler::{
+    ArgSepSyntax, ExprType, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax,
+    SingularArgSyntax,
+};
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
@@ -62,8 +65,28 @@ impl LoginCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOGIN", VarType::Void)
-                .with_syntax("username$[, password$]")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 2, ExprType::Text))
+                .with_typed_syntax(&[
+                    (
+                        &[SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax { name: "username", vtype: ExprType::Text },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                    (
+                        &[
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax { name: "username", vtype: ExprType::Text },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax { name: "password", vtype: ExprType::Text },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Logs into the user's account.
@@ -147,8 +170,7 @@ impl LogoutCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOGOUT", VarType::Void)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Logs the user out of their account.
@@ -234,8 +256,19 @@ impl ShareCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SHARE", VarType::Void)
-                .with_syntax("filename$[, acl1$, .., aclN$]")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, usize::MAX, ExprType::Text))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "filename", vtype: ExprType::Text },
+                        ArgSepSyntax::Exactly(ArgSep::Long),
+                    )],
+                    Some(&RepeatedSyntax {
+                        name: "acl",
+                        type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Text),
+                        sep: ArgSepSyntax::Exactly(ArgSep::Long),
+                        require_one: false,
+                        allow_missing: false,
+                    }),
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Displays or modifies the ACLs of a file.
@@ -406,8 +439,7 @@ impl SignupCommand {
     pub fn new(service: Rc<RefCell<dyn Service>>, console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SIGNUP", VarType::Void)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Creates a new user account interactively.
@@ -703,19 +735,19 @@ mod tests {
     #[test]
     fn test_login_errors() {
         client_check_stmt_compilation_err(
-            "1:1: In call to LOGIN: expected username$[, password$]",
+            "1:1: In call to LOGIN: expected <username$> | <username$, password$>",
             r#"LOGIN"#,
         );
         client_check_stmt_compilation_err(
-            "1:1: In call to LOGIN: expected username$[, password$]",
+            "1:1: In call to LOGIN: expected <username$> | <username$, password$>",
             r#"LOGIN "a", "b", "c""#,
         );
         client_check_stmt_compilation_err(
-            "1:1: In call to LOGIN: expected username$[, password$]",
+            "1:1: In call to LOGIN: expected <username$> | <username$, password$>",
             r#"LOGIN , "c""#,
         );
         client_check_stmt_compilation_err(
-            "1:1: In call to LOGIN: expected username$[, password$]",
+            "1:1: In call to LOGIN: expected <username$> | <username$, password$>",
             r#"LOGIN ;"#,
         );
         client_check_stmt_compilation_err(
