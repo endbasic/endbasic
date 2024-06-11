@@ -17,7 +17,7 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
-use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
+use endbasic_core::compiler::{ArgSepSyntax, ExprType, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
@@ -41,8 +41,7 @@ impl ClearCommand {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Restores initial machine state but keeps the stored program.
@@ -81,8 +80,7 @@ impl ErrmsgFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("ERRMSG", VarType::Text)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the last captured error message.
@@ -139,8 +137,13 @@ impl SleepCommand {
     pub fn new(sleep_fn: SleepFn) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SLEEP", VarType::Void)
-                .with_syntax("seconds<%|#>")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Double))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "seconds", vtype: ExprType::Double },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category(CATEGORY)
                 .with_description(
                     "Suspends program execution.
@@ -270,9 +273,9 @@ mod tests {
 
     #[test]
     fn test_sleep_errors() {
-        check_stmt_compilation_err("1:1: In call to SLEEP: expected seconds<%|#>", "SLEEP");
-        check_stmt_compilation_err("1:1: In call to SLEEP: expected seconds<%|#>", "SLEEP 2, 3");
-        check_stmt_compilation_err("1:1: In call to SLEEP: expected seconds<%|#>", "SLEEP 2; 3");
+        check_stmt_compilation_err("1:1: In call to SLEEP: expected seconds#", "SLEEP");
+        check_stmt_compilation_err("1:1: In call to SLEEP: expected seconds#", "SLEEP 2, 3");
+        check_stmt_compilation_err("1:1: In call to SLEEP: expected seconds#", "SLEEP 2; 3");
         check_stmt_compilation_err(
             "1:1: In call to SLEEP: 1:7: STRING is not a number",
             "SLEEP \"foo\"",

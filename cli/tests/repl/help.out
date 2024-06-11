@@ -1021,7 +1021,7 @@ Output from HELP "SIGNUP":
 
 Output from HELP "SLEEP":
 
-[38;5;11m    SLEEP seconds<%|#>
+[38;5;11m    SLEEP seconds#
 [39m
     Suspends program execution.
 
