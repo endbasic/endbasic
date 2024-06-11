@@ -16,97 +16,19 @@
 //! Array-related functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{Expr, Value, VarType};
-use endbasic_core::bytecode::Instruction;
+use endbasic_core::ast::{ArgSep, Value, VarType};
 use endbasic_core::compiler::{
-    compile_arg, CallableArgsCompiler, ExprType, SymbolPrototype, SymbolsTable,
+    ArgSepSyntax, ExprType, RequiredRefSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
     Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
-    SymbolKey, Symbols,
+    Symbols,
 };
-use endbasic_core::LineCol;
 use std::rc::Rc;
 
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "Array functions";
-
-/// An arguments compiler for the `LBOUND` and `UBOUND` functions.
-#[derive(Debug, Default)]
-struct BoundsArgsCompiler {}
-
-impl CallableArgsCompiler for BoundsArgsCompiler {
-    fn compile_simple(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &SymbolsTable,
-        _pos: LineCol,
-        args: Vec<Expr>,
-    ) -> Result<usize, CallError> {
-        let nargs = args.len();
-        if !(1..=2).contains(&nargs) {
-            return Err(CallError::SyntaxError);
-        }
-
-        let mut iter = args.into_iter().rev();
-
-        if nargs == 2 {
-            compile_arg(instrs, symtable, &mut iter, ExprType::Integer)?;
-        }
-
-        let expr = iter.next().unwrap();
-        match expr {
-            Expr::Symbol(span) => {
-                let key = SymbolKey::from(span.vref.name());
-                match symtable.get(&key) {
-                    Some(SymbolPrototype::Array(vtype, dims)) => {
-                        if !span.vref.accepts((*vtype).into()) {
-                            return Err(CallError::ArgumentError(
-                                span.pos,
-                                format!("Incompatible type annotation in {} reference", span.vref),
-                            ));
-                        }
-
-                        if *dims > 1 && nargs == 1 {
-                            return Err(CallError::ArgumentError(
-                                span.pos,
-                                "Requires a dimension for multidimensional arrays".to_owned(),
-                            ));
-                        }
-
-                        instrs.push(Instruction::LoadRef(span.vref, span.pos));
-                    }
-                    None => {
-                        return Err(CallError::ArgumentError(
-                            span.pos,
-                            format!("Undefined variable {}", span.vref.name()),
-                        ))
-                    }
-                    _ => {
-                        // TODO(jmmv): For consistency with other argument compilation, this should
-                        // check type annotations first, but doing so here is not very interesting.
-                        // Keep this in mind when trying to unify all arguments compilers.
-                        return Err(CallError::ArgumentError(
-                            span.pos,
-                            format!("{} must be an array reference", span.vref),
-                        ));
-                    }
-                }
-            }
-            _ => {
-                return Err(CallError::ArgumentError(
-                    expr.start_pos(),
-                    "First argument must be an array reference".to_owned(),
-                ))
-            }
-        }
-
-        debug_assert!(iter.next().is_none());
-
-        Ok(nargs)
-    }
-}
 
 /// Extracts the array reference and the dimension number from the list of arguments passed to
 /// either `LBOUND` or `UBOUND`.
@@ -147,6 +69,14 @@ fn parse_bound_args<'a>(
         Ok((array, i))
     } else {
         debug_assert_eq!(0, scope.nargs());
+
+        if array.dimensions().len() > 1 {
+            return Err(CallError::ArgumentError(
+                arraypos,
+                "Requires a dimension for multidimensional arrays".to_owned(),
+            ));
+        }
+
         Ok((array, 1))
     }
 }
@@ -161,8 +91,36 @@ impl LboundFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LBOUND", VarType::Integer)
-                .with_syntax("array[, dimension%]")
-                .with_args_compiler(BoundsArgsCompiler::default())
+                .with_typed_syntax(&[
+                    (
+                        &[SingularArgSyntax::RequiredRef(
+                            RequiredRefSyntax {
+                                name: "array",
+                                require_array: true,
+                                define_undefined: false,
+                            },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                    (
+                        &[
+                            SingularArgSyntax::RequiredRef(
+                                RequiredRefSyntax {
+                                    name: "array",
+                                    require_array: true,
+                                    define_undefined: false,
+                                },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax { name: "dimension", vtype: ExprType::Integer },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the lower bound for the given dimension of the array.
@@ -198,8 +156,36 @@ impl UboundFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("UBOUND", VarType::Integer)
-                .with_syntax("array[, dimension%]")
-                .with_args_compiler(BoundsArgsCompiler::default())
+                .with_typed_syntax(&[
+                    (
+                        &[SingularArgSyntax::RequiredRef(
+                            RequiredRefSyntax {
+                                name: "array",
+                                require_array: true,
+                                define_undefined: false,
+                            },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                    (
+                        &[
+                            SingularArgSyntax::RequiredRef(
+                                RequiredRefSyntax {
+                                    name: "array",
+                                    require_array: true,
+                                    define_undefined: false,
+                                },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax { name: "dimension", vtype: ExprType::Integer },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns the upper bound for the given dimension of the array.
@@ -241,7 +227,7 @@ mod tests {
         Tester::default()
             .run(&format!("DIM x(2): result = {}()", func))
             .expect_compilation_err(format!(
-                "1:20: In call to {}: expected array[, dimension%]",
+                "1:20: In call to {}: expected <array> | <array, dimension%>",
                 func
             ))
             .check();
@@ -249,7 +235,7 @@ mod tests {
         Tester::default()
             .run(&format!("DIM x(2): result = {}(x, 1, 2)", func))
             .expect_compilation_err(format!(
-                "1:20: In call to {}: expected array[, dimension%]",
+                "1:20: In call to {}: expected <array> | <array, dimension%>",
                 func
             ))
             .check();
@@ -271,7 +257,7 @@ mod tests {
         Tester::default()
             .run(&format!("i = 0: result = {}(i)", func))
             .expect_compilation_err(format!(
-                "1:17: In call to {}: 1:24: i must be an array reference",
+                "1:17: In call to {}: 1:24: i is not an array reference",
                 func
             ))
             .check();
@@ -279,15 +265,15 @@ mod tests {
         Tester::default()
             .run(&format!("result = {}(3)", func))
             .expect_compilation_err(format!(
-                "1:10: In call to {}: 1:17: First argument must be an array reference",
+                "1:10: In call to {}: 1:17: Requires an array reference, not a value",
                 func
             ))
             .check();
 
         Tester::default()
-            .run(&format!("i = 0: result = {}(i$)", func))
+            .run(&format!("i = 0: result = {}(i)", func))
             .expect_compilation_err(format!(
-                "1:17: In call to {}: 1:24: i$ must be an array reference",
+                "1:17: In call to {}: 1:24: i is not an array reference",
                 func
             ))
             .check();
@@ -302,18 +288,16 @@ mod tests {
 
         Tester::default()
             .run(&format!("result = {}(x)", func))
-            .expect_compilation_err(format!(
-                "1:10: In call to {}: 1:17: Undefined variable x",
-                func
-            ))
+            .expect_compilation_err(format!("1:10: In call to {}: 1:17: Undefined array x", func))
             .check();
 
         Tester::default()
             .run(&format!("DIM x(2, 3, 4): result = {}(x)", func))
-            .expect_compilation_err(format!(
+            .expect_err(format!(
                 "1:26: In call to {}: 1:33: Requires a dimension for multidimensional arrays",
                 func
             ))
+            .expect_array("x", VarType::Integer, &[2, 3, 4], vec![])
             .check();
 
         Tester::default()
