@@ -828,7 +828,7 @@ Output from HELP "LOCATE":
 
 Output from HELP "LOGIN":
 
-[38;5;11m    LOGIN username$[, password$]
+[38;5;11m    LOGIN <username$> | <username$, password$>
 [39m
     Logs into the user's account.
 
