@@ -23,7 +23,7 @@
 
 use async_trait::async_trait;
 use endbasic_core::ast::{Value, VarType};
-use endbasic_core::compiler::{ExprType, NoArgsCompiler, SameTypeArgsCompiler};
+use endbasic_core::compiler::{ArgSepSyntax, ExprType, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope, StopReason};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
@@ -60,8 +60,7 @@ impl NumLightsFunction {
     pub fn new(lights: Rc<RefCell<Lights>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("NUM_LIGHTS", VarType::Integer)
-                .with_syntax("")
-                .with_args_compiler(NoArgsCompiler::default())
+                .with_typed_syntax(&[(&[], None)])
                 .with_category("Demonstration")
                 .with_description("Returns the number of available lights.")
                 .build(),
@@ -95,8 +94,13 @@ impl SwitchLightCommand {
     pub fn new(lights: Rc<RefCell<Lights>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SWITCH_LIGHT", VarType::Void)
-                .with_syntax("id")
-                .with_args_compiler(SameTypeArgsCompiler::new(1, 1, ExprType::Integer))
+                .with_typed_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: "id", vtype: ExprType::Integer },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
                 .with_category("Demonstration")
                 .with_description("Turns the light identified by 'id' on or off.")
                 .build(),
