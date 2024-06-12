@@ -200,40 +200,6 @@ impl From<CallableType> for VarType {
     }
 }
 
-/// Hooks to implement compile-time parsing of callable arguments.
-// TODO(jmmv): This is a transitional type while we refactor all functions and commands to split
-// argument parsing between compile-time and runtime aspects.  Once that's done, this type should
-// be folded into the `Callable` per se.
-pub trait CallableArgsCompiler: fmt::Debug {
-    /// Parses the arguments to a function and generates expressions to compute them.
-    ///
-    /// This can be used to help the runtime by doing type checking during compilation and then
-    /// allowing the runtime to assume that the values on the stack are correctly typed.
-    fn compile_simple(
-        &self,
-        _instrs: &mut Vec<Instruction>,
-        _symtable: &SymbolsTable,
-        _pos: LineCol,
-        _args: Vec<Expr>,
-    ) -> std::result::Result<usize, CallError> {
-        unreachable!();
-    }
-
-    /// Parses the arguments to a buitin command and generates expressions to compute them.
-    ///
-    /// This can be used to help the runtime by doing type checking during compilation and then
-    /// allowing the runtime to assume that the values on the stack are correctly typed.
-    fn compile_complex(
-        &self,
-        _instrs: &mut Vec<Instruction>,
-        _symtable: &mut SymbolsTable,
-        _pos: LineCol,
-        _args: Vec<ArgSpan>,
-    ) -> std::result::Result<usize, CallError> {
-        unreachable!();
-    }
-}
-
 /// Information about a symbol in the symbols table.
 #[derive(Clone)]
 pub enum SymbolPrototype {
@@ -875,10 +841,14 @@ impl Compiler {
                 };
 
                 let name_pos = span.name_pos;
-                let nargs = md
-                    .args_compiler()
-                    .compile_complex(&mut self.instrs, &mut self.symtable, name_pos, span.args)
-                    .map_err(|e| Error::from_call_error(&md, e, name_pos))?;
+                let nargs = compile_command_args(
+                    md.syntaxes(),
+                    &mut self.instrs,
+                    &mut self.symtable,
+                    name_pos,
+                    span.args,
+                )
+                .map_err(|e| Error::from_call_error(&md, e, name_pos))?;
                 self.next_pc = self.instrs.len();
                 self.emit(Instruction::BuiltinCall(key, span.name_pos, nargs));
             }

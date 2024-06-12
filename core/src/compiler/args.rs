@@ -15,7 +15,7 @@
 
 //! Common compilers for callable arguments.
 
-use super::{compile_expr, CallableArgsCompiler, SymbolsTable};
+use super::{compile_expr, SymbolsTable};
 use super::{ExprType, SymbolPrototype};
 use crate::ast::*;
 use crate::bytecode::*;
@@ -271,7 +271,7 @@ pub enum SingularArgSyntax {
 /// builtin functions must never be ill-defined.
 // TODO(jmmv): It might be nice to try to express these restrictions in the type system, but
 // things are already too verbose as they are...
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct CallableSyntax {
     /// Ordered list of singular arguments that appear before repeated arguments.
     singular: &'static [SingularArgSyntax],
@@ -470,268 +470,163 @@ fn compile_required_ref(
     }
 }
 
-/// A generic compiler for arguments to callables.
+/// Locates the syntax definition that can parse the given number of arguments.
 ///
-/// Callables can have more than one syntax definition as a simplistic form of function
-/// overloading.  This makes it easier to process certain commands (like `INPUT`, which wants
-/// to have an optional parameter and separator at the beginning).
-#[derive(Debug, Default)]
-pub(crate) struct ArgsCompiler {
-    /// Collection of syntaxes to compile against.
-    syntaxes: Vec<CallableSyntax>,
-}
-
-impl ArgsCompiler {
-    /// Creates an arguments compiler from a collection of syntaxes.
-    pub(crate) fn new(syntaxes: Vec<CallableSyntax>) -> Self {
-        Self { syntaxes }
-    }
-
-    /// Locates the syntax definition that can parse the given number of arguments.
-    ///
-    /// Panics if more than one syntax definition applies.
-    fn find_syntax(&self, nargs: usize) -> std::result::Result<&CallableSyntax, CallError> {
-        let mut matches = self.syntaxes.iter().filter(|s| s.expected_nargs().contains(&nargs));
-        let syntax = matches.next();
-        debug_assert!(matches.next().is_none(), "Ambiguous syntax definitions");
-        match syntax {
-            Some(syntax) => Ok(syntax),
-            None => Err(CallError::SyntaxError),
-        }
-    }
-
-    /// Compiles an argument separator with any necessary tagging.
-    ///
-    /// `instrs` is the list of instructions into which insert the separator tag at `sep_tag_pc`
-    /// when it is needed to disambiguate separators at runtime.
-    ///
-    /// `syn` contains the details about the separator syntax that is accepted.
-    ///
-    /// `sep` and `sep_pos` are the details about the separator being compiled.
-    ///
-    /// `is_last` indicates whether this is the last separator in the command call and is used
-    /// only for diagnostics purposes.
-    fn compile_syn_argsep(
-        instrs: &mut Vec<Instruction>,
-        syn: &ArgSepSyntax,
-        is_last: bool,
-        sep: ArgSep,
-        sep_pos: LineCol,
-        sep_tag_pc: Address,
-    ) -> std::result::Result<usize, CallError> {
-        debug_assert!(
-            (!is_last || sep == ArgSep::End) && (is_last || sep != ArgSep::End),
-            "Parser can only supply an End separator in the last argument"
-        );
-
-        match syn {
-            ArgSepSyntax::Exactly(exp_sep) => {
-                debug_assert!(*exp_sep != ArgSep::End, "Use ArgSepSyntax::End");
-                if sep != ArgSep::End && sep != *exp_sep {
-                    return Err(CallError::SyntaxError);
-                }
-                Ok(0)
-            }
-
-            ArgSepSyntax::OneOf(exp_sep1, exp_sep2) => {
-                debug_assert!(*exp_sep1 != ArgSep::End, "Use ArgSepSyntax::End");
-                debug_assert!(*exp_sep2 != ArgSep::End, "Use ArgSepSyntax::End");
-                if sep == ArgSep::End {
-                    Ok(0)
-                } else {
-                    if sep != *exp_sep1 && sep != *exp_sep2 {
-                        return Err(CallError::SyntaxError);
-                    }
-                    instrs
-                        .insert(sep_tag_pc, Instruction::Push(Value::Integer(sep as i32), sep_pos));
-                    Ok(1)
-                }
-            }
-
-            ArgSepSyntax::End => {
-                debug_assert!(is_last);
-                Ok(0)
-            }
-        }
+/// Panics if more than one syntax definition applies.
+fn find_syntax(
+    syntaxes: &[CallableSyntax],
+    nargs: usize,
+) -> std::result::Result<&CallableSyntax, CallError> {
+    let mut matches = syntaxes.iter().filter(|s| s.expected_nargs().contains(&nargs));
+    let syntax = matches.next();
+    debug_assert!(matches.next().is_none(), "Ambiguous syntax definitions");
+    match syntax {
+        Some(syntax) => Ok(syntax),
+        None => Err(CallError::SyntaxError),
     }
 }
 
-impl CallableArgsCompiler for ArgsCompiler {
-    fn compile_complex(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &mut SymbolsTable,
-        _pos: LineCol,
-        args: Vec<ArgSpan>,
-    ) -> std::result::Result<usize, CallError> {
-        let syntax = self.find_syntax(args.len())?;
+/// Compiles an argument separator with any necessary tagging.
+///
+/// `instrs` is the list of instructions into which insert the separator tag at `sep_tag_pc`
+/// when it is needed to disambiguate separators at runtime.
+///
+/// `syn` contains the details about the separator syntax that is accepted.
+///
+/// `sep` and `sep_pos` are the details about the separator being compiled.
+///
+/// `is_last` indicates whether this is the last separator in the command call and is used
+/// only for diagnostics purposes.
+fn compile_syn_argsep(
+    instrs: &mut Vec<Instruction>,
+    syn: &ArgSepSyntax,
+    is_last: bool,
+    sep: ArgSep,
+    sep_pos: LineCol,
+    sep_tag_pc: Address,
+) -> std::result::Result<usize, CallError> {
+    debug_assert!(
+        (!is_last || sep == ArgSep::End) && (is_last || sep != ArgSep::End),
+        "Parser can only supply an End separator in the last argument"
+    );
 
-        let input_nargs = args.len();
-        let mut aiter = args.into_iter().rev();
-        let mut nargs = 0;
-
-        let mut remaining;
-        if let Some(syn) = syntax.repeated.as_ref() {
-            let mut min_nargs = syntax.singular.len();
-            if syn.require_one {
-                min_nargs += 1;
-            }
-            if input_nargs < min_nargs {
+    match syn {
+        ArgSepSyntax::Exactly(exp_sep) => {
+            debug_assert!(*exp_sep != ArgSep::End, "Use ArgSepSyntax::End");
+            if sep != ArgSep::End && sep != *exp_sep {
                 return Err(CallError::SyntaxError);
             }
-
-            let need_tags =
-                syn.allow_missing || matches!(syn.type_syn, RepeatedTypeSyntax::AnyValue);
-
-            remaining = input_nargs;
-            while remaining > syntax.singular.len() {
-                let span = aiter.next().expect("Args and their syntax must advance in unison");
-
-                let sep_tag_pc = instrs.len();
-
-                match span.expr {
-                    Some(expr) => {
-                        let pos = expr.start_pos();
-                        match syn.type_syn {
-                            RepeatedTypeSyntax::AnyValue => {
-                                debug_assert!(need_tags);
-                                let etype = compile_expr(instrs, symtable, expr, false)?;
-                                instrs.push(Instruction::Push(
-                                    Value::Integer(ValueTag::from(etype) as i32),
-                                    pos,
-                                ));
-                                nargs += 2;
-                            }
-
-                            RepeatedTypeSyntax::VariableRef => {
-                                let to_insert = compile_required_ref(
-                                    instrs,
-                                    symtable,
-                                    false,
-                                    true,
-                                    Some(expr),
-                                )?;
-                                if let Some((key, proto)) = to_insert {
-                                    symtable.insert(key, proto);
-                                }
-                                nargs += 1;
-                            }
-
-                            RepeatedTypeSyntax::TypedValue(vtype) => {
-                                compile_arg_expr(instrs, symtable, expr, vtype)?;
-                                if need_tags {
-                                    instrs.push(Instruction::Push(
-                                        Value::Integer(ValueTag::from(vtype) as i32),
-                                        pos,
-                                    ));
-                                    nargs += 2;
-                                } else {
-                                    nargs += 1;
-                                }
-                            }
-                        }
-                    }
-                    None => {
-                        if !syn.allow_missing {
-                            return Err(CallError::SyntaxError);
-                        }
-                        instrs.push(Instruction::Push(
-                            Value::Integer(ValueTag::Missing as i32),
-                            span.sep_pos,
-                        ));
-                        nargs += 1;
-                    }
-                }
-
-                nargs += Self::compile_syn_argsep(
-                    instrs,
-                    &syn.sep,
-                    input_nargs == remaining,
-                    span.sep,
-                    span.sep_pos,
-                    sep_tag_pc,
-                )?;
-
-                remaining -= 1;
-            }
-        } else {
-            remaining = syntax.singular.len();
+            Ok(0)
         }
 
-        for syn in syntax.singular.iter().rev() {
+        ArgSepSyntax::OneOf(exp_sep1, exp_sep2) => {
+            debug_assert!(*exp_sep1 != ArgSep::End, "Use ArgSepSyntax::End");
+            debug_assert!(*exp_sep2 != ArgSep::End, "Use ArgSepSyntax::End");
+            if sep == ArgSep::End {
+                Ok(0)
+            } else {
+                if sep != *exp_sep1 && sep != *exp_sep2 {
+                    return Err(CallError::SyntaxError);
+                }
+                instrs.insert(sep_tag_pc, Instruction::Push(Value::Integer(sep as i32), sep_pos));
+                Ok(1)
+            }
+        }
+
+        ArgSepSyntax::End => {
+            debug_assert!(is_last);
+            Ok(0)
+        }
+    }
+}
+
+/// Parses the arguments to a buitin command and generates expressions to compute them.
+///
+/// This can be used to help the runtime by doing type checking during compilation and then
+/// allowing the runtime to assume that the values on the stack are correctly typed.
+pub(super) fn compile_command_args(
+    syntaxes: &[CallableSyntax],
+    instrs: &mut Vec<Instruction>,
+    symtable: &mut SymbolsTable,
+    _pos: LineCol,
+    args: Vec<ArgSpan>,
+) -> std::result::Result<usize, CallError> {
+    let syntax = find_syntax(syntaxes, args.len())?;
+
+    let input_nargs = args.len();
+    let mut aiter = args.into_iter().rev();
+    let mut nargs = 0;
+
+    let mut remaining;
+    if let Some(syn) = syntax.repeated.as_ref() {
+        let mut min_nargs = syntax.singular.len();
+        if syn.require_one {
+            min_nargs += 1;
+        }
+        if input_nargs < min_nargs {
+            return Err(CallError::SyntaxError);
+        }
+
+        let need_tags = syn.allow_missing || matches!(syn.type_syn, RepeatedTypeSyntax::AnyValue);
+
+        remaining = input_nargs;
+        while remaining > syntax.singular.len() {
             let span = aiter.next().expect("Args and their syntax must advance in unison");
 
             let sep_tag_pc = instrs.len();
 
-            let exp_sep = match syn {
-                SingularArgSyntax::RequiredValue(details, sep) => {
-                    match span.expr {
-                        Some(expr) => {
-                            compile_arg_expr(instrs, symtable, expr, details.vtype)?;
-                            nargs += 1;
-                        }
-                        None => return Err(CallError::SyntaxError),
-                    }
-                    sep
-                }
-
-                SingularArgSyntax::RequiredRef(details, sep) => {
-                    let to_insert = compile_required_ref(
-                        instrs,
-                        symtable,
-                        details.require_array,
-                        details.define_undefined,
-                        span.expr,
-                    )?;
-                    if let Some((key, proto)) = to_insert {
-                        symtable.insert(key, proto);
-                    }
-                    nargs += 1;
-                    sep
-                }
-
-                SingularArgSyntax::OptionalValue(details, sep) => {
-                    let (tag, pos) = match span.expr {
-                        Some(expr) => {
-                            let pos = expr.start_pos();
-                            compile_arg_expr(instrs, symtable, expr, details.vtype)?;
-                            nargs += 1;
-                            (details.present_value, pos)
-                        }
-                        None => (details.missing_value, span.sep_pos),
-                    };
-                    instrs.push(Instruction::Push(Value::Integer(tag), pos));
-                    nargs += 1;
-                    sep
-                }
-
-                SingularArgSyntax::AnyValue(details, sep) => {
-                    let (tag, pos) = match span.expr {
-                        Some(expr) => {
-                            let pos = expr.start_pos();
+            match span.expr {
+                Some(expr) => {
+                    let pos = expr.start_pos();
+                    match syn.type_syn {
+                        RepeatedTypeSyntax::AnyValue => {
+                            debug_assert!(need_tags);
                             let etype = compile_expr(instrs, symtable, expr, false)?;
+                            instrs.push(Instruction::Push(
+                                Value::Integer(ValueTag::from(etype) as i32),
+                                pos,
+                            ));
                             nargs += 2;
-                            (ValueTag::from(etype), pos)
                         }
-                        None => {
-                            if !details.allow_missing {
-                                return Err(CallError::ArgumentError(
-                                    span.sep_pos,
-                                    "Missing expression before separator".to_owned(),
-                                ));
+
+                        RepeatedTypeSyntax::VariableRef => {
+                            let to_insert =
+                                compile_required_ref(instrs, symtable, false, true, Some(expr))?;
+                            if let Some((key, proto)) = to_insert {
+                                symtable.insert(key, proto);
                             }
                             nargs += 1;
-                            (ValueTag::Missing, span.sep_pos)
                         }
-                    };
-                    instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
-                    sep
-                }
-            };
 
-            nargs += Self::compile_syn_argsep(
+                        RepeatedTypeSyntax::TypedValue(vtype) => {
+                            compile_arg_expr(instrs, symtable, expr, vtype)?;
+                            if need_tags {
+                                instrs.push(Instruction::Push(
+                                    Value::Integer(ValueTag::from(vtype) as i32),
+                                    pos,
+                                ));
+                                nargs += 2;
+                            } else {
+                                nargs += 1;
+                            }
+                        }
+                    }
+                }
+                None => {
+                    if !syn.allow_missing {
+                        return Err(CallError::SyntaxError);
+                    }
+                    instrs.push(Instruction::Push(
+                        Value::Integer(ValueTag::Missing as i32),
+                        span.sep_pos,
+                    ));
+                    nargs += 1;
+                }
+            }
+
+            nargs += compile_syn_argsep(
                 instrs,
-                exp_sep,
+                &syn.sep,
                 input_nargs == remaining,
                 span.sep,
                 span.sep_pos,
@@ -740,112 +635,200 @@ impl CallableArgsCompiler for ArgsCompiler {
 
             remaining -= 1;
         }
-
-        Ok(nargs)
+    } else {
+        remaining = syntax.singular.len();
     }
 
-    fn compile_simple(
-        &self,
-        instrs: &mut Vec<Instruction>,
-        symtable: &SymbolsTable,
-        _pos: LineCol,
-        args: Vec<Expr>,
-    ) -> std::result::Result<usize, CallError> {
-        let syntax = self.find_syntax(args.len())?;
+    for syn in syntax.singular.iter().rev() {
+        let span = aiter.next().expect("Args and their syntax must advance in unison");
 
-        let input_nargs = args.len();
-        let mut aiter = args.into_iter().rev();
-        let mut nargs = 0;
+        let sep_tag_pc = instrs.len();
 
-        if let Some(syn) = syntax.repeated.as_ref() {
-            debug_assert_eq!(
-                ArgSepSyntax::Exactly(ArgSep::Long),
-                syn.sep,
-                "Function argument separators must be commas"
-            );
-            debug_assert!(!syn.allow_missing, "Functions don't support missing values");
-
-            let mut min_nargs = syntax.singular.len();
-            if syn.require_one {
-                min_nargs += 1;
-            }
-            if input_nargs < min_nargs {
-                return Err(CallError::SyntaxError);
-            }
-
-            let mut remaining = input_nargs;
-            while remaining > syntax.singular.len() {
-                let arg = aiter.next().expect("Args and their syntax must advance in unison");
-
-                match syn.type_syn {
-                    RepeatedTypeSyntax::AnyValue => {
-                        let pos = arg.start_pos();
-                        let etype = compile_expr(instrs, symtable, arg, false)?;
-                        let tag = ValueTag::from(etype);
-                        instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
-                        nargs += 2;
-                    }
-
-                    RepeatedTypeSyntax::TypedValue(vtype) => {
-                        compile_arg_expr(instrs, symtable, arg, vtype)?;
+        let exp_sep = match syn {
+            SingularArgSyntax::RequiredValue(details, sep) => {
+                match span.expr {
+                    Some(expr) => {
+                        compile_arg_expr(instrs, symtable, expr, details.vtype)?;
                         nargs += 1;
                     }
-
-                    RepeatedTypeSyntax::VariableRef => {
-                        unreachable!("Repeated variable references not supported for functions")
-                    }
+                    None => return Err(CallError::SyntaxError),
                 }
-                remaining -= 1;
+                sep
             }
+
+            SingularArgSyntax::RequiredRef(details, sep) => {
+                let to_insert = compile_required_ref(
+                    instrs,
+                    symtable,
+                    details.require_array,
+                    details.define_undefined,
+                    span.expr,
+                )?;
+                if let Some((key, proto)) = to_insert {
+                    symtable.insert(key, proto);
+                }
+                nargs += 1;
+                sep
+            }
+
+            SingularArgSyntax::OptionalValue(details, sep) => {
+                let (tag, pos) = match span.expr {
+                    Some(expr) => {
+                        let pos = expr.start_pos();
+                        compile_arg_expr(instrs, symtable, expr, details.vtype)?;
+                        nargs += 1;
+                        (details.present_value, pos)
+                    }
+                    None => (details.missing_value, span.sep_pos),
+                };
+                instrs.push(Instruction::Push(Value::Integer(tag), pos));
+                nargs += 1;
+                sep
+            }
+
+            SingularArgSyntax::AnyValue(details, sep) => {
+                let (tag, pos) = match span.expr {
+                    Some(expr) => {
+                        let pos = expr.start_pos();
+                        let etype = compile_expr(instrs, symtable, expr, false)?;
+                        nargs += 2;
+                        (ValueTag::from(etype), pos)
+                    }
+                    None => {
+                        if !details.allow_missing {
+                            return Err(CallError::ArgumentError(
+                                span.sep_pos,
+                                "Missing expression before separator".to_owned(),
+                            ));
+                        }
+                        nargs += 1;
+                        (ValueTag::Missing, span.sep_pos)
+                    }
+                };
+                instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
+                sep
+            }
+        };
+
+        nargs += compile_syn_argsep(
+            instrs,
+            exp_sep,
+            input_nargs == remaining,
+            span.sep,
+            span.sep_pos,
+            sep_tag_pc,
+        )?;
+
+        remaining -= 1;
+    }
+
+    Ok(nargs)
+}
+
+/// Parses the arguments to a function and generates expressions to compute them.
+///
+/// This can be used to help the runtime by doing type checking during compilation and then
+/// allowing the runtime to assume that the values on the stack are correctly typed.
+pub(super) fn compile_function_args(
+    syntaxes: &[CallableSyntax],
+    instrs: &mut Vec<Instruction>,
+    symtable: &SymbolsTable,
+    _pos: LineCol,
+    args: Vec<Expr>,
+) -> std::result::Result<usize, CallError> {
+    let syntax = find_syntax(syntaxes, args.len())?;
+
+    let input_nargs = args.len();
+    let mut aiter = args.into_iter().rev();
+    let mut nargs = 0;
+
+    if let Some(syn) = syntax.repeated.as_ref() {
+        debug_assert_eq!(
+            ArgSepSyntax::Exactly(ArgSep::Long),
+            syn.sep,
+            "Function argument separators must be commas"
+        );
+        debug_assert!(!syn.allow_missing, "Functions don't support missing values");
+
+        let mut min_nargs = syntax.singular.len();
+        if syn.require_one {
+            min_nargs += 1;
+        }
+        if input_nargs < min_nargs {
+            return Err(CallError::SyntaxError);
         }
 
-        for (i, syn) in syntax.singular.iter().rev().enumerate() {
+        let mut remaining = input_nargs;
+        while remaining > syntax.singular.len() {
             let arg = aiter.next().expect("Args and their syntax must advance in unison");
 
-            let sep = match syn {
-                SingularArgSyntax::RequiredValue(details, sep) => {
-                    compile_arg_expr(instrs, symtable, arg, details.vtype)?;
-                    nargs += 1;
-                    sep
-                }
-
-                SingularArgSyntax::RequiredRef(details, sep) => {
-                    debug_assert!(!details.define_undefined);
-                    let to_insert = compile_required_ref(
-                        instrs,
-                        symtable,
-                        details.require_array,
-                        details.define_undefined,
-                        Some(arg),
-                    )?;
-                    debug_assert!(to_insert.is_none());
-                    nargs += 1;
-                    sep
-                }
-
-                SingularArgSyntax::OptionalValue(_details, _sep) => {
-                    unreachable!("Functions don't support optional arguments")
-                }
-
-                SingularArgSyntax::AnyValue(details, sep) => {
-                    debug_assert!(!details.allow_missing);
+            match syn.type_syn {
+                RepeatedTypeSyntax::AnyValue => {
                     let pos = arg.start_pos();
                     let etype = compile_expr(instrs, symtable, arg, false)?;
                     let tag = ValueTag::from(etype);
                     instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
                     nargs += 2;
-                    sep
                 }
-            };
-            debug_assert!(
-                (i == syntax.singular.len() - 1 || *sep == ArgSepSyntax::Exactly(ArgSep::Long))
-                    || (i < syntax.singular.len() - 1
-                        || *sep == ArgSepSyntax::Exactly(ArgSep::End))
-            );
-        }
 
-        Ok(nargs)
+                RepeatedTypeSyntax::TypedValue(vtype) => {
+                    compile_arg_expr(instrs, symtable, arg, vtype)?;
+                    nargs += 1;
+                }
+
+                RepeatedTypeSyntax::VariableRef => {
+                    unreachable!("Repeated variable references not supported for functions")
+                }
+            }
+            remaining -= 1;
+        }
     }
+
+    for (i, syn) in syntax.singular.iter().rev().enumerate() {
+        let arg = aiter.next().expect("Args and their syntax must advance in unison");
+
+        let sep = match syn {
+            SingularArgSyntax::RequiredValue(details, sep) => {
+                compile_arg_expr(instrs, symtable, arg, details.vtype)?;
+                nargs += 1;
+                sep
+            }
+
+            SingularArgSyntax::RequiredRef(details, sep) => {
+                debug_assert!(!details.define_undefined);
+                let to_insert = compile_required_ref(
+                    instrs,
+                    symtable,
+                    details.require_array,
+                    details.define_undefined,
+                    Some(arg),
+                )?;
+                debug_assert!(to_insert.is_none());
+                nargs += 1;
+                sep
+            }
+
+            SingularArgSyntax::OptionalValue(_details, _sep) => {
+                unreachable!("Functions don't support optional arguments")
+            }
+
+            SingularArgSyntax::AnyValue(details, sep) => {
+                debug_assert!(!details.allow_missing);
+                let pos = arg.start_pos();
+                let etype = compile_expr(instrs, symtable, arg, false)?;
+                let tag = ValueTag::from(etype);
+                instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
+                nargs += 2;
+                sep
+            }
+        };
+        debug_assert!(
+            (i == syntax.singular.len() - 1 || *sep == ArgSepSyntax::Exactly(ArgSep::Long))
+                || (i < syntax.singular.len() - 1 || *sep == ArgSepSyntax::Exactly(ArgSep::End))
+        );
+    }
+
+    Ok(nargs)
 }
 
 #[cfg(test)]
@@ -886,12 +869,12 @@ mod testutils {
         /// Feeds function `args` into the arguments compiler and returns a checker to validate
         /// expectations.
         pub(super) fn compile_function<A: Into<Vec<Expr>>>(self, args: A) -> Checker {
-            let args_compiler = ArgsCompiler::new(self.syntaxes);
             let mut instrs = vec![
                 // Start with one instruction to validate that the args compiler doesn't touch it.
                 Instruction::Nop,
             ];
-            let result = args_compiler.compile_simple(
+            let result = compile_function_args(
+                &self.syntaxes,
                 &mut instrs,
                 &self.symtable,
                 lc(1000, 2000),
@@ -911,12 +894,12 @@ mod testutils {
         /// expectations.
         pub(super) fn compile_command<A: Into<Vec<ArgSpan>>>(mut self, args: A) -> Checker {
             let args = args.into();
-            let args_compiler = ArgsCompiler::new(self.syntaxes);
             let mut instrs = vec![
                 // Start with one instruction to validate that the args compiler doesn't touch it.
                 Instruction::Nop,
             ];
-            let result = args_compiler.compile_complex(
+            let result = compile_command_args(
+                &self.syntaxes,
                 &mut instrs,
                 &mut self.symtable,
                 lc(1000, 2000),

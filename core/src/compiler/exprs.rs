@@ -18,6 +18,7 @@
 use super::{Error, ExprType, Result, SymbolPrototype, SymbolsTable};
 use crate::ast::*;
 use crate::bytecode::*;
+use crate::compiler::compile_function_args;
 use crate::reader::LineCol;
 use crate::syms::SymbolKey;
 
@@ -383,9 +384,7 @@ fn compile_expr_symbol(
                 ));
             }
 
-            let nargs = md
-                .args_compiler()
-                .compile_simple(instrs, symtable, span.pos, vec![])
+            let nargs = compile_function_args(md.syntaxes(), instrs, symtable, span.pos, vec![])
                 .map_err(|e| Error::from_call_error(md, e, span.pos))?;
             debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
             (Instruction::FunctionCall(key, md.return_type(), span.pos, 0), md.return_type().into())
@@ -734,10 +733,9 @@ pub fn compile_expr(
                     }
 
                     let span_pos = span.pos;
-                    let nargs = md
-                        .args_compiler()
-                        .compile_simple(instrs, symtable, span_pos, span.args)
-                        .map_err(|e| Error::from_call_error(md, e, span_pos))?;
+                    let nargs =
+                        compile_function_args(md.syntaxes(), instrs, symtable, span_pos, span.args)
+                            .map_err(|e| Error::from_call_error(md, e, span_pos))?;
                     instrs.push(Instruction::FunctionCall(key, md.return_type(), span_pos, nargs));
                     Ok(vtype)
                 }

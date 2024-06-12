@@ -16,9 +16,7 @@
 //! Symbol definitions and symbols table representation.
 
 use crate::ast::{Value, VarRef, VarType};
-use crate::compiler::{
-    self, ArgsCompiler, CallableArgsCompiler, CallableSyntax, RepeatedSyntax, SingularArgSyntax,
-};
+use crate::compiler::{self, CallableSyntax, RepeatedSyntax, SingularArgSyntax};
 use crate::exec::{Machine, Scope};
 use crate::reader::LineCol;
 use crate::value::{Error, Result};
@@ -470,8 +468,8 @@ pub struct CallableMetadataBuilder {
     return_type: VarType,
     category: Option<&'static str>,
     syntax: Option<String>,
+    syntaxes: Vec<CallableSyntax>,
     description: Option<&'static str>,
-    args_compiler: Option<Rc<dyn CallableArgsCompiler>>,
 }
 
 impl CallableMetadataBuilder {
@@ -487,9 +485,9 @@ impl CallableMetadataBuilder {
             name,
             return_type,
             syntax: None,
+            syntaxes: vec![],
             category: None,
             description: None,
-            args_compiler: None,
         }
     }
 
@@ -513,7 +511,7 @@ impl CallableMetadataBuilder {
                     .join(" | "),
             );
         };
-        self.args_compiler = Some(Rc::from(ArgsCompiler::new(syntaxes)));
+        self.syntaxes = syntaxes;
         self
     }
 
@@ -537,32 +535,31 @@ impl CallableMetadataBuilder {
     }
 
     /// Generates the final `CallableMetadata` object, ensuring all values are present.
-    pub fn build(mut self) -> CallableMetadata {
+    pub fn build(self) -> CallableMetadata {
+        assert!(!self.syntaxes.is_empty(), "All callables must specify a syntax");
         CallableMetadata {
             name: self.name,
             return_type: self.return_type,
             syntax: self.syntax.expect("All callables must specify a syntax"),
+            syntaxes: self.syntaxes,
             category: self.category.expect("All callables must specify a category"),
             description: self.description.expect("All callables must specify a description"),
-            args_compiler: self
-                .args_compiler
-                .take()
-                .expect("All callables must specify an arguments parser"),
         }
     }
 
     /// Generates the final `CallableMetadata` object, ensuring the minimal set of values are
     /// present.  Only useful for testing.
     pub fn test_build(mut self) -> CallableMetadata {
+        if self.syntaxes.is_empty() {
+            self.syntaxes.push(CallableSyntax::new(&[], None));
+        }
         CallableMetadata {
             name: self.name,
             return_type: self.return_type,
             syntax: self.syntax.unwrap_or("".to_owned()),
+            syntaxes: self.syntaxes,
             category: self.category.unwrap_or(""),
             description: self.description.unwrap_or(""),
-            args_compiler: self.args_compiler.take().unwrap_or_else(|| {
-                Rc::from(ArgsCompiler::new(vec![CallableSyntax::new(&[], None)]))
-            }),
         }
     }
 }
@@ -576,9 +573,9 @@ pub struct CallableMetadata {
     name: &'static str,
     return_type: VarType,
     syntax: String,
+    syntaxes: Vec<CallableSyntax>,
     category: &'static str,
     description: &'static str,
-    args_compiler: Rc<dyn CallableArgsCompiler>,
 }
 
 impl CallableMetadata {
@@ -595,6 +592,11 @@ impl CallableMetadata {
     /// Gets the callable's syntax specification.
     pub fn syntax(&self) -> &str {
         &self.syntax
+    }
+
+    /// Returns the callable's syntax definitions.
+    pub(crate) fn syntaxes(&self) -> &[CallableSyntax] {
+        &self.syntaxes
     }
 
     /// Gets the callable's category as a collection of lines.  The first line is the title of the
@@ -617,11 +619,6 @@ impl CallableMetadata {
     /// Returns true if this callable is a function (not a command).
     pub fn is_function(&self) -> bool {
         self.return_type != VarType::Void
-    }
-
-    /// Returns the arguments compiler.
-    pub fn args_compiler(&self) -> Rc<dyn CallableArgsCompiler> {
-        self.args_compiler.clone()
     }
 }
 
