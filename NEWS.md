@@ -55,6 +55,11 @@ for the time being.**
 
 *   Fixed the `MID` function so that the `length%` parameter is actually optional
     as the documentation claimed.
+    
+*   Homogenized the handling of command and function arguments into a single
+    parser.  The user-visible effects of this change are that all syntax
+    definitions that `HELP` prints now follow a consistent pattern and that such
+    help strings truly match what the commands and functions expect.
 
 ## Changes in version 0.10.0
 
