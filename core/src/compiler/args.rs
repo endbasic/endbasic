@@ -540,22 +540,24 @@ fn compile_syn_argsep(
     }
 }
 
-/// Parses the arguments to a buitin command and generates expressions to compute them.
+/// Parses the arguments to a command or a function and generates expressions to compute them.
 ///
-/// This can be used to help the runtime by doing type checking during compilation and then
-/// allowing the runtime to assume that the values on the stack are correctly typed.
-pub(super) fn compile_command_args(
+/// Returns the number of arguments that the instructions added to `instrs` will push into the
+/// stack and returns the list of new symbols that need to be inserted into `symtable`.
+fn compile_args(
     syntaxes: &[CallableSyntax],
     instrs: &mut Vec<Instruction>,
-    symtable: &mut SymbolsTable,
+    symtable: &SymbolsTable,
     _pos: LineCol,
     args: Vec<ArgSpan>,
-) -> std::result::Result<usize, CallError> {
+) -> std::result::Result<(usize, Vec<(SymbolKey, SymbolPrototype)>), CallError> {
     let syntax = find_syntax(syntaxes, args.len())?;
 
     let input_nargs = args.len();
     let mut aiter = args.into_iter().rev();
+
     let mut nargs = 0;
+    let mut to_insert = vec![];
 
     let mut remaining;
     if let Some(syn) = syntax.repeated.as_ref() {
@@ -590,10 +592,10 @@ pub(super) fn compile_command_args(
                         }
 
                         RepeatedTypeSyntax::VariableRef => {
-                            let to_insert =
+                            let to_insert_one =
                                 compile_required_ref(instrs, symtable, false, true, Some(expr))?;
-                            if let Some((key, proto)) = to_insert {
-                                symtable.insert(key, proto);
+                            if let Some(to_insert_one) = to_insert_one {
+                                to_insert.push(to_insert_one);
                             }
                             nargs += 1;
                         }
@@ -657,15 +659,15 @@ pub(super) fn compile_command_args(
             }
 
             SingularArgSyntax::RequiredRef(details, sep) => {
-                let to_insert = compile_required_ref(
+                let to_insert_one = compile_required_ref(
                     instrs,
                     symtable,
                     details.require_array,
                     details.define_undefined,
                     span.expr,
                 )?;
-                if let Some((key, proto)) = to_insert {
-                    symtable.insert(key, proto);
+                if let Some(to_insert_one) = to_insert_one {
+                    to_insert.push(to_insert_one);
                 }
                 nargs += 1;
                 sep
@@ -722,6 +724,26 @@ pub(super) fn compile_command_args(
         remaining -= 1;
     }
 
+    Ok((nargs, to_insert))
+}
+
+/// Parses the arguments to a buitin command and generates expressions to compute them.
+///
+/// This can be used to help the runtime by doing type checking during compilation and then
+/// allowing the runtime to assume that the values on the stack are correctly typed.
+pub(super) fn compile_command_args(
+    syntaxes: &[CallableSyntax],
+    instrs: &mut Vec<Instruction>,
+    symtable: &mut SymbolsTable,
+    pos: LineCol,
+    args: Vec<ArgSpan>,
+) -> std::result::Result<usize, CallError> {
+    let (nargs, to_insert) = compile_args(syntaxes, instrs, symtable, pos, args)?;
+    for (key, proto) in to_insert {
+        if !symtable.contains_key(&key) {
+            symtable.insert(key, proto);
+        }
+    }
     Ok(nargs)
 }
 
@@ -733,101 +755,23 @@ pub(super) fn compile_function_args(
     syntaxes: &[CallableSyntax],
     instrs: &mut Vec<Instruction>,
     symtable: &SymbolsTable,
-    _pos: LineCol,
+    pos: LineCol,
     args: Vec<Expr>,
 ) -> std::result::Result<usize, CallError> {
-    let syntax = find_syntax(syntaxes, args.len())?;
-
     let input_nargs = args.len();
-    let mut aiter = args.into_iter().rev();
-    let mut nargs = 0;
+    let mut spans = Vec::with_capacity(input_nargs);
+    for (i, expr) in args.into_iter().enumerate() {
+        let sep = if i == input_nargs - 1 { ArgSep::End } else { ArgSep::Long };
 
-    if let Some(syn) = syntax.repeated.as_ref() {
-        debug_assert_eq!(
-            ArgSepSyntax::Exactly(ArgSep::Long),
-            syn.sep,
-            "Function argument separators must be commas"
-        );
-        debug_assert!(!syn.allow_missing, "Functions don't support missing values");
+        // Setting the separator position to the start position of the expression is not accurate,
+        // but because these argument spans are fake, we assume that they are valid and that this
+        // position will never be visible.
+        let sep_pos = expr.start_pos();
 
-        let mut min_nargs = syntax.singular.len();
-        if syn.require_one {
-            min_nargs += 1;
-        }
-        if input_nargs < min_nargs {
-            return Err(CallError::SyntaxError);
-        }
-
-        let mut remaining = input_nargs;
-        while remaining > syntax.singular.len() {
-            let arg = aiter.next().expect("Args and their syntax must advance in unison");
-
-            match syn.type_syn {
-                RepeatedTypeSyntax::AnyValue => {
-                    let pos = arg.start_pos();
-                    let etype = compile_expr(instrs, symtable, arg, false)?;
-                    let tag = ValueTag::from(etype);
-                    instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
-                    nargs += 2;
-                }
-
-                RepeatedTypeSyntax::TypedValue(vtype) => {
-                    compile_arg_expr(instrs, symtable, arg, vtype)?;
-                    nargs += 1;
-                }
-
-                RepeatedTypeSyntax::VariableRef => {
-                    unreachable!("Repeated variable references not supported for functions")
-                }
-            }
-            remaining -= 1;
-        }
+        spans.push(ArgSpan { expr: Some(expr), sep, sep_pos });
     }
-
-    for (i, syn) in syntax.singular.iter().rev().enumerate() {
-        let arg = aiter.next().expect("Args and their syntax must advance in unison");
-
-        let sep = match syn {
-            SingularArgSyntax::RequiredValue(details, sep) => {
-                compile_arg_expr(instrs, symtable, arg, details.vtype)?;
-                nargs += 1;
-                sep
-            }
-
-            SingularArgSyntax::RequiredRef(details, sep) => {
-                debug_assert!(!details.define_undefined);
-                let to_insert = compile_required_ref(
-                    instrs,
-                    symtable,
-                    details.require_array,
-                    details.define_undefined,
-                    Some(arg),
-                )?;
-                debug_assert!(to_insert.is_none());
-                nargs += 1;
-                sep
-            }
-
-            SingularArgSyntax::OptionalValue(_details, _sep) => {
-                unreachable!("Functions don't support optional arguments")
-            }
-
-            SingularArgSyntax::AnyValue(details, sep) => {
-                debug_assert!(!details.allow_missing);
-                let pos = arg.start_pos();
-                let etype = compile_expr(instrs, symtable, arg, false)?;
-                let tag = ValueTag::from(etype);
-                instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
-                nargs += 2;
-                sep
-            }
-        };
-        debug_assert!(
-            (i == syntax.singular.len() - 1 || *sep == ArgSepSyntax::Exactly(ArgSep::Long))
-                || (i < syntax.singular.len() - 1 || *sep == ArgSepSyntax::Exactly(ArgSep::End))
-        );
-    }
-
+    let (nargs, to_insert) = compile_args(syntaxes, instrs, symtable, pos, spans)?;
+    debug_assert!(to_insert.is_empty());
     Ok(nargs)
 }
 
@@ -1245,451 +1189,9 @@ mod function_tests {
     use super::testutils::*;
     use super::*;
 
-    #[test]
-    fn test_no_syntaxes_yields_error() {
-        Tester::default().compile_function([]).exp_error(CallError::SyntaxError).check();
-    }
-
-    #[test]
-    fn test_no_args_ok() {
-        Tester::default().syntax(&[], None).compile_function([]).check();
-    }
-
-    #[test]
-    fn test_no_args_mismatch() {
-        Tester::default()
-            .syntax(&[], None)
-            .compile_function([Expr::Integer(IntegerSpan { value: 3, pos: lc(1, 2) })])
-            .exp_error(CallError::SyntaxError)
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_value_ok() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax { name: "arg1", vtype: ExprType::Integer },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_function([Expr::Integer(IntegerSpan { value: 3, pos: lc(1, 2) })])
-            .exp_instr(Instruction::Push(Value::Integer(3), lc(1, 2)))
-            .exp_nargs(1)
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_value_type_promotion() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax { name: "arg1", vtype: ExprType::Integer },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_function([Expr::Double(DoubleSpan { value: 3.0, pos: lc(1, 2) })])
-            .exp_instr(Instruction::Push(Value::Double(3.0), lc(1, 2)))
-            .exp_instr(Instruction::DoubleToInteger)
-            .exp_nargs(1)
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_variable_ok() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Variable(ExprType::Text))
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: "ref",
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_function([Expr::Symbol(SymbolSpan {
-                vref: VarRef::new("foo", VarType::Auto),
-                pos: lc(1, 2),
-            })])
-            .exp_instr(Instruction::LoadRef(VarRef::new("foo", VarType::Auto), lc(1, 2)))
-            .exp_nargs(1)
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_variable_not_defined() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: "ref",
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_function([Expr::Symbol(SymbolSpan {
-                vref: VarRef::new("foo", VarType::Auto),
-                pos: lc(1, 2),
-            })])
-            .exp_error(CallError::ArgumentError(lc(1, 2), "Undefined variable foo".to_owned()))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_variable_disallow_value() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: "ref",
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_function([Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 2) })])
-            .exp_error(CallError::ArgumentError(
-                lc(1, 2),
-                "Requires a variable reference, not a value".to_owned(),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_variable_wrong_type() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Array(ExprType::Text, 1))
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: "ref",
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_function([Expr::Symbol(SymbolSpan {
-                vref: VarRef::new("foo", VarType::Auto),
-                pos: lc(1, 2),
-            })])
-            .exp_error(CallError::ArgumentError(
-                lc(1, 2),
-                "foo is not a variable reference".to_owned(),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_variable_wrong_annotation() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Variable(ExprType::Text))
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: "ref",
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_function([Expr::Symbol(SymbolSpan {
-                vref: VarRef::new("foo", VarType::Integer),
-                pos: lc(1, 2),
-            })])
-            .exp_error(CallError::ArgumentError(
-                lc(1, 2),
-                "Incompatible type annotation in foo% reference".to_owned(),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_array_ok() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Array(ExprType::Text, 0))
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_function([Expr::Symbol(SymbolSpan {
-                vref: VarRef::new("foo", VarType::Auto),
-                pos: lc(1, 2),
-            })])
-            .exp_instr(Instruction::LoadRef(VarRef::new("foo", VarType::Auto), lc(1, 2)))
-            .exp_nargs(1)
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_array_not_defined() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_function([Expr::Symbol(SymbolSpan {
-                vref: VarRef::new("foo", VarType::Auto),
-                pos: lc(1, 2),
-            })])
-            .exp_error(CallError::ArgumentError(lc(1, 2), "Undefined array foo".to_owned()))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_array_disallow_value() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_function([Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 2) })])
-            .exp_error(CallError::ArgumentError(
-                lc(1, 2),
-                "Requires an array reference, not a value".to_owned(),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_array_wrong_type() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Variable(ExprType::Text))
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_function([Expr::Symbol(SymbolSpan {
-                vref: VarRef::new("foo", VarType::Auto),
-                pos: lc(1, 2),
-            })])
-            .exp_error(CallError::ArgumentError(
-                lc(1, 2),
-                "foo is not an array reference".to_owned(),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_array_wrong_annotation() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Array(ExprType::Text, 0))
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_function([Expr::Symbol(SymbolSpan {
-                vref: VarRef::new("foo", VarType::Integer),
-                pos: lc(1, 2),
-            })])
-            .exp_error(CallError::ArgumentError(
-                lc(1, 2),
-                "Incompatible type annotation in foo% reference".to_owned(),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_multiple_any_value_ok() {
-        Tester::default()
-            .syntax(
-                &[
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg1", allow_missing: false },
-                        ArgSepSyntax::Exactly(ArgSep::Long),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg2", allow_missing: false },
-                        ArgSepSyntax::Exactly(ArgSep::Long),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg3", allow_missing: false },
-                        ArgSepSyntax::Exactly(ArgSep::Long),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg4", allow_missing: false },
-                        ArgSepSyntax::End,
-                    ),
-                ],
-                None,
-            )
-            .compile_function([
-                Expr::Boolean(BooleanSpan { value: false, pos: lc(1, 2) }),
-                Expr::Double(DoubleSpan { value: 2.0, pos: lc(1, 3) }),
-                Expr::Integer(IntegerSpan { value: 3, pos: lc(1, 4) }),
-                Expr::Text(TextSpan { value: "foo".to_owned(), pos: lc(1, 5) }),
-            ])
-            .exp_instr(Instruction::Push(Value::Text("foo".to_owned()), lc(1, 5)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Text as i32), lc(1, 5)))
-            .exp_instr(Instruction::Push(Value::Integer(3), lc(1, 4)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Integer as i32), lc(1, 4)))
-            .exp_instr(Instruction::Push(Value::Double(2.0), lc(1, 3)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Double as i32), lc(1, 3)))
-            .exp_instr(Instruction::Push(Value::Boolean(false), lc(1, 2)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Boolean as i32), lc(1, 2)))
-            .exp_nargs(8)
-            .check();
-    }
-
-    #[test]
-    fn test_one_any_value_expr_error() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Variable(ExprType::Double))
-            .syntax(
-                &[SingularArgSyntax::AnyValue(
-                    AnyValueSyntax { name: "arg1", allow_missing: false },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_function([Expr::Symbol(SymbolSpan {
-                vref: VarRef::new("foo", VarType::Boolean),
-                pos: lc(1, 2),
-            })])
-            .exp_error(CallError::ArgumentError(
-                lc(1, 2),
-                "Incompatible type annotation in foo? reference".to_owned(),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_none() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: "arg",
-                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: false,
-                    require_one: false,
-                }),
-            )
-            .compile_function([])
-            .exp_nargs(0)
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_multiple_and_cast() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: "arg",
-                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: false,
-                    require_one: false,
-                }),
-            )
-            .compile_function([
-                Expr::Double(DoubleSpan { value: 3.0, pos: lc(1, 2) }),
-                Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 4) }),
-            ])
-            .exp_instr(Instruction::Push(Value::Integer(5), lc(1, 4)))
-            .exp_instr(Instruction::Push(Value::Double(3.0), lc(1, 2)))
-            .exp_instr(Instruction::DoubleToInteger)
-            .exp_nargs(2)
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_require_one_just_one() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: "arg",
-                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: false,
-                    require_one: true,
-                }),
-            )
-            .compile_function([Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 2) })])
-            .exp_instr(Instruction::Push(Value::Integer(5), lc(1, 2)))
-            .exp_nargs(1)
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_require_one_missing() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: "arg",
-                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: false,
-                    require_one: true,
-                }),
-            )
-            .compile_function([])
-            .exp_error(CallError::SyntaxError)
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_any_value() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: "arg",
-                    type_syn: RepeatedTypeSyntax::AnyValue,
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: false,
-                    require_one: false,
-                }),
-            )
-            .compile_function([
-                Expr::Boolean(BooleanSpan { value: false, pos: lc(1, 2) }),
-                Expr::Double(DoubleSpan { value: 2.0, pos: lc(1, 4) }),
-                Expr::Integer(IntegerSpan { value: 3, pos: lc(1, 6) }),
-                Expr::Text(TextSpan { value: "foo".to_owned(), pos: lc(1, 8) }),
-            ])
-            .exp_instr(Instruction::Push(Value::Text("foo".to_owned()), lc(1, 8)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Text as i32), lc(1, 8)))
-            .exp_instr(Instruction::Push(Value::Integer(3), lc(1, 6)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Integer as i32), lc(1, 6)))
-            .exp_instr(Instruction::Push(Value::Double(2.0), lc(1, 4)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Double as i32), lc(1, 4)))
-            .exp_instr(Instruction::Push(Value::Boolean(false), lc(1, 2)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Boolean as i32), lc(1, 2)))
-            .exp_nargs(8)
-            .check();
-    }
+    // We only have one test for `compile_function` because we assume that its implementation is
+    // identical to `compile_command`.  The only difference is that the former generates argument
+    // spans, and so we validate some basic functionality here.
 
     #[test]
     fn test_singular_and_repeated() {
@@ -1697,7 +1199,7 @@ mod function_tests {
             .syntax(
                 &[SingularArgSyntax::RequiredValue(
                     RequiredValueSyntax { name: "arg", vtype: ExprType::Double },
-                    ArgSepSyntax::End,
+                    ArgSepSyntax::Exactly(ArgSep::Long),
                 )],
                 Some(&RepeatedSyntax {
                     name: "rep",
@@ -1845,17 +1347,88 @@ mod command_tests {
 
     #[test]
     fn test_one_required_ref_variable_disallow_value() {
-        // Trust that the correspondig function test validates this same error path.
+        Tester::default()
+            .syntax(
+                &[SingularArgSyntax::RequiredRef(
+                    RequiredRefSyntax {
+                        name: "ref",
+                        require_array: false,
+                        define_undefined: false,
+                    },
+                    ArgSepSyntax::End,
+                )],
+                None,
+            )
+            .compile_command([ArgSpan {
+                expr: Some(Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 2) })),
+                sep: ArgSep::End,
+                sep_pos: lc(1, 5),
+            }])
+            .exp_error(CallError::ArgumentError(
+                lc(1, 2),
+                "Requires a variable reference, not a value".to_owned(),
+            ))
+            .check();
     }
 
     #[test]
     fn test_one_required_ref_variable_wrong_type() {
-        // Trust that the correspondig function test validates this same error path.
+        Tester::default()
+            .symbol("foo", SymbolPrototype::Array(ExprType::Text, 1))
+            .syntax(
+                &[SingularArgSyntax::RequiredRef(
+                    RequiredRefSyntax {
+                        name: "ref",
+                        require_array: false,
+                        define_undefined: false,
+                    },
+                    ArgSepSyntax::End,
+                )],
+                None,
+            )
+            .compile_command([ArgSpan {
+                expr: Some(Expr::Symbol(SymbolSpan {
+                    vref: VarRef::new("foo", VarType::Auto),
+                    pos: lc(1, 2),
+                })),
+                sep: ArgSep::End,
+                sep_pos: lc(1, 5),
+            }])
+            .exp_error(CallError::ArgumentError(
+                lc(1, 2),
+                "foo is not a variable reference".to_owned(),
+            ))
+            .check();
     }
 
     #[test]
     fn test_one_required_ref_variable_wrong_annotation() {
-        // Trust that the correspondig function test validates this same error path.
+        Tester::default()
+            .symbol("foo", SymbolPrototype::Variable(ExprType::Text))
+            .syntax(
+                &[SingularArgSyntax::RequiredRef(
+                    RequiredRefSyntax {
+                        name: "ref",
+                        require_array: false,
+                        define_undefined: false,
+                    },
+                    ArgSepSyntax::End,
+                )],
+                None,
+            )
+            .compile_command([ArgSpan {
+                expr: Some(Expr::Symbol(SymbolSpan {
+                    vref: VarRef::new("foo", VarType::Integer),
+                    pos: lc(1, 2),
+                })),
+                sep: ArgSep::End,
+                sep_pos: lc(1, 5),
+            }])
+            .exp_error(CallError::ArgumentError(
+                lc(1, 2),
+                "Incompatible type annotation in foo% reference".to_owned(),
+            ))
+            .check();
     }
 
     #[test]
@@ -1907,28 +1480,172 @@ mod command_tests {
     }
 
     #[test]
+    fn test_multiple_required_ref_variable_define_undefined_repeated_ok() {
+        Tester::default()
+            .syntax(
+                &[
+                    SingularArgSyntax::RequiredRef(
+                        RequiredRefSyntax {
+                            name: "ref1",
+                            require_array: false,
+                            define_undefined: true,
+                        },
+                        ArgSepSyntax::Exactly(ArgSep::Long),
+                    ),
+                    SingularArgSyntax::RequiredRef(
+                        RequiredRefSyntax {
+                            name: "ref2",
+                            require_array: false,
+                            define_undefined: true,
+                        },
+                        ArgSepSyntax::End,
+                    ),
+                ],
+                None,
+            )
+            .compile_command([
+                ArgSpan {
+                    expr: Some(Expr::Symbol(SymbolSpan {
+                        vref: VarRef::new("foo", VarType::Auto),
+                        pos: lc(1, 2),
+                    })),
+                    sep: ArgSep::Long,
+                    sep_pos: lc(1, 5),
+                },
+                ArgSpan {
+                    expr: Some(Expr::Symbol(SymbolSpan {
+                        vref: VarRef::new("foo", VarType::Auto),
+                        pos: lc(1, 2),
+                    })),
+                    sep: ArgSep::End,
+                    sep_pos: lc(1, 5),
+                },
+            ])
+            .exp_instr(Instruction::LoadRef(VarRef::new("foo", VarType::Auto), lc(1, 2)))
+            .exp_instr(Instruction::LoadRef(VarRef::new("foo", VarType::Auto), lc(1, 2)))
+            .exp_nargs(2)
+            .exp_symbol("foo", ExprType::Integer)
+            .check();
+    }
+
+    #[test]
     fn test_one_required_ref_array_ok() {
-        // Trust that the correspondig function test validates this same error path.
+        Tester::default()
+            .symbol("foo", SymbolPrototype::Array(ExprType::Text, 0))
+            .syntax(
+                &[SingularArgSyntax::RequiredRef(
+                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
+                    ArgSepSyntax::End,
+                )],
+                None,
+            )
+            .compile_command([ArgSpan {
+                expr: Some(Expr::Symbol(SymbolSpan {
+                    vref: VarRef::new("foo", VarType::Auto),
+                    pos: lc(1, 2),
+                })),
+                sep: ArgSep::End,
+                sep_pos: lc(1, 5),
+            }])
+            .exp_instr(Instruction::LoadRef(VarRef::new("foo", VarType::Auto), lc(1, 2)))
+            .exp_nargs(1)
+            .check();
     }
 
     #[test]
     fn test_one_required_ref_array_not_defined() {
-        // Trust that the correspondig function test validates this same error path.
+        Tester::default()
+            .syntax(
+                &[SingularArgSyntax::RequiredRef(
+                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
+                    ArgSepSyntax::End,
+                )],
+                None,
+            )
+            .compile_command([ArgSpan {
+                expr: Some(Expr::Symbol(SymbolSpan {
+                    vref: VarRef::new("foo", VarType::Auto),
+                    pos: lc(1, 2),
+                })),
+                sep: ArgSep::End,
+                sep_pos: lc(1, 5),
+            }])
+            .exp_error(CallError::ArgumentError(lc(1, 2), "Undefined array foo".to_owned()))
+            .check();
     }
 
     #[test]
     fn test_one_required_ref_array_disallow_value() {
-        // Trust that the correspondig function test validates this same error path.
+        Tester::default()
+            .syntax(
+                &[SingularArgSyntax::RequiredRef(
+                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
+                    ArgSepSyntax::End,
+                )],
+                None,
+            )
+            .compile_command([ArgSpan {
+                expr: Some(Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 2) })),
+                sep: ArgSep::End,
+                sep_pos: lc(1, 5),
+            }])
+            .exp_error(CallError::ArgumentError(
+                lc(1, 2),
+                "Requires an array reference, not a value".to_owned(),
+            ))
+            .check();
     }
 
     #[test]
     fn test_one_required_ref_array_wrong_type() {
-        // Trust that the correspondig function test validates this same error path.
+        Tester::default()
+            .symbol("foo", SymbolPrototype::Variable(ExprType::Text))
+            .syntax(
+                &[SingularArgSyntax::RequiredRef(
+                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
+                    ArgSepSyntax::End,
+                )],
+                None,
+            )
+            .compile_command([ArgSpan {
+                expr: Some(Expr::Symbol(SymbolSpan {
+                    vref: VarRef::new("foo", VarType::Auto),
+                    pos: lc(1, 2),
+                })),
+                sep: ArgSep::End,
+                sep_pos: lc(1, 5),
+            }])
+            .exp_error(CallError::ArgumentError(
+                lc(1, 2),
+                "foo is not an array reference".to_owned(),
+            ))
+            .check();
     }
 
     #[test]
     fn test_one_required_ref_array_wrong_annotation() {
-        // Trust that the correspondig function test validates this same error path.
+        Tester::default()
+            .symbol("foo", SymbolPrototype::Array(ExprType::Text, 0))
+            .syntax(
+                &[SingularArgSyntax::RequiredRef(
+                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
+                    ArgSepSyntax::End,
+                )],
+                None,
+            )
+            .compile_command([ArgSpan {
+                expr: Some(Expr::Symbol(SymbolSpan {
+                    vref: VarRef::new("foo", VarType::Integer),
+                    pos: lc(1, 2),
+                })),
+                sep: ArgSep::End,
+                sep_pos: lc(1, 5),
+            }])
+            .exp_error(CallError::ArgumentError(
+                lc(1, 2),
+                "Incompatible type annotation in foo% reference".to_owned(),
+            ))
+            .check();
     }
 
     #[test]
