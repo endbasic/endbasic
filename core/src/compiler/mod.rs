@@ -812,14 +812,14 @@ impl Compiler {
                 self.compile_assignment(span.vref, span.vref_pos, span.expr)?;
             }
 
-            Statement::BuiltinCall(span) => {
-                let key = SymbolKey::from(&span.name);
+            Statement::Call(span) => {
+                let key = SymbolKey::from(&span.vref.name());
                 let md = match self.symtable.get(&key) {
                     Some(SymbolPrototype::Callable(md)) => {
                         if md.return_type() != VarType::Void {
                             return Err(Error::new(
-                                span.name_pos,
-                                format!("{} is not a command", span.name),
+                                span.vref_pos,
+                                format!("{} is not a command", span.vref.name()),
                             ));
                         }
                         md.clone()
@@ -827,20 +827,20 @@ impl Compiler {
 
                     Some(_) => {
                         return Err(Error::new(
-                            span.name_pos,
-                            format!("{} is not a command", span.name),
+                            span.vref_pos,
+                            format!("{} is not a command", span.vref.name()),
                         ));
                     }
 
                     None => {
                         return Err(Error::new(
-                            span.name_pos,
-                            format!("Unknown builtin {}", span.name),
+                            span.vref_pos,
+                            format!("Unknown builtin {}", span.vref.name()),
                         ))
                     }
                 };
 
-                let name_pos = span.name_pos;
+                let name_pos = span.vref_pos;
                 let nargs = compile_command_args(
                     md.syntaxes(),
                     &mut self.instrs,
@@ -850,7 +850,7 @@ impl Compiler {
                 )
                 .map_err(|e| Error::from_call_error(&md, e, name_pos))?;
                 self.next_pc = self.instrs.len();
-                self.emit(Instruction::BuiltinCall(key, span.name_pos, nargs));
+                self.emit(Instruction::BuiltinCall(key, span.vref_pos, nargs));
             }
 
             Statement::Data(mut span) => {

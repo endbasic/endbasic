@@ -756,21 +756,9 @@ pub(super) fn compile_function_args(
     instrs: &mut Vec<Instruction>,
     symtable: &SymbolsTable,
     pos: LineCol,
-    args: Vec<Expr>,
+    args: Vec<ArgSpan>,
 ) -> std::result::Result<usize, CallError> {
-    let input_nargs = args.len();
-    let mut spans = Vec::with_capacity(input_nargs);
-    for (i, expr) in args.into_iter().enumerate() {
-        let sep = if i == input_nargs - 1 { ArgSep::End } else { ArgSep::Long };
-
-        // Setting the separator position to the start position of the expression is not accurate,
-        // but because these argument spans are fake, we assume that they are valid and that this
-        // position will never be visible.
-        let sep_pos = expr.start_pos();
-
-        spans.push(ArgSpan { expr: Some(expr), sep, sep_pos });
-    }
-    let (nargs, to_insert) = compile_args(syntaxes, instrs, symtable, pos, spans)?;
+    let (nargs, to_insert) = compile_args(syntaxes, instrs, symtable, pos, args)?;
     debug_assert!(to_insert.is_empty());
     Ok(nargs)
 }
@@ -808,30 +796,6 @@ mod testutils {
         pub(super) fn symbol(mut self, key: &str, proto: SymbolPrototype) -> Self {
             self.symtable.insert(SymbolKey::from(key), proto);
             self
-        }
-
-        /// Feeds function `args` into the arguments compiler and returns a checker to validate
-        /// expectations.
-        pub(super) fn compile_function<A: Into<Vec<Expr>>>(self, args: A) -> Checker {
-            let mut instrs = vec![
-                // Start with one instruction to validate that the args compiler doesn't touch it.
-                Instruction::Nop,
-            ];
-            let result = compile_function_args(
-                &self.syntaxes,
-                &mut instrs,
-                &self.symtable,
-                lc(1000, 2000),
-                args.into(),
-            );
-            Checker {
-                result,
-                instrs,
-                symtable: self.symtable,
-                exp_result: Ok(0),
-                exp_instrs: vec![Instruction::Nop],
-                exp_vars: HashMap::default(),
-            }
         }
 
         /// Feeds command `args` into the arguments compiler and returns a checker to validate
@@ -1185,45 +1149,7 @@ mod description_tests {
 }
 
 #[cfg(test)]
-mod function_tests {
-    use super::testutils::*;
-    use super::*;
-
-    // We only have one test for `compile_function` because we assume that its implementation is
-    // identical to `compile_command`.  The only difference is that the former generates argument
-    // spans, and so we validate some basic functionality here.
-
-    #[test]
-    fn test_singular_and_repeated() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax { name: "arg", vtype: ExprType::Double },
-                    ArgSepSyntax::Exactly(ArgSep::Long),
-                )],
-                Some(&RepeatedSyntax {
-                    name: "rep",
-                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: false,
-                    require_one: false,
-                }),
-            )
-            .compile_function([
-                Expr::Double(DoubleSpan { value: 4.0, pos: lc(1, 2) }),
-                Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 5) }),
-                Expr::Integer(IntegerSpan { value: 6, pos: lc(1, 7) }),
-            ])
-            .exp_nargs(3)
-            .exp_instr(Instruction::Push(Value::Integer(6), lc(1, 7)))
-            .exp_instr(Instruction::Push(Value::Integer(5), lc(1, 5)))
-            .exp_instr(Instruction::Push(Value::Double(4.0), lc(1, 2)))
-            .check();
-    }
-}
-
-#[cfg(test)]
-mod command_tests {
+mod compile_tests {
     use super::testutils::*;
     use super::*;
 

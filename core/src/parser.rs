@@ -46,6 +46,24 @@ fn vref_to_unannotated_string(vref: VarRef, pos: LineCol) -> Result<String> {
     Ok(vref.take_name())
 }
 
+/// Converts a collection of `ArgSpan`s passed to a function or array reference to a collection
+/// of expressions with proper validation.
+pub(crate) fn argspans_to_exprs(spans: Vec<ArgSpan>) -> Vec<Expr> {
+    let nargs = spans.len();
+    let mut exprs = Vec::with_capacity(spans.len());
+    for (i, span) in spans.into_iter().enumerate() {
+        debug_assert!(
+            (span.sep == ArgSep::End || i < nargs - 1)
+                || (span.sep != ArgSep::End || i == nargs - 1)
+        );
+        match span.expr {
+            Some(expr) => exprs.push(expr),
+            None => unreachable!(),
+        }
+    }
+    exprs
+}
+
 /// Operators that can appear within an expression.
 ///
 /// The main difference between this and `lexer::Token` is that, in here, we differentiate the
@@ -344,7 +362,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        Ok(Statement::BuiltinCall(BuiltinCallSpan { name, name_pos: vref_pos, args }))
+        Ok(Statement::Call(CallSpan { vref: VarRef::new(name, VarType::Void), vref_pos, args }))
     }
 
     /// Starts processing either an array reference or a builtin call and disambiguates between the
@@ -357,7 +375,8 @@ impl<'a> Parser<'a> {
         match self.lexer.peek()?.token {
             Token::LeftParen => {
                 let left_paren = self.lexer.consume_peeked();
-                let mut exprs = self.parse_comma_separated_exprs()?;
+                let spans = self.parse_comma_separated_exprs()?;
+                let mut exprs = spans.into_iter().map(|span| span.expr.unwrap()).collect();
                 match self.lexer.peek()?.token {
                     Token::Equal => {
                         self.lexer.consume_peeked();
@@ -513,7 +532,7 @@ impl<'a> Parser<'a> {
                 Ok(Statement::DimArray(DimArraySpan {
                     name,
                     name_pos,
-                    dimensions,
+                    dimensions: argspans_to_exprs(dimensions),
                     subtype,
                     subtype_pos,
                 }))
@@ -637,13 +656,12 @@ impl<'a> Parser<'a> {
     /// Parses a variable list of comma-separated expressions.  The caller must have consumed the
     /// open parenthesis and we stop processing when we encounter the terminating parenthesis (and
     /// consume it).  We expect at least one expression.
-    fn parse_comma_separated_exprs(&mut self) -> Result<Vec<Expr>> {
-        let mut exprs = vec![];
-        let first_pos = self.lexer.peek()?.pos;
-        if let Some(expr) = self.parse_expr(None)? {
-            // The first expression is optional to support calls to functions without arguments.
-            exprs.push(expr);
-        }
+    fn parse_comma_separated_exprs(&mut self) -> Result<Vec<ArgSpan>> {
+        let mut spans = vec![];
+
+        // The first expression is optional to support calls to functions without arguments.
+        let mut is_first = true;
+        let mut prev_expr = self.parse_expr(None)?;
 
         loop {
             let peeked = self.lexer.peek()?;
@@ -651,23 +669,37 @@ impl<'a> Parser<'a> {
             match &peeked.token {
                 Token::RightParen => {
                     self.lexer.consume_peeked();
+
+                    if let Some(expr) = prev_expr.take() {
+                        spans.push(ArgSpan { expr: Some(expr), sep: ArgSep::End, sep_pos: pos });
+                    } else {
+                        if !is_first {
+                            return Err(Error::Bad(pos, "Missing expression".to_owned()));
+                        }
+                    }
+
                     break;
                 }
                 Token::Comma => {
                     self.lexer.consume_peeked();
-                    if exprs.is_empty() {
-                        // The first expression (parsed outside the loop) cannot be empty if we
-                        // encounter more than one expression.
-                        return Err(Error::Bad(first_pos, "Missing expression".to_owned()));
+
+                    if let Some(expr) = prev_expr.take() {
+                        // The first expression is optional to support calls to functions without
+                        // arguments.
+                        spans.push(ArgSpan { expr: Some(expr), sep: ArgSep::Long, sep_pos: pos });
+                    } else {
+                        return Err(Error::Bad(pos, "Missing expression".to_owned()));
                     }
-                    let expr = self.parse_required_expr("Missing expression")?;
-                    exprs.push(expr);
+
+                    prev_expr = self.parse_expr(None)?;
                 }
                 t => return Err(Error::Bad(pos, format!("Unexpected {}", t))),
             }
+
+            is_first = false;
         }
 
-        Ok(exprs)
+        Ok(spans)
     }
 
     /// Parses an expression.
@@ -748,10 +780,10 @@ impl<'a> Parser<'a> {
                     match exprs.pop() {
                         Some(Expr::Symbol(span)) => {
                             if !need_operand {
-                                exprs.push(Expr::Call(FunctionCallSpan {
-                                    fref: span.vref,
+                                exprs.push(Expr::Call(CallSpan {
+                                    vref: span.vref,
+                                    vref_pos: span.pos,
                                     args: self.parse_comma_separated_exprs()?,
-                                    pos: span.pos,
                                 }));
                                 need_operand = false;
                             } else {
@@ -1915,18 +1947,18 @@ mod tests {
         do_ok_test(
             "PRINT a\nPRINT ; 3 , c$\nNOARGS\nNAME 3 AS 4",
             &[
-                Statement::BuiltinCall(BuiltinCallSpan {
-                    name: "PRINT".to_owned(),
-                    name_pos: lc(1, 1),
+                Statement::Call(CallSpan {
+                    vref: VarRef::new("PRINT", VarType::Void),
+                    vref_pos: lc(1, 1),
                     args: vec![ArgSpan {
                         expr: Some(expr_symbol(VarRef::new("a", VarType::Auto), 1, 7)),
                         sep: ArgSep::End,
                         sep_pos: lc(1, 8),
                     }],
                 }),
-                Statement::BuiltinCall(BuiltinCallSpan {
-                    name: "PRINT".to_owned(),
-                    name_pos: lc(2, 1),
+                Statement::Call(CallSpan {
+                    vref: VarRef::new("PRINT", VarType::Void),
+                    vref_pos: lc(2, 1),
                     args: vec![
                         ArgSpan { expr: None, sep: ArgSep::Short, sep_pos: lc(2, 7) },
                         ArgSpan {
@@ -1941,14 +1973,14 @@ mod tests {
                         },
                     ],
                 }),
-                Statement::BuiltinCall(BuiltinCallSpan {
-                    name: "NOARGS".to_owned(),
-                    name_pos: lc(3, 1),
+                Statement::Call(CallSpan {
+                    vref: VarRef::new("NOARGS", VarType::Void),
+                    vref_pos: lc(3, 1),
                     args: vec![],
                 }),
-                Statement::BuiltinCall(BuiltinCallSpan {
-                    name: "NAME".to_owned(),
-                    name_pos: lc(4, 1),
+                Statement::Call(CallSpan {
+                    vref: VarRef::new("NAME", VarType::Void),
+                    vref_pos: lc(4, 1),
                     args: vec![
                         ArgSpan {
                             expr: Some(expr_integer(3, 4, 6)),
@@ -1972,9 +2004,9 @@ mod tests {
 
         do_ok_test(
             "PRINT(1)",
-            &[Statement::BuiltinCall(BuiltinCallSpan {
-                name: "PRINT".to_owned(),
-                name_pos: lc(1, 1),
+            &[Statement::Call(CallSpan {
+                vref: VarRef::new("PRINT", VarType::Void),
+                vref_pos: lc(1, 1),
                 args: vec![ArgSpan {
                     expr: Some(expr_integer(1, 1, 7)),
                     sep: ArgSep::End,
@@ -1985,9 +2017,9 @@ mod tests {
 
         do_ok_test(
             "PRINT(1), 2",
-            &[Statement::BuiltinCall(BuiltinCallSpan {
-                name: "PRINT".to_owned(),
-                name_pos: lc(1, 1),
+            &[Statement::Call(CallSpan {
+                vref: VarRef::new("PRINT", VarType::Void),
+                vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
                         expr: Some(expr_integer(1, 1, 7)),
@@ -2005,9 +2037,9 @@ mod tests {
 
         do_ok_test(
             "PRINT(1); 2",
-            &[Statement::BuiltinCall(BuiltinCallSpan {
-                name: "PRINT".to_owned(),
-                name_pos: lc(1, 1),
+            &[Statement::Call(CallSpan {
+                vref: VarRef::new("PRINT", VarType::Void),
+                vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
                         expr: Some(expr_integer(1, 1, 7)),
@@ -2025,9 +2057,9 @@ mod tests {
 
         do_ok_test(
             "PRINT(1);",
-            &[Statement::BuiltinCall(BuiltinCallSpan {
-                name: "PRINT".to_owned(),
-                name_pos: lc(1, 1),
+            &[Statement::Call(CallSpan {
+                vref: VarRef::new("PRINT", VarType::Void),
+                vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
                         expr: Some(expr_integer(1, 1, 7)),
@@ -2041,9 +2073,9 @@ mod tests {
 
         do_ok_test(
             "PRINT(1) + 2; 3",
-            &[Statement::BuiltinCall(BuiltinCallSpan {
-                name: "PRINT".to_owned(),
-                name_pos: lc(1, 1),
+            &[Statement::Call(CallSpan {
+                vref: VarRef::new("PRINT", VarType::Void),
+                vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
                         expr: Some(Add(Box::from(BinaryOpSpan {
@@ -2258,10 +2290,10 @@ mod tests {
                 name_pos: lc(1, 5),
                 dimensions: vec![
                     Add(Box::from(BinaryOpSpan {
-                        lhs: Call(FunctionCallSpan {
-                            fref: VarRef::new("bar", VarType::Text),
+                        lhs: Call(CallSpan {
+                            vref: VarRef::new("bar", VarType::Text),
+                            vref_pos: lc(1, 9),
                             args: vec![],
-                            pos: lc(1, 9),
                         }),
                         rhs: expr_integer(3, 1, 18),
                         pos: lc(1, 16),
@@ -2441,9 +2473,9 @@ mod tests {
     fn do_expr_ok_test(input: &str, expr: Expr) {
         do_ok_test(
             &format!("PRINT {}, 1", input),
-            &[Statement::BuiltinCall(BuiltinCallSpan {
-                name: "PRINT".to_owned(),
-                name_pos: lc(1, 1),
+            &[Statement::Call(CallSpan {
+                vref: VarRef::new("PRINT", VarType::Void),
+                vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
                         expr: Some(expr),
@@ -2837,30 +2869,46 @@ mod tests {
         use Expr::*;
         do_expr_ok_test(
             "zero()",
-            Call(FunctionCallSpan {
-                fref: VarRef::new("zero", VarType::Auto),
+            Call(CallSpan {
+                vref: VarRef::new("zero", VarType::Auto),
+                vref_pos: lc(1, 7),
                 args: vec![],
-                pos: lc(1, 7),
             }),
         );
         do_expr_ok_test(
             "one%(1)",
-            Call(FunctionCallSpan {
-                fref: VarRef::new("one", VarType::Integer),
-                args: vec![expr_integer(1, 1, 12)],
-                pos: lc(1, 7),
+            Call(CallSpan {
+                vref: VarRef::new("one", VarType::Integer),
+                vref_pos: lc(1, 7),
+                args: vec![ArgSpan {
+                    expr: Some(expr_integer(1, 1, 12)),
+                    sep: ArgSep::End,
+                    sep_pos: lc(1, 13),
+                }],
             }),
         );
         do_expr_ok_test(
             "many$(3, \"x\", TRUE)",
-            Call(FunctionCallSpan {
-                fref: VarRef::new("many", VarType::Text),
+            Call(CallSpan {
+                vref: VarRef::new("many", VarType::Text),
+                vref_pos: lc(1, 7),
                 args: vec![
-                    expr_integer(3, 1, 13),
-                    expr_text("x", 1, 16),
-                    expr_boolean(true, 1, 21),
+                    ArgSpan {
+                        expr: Some(expr_integer(3, 1, 13)),
+                        sep: ArgSep::Long,
+                        sep_pos: lc(1, 14),
+                    },
+                    ArgSpan {
+                        expr: Some(expr_text("x", 1, 16)),
+                        sep: ArgSep::Long,
+                        sep_pos: lc(1, 19),
+                    },
+                    ArgSpan {
+                        expr: Some(expr_boolean(true, 1, 21)),
+                        sep: ArgSep::End,
+                        sep_pos: lc(1, 25),
+                    },
                 ],
-                pos: lc(1, 7),
             }),
         );
     }
@@ -2870,36 +2918,71 @@ mod tests {
         use Expr::*;
         do_expr_ok_test(
             "consecutive(parenthesis())",
-            Call(FunctionCallSpan {
-                fref: VarRef::new("consecutive", VarType::Auto),
-                args: vec![Call(FunctionCallSpan {
-                    fref: VarRef::new("parenthesis", VarType::Auto),
-                    args: vec![],
-                    pos: lc(1, 19),
-                })],
-                pos: lc(1, 7),
+            Call(CallSpan {
+                vref: VarRef::new("consecutive", VarType::Auto),
+                vref_pos: lc(1, 7),
+                args: vec![ArgSpan {
+                    expr: Some(Call(CallSpan {
+                        vref: VarRef::new("parenthesis", VarType::Auto),
+                        vref_pos: lc(1, 19),
+                        args: vec![],
+                    })),
+                    sep: ArgSep::End,
+                    sep_pos: lc(1, 32),
+                }],
             }),
         );
         do_expr_ok_test(
             "outer?(1, inner1(2, 3), 4, inner2(), 5)",
-            Call(FunctionCallSpan {
-                fref: VarRef::new("outer", VarType::Boolean),
+            Call(CallSpan {
+                vref: VarRef::new("outer", VarType::Boolean),
+                vref_pos: lc(1, 7),
                 args: vec![
-                    expr_integer(1, 1, 14),
-                    Call(FunctionCallSpan {
-                        fref: VarRef::new("inner1", VarType::Auto),
-                        args: vec![expr_integer(2, 1, 24), expr_integer(3, 1, 27)],
-                        pos: lc(1, 17),
-                    }),
-                    expr_integer(4, 1, 31),
-                    Call(FunctionCallSpan {
-                        fref: VarRef::new("inner2", VarType::Auto),
-                        args: vec![],
-                        pos: lc(1, 34),
-                    }),
-                    expr_integer(5, 1, 44),
+                    ArgSpan {
+                        expr: Some(expr_integer(1, 1, 14)),
+                        sep: ArgSep::Long,
+                        sep_pos: lc(1, 15),
+                    },
+                    ArgSpan {
+                        expr: Some(Call(CallSpan {
+                            vref: VarRef::new("inner1", VarType::Auto),
+                            vref_pos: lc(1, 17),
+                            args: vec![
+                                ArgSpan {
+                                    expr: Some(expr_integer(2, 1, 24)),
+                                    sep: ArgSep::Long,
+                                    sep_pos: lc(1, 25),
+                                },
+                                ArgSpan {
+                                    expr: Some(expr_integer(3, 1, 27)),
+                                    sep: ArgSep::End,
+                                    sep_pos: lc(1, 28),
+                                },
+                            ],
+                        })),
+                        sep: ArgSep::Long,
+                        sep_pos: lc(1, 29),
+                    },
+                    ArgSpan {
+                        expr: Some(expr_integer(4, 1, 31)),
+                        sep: ArgSep::Long,
+                        sep_pos: lc(1, 32),
+                    },
+                    ArgSpan {
+                        expr: Some(Call(CallSpan {
+                            vref: VarRef::new("inner2", VarType::Auto),
+                            vref_pos: lc(1, 34),
+                            args: vec![],
+                        })),
+                        sep: ArgSep::Long,
+                        sep_pos: lc(1, 42),
+                    },
+                    ArgSpan {
+                        expr: Some(expr_integer(5, 1, 44)),
+                        sep: ArgSep::End,
+                        sep_pos: lc(1, 45),
+                    },
                 ],
-                pos: lc(1, 7),
             }),
         );
     }
@@ -2911,25 +2994,48 @@ mod tests {
             "b AND ask?(34 + 15, ask(1, FALSE), -5)",
             And(Box::from(BinaryOpSpan {
                 lhs: expr_symbol(VarRef::new("b".to_owned(), VarType::Auto), 1, 7),
-                rhs: Call(FunctionCallSpan {
-                    fref: VarRef::new("ask", VarType::Boolean),
+                rhs: Call(CallSpan {
+                    vref: VarRef::new("ask", VarType::Boolean),
+                    vref_pos: lc(1, 13),
                     args: vec![
-                        Add(Box::from(BinaryOpSpan {
-                            lhs: expr_integer(34, 1, 18),
-                            rhs: expr_integer(15, 1, 23),
-                            pos: lc(1, 21),
-                        })),
-                        Call(FunctionCallSpan {
-                            fref: VarRef::new("ask", VarType::Auto),
-                            args: vec![expr_integer(1, 1, 31), expr_boolean(false, 1, 34)],
-                            pos: lc(1, 27),
-                        }),
-                        Negate(Box::from(UnaryOpSpan {
-                            expr: expr_integer(5, 1, 43),
-                            pos: lc(1, 42),
-                        })),
+                        ArgSpan {
+                            expr: Some(Add(Box::from(BinaryOpSpan {
+                                lhs: expr_integer(34, 1, 18),
+                                rhs: expr_integer(15, 1, 23),
+                                pos: lc(1, 21),
+                            }))),
+                            sep: ArgSep::Long,
+                            sep_pos: lc(1, 25),
+                        },
+                        ArgSpan {
+                            expr: Some(Call(CallSpan {
+                                vref: VarRef::new("ask", VarType::Auto),
+                                vref_pos: lc(1, 27),
+                                args: vec![
+                                    ArgSpan {
+                                        expr: Some(expr_integer(1, 1, 31)),
+                                        sep: ArgSep::Long,
+                                        sep_pos: lc(1, 32),
+                                    },
+                                    ArgSpan {
+                                        expr: Some(expr_boolean(false, 1, 34)),
+                                        sep: ArgSep::End,
+                                        sep_pos: lc(1, 39),
+                                    },
+                                ],
+                            })),
+                            sep: ArgSep::Long,
+                            sep_pos: lc(1, 40),
+                        },
+                        ArgSpan {
+                            expr: Some(Negate(Box::from(UnaryOpSpan {
+                                expr: expr_integer(5, 1, 43),
+                                pos: lc(1, 42),
+                            }))),
+                            sep: ArgSep::End,
+                            sep_pos: lc(1, 44),
+                        },
                     ],
-                    pos: lc(1, 13),
                 }),
                 pos: lc(1, 9),
             })),
@@ -2977,7 +3083,7 @@ mod tests {
         do_expr_error_test("(", "1:8: Missing expression");
 
         do_expr_error_test(")", "1:7: Expected comma, semicolon, or end of statement");
-        do_expr_error_test("(()", "1:8: Missing expression");
+        do_expr_error_test("(()", "1:10: Missing expression");
         do_expr_error_test("())", "1:7: Expected expression");
         do_expr_error_test("3 + (2 + 1) + (4 - 5", "1:21: Unbalanced parenthesis");
         do_expr_error_test(
@@ -2992,7 +3098,7 @@ mod tests {
         // TODO(jmmv): These are not the best error messages...
         do_expr_error_test("(,)", "1:8: Missing expression");
         do_expr_error_test("(3, 4)", "1:7: Expected expression");
-        do_expr_error_test("((), ())", "1:8: Missing expression");
+        do_expr_error_test("((), ())", "1:10: Missing expression");
 
         // TODO(jmmv): This succeeds because `PRINT` is interned as a `Token::Symbol` so the
         // expression parser sees it as a variable reference... but this should probably fail.
@@ -3069,9 +3175,9 @@ mod tests {
 
     /// Helper to instantiate a trivial `Statement::BuiltinCall` that has no arguments.
     fn make_bare_builtin_call(name: &str, line: usize, col: usize) -> Statement {
-        Statement::BuiltinCall(BuiltinCallSpan {
-            name: name.to_owned(),
-            name_pos: LineCol { line, col },
+        Statement::Call(CallSpan {
+            vref: VarRef::new(name, VarType::Void),
+            vref_pos: LineCol { line, col },
             args: vec![],
         })
     }
@@ -3509,9 +3615,9 @@ mod tests {
     fn test_if_uniline_allowed_builtin_call() {
         do_if_uniline_allowed_test(
             "a 0",
-            Statement::BuiltinCall(BuiltinCallSpan {
-                name: "A".to_owned(),
-                name_pos: lc(1, 11),
+            Statement::Call(CallSpan {
+                vref: VarRef::new("A", VarType::Void),
+                vref_pos: lc(1, 11),
                 args: vec![ArgSpan {
                     expr: Some(expr_integer(0, 1, 13)),
                     sep: ArgSep::End,

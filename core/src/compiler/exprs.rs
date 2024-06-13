@@ -19,6 +19,7 @@ use super::{Error, ExprType, Result, SymbolPrototype, SymbolsTable};
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::compiler::compile_function_args;
+use crate::parser::argspans_to_exprs;
 use crate::reader::LineCol;
 use crate::syms::SymbolKey;
 
@@ -461,21 +462,22 @@ pub fn compile_expr_symbol_ref(
 fn compile_array_ref(
     instrs: &mut Vec<Instruction>,
     symtable: &SymbolsTable,
-    span: FunctionCallSpan,
+    span: CallSpan,
     key: SymbolKey,
     vtype: ExprType,
     dimensions: usize,
 ) -> Result<ExprType> {
-    let nargs = span.args.len();
-    compile_array_indices(instrs, symtable, dimensions, span.args, span.pos)?;
+    let exprs = argspans_to_exprs(span.args);
+    let nargs = exprs.len();
+    compile_array_indices(instrs, symtable, dimensions, exprs, span.vref_pos)?;
 
-    if !span.fref.accepts(vtype.into()) {
+    if !span.vref.accepts(vtype.into()) {
         return Err(Error::new(
-            span.pos,
-            format!("Incompatible type annotation in {} reference", span.fref),
+            span.vref_pos,
+            format!("Incompatible type annotation in {} reference", span.vref),
         ));
     }
-    instrs.push(Instruction::ArrayLoad(key, span.pos, nargs));
+    instrs.push(Instruction::ArrayLoad(key, span.vref_pos, nargs));
     Ok(vtype)
 }
 
@@ -700,39 +702,39 @@ pub fn compile_expr(
         Expr::Negate(span) => Ok(compile_neg_op(instrs, symtable, *span)?),
 
         Expr::Call(span) => {
-            let key = SymbolKey::from(span.fref.name());
+            let key = SymbolKey::from(span.vref.name());
             match symtable.get(&key) {
                 Some(SymbolPrototype::Array(vtype, dims)) => {
                     compile_array_ref(instrs, symtable, span, key, *vtype, *dims)
                 }
 
                 Some(SymbolPrototype::Callable(md)) => {
-                    if !span.fref.accepts(md.return_type()) {
+                    if !span.vref.accepts(md.return_type()) {
                         return Err(Error::new(
-                            span.pos,
-                            format!("Incompatible type annotation in {} reference", span.fref),
+                            span.vref_pos,
+                            format!("Incompatible type annotation in {} reference", span.vref),
                         ));
                     }
 
                     if md.return_type() == VarType::Void {
                         return Err(Error::new(
-                            span.pos,
-                            format!("{} is not an array nor a function", span.fref.name()),
+                            span.vref_pos,
+                            format!("{} is not an array nor a function", span.vref.name()),
                         ));
                     }
                     let vtype = md.return_type().into();
 
                     if md.is_argless() {
                         return Err(Error::new(
-                            span.pos,
+                            span.vref_pos,
                             format!(
                                 "In call to {}: expected no arguments nor parenthesis",
-                                span.fref.name()
+                                span.vref.name()
                             ),
                         ));
                     }
 
-                    let span_pos = span.pos;
+                    let span_pos = span.vref_pos;
                     let nargs =
                         compile_function_args(md.syntaxes(), instrs, symtable, span_pos, span.args)
                             .map_err(|e| Error::from_call_error(md, e, span_pos))?;
@@ -741,13 +743,13 @@ pub fn compile_expr(
                 }
 
                 Some(SymbolPrototype::Variable(_)) => Err(Error::new(
-                    span.pos,
-                    format!("{} is not an array nor a function", span.fref.name()),
+                    span.vref_pos,
+                    format!("{} is not an array nor a function", span.vref.name()),
                 )),
 
                 None => Err(Error::new(
-                    span.pos,
-                    format!("Unknown function or array {}", span.fref.name()),
+                    span.vref_pos,
+                    format!("Unknown function or array {}", span.vref.name()),
                 )),
             }
         }
