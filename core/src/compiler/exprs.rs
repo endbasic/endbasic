@@ -24,7 +24,7 @@ use crate::reader::LineCol;
 use crate::syms::SymbolKey;
 
 /// Compiles the indices used to address an array.
-pub(crate) fn compile_array_indices(
+pub(super) fn compile_array_indices(
     instrs: &mut Vec<Instruction>,
     symtable: &SymbolsTable,
     exp_nargs: usize,
@@ -402,7 +402,7 @@ fn compile_expr_symbol(
 }
 
 /// Compiles the load of a symbol in the context of a command argument.
-pub fn compile_expr_symbol_ref(
+fn compile_expr_symbol_ref(
     instrs: &mut Vec<Instruction>,
     symtable: &mut SymbolsTable,
     span: SymbolSpan,
@@ -487,7 +487,7 @@ fn compile_array_ref(
 /// `allow_varrefs` should be true for top-level expression compilations within function arguments.
 /// In that specific case, we must leave bare variable and array references unevaluated because we
 /// don't know if the function wants to take the reference or the value.
-pub fn compile_expr(
+pub(super) fn compile_expr(
     instrs: &mut Vec<Instruction>,
     symtable: &SymbolsTable,
     expr: Expr,
@@ -762,7 +762,7 @@ pub fn compile_expr(
 /// This function should be used only when compiling the arguments to a builtin command, because
 /// in that context, we need mutable access to the `symtable`in order to define output variables
 /// (if any).
-pub fn compile_expr_in_command(
+pub(super) fn compile_expr_in_command(
     instrs: &mut Vec<Instruction>,
     symtable: &mut SymbolsTable,
     expr: Expr,

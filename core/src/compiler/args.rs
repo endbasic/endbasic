@@ -15,64 +15,17 @@
 
 //! Common compilers for callable arguments.
 
-use super::{compile_expr, SymbolsTable};
-use super::{ExprType, SymbolPrototype};
 use crate::ast::*;
 use crate::bytecode::*;
+use crate::compiler::exprs::compile_expr;
+use crate::compiler::{ExprType, SymbolPrototype, SymbolsTable};
 use crate::exec::ValueTag;
 use crate::reader::LineCol;
 use crate::syms::{CallError, SymbolKey};
 use std::ops::RangeInclusive;
 
 /// Result for argument compilation return values.
-pub type Result<T> = std::result::Result<T, CallError>;
-
-/// Compiles a single expression, expecting it to be of a `target` type.  Applies casts if
-/// possible.
-pub fn compile_arg_expr(
-    instrs: &mut Vec<Instruction>,
-    symtable: &SymbolsTable,
-    expr: Expr,
-    target: ExprType,
-) -> Result<()> {
-    let epos = expr.start_pos();
-    let etype = compile_expr(instrs, symtable, expr, false)?;
-    if etype == ExprType::Double && target.is_numerical() {
-        if target == ExprType::Integer {
-            instrs.push(Instruction::DoubleToInteger);
-        }
-        Ok(())
-    } else if etype == ExprType::Integer && target.is_numerical() {
-        if target == ExprType::Double {
-            instrs.push(Instruction::IntegerToDouble);
-        }
-        Ok(())
-    } else if etype == target {
-        Ok(())
-    } else {
-        if target.is_numerical() {
-            Err(CallError::ArgumentError(epos, format!("{} is not a number", etype)))
-        } else {
-            Err(CallError::ArgumentError(epos, format!("{} is not a {}", etype, target)))
-        }
-    }
-}
-
-/// Compiles an argument, expecting it to be of a `target` type.  Applies casts if possible.
-pub fn compile_arg<I>(
-    instrs: &mut Vec<Instruction>,
-    symtable: &SymbolsTable,
-    iter: &mut I,
-    target: ExprType,
-) -> Result<()>
-where
-    I: Iterator<Item = Expr>,
-{
-    match iter.next() {
-        Some(expr) => compile_arg_expr(instrs, symtable, expr, target),
-        None => Err(CallError::SyntaxError),
-    }
-}
+type Result<T> = std::result::Result<T, CallError>;
 
 /// Details to compile a required scalar parameter.
 #[derive(Debug)]
@@ -366,7 +319,7 @@ fn compile_required_ref(
     require_array: bool,
     define_undefined: bool,
     expr: Option<Expr>,
-) -> std::result::Result<Option<(SymbolKey, SymbolPrototype)>, CallError> {
+) -> Result<Option<(SymbolKey, SymbolPrototype)>> {
     match expr {
         Some(Expr::Symbol(span)) => {
             let key = SymbolKey::from(span.vref.name());
@@ -473,10 +426,7 @@ fn compile_required_ref(
 /// Locates the syntax definition that can parse the given number of arguments.
 ///
 /// Panics if more than one syntax definition applies.
-fn find_syntax(
-    syntaxes: &[CallableSyntax],
-    nargs: usize,
-) -> std::result::Result<&CallableSyntax, CallError> {
+fn find_syntax(syntaxes: &[CallableSyntax], nargs: usize) -> Result<&CallableSyntax> {
     let mut matches = syntaxes.iter().filter(|s| s.expected_nargs().contains(&nargs));
     let syntax = matches.next();
     debug_assert!(matches.next().is_none(), "Ambiguous syntax definitions");
@@ -504,7 +454,7 @@ fn compile_syn_argsep(
     sep: ArgSep,
     sep_pos: LineCol,
     sep_tag_pc: Address,
-) -> std::result::Result<usize, CallError> {
+) -> Result<usize> {
     debug_assert!(
         (!is_last || sep == ArgSep::End) && (is_last || sep != ArgSep::End),
         "Parser can only supply an End separator in the last argument"
@@ -540,6 +490,37 @@ fn compile_syn_argsep(
     }
 }
 
+/// Compiles a single expression, expecting it to be of a `target` type.  Applies casts if
+/// possible.
+fn compile_arg_expr(
+    instrs: &mut Vec<Instruction>,
+    symtable: &SymbolsTable,
+    expr: Expr,
+    target: ExprType,
+) -> Result<()> {
+    let epos = expr.start_pos();
+    let etype = compile_expr(instrs, symtable, expr, false)?;
+    if etype == ExprType::Double && target.is_numerical() {
+        if target == ExprType::Integer {
+            instrs.push(Instruction::DoubleToInteger);
+        }
+        Ok(())
+    } else if etype == ExprType::Integer && target.is_numerical() {
+        if target == ExprType::Double {
+            instrs.push(Instruction::IntegerToDouble);
+        }
+        Ok(())
+    } else if etype == target {
+        Ok(())
+    } else {
+        if target.is_numerical() {
+            Err(CallError::ArgumentError(epos, format!("{} is not a number", etype)))
+        } else {
+            Err(CallError::ArgumentError(epos, format!("{} is not a {}", etype, target)))
+        }
+    }
+}
+
 /// Parses the arguments to a command or a function and generates expressions to compute them.
 ///
 /// Returns the number of arguments that the instructions added to `instrs` will push into the
@@ -550,7 +531,7 @@ fn compile_args(
     symtable: &SymbolsTable,
     _pos: LineCol,
     args: Vec<ArgSpan>,
-) -> std::result::Result<(usize, Vec<(SymbolKey, SymbolPrototype)>), CallError> {
+) -> Result<(usize, Vec<(SymbolKey, SymbolPrototype)>)> {
     let syntax = find_syntax(syntaxes, args.len())?;
 
     let input_nargs = args.len();
@@ -737,7 +718,7 @@ pub(super) fn compile_command_args(
     symtable: &mut SymbolsTable,
     pos: LineCol,
     args: Vec<ArgSpan>,
-) -> std::result::Result<usize, CallError> {
+) -> Result<usize> {
     let (nargs, to_insert) = compile_args(syntaxes, instrs, symtable, pos, args)?;
     for (key, proto) in to_insert {
         if !symtable.contains_key(&key) {
@@ -757,7 +738,7 @@ pub(super) fn compile_function_args(
     symtable: &SymbolsTable,
     pos: LineCol,
     args: Vec<ArgSpan>,
-) -> std::result::Result<usize, CallError> {
+) -> Result<usize> {
     let (nargs, to_insert) = compile_args(syntaxes, instrs, symtable, pos, args)?;
     debug_assert!(to_insert.is_empty());
     Ok(nargs)
@@ -827,10 +808,10 @@ mod testutils {
     /// Builder pattern to validate expectations in a test scenario.
     #[must_use]
     pub(super) struct Checker {
-        result: std::result::Result<usize, CallError>,
+        result: Result<usize>,
         instrs: Vec<Instruction>,
         symtable: SymbolsTable,
-        exp_result: std::result::Result<usize, CallError>,
+        exp_result: Result<usize>,
         exp_instrs: Vec<Instruction>,
         exp_vars: HashMap<SymbolKey, ExprType>,
     }
