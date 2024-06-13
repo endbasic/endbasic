@@ -91,19 +91,6 @@ pub struct BinaryOpSpan {
     pub pos: LineCol,
 }
 
-/// Components of an function call or an array reference expression.
-#[derive(Clone, Debug, PartialEq)]
-pub struct FunctionCallSpan {
-    /// Reference to the function to call or array to reference.
-    pub fref: VarRef,
-
-    /// Sequence of arguments to pass to the function.
-    pub args: Vec<Expr>,
-
-    /// Starting position of the function call.
-    pub pos: LineCol,
-}
-
 /// Represents an expression and provides mechanisms to evaluate it.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
@@ -162,7 +149,7 @@ pub enum Expr {
     ShiftRight(Box<BinaryOpSpan>),
 
     /// A function call or an array reference.
-    Call(FunctionCallSpan),
+    Call(CallSpan),
 }
 
 impl Expr {
@@ -199,7 +186,7 @@ impl Expr {
             Expr::Power(span) => span.lhs.start_pos(),
             Expr::Negate(span) => span.pos,
 
-            Expr::Call(span) => span.pos,
+            Expr::Call(span) => span.vref_pos,
         }
     }
 }
@@ -479,8 +466,7 @@ pub struct AssignmentSpan {
 }
 
 /// Single argument to a builtin call statement.
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ArgSpan {
     /// Expression to compute the argument's value.  This expression is optional to support calls
     /// of the form `PRINT a, , b` where some arguments are empty.
@@ -494,17 +480,16 @@ pub struct ArgSpan {
     pub sep_pos: LineCol,
 }
 
-/// Components of an builtin call statement.
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
-pub struct BuiltinCallSpan {
-    /// Name of the builtin to call.
-    pub name: String,
+/// Components of a call statement or expression.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CallSpan {
+    /// Reference to the callable (a command or a function), or the array to index.
+    pub vref: VarRef,
 
-    /// Position of the name.
-    pub name_pos: LineCol,
+    /// Position of the reference.
+    pub vref_pos: LineCol,
 
-    /// Sequence of arguments to pass to the builtin.
+    /// Sequence of arguments to pass to the callable.
     pub args: Vec<ArgSpan>,
 }
 
@@ -774,7 +759,7 @@ pub enum Statement {
     Assignment(AssignmentSpan),
 
     /// Represents a call to a builtin command such as `PRINT`.
-    BuiltinCall(BuiltinCallSpan),
+    Call(CallSpan),
 
     /// Represents a `DATA` statement.
     Data(DataSpan),
