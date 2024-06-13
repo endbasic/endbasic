@@ -29,7 +29,7 @@ use std::fmt;
 mod args;
 pub use args::*;
 mod exprs;
-pub use exprs::{compile_expr, compile_expr_in_command, compile_expr_symbol_ref};
+use exprs::{compile_expr, compile_expr_in_command};
 
 /// Compilation errors.
 #[derive(Debug, thiserror::Error)]
@@ -158,7 +158,7 @@ impl fmt::Display for ExprType {
 /// commands.
 #[derive(Clone, Copy, PartialEq)]
 #[cfg_attr(any(debug_assertions, test), derive(Debug))]
-pub enum CallableType {
+enum CallableType {
     /// Type for a function that returns a boolean.
     Boolean,
 
@@ -202,7 +202,7 @@ impl From<CallableType> for VarType {
 
 /// Information about a symbol in the symbols table.
 #[derive(Clone)]
-pub enum SymbolPrototype {
+enum SymbolPrototype {
     /// Information about an array.  The integer indicates the number of dimensions in the array.
     Array(ExprType, usize),
 
@@ -215,7 +215,7 @@ pub enum SymbolPrototype {
 
 /// Type for the symbols table.
 #[derive(Default)]
-pub struct SymbolsTable {
+struct SymbolsTable {
     table: HashMap<SymbolKey, SymbolPrototype>,
 }
 
@@ -247,12 +247,12 @@ impl From<&Symbols> for SymbolsTable {
 
 impl SymbolsTable {
     /// Returns true if the symbols table contains `key`.
-    pub fn contains_key(&mut self, key: &SymbolKey) -> bool {
+    fn contains_key(&mut self, key: &SymbolKey) -> bool {
         self.table.contains_key(key)
     }
 
     /// Returns the information for the symbol `key` if it exists, otherwise `None`.
-    pub fn get(&self, key: &SymbolKey) -> Option<&SymbolPrototype> {
+    fn get(&self, key: &SymbolKey) -> Option<&SymbolPrototype> {
         self.table.get(key)
     }
 
@@ -1010,7 +1010,7 @@ fn compile_aux(stmts: Vec<Statement>, symtable: SymbolsTable) -> Result<(Image, 
 /// that exist in the virtual machine.
 // TODO(jmmv): This is ugly.  Now that we have a symbols table in here, we should not _also_ have a
 // Symbols object to maintain runtime state (or if we do, we shouldn't be getting it here).
-pub fn compile(stmts: Vec<Statement>, syms: &Symbols) -> Result<Image> {
+pub(crate) fn compile(stmts: Vec<Statement>, syms: &Symbols) -> Result<Image> {
     compile_aux(stmts, SymbolsTable::from(syms)).map(|(image, _symtable)| image)
 }
 
