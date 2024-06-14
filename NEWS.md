@@ -13,6 +13,11 @@ for the time being.**
 ## Changes in version 0.10.99
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+*   Issue #120: Added support for having the cursor wrap around to the next line 
+    when pressing left or right at a line start or end boundary, respectively. 
+    In simpler words, pressing left at the start of a line takes you to the end 
+    of the next line, and pressing right at the end of a line takes you to the 
+    beginning of the next line. (@Protowalker)
 
 *   Fixed JSON requests to the service to properly set the correct
     `Content-Type` header.

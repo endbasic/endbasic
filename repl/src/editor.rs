@@ -284,6 +284,9 @@ impl Editor {
                     if self.file_pos.col > 0 {
                         self.file_pos.col -= 1;
                         self.insert_col = self.file_pos.col;
+                    } else if self.file_pos.line > 0 {
+                        self.file_pos.line -= 1;
+                        self.file_pos.col = self.content[self.file_pos.line].len();
                     }
                 }
 
@@ -291,6 +294,9 @@ impl Editor {
                     if self.file_pos.col < self.content[self.file_pos.line].len() {
                         self.file_pos.col += 1;
                         self.insert_col = self.file_pos.col;
+                    } else if self.file_pos.line < self.content.len() - 1 {
+                        self.file_pos.line += 1;
+                        self.file_pos.col = 0;
                     }
                 }
 
@@ -1117,6 +1123,45 @@ mod tests {
         ob = ob.quick_refresh(linecol(3, 2), yx(3, 2));
 
         run_editor("longer\na\nlonger\nb\n", "longer\na\nlongXer\nbZ\n", cb, ob);
+    }
+
+    #[test]
+    fn test_move_left_at_start_of_line() {
+        let mut cb = MockConsole::default();
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["abc", "abc"], yx(0, 0));
+
+        cb.add_input_keys(&[Key::ArrowDown]);
+        ob = ob.quick_refresh(linecol(1, 0), yx(1, 0));
+        cb.add_input_keys(&[Key::ArrowLeft]);
+        ob = ob.quick_refresh(linecol(0, 3), yx(0, 3));
+
+        cb.add_input_chars("x");
+        ob = ob.set_dirty();
+        ob = ob.add(CapturedOut::Write(b"x".to_vec()));
+        ob = ob.quick_refresh(linecol(0, 4), yx(0, 4));
+
+        run_editor("abc\nabc\n", "abcx\nabc\n", cb, ob);
+    }
+
+    #[test]
+    fn test_move_right_at_end_of_line() {
+        let mut cb = MockConsole::default();
+        cb.set_size(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["abc", "abc"], yx(0, 0));
+
+        cb.add_input_keys(&[Key::End]);
+        ob = ob.quick_refresh(linecol(0, 3), yx(0, 3));
+        cb.add_input_keys(&[Key::ArrowRight]);
+        ob = ob.quick_refresh(linecol(1, 0), yx(1, 0));
+
+        cb.add_input_chars("x");
+        ob = ob.set_dirty();
+        ob = ob.refresh(linecol(1, 1), &["abc", "xabc"], yx(1, 1));
+
+        run_editor("abc\nabc\n", "abc\nxabc\n", cb, ob);
     }
 
     #[test]
