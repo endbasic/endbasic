@@ -29,7 +29,7 @@ use std::fmt;
 mod args;
 pub use args::*;
 mod exprs;
-use exprs::{compile_expr, compile_expr_in_command};
+use exprs::{compile_expr, compile_expr_as_type, compile_expr_in_command};
 
 /// Compilation errors.
 #[derive(Debug, thiserror::Error)]
@@ -791,6 +791,14 @@ impl Compiler {
         }
     }
 
+    /// Compiles the evaluation of an expression with casts to a target type, appends its
+    /// instructions to the compilation context, and returns the type of the compiled expression.
+    fn compile_expr_as_type(&mut self, expr: Expr, target: ExprType) -> Result<()> {
+        compile_expr_as_type(&mut self.instrs, &self.symtable, expr, target)?;
+        self.next_pc = self.instrs.len();
+        Ok(())
+    }
+
     /// Compiles an expression that guards a conditional statement.  Returns an error if the
     /// expression is invalid or if it does not evaluate to a boolean.
     fn compile_expr_guard<S: Into<String>>(&mut self, guard: Expr, errmsg: S) -> Result<()> {
@@ -872,7 +880,7 @@ impl Compiler {
 
                 let nargs = span.dimensions.len();
                 for arg in span.dimensions.into_iter().rev() {
-                    self.compile_expr(arg, false)?;
+                    self.compile_expr_as_type(arg, ExprType::Integer)?;
                 }
                 self.emit(Instruction::DimArray(DimArrayISpan {
                     name: key.clone(),
@@ -891,7 +899,7 @@ impl Compiler {
 
             Statement::End(span) => match span.code {
                 Some(expr) => {
-                    self.compile_expr(expr, false)?;
+                    self.compile_expr_as_type(expr, ExprType::Integer)?;
                     self.emit(Instruction::End(true));
                 }
                 None => {
@@ -1528,6 +1536,35 @@ mod tests {
     }
 
     #[test]
+    fn test_compile_dim_array_double_to_integer() {
+        Tester::default()
+            .parse("DIM var(3.7) AS INTEGER")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Double(3.7), lc(1, 9)))
+            .expect_instr(1, Instruction::DoubleToInteger)
+            .expect_instr(
+                2,
+                Instruction::DimArray(DimArrayISpan {
+                    name: SymbolKey::from("var"),
+                    name_pos: lc(1, 5),
+                    dimensions: 1,
+                    subtype: VarType::Integer,
+                    subtype_pos: lc(1, 17),
+                }),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_dim_array_dimension_type_error() {
+        Tester::default()
+            .parse("DIM var(TRUE) AS INTEGER")
+            .compile()
+            .expect_err("1:9: BOOLEAN is not a number")
+            .check();
+    }
+
+    #[test]
     fn test_compile_do_infinite() {
         Tester::default()
             .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
@@ -1589,6 +1626,26 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Load(SymbolKey::from("i"), lc(1, 5)))
             .expect_instr(1, Instruction::End(true))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_end_with_exit_code_type_error() {
+        Tester::default()
+            .parse("END TRUE")
+            .compile()
+            .expect_err("1:5: BOOLEAN is not a number")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_end_with_exit_code_double_to_integer() {
+        Tester::default()
+            .parse("END 2.3")
+            .compile()
+            .expect_instr(0, Instruction::Push(Value::Double(2.3), lc(1, 5)))
+            .expect_instr(1, Instruction::DoubleToInteger)
+            .expect_instr(2, Instruction::End(true))
             .check();
     }
 

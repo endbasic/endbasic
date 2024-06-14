@@ -941,7 +941,9 @@ This is the first and only topic with just one line.
         t.run(r#"HELP foo bar"#)
             .expect_uncatchable_err("1:10: Unexpected value in expression")
             .check();
-        t.run(r#"HELP foo"#).expect_compilation_err("1:6: Undefined variable foo").check();
+        t.run(r#"HELP foo"#)
+            .expect_compilation_err("1:1: In call to HELP: 1:6: Undefined variable foo")
+            .check();
 
         t.run(r#"HELP "foo", 3"#)
             .expect_compilation_err("1:1: In call to HELP: expected <> | <topic$>")
