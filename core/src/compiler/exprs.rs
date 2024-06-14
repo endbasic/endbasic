@@ -773,6 +773,37 @@ pub(super) fn compile_expr_in_command(
     }
 }
 
+/// Compiles a single expression, expecting it to be of a `target` type.  Applies casts if
+/// possible.
+pub(super) fn compile_expr_as_type(
+    instrs: &mut Vec<Instruction>,
+    symtable: &SymbolsTable,
+    expr: Expr,
+    target: ExprType,
+) -> Result<()> {
+    let epos = expr.start_pos();
+    let etype = compile_expr(instrs, symtable, expr, false)?;
+    if etype == ExprType::Double && target.is_numerical() {
+        if target == ExprType::Integer {
+            instrs.push(Instruction::DoubleToInteger);
+        }
+        Ok(())
+    } else if etype == ExprType::Integer && target.is_numerical() {
+        if target == ExprType::Double {
+            instrs.push(Instruction::IntegerToDouble);
+        }
+        Ok(())
+    } else if etype == target {
+        Ok(())
+    } else {
+        if target.is_numerical() {
+            Err(Error::new(epos, format!("{} is not a number", etype)))
+        } else {
+            Err(Error::new(epos, format!("{} is not a {}", etype, target)))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

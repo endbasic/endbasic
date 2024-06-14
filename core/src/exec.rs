@@ -1793,7 +1793,7 @@ mod tests {
     #[test]
     fn test_dim_array_errors() {
         do_simple_error_test("DIM i()", "1:6: Arrays require at least one dimension");
-        do_simple_error_test("DIM i(FALSE)", "1:7: Dimensions in DIM array must be integers");
+        do_simple_error_test("DIM i(FALSE)", "1:7: BOOLEAN is not a number");
         do_simple_error_test("DIM i(-3)", "1:7: Dimensions in DIM array must be positive");
         do_simple_error_test("DIM i\nDIM i(3)", "2:5: Cannot DIM already-defined symbol i");
     }
@@ -1837,7 +1837,7 @@ mod tests {
     #[test]
     fn test_end_errors() {
         do_simple_error_test("END 1, 2", "1:6: Expected newline but found ,");
-        do_simple_error_test("END \"b\"", "1:5: \"b\" is not a number");
+        do_simple_error_test("END \"b\"", "1:5: STRING is not a number");
         do_simple_error_test("END -3", "1:5: Exit code must be a positive integer");
         do_simple_error_test("END 128", "1:5: Exit code cannot be larger than 127");
     }

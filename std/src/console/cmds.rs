@@ -834,14 +834,20 @@ mod tests {
             "1:1: In call to INPUT: expected <vref> | <[prompt$] <,|;> vref>",
             "INPUT \"foo\" AS bar",
         );
-        check_stmt_uncatchable_err("1:7: Undefined variable a", "INPUT a + 1 ; b");
+        check_stmt_uncatchable_err(
+            "1:1: In call to INPUT: 1:7: Undefined variable a",
+            "INPUT a + 1 ; b",
+        );
         Tester::default()
             .run("a = 3: INPUT ; a + 1")
             .expect_compilation_err(
                 "1:8: In call to INPUT: 1:16: Requires a variable reference, not a value",
             )
             .check();
-        check_stmt_uncatchable_err("1:11: Cannot + STRING and BOOLEAN", "INPUT \"a\" + TRUE; b?");
+        check_stmt_uncatchable_err(
+            "1:1: In call to INPUT: 1:11: Cannot + STRING and BOOLEAN",
+            "INPUT \"a\" + TRUE; b?",
+        );
     }
 
     #[test]

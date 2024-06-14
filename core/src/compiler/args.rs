@@ -17,7 +17,7 @@
 
 use crate::ast::*;
 use crate::bytecode::*;
-use crate::compiler::exprs::compile_expr;
+use crate::compiler::exprs::{compile_expr, compile_expr_as_type};
 use crate::compiler::{ExprType, SymbolPrototype, SymbolsTable};
 use crate::exec::ValueTag;
 use crate::reader::LineCol;
@@ -498,26 +498,9 @@ fn compile_arg_expr(
     expr: Expr,
     target: ExprType,
 ) -> Result<()> {
-    let epos = expr.start_pos();
-    let etype = compile_expr(instrs, symtable, expr, false)?;
-    if etype == ExprType::Double && target.is_numerical() {
-        if target == ExprType::Integer {
-            instrs.push(Instruction::DoubleToInteger);
-        }
-        Ok(())
-    } else if etype == ExprType::Integer && target.is_numerical() {
-        if target == ExprType::Double {
-            instrs.push(Instruction::IntegerToDouble);
-        }
-        Ok(())
-    } else if etype == target {
-        Ok(())
-    } else {
-        if target.is_numerical() {
-            Err(CallError::ArgumentError(epos, format!("{} is not a number", etype)))
-        } else {
-            Err(CallError::ArgumentError(epos, format!("{} is not a {}", etype, target)))
-        }
+    match compile_expr_as_type(instrs, symtable, expr, target) {
+        Ok(()) => Ok(()),
+        Err(e) => Err(CallError::ArgumentError(e.pos, e.message)),
     }
 }
 
