@@ -24,6 +24,7 @@ use crate::reader::LineCol;
 use crate::syms::SymbolKey;
 use crate::syms::{CallError, Callable, CallableMetadata, Symbol, Symbols};
 use crate::value;
+use crate::value::double_to_integer;
 use async_channel::{Receiver, Sender, TryRecvError};
 use std::future::Future;
 use std::io;
@@ -251,6 +252,14 @@ impl Stack {
     }
 
     /// Pops the top of the stack as a boolean value.
+    fn pop_boolean(&mut self) -> bool {
+        self.pop_boolean_with_pos().0
+    }
+
+    /// Pops the top of the stack as a boolean value.
+    //
+    // TODO(jmmv): Remove this variant once the stack values do not carry position
+    // information any longer.
     fn pop_boolean_with_pos(&mut self) -> (bool, LineCol) {
         match self.values.pop() {
             Some((Value::Boolean(b), pos)) => (b, pos),
@@ -259,7 +268,22 @@ impl Stack {
         }
     }
 
+    /// Pushes a boolean onto the stack.
+    #[allow(unused)]
+    fn push_boolean(&mut self, b: bool, pos: LineCol) {
+        self.values.push((Value::Boolean(b), pos));
+    }
+
     /// Pops the top of the stack as a double value.
+    #[allow(unused)]
+    fn pop_double(&mut self) -> f64 {
+        self.pop_double_with_pos().0
+    }
+
+    /// Pops the top of the stack as a double value.
+    //
+    // TODO(jmmv): Remove this variant once the stack values do not carry position
+    // information any longer.
     fn pop_double_with_pos(&mut self) -> (f64, LineCol) {
         match self.values.pop() {
             Some((Value::Double(d), pos)) => (d, pos),
@@ -268,7 +292,21 @@ impl Stack {
         }
     }
 
+    /// Pushes a double onto the stack.
+    #[allow(unused)]
+    fn push_double(&mut self, d: f64, pos: LineCol) {
+        self.values.push((Value::Double(d), pos));
+    }
+
     /// Pops the top of the stack as an integer value.
+    fn pop_integer(&mut self) -> i32 {
+        self.pop_integer_with_pos().0
+    }
+
+    /// Pops the top of the stack as an integer value.
+    //
+    // TODO(jmmv): Remove this variant once the stack values do not carry position
+    // information any longer.
     fn pop_integer_with_pos(&mut self) -> (i32, LineCol) {
         match self.values.pop() {
             Some((Value::Integer(i), pos)) => (i, pos),
@@ -277,7 +315,22 @@ impl Stack {
         }
     }
 
+    /// Pushes an integer onto the stack.
+    #[allow(unused)]
+    fn push_integer(&mut self, i: i32, pos: LineCol) {
+        self.values.push((Value::Integer(i), pos));
+    }
+
     /// Pops the top of the stack as a string value.
+    #[allow(unused)]
+    fn pop_string(&mut self) -> String {
+        self.pop_string_with_pos().0
+    }
+
+    /// Pops the top of the stack as a string value.
+    //
+    // TODO(jmmv): Remove this variant once the stack values do not carry position
+    // information any longer.
     fn pop_string_with_pos(&mut self) -> (String, LineCol) {
         match self.values.pop() {
             Some((Value::Text(s), pos)) => (s, pos),
@@ -286,13 +339,34 @@ impl Stack {
         }
     }
 
+    /// Pushes a string onto the stack.
+    #[allow(unused)]
+    fn push_string(&mut self, s: String, pos: LineCol) {
+        self.values.push((Value::Text(s), pos));
+    }
+
     /// Pops the top of the stack as a variable reference.
+    #[allow(unused)]
+    fn pop_varref(&mut self) -> VarRef {
+        self.pop_varref_with_pos().0
+    }
+
+    /// Pops the top of the stack as a variable reference.
+    //
+    // TODO(jmmv): Remove this variant once the stack values do not carry position
+    // information any longer.
     fn pop_varref_with_pos(&mut self) -> (VarRef, LineCol) {
         match self.values.pop() {
             Some((Value::VarRef(vref), pos)) => (vref, pos),
             Some((_, _)) => panic!("Type mismatch"),
             _ => panic!("Not enough arguments to pop"),
         }
+    }
+
+    /// Pushes a variable reference onto the stack.
+    #[allow(unused)]
+    fn push_varref(&mut self, vref: VarRef, pos: LineCol) {
+        self.values.push((Value::VarRef(vref), pos));
     }
 }
 
@@ -609,11 +683,8 @@ impl Machine {
     ) -> Result<()> {
         let mut ds = Vec::with_capacity(nargs);
         for _ in 0..nargs {
-            let (value, _pos) = context.value_stack.pop().unwrap();
-            match value {
-                Value::Integer(i) => ds.push(i),
-                _ => unreachable!("Array subscript type checking has been done at compile time"),
-            }
+            let i = context.value_stack.pop_integer();
+            ds.push(i);
         }
 
         let (value, _pos) = context.value_stack.pop().unwrap();
@@ -659,17 +730,11 @@ impl Machine {
     fn dim_array(&mut self, context: &mut Context, span: &DimArrayISpan) -> Result<()> {
         let mut ds = Vec::with_capacity(span.dimensions);
         for _ in 0..span.dimensions {
-            let (value, pos) = context.value_stack.pop().unwrap();
-            match value {
-                Value::Integer(i) => {
-                    if i <= 0 {
-                        return new_syntax_error(pos, "Dimensions in DIM array must be positive");
-                    }
-                    ds.push(i as usize);
-                }
-                Value::VarRef(_) => panic!("Should never get unevaluated varrefs"),
-                _ => return new_syntax_error(pos, "Dimensions in DIM array must be integers"),
+            let (i, pos) = context.value_stack.pop_integer_with_pos();
+            if i <= 0 {
+                return new_syntax_error(pos, "Dimensions in DIM array must be positive");
             }
+            ds.push(i as usize);
         }
         self.symbols.dim_array(span.name.clone(), span.subtype, ds);
         Ok(())
@@ -685,22 +750,20 @@ impl Machine {
     /// Tells the machine to stop execution at the next statement boundary.
     fn end(&mut self, context: &mut Context, has_code: bool) -> Result<()> {
         let code = if has_code {
-            let (code, code_pos) = context.value_stack.pop().unwrap();
-            match code.as_i32().map_err(|e| Error::from_value_error(e, code_pos))? {
-                n if n < 0 => {
-                    return new_syntax_error(
-                        code_pos,
-                        "Exit code must be a positive integer".to_owned(),
-                    );
-                }
-                n if n >= 128 => {
-                    return new_syntax_error(
-                        code_pos,
-                        "Exit code cannot be larger than 127".to_owned(),
-                    );
-                }
-                n => n as u8,
+            let (code, code_pos) = context.value_stack.pop_integer_with_pos();
+            if code < 0 {
+                return new_syntax_error(
+                    code_pos,
+                    "Exit code must be a positive integer".to_owned(),
+                );
             }
+            if code >= 128 {
+                return new_syntax_error(
+                    code_pos,
+                    "Exit code cannot be larger than 127".to_owned(),
+                );
+            }
+            code as u8
         } else {
             0
         };
@@ -759,13 +822,8 @@ impl Machine {
     fn get_array_args(&self, context: &mut Context, nargs: usize) -> Result<Vec<i32>> {
         let mut subscripts = Vec::with_capacity(nargs);
         for _ in 0..nargs {
-            let (value, _pos) = context.value_stack.pop().unwrap();
-            match value {
-                Value::Integer(i) => {
-                    subscripts.push(i);
-                }
-                _ => unreachable!("Invalid types in index; guaranteed valid by the compiler"),
-            }
+            let i = context.value_stack.pop_integer();
+            subscripts.push(i);
         }
         Ok(subscripts)
     }
@@ -1148,12 +1206,10 @@ impl Machine {
             }
 
             Instruction::DoubleToInteger => {
-                let (value, pos) = context.value_stack.pop().unwrap();
-                debug_assert_eq!(VarType::Double, value.as_vartype());
-                context.value_stack.push((
-                    Value::Integer(value.as_i32().map_err(|e| Error::from_value_error(e, pos))?),
-                    pos,
-                ));
+                let (d, pos) = context.value_stack.pop_double_with_pos();
+                let i =
+                    double_to_integer(d.round()).map_err(|e| Error::from_value_error(e, pos))?;
+                context.value_stack.push_integer(i, pos);
                 context.pc += 1;
             }
 
@@ -1177,12 +1233,8 @@ impl Machine {
             }
 
             Instruction::IntegerToDouble => {
-                let (value, pos) = context.value_stack.pop().unwrap();
-                debug_assert_eq!(VarType::Integer, value.as_vartype());
-                context.value_stack.push((
-                    Value::Double(value.as_f64().map_err(|e| Error::from_value_error(e, pos))?),
-                    pos,
-                ));
+                let (i, pos) = context.value_stack.pop_integer_with_pos();
+                context.value_stack.push_double(i as f64, pos);
                 context.pc += 1;
             }
 
@@ -1205,12 +1257,7 @@ impl Machine {
             }
 
             Instruction::JumpIfTrue(addr) => {
-                let (arg, _pos) = context.value_stack.pop().unwrap();
-                let cond = match arg {
-                    Value::Boolean(value) => value,
-                    _ => unreachable!("Types validated during compilation"),
-                };
-
+                let cond = context.value_stack.pop_boolean();
                 if cond {
                     if *addr <= context.pc {
                         self.check_stop = true;
@@ -1222,12 +1269,7 @@ impl Machine {
             }
 
             Instruction::JumpIfNotTrue(addr) => {
-                let (arg, _pos) = context.value_stack.pop().unwrap();
-                let cond = match arg {
-                    Value::Boolean(value) => value,
-                    _ => unreachable!("Types validated during compilation"),
-                };
-
+                let cond = context.value_stack.pop_boolean();
                 if cond {
                     context.pc += 1;
                 } else {
@@ -1264,7 +1306,7 @@ impl Machine {
                     }
                 };
 
-                context.value_stack.push((Value::VarRef(vref.clone()), *pos));
+                context.value_stack.push_varref(vref.clone(), *pos);
                 context.pc += 1;
             }
 
@@ -1393,6 +1435,74 @@ mod tests {
 
             *self.cleared.borrow_mut() = true;
         }
+    }
+
+    #[test]
+    fn test_stack_len() {
+        let mut stack = Stack::from([(Value::Integer(3), LineCol { line: 1, col: 2 })]);
+        assert_eq!(1, stack.len());
+    }
+
+    #[test]
+    fn test_stack_push_pop() {
+        let mut stack = Stack::from([]);
+        stack.push((Value::Integer(9), LineCol { line: 1, col: 2 }));
+        assert_eq!(Some((Value::Integer(9), LineCol { line: 1, col: 2 })), stack.pop());
+        assert_eq!(None, stack.pop());
+    }
+
+    #[test]
+    fn test_stack_pop_types() {
+        let mut stack = Stack::from([
+            (Value::Boolean(false), LineCol { line: 1, col: 2 }),
+            (Value::Double(1.2), LineCol { line: 1, col: 2 }),
+            (Value::Integer(2), LineCol { line: 1, col: 2 }),
+            (Value::Text("foo".to_owned()), LineCol { line: 1, col: 2 }),
+            (Value::VarRef(VarRef::new("foo", VarType::Auto)), LineCol { line: 1, col: 2 }),
+        ]);
+        assert_eq!(VarRef::new("foo", VarType::Auto), stack.pop_varref());
+        assert_eq!("foo", stack.pop_string());
+        assert_eq!(2, stack.pop_integer());
+        assert_eq!(1.2, stack.pop_double());
+        assert!(!stack.pop_boolean());
+    }
+
+    #[test]
+    fn test_stack_pop_types_with_pos() {
+        let mut stack = Stack::from([
+            (Value::Boolean(false), LineCol { line: 1, col: 2 }),
+            (Value::Double(1.2), LineCol { line: 3, col: 4 }),
+            (Value::Integer(2), LineCol { line: 5, col: 6 }),
+            (Value::Text("foo".to_owned()), LineCol { line: 7, col: 8 }),
+            (Value::VarRef(VarRef::new("foo", VarType::Auto)), LineCol { line: 9, col: 10 }),
+        ]);
+        assert_eq!(
+            (VarRef::new("foo", VarType::Auto), LineCol { line: 9, col: 10 }),
+            stack.pop_varref_with_pos()
+        );
+        assert_eq!(("foo".to_owned(), LineCol { line: 7, col: 8 }), stack.pop_string_with_pos());
+        assert_eq!((2, LineCol { line: 5, col: 6 }), stack.pop_integer_with_pos());
+        assert_eq!((1.2, LineCol { line: 3, col: 4 }), stack.pop_double_with_pos());
+        assert_eq!((false, LineCol { line: 1, col: 2 }), stack.pop_boolean_with_pos());
+    }
+
+    #[test]
+    fn test_stack_push_types() {
+        let mut stack = Stack::from([]);
+        stack.push_boolean(false, LineCol { line: 1, col: 2 });
+        stack.push_double(1.2, LineCol { line: 1, col: 2 });
+        stack.push_integer(2, LineCol { line: 1, col: 2 });
+        stack.push_string("foo".to_owned(), LineCol { line: 1, col: 2 });
+        stack.push_varref(VarRef::new("foo", VarType::Auto), LineCol { line: 1, col: 2 });
+
+        let exp_values = vec![
+            (Value::Boolean(false), LineCol { line: 1, col: 2 }),
+            (Value::Double(1.2), LineCol { line: 1, col: 2 }),
+            (Value::Integer(2), LineCol { line: 1, col: 2 }),
+            (Value::Text("foo".to_owned()), LineCol { line: 1, col: 2 }),
+            (Value::VarRef(VarRef::new("foo", VarType::Auto)), LineCol { line: 1, col: 2 }),
+        ];
+        assert_eq!(exp_values, stack.values);
     }
 
     #[test]

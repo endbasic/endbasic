@@ -33,6 +33,6 @@ mod reader;
 pub mod syms;
 #[cfg(test)]
 mod testutils;
-mod value;
+pub mod value;
 
 pub use reader::LineCol;

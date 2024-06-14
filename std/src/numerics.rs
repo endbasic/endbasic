@@ -25,6 +25,7 @@ use endbasic_core::exec::{Clearable, Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
 };
+use endbasic_core::value::double_to_integer;
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
 use std::cell::RefCell;
@@ -185,11 +186,9 @@ impl Callable for CintFunction {
         debug_assert_eq!(1, scope.nargs());
         let (value, pos) = scope.pop_double_with_pos();
 
-        Ok(Value::Integer(
-            Value::Double(value)
-                .as_i32()
-                .map_err(|e| CallError::ArgumentError(pos, e.to_string()))?,
-        ))
+        let i =
+            double_to_integer(value).map_err(|e| CallError::ArgumentError(pos, e.to_string()))?;
+        Ok(Value::Integer(i))
     }
 }
 
@@ -310,9 +309,9 @@ impl Callable for IntFunction {
         debug_assert_eq!(1, scope.nargs());
         let (value, pos) = scope.pop_double_with_pos();
 
-        Ok(Value::Double(value.floor())
-            .maybe_cast(VarType::Integer)
-            .map_err(|e| CallError::ArgumentError(pos, e.to_string()))?)
+        let i = double_to_integer(value.floor())
+            .map_err(|e| CallError::ArgumentError(pos, e.to_string()))?;
+        Ok(Value::Integer(i))
     }
 }
 
