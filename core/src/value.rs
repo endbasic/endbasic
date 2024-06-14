@@ -76,44 +76,33 @@ impl Value {
         }
     }
 
-    /// Reinterprets this value as an `i32` and fails if the conversion is not possible.
-    pub fn as_i32(&self) -> Result<i32> {
-        match self {
-            Value::Double(d) => {
-                let d = d.round();
-                if d.is_finite() && d >= (std::i32::MIN as f64) && (d <= std::i32::MAX as f64) {
-                    Ok(d as i32)
-                } else {
-                    Err(Error::new(format!("Cannot cast {} to integer due to overflow", d)))
-                }
-            }
-            Value::Integer(i) => Ok(*i),
-            Value::VarRef(_) => panic!("Should never get unevaluated varrefs"),
-            _ => Err(Error::new(format!("{} is not a number", self))),
-        }
-    }
-
-    /// Reinterprets this value as an `f64` and fails if the conversion is not possible.
-    pub fn as_f64(&self) -> Result<f64> {
-        match self {
-            Value::Double(d) => Ok(*d),
-            Value::Integer(i) => Ok(*i as f64),
-            _ => Err(Error::new(format!("{} is not a number", self))),
-        }
-    }
-
     /// Given a `target` variable type, tries to convert the value to that type if they are
     /// compatible or otherwise returns self.
     ///
     /// Can return an error when the conversion is feasible but it is not possible, such as trying
     /// to cast a NaN to an integer.
-    pub fn maybe_cast(self, target: VarType) -> Result<Value> {
+    pub(crate) fn maybe_cast(self, target: VarType) -> Result<Value> {
         match (target, self) {
-            (VarType::Integer, d @ Value::Double(_)) => Ok(Value::Integer(d.as_i32()?)),
-            (VarType::Double, i @ Value::Integer(_)) => Ok(Value::Double(i.as_f64()?)),
+            (VarType::Integer, Value::Double(d)) => Ok(Value::Integer(double_to_integer(d)?)),
+            (VarType::Double, Value::Integer(i)) => Ok(Value::Double(integer_to_double(i))),
             (_, v) => Ok(v),
         }
     }
+}
+
+/// Converts the double `d` to an integer and fails if the conversion is not possible.
+pub fn double_to_integer(d: f64) -> Result<i32> {
+    let d = d.round();
+    if d.is_finite() && d >= (i32::MIN as f64) && (d <= i32::MAX as f64) {
+        Ok(d as i32)
+    } else {
+        Err(Error::new(format!("Cannot cast {} to integer due to overflow", d)))
+    }
+}
+
+/// Converts the integer `i` to a double.
+pub(crate) fn integer_to_double(i: i32) -> f64 {
+    i as f64
 }
 
 /// Performs a logical "and" operation.
@@ -546,27 +535,19 @@ mod tests {
     }
 
     #[test]
-    fn test_value_as_i32() {
-        assert_eq!(8, Double(8.4).as_i32().unwrap());
-        assert_eq!(9, Double(8.5).as_i32().unwrap());
-        assert_eq!(9, Double(8.6).as_i32().unwrap());
-        assert_eq!(7, Integer(7).as_i32().unwrap());
+    fn test_double_to_integer() {
+        assert_eq!(8, double_to_integer(8.4).unwrap());
+        assert_eq!(9, double_to_integer(8.5).unwrap());
+        assert_eq!(9, double_to_integer(8.6).unwrap());
 
-        Double(f64::NAN).as_i32().unwrap_err();
-        Double(i32::MAX as f64 + 1.0).as_i32().unwrap_err();
-        Double(i32::MIN as f64 - 1.0).as_i32().unwrap_err();
-
-        Boolean(false).as_i32().unwrap_err();
-        Text("a".to_owned()).as_i32().unwrap_err();
+        double_to_integer(f64::NAN).unwrap_err();
+        double_to_integer(i32::MAX as f64 + 1.0).unwrap_err();
+        double_to_integer(i32::MIN as f64 - 1.0).unwrap_err();
     }
 
     #[test]
-    fn test_value_as_f64() {
-        assert_eq!(8.4, Double(8.4).as_f64().unwrap());
-        assert_eq!(7.0, Integer(7).as_f64().unwrap());
-
-        Boolean(false).as_f64().unwrap_err();
-        Text("a".to_owned()).as_f64().unwrap_err();
+    fn test_integer_to_double() {
+        assert_eq!(7.0, integer_to_double(7));
     }
 
     #[test]
