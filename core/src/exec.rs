@@ -269,7 +269,6 @@ impl Stack {
     }
 
     /// Pushes a boolean onto the stack.
-    #[allow(unused)]
     fn push_boolean(&mut self, b: bool, pos: LineCol) {
         self.values.push((Value::Boolean(b), pos));
     }
@@ -293,7 +292,6 @@ impl Stack {
     }
 
     /// Pushes a double onto the stack.
-    #[allow(unused)]
     fn push_double(&mut self, d: f64, pos: LineCol) {
         self.values.push((Value::Double(d), pos));
     }
@@ -316,7 +314,6 @@ impl Stack {
     }
 
     /// Pushes an integer onto the stack.
-    #[allow(unused)]
     fn push_integer(&mut self, i: i32, pos: LineCol) {
         self.values.push((Value::Integer(i), pos));
     }
@@ -340,7 +337,6 @@ impl Stack {
     }
 
     /// Pushes a string onto the stack.
-    #[allow(unused)]
     fn push_string(&mut self, s: String, pos: LineCol) {
         self.values.push((Value::Text(s), pos));
     }
@@ -364,7 +360,6 @@ impl Stack {
     }
 
     /// Pushes a variable reference onto the stack.
-    #[allow(unused)]
     fn push_varref(&mut self, vref: VarRef, pos: LineCol) {
         self.values.push((Value::VarRef(vref), pos));
     }
@@ -947,6 +942,15 @@ impl Machine {
         }
     }
 
+    /// Loads the value of a symbol.
+    fn load(&self, key: &SymbolKey, pos: LineCol) -> Result<&Value> {
+        match self.symbols.load(key) {
+            Some(Symbol::Variable(v)) => Ok(v),
+            Some(_) => unreachable!("Variable type checking has been done at compile time"),
+            None => new_syntax_error(pos, format!("Undefined variable {}", key)),
+        }
+    }
+
     /// Helper for `exec_one` that only worries about execution of a single instruction.
     ///
     /// Errors are handled on the caller side depending on the `ON ERROR` handling policy that is
@@ -1280,13 +1284,39 @@ impl Machine {
                 }
             }
 
-            Instruction::Load(key, pos) => {
-                let value = match self.symbols.load(key) {
-                    Some(Symbol::Variable(v)) => v.clone(),
-                    Some(_) => unreachable!("Variable type checking has been done at compile time"),
-                    None => return new_syntax_error(*pos, format!("Undefined variable {}", key)),
+            Instruction::LoadBoolean(key, pos) => {
+                let b = match self.load(key, *pos)? {
+                    Value::Boolean(b) => b,
+                    _ => unreachable!("Types are validated at compilation time"),
                 };
-                context.value_stack.push((value, *pos));
+                context.value_stack.push_boolean(*b, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::LoadDouble(key, pos) => {
+                let d = match self.load(key, *pos)? {
+                    Value::Double(d) => d,
+                    _ => unreachable!("Types are validated at compilation time"),
+                };
+                context.value_stack.push_double(*d, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::LoadInteger(key, pos) => {
+                let i = match self.load(key, *pos)? {
+                    Value::Integer(i) => i,
+                    _ => unreachable!("Types are validated at compilation time"),
+                };
+                context.value_stack.push_integer(*i, *pos);
+                context.pc += 1;
+            }
+
+            Instruction::LoadString(key, pos) => {
+                let s = match self.load(key, *pos)? {
+                    Value::Text(s) => s,
+                    _ => unreachable!("Types are validated at compilation time"),
+                };
+                context.value_stack.push_string(s.clone(), *pos);
                 context.pc += 1;
             }
 
