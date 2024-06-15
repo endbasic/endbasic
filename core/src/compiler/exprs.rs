@@ -366,7 +366,13 @@ fn compile_expr_symbol(
             if allow_varrefs {
                 (Instruction::LoadRef(span.vref.clone(), span.pos), *vtype)
             } else {
-                (Instruction::Load(key, span.pos), *vtype)
+                let instr = match vtype {
+                    ExprType::Boolean => Instruction::LoadBoolean,
+                    ExprType::Double => Instruction::LoadDouble,
+                    ExprType::Integer => Instruction::LoadInteger,
+                    ExprType::Text => Instruction::LoadString,
+                };
+                (instr(key, span.pos), *vtype)
             }
         }
 
@@ -835,7 +841,7 @@ mod tests {
             .define("j", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = j")
             .compile()
-            .expect_instr(0, Instruction::Load(SymbolKey::from("j"), lc(1, 5)))
+            .expect_instr(0, Instruction::LoadInteger(SymbolKey::from("j"), lc(1, 5)))
             .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
             .check();
     }
@@ -1002,11 +1008,11 @@ mod tests {
             .parse("b = true OR x AND y XOR NOT z")
             .compile()
             .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 5)))
-            .expect_instr(1, Instruction::Load(SymbolKey::from("x"), lc(1, 13)))
+            .expect_instr(1, Instruction::LoadBoolean(SymbolKey::from("x"), lc(1, 13)))
             .expect_instr(2, Instruction::LogicalOr(lc(1, 10)))
-            .expect_instr(3, Instruction::Load(SymbolKey::from("y"), lc(1, 19)))
+            .expect_instr(3, Instruction::LoadBoolean(SymbolKey::from("y"), lc(1, 19)))
             .expect_instr(4, Instruction::LogicalAnd(lc(1, 15)))
-            .expect_instr(5, Instruction::Load(SymbolKey::from("z"), lc(1, 29)))
+            .expect_instr(5, Instruction::LoadBoolean(SymbolKey::from("z"), lc(1, 29)))
             .expect_instr(6, Instruction::LogicalNot(lc(1, 25)))
             .expect_instr(7, Instruction::LogicalXor(lc(1, 21)))
             .expect_instr(8, Instruction::Assign(SymbolKey::from("b")))
@@ -1020,10 +1026,10 @@ mod tests {
             .define("b", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = a >> 5 << b")
             .compile()
-            .expect_instr(0, Instruction::Load(SymbolKey::from("a"), lc(1, 5)))
+            .expect_instr(0, Instruction::LoadInteger(SymbolKey::from("a"), lc(1, 5)))
             .expect_instr(1, Instruction::Push(Value::Integer(5), lc(1, 10)))
             .expect_instr(2, Instruction::ShiftRight(lc(1, 7)))
-            .expect_instr(3, Instruction::Load(SymbolKey::from("b"), lc(1, 15)))
+            .expect_instr(3, Instruction::LoadInteger(SymbolKey::from("b"), lc(1, 15)))
             .expect_instr(4, Instruction::ShiftLeft(lc(1, 12)))
             .expect_instr(5, Instruction::Assign(SymbolKey::from("i")))
             .check();
@@ -1034,8 +1040,9 @@ mod tests {
     /// `make_inst` is the instruction to expect.  `op_name` is the literal name of the operator as
     /// it appears in EndBASIC code.  `test_value` is a value of the right type to use with the
     /// operator call and `test_value_str` is the same value as represented in EndBASIC code.
-    fn do_op_test<F: Fn(LineCol) -> Instruction>(
-        make_inst: F,
+    fn do_op_test<L: Fn(SymbolKey, LineCol) -> Instruction, M: Fn(LineCol) -> Instruction>(
+        load_inst: L,
+        make_inst: M,
         op_name: &str,
         test_value: Value,
         test_value_str: &str,
@@ -1044,7 +1051,7 @@ mod tests {
             .define("a", SymbolPrototype::Variable(test_value.as_vartype().into()))
             .parse(&format!("b = a {} {}", op_name, test_value_str))
             .compile()
-            .expect_instr(0, Instruction::Load(SymbolKey::from("a"), lc(1, 5)))
+            .expect_instr(0, load_inst(SymbolKey::from("a"), lc(1, 5)))
             .expect_instr(1, Instruction::Push(test_value, lc(1, 8 + op_name.len())))
             .expect_instr(2, make_inst(lc(1, 7)))
             .expect_instr(3, Instruction::Assign(SymbolKey::from("b")))
@@ -1053,75 +1060,76 @@ mod tests {
 
     #[test]
     fn test_compile_expr_equality_ops() {
-        do_op_test(Instruction::EqualBooleans, "=", Value::Boolean(true), "TRUE");
-        do_op_test(Instruction::NotEqualBooleans, "<>", Value::Boolean(true), "TRUE");
+        use Instruction::*;
 
-        do_op_test(Instruction::EqualDoubles, "=", Value::Double(10.2), "10.2");
-        do_op_test(Instruction::NotEqualDoubles, "<>", Value::Double(10.2), "10.2");
+        do_op_test(LoadBoolean, EqualBooleans, "=", Value::Boolean(true), "TRUE");
+        do_op_test(LoadBoolean, NotEqualBooleans, "<>", Value::Boolean(true), "TRUE");
 
-        do_op_test(Instruction::EqualIntegers, "=", Value::Integer(10), "10");
-        do_op_test(Instruction::NotEqualIntegers, "<>", Value::Integer(10), "10");
+        do_op_test(LoadDouble, EqualDoubles, "=", Value::Double(10.2), "10.2");
+        do_op_test(LoadDouble, NotEqualDoubles, "<>", Value::Double(10.2), "10.2");
 
-        do_op_test(Instruction::EqualStrings, "=", Value::Text("foo".to_owned()), "\"foo\"");
-        do_op_test(Instruction::NotEqualStrings, "<>", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(LoadInteger, EqualIntegers, "=", Value::Integer(10), "10");
+        do_op_test(LoadInteger, NotEqualIntegers, "<>", Value::Integer(10), "10");
+
+        do_op_test(LoadString, EqualStrings, "=", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(LoadString, NotEqualStrings, "<>", Value::Text("foo".to_owned()), "\"foo\"");
     }
 
     #[test]
     fn test_compile_expr_relational_ops() {
-        do_op_test(Instruction::LessDoubles, "<", Value::Double(10.2), "10.2");
-        do_op_test(Instruction::LessEqualDoubles, "<=", Value::Double(10.2), "10.2");
-        do_op_test(Instruction::GreaterDoubles, ">", Value::Double(10.2), "10.2");
-        do_op_test(Instruction::GreaterEqualDoubles, ">=", Value::Double(10.2), "10.2");
+        use Instruction::*;
 
-        do_op_test(Instruction::LessIntegers, "<", Value::Integer(10), "10");
-        do_op_test(Instruction::LessEqualIntegers, "<=", Value::Integer(10), "10");
-        do_op_test(Instruction::GreaterIntegers, ">", Value::Integer(10), "10");
-        do_op_test(Instruction::GreaterEqualIntegers, ">=", Value::Integer(10), "10");
+        do_op_test(LoadDouble, LessDoubles, "<", Value::Double(10.2), "10.2");
+        do_op_test(LoadDouble, LessEqualDoubles, "<=", Value::Double(10.2), "10.2");
+        do_op_test(LoadDouble, GreaterDoubles, ">", Value::Double(10.2), "10.2");
+        do_op_test(LoadDouble, GreaterEqualDoubles, ">=", Value::Double(10.2), "10.2");
 
-        do_op_test(Instruction::LessStrings, "<", Value::Text("foo".to_owned()), "\"foo\"");
-        do_op_test(Instruction::LessEqualStrings, "<=", Value::Text("foo".to_owned()), "\"foo\"");
-        do_op_test(Instruction::GreaterStrings, ">", Value::Text("foo".to_owned()), "\"foo\"");
-        do_op_test(
-            Instruction::GreaterEqualStrings,
-            ">=",
-            Value::Text("foo".to_owned()),
-            "\"foo\"",
-        );
+        do_op_test(LoadInteger, LessIntegers, "<", Value::Integer(10), "10");
+        do_op_test(LoadInteger, LessEqualIntegers, "<=", Value::Integer(10), "10");
+        do_op_test(LoadInteger, GreaterIntegers, ">", Value::Integer(10), "10");
+        do_op_test(LoadInteger, GreaterEqualIntegers, ">=", Value::Integer(10), "10");
+
+        do_op_test(LoadString, LessStrings, "<", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(LoadString, LessEqualStrings, "<=", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(LoadString, GreaterStrings, ">", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(LoadString, GreaterEqualStrings, ">=", Value::Text("foo".to_owned()), "\"foo\"");
     }
 
     #[test]
     fn test_compile_expr_arithmetic_ops() {
-        do_op_test(Instruction::AddDoubles, "+", Value::Double(10.2), "10.2");
-        do_op_test(Instruction::SubtractDoubles, "-", Value::Double(10.2), "10.2");
-        do_op_test(Instruction::MultiplyDoubles, "*", Value::Double(10.2), "10.2");
-        do_op_test(Instruction::DivideDoubles, "/", Value::Double(10.2), "10.2");
-        do_op_test(Instruction::ModuloDoubles, "MOD", Value::Double(10.2), "10.2");
-        do_op_test(Instruction::PowerDoubles, "^", Value::Double(10.2), "10.2");
+        use Instruction::*;
+
+        do_op_test(LoadDouble, AddDoubles, "+", Value::Double(10.2), "10.2");
+        do_op_test(LoadDouble, SubtractDoubles, "-", Value::Double(10.2), "10.2");
+        do_op_test(LoadDouble, MultiplyDoubles, "*", Value::Double(10.2), "10.2");
+        do_op_test(LoadDouble, DivideDoubles, "/", Value::Double(10.2), "10.2");
+        do_op_test(LoadDouble, ModuloDoubles, "MOD", Value::Double(10.2), "10.2");
+        do_op_test(LoadDouble, PowerDoubles, "^", Value::Double(10.2), "10.2");
         Tester::default()
             .define("a", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = -60.2")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Double(60.2), lc(1, 6)))
-            .expect_instr(1, Instruction::NegateDouble(lc(1, 5)))
-            .expect_instr(2, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(0, Push(Value::Double(60.2), lc(1, 6)))
+            .expect_instr(1, NegateDouble(lc(1, 5)))
+            .expect_instr(2, Assign(SymbolKey::from("i")))
             .check();
 
-        do_op_test(Instruction::AddIntegers, "+", Value::Integer(10), "10");
-        do_op_test(Instruction::SubtractIntegers, "-", Value::Integer(10), "10");
-        do_op_test(Instruction::MultiplyIntegers, "*", Value::Integer(10), "10");
-        do_op_test(Instruction::DivideIntegers, "/", Value::Integer(10), "10");
-        do_op_test(Instruction::ModuloIntegers, "MOD", Value::Integer(10), "10");
-        do_op_test(Instruction::PowerIntegers, "^", Value::Integer(10), "10");
+        do_op_test(LoadInteger, AddIntegers, "+", Value::Integer(10), "10");
+        do_op_test(LoadInteger, SubtractIntegers, "-", Value::Integer(10), "10");
+        do_op_test(LoadInteger, MultiplyIntegers, "*", Value::Integer(10), "10");
+        do_op_test(LoadInteger, DivideIntegers, "/", Value::Integer(10), "10");
+        do_op_test(LoadInteger, ModuloIntegers, "MOD", Value::Integer(10), "10");
+        do_op_test(LoadInteger, PowerIntegers, "^", Value::Integer(10), "10");
         Tester::default()
             .define("a", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = -60")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(60), lc(1, 6)))
-            .expect_instr(1, Instruction::NegateInteger(lc(1, 5)))
-            .expect_instr(2, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(0, Push(Value::Integer(60), lc(1, 6)))
+            .expect_instr(1, NegateInteger(lc(1, 5)))
+            .expect_instr(2, Assign(SymbolKey::from("i")))
             .check();
 
-        do_op_test(Instruction::ConcatStrings, "+", Value::Text("foo".to_owned()), "\"foo\"");
+        do_op_test(LoadString, ConcatStrings, "+", Value::Text("foo".to_owned()), "\"foo\"");
     }
 
     #[test]
@@ -1132,10 +1140,10 @@ mod tests {
             .define("k", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = FOO(3, j, k + 1)")
             .compile()
-            .expect_instr(0, Instruction::Load(SymbolKey::from("k"), lc(1, 15)))
+            .expect_instr(0, Instruction::LoadInteger(SymbolKey::from("k"), lc(1, 15)))
             .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 19)))
             .expect_instr(2, Instruction::AddIntegers(lc(1, 17)))
-            .expect_instr(3, Instruction::Load(SymbolKey::from("j"), lc(1, 12)))
+            .expect_instr(3, Instruction::LoadInteger(SymbolKey::from("j"), lc(1, 12)))
             .expect_instr(4, Instruction::Push(Value::Integer(3), lc(1, 9)))
             .expect_instr(5, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 3))
             .expect_instr(6, Instruction::Assign(SymbolKey::from("i")))
@@ -1235,12 +1243,12 @@ mod tests {
             .define("k", SymbolPrototype::Variable(ExprType::Double))
             .parse("i = FOO(3, j, k + 1)")
             .compile()
-            .expect_instr(0, Instruction::Load(SymbolKey::from("k"), lc(1, 15)))
+            .expect_instr(0, Instruction::LoadDouble(SymbolKey::from("k"), lc(1, 15)))
             .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 19)))
             .expect_instr(2, Instruction::IntegerToDouble)
             .expect_instr(3, Instruction::AddDoubles(lc(1, 17)))
             .expect_instr(4, Instruction::DoubleToInteger)
-            .expect_instr(5, Instruction::Load(SymbolKey::from("j"), lc(1, 12)))
+            .expect_instr(5, Instruction::LoadInteger(SymbolKey::from("j"), lc(1, 12)))
             .expect_instr(6, Instruction::Push(Value::Integer(3), lc(1, 9)))
             .expect_instr(
                 7,

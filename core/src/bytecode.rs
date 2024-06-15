@@ -270,8 +270,17 @@ pub enum Instruction {
     /// Represents an conditional jump that jumps if the condition is not met.
     JumpIfNotTrue(Address),
 
-    /// Represents a load of a variable's value from main memory into the stack.
-    Load(SymbolKey, LineCol),
+    /// Represents a load of a boolean variable's value from main memory into the stack.
+    LoadBoolean(SymbolKey, LineCol),
+
+    /// Represents a load of a double variable's value from main memory into the stack.
+    LoadDouble(SymbolKey, LineCol),
+
+    /// Represents a load of an integer variable's value from main memory into the stack.
+    LoadInteger(SymbolKey, LineCol),
+
+    /// Represents a load of a string variable's value from main memory into the stack.
+    LoadString(SymbolKey, LineCol),
 
     /// Represents a load of a variable's reference into the stack.
     LoadRef(VarRef, LineCol),
@@ -344,7 +353,10 @@ impl Instruction {
             | Instruction::FunctionCall(_, _, _, _)
             | Instruction::DoubleToInteger
             | Instruction::IntegerToDouble
-            | Instruction::Load(_, _)
+            | Instruction::LoadBoolean(_, _)
+            | Instruction::LoadDouble(_, _)
+            | Instruction::LoadInteger(_, _)
+            | Instruction::LoadString(_, _)
             | Instruction::LoadRef(_, _)
             | Instruction::Push(_, _) => false,
 
