@@ -18,8 +18,8 @@
 use crate::console::{read_line, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{Value, VarType};
-use endbasic_core::compiler::{ArgSepSyntax, ExprType, RequiredValueSyntax, SingularArgSyntax};
+use endbasic_core::ast::{ExprType, Value, VarType};
+use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope, StopReason};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,

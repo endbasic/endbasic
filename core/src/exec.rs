@@ -18,7 +18,6 @@
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::compiler;
-use crate::compiler::ExprType;
 use crate::parser;
 use crate::reader::LineCol;
 use crate::syms::SymbolKey;

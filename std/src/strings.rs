@@ -16,9 +16,9 @@
 //! String functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::ast::{ArgSep, ExprType, Value, VarType};
 use endbasic_core::compiler::{
-    AnyValueSyntax, ArgSepSyntax, ExprType, RequiredValueSyntax, SingularArgSyntax,
+    AnyValueSyntax, ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
 use endbasic_core::exec::{Machine, Scope, ValueTag};
 use endbasic_core::syms::{

@@ -16,9 +16,9 @@
 //! Array-related functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::ast::{ArgSep, ExprType, Value, VarType};
 use endbasic_core::compiler::{
-    ArgSepSyntax, ExprType, RequiredRefSyntax, RequiredValueSyntax, SingularArgSyntax,
+    ArgSepSyntax, RequiredRefSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{

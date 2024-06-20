@@ -22,8 +22,8 @@
 //! of the lights, and finally dumps the resulting state to the screen.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{Value, VarType};
-use endbasic_core::compiler::{ArgSepSyntax, ExprType, RequiredValueSyntax, SingularArgSyntax};
+use endbasic_core::ast::{ExprType, Value, VarType};
+use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope, StopReason};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,

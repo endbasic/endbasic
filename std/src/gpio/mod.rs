@@ -16,8 +16,8 @@
 //! GPIO access functions and commands for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Value, VarType};
-use endbasic_core::compiler::{ArgSepSyntax, ExprType, RequiredValueSyntax, SingularArgSyntax};
+use endbasic_core::ast::{ArgSep, ExprType, Value, VarType};
+use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Clearable, Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,

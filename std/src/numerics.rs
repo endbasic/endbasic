@@ -16,10 +16,9 @@
 //! Numerical functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::ast::{ArgSep, ExprType, Value, VarType};
 use endbasic_core::compiler::{
-    ArgSepSyntax, ExprType, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax,
-    SingularArgSyntax,
+    ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
 use endbasic_core::exec::{Clearable, Machine, Scope};
 use endbasic_core::syms::{
