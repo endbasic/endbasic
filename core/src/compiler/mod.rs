@@ -102,30 +102,33 @@ pub enum ExprType {
 }
 
 impl ExprType {
+    /// Converts a `VarType` into an `ExprType`.
+    ///
+    /// If the `VarType` represents type inference (the `Auto` value), returns `auto_type` assuming
+    /// there is an `auto_type` to return; otherwise, panics.
+    fn from_vartype(vtype: VarType, auto_type: Option<ExprType>) -> Self {
+        match vtype {
+            VarType::Auto => auto_type.unwrap(),
+            VarType::Boolean => ExprType::Boolean,
+            VarType::Double => ExprType::Double,
+            VarType::Integer => ExprType::Integer,
+            VarType::Text => ExprType::Text,
+            VarType::Void => unreachable!(),
+        }
+    }
+
     /// Returns true if this expression type is numerical.
     fn is_numerical(self) -> bool {
         self == Self::Double || self == Self::Integer
     }
 
+    /// Returns the textual representation of the annotation for this type.
     pub(crate) fn annotation(&self) -> char {
         match self {
             ExprType::Boolean => '?',
             ExprType::Double => '#',
             ExprType::Integer => '%',
             ExprType::Text => '$',
-        }
-    }
-}
-
-impl From<VarType> for ExprType {
-    fn from(value: VarType) -> Self {
-        match value {
-            VarType::Auto => unreachable!(),
-            VarType::Boolean => ExprType::Boolean,
-            VarType::Double => ExprType::Double,
-            VarType::Integer => ExprType::Integer,
-            VarType::Text => ExprType::Text,
-            VarType::Void => unreachable!(),
         }
     }
 }
@@ -230,13 +233,16 @@ impl From<&Symbols> for SymbolsTable {
         let mut table = HashMap::default();
         for (name, symbol) in syms.as_hashmap() {
             let proto = match symbol {
-                Symbol::Array(array) => {
-                    SymbolPrototype::Array(array.subtype().into(), array.dimensions().len())
-                }
+                Symbol::Array(array) => SymbolPrototype::Array(
+                    ExprType::from_vartype(array.subtype(), None),
+                    array.dimensions().len(),
+                ),
                 Symbol::Callable(callable) => {
                     SymbolPrototype::Callable(callable.metadata().clone())
                 }
-                Symbol::Variable(var) => SymbolPrototype::Variable(var.as_vartype().into()),
+                Symbol::Variable(var) => {
+                    SymbolPrototype::Variable(ExprType::from_vartype(var.as_vartype(), None))
+                }
             };
             debug_assert_eq!(name, &name.to_ascii_uppercase());
             table.insert(SymbolKey::from(name), proto);
@@ -468,13 +474,9 @@ impl Compiler {
                 // TODO(jmmv): Compile separate Dim instructions for new variables instead of
                 // checking this every time.
                 let key = key.clone();
-                if vref.ref_type() == VarType::Auto {
-                    self.symtable.insert(key, SymbolPrototype::Variable(etype));
-                    etype
-                } else {
-                    self.symtable.insert(key, SymbolPrototype::Variable(vref.ref_type().into()));
-                    vref.ref_type().into()
-                }
+                let vtype = ExprType::from_vartype(vref.ref_type(), Some(etype));
+                self.symtable.insert(key, SymbolPrototype::Variable(vtype));
+                vtype
             }
         };
 
@@ -506,7 +508,8 @@ impl Compiler {
         }
 
         self.emit(Instruction::Dim(key.clone(), span.vtype));
-        self.symtable.insert(key, SymbolPrototype::Variable(span.vtype.into()));
+        self.symtable
+            .insert(key, SymbolPrototype::Variable(ExprType::from_vartype(span.vtype, None)));
 
         Ok(())
     }
@@ -890,7 +893,10 @@ impl Compiler {
                     subtype_pos: span.subtype_pos,
                 }));
 
-                self.symtable.insert(key, SymbolPrototype::Array(span.subtype.into(), nargs));
+                self.symtable.insert(
+                    key,
+                    SymbolPrototype::Array(ExprType::from_vartype(span.subtype, None), nargs),
+                );
             }
 
             Statement::Do(span) => {

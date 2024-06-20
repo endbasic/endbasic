@@ -335,11 +335,8 @@ fn compile_required_ref(
                     }
                     debug_assert!(!require_array);
 
-                    let vtype = if span.vref.ref_type() == VarType::Auto {
-                        ExprType::Integer
-                    } else {
-                        span.vref.ref_type().into()
-                    };
+                    let vtype =
+                        ExprType::from_vartype(span.vref.ref_type(), Some(ExprType::Integer));
 
                     if !span.vref.accepts(vtype.into()) {
                         return Err(CallError::ArgumentError(
