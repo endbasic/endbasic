@@ -288,8 +288,17 @@ pub enum Instruction {
     /// Represents an instruction that does nothing.
     Nop,
 
-    /// Represents a load of a literal value into the top of the stack.
-    Push(Value, LineCol),
+    /// Represents a load of a literal boolean value into the top of the stack.
+    PushBoolean(bool, LineCol),
+
+    /// Represents a load of a literal double value into the top of the stack.
+    PushDouble(f64, LineCol),
+
+    /// Represents a load of a literal integer value into the top of the stack.
+    PushInteger(i32, LineCol),
+
+    /// Represents a load of a literal string value into the top of the stack.
+    PushString(String, LineCol),
 
     /// Represents a return after a call.
     Return(LineCol),
@@ -358,7 +367,10 @@ impl Instruction {
             | Instruction::LoadInteger(_, _)
             | Instruction::LoadString(_, _)
             | Instruction::LoadRef(_, _)
-            | Instruction::Push(_, _) => false,
+            | Instruction::PushBoolean(_, _)
+            | Instruction::PushDouble(_, _)
+            | Instruction::PushInteger(_, _)
+            | Instruction::PushString(_, _) => false,
 
             Instruction::ArrayAssignment(_, _, _)
             | Instruction::Assign(_)
