@@ -394,7 +394,10 @@ fn compile_expr_symbol(
             let nargs = compile_function_args(md.syntaxes(), instrs, symtable, span.pos, vec![])
                 .map_err(|e| Error::from_call_error(md, e, span.pos))?;
             debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
-            (Instruction::FunctionCall(key, md.return_type(), span.pos, 0), md.return_type().into())
+            (
+                Instruction::FunctionCall(key, md.return_type(), span.pos, 0),
+                ExprType::from_vartype(md.return_type(), None),
+            )
         }
     };
     if !span.vref.accepts(vtype.into()) {
@@ -416,11 +419,7 @@ fn compile_expr_symbol_ref(
     let key = SymbolKey::from(span.vref.name());
     match symtable.get(&key) {
         None => {
-            let vtype = if span.vref.ref_type() == VarType::Auto {
-                ExprType::Integer
-            } else {
-                span.vref.ref_type().into()
-            };
+            let vtype = ExprType::from_vartype(span.vref.ref_type(), Some(ExprType::Integer));
 
             if !span.vref.accepts(vtype.into()) {
                 return Err(Error::new(
@@ -728,7 +727,7 @@ pub(super) fn compile_expr(
                             format!("{} is not an array nor a function", span.vref.name()),
                         ));
                     }
-                    let vtype = md.return_type().into();
+                    let vtype = ExprType::from_vartype(md.return_type(), None);
 
                     if md.is_argless() {
                         return Err(Error::new(
