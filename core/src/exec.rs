@@ -730,7 +730,11 @@ impl Machine {
             }
             ds.push(i as usize);
         }
-        self.symbols.dim_array(span.name.clone(), span.subtype, ds);
+        self.symbols.dim_array(
+            span.name.clone(),
+            ExprType::from_vartype(span.subtype, Some(ExprType::Integer)),
+            ds,
+        );
         Ok(())
     }
 

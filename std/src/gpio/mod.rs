@@ -427,7 +427,7 @@ mod tests {
             c = c.expect_var(var.0, var.1.clone());
         }
         c.expect_var("__GPIO_MOCK_LAST", Value::Integer(trace.len() as i32))
-            .expect_array_simple("__GPIO_MOCK_DATA", VarType::Integer, exp_data)
+            .expect_array_simple("__GPIO_MOCK_DATA", ExprType::Integer, exp_data)
             .check();
     }
 

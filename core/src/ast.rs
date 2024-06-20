@@ -237,6 +237,16 @@ impl ExprType {
             ExprType::Text => '$',
         }
     }
+
+    /// Returns the default value to assign to this type.
+    pub(crate) fn default_value(&self) -> Value {
+        match self {
+            ExprType::Boolean => Value::Boolean(false),
+            ExprType::Double => Value::Double(0.0),
+            ExprType::Integer => Value::Integer(0),
+            ExprType::Text => Value::Text("".to_owned()),
+        }
+    }
 }
 
 impl From<ExprType> for VarType {
@@ -300,7 +310,7 @@ impl VarType {
     }
 
     /// Returns the default value to assign to this type.
-    pub fn default_value(&self) -> Value {
+    pub(crate) fn default_value(&self) -> Value {
         match self {
             VarType::Auto => Value::Integer(0),
             VarType::Boolean => Value::Boolean(false),

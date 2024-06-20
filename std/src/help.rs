@@ -990,7 +990,7 @@ This is the first and only topic with just one line.
             .check();
         t.run(r#"DIM undoc(3): HELP "undoc""#)
             .expect_err("1:15: In call to HELP: 1:20: Unknown help topic undoc")
-            .expect_array("undoc", VarType::Integer, &[3], vec![])
+            .expect_array("undoc", ExprType::Integer, &[3], vec![])
             .check();
     }
 }

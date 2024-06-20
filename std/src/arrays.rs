@@ -219,8 +219,8 @@ pub fn add_all(machine: &mut Machine) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::testutils::*;
-    use endbasic_core::ast::VarType;
 
     /// Validates error handling of `LBOUND` and `UBOUND` as given in `func`.
     fn do_bound_errors_test(func: &str) {
@@ -243,7 +243,7 @@ mod tests {
         Tester::default()
             .run(&format!("DIM x(2): result = {}(x, -1)", func))
             .expect_err(format!("1:20: In call to {}: 1:30: Dimension -1 must be positive", func))
-            .expect_array("x", VarType::Integer, &[2], vec![])
+            .expect_array("x", ExprType::Integer, &[2], vec![])
             .check();
 
         Tester::default()
@@ -297,7 +297,7 @@ mod tests {
                 "1:26: In call to {}: 1:33: Requires a dimension for multidimensional arrays",
                 func
             ))
-            .expect_array("x", VarType::Integer, &[2, 3, 4], vec![])
+            .expect_array("x", ExprType::Integer, &[2, 3, 4], vec![])
             .check();
 
         Tester::default()
@@ -306,7 +306,7 @@ mod tests {
                 "1:26: In call to {}: 1:36: Array x has only 3 dimensions but asked for 5",
                 func
             ))
-            .expect_array("x", VarType::Integer, &[2, 3, 4], vec![])
+            .expect_array("x", ExprType::Integer, &[2, 3, 4], vec![])
             .check();
     }
 
@@ -315,19 +315,19 @@ mod tests {
         Tester::default()
             .run("DIM x(10): result = LBOUND(x)")
             .expect_var("result", 0i32)
-            .expect_array("x", VarType::Integer, &[10], vec![])
+            .expect_array("x", ExprType::Integer, &[10], vec![])
             .check();
 
         Tester::default()
             .run("DIM x(10, 20): result = LBOUND(x, 1)")
             .expect_var("result", 0i32)
-            .expect_array("x", VarType::Integer, &[10, 20], vec![])
+            .expect_array("x", ExprType::Integer, &[10, 20], vec![])
             .check();
 
         Tester::default()
             .run("DIM x(10, 20): result = LBOUND(x, 2.1)")
             .expect_var("result", 0i32)
-            .expect_array("x", VarType::Integer, &[10, 20], vec![])
+            .expect_array("x", ExprType::Integer, &[10, 20], vec![])
             .check();
     }
 
@@ -341,19 +341,19 @@ mod tests {
         Tester::default()
             .run("DIM x(10): result = UBOUND(x)")
             .expect_var("result", 9i32)
-            .expect_array("x", VarType::Integer, &[10], vec![])
+            .expect_array("x", ExprType::Integer, &[10], vec![])
             .check();
 
         Tester::default()
             .run("DIM x(10, 20): result = UBOUND(x, 1)")
             .expect_var("result", 9i32)
-            .expect_array("x", VarType::Integer, &[10, 20], vec![])
+            .expect_array("x", ExprType::Integer, &[10, 20], vec![])
             .check();
 
         Tester::default()
             .run("DIM x(10, 20): result = UBOUND(x, 2.1)")
             .expect_var("result", 19i32)
-            .expect_array("x", VarType::Integer, &[10, 20], vec![])
+            .expect_array("x", ExprType::Integer, &[10, 20], vec![])
             .check();
     }
 
@@ -369,7 +369,7 @@ mod tests {
             .expect_var("i", 5i32)
             .expect_array_simple(
                 "x",
-                VarType::Integer,
+                ExprType::Integer,
                 vec![0i32.into(), 2i32.into(), 4i32.into(), 6i32.into(), 8i32.into()],
             )
             .check();

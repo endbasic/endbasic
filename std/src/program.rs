@@ -859,12 +859,12 @@ mod tests {
         let program = "DIM a(1) AS INTEGER: a(0) = 123";
         let mut t = Tester::default().set_program(Some("untouched.bas"), program);
         t.run("DIM a(1) AS STRING: RUN")
-            .expect_array_simple("a", VarType::Integer, vec![123.into()])
+            .expect_array_simple("a", ExprType::Integer, vec![123.into()])
             .expect_clear()
             .expect_program(Some("untouched.bas"), program)
             .check();
         t.run("RUN")
-            .expect_array_simple("a", VarType::Integer, vec![123.into()])
+            .expect_array_simple("a", ExprType::Integer, vec![123.into()])
             .expect_clear()
             .expect_clear()
             .expect_program(Some("untouched.bas"), program)
