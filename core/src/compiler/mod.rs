@@ -155,54 +155,6 @@ impl fmt::Display for ExprType {
     }
 }
 
-/// Represents the type of a callable.
-///
-/// This is a superset of `ExprType` with the addition of the `Void` required to represent
-/// commands.
-#[derive(Clone, Copy, PartialEq)]
-#[cfg_attr(any(debug_assertions, test), derive(Debug))]
-enum CallableType {
-    /// Type for a function that returns a boolean.
-    Boolean,
-
-    /// Type for a function that returns a double.
-    Double,
-
-    /// Type for a function that returns an integer.
-    Integer,
-
-    /// Type for a function that returns a string.
-    Text,
-
-    /// Type for a builtin command.
-    Void,
-}
-
-impl From<VarType> for CallableType {
-    fn from(value: VarType) -> Self {
-        match value {
-            VarType::Auto => unreachable!(),
-            VarType::Boolean => CallableType::Boolean,
-            VarType::Double => CallableType::Double,
-            VarType::Integer => CallableType::Integer,
-            VarType::Text => CallableType::Text,
-            VarType::Void => CallableType::Void,
-        }
-    }
-}
-
-impl From<CallableType> for VarType {
-    fn from(value: CallableType) -> Self {
-        match value {
-            CallableType::Boolean => VarType::Boolean,
-            CallableType::Double => VarType::Double,
-            CallableType::Integer => VarType::Integer,
-            CallableType::Text => VarType::Text,
-            CallableType::Void => VarType::Void,
-        }
-    }
-}
-
 /// Information about a symbol in the symbols table.
 #[derive(Clone)]
 enum SymbolPrototype {
