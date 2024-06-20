@@ -24,7 +24,6 @@ use crate::syms::{Symbol, SymbolKey, Symbols};
 use std::collections::HashMap;
 #[cfg(test)]
 use std::collections::HashSet;
-use std::fmt;
 
 mod args;
 pub use args::*;
@@ -84,76 +83,6 @@ impl Error {
 
 /// Result for compiler return values.
 pub type Result<T> = std::result::Result<T, Error>;
-
-/// Represents type of an expression.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum ExprType {
-    /// Type for an expression that evaluates to a boolean.
-    Boolean,
-
-    /// Type for an expression that evaluates to a double.
-    Double,
-
-    /// Type for an expression that evaluates to an integer.
-    Integer,
-
-    /// Type for an expression that evaluates to a string.
-    Text,
-}
-
-impl ExprType {
-    /// Converts a `VarType` into an `ExprType`.
-    ///
-    /// If the `VarType` represents type inference (the `Auto` value), returns `auto_type` assuming
-    /// there is an `auto_type` to return; otherwise, panics.
-    fn from_vartype(vtype: VarType, auto_type: Option<ExprType>) -> Self {
-        match vtype {
-            VarType::Auto => auto_type.unwrap(),
-            VarType::Boolean => ExprType::Boolean,
-            VarType::Double => ExprType::Double,
-            VarType::Integer => ExprType::Integer,
-            VarType::Text => ExprType::Text,
-            VarType::Void => unreachable!(),
-        }
-    }
-
-    /// Returns true if this expression type is numerical.
-    fn is_numerical(self) -> bool {
-        self == Self::Double || self == Self::Integer
-    }
-
-    /// Returns the textual representation of the annotation for this type.
-    pub(crate) fn annotation(&self) -> char {
-        match self {
-            ExprType::Boolean => '?',
-            ExprType::Double => '#',
-            ExprType::Integer => '%',
-            ExprType::Text => '$',
-        }
-    }
-}
-
-impl From<ExprType> for VarType {
-    fn from(value: ExprType) -> Self {
-        match value {
-            ExprType::Boolean => VarType::Boolean,
-            ExprType::Double => VarType::Double,
-            ExprType::Integer => VarType::Integer,
-            ExprType::Text => VarType::Text,
-        }
-    }
-}
-
-impl fmt::Display for ExprType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ExprType::Boolean => write!(f, "BOOLEAN"),
-            ExprType::Double => write!(f, "DOUBLE"),
-            ExprType::Integer => write!(f, "INTEGER"),
-            ExprType::Text => write!(f, "STRING"),
-        }
-    }
-}
 
 /// Information about a symbol in the symbols table.
 #[derive(Clone)]

@@ -19,10 +19,10 @@ use crate::console::readline::read_line;
 use crate::console::{CharsXY, ClearType, Console, ConsoleClearable, Key};
 use crate::strings::{format_boolean, format_double, format_integer};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::ast::{ArgSep, ExprType, Value, VarType};
 use endbasic_core::compiler::{
-    ArgSepSyntax, ExprType, OptionalValueSyntax, RepeatedSyntax, RepeatedTypeSyntax,
-    RequiredRefSyntax, RequiredValueSyntax, SingularArgSyntax,
+    ArgSepSyntax, OptionalValueSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax,
+    RequiredValueSyntax, SingularArgSyntax,
 };
 use endbasic_core::exec::{Machine, Scope, ValueTag};
 use endbasic_core::syms::{

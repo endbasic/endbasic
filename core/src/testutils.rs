@@ -15,10 +15,10 @@
 
 //! Test utilities.
 
-use crate::ast::{ArgSep, Value, VarRef, VarType};
+use crate::ast::{ArgSep, ExprType, Value, VarRef, VarType};
 use crate::compiler::{
-    ArgSepSyntax, ExprType, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax,
-    RequiredValueSyntax, SingularArgSyntax,
+    ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax, RequiredValueSyntax,
+    SingularArgSyntax,
 };
 use crate::exec::{Machine, Scope, ValueTag};
 use crate::syms::{
