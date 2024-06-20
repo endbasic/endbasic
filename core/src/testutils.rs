@@ -507,7 +507,7 @@ pub struct SymbolsBuilder {
 impl SymbolsBuilder {
     /// Adds the array named `name` of type `subtype` to the list of symbols.  The dimensions
     /// and contents of the array are unspecified.
-    pub fn add_array<S: Into<String>>(mut self, name: S, subtype: VarType) -> Self {
+    pub fn add_array<S: Into<String>>(mut self, name: S, subtype: ExprType) -> Self {
         let name = name.into();
         assert!(name == name.to_ascii_uppercase());
         let array = Array::new(subtype, vec![10]);

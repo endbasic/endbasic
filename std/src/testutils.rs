@@ -22,7 +22,7 @@ use crate::gpio;
 use crate::program::Program;
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{Value, VarRef, VarType};
+use endbasic_core::ast::{ExprType, Value, VarRef, VarType};
 use endbasic_core::exec::{self, Machine, StopReason};
 use endbasic_core::syms::{Array, Callable, Symbol};
 use futures_lite::future::block_on;
@@ -618,7 +618,7 @@ impl<'a> Checker<'a> {
     pub fn expect_array<S: Into<String>>(
         mut self,
         name: S,
-        subtype: VarType,
+        subtype: ExprType,
         dimensions: &[usize],
         contents: Vec<(&[i32], Value)>,
     ) -> Self {
@@ -637,7 +637,7 @@ impl<'a> Checker<'a> {
     pub fn expect_array_simple<S: Into<String>>(
         mut self,
         name: S,
-        subtype: VarType,
+        subtype: ExprType,
         contents: Vec<Value>,
     ) -> Self {
         let name = name.into().to_ascii_uppercase();

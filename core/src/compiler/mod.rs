@@ -114,10 +114,9 @@ impl From<&Symbols> for SymbolsTable {
         let mut table = HashMap::default();
         for (name, symbol) in syms.as_hashmap() {
             let proto = match symbol {
-                Symbol::Array(array) => SymbolPrototype::Array(
-                    ExprType::from_vartype(array.subtype(), None),
-                    array.dimensions().len(),
-                ),
+                Symbol::Array(array) => {
+                    SymbolPrototype::Array(array.subtype(), array.dimensions().len())
+                }
                 Symbol::Callable(callable) => {
                     SymbolPrototype::Callable(callable.metadata().clone())
                 }

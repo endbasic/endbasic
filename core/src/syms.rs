@@ -15,7 +15,7 @@
 
 //! Symbol definitions and symbols table representation.
 
-use crate::ast::{Value, VarRef, VarType};
+use crate::ast::{ExprType, Value, VarRef, VarType};
 use crate::compiler::{self, CallableSyntax, RepeatedSyntax, SingularArgSyntax};
 use crate::exec::{Machine, Scope};
 use crate::reader::LineCol;
@@ -91,7 +91,7 @@ impl fmt::Display for SymbolKey {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Array {
     /// The type of all elements in the array.
-    subtype: VarType,
+    subtype: ExprType,
 
     /// The dimensions of the array.  At least one must be present.
     dimensions: Vec<usize>,
@@ -103,7 +103,7 @@ pub struct Array {
 
 impl Array {
     /// Creates a new array of the given `subtype` and `dimensions`.
-    pub fn new(subtype: VarType, dimensions: Vec<usize>) -> Self {
+    pub fn new(subtype: ExprType, dimensions: Vec<usize>) -> Self {
         assert!(!dimensions.is_empty());
         let mut n = 1;
         for dim in &dimensions {
@@ -124,7 +124,7 @@ impl Array {
     }
 
     /// Returns the type of the elements in this array.
-    pub fn subtype(&self) -> VarType {
+    pub fn subtype(&self) -> ExprType {
         self.subtype
     }
 
@@ -173,7 +173,7 @@ impl Array {
 
         debug_assert_eq!(
             value.as_vartype(),
-            self.subtype,
+            self.subtype.into(),
             "Invalid types in assignment; guaranteed valid by the compiler"
         );
 
@@ -186,7 +186,7 @@ impl Array {
     pub fn index(&self, subscripts: &[i32]) -> Result<&Value> {
         let i = Array::native_index(&self.dimensions, subscripts)?;
         let value = &self.values[i];
-        debug_assert!(value.as_vartype() == self.subtype);
+        debug_assert!(value.as_vartype() == self.subtype.into());
         Ok(value)
     }
 }
@@ -207,7 +207,7 @@ impl Symbol {
     /// Returns the type the symbol evaluates as.
     fn eval_type(&self) -> VarType {
         match self {
-            Symbol::Array(array) => array.subtype(),
+            Symbol::Array(array) => array.subtype().into(),
             Symbol::Callable(callable) => callable.metadata().return_type(),
             Symbol::Variable(value) => value.as_vartype(),
         }
@@ -298,7 +298,7 @@ impl Symbols {
 
     /// Defines a new array `key` of type `subtype` with `dimensions`.  The array must not yet
     /// exist, and the name may not overlap function or variable names.
-    pub fn dim_array(&mut self, key: SymbolKey, subtype: VarType, dimensions: Vec<usize>) {
+    pub fn dim_array(&mut self, key: SymbolKey, subtype: ExprType, dimensions: Vec<usize>) {
         let previous = self.by_name.insert(key.0, Symbol::Array(Array::new(subtype, dimensions)));
         debug_assert!(
             previous.is_none(),
@@ -655,8 +655,8 @@ mod tests {
 
     #[test]
     fn test_array_unidimensional_ok() {
-        let mut array = Array::new(VarType::Integer, vec![5]);
-        assert_eq!(VarType::Integer, array.subtype());
+        let mut array = Array::new(ExprType::Integer, vec![5]);
+        assert_eq!(ExprType::Integer, array.subtype());
 
         array.assign(&[1], 5.into()).unwrap();
         array.assign(&[4], 8.into()).unwrap();
@@ -669,7 +669,7 @@ mod tests {
 
     #[test]
     fn test_array_unidimensional_errors() {
-        let mut array = Array::new(VarType::Integer, vec![5]);
+        let mut array = Array::new(ExprType::Integer, vec![5]);
 
         assert_eq!(
             "Subscript -1 cannot be negative",
@@ -689,8 +689,8 @@ mod tests {
 
     #[test]
     fn test_array_bidimensional_ok() {
-        let mut array = Array::new(VarType::Double, vec![2, 3]);
-        assert_eq!(VarType::Double, array.subtype());
+        let mut array = Array::new(ExprType::Double, vec![2, 3]);
+        assert_eq!(ExprType::Double, array.subtype());
 
         array.assign(&[0, 1], 9.1.into()).unwrap();
         array.assign(&[1, 0], 8.1.into()).unwrap();
@@ -705,7 +705,7 @@ mod tests {
 
     #[test]
     fn test_array_bidimensional_errors() {
-        let mut array = Array::new(VarType::Integer, vec![5, 2]);
+        let mut array = Array::new(ExprType::Integer, vec![5, 2]);
 
         assert_eq!(
             "Subscript -1 cannot be negative",
@@ -737,8 +737,8 @@ mod tests {
 
     #[test]
     fn test_array_multidimensional() {
-        let mut array = Array::new(VarType::Integer, vec![2, 4, 3, 5]);
-        assert_eq!(VarType::Integer, array.subtype());
+        let mut array = Array::new(ExprType::Integer, vec![2, 4, 3, 5]);
+        assert_eq!(ExprType::Integer, array.subtype());
 
         // First initialize the array with sequential numbers and check that they are valid
         // immediately after assignment.
@@ -772,7 +772,7 @@ mod tests {
     #[test]
     fn test_symbols_clear() {
         let mut syms = SymbolsBuilder::default()
-            .add_array("SOMEARRAY", VarType::Integer)
+            .add_array("SOMEARRAY", ExprType::Integer)
             .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
@@ -803,7 +803,7 @@ mod tests {
         }
     }
 
-    fn assert_same_array_shape(exp_subtype: VarType, exp_dims: &[usize], symbol: &Symbol) {
+    fn assert_same_array_shape(exp_subtype: ExprType, exp_dims: &[usize], symbol: &Symbol) {
         match symbol {
             Symbol::Array(array) => {
                 assert_eq!(exp_subtype, array.subtype());
@@ -817,9 +817,9 @@ mod tests {
     fn test_symbols_dim_array_ok() {
         let mut syms = Symbols::default();
 
-        syms.dim_array(SymbolKey::from("A_Boolean"), VarType::Boolean, vec![1]);
+        syms.dim_array(SymbolKey::from("A_Boolean"), ExprType::Boolean, vec![1]);
         assert_same_array_shape(
-            VarType::Boolean,
+            ExprType::Boolean,
             &[1],
             syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap().unwrap(),
         );
@@ -829,7 +829,7 @@ mod tests {
     fn test_symbols_get_check_types() {
         // If modifying this test, update the identical test for get_auto() and get_mut().
         let syms = SymbolsBuilder::default()
-            .add_array("BOOL_ARRAY", VarType::Boolean)
+            .add_array("BOOL_ARRAY", ExprType::Boolean)
             .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_callable(SumFunction::new())
             .add_var("STRING_VAR", Value::Text("".to_owned()))
@@ -837,7 +837,7 @@ mod tests {
 
         for ref_type in &[VarType::Auto, VarType::Boolean] {
             match syms.get(&VarRef::new("bool_array", *ref_type)).unwrap().unwrap() {
-                Symbol::Array(array) => assert_eq!(VarType::Boolean, array.subtype()),
+                Symbol::Array(array) => assert_eq!(ExprType::Boolean, array.subtype()),
                 _ => panic!("Got something that is not the array we asked for"),
             }
         }
@@ -882,7 +882,7 @@ mod tests {
     fn test_symbols_get_case_insensitivity() {
         // If modifying this test, update the identical test for get_auto() and get_mut().
         let syms = SymbolsBuilder::default()
-            .add_array("SOMEARRAY", VarType::Integer)
+            .add_array("SOMEARRAY", ExprType::Integer)
             .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
@@ -912,7 +912,7 @@ mod tests {
     fn test_symbols_get_mut_check_types() {
         // If modifying this test, update the identical test for get() and get_auto().
         let mut syms = SymbolsBuilder::default()
-            .add_array("BOOL_ARRAY", VarType::Boolean)
+            .add_array("BOOL_ARRAY", ExprType::Boolean)
             .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_callable(SumFunction::new())
             .add_var("STRING_VAR", Value::Text("".to_owned()))
@@ -920,7 +920,7 @@ mod tests {
 
         for ref_type in &[VarType::Auto, VarType::Boolean] {
             match syms.get_mut(&VarRef::new("bool_array", *ref_type)).unwrap().unwrap() {
-                Symbol::Array(array) => assert_eq!(VarType::Boolean, array.subtype()),
+                Symbol::Array(array) => assert_eq!(ExprType::Boolean, array.subtype()),
                 _ => panic!("Got something that is not the array we asked for"),
             }
         }
@@ -965,7 +965,7 @@ mod tests {
     fn test_symbols_get_mut_case_insensitivity() {
         // If modifying this test, update the identical test for get() and get_auto().
         let mut syms = SymbolsBuilder::default()
-            .add_array("SOMEARRAY", VarType::Integer)
+            .add_array("SOMEARRAY", ExprType::Integer)
             .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
@@ -995,14 +995,14 @@ mod tests {
     fn test_symbols_get_auto() {
         // If modifying this test, update the identical test for get() and get_mut().
         let syms = SymbolsBuilder::default()
-            .add_array("BOOL_ARRAY", VarType::Boolean)
+            .add_array("BOOL_ARRAY", ExprType::Boolean)
             .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_callable(SumFunction::new())
             .add_var("STRING_VAR", Value::Text("".to_owned()))
             .build();
 
         match syms.get_auto("bool_array").unwrap() {
-            Symbol::Array(array) => assert_eq!(VarType::Boolean, array.subtype()),
+            Symbol::Array(array) => assert_eq!(ExprType::Boolean, array.subtype()),
             _ => panic!("Got something that is not the array we asked for"),
         }
 
@@ -1026,7 +1026,7 @@ mod tests {
     fn test_symbols_get_auto_case_insensitivity() {
         // If modifying this test, update the identical test for get() and get_mut().
         let syms = SymbolsBuilder::default()
-            .add_array("SOMEARRAY", VarType::Integer)
+            .add_array("SOMEARRAY", ExprType::Integer)
             .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
@@ -1054,7 +1054,7 @@ mod tests {
 
     #[test]
     fn test_symbols_qualify_varref() {
-        let syms = SymbolsBuilder::default().add_array("V", VarType::Boolean).build();
+        let syms = SymbolsBuilder::default().add_array("V", ExprType::Boolean).build();
 
         assert_eq!(
             VarRef::new("v", VarType::Boolean),
@@ -1231,7 +1231,7 @@ mod tests {
     #[test]
     fn test_symbols_set_var_name_overlap() {
         let mut syms = SymbolsBuilder::default()
-            .add_array("SOMEARRAY", VarType::Integer)
+            .add_array("SOMEARRAY", ExprType::Integer)
             .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
@@ -1309,7 +1309,7 @@ mod tests {
     #[test]
     fn test_symbols_unset_ok() {
         let mut syms = SymbolsBuilder::default()
-            .add_array("SOMEARRAY", VarType::Integer)
+            .add_array("SOMEARRAY", ExprType::Integer)
             .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
