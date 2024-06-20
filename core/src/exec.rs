@@ -1344,8 +1344,23 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::Push(value, pos) => {
-                context.value_stack.push((value.clone(), *pos));
+            Instruction::PushBoolean(value, pos) => {
+                context.value_stack.push((Value::Boolean(*value), *pos));
+                context.pc += 1;
+            }
+
+            Instruction::PushDouble(value, pos) => {
+                context.value_stack.push((Value::Double(*value), *pos));
+                context.pc += 1;
+            }
+
+            Instruction::PushInteger(value, pos) => {
+                context.value_stack.push((Value::Integer(*value), *pos));
+                context.pc += 1;
+            }
+
+            Instruction::PushString(value, pos) => {
+                context.value_stack.push((Value::Text(value.clone()), *pos));
                 context.pc += 1;
             }
 

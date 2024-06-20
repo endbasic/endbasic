@@ -478,7 +478,7 @@ fn compile_syn_argsep(
                 if sep != *exp_sep1 && sep != *exp_sep2 {
                     return Err(CallError::SyntaxError);
                 }
-                instrs.insert(sep_tag_pc, Instruction::Push(Value::Integer(sep as i32), sep_pos));
+                instrs.insert(sep_tag_pc, Instruction::PushInteger(sep as i32, sep_pos));
                 Ok(1)
             }
         }
@@ -548,10 +548,8 @@ fn compile_args(
                         RepeatedTypeSyntax::AnyValue => {
                             debug_assert!(need_tags);
                             let etype = compile_expr(instrs, symtable, expr, false)?;
-                            instrs.push(Instruction::Push(
-                                Value::Integer(ValueTag::from(etype) as i32),
-                                pos,
-                            ));
+                            instrs
+                                .push(Instruction::PushInteger(ValueTag::from(etype) as i32, pos));
                             nargs += 2;
                         }
 
@@ -567,8 +565,8 @@ fn compile_args(
                         RepeatedTypeSyntax::TypedValue(vtype) => {
                             compile_arg_expr(instrs, symtable, expr, vtype)?;
                             if need_tags {
-                                instrs.push(Instruction::Push(
-                                    Value::Integer(ValueTag::from(vtype) as i32),
+                                instrs.push(Instruction::PushInteger(
+                                    ValueTag::from(vtype) as i32,
                                     pos,
                                 ));
                                 nargs += 2;
@@ -582,10 +580,7 @@ fn compile_args(
                     if !syn.allow_missing {
                         return Err(CallError::SyntaxError);
                     }
-                    instrs.push(Instruction::Push(
-                        Value::Integer(ValueTag::Missing as i32),
-                        span.sep_pos,
-                    ));
+                    instrs.push(Instruction::PushInteger(ValueTag::Missing as i32, span.sep_pos));
                     nargs += 1;
                 }
             }
@@ -647,7 +642,7 @@ fn compile_args(
                     }
                     None => (details.missing_value, span.sep_pos),
                 };
-                instrs.push(Instruction::Push(Value::Integer(tag), pos));
+                instrs.push(Instruction::PushInteger(tag, pos));
                 nargs += 1;
                 sep
             }
@@ -671,7 +666,7 @@ fn compile_args(
                         (ValueTag::Missing, span.sep_pos)
                     }
                 };
-                instrs.push(Instruction::Push(Value::Integer(tag as i32), pos));
+                instrs.push(Instruction::PushInteger(tag as i32, pos));
                 sep
             }
         };
@@ -1155,7 +1150,7 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 3),
             }])
-            .exp_instr(Instruction::Push(Value::Integer(3), lc(1, 2)))
+            .exp_instr(Instruction::PushInteger(3, lc(1, 2)))
             .exp_nargs(1)
             .check();
     }
@@ -1175,7 +1170,7 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_instr(Instruction::Push(Value::Double(3.0), lc(1, 2)))
+            .exp_instr(Instruction::PushDouble(3.0, lc(1, 2)))
             .exp_instr(Instruction::DoubleToInteger)
             .exp_nargs(1)
             .check();
@@ -1558,8 +1553,8 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_instr(Instruction::Push(Value::Double(3.0), lc(1, 2)))
-            .exp_instr(Instruction::Push(Value::Integer(20), lc(1, 2)))
+            .exp_instr(Instruction::PushDouble(3.0, lc(1, 2)))
+            .exp_instr(Instruction::PushInteger(20, lc(1, 2)))
             .exp_nargs(2)
             .check();
     }
@@ -1580,7 +1575,7 @@ mod compile_tests {
                 None,
             )
             .compile_command([ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 2) }])
-            .exp_instr(Instruction::Push(Value::Integer(10), lc(1, 2)))
+            .exp_instr(Instruction::PushInteger(10, lc(1, 2)))
             .exp_nargs(1)
             .check();
     }
@@ -1631,14 +1626,14 @@ mod compile_tests {
                     sep_pos: lc(1, 9),
                 },
             ])
-            .exp_instr(Instruction::Push(Value::Text("foo".to_owned()), lc(1, 8)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Text as i32), lc(1, 8)))
-            .exp_instr(Instruction::Push(Value::Integer(3), lc(1, 6)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Integer as i32), lc(1, 6)))
-            .exp_instr(Instruction::Push(Value::Double(2.0), lc(1, 4)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Double as i32), lc(1, 4)))
-            .exp_instr(Instruction::Push(Value::Boolean(false), lc(1, 2)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Boolean as i32), lc(1, 2)))
+            .exp_instr(Instruction::PushString("foo".to_owned(), lc(1, 8)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Text as i32, lc(1, 8)))
+            .exp_instr(Instruction::PushInteger(3, lc(1, 6)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Integer as i32, lc(1, 6)))
+            .exp_instr(Instruction::PushDouble(2.0, lc(1, 4)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Double as i32, lc(1, 4)))
+            .exp_instr(Instruction::PushBoolean(false, lc(1, 2)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Boolean as i32, lc(1, 2)))
             .exp_nargs(8)
             .check();
     }
@@ -1699,7 +1694,7 @@ mod compile_tests {
                 None,
             )
             .compile_command([ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 3) }])
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Missing as i32), lc(1, 3)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 3)))
             .exp_nargs(1)
             .check();
     }
@@ -1734,12 +1729,12 @@ mod compile_tests {
                 ArgSpan { expr: None, sep: ArgSep::Short, sep_pos: lc(1, 3) },
                 ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 4) },
             ])
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Missing as i32), lc(1, 4)))
-            .exp_instr(Instruction::Push(Value::Integer(ArgSep::Short as i32), lc(1, 3)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Missing as i32), lc(1, 3)))
-            .exp_instr(Instruction::Push(Value::Integer(ArgSep::Long as i32), lc(1, 2)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Missing as i32), lc(1, 2)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Missing as i32), lc(1, 1)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 4)))
+            .exp_instr(Instruction::PushInteger(ArgSep::Short as i32, lc(1, 3)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 3)))
+            .exp_instr(Instruction::PushInteger(ArgSep::Long as i32, lc(1, 2)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 2)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 1)))
             .exp_nargs(6)
             .check();
     }
@@ -1835,8 +1830,8 @@ mod compile_tests {
                     sep_pos: lc(1, 3),
                 },
             ])
-            .exp_instr(Instruction::Push(Value::Integer(5), lc(1, 4)))
-            .exp_instr(Instruction::Push(Value::Double(3.0), lc(1, 2)))
+            .exp_instr(Instruction::PushInteger(5, lc(1, 4)))
+            .exp_instr(Instruction::PushDouble(3.0, lc(1, 2)))
             .exp_instr(Instruction::DoubleToInteger)
             .exp_nargs(2)
             .check();
@@ -1860,7 +1855,7 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 2),
             }])
-            .exp_instr(Instruction::Push(Value::Integer(5), lc(1, 2)))
+            .exp_instr(Instruction::PushInteger(5, lc(1, 2)))
             .exp_nargs(1)
             .check();
     }
@@ -1964,11 +1959,11 @@ mod compile_tests {
                     sep_pos: lc(1, 7),
                 },
             ])
-            .exp_instr(Instruction::Push(Value::Double(2.0), lc(1, 6)))
-            .exp_instr(Instruction::Push(Value::Integer(ArgSep::Long as i32), lc(1, 5)))
-            .exp_instr(Instruction::Push(Value::Double(5.0), lc(1, 4)))
-            .exp_instr(Instruction::Push(Value::Integer(ArgSep::Short as i32), lc(1, 3)))
-            .exp_instr(Instruction::Push(Value::Double(3.0), lc(1, 2)))
+            .exp_instr(Instruction::PushDouble(2.0, lc(1, 6)))
+            .exp_instr(Instruction::PushInteger(ArgSep::Long as i32, lc(1, 5)))
+            .exp_instr(Instruction::PushDouble(5.0, lc(1, 4)))
+            .exp_instr(Instruction::PushInteger(ArgSep::Short as i32, lc(1, 3)))
+            .exp_instr(Instruction::PushDouble(3.0, lc(1, 2)))
             .exp_nargs(5)
             .check();
     }
@@ -1994,10 +1989,10 @@ mod compile_tests {
                 },
                 ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 4) },
             ])
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Missing as i32), lc(1, 4)))
-            .exp_instr(Instruction::Push(Value::Integer(ArgSep::Short as i32), lc(1, 3)))
-            .exp_instr(Instruction::Push(Value::Double(3.0), lc(1, 2)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Double as i32), lc(1, 2)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 4)))
+            .exp_instr(Instruction::PushInteger(ArgSep::Short as i32, lc(1, 3)))
+            .exp_instr(Instruction::PushDouble(3.0, lc(1, 2)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Double as i32, lc(1, 2)))
             .exp_nargs(4)
             .check();
     }
@@ -2038,15 +2033,15 @@ mod compile_tests {
                 },
                 ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 10) },
             ])
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Missing as i32), lc(1, 10)))
-            .exp_instr(Instruction::Push(Value::Text("foo".to_owned()), lc(1, 8)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Text as i32), lc(1, 8)))
-            .exp_instr(Instruction::Push(Value::Integer(3), lc(1, 6)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Integer as i32), lc(1, 6)))
-            .exp_instr(Instruction::Push(Value::Double(2.0), lc(1, 4)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Double as i32), lc(1, 4)))
-            .exp_instr(Instruction::Push(Value::Boolean(false), lc(1, 2)))
-            .exp_instr(Instruction::Push(Value::Integer(ValueTag::Boolean as i32), lc(1, 2)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 10)))
+            .exp_instr(Instruction::PushString("foo".to_owned(), lc(1, 8)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Text as i32, lc(1, 8)))
+            .exp_instr(Instruction::PushInteger(3, lc(1, 6)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Integer as i32, lc(1, 6)))
+            .exp_instr(Instruction::PushDouble(2.0, lc(1, 4)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Double as i32, lc(1, 4)))
+            .exp_instr(Instruction::PushBoolean(false, lc(1, 2)))
+            .exp_instr(Instruction::PushInteger(ValueTag::Boolean as i32, lc(1, 2)))
             .exp_nargs(9)
             .check();
     }
@@ -2085,9 +2080,9 @@ mod compile_tests {
                 },
             ])
             .exp_nargs(3)
-            .exp_instr(Instruction::Push(Value::Integer(6), lc(1, 7)))
-            .exp_instr(Instruction::Push(Value::Integer(5), lc(1, 5)))
-            .exp_instr(Instruction::Push(Value::Double(4.0), lc(1, 2)))
+            .exp_instr(Instruction::PushInteger(6, lc(1, 7)))
+            .exp_instr(Instruction::PushInteger(5, lc(1, 5)))
+            .exp_instr(Instruction::PushDouble(4.0, lc(1, 2)))
             .check();
     }
 }

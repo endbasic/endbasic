@@ -1189,12 +1189,12 @@ mod tests {
             .define("i", SymbolPrototype::Variable(ExprType::Integer))
             .parse("foo(3, 4 + i, i) = 5")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 20)))
+            .expect_instr(0, Instruction::PushInteger(5, lc(1, 20)))
             .expect_instr(1, Instruction::LoadInteger(SymbolKey::from("i"), lc(1, 15)))
-            .expect_instr(2, Instruction::Push(Value::Integer(4), lc(1, 8)))
+            .expect_instr(2, Instruction::PushInteger(4, lc(1, 8)))
             .expect_instr(3, Instruction::LoadInteger(SymbolKey::from("i"), lc(1, 12)))
             .expect_instr(4, Instruction::AddIntegers(lc(1, 10)))
-            .expect_instr(5, Instruction::Push(Value::Integer(3), lc(1, 5)))
+            .expect_instr(5, Instruction::PushInteger(3, lc(1, 5)))
             .expect_instr(6, Instruction::ArrayAssignment(SymbolKey::from("foo"), lc(1, 1), 3))
             .check();
     }
@@ -1205,8 +1205,8 @@ mod tests {
             .define("a", SymbolPrototype::Array(ExprType::Integer, 1))
             .parse("a%(0) = 1")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(1), lc(1, 9)))
-            .expect_instr(1, Instruction::Push(Value::Integer(0), lc(1, 4)))
+            .expect_instr(0, Instruction::PushInteger(1, lc(1, 9)))
+            .expect_instr(1, Instruction::PushInteger(0, lc(1, 4)))
             .expect_instr(2, Instruction::ArrayAssignment(SymbolKey::from("a"), lc(1, 1), 1))
             .check();
     }
@@ -1217,8 +1217,8 @@ mod tests {
             .define("a", SymbolPrototype::Array(ExprType::Integer, 1))
             .parse("a(1.2) = 1")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(1), lc(1, 10)))
-            .expect_instr(1, Instruction::Push(Value::Double(1.2), lc(1, 3)))
+            .expect_instr(0, Instruction::PushInteger(1, lc(1, 10)))
+            .expect_instr(1, Instruction::PushDouble(1.2, lc(1, 3)))
             .expect_instr(2, Instruction::DoubleToInteger)
             .expect_instr(3, Instruction::ArrayAssignment(SymbolKey::from("a"), lc(1, 1), 1))
             .check();
@@ -1253,7 +1253,7 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::LoadDouble(SymbolKey::from("d"), lc(1, 8)))
             .expect_instr(1, Instruction::DoubleToInteger)
-            .expect_instr(2, Instruction::Push(Value::Integer(3), lc(1, 3)))
+            .expect_instr(2, Instruction::PushInteger(3, lc(1, 3)))
             .expect_instr(3, Instruction::ArrayAssignment(SymbolKey::from("a"), lc(1, 1), 1))
             .check();
     }
@@ -1267,7 +1267,7 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::LoadInteger(SymbolKey::from("i"), lc(1, 8)))
             .expect_instr(1, Instruction::IntegerToDouble)
-            .expect_instr(2, Instruction::Push(Value::Integer(3), lc(1, 3)))
+            .expect_instr(2, Instruction::PushInteger(3, lc(1, 3)))
             .expect_instr(3, Instruction::ArrayAssignment(SymbolKey::from("a"), lc(1, 1), 1))
             .check();
     }
@@ -1318,7 +1318,7 @@ mod tests {
         Tester::default()
             .parse("foo = 5")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 7)))
+            .expect_instr(0, Instruction::PushInteger(5, lc(1, 7)))
             .expect_instr(1, Instruction::Assign(SymbolKey::from("foo")))
             .check();
     }
@@ -1339,7 +1339,7 @@ mod tests {
         Tester::default()
             .parse("foo = 2.3")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Double(2.3), lc(1, 7)))
+            .expect_instr(0, Instruction::PushDouble(2.3, lc(1, 7)))
             .expect_instr(1, Instruction::Assign(SymbolKey::from("foo")))
             .expect_symtable(SymbolKey::from("foo"), SymbolPrototype::Variable(ExprType::Double))
             .check();
@@ -1350,7 +1350,7 @@ mod tests {
         Tester::default()
             .parse("foo# = 2")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(2), lc(1, 8)))
+            .expect_instr(0, Instruction::PushInteger(2, lc(1, 8)))
             .expect_instr(1, Instruction::IntegerToDouble)
             .expect_instr(2, Instruction::Assign(SymbolKey::from("foo")))
             .expect_symtable(SymbolKey::from("foo"), SymbolPrototype::Variable(ExprType::Double))
@@ -1401,10 +1401,10 @@ mod tests {
             )]))
             .parse("IF TRUE THEN: CMD 1, 2: END IF")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 4)))
+            .expect_instr(0, Instruction::PushBoolean(true, lc(1, 4)))
             .expect_instr(1, Instruction::JumpIfNotTrue(5))
-            .expect_instr(2, Instruction::Push(Value::Integer(2), lc(1, 22)))
-            .expect_instr(3, Instruction::Push(Value::Integer(1), lc(1, 19)))
+            .expect_instr(2, Instruction::PushInteger(2, lc(1, 22)))
+            .expect_instr(3, Instruction::PushInteger(1, lc(1, 19)))
             .expect_instr(4, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 15), 2))
             .check();
     }
@@ -1498,7 +1498,7 @@ mod tests {
         Tester::default()
             .parse("DIM var(1) AS INTEGER")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(1), lc(1, 9)))
+            .expect_instr(0, Instruction::PushInteger(1, lc(1, 9)))
             .expect_instr(
                 1,
                 Instruction::DimArray(DimArrayISpan {
@@ -1518,8 +1518,8 @@ mod tests {
             .define("i", SymbolPrototype::Variable(ExprType::Integer))
             .parse("DIM var(i, 3 + 4) AS INTEGER")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(3), lc(1, 12)))
-            .expect_instr(1, Instruction::Push(Value::Integer(4), lc(1, 16)))
+            .expect_instr(0, Instruction::PushInteger(3, lc(1, 12)))
+            .expect_instr(1, Instruction::PushInteger(4, lc(1, 16)))
             .expect_instr(2, Instruction::AddIntegers(lc(1, 14)))
             .expect_instr(3, Instruction::LoadInteger(SymbolKey::from("i"), lc(1, 9)))
             .expect_instr(
@@ -1540,7 +1540,7 @@ mod tests {
         Tester::default()
             .parse("DIM var(3.7) AS INTEGER")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Double(3.7), lc(1, 9)))
+            .expect_instr(0, Instruction::PushDouble(3.7, lc(1, 9)))
             .expect_instr(1, Instruction::DoubleToInteger)
             .expect_instr(
                 2,
@@ -1581,7 +1581,7 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse("DO WHILE TRUE\nFOO\nLOOP")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
+            .expect_instr(0, Instruction::PushBoolean(true, lc(1, 10)))
             .expect_instr(1, Instruction::JumpIfNotTrue(4))
             .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
@@ -1595,7 +1595,7 @@ mod tests {
             .parse("DO\nFOO\nLOOP WHILE TRUE")
             .compile()
             .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
-            .expect_instr(1, Instruction::Push(Value::Boolean(true), lc(3, 12)))
+            .expect_instr(1, Instruction::PushBoolean(true, lc(3, 12)))
             .expect_instr(2, Instruction::JumpIfTrue(0))
             .check();
     }
@@ -1611,7 +1611,7 @@ mod tests {
             .define("i", SymbolPrototype::Variable(ExprType::Integer))
             .parse("END 2 + i")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(2), lc(1, 5)))
+            .expect_instr(0, Instruction::PushInteger(2, lc(1, 5)))
             .expect_instr(1, Instruction::LoadInteger(SymbolKey::from("i"), lc(1, 9)))
             .expect_instr(2, Instruction::AddIntegers(lc(1, 7)))
             .expect_instr(3, Instruction::End(true))
@@ -1643,7 +1643,7 @@ mod tests {
         Tester::default()
             .parse("END 2.3")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Double(2.3), lc(1, 5)))
+            .expect_instr(0, Instruction::PushDouble(2.3, lc(1, 5)))
             .expect_instr(1, Instruction::DoubleToInteger)
             .expect_instr(2, Instruction::End(true))
             .check();
@@ -1664,7 +1664,7 @@ mod tests {
         Tester::default()
             .parse("DO WHILE TRUE\nEXIT DO\nLOOP")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
+            .expect_instr(0, Instruction::PushBoolean(true, lc(1, 10)))
             .expect_instr(1, Instruction::JumpIfNotTrue(4))
             .expect_instr(2, Instruction::Jump(JumpISpan { addr: 4 }))
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
@@ -1676,10 +1676,10 @@ mod tests {
         Tester::default()
             .parse("DO WHILE TRUE\nEXIT DO\nDO UNTIL FALSE\nEXIT DO\nLOOP\nLOOP")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
+            .expect_instr(0, Instruction::PushBoolean(true, lc(1, 10)))
             .expect_instr(1, Instruction::JumpIfNotTrue(8))
             .expect_instr(2, Instruction::Jump(JumpISpan { addr: 8 }))
-            .expect_instr(3, Instruction::Push(Value::Boolean(false), lc(3, 10)))
+            .expect_instr(3, Instruction::PushBoolean(false, lc(3, 10)))
             .expect_instr(4, Instruction::JumpIfTrue(7))
             .expect_instr(5, Instruction::Jump(JumpISpan { addr: 7 }))
             .expect_instr(6, Instruction::Jump(JumpISpan { addr: 3 }))
@@ -1692,11 +1692,11 @@ mod tests {
         Tester::default()
             .parse("DO WHILE TRUE\nEXIT DO\nLOOP\nDO WHILE TRUE\nEXIT DO\nLOOP")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
+            .expect_instr(0, Instruction::PushBoolean(true, lc(1, 10)))
             .expect_instr(1, Instruction::JumpIfNotTrue(4))
             .expect_instr(2, Instruction::Jump(JumpISpan { addr: 4 }))
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
-            .expect_instr(4, Instruction::Push(Value::Boolean(true), lc(4, 10)))
+            .expect_instr(4, Instruction::PushBoolean(true, lc(4, 10)))
             .expect_instr(5, Instruction::JumpIfNotTrue(8))
             .expect_instr(6, Instruction::Jump(JumpISpan { addr: 8 }))
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 4 }))
@@ -1708,10 +1708,10 @@ mod tests {
         Tester::default()
             .parse("DO WHILE TRUE\nEXIT DO\nWHILE FALSE\nEXIT DO\nWEND\nLOOP")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 10)))
+            .expect_instr(0, Instruction::PushBoolean(true, lc(1, 10)))
             .expect_instr(1, Instruction::JumpIfNotTrue(8))
             .expect_instr(2, Instruction::Jump(JumpISpan { addr: 8 }))
-            .expect_instr(3, Instruction::Push(Value::Boolean(false), lc(3, 7)))
+            .expect_instr(3, Instruction::PushBoolean(false, lc(3, 7)))
             .expect_instr(4, Instruction::JumpIfNotTrue(7))
             .expect_instr(5, Instruction::Jump(JumpISpan { addr: 8 }))
             .expect_instr(6, Instruction::Jump(JumpISpan { addr: 3 }))
@@ -1739,16 +1739,16 @@ mod tests {
         Tester::default()
             .parse("FOR iter = 1 TO 5: a = FALSE: NEXT")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(1), lc(1, 12)))
+            .expect_instr(0, Instruction::PushInteger(1, lc(1, 12)))
             .expect_instr(1, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(2, Instruction::LoadInteger(SymbolKey::from("iter"), lc(1, 5)))
-            .expect_instr(3, Instruction::Push(Value::Integer(5), lc(1, 17)))
+            .expect_instr(3, Instruction::PushInteger(5, lc(1, 17)))
             .expect_instr(4, Instruction::LessEqualIntegers(lc(1, 14)))
             .expect_instr(5, Instruction::JumpIfNotTrue(13))
-            .expect_instr(6, Instruction::Push(Value::Boolean(false), lc(1, 24)))
+            .expect_instr(6, Instruction::PushBoolean(false, lc(1, 24)))
             .expect_instr(7, Instruction::Assign(SymbolKey::from("a")))
             .expect_instr(8, Instruction::LoadInteger(SymbolKey::from("iter"), lc(1, 5)))
-            .expect_instr(9, Instruction::Push(Value::Integer(1), lc(1, 18)))
+            .expect_instr(9, Instruction::PushInteger(1, lc(1, 18)))
             .expect_instr(10, Instruction::AddIntegers(lc(1, 14)))
             .expect_instr(11, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(12, Instruction::Jump(JumpISpan { addr: 2 }))
@@ -1768,10 +1768,10 @@ mod tests {
             .expect_instr(3, Instruction::LoadInteger(SymbolKey::from("j"), lc(1, 17)))
             .expect_instr(4, Instruction::LessEqualIntegers(lc(1, 14)))
             .expect_instr(5, Instruction::JumpIfNotTrue(13))
-            .expect_instr(6, Instruction::Push(Value::Boolean(false), lc(1, 24)))
+            .expect_instr(6, Instruction::PushBoolean(false, lc(1, 24)))
             .expect_instr(7, Instruction::Assign(SymbolKey::from("a")))
             .expect_instr(8, Instruction::LoadInteger(SymbolKey::from("iter"), lc(1, 5)))
-            .expect_instr(9, Instruction::Push(Value::Integer(1), lc(1, 18)))
+            .expect_instr(9, Instruction::PushInteger(1, lc(1, 18)))
             .expect_instr(10, Instruction::AddIntegers(lc(1, 14)))
             .expect_instr(11, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(12, Instruction::Jump(JumpISpan { addr: 2 }))
@@ -1786,19 +1786,19 @@ mod tests {
             .parse("FOR iter = (i + 1) TO (2 + j): a = FALSE: NEXT")
             .compile()
             .expect_instr(0, Instruction::LoadInteger(SymbolKey::from("i"), lc(1, 13)))
-            .expect_instr(1, Instruction::Push(Value::Integer(1), lc(1, 17)))
+            .expect_instr(1, Instruction::PushInteger(1, lc(1, 17)))
             .expect_instr(2, Instruction::AddIntegers(lc(1, 15)))
             .expect_instr(3, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(4, Instruction::LoadInteger(SymbolKey::from("iter"), lc(1, 5)))
-            .expect_instr(5, Instruction::Push(Value::Integer(2), lc(1, 24)))
+            .expect_instr(5, Instruction::PushInteger(2, lc(1, 24)))
             .expect_instr(6, Instruction::LoadInteger(SymbolKey::from("j"), lc(1, 28)))
             .expect_instr(7, Instruction::AddIntegers(lc(1, 26)))
             .expect_instr(8, Instruction::LessEqualIntegers(lc(1, 20)))
             .expect_instr(9, Instruction::JumpIfNotTrue(17))
-            .expect_instr(10, Instruction::Push(Value::Boolean(false), lc(1, 36)))
+            .expect_instr(10, Instruction::PushBoolean(false, lc(1, 36)))
             .expect_instr(11, Instruction::Assign(SymbolKey::from("a")))
             .expect_instr(12, Instruction::LoadInteger(SymbolKey::from("iter"), lc(1, 5)))
-            .expect_instr(13, Instruction::Push(Value::Integer(1), lc(1, 30)))
+            .expect_instr(13, Instruction::PushInteger(1, lc(1, 30)))
             .expect_instr(14, Instruction::AddIntegers(lc(1, 20)))
             .expect_instr(15, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(16, Instruction::Jump(JumpISpan { addr: 4 }))
@@ -1818,16 +1818,16 @@ mod tests {
                 }),
             )
             .expect_instr(1, Instruction::Dim(SymbolKey::from("iter"), VarType::Double))
-            .expect_instr(2, Instruction::Push(Value::Integer(0), lc(1, 12)))
+            .expect_instr(2, Instruction::PushInteger(0, lc(1, 12)))
             .expect_instr(3, Instruction::IntegerToDouble)
             .expect_instr(4, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(5, Instruction::LoadDouble(SymbolKey::from("iter"), lc(1, 5)))
-            .expect_instr(6, Instruction::Push(Value::Integer(2), lc(1, 17)))
+            .expect_instr(6, Instruction::PushInteger(2, lc(1, 17)))
             .expect_instr(7, Instruction::IntegerToDouble)
             .expect_instr(8, Instruction::LessEqualDoubles(lc(1, 14)))
             .expect_instr(9, Instruction::JumpIfNotTrue(15))
             .expect_instr(10, Instruction::LoadDouble(SymbolKey::from("iter"), lc(1, 5)))
-            .expect_instr(11, Instruction::Push(Value::Double(0.1), lc(1, 24)))
+            .expect_instr(11, Instruction::PushDouble(0.1, lc(1, 24)))
             .expect_instr(12, Instruction::AddDoubles(lc(1, 14)))
             .expect_instr(13, Instruction::Assign(SymbolKey::from("iter")))
             .expect_instr(14, Instruction::Jump(JumpISpan { addr: 5 }))
@@ -1872,7 +1872,7 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse("IF FALSE THEN: FOO: END IF")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Boolean(false), lc(1, 4)))
+            .expect_instr(0, Instruction::PushBoolean(false, lc(1, 4)))
             .expect_instr(1, Instruction::JumpIfNotTrue(3))
             .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(1, 16), 0))
             .check();
@@ -1886,15 +1886,15 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("BAZ", VarType::Void))
             .parse("IF FALSE THEN\nFOO\nELSEIF TRUE THEN\nBAR\nELSE\nBAZ\nEND IF")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Boolean(false), lc(1, 4)))
+            .expect_instr(0, Instruction::PushBoolean(false, lc(1, 4)))
             .expect_instr(1, Instruction::JumpIfNotTrue(4))
             .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 11 }))
-            .expect_instr(4, Instruction::Push(Value::Boolean(true), lc(3, 8)))
+            .expect_instr(4, Instruction::PushBoolean(true, lc(3, 8)))
             .expect_instr(5, Instruction::JumpIfNotTrue(8))
             .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("BAR"), lc(4, 1), 0))
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 11 }))
-            .expect_instr(8, Instruction::Push(Value::Boolean(true), lc(5, 1)))
+            .expect_instr(8, Instruction::PushBoolean(true, lc(5, 1)))
             .expect_instr(9, Instruction::JumpIfNotTrue(11))
             .expect_instr(10, Instruction::BuiltinCall(SymbolKey::from("BAZ"), lc(6, 1), 0))
             .check();
@@ -1945,7 +1945,7 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse(&format!("SELECT CASE 5\nCASE {}\nFOO\nEND SELECT", guards))
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
+            .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
             .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")));
         let mut n = 2;
         for instr in exp_expr_instrs {
@@ -1967,8 +1967,8 @@ mod tests {
             "1 + 2",
             vec![
                 Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 6)),
-                Instruction::Push(Value::Integer(1), lc(2, 6)),
-                Instruction::Push(Value::Integer(2), lc(2, 10)),
+                Instruction::PushInteger(1, lc(2, 6)),
+                Instruction::PushInteger(2, lc(2, 10)),
                 Instruction::AddIntegers(lc(2, 8)),
                 Instruction::EqualIntegers(lc(2, 6)),
             ],
@@ -1981,8 +1981,8 @@ mod tests {
             "IS = 9 + 8",
             vec![
                 Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 11)),
-                Instruction::Push(Value::Integer(9), lc(2, 11)),
-                Instruction::Push(Value::Integer(8), lc(2, 15)),
+                Instruction::PushInteger(9, lc(2, 11)),
+                Instruction::PushInteger(8, lc(2, 15)),
                 Instruction::AddIntegers(lc(2, 13)),
                 Instruction::EqualIntegers(lc(2, 11)),
             ],
@@ -1992,7 +1992,7 @@ mod tests {
             "IS <> 9",
             vec![
                 Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 12)),
-                Instruction::Push(Value::Integer(9), lc(2, 12)),
+                Instruction::PushInteger(9, lc(2, 12)),
                 Instruction::NotEqualIntegers(lc(2, 12)),
             ],
         );
@@ -2001,7 +2001,7 @@ mod tests {
             "IS < 9",
             vec![
                 Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 11)),
-                Instruction::Push(Value::Integer(9), lc(2, 11)),
+                Instruction::PushInteger(9, lc(2, 11)),
                 Instruction::LessIntegers(lc(2, 11)),
             ],
         );
@@ -2010,7 +2010,7 @@ mod tests {
             "IS <= 9",
             vec![
                 Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 12)),
-                Instruction::Push(Value::Integer(9), lc(2, 12)),
+                Instruction::PushInteger(9, lc(2, 12)),
                 Instruction::LessEqualIntegers(lc(2, 12)),
             ],
         );
@@ -2019,7 +2019,7 @@ mod tests {
             "IS > 9",
             vec![
                 Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 11)),
-                Instruction::Push(Value::Integer(9), lc(2, 11)),
+                Instruction::PushInteger(9, lc(2, 11)),
                 Instruction::GreaterIntegers(lc(2, 11)),
             ],
         );
@@ -2028,7 +2028,7 @@ mod tests {
             "IS >= 9",
             vec![
                 Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 12)),
-                Instruction::Push(Value::Integer(9), lc(2, 12)),
+                Instruction::PushInteger(9, lc(2, 12)),
                 Instruction::GreaterEqualIntegers(lc(2, 12)),
             ],
         );
@@ -2040,10 +2040,10 @@ mod tests {
             "1 TO 2",
             vec![
                 Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 6)),
-                Instruction::Push(Value::Integer(1), lc(2, 6)),
+                Instruction::PushInteger(1, lc(2, 6)),
                 Instruction::GreaterEqualIntegers(lc(2, 6)),
                 Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 6)),
-                Instruction::Push(Value::Integer(2), lc(2, 11)),
+                Instruction::PushInteger(2, lc(2, 11)),
                 Instruction::LessEqualIntegers(lc(2, 11)),
                 Instruction::LogicalAnd(lc(2, 6)),
             ],
@@ -2056,10 +2056,10 @@ mod tests {
             "IS <> 9, 8",
             vec![
                 Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 12)),
-                Instruction::Push(Value::Integer(9), lc(2, 12)),
+                Instruction::PushInteger(9, lc(2, 12)),
                 Instruction::NotEqualIntegers(lc(2, 12)),
                 Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 15)),
-                Instruction::Push(Value::Integer(8), lc(2, 15)),
+                Instruction::PushInteger(8, lc(2, 15)),
                 Instruction::EqualIntegers(lc(2, 15)),
                 Instruction::LogicalOr(lc(2, 12)),
             ],
@@ -2071,8 +2071,8 @@ mod tests {
         Tester::default()
             .parse("SELECT CASE 5 + 3: END SELECT")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
-            .expect_instr(1, Instruction::Push(Value::Integer(3), lc(1, 17)))
+            .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
+            .expect_instr(1, Instruction::PushInteger(3, lc(1, 17)))
             .expect_instr(2, Instruction::AddIntegers(lc(1, 15)))
             .expect_instr(3, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(
@@ -2091,10 +2091,10 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nEND SELECT")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
+            .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
             .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(2, Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 6)))
-            .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
+            .expect_instr(3, Instruction::PushInteger(7, lc(2, 6)))
             .expect_instr(4, Instruction::EqualIntegers(lc(2, 6)))
             .expect_instr(5, Instruction::JumpIfNotTrue(7))
             .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
@@ -2129,7 +2129,7 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse("SELECT CASE 5\nCASE ELSE\nFOO\nEND SELECT")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
+            .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
             .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
             .expect_instr(
@@ -2146,16 +2146,16 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("BAR", VarType::Void))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE IS <> 8\nBAR\nEND SELECT")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
+            .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
             .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(2, Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 6)))
-            .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
+            .expect_instr(3, Instruction::PushInteger(7, lc(2, 6)))
             .expect_instr(4, Instruction::EqualIntegers(lc(2, 6)))
             .expect_instr(5, Instruction::JumpIfNotTrue(8))
             .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 13 }))
             .expect_instr(8, Instruction::LoadInteger(SymbolKey::from("0select1"), lc(4, 12)))
-            .expect_instr(9, Instruction::Push(Value::Integer(8), lc(4, 12)))
+            .expect_instr(9, Instruction::PushInteger(8, lc(4, 12)))
             .expect_instr(10, Instruction::NotEqualIntegers(lc(4, 12)))
             .expect_instr(11, Instruction::JumpIfNotTrue(13))
             .expect_instr(12, Instruction::BuiltinCall(SymbolKey::from("BAR"), lc(5, 1), 0))
@@ -2173,10 +2173,10 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("BAR", VarType::Void))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE ELSE\nBAR\nEND SELECT")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(5), lc(1, 13)))
+            .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
             .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(2, Instruction::LoadInteger(SymbolKey::from("0select1"), lc(2, 6)))
-            .expect_instr(3, Instruction::Push(Value::Integer(7), lc(2, 6)))
+            .expect_instr(3, Instruction::PushInteger(7, lc(2, 6)))
             .expect_instr(4, Instruction::EqualIntegers(lc(2, 6)))
             .expect_instr(5, Instruction::JumpIfNotTrue(8))
             .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
@@ -2194,7 +2194,7 @@ mod tests {
         Tester::default()
             .parse("SELECT CASE 0: END SELECT\nSELECT CASE 0: END SELECT")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Integer(0), lc(1, 13)))
+            .expect_instr(0, Instruction::PushInteger(0, lc(1, 13)))
             .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
             .expect_instr(
                 2,
@@ -2203,7 +2203,7 @@ mod tests {
                     pos: lc(1, 16),
                 }),
             )
-            .expect_instr(3, Instruction::Push(Value::Integer(0), lc(2, 13)))
+            .expect_instr(3, Instruction::PushInteger(0, lc(2, 13)))
             .expect_instr(4, Instruction::Assign(SymbolKey::from("0select2")))
             .expect_instr(
                 5,
@@ -2221,7 +2221,7 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
             .parse("WHILE TRUE\nFOO\nWEND")
             .compile()
-            .expect_instr(0, Instruction::Push(Value::Boolean(true), lc(1, 7)))
+            .expect_instr(0, Instruction::PushBoolean(true, lc(1, 7)))
             .expect_instr(1, Instruction::JumpIfNotTrue(4))
             .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
