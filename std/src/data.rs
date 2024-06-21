@@ -46,7 +46,7 @@ impl ReadCommand {
     /// Creates a new `READ` command.
     pub fn new(index: Rc<RefCell<usize>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("READ", VarType::Void)
+            metadata: CallableMetadataBuilder::new("READ")
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
@@ -146,7 +146,7 @@ impl RestoreCommand {
     /// Creates a new `RESTORE` command.
     pub fn new(index: Rc<RefCell<usize>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("RESTORE", VarType::Void)
+            metadata: CallableMetadataBuilder::new("RESTORE")
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(

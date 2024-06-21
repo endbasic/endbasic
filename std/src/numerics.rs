@@ -16,7 +16,7 @@
 //! Numerical functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value, VarType};
+use endbasic_core::ast::{ArgSep, ExprType, Value};
 use endbasic_core::compiler::{
     ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
@@ -110,7 +110,8 @@ impl AtnFunction {
     /// Creates a new instance of the function.
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("ATN", VarType::Double)
+            metadata: CallableMetadataBuilder::new("ATN")
+                .with_return_type(ExprType::Double)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "n", vtype: ExprType::Double },
@@ -156,7 +157,8 @@ impl CintFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("CINT", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("CINT")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "expr", vtype: ExprType::Double },
@@ -201,7 +203,8 @@ impl CosFunction {
     /// Creates a new instance of the function.
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("COS", VarType::Double)
+            metadata: CallableMetadataBuilder::new("COS")
+                .with_return_type(ExprType::Double)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "angle", vtype: ExprType::Double },
@@ -243,7 +246,7 @@ impl DegCommand {
     /// Creates a new instance of the command.
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("DEG", VarType::Void)
+            metadata: CallableMetadataBuilder::new("DEG")
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -279,7 +282,8 @@ impl IntFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("INT", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("INT")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "expr", vtype: ExprType::Double },
@@ -323,7 +327,8 @@ impl MaxFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("MAX", VarType::Double)
+            metadata: CallableMetadataBuilder::new("MAX")
+                .with_return_type(ExprType::Double)
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
@@ -368,7 +373,8 @@ impl MinFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("MIN", VarType::Double)
+            metadata: CallableMetadataBuilder::new("MIN")
+                .with_return_type(ExprType::Double)
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
@@ -413,7 +419,8 @@ impl PiFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("PI", VarType::Double)
+            metadata: CallableMetadataBuilder::new("PI")
+                .with_return_type(ExprType::Double)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description("Returns the Archimedes' constant.")
@@ -444,7 +451,7 @@ impl RadCommand {
     /// Creates a new instance of the command.
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("RAD", VarType::Void)
+            metadata: CallableMetadataBuilder::new("RAD")
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -481,7 +488,7 @@ impl RandomizeCommand {
     /// Creates a new command that updates `code` with the exit code once called.
     pub fn new(prng: Rc<RefCell<Prng>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("RANDOMIZE", VarType::Void)
+            metadata: CallableMetadataBuilder::new("RANDOMIZE")
                 .with_syntax(&[
                     (&[], None),
                     (
@@ -532,7 +539,8 @@ impl RndFunction {
     /// Creates a new instance of the function.
     pub fn new(prng: Rc<RefCell<Prng>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("RND", VarType::Double)
+            metadata: CallableMetadataBuilder::new("RND")
+                .with_return_type(ExprType::Double)
                 .with_syntax(&[
                     (&[], None),
                     (
@@ -591,7 +599,8 @@ impl SinFunction {
     /// Creates a new instance of the function.
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("SIN", VarType::Double)
+            metadata: CallableMetadataBuilder::new("SIN")
+                .with_return_type(ExprType::Double)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "angle", vtype: ExprType::Double },
@@ -632,7 +641,8 @@ impl SqrFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("SQR", VarType::Double)
+            metadata: CallableMetadataBuilder::new("SQR")
+                .with_return_type(ExprType::Double)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "num", vtype: ExprType::Double },
@@ -677,7 +687,8 @@ impl TanFunction {
     /// Creates a new instance of the function.
     pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("TAN", VarType::Double)
+            metadata: CallableMetadataBuilder::new("TAN")
+                .with_return_type(ExprType::Double)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "angle", vtype: ExprType::Double },

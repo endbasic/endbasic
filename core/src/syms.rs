@@ -205,11 +205,11 @@ pub enum Symbol {
 
 impl Symbol {
     /// Returns the type the symbol evaluates as.
-    fn eval_type(&self) -> VarType {
+    fn eval_type(&self) -> Option<ExprType> {
         match self {
-            Symbol::Array(array) => array.subtype().into(),
+            Symbol::Array(array) => Some(array.subtype()),
             Symbol::Callable(callable) => callable.metadata().return_type(),
-            Symbol::Variable(value) => value.as_vartype(),
+            Symbol::Variable(value) => value.as_exprtype(),
         }
     }
 
@@ -330,7 +330,7 @@ impl Symbols {
         let symbol = self.load(&key);
         if let Some(symbol) = symbol {
             let stype = symbol.eval_type();
-            if !vref.accepts(stype) {
+            if !vref.accepts_callable(stype) {
                 return Err(Error::new(format!("Incompatible types in {} reference", vref)));
             }
         }
@@ -351,7 +351,7 @@ impl Symbols {
         match self.by_name.get_mut(key) {
             Some(symbol) => {
                 let stype = symbol.eval_type();
-                if !vref.accepts(stype) {
+                if !vref.accepts_callable(stype) {
                     return Err(Error::new(format!("Incompatible types in {} reference", vref)));
                 }
                 Ok(Some(symbol))
@@ -381,7 +381,7 @@ impl Symbols {
             Some(symbol) => match vref.ref_type() {
                 VarType::Auto => Ok(vref.clone().qualify(symbol.eval_type())),
                 _ => {
-                    if !vref.accepts(symbol.eval_type()) {
+                    if !vref.accepts_callable(symbol.eval_type()) {
                         return Err(Error::new(format!(
                             "Incompatible types in {} reference",
                             vref
@@ -465,7 +465,7 @@ impl Symbols {
 /// Builder pattern for a callable's metadata.
 pub struct CallableMetadataBuilder {
     name: &'static str,
-    return_type: VarType,
+    return_type: Option<ExprType>,
     category: Option<&'static str>,
     syntax: Option<String>,
     syntaxes: Vec<CallableSyntax>,
@@ -478,17 +478,23 @@ impl CallableMetadataBuilder {
     /// All code except tests must populate the whole builder with details.  This is enforced at
     /// construction time, where we only allow some fields to be missing under the test
     /// configuration.
-    pub fn new(name: &'static str, return_type: VarType) -> Self {
+    pub fn new(name: &'static str) -> Self {
         assert!(name == name.to_ascii_uppercase(), "Callable name must be in uppercase");
 
         Self {
             name,
-            return_type,
+            return_type: None,
             syntax: None,
             syntaxes: vec![],
             category: None,
             description: None,
         }
+    }
+
+    /// Sets the return type of the callable.
+    pub fn with_return_type(mut self, return_type: ExprType) -> Self {
+        self.return_type = Some(return_type);
+        self
     }
 
     /// Sets the syntax specifications for this callable.
@@ -571,7 +577,7 @@ impl CallableMetadataBuilder {
 #[derive(Clone, Debug)]
 pub struct CallableMetadata {
     name: &'static str,
-    return_type: VarType,
+    return_type: Option<ExprType>,
     syntax: String,
     syntaxes: Vec<CallableSyntax>,
     category: &'static str,
@@ -585,7 +591,7 @@ impl CallableMetadata {
     }
 
     /// Gets the callable's return type.
-    pub fn return_type(&self) -> VarType {
+    pub fn return_type(&self) -> Option<ExprType> {
         self.return_type
     }
 
@@ -618,7 +624,7 @@ impl CallableMetadata {
 
     /// Returns true if this callable is a function (not a command).
     pub fn is_function(&self) -> bool {
-        self.return_type != VarType::Void
+        self.return_type.is_some()
     }
 }
 
@@ -847,7 +853,7 @@ mod tests {
         );
 
         match syms.get(&VarRef::new("out", VarType::Auto)).unwrap().unwrap() {
-            Symbol::Callable(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
+            Symbol::Callable(c) => assert_eq!(None, c.metadata().return_type()),
             _ => panic!("Got something that is not the command we asked for"),
         }
         assert_eq!(
@@ -857,7 +863,9 @@ mod tests {
 
         for ref_type in &[VarType::Auto, VarType::Integer] {
             match syms.get(&VarRef::new("sum", *ref_type)).unwrap().unwrap() {
-                Symbol::Callable(f) => assert_eq!(VarType::Integer, f.metadata().return_type()),
+                Symbol::Callable(f) => {
+                    assert_eq!(Some(ExprType::Integer), f.metadata().return_type())
+                }
                 _ => panic!("Got something that is not the function we asked for"),
             }
         }
@@ -930,7 +938,7 @@ mod tests {
         );
 
         match syms.get_mut(&VarRef::new("out", VarType::Auto)).unwrap().unwrap() {
-            Symbol::Callable(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
+            Symbol::Callable(c) => assert_eq!(None, c.metadata().return_type()),
             _ => panic!("Got something that is not the command we asked for"),
         }
         assert_eq!(
@@ -940,7 +948,9 @@ mod tests {
 
         for ref_type in &[VarType::Auto, VarType::Integer] {
             match syms.get_mut(&VarRef::new("sum", *ref_type)).unwrap().unwrap() {
-                Symbol::Callable(f) => assert_eq!(VarType::Integer, f.metadata().return_type()),
+                Symbol::Callable(f) => {
+                    assert_eq!(Some(ExprType::Integer), f.metadata().return_type())
+                }
                 _ => panic!("Got something that is not the function we asked for"),
             }
         }
@@ -1007,12 +1017,12 @@ mod tests {
         }
 
         match syms.get_auto("out").unwrap() {
-            Symbol::Callable(c) => assert_eq!(VarType::Void, c.metadata().return_type()),
+            Symbol::Callable(c) => assert_eq!(None, c.metadata().return_type()),
             _ => panic!("Got something that is not the command we asked for"),
         }
 
         match syms.get_auto("sum").unwrap() {
-            Symbol::Callable(f) => assert_eq!(VarType::Integer, f.metadata().return_type()),
+            Symbol::Callable(f) => assert_eq!(Some(ExprType::Integer), f.metadata().return_type()),
             _ => panic!("Got something that is not the function we asked for"),
         }
 

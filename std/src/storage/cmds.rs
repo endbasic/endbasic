@@ -18,7 +18,7 @@
 use crate::console::{is_narrow, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value, VarType};
+use endbasic_core::ast::{ArgSep, ExprType, Value};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{CallResult, Callable, CallableMetadata, CallableMetadataBuilder};
@@ -128,7 +128,7 @@ impl CdCommand {
     /// Creates a new `CD` command that changes the current location in `storage`.
     pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("CD", VarType::Void)
+            metadata: CallableMetadataBuilder::new("CD")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "path", vtype: ExprType::Text },
@@ -171,7 +171,7 @@ impl DirCommand {
     /// Creates a new `DIR` command that lists `storage` contents on the `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("DIR", VarType::Void)
+            metadata: CallableMetadataBuilder::new("DIR")
                 .with_syntax(&[
                     (&[], None),
                     (
@@ -222,7 +222,7 @@ impl MountCommand {
     /// Creates a new `MOUNT` command.
     pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("MOUNT", VarType::Void)
+            metadata: CallableMetadataBuilder::new("MOUNT")
                 .with_syntax(&[
                     (&[], None),
                     (
@@ -285,7 +285,7 @@ impl PwdCommand {
     /// Creates a new `PWD` command that prints the current directory of `storage` to the `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("PWD", VarType::Void)
+            metadata: CallableMetadataBuilder::new("PWD")
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -336,7 +336,7 @@ impl UnmountCommand {
     /// Creates a new `UNMOUNT` command.
     pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("UNMOUNT", VarType::Void)
+            metadata: CallableMetadataBuilder::new("UNMOUNT")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "drive_name", vtype: ExprType::Text },

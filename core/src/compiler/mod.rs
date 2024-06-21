@@ -56,7 +56,7 @@ impl Error {
                 format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
             ),
             CallError::EvalError(pos2, e) => {
-                if md.return_type() == VarType::Void {
+                if !md.is_function() {
                     Self::new(pos2, e)
                 } else {
                     Self::new(
@@ -707,7 +707,7 @@ impl Compiler {
                 let key = SymbolKey::from(&span.vref.name());
                 let md = match self.symtable.get(&key) {
                     Some(SymbolPrototype::Callable(md)) => {
-                        if md.return_type() != VarType::Void {
+                        if md.is_function() {
                             return Err(Error::new(
                                 span.vref_pos,
                                 format!("{} is not a command", span.vref.name()),
@@ -1265,7 +1265,7 @@ mod tests {
     #[test]
     fn test_compile_builtin_call_no_args() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("CMD", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("CMD"))
             .parse("CMD")
             .compile()
             .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 1), 0))
@@ -1275,7 +1275,7 @@ mod tests {
     #[test]
     fn test_compile_builtin_call_increments_next_pc() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("CMD", VarType::Void).with_syntax(&[(
+            .define_callable(CallableMetadataBuilder::new("CMD").with_syntax(&[(
                 &[],
                 Some(&RepeatedSyntax {
                     name: "expr",
@@ -1365,7 +1365,9 @@ mod tests {
             .check();
 
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("OUT", VarType::Integer))
+            .define_callable(
+                CallableMetadataBuilder::new("OUT").with_return_type(ExprType::Integer),
+            )
             .parse("DIM OuT")
             .compile()
             .expect_err("1:5: Cannot DIM already-defined symbol OuT")
@@ -1453,7 +1455,7 @@ mod tests {
     #[test]
     fn test_compile_do_infinite() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("FOO"))
             .parse("DO\nFOO\nLOOP")
             .compile()
             .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
@@ -1464,7 +1466,7 @@ mod tests {
     #[test]
     fn test_compile_do_pre_guard() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("FOO"))
             .parse("DO WHILE TRUE\nFOO\nLOOP")
             .compile()
             .expect_instr(0, Instruction::PushBoolean(true, lc(1, 10)))
@@ -1477,7 +1479,7 @@ mod tests {
     #[test]
     fn test_compile_do_post_guard() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("FOO"))
             .parse("DO\nFOO\nLOOP WHILE TRUE")
             .compile()
             .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
@@ -1734,7 +1736,7 @@ mod tests {
     #[test]
     fn test_compile_gosub_and_return() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("FOO"))
             .parse("@sub\nFOO\nRETURN\nGOSUB @sub")
             .compile()
             .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
@@ -1755,7 +1757,7 @@ mod tests {
     #[test]
     fn test_compile_if_one_branch() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("FOO"))
             .parse("IF FALSE THEN: FOO: END IF")
             .compile()
             .expect_instr(0, Instruction::PushBoolean(false, lc(1, 4)))
@@ -1767,9 +1769,9 @@ mod tests {
     #[test]
     fn test_compile_if_many_branches() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
-            .define_callable(CallableMetadataBuilder::new("BAR", VarType::Void))
-            .define_callable(CallableMetadataBuilder::new("BAZ", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("FOO"))
+            .define_callable(CallableMetadataBuilder::new("BAR"))
+            .define_callable(CallableMetadataBuilder::new("BAZ"))
             .parse("IF FALSE THEN\nFOO\nELSEIF TRUE THEN\nBAR\nELSE\nBAZ\nEND IF")
             .compile()
             .expect_instr(0, Instruction::PushBoolean(false, lc(1, 4)))
@@ -1828,7 +1830,7 @@ mod tests {
     /// `exp_expr` must assume that its position starts at `(2, 6)`.
     fn do_compile_case_guard_test(guards: &str, exp_expr_instrs: Vec<Instruction>) {
         let mut t = Tester::default()
-            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("FOO"))
             .parse(&format!("SELECT CASE 5\nCASE {}\nFOO\nEND SELECT", guards))
             .compile()
             .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
@@ -1974,7 +1976,7 @@ mod tests {
     #[test]
     fn test_compile_select_one_case() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("FOO"))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
@@ -2012,7 +2014,7 @@ mod tests {
     #[test]
     fn test_compile_select_only_case_else() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("FOO"))
             .parse("SELECT CASE 5\nCASE ELSE\nFOO\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
@@ -2028,8 +2030,8 @@ mod tests {
     #[test]
     fn test_compile_select_many_cases_without_else() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
-            .define_callable(CallableMetadataBuilder::new("BAR", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("FOO"))
+            .define_callable(CallableMetadataBuilder::new("BAR"))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE IS <> 8\nBAR\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
@@ -2055,8 +2057,8 @@ mod tests {
     #[test]
     fn test_compile_select_many_cases_with_else() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
-            .define_callable(CallableMetadataBuilder::new("BAR", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("FOO"))
+            .define_callable(CallableMetadataBuilder::new("BAR"))
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE ELSE\nBAR\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
@@ -2104,7 +2106,7 @@ mod tests {
     #[test]
     fn test_compile_while() {
         Tester::default()
-            .define_callable(CallableMetadataBuilder::new("FOO", VarType::Void))
+            .define_callable(CallableMetadataBuilder::new("FOO"))
             .parse("WHILE TRUE\nFOO\nWEND")
             .compile()
             .expect_instr(0, Instruction::PushBoolean(true, lc(1, 7)))

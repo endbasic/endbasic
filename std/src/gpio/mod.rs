@@ -16,7 +16,7 @@
 //! GPIO access functions and commands for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value, VarType};
+use endbasic_core::ast::{ArgSep, ExprType, Value};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Clearable, Machine, Scope};
 use endbasic_core::syms::{
@@ -139,7 +139,7 @@ impl GpioSetupCommand {
     /// Creates a new instance of the command.
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GPIO_SETUP", VarType::Void)
+            metadata: CallableMetadataBuilder::new("GPIO_SETUP")
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
@@ -205,7 +205,7 @@ impl GpioClearCommand {
     /// Creates a new instance of the command.
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GPIO_CLEAR", VarType::Void)
+            metadata: CallableMetadataBuilder::new("GPIO_CLEAR")
                 .with_syntax(&[
                     (&[], None),
                     (
@@ -268,7 +268,8 @@ impl GpioReadFunction {
     /// Creates a new instance of the function.
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GPIO_READ", VarType::Boolean)
+            metadata: CallableMetadataBuilder::new("GPIO_READ")
+                .with_return_type(ExprType::Boolean)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "pin", vtype: ExprType::Integer },
@@ -318,7 +319,7 @@ impl GpioWriteCommand {
     /// Creates a new instance of the command.
     pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GPIO_WRITE", VarType::Void)
+            metadata: CallableMetadataBuilder::new("GPIO_WRITE")
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(

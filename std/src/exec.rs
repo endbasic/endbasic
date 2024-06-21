@@ -16,7 +16,7 @@
 //! Commands that manipulate the machine's state or the program's execution.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ExprType, Value, VarType};
+use endbasic_core::ast::{ExprType, Value};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
@@ -40,7 +40,7 @@ impl ClearCommand {
     /// Creates a new `CLEAR` command that resets the state of the machine.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void)
+            metadata: CallableMetadataBuilder::new("CLEAR")
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -79,7 +79,8 @@ impl ErrmsgFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("ERRMSG", VarType::Text)
+            metadata: CallableMetadataBuilder::new("ERRMSG")
+                .with_return_type(ExprType::Text)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -136,7 +137,7 @@ impl SleepCommand {
     /// Creates a new instance of the command.
     pub fn new(sleep_fn: SleepFn) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("SLEEP", VarType::Void)
+            metadata: CallableMetadataBuilder::new("SLEEP")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "seconds", vtype: ExprType::Double },

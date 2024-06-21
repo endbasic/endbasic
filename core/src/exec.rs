@@ -75,7 +75,7 @@ impl Error {
                 format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
             ),
             CallError::EvalError(pos2, e) => {
-                if md.return_type() == VarType::Void {
+                if !md.is_function() {
                     Self::EvalError(pos2, e)
                 } else {
                     Self::EvalError(
@@ -706,7 +706,7 @@ impl Machine {
         };
 
         let metadata = b.metadata();
-        debug_assert_eq!(VarType::Void, metadata.return_type());
+        debug_assert!(!metadata.is_function());
 
         let scope = Scope::new(&mut context.value_stack, nargs);
 
@@ -837,13 +837,12 @@ impl Machine {
         f: Rc<dyn Callable>,
     ) -> Result<()> {
         let metadata = f.metadata();
-        debug_assert_eq!(return_type, metadata.return_type());
+        debug_assert_eq!(return_type, metadata.return_type().unwrap().into());
 
         let scope = Scope::new(&mut context.value_stack, nargs);
         let result = f.exec(scope, self).await;
         match result {
             Ok(value) => {
-                debug_assert!(metadata.return_type() != VarType::Auto);
                 // Given that we only support built-in functions at the moment, this
                 // could well be an assertion.  Doing so could turn into a time bomb
                 // when/if we add user-defined functions, so handle the problem as an
@@ -924,8 +923,7 @@ impl Machine {
         let result = f.exec(scope, self).await;
         match result {
             Ok(value) => {
-                debug_assert!(metadata.return_type() != VarType::Auto);
-                let fref_checker = VarRef::new(fref.name(), metadata.return_type());
+                let fref_checker = VarRef::new(fref.name(), metadata.return_type().unwrap().into());
                 // Given that we only support built-in functions at the moment, this
                 // could well be an assertion.  Doing so could turn into a time bomb
                 // when/if we add user-defined functions, so handle the problem as an

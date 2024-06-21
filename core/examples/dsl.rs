@@ -22,7 +22,7 @@
 //! of the lights, and finally dumps the resulting state to the screen.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ExprType, Value, VarType};
+use endbasic_core::ast::{ExprType, Value};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope, StopReason};
 use endbasic_core::syms::{
@@ -59,7 +59,8 @@ impl NumLightsFunction {
     /// Creates a new function that queries the `lights` state.
     pub fn new(lights: Rc<RefCell<Lights>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("NUM_LIGHTS", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("NUM_LIGHTS")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[(&[], None)])
                 .with_category("Demonstration")
                 .with_description("Returns the number of available lights.")
@@ -93,7 +94,7 @@ impl SwitchLightCommand {
     /// Creates a new command that modifies the `lights` state.
     pub fn new(lights: Rc<RefCell<Lights>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("SWITCH_LIGHT", VarType::Void)
+            metadata: CallableMetadataBuilder::new("SWITCH_LIGHT")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "id", vtype: ExprType::Integer },

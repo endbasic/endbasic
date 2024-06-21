@@ -229,7 +229,7 @@ impl ExprType {
     }
 
     /// Returns the textual representation of the annotation for this type.
-    pub(crate) fn annotation(&self) -> char {
+    pub fn annotation(&self) -> char {
         match self {
             ExprType::Boolean => '?',
             ExprType::Double => '#',
@@ -350,7 +350,7 @@ impl VarRef {
     /// Creates a new reference to the variable with `name` and the optional `vtype` type.
     #[allow(clippy::redundant_field_names)]
     pub fn new<T: Into<String>>(name: T, ref_type: VarType) -> Self {
-        Self { name: name.into(), ref_type: ref_type }
+        Self { name: name.into(), ref_type }
     }
 
     /// Returns the name of this reference, without any type annotations.
@@ -366,12 +366,13 @@ impl VarRef {
 
     /// Adds the type annotation `ref_type` to this reference.
     ///
-    /// Assumes that the current annotation for this reference is `Auto` and that the given
-    /// annotation is not.
-    pub fn qualify(self, ref_type: VarType) -> Self {
-        assert!(ref_type != VarType::Auto, "Cannot qualify with auto");
+    /// Assumes that the current annotation for this reference is `Auto`.
+    pub(crate) fn qualify(self, expr_type: Option<ExprType>) -> Self {
         assert!(self.ref_type == VarType::Auto, "Reference already qualified");
-        Self { name: self.name, ref_type }
+        match expr_type {
+            None => Self { name: self.name, ref_type: VarType::Void },
+            Some(expr_type) => Self { name: self.name, ref_type: expr_type.into() },
+        }
     }
 
     /// Returns the type of this reference.
@@ -382,6 +383,15 @@ impl VarRef {
     /// Returns true if this reference is compatible with the given type.
     pub fn accepts(&self, other: VarType) -> bool {
         self.ref_type == VarType::Auto || self.ref_type == other
+    }
+
+    /// Returns true if this reference is compatible with the return type of a callable.
+    pub fn accepts_callable(&self, other: Option<ExprType>) -> bool {
+        let other_type = match other {
+            Some(other) => other.into(),
+            None => VarType::Void,
+        };
+        self.ref_type == VarType::Auto || self.ref_type == other_type
     }
 }
 
@@ -458,6 +468,18 @@ impl fmt::Display for Value {
 }
 
 impl Value {
+    /// Returns the type of the value as an `ExprType`.
+    pub fn as_exprtype(&self) -> Option<ExprType> {
+        match self {
+            Value::Boolean(_) => Some(ExprType::Boolean),
+            Value::Double(_) => Some(ExprType::Double),
+            Value::Integer(_) => Some(ExprType::Integer),
+            Value::Text(_) => Some(ExprType::Text),
+            Value::VarRef(vref) => Some(ExprType::from_vartype(vref.ref_type, None)),
+            Value::Void => None,
+        }
+    }
+
     /// Returns the type of the value as a `VarType`.
     pub fn as_vartype(&self) -> VarType {
         match self {

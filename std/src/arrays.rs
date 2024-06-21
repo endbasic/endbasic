@@ -16,7 +16,7 @@
 //! Array-related functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value, VarType};
+use endbasic_core::ast::{ArgSep, ExprType, Value};
 use endbasic_core::compiler::{
     ArgSepSyntax, RequiredRefSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
@@ -90,7 +90,8 @@ impl LboundFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("LBOUND", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("LBOUND")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[
                     (
                         &[SingularArgSyntax::RequiredRef(
@@ -155,7 +156,8 @@ impl UboundFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("UBOUND", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("UBOUND")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[
                     (
                         &[SingularArgSyntax::RequiredRef(
