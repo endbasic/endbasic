@@ -81,7 +81,7 @@ impl Callable for ClsCommand {
     async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         debug_assert_eq!(0, scope.nargs());
         self.console.borrow_mut().clear(ClearType::All)?;
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -177,7 +177,7 @@ impl Callable for ColorCommand {
         };
 
         self.console.borrow_mut().set_color(fg, bg)?;
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -225,28 +225,29 @@ impl Callable for InKeyFunction {
         debug_assert_eq!(0, scope.nargs());
 
         let key = self.console.borrow_mut().poll_key().await?;
-        Ok(match key {
-            Some(Key::ArrowDown) => Value::Text("DOWN".to_owned()),
-            Some(Key::ArrowLeft) => Value::Text("LEFT".to_owned()),
-            Some(Key::ArrowRight) => Value::Text("RIGHT".to_owned()),
-            Some(Key::ArrowUp) => Value::Text("UP".to_owned()),
+        let key_name = match key {
+            Some(Key::ArrowDown) => "DOWN".to_owned(),
+            Some(Key::ArrowLeft) => "LEFT".to_owned(),
+            Some(Key::ArrowRight) => "RIGHT".to_owned(),
+            Some(Key::ArrowUp) => "UP".to_owned(),
 
-            Some(Key::Backspace) => Value::Text("BS".to_owned()),
-            Some(Key::CarriageReturn) => Value::Text("ENTER".to_owned()),
-            Some(Key::Char(x)) => Value::Text(format!("{}", x)),
-            Some(Key::End) => Value::Text("END".to_owned()),
-            Some(Key::Eof) => Value::Text("EOF".to_owned()),
-            Some(Key::Escape) => Value::Text("ESC".to_owned()),
-            Some(Key::Home) => Value::Text("HOME".to_owned()),
-            Some(Key::Interrupt) => Value::Text("INT".to_owned()),
-            Some(Key::NewLine) => Value::Text("ENTER".to_owned()),
-            Some(Key::PageDown) => Value::Text("PGDOWN".to_owned()),
-            Some(Key::PageUp) => Value::Text("PGUP".to_owned()),
-            Some(Key::Tab) => Value::Text("TAB".to_owned()),
-            Some(Key::Unknown(_)) => Value::Text("".to_owned()),
+            Some(Key::Backspace) => "BS".to_owned(),
+            Some(Key::CarriageReturn) => "ENTER".to_owned(),
+            Some(Key::Char(x)) => format!("{}", x),
+            Some(Key::End) => "END".to_owned(),
+            Some(Key::Eof) => "EOF".to_owned(),
+            Some(Key::Escape) => "ESC".to_owned(),
+            Some(Key::Home) => "HOME".to_owned(),
+            Some(Key::Interrupt) => "INT".to_owned(),
+            Some(Key::NewLine) => "ENTER".to_owned(),
+            Some(Key::PageDown) => "PGDOWN".to_owned(),
+            Some(Key::PageUp) => "PGUP".to_owned(),
+            Some(Key::Tab) => "TAB".to_owned(),
+            Some(Key::Unknown(_)) => "".to_owned(),
 
-            None => Value::Text("".to_owned()),
-        })
+            None => "".to_owned(),
+        };
+        scope.return_string(key_name)
     }
 }
 
@@ -357,7 +358,7 @@ impl Callable for InputCommand {
                             .get_mut_symbols()
                             .set_var(&vref, value)
                             .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
-                        return Ok(Value::Void);
+                        return Ok(());
                     }
                     Err(e) => {
                         console.print(&format!("Retry input: {}", e))?;
@@ -440,7 +441,7 @@ impl Callable for LocateCommand {
         }
 
         console.locate(CharsXY::new(column, row))?;
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -548,7 +549,7 @@ impl Callable for PrintCommand {
         } else {
             self.console.borrow_mut().write(&text)?;
         }
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -585,7 +586,7 @@ impl Callable for ScrColsFunction {
     async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         debug_assert_eq!(0, scope.nargs());
         let size = self.console.borrow().size_chars()?;
-        Ok(Value::Integer(i32::from(size.x)))
+        scope.return_integer(i32::from(size.x))
     }
 }
 
@@ -622,7 +623,7 @@ impl Callable for ScrRowsFunction {
     async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         debug_assert_eq!(0, scope.nargs());
         let size = self.console.borrow().size_chars()?;
-        Ok(Value::Integer(i32::from(size.y)))
+        scope.return_integer(i32::from(size.y))
     }
 }
 

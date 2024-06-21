@@ -132,7 +132,7 @@ impl Callable for ReadCommand {
                 .map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
         }
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -169,7 +169,7 @@ impl Callable for RestoreCommand {
     async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         debug_assert_eq!(0, scope.nargs());
         *self.index.borrow_mut() = 0;
-        Ok(Value::Void)
+        Ok(())
     }
 }
 

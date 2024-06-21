@@ -16,7 +16,7 @@
 //! GPIO access functions and commands for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value};
+use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Clearable, Machine, Scope};
 use endbasic_core::syms::{
@@ -191,7 +191,7 @@ impl Callable for GpioSetupCommand {
             Some(mut pins) => pins.setup(pin, mode)?,
             None => self.pins.borrow_mut().setup(pin, mode)?,
         };
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -254,7 +254,7 @@ impl Callable for GpioClearCommand {
             };
         }
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -305,7 +305,7 @@ impl Callable for GpioReadFunction {
             Some(mut pins) => pins.read(pin)?,
             None => self.pins.borrow_mut().read(pin)?,
         };
-        Ok(value.into())
+        scope.return_boolean(value)
     }
 }
 
@@ -362,7 +362,7 @@ impl Callable for GpioWriteCommand {
             Some(mut pins) => pins.write(pin, value)?,
             None => self.pins.borrow_mut().write(pin, value)?,
         };
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -379,6 +379,7 @@ pub fn add_all(machine: &mut Machine, pins: Rc<RefCell<dyn Pins>>) {
 mod tests {
     use super::*;
     use crate::testutils::*;
+    use endbasic_core::ast::Value;
 
     /// Common checks for pin number validation.
     ///

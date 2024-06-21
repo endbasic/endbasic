@@ -18,7 +18,7 @@
 use crate::console::{is_narrow, Console};
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value};
+use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{CallResult, Callable, CallableMetadata, CallableMetadataBuilder};
@@ -156,7 +156,7 @@ impl Callable for CdCommand {
 
         self.storage.borrow_mut().cd(&target)?;
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -207,7 +207,7 @@ impl Callable for DirCommand {
 
         show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), &path).await?;
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -262,14 +262,14 @@ impl Callable for MountCommand {
     async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         if scope.nargs() == 0 {
             show_drives(&self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
-            Ok(Value::Void)
+            Ok(())
         } else {
             debug_assert_eq!(2, scope.nargs());
             let target = scope.pop_string();
             let name = scope.pop_string();
 
             self.storage.borrow_mut().mount(&name, &target)?;
-            Ok(Value::Void)
+            Ok(())
         }
     }
 }
@@ -322,7 +322,7 @@ impl Callable for PwdCommand {
         }
         console.print("")?;
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -367,7 +367,7 @@ impl Callable for UnmountCommand {
 
         self.storage.borrow_mut().unmount(&drive)?;
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 

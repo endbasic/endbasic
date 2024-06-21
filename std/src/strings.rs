@@ -16,7 +16,7 @@
 //! String functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value};
+use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{
     AnyValueSyntax, ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
@@ -121,7 +121,7 @@ impl Callable for AscFunction {
             ch as i32
         };
 
-        Ok(Value::Integer(ch))
+        scope.return_integer(ch)
     }
 }
 
@@ -172,7 +172,7 @@ impl Callable for ChrFunction {
         let code = i as u32;
 
         match char::from_u32(code) {
-            Some(ch) => Ok(Value::Text(format!("{}", ch))),
+            Some(ch) => scope.return_string(format!("{}", ch)),
             None => Err(CallError::ArgumentError(ipos, format!("Invalid character code {}", code))),
         }
     }
@@ -228,7 +228,7 @@ impl Callable for LeftFunction {
             Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
         } else {
             let n = min(s.len(), n as usize);
-            Ok(Value::Text(s[..n].to_owned()))
+            scope.return_string(s[..n].to_owned())
         }
     }
 }
@@ -271,7 +271,7 @@ impl Callable for LenFunction {
         if s.len() > std::i32::MAX as usize {
             Err(CallError::InternalError(spos, "String too long".to_owned()))
         } else {
-            Ok(Value::Integer(s.len() as i32))
+            scope.return_integer(s.len() as i32)
         }
     }
 }
@@ -311,7 +311,7 @@ impl Callable for LtrimFunction {
         debug_assert_eq!(1, scope.nargs());
         let s = scope.pop_string();
 
-        Ok(Value::Text(s.trim_start().to_owned()))
+        scope.return_string(s.trim_start().to_owned())
     }
 }
 
@@ -400,7 +400,7 @@ impl Callable for MidFunction {
             s.len()
         };
 
-        Ok(Value::Text(s[start..end].to_owned()))
+        scope.return_string(s[start..end].to_owned())
     }
 }
 
@@ -454,7 +454,7 @@ impl Callable for RightFunction {
             Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
         } else {
             let n = min(s.len(), n as usize);
-            Ok(Value::Text(s[s.len() - n..].to_owned()))
+            scope.return_string(s[s.len() - n..].to_owned())
         }
     }
 }
@@ -494,7 +494,7 @@ impl Callable for RtrimFunction {
         debug_assert_eq!(1, scope.nargs());
         let s = scope.pop_string();
 
-        Ok(Value::Text(s.trim_end().to_owned()))
+        scope.return_string(s.trim_end().to_owned())
     }
 }
 
@@ -543,19 +543,19 @@ impl Callable for StrFunction {
         match scope.pop_value_tag() {
             ValueTag::Boolean => {
                 let b = scope.pop_boolean();
-                Ok(Value::Text(format_boolean(b).to_owned()))
+                scope.return_string(format_boolean(b).to_owned())
             }
             ValueTag::Double => {
                 let d = scope.pop_double();
-                Ok(Value::Text(format_double(d)))
+                scope.return_string(format_double(d))
             }
             ValueTag::Integer => {
                 let i = scope.pop_integer();
-                Ok(Value::Text(format_integer(i)))
+                scope.return_string(format_integer(i))
             }
             ValueTag::Text => {
                 let s = scope.pop_string();
-                Ok(Value::Text(s))
+                scope.return_string(s)
             }
             ValueTag::Missing => {
                 unreachable!("Missing expressions aren't allowed in function calls");

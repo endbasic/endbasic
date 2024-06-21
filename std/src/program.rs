@@ -197,7 +197,7 @@ impl Callable for KillCommand {
         let name = add_extension(name)?;
         self.storage.borrow_mut().delete(&name).await?;
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -235,7 +235,7 @@ impl Callable for EditCommand {
         let mut console = self.console.borrow_mut();
         let mut program = self.program.borrow_mut();
         program.edit(&mut *console).await?;
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -274,7 +274,7 @@ impl Callable for ListCommand {
         for line in self.program.borrow().text().lines() {
             console.print(line)?;
         }
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -341,7 +341,7 @@ impl Callable for LoadCommand {
                 .borrow_mut()
                 .print("LOAD aborted; use SAVE to save your current changes.")?;
         }
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -393,7 +393,7 @@ impl Callable for NewCommand {
                 .borrow_mut()
                 .print("NEW aborted; use SAVE to save your current changes.")?;
         }
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -451,7 +451,7 @@ impl Callable for RunCommand {
                 }
             }
         }
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -529,7 +529,7 @@ impl Callable for SaveCommand {
 
         self.console.borrow_mut().print(&format!("Saved as {}", full_name))?;
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 

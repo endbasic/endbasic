@@ -69,7 +69,7 @@ impl From<compiler::Error> for CallError {
 }
 
 /// Result for callable execution return values.
-pub type CallResult = std::result::Result<Value, CallError>;
+pub type CallResult = std::result::Result<(), CallError>;
 
 /// The key of a symbol in the symbols table.
 #[derive(Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
@@ -209,7 +209,7 @@ impl Symbol {
         match self {
             Symbol::Array(array) => Some(array.subtype()),
             Symbol::Callable(callable) => callable.metadata().return_type(),
-            Symbol::Variable(value) => value.as_exprtype(),
+            Symbol::Variable(value) => Some(value.as_exprtype()),
         }
     }
 

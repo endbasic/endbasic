@@ -418,9 +418,6 @@ pub enum Value {
 
     /// A reference to a variable.
     VarRef(VarRef),
-
-    /// A value that does not exist.
-    Void,
 }
 
 impl From<bool> for Value {
@@ -462,21 +459,19 @@ impl fmt::Display for Value {
             Value::Integer(i) => write!(f, "{}", i),
             Value::Text(s) => write!(f, "\"{}\"", s),
             Value::VarRef(v) => write!(f, "{}", v),
-            Value::Void => write!(f, "()"),
         }
     }
 }
 
 impl Value {
     /// Returns the type of the value as an `ExprType`.
-    pub fn as_exprtype(&self) -> Option<ExprType> {
+    pub fn as_exprtype(&self) -> ExprType {
         match self {
-            Value::Boolean(_) => Some(ExprType::Boolean),
-            Value::Double(_) => Some(ExprType::Double),
-            Value::Integer(_) => Some(ExprType::Integer),
-            Value::Text(_) => Some(ExprType::Text),
-            Value::VarRef(vref) => Some(ExprType::from_vartype(vref.ref_type, None)),
-            Value::Void => None,
+            Value::Boolean(_) => ExprType::Boolean,
+            Value::Double(_) => ExprType::Double,
+            Value::Integer(_) => ExprType::Integer,
+            Value::Text(_) => ExprType::Text,
+            Value::VarRef(vref) => ExprType::from_vartype(vref.ref_type, None),
         }
     }
 
@@ -488,7 +483,6 @@ impl Value {
             Value::Integer(_) => VarType::Integer,
             Value::Text(_) => VarType::Text,
             Value::VarRef(vref) => vref.ref_type,
-            Value::Void => VarType::Void,
         }
     }
 }

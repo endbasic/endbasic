@@ -23,7 +23,6 @@
 #![warn(unsafe_code)]
 
 use async_channel::{Receiver, Sender};
-use endbasic_core::ast::Value;
 use endbasic_core::exec::{Signal, YieldNowFn};
 use endbasic_core::syms::{self, CallResult};
 use endbasic_core::LineCol;
@@ -119,7 +118,7 @@ fn js_sleep(
     let ms = ms as i32;
 
     yielder.borrow_mut().reset();
-    do_sleep(ms, Ok(Value::Void))
+    do_sleep(ms, Ok(()))
 }
 
 /// Supplier of a `YieldNowFn` that relies on a zero timeout to yield execution back to the

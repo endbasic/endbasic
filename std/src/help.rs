@@ -18,7 +18,7 @@
 use crate::console::{refill_and_print, AnsiColor, Console};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
-use endbasic_core::ast::{ExprType, Value};
+use endbasic_core::ast::ExprType;
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
@@ -510,7 +510,7 @@ impl Callable for HelpCommand {
             result?;
         }
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -522,7 +522,6 @@ pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
 #[cfg(test)]
 pub(crate) mod testutils {
     use super::*;
-    use endbasic_core::ast::Value;
     use endbasic_core::syms::{CallResult, Callable, CallableMetadata, CallableMetadataBuilder};
 
     /// A command that does nothing.
@@ -568,7 +567,7 @@ Second paragraph of the extended description.",
         }
 
         async fn exec(&self, _scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
-            Ok(Value::Void)
+            Ok(())
         }
     }
 
@@ -615,8 +614,8 @@ Second paragraph of the extended description.",
             &self.metadata
         }
 
-        async fn exec(&self, _scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
-            Ok(Value::Text("irrelevant".to_owned()))
+        async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+            scope.return_string("irrelevant".to_owned())
         }
     }
 }

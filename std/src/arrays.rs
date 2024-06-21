@@ -16,7 +16,7 @@
 //! Array-related functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value};
+use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{
     ArgSepSyntax, RequiredRefSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
@@ -34,7 +34,7 @@ const CATEGORY: &str = "Array functions";
 /// either `LBOUND` or `UBOUND`.
 #[allow(clippy::needless_lifetimes)]
 fn parse_bound_args<'a>(
-    mut scope: Scope<'_>,
+    scope: &mut Scope<'_>,
     symbols: &'a Symbols,
 ) -> Result<(&'a Array, usize), CallError> {
     let (arrayref, arraypos) = scope.pop_varref_with_pos();
@@ -141,9 +141,9 @@ impl Callable for LboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
-        let (_array, _dim) = parse_bound_args(scope, machine.get_symbols())?;
-        Ok(Value::Integer(0))
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        let (_array, _dim) = parse_bound_args(&mut scope, machine.get_symbols())?;
+        scope.return_integer(0)
     }
 }
 
@@ -207,9 +207,9 @@ impl Callable for UboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
-        let (array, dim) = parse_bound_args(scope, machine.get_symbols())?;
-        Ok(Value::Integer((array.dimensions()[dim - 1] - 1) as i32))
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        let (array, dim) = parse_bound_args(&mut scope, machine.get_symbols())?;
+        scope.return_integer((array.dimensions()[dim - 1] - 1) as i32)
     }
 }
 
