@@ -22,7 +22,7 @@
 //! of the lights, and finally dumps the resulting state to the screen.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ExprType, Value};
+use endbasic_core::ast::ExprType;
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope, StopReason};
 use endbasic_core::syms::{
@@ -80,7 +80,7 @@ impl Callable for NumLightsFunction {
         debug_assert_eq!(0, scope.nargs());
         let num = self.lights.borrow().len();
         assert!(num <= std::i32::MAX as usize, "Ended up with too many lights");
-        Ok(Value::Integer(num as i32))
+        scope.return_integer(num as i32)
     }
 }
 
@@ -137,7 +137,7 @@ impl Callable for SwitchLightCommand {
             println!("Turning light {} on", i);
         }
         lights[i - 1] = !lights[i - 1];
-        Ok(Value::Void)
+        Ok(())
     }
 }
 

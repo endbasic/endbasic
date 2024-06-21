@@ -17,7 +17,7 @@
 
 use crate::console::{Console, PixelsXY};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value};
+use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
@@ -120,7 +120,7 @@ impl Callable for GfxCircleCommand {
         let r = parse_radius(rvalue, rpos)?;
 
         self.console.borrow_mut().draw_circle(xy, r)?;
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -179,7 +179,7 @@ impl Callable for GfxCirclefCommand {
         let r = parse_radius(rvalue, rpos)?;
 
         self.console.borrow_mut().draw_circle_filled(xy, r)?;
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -216,7 +216,7 @@ impl Callable for GfxHeightFunction {
     async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         debug_assert_eq!(0, scope.nargs());
         let size = self.console.borrow().size_pixels()?;
-        Ok(Value::Integer(i32::from(size.height)))
+        scope.return_integer(i32::from(size.height))
     }
 }
 
@@ -280,7 +280,7 @@ impl Callable for GfxLineCommand {
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
 
         self.console.borrow_mut().draw_line(x1y1, x2y2)?;
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -333,7 +333,7 @@ impl Callable for GfxPixelCommand {
         let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
 
         self.console.borrow_mut().draw_pixel(xy)?;
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -398,7 +398,7 @@ impl Callable for GfxRectCommand {
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
 
         self.console.borrow_mut().draw_rect(x1y1, x2y2)?;
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -462,7 +462,7 @@ impl Callable for GfxRectfCommand {
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
 
         self.console.borrow_mut().draw_rect_filled(x1y1, x2y2)?;
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -519,7 +519,7 @@ impl Callable for GfxSyncCommand {
     async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         if scope.nargs() == 0 {
             self.console.borrow_mut().sync_now()?;
-            Ok(Value::Void)
+            Ok(())
         } else {
             debug_assert_eq!(1, scope.nargs());
             let enabled = scope.pop_boolean();
@@ -531,7 +531,7 @@ impl Callable for GfxSyncCommand {
                 console.hide_cursor()?;
             }
             console.set_sync(enabled)?;
-            Ok(Value::Void)
+            Ok(())
         }
     }
 }
@@ -569,7 +569,7 @@ impl Callable for GfxWidthFunction {
     async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         debug_assert_eq!(0, scope.nargs());
         let size = self.console.borrow().size_pixels()?;
-        Ok(Value::Integer(i32::from(size.width)))
+        scope.return_integer(i32::from(size.width))
     }
 }
 

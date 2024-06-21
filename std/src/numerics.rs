@@ -16,7 +16,7 @@
 //! Numerical functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value};
+use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{
     ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
@@ -55,7 +55,7 @@ impl Clearable for ClearableAngleMode {
 
 /// Gets the single argument to a trigonometric function, which is its angle.  Applies units
 /// conversion based on `angle_mode`.
-async fn get_angle(mut scope: Scope<'_>, angle_mode: &AngleMode) -> Result<f64, CallError> {
+async fn get_angle(scope: &mut Scope<'_>, angle_mode: &AngleMode) -> Result<f64, CallError> {
     debug_assert_eq!(1, scope.nargs());
     let angle = scope.pop_double();
 
@@ -142,8 +142,8 @@ impl Callable for AtnFunction {
         let n = scope.pop_double();
 
         match *self.angle_mode.borrow() {
-            AngleMode::Degrees => Ok(Value::Double(n.atan().to_degrees())),
-            AngleMode::Radians => Ok(Value::Double(n.atan())),
+            AngleMode::Degrees => scope.return_double(n.atan().to_degrees()),
+            AngleMode::Radians => scope.return_double(n.atan()),
         }
     }
 }
@@ -189,7 +189,7 @@ impl Callable for CintFunction {
 
         let i =
             double_to_integer(value).map_err(|e| CallError::ArgumentError(pos, e.to_string()))?;
-        Ok(Value::Integer(i))
+        scope.return_integer(i)
     }
 }
 
@@ -230,9 +230,9 @@ impl Callable for CosFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
-        let angle = get_angle(scope, &self.angle_mode.borrow()).await?;
-        Ok(Value::Double(angle.cos()))
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
+        scope.return_double(angle.cos())
     }
 }
 
@@ -269,7 +269,7 @@ impl Callable for DegCommand {
     async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         debug_assert_eq!(0, scope.nargs());
         *self.angle_mode.borrow_mut() = AngleMode::Degrees;
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -314,7 +314,7 @@ impl Callable for IntFunction {
 
         let i = double_to_integer(value.floor())
             .map_err(|e| CallError::ArgumentError(pos, e.to_string()))?;
-        Ok(Value::Integer(i))
+        scope.return_integer(i)
     }
 }
 
@@ -360,7 +360,7 @@ impl Callable for MaxFunction {
                 max = n;
             }
         }
-        Ok(Value::Double(max))
+        scope.return_double(max)
     }
 }
 
@@ -406,7 +406,7 @@ impl Callable for MinFunction {
                 min = n;
             }
         }
-        Ok(Value::Double(min))
+        scope.return_double(min)
     }
 }
 
@@ -437,7 +437,7 @@ impl Callable for PiFunction {
 
     async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         debug_assert_eq!(0, scope.nargs());
-        Ok(Value::Double(std::f64::consts::PI))
+        scope.return_double(std::f64::consts::PI)
     }
 }
 
@@ -474,7 +474,7 @@ impl Callable for RadCommand {
     async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         debug_assert_eq!(0, scope.nargs());
         *self.angle_mode.borrow_mut() = AngleMode::Radians;
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -525,7 +525,7 @@ impl Callable for RandomizeCommand {
             let n = scope.pop_integer();
             *self.prng.borrow_mut() = Prng::new_from_seed(n);
         }
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -574,13 +574,13 @@ impl Callable for RndFunction {
 
     async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         if scope.nargs() == 0 {
-            Ok(Value::Double(self.prng.borrow_mut().next()))
+            scope.return_double(self.prng.borrow_mut().next())
         } else {
             debug_assert_eq!(1, scope.nargs());
             let (n, npos) = scope.pop_integer_with_pos();
             match n.cmp(&0) {
-                Ordering::Equal => Ok(Value::Double(self.prng.borrow_mut().last())),
-                Ordering::Greater => Ok(Value::Double(self.prng.borrow_mut().next())),
+                Ordering::Equal => scope.return_double(self.prng.borrow_mut().last()),
+                Ordering::Greater => scope.return_double(self.prng.borrow_mut().next()),
                 Ordering::Less => {
                     Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
                 }
@@ -626,9 +626,9 @@ impl Callable for SinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
-        let angle = get_angle(scope, &self.angle_mode.borrow()).await?;
-        Ok(Value::Double(angle.sin()))
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
+        scope.return_double(angle.sin())
     }
 }
 
@@ -673,7 +673,7 @@ impl Callable for SqrFunction {
                 "Cannot take square root of a negative number".to_owned(),
             ));
         }
-        Ok(Value::Double(num.sqrt()))
+        scope.return_double(num.sqrt())
     }
 }
 
@@ -714,9 +714,9 @@ impl Callable for TanFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
-        let angle = get_angle(scope, &self.angle_mode.borrow()).await?;
-        Ok(Value::Double(angle.tan()))
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
+        scope.return_double(angle.tan())
     }
 }
 

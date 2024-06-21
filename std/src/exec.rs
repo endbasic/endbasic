@@ -66,7 +66,7 @@ impl Callable for ClearCommand {
     async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
         debug_assert_eq!(0, scope.nargs());
         machine.clear();
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -108,9 +108,9 @@ impl Callable for ErrmsgFunction {
         // a method, but this is difficult (from a refactoring perspective) because a function's
         // exec() does not have access to the Machine.
         match machine.get_symbols().get_auto("0errmsg") {
-            Some(Symbol::Variable(v @ Value::Text(_))) => Ok(v.clone()),
+            Some(Symbol::Variable(Value::Text(t))) => scope.return_string(t),
             Some(_) => panic!("Internal symbol must be of a specific type"),
-            None => Ok(Value::Text("".to_owned())),
+            None => scope.return_string("".to_owned()),
         }
     }
 }
@@ -122,7 +122,7 @@ pub type SleepFn = Box<dyn Fn(Duration, LineCol) -> BoxedLocal<CallResult>>;
 fn system_sleep(d: Duration, _pos: LineCol) -> BoxedLocal<CallResult> {
     async move {
         thread::sleep(d);
-        Ok(Value::Void)
+        Ok(())
     }
     .boxed_local()
 }

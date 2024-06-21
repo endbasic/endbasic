@@ -40,11 +40,13 @@ pub struct ArglessFunction {
 
 impl ArglessFunction {
     pub fn new(value: Value) -> Rc<Self> {
-        let mut builder = CallableMetadataBuilder::new("ARGLESS").with_syntax(&[(&[], None)]);
-        if let Some(etype) = value.as_exprtype() {
-            builder = builder.with_return_type(etype);
-        };
-        Rc::from(Self { metadata: builder.test_build(), value })
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("ARGLESS")
+                .with_syntax(&[(&[], None)])
+                .with_return_type(value.as_exprtype())
+                .test_build(),
+            value,
+        })
     }
 }
 
@@ -56,7 +58,7 @@ impl Callable for ArglessFunction {
 
     async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         assert_eq!(0, scope.nargs());
-        Ok(self.value.clone())
+        scope.return_any(self.value.clone())
     }
 }
 
@@ -84,7 +86,7 @@ impl Callable for ClearCommand {
     async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
         assert_eq!(0, scope.nargs());
         machine.clear();
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -117,7 +119,7 @@ impl Callable for CountFunction {
         let mut counter = self.counter.borrow_mut();
         *counter += 1;
         debug_assert!(*counter >= 0);
-        Ok(Value::Integer(*counter))
+        scope.return_integer(*counter)
     }
 }
 
@@ -237,7 +239,7 @@ impl Callable for GetHiddenFunction {
         assert_eq!(1, scope.nargs());
         let name = scope.pop_string();
         match machine.get_var(&VarRef::new(name, VarType::Text)) {
-            Ok(t) => Ok(t.clone()),
+            Ok(t) => scope.return_any(t.clone()),
             Err(_) => panic!("Invalid argument"),
         }
     }
@@ -270,7 +272,7 @@ impl Callable for GetDataCommand {
     async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
         assert_eq!(0, scope.nargs());
         *self.data.borrow_mut() = machine.get_data().to_vec();
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -320,7 +322,7 @@ impl Callable for InCommand {
         let value = Value::parse_as(vref.ref_type(), raw_value)
             .map_err(|e| CallError::EvalError(pos, e.message))?;
         machine.get_mut_symbols().assign(&SymbolKey::from(vref.name()), value);
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -396,7 +398,7 @@ impl Callable for OutCommand {
             }
         }
         self.data.borrow_mut().push(text);
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -453,7 +455,7 @@ impl Callable for OutfFunction {
             text.push_str(&arg.to_string());
         }
         self.data.borrow_mut().push(text);
-        Ok(Value::Integer(result))
+        scope.return_integer(result)
     }
 }
 
@@ -495,7 +497,7 @@ impl Callable for SumFunction {
             result = value::add_integer(result, Value::Integer(i))
                 .map_err(|e| CallError::EvalError(pos, e.message))?;
         }
-        Ok(result)
+        scope.return_any(result)
     }
 }
 
@@ -567,6 +569,6 @@ impl Callable for TypeCheckFunction {
 
     async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         assert_eq!(0, scope.nargs());
-        Ok(self.value.clone())
+        scope.return_any(self.value.clone())
     }
 }

@@ -20,6 +20,7 @@ use crate::bytecode::*;
 use crate::compiler;
 use crate::parser;
 use crate::reader::LineCol;
+use crate::syms::CallResult;
 use crate::syms::SymbolKey;
 use crate::syms::{CallError, Callable, CallableMetadata, Symbol, Symbols};
 use crate::value;
@@ -362,25 +363,36 @@ impl Stack {
     fn push_varref(&mut self, vref: VarRef, pos: LineCol) {
         self.values.push((Value::VarRef(vref), pos));
     }
+
+    /// Peeks into the top of the stack.
+    fn top(&self) -> Option<&(Value, LineCol)> {
+        self.values.last()
+    }
 }
 
 /// Provides controlled access to the parameters passed to a callable.
 pub struct Scope<'s> {
     stack: &'s mut Stack,
     nargs: usize,
+    fref_pos: LineCol,
 }
 
 impl<'s> Drop for Scope<'s> {
     fn drop(&mut self) {
-        self.stack.discard(self.nargs)
+        self.stack.discard(self.nargs);
     }
 }
 
 impl<'s> Scope<'s> {
     /// Creates a new scope that wraps `nargs` arguments at the top of `stack`.
-    fn new(stack: &'s mut Stack, nargs: usize) -> Self {
+    fn new(stack: &'s mut Stack, nargs: usize, fref_pos: LineCol) -> Self {
         debug_assert!(nargs <= stack.len());
-        Self { stack, nargs }
+        Self { stack, nargs, fref_pos }
+    }
+
+    fn drain(&mut self) {
+        self.stack.discard(self.nargs);
+        self.nargs = 0;
     }
 
     /// Returns the number of arguments that can still be consumed.
@@ -495,6 +507,41 @@ impl<'s> Scope<'s> {
         debug_assert!(self.nargs > 0, "Not enough arguments in scope");
         self.nargs -= 1;
         self.stack.pop_varref_with_pos()
+    }
+
+    /// Sets the return value of this function to `value`.
+    pub fn return_any(mut self, value: Value) -> CallResult {
+        self.drain();
+        self.stack.push((value, self.fref_pos));
+        Ok(())
+    }
+
+    /// Sets the return value of this function to the boolean `value`.
+    pub fn return_boolean(mut self, value: bool) -> CallResult {
+        self.drain();
+        self.stack.push((Value::Boolean(value), self.fref_pos));
+        Ok(())
+    }
+
+    /// Sets the return value of this function to the double `value`.
+    pub fn return_double(mut self, value: f64) -> CallResult {
+        self.drain();
+        self.stack.push((Value::Double(value), self.fref_pos));
+        Ok(())
+    }
+
+    /// Sets the return value of this function to the integer `value`.
+    pub fn return_integer(mut self, value: i32) -> CallResult {
+        self.drain();
+        self.stack.push((Value::Integer(value), self.fref_pos));
+        Ok(())
+    }
+
+    /// Sets the return value of this function to the string `value`.
+    pub fn return_string<S: Into<String>>(mut self, value: S) -> CallResult {
+        self.drain();
+        self.stack.push((Value::Text(value.into()), self.fref_pos));
+        Ok(())
     }
 }
 
@@ -708,14 +755,10 @@ impl Machine {
         let metadata = b.metadata();
         debug_assert!(!metadata.is_function());
 
-        let scope = Scope::new(&mut context.value_stack, nargs);
+        let scope = Scope::new(&mut context.value_stack, nargs, bref_pos);
 
         let b = b.clone();
-        let value = b
-            .exec(scope, self)
-            .await
-            .map_err(|e| Error::from_call_error(b.metadata(), e, bref_pos))?;
-        assert_eq!(value, Value::Void, "Commands do return values");
+        b.exec(scope, self).await.map_err(|e| Error::from_call_error(b.metadata(), e, bref_pos))?;
         Ok(())
     }
 
@@ -830,7 +873,6 @@ impl Machine {
     async fn do_function_call(
         &mut self,
         context: &mut Context,
-        name: &SymbolKey,
         return_type: VarType,
         fref_pos: LineCol,
         nargs: usize,
@@ -839,28 +881,21 @@ impl Machine {
         let metadata = f.metadata();
         debug_assert_eq!(return_type, metadata.return_type().unwrap().into());
 
-        let scope = Scope::new(&mut context.value_stack, nargs);
-        let result = f.exec(scope, self).await;
-        match result {
-            Ok(value) => {
-                // Given that we only support built-in functions at the moment, this
-                // could well be an assertion.  Doing so could turn into a time bomb
-                // when/if we add user-defined functions, so handle the problem as an
-                // error.
-                if return_type != value.as_vartype() {
-                    return Err(Error::EvalError(
-                        fref_pos,
-                        format!(
-                            "Value returned by {} is incompatible with its type definition",
-                            name,
-                        ),
-                    ));
+        let scope = Scope::new(&mut context.value_stack, nargs, fref_pos);
+        f.exec(scope, self).await.map_err(|e| Error::from_call_error(metadata, e, fref_pos))?;
+        if cfg!(debug_assertions) {
+            match context.value_stack.top() {
+                Some((value, _pos)) => {
+                    debug_assert_eq!(
+                        return_type,
+                        value.as_vartype(),
+                        "Value returned by function is incompatible with its type definition",
+                    )
                 }
-                context.value_stack.push((value, fref_pos));
-                Ok(())
+                None => unreachable!("Functions must return one value"),
             }
-            Err(e) => Err(Error::from_call_error(metadata, e, fref_pos)),
         }
+        Ok(())
     }
 
     /// Handles an array reference.
@@ -904,7 +939,7 @@ impl Machine {
                     ));
                 }
                 let f = f.clone();
-                self.do_function_call(context, name, return_type, fref_pos, nargs, f).await
+                self.do_function_call(context, return_type, fref_pos, nargs, f).await
             }
             _ => unreachable!("Function existence and type checking has been done at compile time"),
         }
@@ -917,30 +952,24 @@ impl Machine {
         fref: VarRef,
         fref_pos: LineCol,
         f: Rc<dyn Callable>,
-    ) -> Result<Value> {
+    ) -> Result<()> {
         let metadata = f.metadata();
-        let scope = Scope::new(&mut context.value_stack, 0);
-        let result = f.exec(scope, self).await;
-        match result {
-            Ok(value) => {
-                let fref_checker = VarRef::new(fref.name(), metadata.return_type().unwrap().into());
-                // Given that we only support built-in functions at the moment, this
-                // could well be an assertion.  Doing so could turn into a time bomb
-                // when/if we add user-defined functions, so handle the problem as an
-                // error.
-                if !fref_checker.accepts(value.as_vartype()) {
-                    return Err(Error::EvalError(
-                        fref_pos,
-                        format!(
-                            "Value returned by {} is incompatible with its type definition",
-                            fref.name(),
-                        ),
-                    ));
+        let scope = Scope::new(&mut context.value_stack, 0, fref_pos);
+        f.exec(scope, self).await.map_err(|e| Error::from_call_error(metadata, e, fref_pos))?;
+        if cfg!(debug_assertions) {
+            match context.value_stack.top() {
+                Some((value, _pos)) => {
+                    let fref_checker =
+                        VarRef::new(fref.name(), metadata.return_type().unwrap().into());
+                    debug_assert!(
+                        fref_checker.accepts(value.as_vartype()),
+                        "Value returned by function is incompatible with its type definition",
+                    )
                 }
-                Ok(value)
+                None => unreachable!("Functions must return one value"),
             }
-            Err(e) => Err(Error::from_call_error(metadata, e, fref_pos)),
         }
+        Ok(())
     }
 
     /// Loads the value of a symbol.
@@ -1329,9 +1358,7 @@ impl Machine {
                 if let Some(Symbol::Callable(f)) = sym {
                     if f.metadata().is_argless() {
                         let f = f.clone();
-                        let value =
-                            self.argless_function_call(context, vref.clone(), *pos, f).await?;
-                        context.value_stack.push((value, *pos));
+                        self.argless_function_call(context, vref.clone(), *pos, f).await?;
                         context.pc += 1;
                         return Ok(());
                     }
@@ -1554,7 +1581,7 @@ mod tests {
     #[test]
     fn test_scope_and_stack_empty() {
         let mut stack = Stack::from([]);
-        let scope = Scope::new(&mut stack, 0);
+        let scope = Scope::new(&mut stack, 0, LineCol { line: 50, col: 60 });
         drop(scope);
         assert_eq!(0, stack.len());
     }
@@ -1562,7 +1589,7 @@ mod tests {
     #[test]
     fn test_scope_no_args() {
         let mut stack = Stack::from([(Value::Integer(3), LineCol { line: 1, col: 2 })]);
-        let scope = Scope::new(&mut stack, 0);
+        let scope = Scope::new(&mut stack, 0, LineCol { line: 50, col: 60 });
         drop(scope);
         assert_eq!(1, stack.len());
     }
@@ -1575,7 +1602,7 @@ mod tests {
             (Value::Integer(2), LineCol { line: 1, col: 2 }),
             (Value::Integer(4), LineCol { line: 1, col: 2 }),
         ]);
-        let mut scope = Scope::new(&mut stack, 3);
+        let mut scope = Scope::new(&mut stack, 3, LineCol { line: 50, col: 60 });
         assert_eq!(3, scope.nargs());
         assert_eq!(4, scope.pop_integer());
         assert_eq!(2, scope.nargs());
@@ -1595,7 +1622,7 @@ mod tests {
             (Value::Text("foo".to_owned()), LineCol { line: 1, col: 2 }),
             (Value::VarRef(VarRef::new("foo", VarType::Auto)), LineCol { line: 1, col: 2 }),
         ]);
-        let mut scope = Scope::new(&mut stack, 5);
+        let mut scope = Scope::new(&mut stack, 5, LineCol { line: 50, col: 60 });
         assert_eq!(VarRef::new("foo", VarType::Auto), scope.pop_varref());
         assert_eq!("foo", scope.pop_string());
         assert_eq!(2, scope.pop_integer());
@@ -1612,7 +1639,7 @@ mod tests {
             (Value::Text("foo".to_owned()), LineCol { line: 7, col: 8 }),
             (Value::VarRef(VarRef::new("foo", VarType::Auto)), LineCol { line: 9, col: 10 }),
         ]);
-        let mut scope = Scope::new(&mut stack, 5);
+        let mut scope = Scope::new(&mut stack, 5, LineCol { line: 50, col: 60 });
         assert_eq!(
             (VarRef::new("foo", VarType::Auto), LineCol { line: 9, col: 10 }),
             scope.pop_varref_with_pos()
@@ -1621,6 +1648,51 @@ mod tests {
         assert_eq!((2, LineCol { line: 5, col: 6 }), scope.pop_integer_with_pos());
         assert_eq!((1.2, LineCol { line: 3, col: 4 }), scope.pop_double_with_pos());
         assert_eq!((false, LineCol { line: 1, col: 2 }), scope.pop_boolean_with_pos());
+    }
+
+    #[test]
+    fn test_scope_return_any() {
+        let mut stack = Stack::from([(Value::Boolean(false), LineCol { line: 1, col: 2 })]);
+        let scope = Scope::new(&mut stack, 0, LineCol { line: 50, col: 60 });
+        assert!(scope.return_any(Value::Boolean(true)).is_ok());
+        assert_eq!((true, LineCol { line: 50, col: 60 }), stack.pop_boolean_with_pos());
+        assert_eq!((false, LineCol { line: 1, col: 2 }), stack.pop_boolean_with_pos());
+    }
+
+    #[test]
+    fn test_scope_return_boolean() {
+        let mut stack = Stack::from([(Value::Boolean(false), LineCol { line: 1, col: 2 })]);
+        let scope = Scope::new(&mut stack, 0, LineCol { line: 50, col: 60 });
+        assert!(scope.return_boolean(true).is_ok());
+        assert_eq!((true, LineCol { line: 50, col: 60 }), stack.pop_boolean_with_pos());
+        assert_eq!((false, LineCol { line: 1, col: 2 }), stack.pop_boolean_with_pos());
+    }
+
+    #[test]
+    fn test_scope_return_double() {
+        let mut stack = Stack::from([(Value::Boolean(false), LineCol { line: 1, col: 2 })]);
+        let scope = Scope::new(&mut stack, 0, LineCol { line: 50, col: 60 });
+        assert!(scope.return_double(4.5).is_ok());
+        assert_eq!((4.5, LineCol { line: 50, col: 60 }), stack.pop_double_with_pos());
+        assert_eq!((false, LineCol { line: 1, col: 2 }), stack.pop_boolean_with_pos());
+    }
+
+    #[test]
+    fn test_scope_return_integer() {
+        let mut stack = Stack::from([(Value::Boolean(false), LineCol { line: 1, col: 2 })]);
+        let scope = Scope::new(&mut stack, 0, LineCol { line: 50, col: 60 });
+        assert!(scope.return_integer(7).is_ok());
+        assert_eq!((7, LineCol { line: 50, col: 60 }), stack.pop_integer_with_pos());
+        assert_eq!((false, LineCol { line: 1, col: 2 }), stack.pop_boolean_with_pos());
+    }
+
+    #[test]
+    fn test_scope_return_string() {
+        let mut stack = Stack::from([(Value::Boolean(false), LineCol { line: 1, col: 2 })]);
+        let scope = Scope::new(&mut stack, 0, LineCol { line: 50, col: 60 });
+        assert!(scope.return_string("foo").is_ok());
+        assert_eq!(("foo".to_owned(), LineCol { line: 50, col: 60 }), stack.pop_string_with_pos());
+        assert_eq!((false, LineCol { line: 1, col: 2 }), stack.pop_boolean_with_pos());
     }
 
     #[test]
@@ -2550,10 +2622,6 @@ mod tests {
         do_simple_error_test("OUT OUT()", "1:5: OUT is not an array nor a function");
         do_simple_error_test("OUT OUT(3)", "1:5: OUT is not an array nor a function");
         do_simple_error_test("OUT SUM?()", "1:5: Incompatible type annotation in SUM? reference");
-        do_simple_error_test(
-            "OUT TYPE_CHECK",
-            "1:5: Value returned by TYPE_CHECK is incompatible with its type definition",
-        );
         do_simple_error_test(
             "OUT TYPE_CHECK()",
             "1:5: In call to TYPE_CHECK: expected no arguments nor parenthesis",

@@ -121,7 +121,7 @@ To create an account, use the SIGNUP command.",
         let mut storage = self.storage.borrow_mut();
         storage.mount("CLOUD", &format!("cloud://{}", username))?;
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -227,7 +227,7 @@ impl Callable for LogoutCommand {
             console.print("")?;
         }
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -344,7 +344,7 @@ impl ShareCommand {
         }
         console.print("")?;
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -399,7 +399,7 @@ auto-run your public file by visiting:",
             console.print("")?;
         }
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
@@ -550,7 +550,7 @@ have no adverse impact in the service you receive.",
         if !proceed {
             // TODO(jmmv): This should return an error of some form once we have error handling in
             // the language.
-            return Ok(Value::Void);
+            return Ok(());
         }
 
         let request = SignupRequest { username, password, email, promotional_email };
@@ -568,7 +568,7 @@ in it to activate your account.  Make sure to check your spam folder.",
         )?;
         console.print("")?;
 
-        Ok(Value::Void)
+        Ok(())
     }
 }
 
