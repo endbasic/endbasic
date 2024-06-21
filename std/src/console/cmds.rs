@@ -19,7 +19,7 @@ use crate::console::readline::read_line;
 use crate::console::{CharsXY, ClearType, Console, ConsoleClearable, Key};
 use crate::strings::{format_boolean, format_double, format_integer};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value, VarType};
+use endbasic_core::ast::{ArgSep, ExprType, Value};
 use endbasic_core::compiler::{
     ArgSepSyntax, OptionalValueSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax,
     RequiredValueSyntax, SingularArgSyntax,
@@ -62,7 +62,7 @@ impl ClsCommand {
     /// Creates a new `CLS` command that clears the `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("CLS", VarType::Void)
+            metadata: CallableMetadataBuilder::new("CLS")
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description("Clears the screen.")
@@ -98,7 +98,7 @@ impl ColorCommand {
     /// Creates a new `COLOR` command that changes the color of the `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("COLOR", VarType::Void)
+            metadata: CallableMetadataBuilder::new("COLOR")
                 .with_syntax(&[
                     (&[], None),
                     (
@@ -191,7 +191,8 @@ impl InKeyFunction {
     /// Creates a new `INKEY` function that waits for a key press.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("INKEY", VarType::Text)
+            metadata: CallableMetadataBuilder::new("INKEY")
+                .with_return_type(ExprType::Text)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -259,7 +260,7 @@ impl InputCommand {
     /// Creates a new `INPUT` command that uses `console` to gather user input.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("INPUT", VarType::Void)
+            metadata: CallableMetadataBuilder::new("INPUT")
                 .with_syntax(&[
                     (
                         &[SingularArgSyntax::RequiredRef(
@@ -382,7 +383,7 @@ impl LocateCommand {
     /// Creates a new `LOCATE` command that moves the cursor of the `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("LOCATE", VarType::Void)
+            metadata: CallableMetadataBuilder::new("LOCATE")
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
@@ -453,7 +454,7 @@ impl PrintCommand {
     /// Creates a new `PRINT` command that writes to `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("PRINT", VarType::Void)
+            metadata: CallableMetadataBuilder::new("PRINT")
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
@@ -561,7 +562,8 @@ impl ScrColsFunction {
     /// Creates a new instance of the function.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("SCRCOLS", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("SCRCOLS")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -597,7 +599,8 @@ impl ScrRowsFunction {
     /// Creates a new instance of the function.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("SCRROWS", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("SCRROWS")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(

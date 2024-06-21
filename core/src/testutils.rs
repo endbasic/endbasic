@@ -40,12 +40,11 @@ pub struct ArglessFunction {
 
 impl ArglessFunction {
     pub fn new(value: Value) -> Rc<Self> {
-        Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("ARGLESS", value.as_vartype())
-                .with_syntax(&[(&[], None)])
-                .test_build(),
-            value,
-        })
+        let mut builder = CallableMetadataBuilder::new("ARGLESS").with_syntax(&[(&[], None)]);
+        if let Some(etype) = value.as_exprtype() {
+            builder = builder.with_return_type(etype);
+        };
+        Rc::from(Self { metadata: builder.test_build(), value })
     }
 }
 
@@ -69,7 +68,7 @@ pub(crate) struct ClearCommand {
 impl ClearCommand {
     pub(crate) fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("CLEAR", VarType::Void)
+            metadata: CallableMetadataBuilder::new("CLEAR")
                 .with_syntax(&[(&[], None)])
                 .test_build(),
         })
@@ -98,7 +97,8 @@ pub(crate) struct CountFunction {
 impl CountFunction {
     pub(crate) fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("COUNT", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("COUNT")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[(&[], None)])
                 .test_build(),
             counter: Rc::from(RefCell::from(0)),
@@ -129,7 +129,8 @@ pub struct RaisefFunction {
 impl RaisefFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("RAISEF", VarType::Boolean)
+            metadata: CallableMetadataBuilder::new("RAISEF")
+                .with_return_type(ExprType::Boolean)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "arg", vtype: ExprType::Text },
@@ -170,7 +171,7 @@ pub struct RaiseCommand {
 impl RaiseCommand {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("RAISE", VarType::Void)
+            metadata: CallableMetadataBuilder::new("RAISE")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "arg", vtype: ExprType::Text },
@@ -212,7 +213,8 @@ impl GetHiddenFunction {
     /// Creates a new command that sets aside all data values.
     pub(crate) fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GETHIDDEN", VarType::Text)
+            metadata: CallableMetadataBuilder::new("GETHIDDEN")
+                .with_return_type(ExprType::Text)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "varname", vtype: ExprType::Text },
@@ -251,7 +253,7 @@ impl GetDataCommand {
     /// Creates a new command that sets aside all data values.
     pub(crate) fn new(data: Rc<RefCell<Vec<Option<Value>>>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GETDATA", VarType::Void)
+            metadata: CallableMetadataBuilder::new("GETDATA")
                 .with_syntax(&[(&[], None)])
                 .test_build(),
             data,
@@ -285,7 +287,7 @@ impl InCommand {
     /// Creates a new command with the golden `data`.
     pub fn new(data: Box<RefCell<dyn Iterator<Item = &'static &'static str>>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("IN", VarType::Void)
+            metadata: CallableMetadataBuilder::new("IN")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredRef(
                         RequiredRefSyntax {
@@ -335,7 +337,7 @@ impl OutCommand {
     /// Creates a new command that captures all calls into `data`.
     pub fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("OUT", VarType::Void)
+            metadata: CallableMetadataBuilder::new("OUT")
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
@@ -409,7 +411,8 @@ impl OutfFunction {
     /// Creates a new function that captures all calls into `data`.
     pub fn new(data: Rc<RefCell<Vec<String>>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("OUTF", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("OUTF")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
@@ -462,7 +465,8 @@ pub struct SumFunction {
 impl SumFunction {
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("SUM", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("SUM")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
@@ -546,7 +550,8 @@ pub struct TypeCheckFunction {
 impl TypeCheckFunction {
     pub fn new(value: Value) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("TYPE_CHECK", VarType::Boolean)
+            metadata: CallableMetadataBuilder::new("TYPE_CHECK")
+                .with_return_type(ExprType::Boolean)
                 .with_syntax(&[(&[], None)])
                 .test_build(),
             value,

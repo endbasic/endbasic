@@ -63,7 +63,7 @@ impl LoginCommand {
         storage: Rc<RefCell<Storage>>,
     ) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("LOGIN", VarType::Void)
+            metadata: CallableMetadataBuilder::new("LOGIN")
                 .with_syntax(&[
                     (
                         &[SingularArgSyntax::RequiredValue(
@@ -168,7 +168,7 @@ impl LogoutCommand {
         storage: Rc<RefCell<Storage>>,
     ) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("LOGOUT", VarType::Void)
+            metadata: CallableMetadataBuilder::new("LOGOUT")
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -254,7 +254,7 @@ impl ShareCommand {
         exec_base_url: S,
     ) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("SHARE", VarType::Void)
+            metadata: CallableMetadataBuilder::new("SHARE")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "filename", vtype: ExprType::Text },
@@ -437,7 +437,7 @@ impl SignupCommand {
     /// Creates a new `SIGNUP` command.
     pub fn new(service: Rc<RefCell<dyn Service>>, console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("SIGNUP", VarType::Void)
+            metadata: CallableMetadataBuilder::new("SIGNUP")
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(

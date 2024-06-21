@@ -17,7 +17,7 @@
 
 use crate::console::{Console, PixelsXY};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value, VarType};
+use endbasic_core::ast::{ArgSep, ExprType, Value};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
@@ -74,7 +74,7 @@ impl GfxCircleCommand {
     /// Creates a new `GFX_CIRCLE` command that draws an empty circle on `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GFX_CIRCLE", VarType::Void)
+            metadata: CallableMetadataBuilder::new("GFX_CIRCLE")
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
@@ -134,7 +134,7 @@ impl GfxCirclefCommand {
     /// Creates a new `GFX_CIRCLEF` command that draws a filled circle on `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GFX_CIRCLEF", VarType::Void)
+            metadata: CallableMetadataBuilder::new("GFX_CIRCLEF")
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
@@ -193,7 +193,8 @@ impl GfxHeightFunction {
     /// Creates a new instance of the function.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GFX_HEIGHT", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("GFX_HEIGHT")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -229,7 +230,7 @@ impl GfxLineCommand {
     /// Creates a new `GFX_LINE` command that draws a line on `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GFX_LINE", VarType::Void)
+            metadata: CallableMetadataBuilder::new("GFX_LINE")
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
@@ -293,7 +294,7 @@ impl GfxPixelCommand {
     /// Creates a new `GFX_PIXEL` command that draws a single pixel on `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GFX_PIXEL", VarType::Void)
+            metadata: CallableMetadataBuilder::new("GFX_PIXEL")
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
@@ -346,7 +347,7 @@ impl GfxRectCommand {
     /// Creates a new `GFX_RECT` command that draws an empty rectangle on `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GFX_RECT", VarType::Void)
+            metadata: CallableMetadataBuilder::new("GFX_RECT")
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
@@ -411,7 +412,7 @@ impl GfxRectfCommand {
     /// Creates a new `GFX_RECTF` command that draws a filled rectangle on `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GFX_RECTF", VarType::Void)
+            metadata: CallableMetadataBuilder::new("GFX_RECTF")
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
@@ -475,7 +476,7 @@ impl GfxSyncCommand {
     /// Creates a new `GFX_SYNC` command that controls video syncing on `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GFX_SYNC", VarType::Void)
+            metadata: CallableMetadataBuilder::new("GFX_SYNC")
                 .with_syntax(&[
                     (&[], None),
                     (
@@ -545,7 +546,8 @@ impl GfxWidthFunction {
     /// Creates a new instance of the function.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GFX_WIDTH", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("GFX_WIDTH")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(

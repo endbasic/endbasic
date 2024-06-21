@@ -16,7 +16,7 @@
 //! String functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value, VarType};
+use endbasic_core::ast::{ArgSep, ExprType, Value};
 use endbasic_core::compiler::{
     AnyValueSyntax, ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
@@ -67,7 +67,8 @@ impl AscFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("ASC", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("ASC")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "char", vtype: ExprType::Text },
@@ -133,7 +134,8 @@ impl ChrFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("CHR", VarType::Text)
+            metadata: CallableMetadataBuilder::new("CHR")
+                .with_return_type(ExprType::Text)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "code", vtype: ExprType::Integer },
@@ -185,7 +187,8 @@ impl LeftFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("LEFT", VarType::Text)
+            metadata: CallableMetadataBuilder::new("LEFT")
+                .with_return_type(ExprType::Text)
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
@@ -239,7 +242,8 @@ impl LenFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("LEN", VarType::Integer)
+            metadata: CallableMetadataBuilder::new("LEN")
+                .with_return_type(ExprType::Integer)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
@@ -281,7 +285,8 @@ impl LtrimFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("LTRIM", VarType::Text)
+            metadata: CallableMetadataBuilder::new("LTRIM")
+                .with_return_type(ExprType::Text)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
@@ -319,7 +324,8 @@ impl MidFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("MID", VarType::Text)
+            metadata: CallableMetadataBuilder::new("MID")
+                .with_return_type(ExprType::Text)
                 .with_syntax(&[
                     (
                         &[
@@ -407,7 +413,8 @@ impl RightFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("RIGHT", VarType::Text)
+            metadata: CallableMetadataBuilder::new("RIGHT")
+                .with_return_type(ExprType::Text)
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
@@ -461,7 +468,8 @@ impl RtrimFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("RTRIM", VarType::Text)
+            metadata: CallableMetadataBuilder::new("RTRIM")
+                .with_return_type(ExprType::Text)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
@@ -499,7 +507,8 @@ impl StrFunction {
     /// Creates a new instance of the function.
     pub fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("STR", VarType::Text)
+            metadata: CallableMetadataBuilder::new("STR")
+                .with_return_type(ExprType::Text)
                 .with_syntax(&[(
                     &[SingularArgSyntax::AnyValue(
                         AnyValueSyntax { name: "expr", allow_missing: false },

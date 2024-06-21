@@ -392,7 +392,7 @@ fn compile_required_ref(
                 }
 
                 Some(SymbolPrototype::Callable(md)) => {
-                    if !span.vref.accepts(md.return_type()) {
+                    if !span.vref.accepts_callable(md.return_type()) {
                         return Err(CallError::ArgumentError(
                             span.pos,
                             format!("Incompatible type annotation in {} reference", span.vref),

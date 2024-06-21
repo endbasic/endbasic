@@ -163,7 +163,7 @@ impl KillCommand {
     /// Creates a new `KILL` command that deletes a file from `storage`.
     pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("KILL", VarType::Void)
+            metadata: CallableMetadataBuilder::new("KILL")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "filename", vtype: ExprType::Text },
@@ -212,7 +212,7 @@ impl EditCommand {
     /// Creates a new `EDIT` command that edits the stored `program` in the `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("EDIT", VarType::Void)
+            metadata: CallableMetadataBuilder::new("EDIT")
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description("Interactively edits the stored program.")
@@ -250,7 +250,7 @@ impl ListCommand {
     /// Creates a new `LIST` command that dumps the `program` to the `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("LIST", VarType::Void)
+            metadata: CallableMetadataBuilder::new("LIST")
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description("Prints the currently-loaded program.")
@@ -295,7 +295,7 @@ impl LoadCommand {
         program: Rc<RefCell<dyn Program>>,
     ) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("LOAD", VarType::Void)
+            metadata: CallableMetadataBuilder::new("LOAD")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax { name: "filename", vtype: ExprType::Text },
@@ -357,7 +357,7 @@ impl NewCommand {
     /// to communicate unsaved changes.
     pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("NEW", VarType::Void)
+            metadata: CallableMetadataBuilder::new("NEW")
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -410,7 +410,7 @@ impl RunCommand {
     /// Reports any non-successful return codes from the program to the console.
     pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("RUN", VarType::Void)
+            metadata: CallableMetadataBuilder::new("RUN")
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -471,7 +471,7 @@ impl SaveCommand {
         program: Rc<RefCell<dyn Program>>,
     ) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("SAVE", VarType::Void)
+            metadata: CallableMetadataBuilder::new("SAVE")
                 .with_syntax(&[
                     (&[], None),
                     (

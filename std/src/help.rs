@@ -18,7 +18,7 @@
 use crate::console::{refill_and_print, AnsiColor, Console};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
-use endbasic_core::ast::{ExprType, Value, VarType};
+use endbasic_core::ast::{ExprType, Value};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
@@ -89,39 +89,38 @@ impl Topic for CallableTopic {
         console.print("")?;
         let previous = console.color();
         console.set_color(Some(TITLE_COLOR), previous.1)?;
-        if self.metadata.return_type() == VarType::Void {
-            if self.metadata.syntax().is_empty() {
-                refill_and_print(console, [self.metadata.name()], "    ")?;
-            } else {
-                refill_and_print(
-                    console,
-                    [&format!("{} {}", self.metadata.name(), self.metadata.syntax())],
-                    "    ",
-                )?;
+        match self.metadata.return_type() {
+            None => {
+                if self.metadata.syntax().is_empty() {
+                    refill_and_print(console, [self.metadata.name()], "    ")?;
+                } else {
+                    refill_and_print(
+                        console,
+                        [&format!("{} {}", self.metadata.name(), self.metadata.syntax())],
+                        "    ",
+                    )?;
+                }
             }
-        } else {
-            if self.metadata.is_argless() {
-                debug_assert!(self.metadata.syntax().is_empty());
-                refill_and_print(
-                    console,
-                    [&format!(
-                        "{}{}",
-                        self.metadata.name(),
-                        self.metadata.return_type().annotation(),
-                    )],
-                    "    ",
-                )?;
-            } else {
-                refill_and_print(
-                    console,
-                    [&format!(
-                        "{}{}({})",
-                        self.metadata.name(),
-                        self.metadata.return_type().annotation(),
-                        self.metadata.syntax(),
-                    )],
-                    "    ",
-                )?;
+            Some(return_type) => {
+                if self.metadata.is_argless() {
+                    debug_assert!(self.metadata.syntax().is_empty());
+                    refill_and_print(
+                        console,
+                        [&format!("{}{}", self.metadata.name(), return_type.annotation(),)],
+                        "    ",
+                    )?;
+                } else {
+                    refill_and_print(
+                        console,
+                        [&format!(
+                            "{}{}({})",
+                            self.metadata.name(),
+                            return_type.annotation(),
+                            self.metadata.syntax(),
+                        )],
+                        "    ",
+                    )?;
+                }
             }
         }
         console.set_color(previous.0, previous.1)?;
@@ -145,7 +144,10 @@ fn callables_to_index(metadatas: &[CallableMetadata]) -> BTreeMap<String, &'stat
             metadata.category(),
             "All commands registered in this category must be equivalent"
         );
-        let name = format!("{}{}", metadata.name(), metadata.return_type().annotation());
+        let name = match metadata.return_type() {
+            None => metadata.name().to_owned(),
+            Some(return_type) => format!("{}{}", metadata.name(), return_type.annotation()),
+        };
         let blurb = metadata.description().next().unwrap();
         let previous = index.insert(name, blurb);
         assert!(previous.is_none(), "Names should have been unique");
@@ -342,13 +344,12 @@ impl Topics {
                     .or_insert_with(Vec::default)
                     .push(metadata.clone());
 
-                insert(
-                    &mut topics,
-                    Box::from(CallableTopic {
-                        name: format!("{}{}", name, metadata.return_type().annotation()),
-                        metadata: metadata.clone(),
-                    }),
-                );
+                let name = match metadata.return_type() {
+                    None => metadata.name().to_owned(),
+                    Some(return_type) => format!("{}{}", name, return_type.annotation()),
+                };
+
+                insert(&mut topics, Box::from(CallableTopic { name, metadata: metadata.clone() }));
             }
         }
         for (name, metadatas) in categories.into_iter() {
@@ -410,7 +411,7 @@ impl HelpCommand {
     /// Creates a new command that writes help messages to `output`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("HELP", VarType::Void)
+            metadata: CallableMetadataBuilder::new("HELP")
                 .with_syntax(&[
                     (&[], None),
                     (
@@ -538,7 +539,7 @@ pub(crate) mod testutils {
         /// Creates a new instance of the command with a given `name`.
         pub fn new_with_name(name: &'static str) -> Rc<Self> {
             Rc::from(Self {
-                metadata: CallableMetadataBuilder::new(name, VarType::Void)
+                metadata: CallableMetadataBuilder::new(name)
                     .with_syntax(&[(
                         &[SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "sample", vtype: ExprType::Text },
@@ -585,7 +586,8 @@ Second paragraph of the extended description.",
         /// Creates a new instance of the function with a given `name`.
         pub(crate) fn new_with_name(name: &'static str) -> Rc<Self> {
             Rc::from(Self {
-                metadata: CallableMetadataBuilder::new(name, VarType::Text)
+                metadata: CallableMetadataBuilder::new(name)
+                    .with_return_type(ExprType::Text)
                     .with_syntax(&[(
                         &[SingularArgSyntax::RequiredValue(
                             RequiredValueSyntax { name: "sample", vtype: ExprType::Text },
