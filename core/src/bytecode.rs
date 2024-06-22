@@ -36,7 +36,7 @@ pub struct DimArrayISpan {
     pub dimensions: usize,
 
     /// Type of the array to be defined.
-    pub subtype: VarType,
+    pub subtype: ExprType,
 
     /// Position of the subtype.
     pub subtype_pos: LineCol,
@@ -243,7 +243,7 @@ pub enum Instruction {
     FunctionCall(SymbolKey, VarType, LineCol, usize),
 
     /// Represents a variable definition.
-    Dim(SymbolKey, VarType),
+    Dim(SymbolKey, ExprType),
 
     /// Represents an array definition.
     DimArray(DimArrayISpan),
