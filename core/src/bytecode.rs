@@ -15,7 +15,7 @@
 
 //! Low-level representation of an EndBASIC program for execution.
 
-use crate::ast::*;
+use crate::ast::{ExprType, Value, VarRef};
 use crate::reader::LineCol;
 use crate::syms::SymbolKey;
 
@@ -240,7 +240,7 @@ pub enum Instruction {
     Call(JumpISpan),
 
     /// Represents a call to the given function with the given number of arguments.
-    FunctionCall(SymbolKey, VarType, LineCol, usize),
+    FunctionCall(SymbolKey, ExprType, LineCol, usize),
 
     /// Represents a variable definition.
     Dim(SymbolKey, ExprType),
