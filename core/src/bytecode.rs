@@ -15,7 +15,7 @@
 
 //! Low-level representation of an EndBASIC program for execution.
 
-use crate::ast::{ExprType, Value, VarRef};
+use crate::ast::{ExprType, Value};
 use crate::reader::LineCol;
 use crate::syms::SymbolKey;
 
@@ -283,7 +283,7 @@ pub enum Instruction {
     LoadString(SymbolKey, LineCol),
 
     /// Represents a load of a variable's reference into the stack.
-    LoadRef(VarRef, LineCol),
+    LoadRef(SymbolKey, ExprType, LineCol),
 
     /// Represents an instruction that does nothing.
     Nop,
@@ -366,7 +366,7 @@ impl Instruction {
             | Instruction::LoadDouble(_, _)
             | Instruction::LoadInteger(_, _)
             | Instruction::LoadString(_, _)
-            | Instruction::LoadRef(_, _)
+            | Instruction::LoadRef(_, _, _)
             | Instruction::PushBoolean(_, _)
             | Instruction::PushDouble(_, _)
             | Instruction::PushInteger(_, _)

@@ -23,7 +23,7 @@ use crate::compiler::{
 use crate::exec::{Machine, Scope, ValueTag};
 use crate::syms::{
     Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
-    SymbolKey, Symbols,
+    Symbols,
 };
 use crate::value;
 use async_trait::async_trait;
@@ -315,13 +315,13 @@ impl Callable for InCommand {
 
     async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
         debug_assert_eq!(1, scope.nargs());
-        let (vref, pos) = scope.pop_varref_with_pos();
+        let (vname, vtype, pos) = scope.pop_varref_with_pos();
 
         let mut data = self.data.borrow_mut();
         let raw_value = data.next().unwrap().to_owned();
-        let value = Value::parse_as(vref.ref_type(), raw_value)
+        let value = Value::parse_as(vtype.into(), raw_value)
             .map_err(|e| CallError::EvalError(pos, e.message))?;
-        machine.get_mut_symbols().assign(&SymbolKey::from(vref.name()), value);
+        machine.get_mut_symbols().assign(&vname, value);
         Ok(())
     }
 }

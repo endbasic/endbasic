@@ -16,7 +16,7 @@
 //! Commands to interact with the data provided by `DATA` statements.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, Value, VarType};
+use endbasic_core::ast::{ArgSep, ExprType, Value, VarRef};
 use endbasic_core::compiler::{ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax};
 use endbasic_core::exec::{Clearable, Machine, Scope};
 use endbasic_core::syms::{
@@ -93,39 +93,28 @@ impl Callable for ReadCommand {
         }
 
         let mut index = self.index.borrow_mut();
-        for (vref, pos) in vrefs {
+        for (vname, vtype, pos) in vrefs {
             let datum = {
                 let data = machine.get_data();
                 debug_assert!(*index <= data.len());
                 if *index == data.len() {
                     return Err(CallError::InternalError(
                         pos,
-                        format!("Out of data reading into {}", vref),
+                        format!("Out of data reading into {}", vname),
                     ));
                 }
 
-                match (&vref.ref_type(), &data[*index]) {
+                match (vtype, &data[*index]) {
                     (_, Some(datum)) => datum.clone(),
-                    (VarType::Auto, None) => {
-                        match machine.get_symbols().get_var(&vref).map(Value::as_vartype) {
-                            Ok(VarType::Auto) => panic!(),
-                            Ok(VarType::Boolean) => Value::Boolean(false),
-                            Ok(VarType::Double) => Value::Double(0.0),
-                            Ok(VarType::Integer) => Value::Integer(0),
-                            Ok(VarType::Text) => Value::Text("".to_owned()),
-                            Ok(VarType::Void) => panic!(),
-                            Err(_) => Value::Integer(0),
-                        }
-                    }
-                    (VarType::Boolean, None) => Value::Boolean(false),
-                    (VarType::Double, None) => Value::Double(0.0),
-                    (VarType::Integer, None) => Value::Integer(0),
-                    (VarType::Text, None) => Value::Text("".to_owned()),
-                    (VarType::Void, None) => panic!(),
+                    (ExprType::Boolean, None) => Value::Boolean(false),
+                    (ExprType::Double, None) => Value::Double(0.0),
+                    (ExprType::Integer, None) => Value::Integer(0),
+                    (ExprType::Text, None) => Value::Text("".to_owned()),
                 }
             };
             *index += 1;
 
+            let vref = VarRef::new(vname.to_string(), vtype.into());
             machine
                 .get_mut_symbols()
                 .set_var(&vref, datum)
@@ -218,17 +207,6 @@ mod tests {
     }
 
     #[test]
-    fn test_read_types() {
-        Tester::default()
-            .run(r#"DATA TRUE, 1.2, -5, "foo bar": READ b, d, i, s"#)
-            .expect_var("b", Value::Boolean(true))
-            .expect_var("d", Value::Double(1.2))
-            .expect_var("i", Value::Integer(-5))
-            .expect_var("s", Value::Text("foo bar".to_owned()))
-            .check();
-    }
-
-    #[test]
     fn test_read_defaults_with_annotations() {
         Tester::default()
             .run(r#"DATA , , , ,: READ a, b?, d#, i%, s$"#)
@@ -275,7 +253,7 @@ mod tests {
     fn test_read_out_of_data() {
         Tester::default()
             .run(r#"DATA 5: READ i: READ j"#)
-            .expect_err("1:17: In call to READ: 1:22: Out of data reading into j")
+            .expect_err("1:17: In call to READ: 1:22: Out of data reading into J")
             .expect_var("I", Value::Integer(5))
             .check();
     }
@@ -299,7 +277,7 @@ mod tests {
         let mut t = Tester::default();
         t.run(r#"DATA 1: READ i, j"#)
             .expect_var("i", Value::Integer(1))
-            .expect_err("1:9: In call to READ: 1:17: Out of data reading into j")
+            .expect_err("1:9: In call to READ: 1:17: Out of data reading into J")
             .check();
 
         // This represents a second invocation in the REPL, which in principle should work to avoid
@@ -310,7 +288,7 @@ mod tests {
         // extra hooks into `machine.exec()` just for this single use case seems overkill.
         t.run(r#"DATA 1, 2: READ i, j"#)
             .expect_var("i", Value::Integer(2))
-            .expect_err("1:12: In call to READ: 1:20: Out of data reading into j")
+            .expect_err("1:12: In call to READ: 1:20: Out of data reading into J")
             .check();
 
         // Running `CLEAR` explicitly should resolve the issue described above and give us the
@@ -335,6 +313,10 @@ mod tests {
             "READ i; j",
         );
 
+        check_stmt_err(
+            "1:11: In call to READ: 1:16: Cannot assign value of type STRING to variable of type INTEGER",
+            "DATA \"x\": READ i",
+        );
         check_stmt_err(
             "1:13: In call to READ: 1:18: Cannot assign value of type BOOLEAN to variable of type INTEGER",
             "DATA FALSE: READ s%");
