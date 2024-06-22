@@ -400,7 +400,7 @@ fn compile_expr_symbol(
             (Instruction::FunctionCall(key, etype, span.pos, 0), etype)
         }
     };
-    if !span.vref.accepts(vtype.into()) {
+    if !span.vref.accepts(vtype) {
         return Err(Error::new(
             span.pos,
             format!("Incompatible type annotation in {} reference", span.vref),
@@ -419,9 +419,9 @@ fn compile_expr_symbol_ref(
     let key = SymbolKey::from(span.vref.name());
     match symtable.get(&key) {
         None => {
-            let vtype = ExprType::from_vartype(span.vref.ref_type(), Some(ExprType::Integer));
+            let vtype = ExprType::from_vartype(span.vref.ref_type(), ExprType::Integer);
 
-            if !span.vref.accepts(vtype.into()) {
+            if !span.vref.accepts(vtype) {
                 return Err(Error::new(
                     span.pos,
                     format!("Incompatible type annotation in {} reference", span.vref),
@@ -436,7 +436,7 @@ fn compile_expr_symbol_ref(
         Some(SymbolPrototype::Array(vtype, _)) | Some(SymbolPrototype::Variable(vtype)) => {
             let vtype = *vtype;
 
-            if !span.vref.accepts(vtype.into()) {
+            if !span.vref.accepts(vtype) {
                 return Err(Error::new(
                     span.pos,
                     format!("Incompatible type annotation in {} reference", span.vref),
@@ -476,7 +476,7 @@ fn compile_array_ref(
     let nargs = exprs.len();
     compile_array_indices(instrs, symtable, dimensions, exprs, span.vref_pos)?;
 
-    if !span.vref.accepts(vtype.into()) {
+    if !span.vref.accepts(vtype) {
         return Err(Error::new(
             span.vref_pos,
             format!("Incompatible type annotation in {} reference", span.vref),

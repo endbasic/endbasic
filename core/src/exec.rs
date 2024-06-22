@@ -960,7 +960,7 @@ impl Machine {
                 Some((value, _pos)) => {
                     let fref_checker = VarRef::new(fname.to_string(), ftype.into());
                     debug_assert!(
-                        fref_checker.accepts(value.as_vartype()),
+                        fref_checker.accepts(value.as_exprtype()),
                         "Value returned by function is incompatible with its type definition",
                     )
                 }

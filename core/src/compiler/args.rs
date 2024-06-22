@@ -335,10 +335,9 @@ fn compile_required_ref(
                     }
                     debug_assert!(!require_array);
 
-                    let vtype =
-                        ExprType::from_vartype(span.vref.ref_type(), Some(ExprType::Integer));
+                    let vtype = ExprType::from_vartype(span.vref.ref_type(), ExprType::Integer);
 
-                    if !span.vref.accepts(vtype.into()) {
+                    if !span.vref.accepts(vtype) {
                         return Err(CallError::ArgumentError(
                             span.pos,
                             format!("Incompatible type annotation in {} reference", span.vref),
@@ -352,7 +351,7 @@ fn compile_required_ref(
                 Some(SymbolPrototype::Array(vtype, _)) => {
                     let vtype = *vtype;
 
-                    if !span.vref.accepts(vtype.into()) {
+                    if !span.vref.accepts(vtype) {
                         return Err(CallError::ArgumentError(
                             span.pos,
                             format!("Incompatible type annotation in {} reference", span.vref),
@@ -373,7 +372,7 @@ fn compile_required_ref(
                 Some(SymbolPrototype::Variable(vtype)) => {
                     let vtype = *vtype;
 
-                    if !span.vref.accepts(vtype.into()) {
+                    if !span.vref.accepts(vtype) {
                         return Err(CallError::ArgumentError(
                             span.pos,
                             format!("Incompatible type annotation in {} reference", span.vref),

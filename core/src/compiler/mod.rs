@@ -120,9 +120,7 @@ impl From<&Symbols> for SymbolsTable {
                 Symbol::Callable(callable) => {
                     SymbolPrototype::Callable(callable.metadata().clone())
                 }
-                Symbol::Variable(var) => {
-                    SymbolPrototype::Variable(ExprType::from_vartype(var.as_vartype(), None))
-                }
+                Symbol::Variable(var) => SymbolPrototype::Variable(var.as_exprtype()),
             };
             debug_assert_eq!(name, &name.to_ascii_uppercase());
             table.insert(SymbolKey::from(name), proto);
@@ -313,7 +311,7 @@ impl Compiler {
             }
         };
 
-        if !span.vref.accepts(atype.into()) {
+        if !span.vref.accepts(atype) {
             return Err(Error::new(
                 span.vref_pos,
                 format!("Incompatible types in {} reference", span.vref),
@@ -354,7 +352,7 @@ impl Compiler {
                 // TODO(jmmv): Compile separate Dim instructions for new variables instead of
                 // checking this every time.
                 let key = key.clone();
-                let vtype = ExprType::from_vartype(vref.ref_type(), Some(etype));
+                let vtype = ExprType::from_vartype(vref.ref_type(), etype);
                 self.symtable.insert(key, SymbolPrototype::Variable(vtype));
                 vtype
             }

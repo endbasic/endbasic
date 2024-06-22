@@ -172,8 +172,8 @@ impl Array {
         );
 
         debug_assert_eq!(
-            value.as_vartype(),
-            self.subtype.into(),
+            value.as_exprtype(),
+            self.subtype,
             "Invalid types in assignment; guaranteed valid by the compiler"
         );
 
@@ -186,7 +186,7 @@ impl Array {
     pub fn index(&self, subscripts: &[i32]) -> Result<&Value> {
         let i = Array::native_index(&self.dimensions, subscripts)?;
         let value = &self.values[i];
-        debug_assert!(value.as_vartype() == self.subtype.into());
+        debug_assert!(value.as_exprtype() == self.subtype);
         Ok(value)
     }
 }
@@ -427,12 +427,12 @@ impl Symbols {
         let value = value.maybe_cast(vref.ref_type())?;
         match self.get_mut(vref)? {
             Some(Symbol::Variable(old_value)) => {
-                let value = value.maybe_cast(old_value.as_vartype())?;
+                let value = value.maybe_cast(old_value.as_exprtype().into())?;
                 if mem::discriminant(&value) != mem::discriminant(old_value) {
                     return Err(Error::new(format!(
                         "Cannot assign value of type {} to variable of type {}",
-                        value.as_vartype(),
-                        old_value.as_vartype(),
+                        value.as_exprtype(),
+                        old_value.as_exprtype(),
                     )));
                 }
                 self.assign(&key, value);
@@ -440,10 +440,10 @@ impl Symbols {
             }
             Some(_) => Err(Error::new(format!("Cannot redefine {} as a variable", vref))),
             None => {
-                if !vref.accepts(value.as_vartype()) {
+                if !vref.accepts(value.as_exprtype()) {
                     return Err(Error::new(format!(
                         "Cannot assign value of type {} to variable of type {}",
-                        value.as_vartype(),
+                        value.as_exprtype(),
                         vref.ref_type(),
                     )));
                 }
@@ -876,7 +876,7 @@ mod tests {
 
         for ref_type in &[VarType::Auto, VarType::Text] {
             match syms.get(&VarRef::new("string_var", *ref_type)).unwrap().unwrap() {
-                Symbol::Variable(value) => assert_eq!(VarType::Text, value.as_vartype()),
+                Symbol::Variable(value) => assert_eq!(ExprType::Text, value.as_exprtype()),
                 _ => panic!("Got something that is not the variable we asked for"),
             }
         }
@@ -961,7 +961,7 @@ mod tests {
 
         for ref_type in &[VarType::Auto, VarType::Text] {
             match syms.get_mut(&VarRef::new("string_var", *ref_type)).unwrap().unwrap() {
-                Symbol::Variable(value) => assert_eq!(VarType::Text, value.as_vartype()),
+                Symbol::Variable(value) => assert_eq!(ExprType::Text, value.as_exprtype()),
                 _ => panic!("Got something that is not the variable we asked for"),
             }
         }
@@ -1027,7 +1027,7 @@ mod tests {
         }
 
         match syms.get_auto("string_var").unwrap() {
-            Symbol::Variable(value) => assert_eq!(VarType::Text, value.as_vartype()),
+            Symbol::Variable(value) => assert_eq!(ExprType::Text, value.as_exprtype()),
             _ => panic!("Got something that is not the variable we asked for"),
         }
     }
@@ -1108,7 +1108,7 @@ mod tests {
             let mut syms = Symbols::default();
             syms.set_var(&VarRef::new("a", VarType::Auto), value.clone()).unwrap();
             check_var(&syms, "a", value.clone());
-            syms.set_var(&VarRef::new("v", value.as_vartype()), value.clone()).unwrap();
+            syms.set_var(&VarRef::new("v", value.as_exprtype().into()), value.clone()).unwrap();
             check_var(&syms, "v", value);
         }
     }
@@ -1195,7 +1195,7 @@ mod tests {
                 .build();
             syms.set_var(&VarRef::new("a", VarType::Auto), value.clone()).unwrap();
             check_var(&syms, "a", value.clone());
-            syms.set_var(&VarRef::new("v", value.as_vartype()), value.clone()).unwrap();
+            syms.set_var(&VarRef::new("v", value.as_exprtype().into()), value.clone()).unwrap();
             check_var(&syms, "v", value);
         }
     }

@@ -210,11 +210,10 @@ pub enum ExprType {
 impl ExprType {
     /// Converts a `VarType` into an `ExprType`.
     ///
-    /// If the `VarType` represents type inference (the `Auto` value), returns `auto_type` assuming
-    /// there is an `auto_type` to return; otherwise, panics.
-    pub(crate) fn from_vartype(vtype: VarType, auto_type: Option<ExprType>) -> Self {
+    /// If the `VarType` represents type inference (the `Auto` value), returns `auto_type`.
+    pub(crate) fn from_vartype(vtype: VarType, auto_type: ExprType) -> Self {
         match vtype {
-            VarType::Auto => auto_type.unwrap(),
+            VarType::Auto => auto_type,
             VarType::Boolean => ExprType::Boolean,
             VarType::Double => ExprType::Double,
             VarType::Integer => ExprType::Integer,
@@ -369,8 +368,8 @@ impl VarRef {
     }
 
     /// Returns true if this reference is compatible with the given type.
-    pub fn accepts(&self, other: VarType) -> bool {
-        self.ref_type == VarType::Auto || self.ref_type == other
+    pub fn accepts(&self, other: ExprType) -> bool {
+        self.ref_type == VarType::Auto || self.ref_type == other.into()
     }
 
     /// Returns true if this reference is compatible with the return type of a callable.
@@ -460,17 +459,6 @@ impl Value {
             Value::Integer(_) => ExprType::Integer,
             Value::Text(_) => ExprType::Text,
             Value::VarRef(_key, etype) => *etype,
-        }
-    }
-
-    /// Returns the type of the value as a `VarType`.
-    pub fn as_vartype(&self) -> VarType {
-        match self {
-            Value::Boolean(_) => VarType::Boolean,
-            Value::Double(_) => VarType::Double,
-            Value::Integer(_) => VarType::Integer,
-            Value::Text(_) => VarType::Text,
-            Value::VarRef(_key, etype) => (*etype).into(),
         }
     }
 }
@@ -906,30 +894,30 @@ mod tests {
 
     #[test]
     fn test_varref_accepts() {
-        assert!(VarRef::new("a", VarType::Auto).accepts(VarType::Boolean));
-        assert!(VarRef::new("a", VarType::Auto).accepts(VarType::Double));
-        assert!(VarRef::new("a", VarType::Auto).accepts(VarType::Integer));
-        assert!(VarRef::new("a", VarType::Auto).accepts(VarType::Text));
+        assert!(VarRef::new("a", VarType::Auto).accepts(ExprType::Boolean));
+        assert!(VarRef::new("a", VarType::Auto).accepts(ExprType::Double));
+        assert!(VarRef::new("a", VarType::Auto).accepts(ExprType::Integer));
+        assert!(VarRef::new("a", VarType::Auto).accepts(ExprType::Text));
 
-        assert!(VarRef::new("a", VarType::Boolean).accepts(VarType::Boolean));
-        assert!(!VarRef::new("a", VarType::Boolean).accepts(VarType::Double));
-        assert!(!VarRef::new("a", VarType::Boolean).accepts(VarType::Integer));
-        assert!(!VarRef::new("a", VarType::Boolean).accepts(VarType::Text));
+        assert!(VarRef::new("a", VarType::Boolean).accepts(ExprType::Boolean));
+        assert!(!VarRef::new("a", VarType::Boolean).accepts(ExprType::Double));
+        assert!(!VarRef::new("a", VarType::Boolean).accepts(ExprType::Integer));
+        assert!(!VarRef::new("a", VarType::Boolean).accepts(ExprType::Text));
 
-        assert!(!VarRef::new("a", VarType::Double).accepts(VarType::Boolean));
-        assert!(VarRef::new("a", VarType::Double).accepts(VarType::Double));
-        assert!(!VarRef::new("a", VarType::Double).accepts(VarType::Integer));
-        assert!(!VarRef::new("a", VarType::Double).accepts(VarType::Text));
+        assert!(!VarRef::new("a", VarType::Double).accepts(ExprType::Boolean));
+        assert!(VarRef::new("a", VarType::Double).accepts(ExprType::Double));
+        assert!(!VarRef::new("a", VarType::Double).accepts(ExprType::Integer));
+        assert!(!VarRef::new("a", VarType::Double).accepts(ExprType::Text));
 
-        assert!(!VarRef::new("a", VarType::Integer).accepts(VarType::Boolean));
-        assert!(!VarRef::new("a", VarType::Integer).accepts(VarType::Double));
-        assert!(VarRef::new("a", VarType::Integer).accepts(VarType::Integer));
-        assert!(!VarRef::new("a", VarType::Integer).accepts(VarType::Text));
+        assert!(!VarRef::new("a", VarType::Integer).accepts(ExprType::Boolean));
+        assert!(!VarRef::new("a", VarType::Integer).accepts(ExprType::Double));
+        assert!(VarRef::new("a", VarType::Integer).accepts(ExprType::Integer));
+        assert!(!VarRef::new("a", VarType::Integer).accepts(ExprType::Text));
 
-        assert!(!VarRef::new("a", VarType::Text).accepts(VarType::Boolean));
-        assert!(!VarRef::new("a", VarType::Text).accepts(VarType::Double));
-        assert!(!VarRef::new("a", VarType::Text).accepts(VarType::Integer));
-        assert!(VarRef::new("a", VarType::Text).accepts(VarType::Text));
+        assert!(!VarRef::new("a", VarType::Text).accepts(ExprType::Boolean));
+        assert!(!VarRef::new("a", VarType::Text).accepts(ExprType::Double));
+        assert!(!VarRef::new("a", VarType::Text).accepts(ExprType::Integer));
+        assert!(VarRef::new("a", VarType::Text).accepts(ExprType::Text));
     }
 
     #[test]
