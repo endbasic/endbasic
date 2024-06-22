@@ -397,7 +397,7 @@ fn compile_expr_symbol(
             let nargs = compile_function_args(md.syntaxes(), instrs, symtable, span.pos, vec![])
                 .map_err(|e| Error::from_call_error(md, e, span.pos))?;
             debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
-            (Instruction::FunctionCall(key, etype.into(), span.pos, 0), etype)
+            (Instruction::FunctionCall(key, etype, span.pos, 0), etype)
         }
     };
     if !span.vref.accepts(vtype.into()) {
@@ -745,7 +745,7 @@ pub(super) fn compile_expr(
                     let nargs =
                         compile_function_args(md.syntaxes(), instrs, symtable, span_pos, span.args)
                             .map_err(|e| Error::from_call_error(md, e, span_pos))?;
-                    instrs.push(Instruction::FunctionCall(key, vtype.into(), span_pos, nargs));
+                    instrs.push(Instruction::FunctionCall(key, vtype, span_pos, nargs));
                     Ok(vtype)
                 }
 
@@ -855,7 +855,7 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::FunctionCall(SymbolKey::from("f"), VarType::Integer, lc(1, 5), 0),
+                Instruction::FunctionCall(SymbolKey::from("f"), ExprType::Integer, lc(1, 5), 0),
             )
             .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
             .check();
@@ -1299,7 +1299,7 @@ mod tests {
             .expect_instr(6, Instruction::PushInteger(3, lc(1, 9)))
             .expect_instr(
                 7,
-                Instruction::FunctionCall(SymbolKey::from("FOO"), VarType::Integer, lc(1, 5), 3),
+                Instruction::FunctionCall(SymbolKey::from("FOO"), ExprType::Integer, lc(1, 5), 3),
             )
             .expect_instr(8, Instruction::Assign(SymbolKey::from("i")))
             .check();

@@ -869,13 +869,13 @@ impl Machine {
     async fn do_function_call(
         &mut self,
         context: &mut Context,
-        return_type: VarType,
+        return_type: ExprType,
         fref_pos: LineCol,
         nargs: usize,
         f: Rc<dyn Callable>,
     ) -> Result<()> {
         let metadata = f.metadata();
-        debug_assert_eq!(return_type, metadata.return_type().unwrap().into());
+        debug_assert_eq!(return_type, metadata.return_type().unwrap());
 
         let scope = Scope::new(&mut context.value_stack, nargs, fref_pos);
         f.exec(scope, self).await.map_err(|e| Error::from_call_error(metadata, e, fref_pos))?;
@@ -884,7 +884,7 @@ impl Machine {
                 Some((value, _pos)) => {
                     debug_assert_eq!(
                         return_type,
-                        value.as_vartype(),
+                        value.as_exprtype(),
                         "Value returned by function is incompatible with its type definition",
                     )
                 }
@@ -922,7 +922,7 @@ impl Machine {
         &mut self,
         context: &mut Context,
         name: &SymbolKey,
-        return_type: VarType,
+        return_type: ExprType,
         fref_pos: LineCol,
         nargs: usize,
     ) -> Result<()> {
