@@ -471,18 +471,18 @@ impl<'a> Parser<'a> {
 
     /// Parses the `AS typename` clause of a `DIM` statement.  The caller has already consumed the
     /// `AS` token.
-    fn parse_dim_as(&mut self) -> Result<(VarType, LineCol)> {
+    fn parse_dim_as(&mut self) -> Result<(ExprType, LineCol)> {
         let peeked = self.lexer.peek()?;
         let (vtype, vtype_pos) = match peeked.token {
-            Token::Eof | Token::Eol => (VarType::Integer, peeked.pos),
+            Token::Eof | Token::Eol => (ExprType::Integer, peeked.pos),
             Token::As => {
                 self.lexer.consume_peeked();
                 let token_span = self.lexer.read()?;
                 match token_span.token {
-                    Token::BooleanName => (VarType::Boolean, token_span.pos),
-                    Token::DoubleName => (VarType::Double, token_span.pos),
-                    Token::IntegerName => (VarType::Integer, token_span.pos),
-                    Token::TextName => (VarType::Text, token_span.pos),
+                    Token::BooleanName => (ExprType::Boolean, token_span.pos),
+                    Token::DoubleName => (ExprType::Double, token_span.pos),
+                    Token::IntegerName => (ExprType::Integer, token_span.pos),
+                    Token::TextName => (ExprType::Text, token_span.pos),
                     t => {
                         return Err(Error::Bad(
                             token_span.pos,
@@ -2181,7 +2181,7 @@ mod tests {
             &[Statement::Dim(DimSpan {
                 name: "i".to_owned(),
                 name_pos: lc(1, 5),
-                vtype: VarType::Integer,
+                vtype: ExprType::Integer,
                 vtype_pos: lc(1, 6),
             })],
         );
@@ -2194,7 +2194,7 @@ mod tests {
             &[Statement::Dim(DimSpan {
                 name: "i".to_owned(),
                 name_pos: lc(1, 5),
-                vtype: VarType::Boolean,
+                vtype: ExprType::Boolean,
                 vtype_pos: lc(1, 10),
             })],
         );
@@ -2203,7 +2203,7 @@ mod tests {
             &[Statement::Dim(DimSpan {
                 name: "i".to_owned(),
                 name_pos: lc(1, 5),
-                vtype: VarType::Double,
+                vtype: ExprType::Double,
                 vtype_pos: lc(1, 10),
             })],
         );
@@ -2212,7 +2212,7 @@ mod tests {
             &[Statement::Dim(DimSpan {
                 name: "i".to_owned(),
                 name_pos: lc(1, 5),
-                vtype: VarType::Integer,
+                vtype: ExprType::Integer,
                 vtype_pos: lc(1, 10),
             })],
         );
@@ -2221,7 +2221,7 @@ mod tests {
             &[Statement::Dim(DimSpan {
                 name: "i".to_owned(),
                 name_pos: lc(1, 5),
-                vtype: VarType::Text,
+                vtype: ExprType::Text,
                 vtype_pos: lc(1, 10),
             })],
         );
@@ -2235,19 +2235,19 @@ mod tests {
                 Statement::Dim(DimSpan {
                     name: "i".to_owned(),
                     name_pos: lc(1, 5),
-                    vtype: VarType::Integer,
+                    vtype: ExprType::Integer,
                     vtype_pos: lc(1, 6),
                 }),
                 Statement::Dim(DimSpan {
                     name: "j".to_owned(),
                     name_pos: lc(2, 5),
-                    vtype: VarType::Boolean,
+                    vtype: ExprType::Boolean,
                     vtype_pos: lc(2, 10),
                 }),
                 Statement::Dim(DimSpan {
                     name: "k".to_owned(),
                     name_pos: lc(3, 5),
-                    vtype: VarType::Integer,
+                    vtype: ExprType::Integer,
                     vtype_pos: lc(3, 6),
                 }),
             ],
@@ -2264,7 +2264,7 @@ mod tests {
                 name: "i".to_owned(),
                 name_pos: lc(1, 5),
                 dimensions: vec![expr_integer(10, 1, 7)],
-                subtype: VarType::Integer,
+                subtype: ExprType::Integer,
                 subtype_pos: lc(1, 10),
             })],
         );
@@ -2278,7 +2278,7 @@ mod tests {
                     Negate(Box::from(UnaryOpSpan { expr: expr_integer(5, 1, 10), pos: lc(1, 9) })),
                     expr_integer(0, 1, 13),
                 ],
-                subtype: VarType::Text,
+                subtype: ExprType::Text,
                 subtype_pos: lc(1, 19),
             })],
         );
@@ -2301,7 +2301,7 @@ mod tests {
                     expr_integer(8, 1, 21),
                     Negate(Box::from(UnaryOpSpan { expr: expr_integer(1, 1, 25), pos: lc(1, 24) })),
                 ],
-                subtype: VarType::Integer,
+                subtype: ExprType::Integer,
                 subtype_pos: lc(1, 27),
             })],
         );

@@ -773,11 +773,7 @@ impl Machine {
             }
             ds.push(i as usize);
         }
-        self.symbols.dim_array(
-            span.name.clone(),
-            ExprType::from_vartype(span.subtype, Some(ExprType::Integer)),
-            ds,
-        );
+        self.symbols.dim_array(span.name.clone(), span.subtype, ds);
         Ok(())
     }
 
@@ -1252,8 +1248,8 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::Dim(name, vtype) => {
-                self.symbols.dim(name.clone(), *vtype);
+            Instruction::Dim(name, etype) => {
+                self.symbols.dim(name.clone(), *etype);
                 context.pc += 1;
             }
 

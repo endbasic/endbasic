@@ -192,7 +192,7 @@ impl Expr {
 }
 
 /// Represents type of an expression.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExprType {
     /// Type for an expression that evaluates to a boolean.
     Boolean,
@@ -306,18 +306,6 @@ impl VarType {
             VarType::Integer => "%",
             VarType::Text => "$",
             VarType::Void => "",
-        }
-    }
-
-    /// Returns the default value to assign to this type.
-    pub(crate) fn default_value(&self) -> Value {
-        match self {
-            VarType::Auto => Value::Integer(0),
-            VarType::Boolean => Value::Boolean(false),
-            VarType::Double => Value::Double(0.0),
-            VarType::Integer => Value::Integer(0),
-            VarType::Text => Value::Text("".to_owned()),
-            VarType::Void => panic!("Cannot represent a default value for void"),
         }
     }
 }
@@ -613,7 +601,7 @@ pub struct DimSpan {
     pub name_pos: LineCol,
 
     /// Type of the variable to be defined.
-    pub vtype: VarType,
+    pub vtype: ExprType,
 
     /// Position of the type.
     pub vtype_pos: LineCol,
@@ -634,7 +622,7 @@ pub struct DimArraySpan {
     pub dimensions: Vec<Expr>,
 
     /// Type of the array to be defined.
-    pub subtype: VarType,
+    pub subtype: ExprType,
 
     /// Position of the subtype.
     pub subtype_pos: LineCol,

@@ -288,8 +288,8 @@ impl Symbols {
     }
 
     /// Defines a new variable `key` of type `vartype`.  The variable must not yet exist.
-    pub fn dim(&mut self, key: SymbolKey, vartype: VarType) {
-        let previous = self.by_name.insert(key.0, Symbol::Variable(vartype.default_value()));
+    pub fn dim(&mut self, key: SymbolKey, etype: ExprType) {
+        let previous = self.by_name.insert(key.0, Symbol::Variable(etype.default_value()));
         debug_assert!(
             previous.is_none(),
             "Pre-existence of variables is checked at compilation time"
@@ -802,7 +802,7 @@ mod tests {
     fn test_symbols_dim_ok() {
         let mut syms = Symbols::default();
 
-        syms.dim(SymbolKey::from("A_Boolean"), VarType::Boolean);
+        syms.dim(SymbolKey::from("A_Boolean"), ExprType::Boolean);
         match syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap().unwrap() {
             Symbol::Variable(value) => assert_eq!(&Value::Boolean(false), value),
             _ => panic!("Got something that is not the variable we asked for"),

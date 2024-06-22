@@ -388,8 +388,7 @@ impl Compiler {
         }
 
         self.emit(Instruction::Dim(key.clone(), span.vtype));
-        self.symtable
-            .insert(key, SymbolPrototype::Variable(ExprType::from_vartype(span.vtype, None)));
+        self.symtable.insert(key, SymbolPrototype::Variable(span.vtype));
 
         Ok(())
     }
@@ -463,7 +462,7 @@ impl Compiler {
 
             let iter_key = SymbolKey::from(span.iter.name());
             if self.symtable.get(&key).is_none() {
-                self.emit(Instruction::Dim(key, VarType::Double));
+                self.emit(Instruction::Dim(key, ExprType::Double));
                 self.symtable.insert(iter_key.clone(), SymbolPrototype::Variable(ExprType::Double));
             }
 
@@ -773,10 +772,7 @@ impl Compiler {
                     subtype_pos: span.subtype_pos,
                 }));
 
-                self.symtable.insert(
-                    key,
-                    SymbolPrototype::Array(ExprType::from_vartype(span.subtype, None), nargs),
-                );
+                self.symtable.insert(key, SymbolPrototype::Array(span.subtype, nargs));
             }
 
             Statement::Do(span) => {
@@ -1327,22 +1323,22 @@ mod tests {
         Tester::default()
             .parse("DIM var AS BOOLEAN")
             .compile()
-            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), VarType::Boolean))
+            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), ExprType::Boolean))
             .check();
         Tester::default()
             .parse("DIM var AS DOUBLE")
             .compile()
-            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), VarType::Double))
+            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), ExprType::Double))
             .check();
         Tester::default()
             .parse("DIM var AS INTEGER")
             .compile()
-            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), VarType::Integer))
+            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), ExprType::Integer))
             .check();
         Tester::default()
             .parse("DIM var AS STRING")
             .compile()
-            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), VarType::Text))
+            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), ExprType::Text))
             .check();
     }
 
@@ -1393,7 +1389,7 @@ mod tests {
                     name: SymbolKey::from("var"),
                     name_pos: lc(1, 5),
                     dimensions: 1,
-                    subtype: VarType::Integer,
+                    subtype: ExprType::Integer,
                     subtype_pos: lc(1, 15),
                 }),
             )
@@ -1416,7 +1412,7 @@ mod tests {
                     name: SymbolKey::from("var"),
                     name_pos: lc(1, 5),
                     dimensions: 2,
-                    subtype: VarType::Integer,
+                    subtype: ExprType::Integer,
                     subtype_pos: lc(1, 22),
                 }),
             )
@@ -1436,7 +1432,7 @@ mod tests {
                     name: SymbolKey::from("var"),
                     name_pos: lc(1, 5),
                     dimensions: 1,
-                    subtype: VarType::Integer,
+                    subtype: ExprType::Integer,
                     subtype_pos: lc(1, 17),
                 }),
             )
@@ -1705,7 +1701,7 @@ mod tests {
                     addr: 2,
                 }),
             )
-            .expect_instr(1, Instruction::Dim(SymbolKey::from("iter"), VarType::Double))
+            .expect_instr(1, Instruction::Dim(SymbolKey::from("iter"), ExprType::Double))
             .expect_instr(2, Instruction::PushInteger(0, lc(1, 12)))
             .expect_instr(3, Instruction::IntegerToDouble)
             .expect_instr(4, Instruction::Assign(SymbolKey::from("iter")))
