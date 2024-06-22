@@ -16,7 +16,7 @@
 //! Array-related functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType};
+use endbasic_core::ast::{ArgSep, ExprType, VarRef};
 use endbasic_core::compiler::{
     ArgSepSyntax, RequiredRefSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
@@ -37,8 +37,9 @@ fn parse_bound_args<'a>(
     scope: &mut Scope<'_>,
     symbols: &'a Symbols,
 ) -> Result<(&'a Array, usize), CallError> {
-    let (arrayref, arraypos) = scope.pop_varref_with_pos();
+    let (arrayname, arraytype, arraypos) = scope.pop_varref_with_pos();
 
+    let arrayref = VarRef::new(arrayname.to_string(), arraytype.into());
     let array = match symbols
         .get(&arrayref)
         .map_err(|e| CallError::ArgumentError(arraypos, format!("{}", e)))?
@@ -60,7 +61,7 @@ fn parse_bound_args<'a>(
                 pos,
                 format!(
                     "Array {} has only {} dimensions but asked for {}",
-                    arrayref,
+                    arrayname,
                     array.dimensions().len(),
                     i,
                 ),
@@ -305,7 +306,7 @@ mod tests {
         Tester::default()
             .run(&format!("DIM x(2, 3, 4): result = {}(x, 5)", func))
             .expect_err(format!(
-                "1:26: In call to {}: 1:36: Array x has only 3 dimensions but asked for 5",
+                "1:26: In call to {}: 1:36: Array X has only 3 dimensions but asked for 5",
                 func
             ))
             .expect_array("x", ExprType::Integer, &[2, 3, 4], vec![])

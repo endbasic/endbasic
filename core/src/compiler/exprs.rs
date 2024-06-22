@@ -353,7 +353,7 @@ fn compile_expr_symbol(
 
         Some(SymbolPrototype::Array(atype, _dims)) => {
             if allow_varrefs {
-                (Instruction::LoadRef(span.vref.clone(), span.pos), *atype)
+                (Instruction::LoadRef(key, *atype, span.pos), *atype)
             } else {
                 return Err(Error::new(
                     span.pos,
@@ -364,7 +364,7 @@ fn compile_expr_symbol(
 
         Some(SymbolPrototype::Variable(vtype)) => {
             if allow_varrefs {
-                (Instruction::LoadRef(span.vref.clone(), span.pos), *vtype)
+                (Instruction::LoadRef(key, *vtype, span.pos), *vtype)
             } else {
                 let instr = match vtype {
                     ExprType::Boolean => Instruction::LoadBoolean,
@@ -428,8 +428,8 @@ fn compile_expr_symbol_ref(
                 ));
             }
 
-            symtable.insert(key, SymbolPrototype::Variable(vtype));
-            instrs.push(Instruction::LoadRef(span.vref, span.pos));
+            symtable.insert(key.clone(), SymbolPrototype::Variable(vtype));
+            instrs.push(Instruction::LoadRef(key, vtype, span.pos));
             Ok(vtype)
         }
 
@@ -443,7 +443,7 @@ fn compile_expr_symbol_ref(
                 ));
             }
 
-            instrs.push(Instruction::LoadRef(span.vref, span.pos));
+            instrs.push(Instruction::LoadRef(key, vtype, span.pos));
             Ok(vtype)
         }
 
@@ -973,7 +973,10 @@ mod tests {
             )]))
             .parse("c a")
             .compile()
-            .expect_instr(0, Instruction::LoadRef(VarRef::new("a", VarType::Auto), lc(1, 3)))
+            .expect_instr(
+                0,
+                Instruction::LoadRef(SymbolKey::from("a"), ExprType::Integer, lc(1, 3)),
+            )
             .expect_instr(1, Instruction::BuiltinCall(SymbolKey::from("C"), lc(1, 1), 1))
             .check();
     }

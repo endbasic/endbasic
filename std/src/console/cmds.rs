@@ -19,7 +19,7 @@ use crate::console::readline::read_line;
 use crate::console::{CharsXY, ClearType, Console, ConsoleClearable, Key};
 use crate::strings::{format_boolean, format_double, format_integer};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value};
+use endbasic_core::ast::{ArgSep, ExprType, Value, VarRef};
 use endbasic_core::compiler::{
     ArgSepSyntax, OptionalValueSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax,
     RequiredValueSyntax, SingularArgSyntax,
@@ -341,18 +341,14 @@ impl Callable for InputCommand {
 
             prompt
         };
-        let (vref, pos) = scope.pop_varref_with_pos();
-
-        let vref = machine
-            .get_symbols()
-            .qualify_varref(&vref)
-            .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
+        let (vname, vtype, pos) = scope.pop_varref_with_pos();
 
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
+        let vref = VarRef::new(vname.to_string(), vtype.into());
         loop {
             match read_line(&mut *console, &prompt, &previous_answer, None).await {
-                Ok(answer) => match Value::parse_as(vref.ref_type(), answer.trim_end()) {
+                Ok(answer) => match Value::parse_as(vtype.into(), answer.trim_end()) {
                     Ok(value) => {
                         machine
                             .get_mut_symbols()
