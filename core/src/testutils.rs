@@ -238,7 +238,7 @@ impl Callable for GetHiddenFunction {
     async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
         assert_eq!(1, scope.nargs());
         let name = scope.pop_string();
-        match machine.get_var(&VarRef::new(name, VarType::Text)) {
+        match machine.get_var(&VarRef::new(name, Some(VarType::Text))) {
             Ok(t) => scope.return_any(t.clone()),
             Err(_) => panic!("Invalid argument"),
         }

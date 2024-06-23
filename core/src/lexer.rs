@@ -465,7 +465,7 @@ impl<'a> Lexer<'a> {
     fn consume_symbol(&mut self, first: CharSpan) -> io::Result<TokenSpan> {
         let mut s = String::new();
         s.push(first.ch);
-        let mut vtype = VarType::Auto;
+        let mut vtype = None;
         let mut token_len = 0;
         loop {
             match self.input.peek() {
@@ -473,25 +473,25 @@ impl<'a> Lexer<'a> {
                     ch if ch.is_word() => s.push(self.input.next().unwrap()?.ch),
                     ch if ch.is_separator() => break,
                     '?' => {
-                        vtype = VarType::Boolean;
+                        vtype = Some(VarType::Boolean);
                         self.input.next().unwrap()?;
                         token_len += 1;
                         break;
                     }
                     '#' => {
-                        vtype = VarType::Double;
+                        vtype = Some(VarType::Double);
                         self.input.next().unwrap()?;
                         token_len += 1;
                         break;
                     }
                     '%' => {
-                        vtype = VarType::Integer;
+                        vtype = Some(VarType::Integer);
                         self.input.next().unwrap()?;
                         token_len += 1;
                         break;
                     }
                     '$' => {
-                        vtype = VarType::Text;
+                        vtype = Some(VarType::Text);
                         self.input.next().unwrap()?;
                         token_len += 1;
                         break;
@@ -835,7 +835,7 @@ mod tests {
 
     /// Syntactic sugar to instantiate a `VarRef` without an explicit type annotation.
     fn new_auto_symbol(name: &str) -> Token {
-        Token::Symbol(VarRef::new(name, VarType::Auto))
+        Token::Symbol(VarRef::new(name, None))
     }
 
     #[test]
@@ -1011,10 +1011,10 @@ mod tests {
             "a b? d# i% s$",
             &[
                 ts(new_auto_symbol("a"), 1, 1, 1),
-                ts(Token::Symbol(VarRef::new("b", VarType::Boolean)), 1, 3, 2),
-                ts(Token::Symbol(VarRef::new("d", VarType::Double)), 1, 6, 2),
-                ts(Token::Symbol(VarRef::new("i", VarType::Integer)), 1, 9, 2),
-                ts(Token::Symbol(VarRef::new("s", VarType::Text)), 1, 12, 2),
+                ts(Token::Symbol(VarRef::new("b", Some(VarType::Boolean))), 1, 3, 2),
+                ts(Token::Symbol(VarRef::new("d", Some(VarType::Double))), 1, 6, 2),
+                ts(Token::Symbol(VarRef::new("i", Some(VarType::Integer))), 1, 9, 2),
+                ts(Token::Symbol(VarRef::new("s", Some(VarType::Text))), 1, 12, 2),
                 ts(Token::Eof, 1, 14, 0),
             ],
         );

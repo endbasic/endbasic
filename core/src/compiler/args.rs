@@ -1189,7 +1189,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", VarType::Auto),
+                    vref: VarRef::new("foo", None),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1216,7 +1216,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", VarType::Auto),
+                    vref: VarRef::new("foo", None),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1269,7 +1269,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", VarType::Auto),
+                    vref: VarRef::new("foo", None),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1299,7 +1299,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", VarType::Integer),
+                    vref: VarRef::new("foo", Some(VarType::Integer)),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1324,7 +1324,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", VarType::Auto),
+                    vref: VarRef::new("foo", None),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1348,7 +1348,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", VarType::Text),
+                    vref: VarRef::new("foo", Some(VarType::Text)),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1387,7 +1387,7 @@ mod compile_tests {
             .compile_command([
                 ArgSpan {
                     expr: Some(Expr::Symbol(SymbolSpan {
-                        vref: VarRef::new("foo", VarType::Auto),
+                        vref: VarRef::new("foo", None),
                         pos: lc(1, 2),
                     })),
                     sep: ArgSep::Long,
@@ -1395,7 +1395,7 @@ mod compile_tests {
                 },
                 ArgSpan {
                     expr: Some(Expr::Symbol(SymbolSpan {
-                        vref: VarRef::new("foo", VarType::Auto),
+                        vref: VarRef::new("foo", None),
                         pos: lc(1, 2),
                     })),
                     sep: ArgSep::End,
@@ -1422,7 +1422,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", VarType::Auto),
+                    vref: VarRef::new("foo", None),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1445,7 +1445,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", VarType::Auto),
+                    vref: VarRef::new("foo", None),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1490,7 +1490,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", VarType::Auto),
+                    vref: VarRef::new("foo", None),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1516,7 +1516,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", VarType::Integer),
+                    vref: VarRef::new("foo", Some(VarType::Integer)),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1647,7 +1647,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", VarType::Boolean),
+                    vref: VarRef::new("foo", Some(VarType::Boolean)),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1889,7 +1889,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", VarType::Text),
+                    vref: VarRef::new("foo", Some(VarType::Text)),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,

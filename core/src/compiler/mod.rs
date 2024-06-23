@@ -366,8 +366,13 @@ impl Compiler {
             ));
         }
 
-        if vref.ref_type() != VarType::Auto && vref.ref_type() != vtype.into() {
-            return Err(Error::new(vref_pos, format!("Incompatible types in {} reference", vref)));
+        if let Some(ref_type) = vref.ref_type() {
+            if ref_type != vtype.into() {
+                return Err(Error::new(
+                    vref_pos,
+                    format!("Incompatible types in {} reference", vref),
+                ));
+            }
         }
 
         self.emit(Instruction::Assign(key));
@@ -449,12 +454,12 @@ impl Compiler {
     /// Compiles a `FOR` loop and appends its instructions to the compilation context.
     fn compile_for(&mut self, span: ForSpan) -> Result<()> {
         debug_assert!(
-            span.iter.ref_type() == VarType::Auto
-                || span.iter.ref_type() == VarType::Double
-                || span.iter.ref_type() == VarType::Integer
+            span.iter.ref_type().is_none()
+                || span.iter.ref_type().unwrap() == VarType::Double
+                || span.iter.ref_type().unwrap() == VarType::Integer
         );
 
-        if span.iter_double && span.iter.ref_type() == VarType::Auto {
+        if span.iter_double && span.iter.ref_type().is_none() {
             let key = SymbolKey::from(span.iter.name());
             let skip_pc = self.emit(Instruction::Nop);
 
@@ -594,7 +599,7 @@ impl Compiler {
         let mut end_pcs = vec![];
 
         self.selects += 1;
-        let test_vref = VarRef::new(Compiler::select_test_var_name(self.selects), VarType::Auto);
+        let test_vref = VarRef::new(Compiler::select_test_var_name(self.selects), None);
         self.compile_assignment(test_vref.clone(), span.expr.start_pos(), span.expr)?;
 
         let mut iter = span.cases.into_iter();

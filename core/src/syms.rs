@@ -15,7 +15,7 @@
 
 //! Symbol definitions and symbols table representation.
 
-use crate::ast::{ExprType, Value, VarRef, VarType};
+use crate::ast::{ExprType, Value, VarRef};
 use crate::compiler::{self, CallableSyntax, RepeatedSyntax, SingularArgSyntax};
 use crate::exec::{Machine, Scope};
 use crate::reader::LineCol;
@@ -379,7 +379,7 @@ impl Symbols {
         let key = vref.name().to_ascii_uppercase();
         match self.by_name.get(&key) {
             Some(symbol) => match vref.ref_type() {
-                VarType::Auto => Ok(vref.clone().qualify(symbol.eval_type())),
+                None => Ok(vref.clone().qualify(symbol.eval_type())),
                 _ => {
                     if !vref.accepts_callable(symbol.eval_type()) {
                         return Err(Error::new(format!(
@@ -427,7 +427,7 @@ impl Symbols {
         let value = value.maybe_cast(vref.ref_type())?;
         match self.get_mut(vref)? {
             Some(Symbol::Variable(old_value)) => {
-                let value = value.maybe_cast(old_value.as_exprtype().into())?;
+                let value = value.maybe_cast(Some(old_value.as_exprtype().into()))?;
                 if mem::discriminant(&value) != mem::discriminant(old_value) {
                     return Err(Error::new(format!(
                         "Cannot assign value of type {} to variable of type {}",
@@ -440,12 +440,14 @@ impl Symbols {
             }
             Some(_) => Err(Error::new(format!("Cannot redefine {} as a variable", vref))),
             None => {
-                if !vref.accepts(value.as_exprtype()) {
-                    return Err(Error::new(format!(
-                        "Cannot assign value of type {} to variable of type {}",
-                        value.as_exprtype(),
-                        vref.ref_type(),
-                    )));
+                if let Some(ref_type) = vref.ref_type() {
+                    if !vref.accepts(value.as_exprtype()) {
+                        return Err(Error::new(format!(
+                            "Cannot assign value of type {} to variable of type {}",
+                            value.as_exprtype(),
+                            ref_type,
+                        )));
+                    }
                 }
                 self.by_name.insert(key.0, Symbol::Variable(value));
                 Ok(())
@@ -655,7 +657,7 @@ pub trait Callable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::VarRef;
+    use crate::ast::{VarRef, VarType};
     use crate::testutils::*;
     use std::cell::RefCell;
 
@@ -785,17 +787,17 @@ mod tests {
             .add_var("__SYSTEM_VAR", Value::Integer(42))
             .build();
 
-        assert!(syms.get(&VarRef::new("SOMEARRAY", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("OUT", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("SUM", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("SOMEVAR", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("__SYSTEM_VAR", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SOMEARRAY", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("OUT", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SUM", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SOMEVAR", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("__SYSTEM_VAR", None)).unwrap().is_some());
         syms.clear();
-        assert!(syms.get(&VarRef::new("SOMEARRAY", VarType::Auto)).unwrap().is_none());
-        assert!(syms.get(&VarRef::new("OUT", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("SUM", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("SOMEVAR", VarType::Auto)).unwrap().is_none());
-        assert!(syms.get(&VarRef::new("__SYSTEM_VAR", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SOMEARRAY", None)).unwrap().is_none());
+        assert!(syms.get(&VarRef::new("OUT", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SUM", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SOMEVAR", None)).unwrap().is_none());
+        assert!(syms.get(&VarRef::new("__SYSTEM_VAR", None)).unwrap().is_some());
     }
 
     #[test]
@@ -803,7 +805,7 @@ mod tests {
         let mut syms = Symbols::default();
 
         syms.dim(SymbolKey::from("A_Boolean"), ExprType::Boolean);
-        match syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap().unwrap() {
+        match syms.get(&VarRef::new("a_boolean", None)).unwrap().unwrap() {
             Symbol::Variable(value) => assert_eq!(&Value::Boolean(false), value),
             _ => panic!("Got something that is not the variable we asked for"),
         }
@@ -827,7 +829,7 @@ mod tests {
         assert_same_array_shape(
             ExprType::Boolean,
             &[1],
-            syms.get(&VarRef::new("a_boolean", VarType::Auto)).unwrap().unwrap(),
+            syms.get(&VarRef::new("a_boolean", None)).unwrap().unwrap(),
         );
     }
 
@@ -841,7 +843,7 @@ mod tests {
             .add_var("STRING_VAR", Value::Text("".to_owned()))
             .build();
 
-        for ref_type in &[VarType::Auto, VarType::Boolean] {
+        for ref_type in &[None, Some(VarType::Boolean)] {
             match syms.get(&VarRef::new("bool_array", *ref_type)).unwrap().unwrap() {
                 Symbol::Array(array) => assert_eq!(ExprType::Boolean, array.subtype()),
                 _ => panic!("Got something that is not the array we asked for"),
@@ -849,19 +851,19 @@ mod tests {
         }
         assert_eq!(
             "Incompatible types in bool_array$ reference",
-            format!("{}", syms.get(&VarRef::new("bool_array", VarType::Text)).unwrap_err())
+            format!("{}", syms.get(&VarRef::new("bool_array", Some(VarType::Text))).unwrap_err())
         );
 
-        match syms.get(&VarRef::new("out", VarType::Auto)).unwrap().unwrap() {
+        match syms.get(&VarRef::new("out", None)).unwrap().unwrap() {
             Symbol::Callable(c) => assert_eq!(None, c.metadata().return_type()),
             _ => panic!("Got something that is not the command we asked for"),
         }
         assert_eq!(
             "Incompatible types in out# reference",
-            format!("{}", syms.get(&VarRef::new("out", VarType::Double)).unwrap_err())
+            format!("{}", syms.get(&VarRef::new("out", Some(VarType::Double))).unwrap_err())
         );
 
-        for ref_type in &[VarType::Auto, VarType::Integer] {
+        for ref_type in &[None, Some(VarType::Integer)] {
             match syms.get(&VarRef::new("sum", *ref_type)).unwrap().unwrap() {
                 Symbol::Callable(f) => {
                     assert_eq!(Some(ExprType::Integer), f.metadata().return_type())
@@ -871,10 +873,10 @@ mod tests {
         }
         assert_eq!(
             "Incompatible types in sum# reference",
-            format!("{}", syms.get(&VarRef::new("sum", VarType::Double)).unwrap_err())
+            format!("{}", syms.get(&VarRef::new("sum", Some(VarType::Double))).unwrap_err())
         );
 
-        for ref_type in &[VarType::Auto, VarType::Text] {
+        for ref_type in &[None, Some(VarType::Text)] {
             match syms.get(&VarRef::new("string_var", *ref_type)).unwrap().unwrap() {
                 Symbol::Variable(value) => assert_eq!(ExprType::Text, value.as_exprtype()),
                 _ => panic!("Got something that is not the variable we asked for"),
@@ -882,7 +884,10 @@ mod tests {
         }
         assert_eq!(
             "Incompatible types in string_var% reference",
-            format!("{}", syms.get(&VarRef::new("string_var", VarType::Integer)).unwrap_err())
+            format!(
+                "{}",
+                syms.get(&VarRef::new("string_var", Some(VarType::Integer))).unwrap_err()
+            )
         );
     }
 
@@ -896,24 +901,24 @@ mod tests {
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
-        assert!(syms.get(&VarRef::new("somearray", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("SomeArray", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("somearray", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SomeArray", None)).unwrap().is_some());
 
-        assert!(syms.get(&VarRef::new("out", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("Out", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("out", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("Out", None)).unwrap().is_some());
 
-        assert!(syms.get(&VarRef::new("sum", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("Sum", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("sum", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("Sum", None)).unwrap().is_some());
 
-        assert!(syms.get(&VarRef::new("somevar", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("SomeVar", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("somevar", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("SomeVar", None)).unwrap().is_some());
     }
 
     #[test]
     fn test_symbols_get_undefined() {
         // If modifying this test, update the identical test for get_auto() and get_mut().
         let syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
-        assert!(syms.get(&VarRef::new("SOME_THIN", VarType::Integer)).unwrap().is_none());
+        assert!(syms.get(&VarRef::new("SOME_THIN", Some(VarType::Integer))).unwrap().is_none());
     }
 
     #[test]
@@ -926,7 +931,7 @@ mod tests {
             .add_var("STRING_VAR", Value::Text("".to_owned()))
             .build();
 
-        for ref_type in &[VarType::Auto, VarType::Boolean] {
+        for ref_type in &[None, Some(VarType::Boolean)] {
             match syms.get_mut(&VarRef::new("bool_array", *ref_type)).unwrap().unwrap() {
                 Symbol::Array(array) => assert_eq!(ExprType::Boolean, array.subtype()),
                 _ => panic!("Got something that is not the array we asked for"),
@@ -934,19 +939,22 @@ mod tests {
         }
         assert_eq!(
             "Incompatible types in bool_array$ reference",
-            format!("{}", syms.get_mut(&VarRef::new("bool_array", VarType::Text)).unwrap_err())
+            format!(
+                "{}",
+                syms.get_mut(&VarRef::new("bool_array", Some(VarType::Text))).unwrap_err()
+            )
         );
 
-        match syms.get_mut(&VarRef::new("out", VarType::Auto)).unwrap().unwrap() {
+        match syms.get_mut(&VarRef::new("out", None)).unwrap().unwrap() {
             Symbol::Callable(c) => assert_eq!(None, c.metadata().return_type()),
             _ => panic!("Got something that is not the command we asked for"),
         }
         assert_eq!(
             "Incompatible types in out# reference",
-            format!("{}", syms.get_mut(&VarRef::new("out", VarType::Double)).unwrap_err())
+            format!("{}", syms.get_mut(&VarRef::new("out", Some(VarType::Double))).unwrap_err())
         );
 
-        for ref_type in &[VarType::Auto, VarType::Integer] {
+        for ref_type in &[None, Some(VarType::Integer)] {
             match syms.get_mut(&VarRef::new("sum", *ref_type)).unwrap().unwrap() {
                 Symbol::Callable(f) => {
                     assert_eq!(Some(ExprType::Integer), f.metadata().return_type())
@@ -956,10 +964,10 @@ mod tests {
         }
         assert_eq!(
             "Incompatible types in sum# reference",
-            format!("{}", syms.get_mut(&VarRef::new("sum", VarType::Double)).unwrap_err())
+            format!("{}", syms.get_mut(&VarRef::new("sum", Some(VarType::Double))).unwrap_err())
         );
 
-        for ref_type in &[VarType::Auto, VarType::Text] {
+        for ref_type in &[None, Some(VarType::Text)] {
             match syms.get_mut(&VarRef::new("string_var", *ref_type)).unwrap().unwrap() {
                 Symbol::Variable(value) => assert_eq!(ExprType::Text, value.as_exprtype()),
                 _ => panic!("Got something that is not the variable we asked for"),
@@ -967,7 +975,10 @@ mod tests {
         }
         assert_eq!(
             "Incompatible types in string_var% reference",
-            format!("{}", syms.get_mut(&VarRef::new("string_var", VarType::Integer)).unwrap_err())
+            format!(
+                "{}",
+                syms.get_mut(&VarRef::new("string_var", Some(VarType::Integer))).unwrap_err()
+            )
         );
     }
 
@@ -981,24 +992,24 @@ mod tests {
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
-        assert!(syms.get_mut(&VarRef::new("somearray", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get_mut(&VarRef::new("SomeArray", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("somearray", None)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("SomeArray", None)).unwrap().is_some());
 
-        assert!(syms.get_mut(&VarRef::new("out", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get_mut(&VarRef::new("Out", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("out", None)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("Out", None)).unwrap().is_some());
 
-        assert!(syms.get_mut(&VarRef::new("sum", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get_mut(&VarRef::new("Sum", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("sum", None)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("Sum", None)).unwrap().is_some());
 
-        assert!(syms.get_mut(&VarRef::new("somevar", VarType::Auto)).unwrap().is_some());
-        assert!(syms.get_mut(&VarRef::new("SomeVar", VarType::Auto)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("somevar", None)).unwrap().is_some());
+        assert!(syms.get_mut(&VarRef::new("SomeVar", None)).unwrap().is_some());
     }
 
     #[test]
     fn test_symbols_get_mut_undefined() {
         // If modifying this test, update the identical test for get() and get_auto().
         let mut syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
-        assert!(syms.get_mut(&VarRef::new("SOME_THIN", VarType::Integer)).unwrap().is_none());
+        assert!(syms.get_mut(&VarRef::new("SOME_THIN", Some(VarType::Integer))).unwrap().is_none());
     }
 
     #[test]
@@ -1067,31 +1078,34 @@ mod tests {
         let syms = SymbolsBuilder::default().add_array("V", ExprType::Boolean).build();
 
         assert_eq!(
-            VarRef::new("v", VarType::Boolean),
-            syms.qualify_varref(&VarRef::new("v", VarType::Auto)).unwrap(),
+            VarRef::new("v", Some(VarType::Boolean)),
+            syms.qualify_varref(&VarRef::new("v", None)).unwrap(),
         );
         assert_eq!(
-            VarRef::new("v", VarType::Boolean),
-            syms.qualify_varref(&VarRef::new("v", VarType::Boolean)).unwrap(),
+            VarRef::new("v", Some(VarType::Boolean)),
+            syms.qualify_varref(&VarRef::new("v", Some(VarType::Boolean))).unwrap(),
         );
         assert_eq!(
             "Incompatible types in v% reference",
-            format!("{}", syms.qualify_varref(&VarRef::new("v", VarType::Integer)).unwrap_err()),
+            format!(
+                "{}",
+                syms.qualify_varref(&VarRef::new("v", Some(VarType::Integer))).unwrap_err()
+            ),
         );
 
         assert_eq!(
-            VarRef::new("undefined", VarType::Auto),
-            syms.qualify_varref(&VarRef::new("undefined", VarType::Auto)).unwrap(),
+            VarRef::new("undefined", None),
+            syms.qualify_varref(&VarRef::new("undefined", None)).unwrap(),
         );
         assert_eq!(
-            VarRef::new("undefined", VarType::Text),
-            syms.qualify_varref(&VarRef::new("undefined", VarType::Text)).unwrap(),
+            VarRef::new("undefined", Some(VarType::Text)),
+            syms.qualify_varref(&VarRef::new("undefined", Some(VarType::Text))).unwrap(),
         );
     }
 
     /// Checks that the variable `name` in `syms` has the value in `exp_value`.
     fn check_var(syms: &Symbols, name: &str, exp_value: Value) {
-        match syms.get(&VarRef::new(name, VarType::Auto)).unwrap().unwrap() {
+        match syms.get(&VarRef::new(name, None)).unwrap().unwrap() {
             Symbol::Variable(value) => assert_eq!(exp_value, *value),
             _ => panic!("Got something that is not the variable we asked for"),
         }
@@ -1106,9 +1120,10 @@ mod tests {
             Value::Text("a".to_owned()),
         ] {
             let mut syms = Symbols::default();
-            syms.set_var(&VarRef::new("a", VarType::Auto), value.clone()).unwrap();
+            syms.set_var(&VarRef::new("a", None), value.clone()).unwrap();
             check_var(&syms, "a", value.clone());
-            syms.set_var(&VarRef::new("v", value.as_exprtype().into()), value.clone()).unwrap();
+            syms.set_var(&VarRef::new("v", Some(value.as_exprtype().into())), value.clone())
+                .unwrap();
             check_var(&syms, "v", value);
         }
     }
@@ -1131,25 +1146,16 @@ mod tests {
     fn test_symbols_get_var_apply_case_insensitivity() {
         let mut syms = Symbols::default();
         syms.assign(&SymbolKey::from("SomeName"), Value::Integer(6));
-        assert_eq!(
-            Value::Integer(6),
-            *syms.get_var(&VarRef::new("somename", VarType::Auto)).unwrap()
-        );
+        assert_eq!(Value::Integer(6), *syms.get_var(&VarRef::new("somename", None)).unwrap());
     }
 
     #[test]
     fn test_symbols_get_var_apply_replace_value() {
         let mut syms = Symbols::default();
         syms.assign(&SymbolKey::from("the_var"), Value::Integer(100));
-        assert_eq!(
-            Value::Integer(100),
-            *syms.get_var(&VarRef::new("the_var", VarType::Auto)).unwrap()
-        );
+        assert_eq!(Value::Integer(100), *syms.get_var(&VarRef::new("the_var", None)).unwrap());
         syms.assign(&SymbolKey::from("the_var"), Value::Integer(200));
-        assert_eq!(
-            Value::Integer(200),
-            *syms.get_var(&VarRef::new("the_var", VarType::Auto)).unwrap()
-        );
+        assert_eq!(Value::Integer(200), *syms.get_var(&VarRef::new("the_var", None)).unwrap());
     }
 
     #[test]
@@ -1159,7 +1165,7 @@ mod tests {
             "Cannot assign value of type BOOLEAN to variable of type INTEGER",
             format!(
                 "{}",
-                syms.set_var(&VarRef::new("v", VarType::Integer), Value::Boolean(false))
+                syms.set_var(&VarRef::new("v", Some(VarType::Integer)), Value::Boolean(false))
                     .unwrap_err()
             )
         );
@@ -1168,7 +1174,7 @@ mod tests {
     #[test]
     fn test_symbols_set_var_new_integer_to_double() {
         let mut syms = Symbols::default();
-        syms.set_var(&VarRef::new("v", VarType::Double), Value::Integer(3)).unwrap();
+        syms.set_var(&VarRef::new("v", Some(VarType::Double)), Value::Integer(3)).unwrap();
         check_var(&syms, "v", Value::Double(3.0));
     }
 
@@ -1176,7 +1182,7 @@ mod tests {
     fn test_symbols_set_var_new_double_to_integer() {
         for (expected, actual) in [(4, 4.4), (5, 4.5), (5, 4.6)] {
             let mut syms = Symbols::default();
-            syms.set_var(&VarRef::new("v", VarType::Integer), Value::Double(actual)).unwrap();
+            syms.set_var(&VarRef::new("v", Some(VarType::Integer)), Value::Double(actual)).unwrap();
             check_var(&syms, "v", Value::Integer(expected));
         }
     }
@@ -1193,9 +1199,10 @@ mod tests {
                 .add_var("A", value.clone())
                 .add_var("V", value.clone())
                 .build();
-            syms.set_var(&VarRef::new("a", VarType::Auto), value.clone()).unwrap();
+            syms.set_var(&VarRef::new("a", None), value.clone()).unwrap();
             check_var(&syms, "a", value.clone());
-            syms.set_var(&VarRef::new("v", value.as_exprtype().into()), value.clone()).unwrap();
+            syms.set_var(&VarRef::new("v", Some(value.as_exprtype().into())), value.clone())
+                .unwrap();
             check_var(&syms, "v", value);
         }
     }
@@ -1205,10 +1212,7 @@ mod tests {
         let mut syms = SymbolsBuilder::default().add_var("V", Value::Double(10.0)).build();
         assert_eq!(
             "Cannot assign value of type BOOLEAN to variable of type DOUBLE",
-            format!(
-                "{}",
-                syms.set_var(&VarRef::new("v", VarType::Auto), Value::Boolean(true)).unwrap_err()
-            )
+            format!("{}", syms.set_var(&VarRef::new("v", None), Value::Boolean(true)).unwrap_err())
         );
     }
 
@@ -1218,8 +1222,8 @@ mod tests {
             .add_var("A", Value::Double(1.0))
             .add_var("V", Value::Double(1.0))
             .build();
-        syms.set_var(&VarRef::new("a", VarType::Auto), Value::Integer(3)).unwrap();
-        syms.set_var(&VarRef::new("v", VarType::Double), Value::Integer(3)).unwrap();
+        syms.set_var(&VarRef::new("a", None), Value::Integer(3)).unwrap();
+        syms.set_var(&VarRef::new("v", Some(VarType::Double)), Value::Integer(3)).unwrap();
         check_var(&syms, "a", Value::Double(3.0));
         check_var(&syms, "v", Value::Double(3.0));
     }
@@ -1231,8 +1235,8 @@ mod tests {
                 .add_var("A", Value::Integer(1))
                 .add_var("V", Value::Integer(1))
                 .build();
-            syms.set_var(&VarRef::new("a", VarType::Auto), Value::Double(actual)).unwrap();
-            syms.set_var(&VarRef::new("v", VarType::Integer), Value::Double(actual)).unwrap();
+            syms.set_var(&VarRef::new("a", None), Value::Double(actual)).unwrap();
+            syms.set_var(&VarRef::new("v", Some(VarType::Integer)), Value::Double(actual)).unwrap();
             check_var(&syms, "a", Value::Integer(expected));
             check_var(&syms, "v", Value::Integer(expected));
         }
@@ -1249,17 +1253,15 @@ mod tests {
 
         assert_eq!(
             "Cannot redefine Out as a variable",
-            format!(
-                "{}",
-                syms.set_var(&VarRef::new("Out", VarType::Auto), Value::Integer(1)).unwrap_err()
-            )
+            format!("{}", syms.set_var(&VarRef::new("Out", None), Value::Integer(1)).unwrap_err())
         );
 
         assert_eq!(
             "Cannot redefine Sum% as a variable",
             format!(
                 "{}",
-                syms.set_var(&VarRef::new("Sum", VarType::Integer), Value::Integer(1)).unwrap_err()
+                syms.set_var(&VarRef::new("Sum", Some(VarType::Integer)), Value::Integer(1))
+                    .unwrap_err()
             )
         );
 
@@ -1267,7 +1269,7 @@ mod tests {
             "Cannot redefine SomeArray% as a variable",
             format!(
                 "{}",
-                syms.set_var(&VarRef::new("SomeArray", VarType::Integer), Value::Integer(1))
+                syms.set_var(&VarRef::new("SomeArray", Some(VarType::Integer)), Value::Integer(1))
                     .unwrap_err()
             )
         );
@@ -1276,7 +1278,7 @@ mod tests {
             "Incompatible types in SomeArray$ reference",
             format!(
                 "{}",
-                syms.set_var(&VarRef::new("SomeArray", VarType::Text), Value::Integer(1))
+                syms.set_var(&VarRef::new("SomeArray", Some(VarType::Text)), Value::Integer(1))
                     .unwrap_err()
             )
         );
@@ -1285,26 +1287,17 @@ mod tests {
     #[test]
     fn test_symbols_get_var_set_var_case_insensitivity() {
         let mut syms = Symbols::default();
-        syms.set_var(&VarRef::new("SomeName", VarType::Auto), Value::Integer(6)).unwrap();
-        assert_eq!(
-            Value::Integer(6),
-            *syms.get_var(&VarRef::new("somename", VarType::Auto)).unwrap()
-        );
+        syms.set_var(&VarRef::new("SomeName", None), Value::Integer(6)).unwrap();
+        assert_eq!(Value::Integer(6), *syms.get_var(&VarRef::new("somename", None)).unwrap());
     }
 
     #[test]
     fn test_symbols_get_var_set_var_replace_value() {
         let mut syms = Symbols::default();
-        syms.set_var(&VarRef::new("the_var", VarType::Auto), Value::Integer(100)).unwrap();
-        assert_eq!(
-            Value::Integer(100),
-            *syms.get_var(&VarRef::new("the_var", VarType::Auto)).unwrap()
-        );
-        syms.set_var(&VarRef::new("the_var", VarType::Auto), Value::Integer(200)).unwrap();
-        assert_eq!(
-            Value::Integer(200),
-            *syms.get_var(&VarRef::new("the_var", VarType::Auto)).unwrap()
-        );
+        syms.set_var(&VarRef::new("the_var", None), Value::Integer(100)).unwrap();
+        assert_eq!(Value::Integer(100), *syms.get_var(&VarRef::new("the_var", None)).unwrap());
+        syms.set_var(&VarRef::new("the_var", None), Value::Integer(200)).unwrap();
+        assert_eq!(Value::Integer(200), *syms.get_var(&VarRef::new("the_var", None)).unwrap());
     }
 
     #[test]
@@ -1312,7 +1305,10 @@ mod tests {
         let syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
         assert_eq!(
             "Undefined variable SOME_THIN",
-            format!("{}", syms.get_var(&VarRef::new("SOME_THIN", VarType::Integer)).unwrap_err())
+            format!(
+                "{}",
+                syms.get_var(&VarRef::new("SOME_THIN", Some(VarType::Integer))).unwrap_err()
+            )
         );
     }
 
