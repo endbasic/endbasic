@@ -811,50 +811,140 @@ impl Machine {
         Ok(())
     }
 
-    /// Handles a unary operator that is part of an expression.
-    fn exec_unary_op_can_fail<F: Fn(Value) -> value::Result<Value>>(
+    /// Handles a unary logical operator that cannot fail.
+    fn exec_logical_op1<F: Fn(bool) -> bool>(context: &mut Context, op: F, pos: LineCol) {
+        let rhs = context.value_stack.pop_boolean();
+        context.value_stack.push_boolean(op(rhs), pos);
+    }
+
+    /// Handles a binary logical operator that cannot fail.
+    fn exec_logical_op2<F: Fn(bool, bool) -> bool>(context: &mut Context, op: F, pos: LineCol) {
+        let rhs = context.value_stack.pop_boolean();
+        let lhs = context.value_stack.pop_boolean();
+        context.value_stack.push_boolean(op(lhs, rhs), pos);
+    }
+
+    /// Handles a unary bitwise operator that cannot fail.
+    fn exec_bitwise_op1<F: Fn(i32) -> i32>(context: &mut Context, op: F, pos: LineCol) {
+        let rhs = context.value_stack.pop_integer();
+        context.value_stack.push_integer(op(rhs), pos);
+    }
+
+    /// Handles a binary bitwise operator that cannot fail.
+    fn exec_bitwise_op2<F: Fn(i32, i32) -> i32>(context: &mut Context, op: F, pos: LineCol) {
+        let rhs = context.value_stack.pop_integer();
+        let lhs = context.value_stack.pop_integer();
+        context.value_stack.push_integer(op(lhs, rhs), pos);
+    }
+
+    /// Handles a binary bitwise operator that can fail.
+    fn exec_bitwise_op2_err<F: Fn(i32, i32) -> value::Result<i32>>(
         context: &mut Context,
         op: F,
         pos: LineCol,
     ) -> Result<()> {
-        let (value, _pos) = context.value_stack.pop().unwrap();
-        let result = op(value).map_err(|e| Error::from_value_error(e, pos))?;
-        context.value_stack.push((result, pos));
-        Ok(())
-    }
-
-    /// Handles a unary operator that cannot fail.
-    fn exec_unary_op_cannot_fail<F: Fn(Value) -> Value>(
-        context: &mut Context,
-        op: F,
-        pos: LineCol,
-    ) {
-        let (value, _pos) = context.value_stack.pop().unwrap();
-        context.value_stack.push((op(value), pos));
-    }
-
-    /// Handles a binary operator that can fail.
-    fn exec_binary_op_can_fail<F: Fn(Value, Value) -> value::Result<Value>>(
-        context: &mut Context,
-        op: F,
-        pos: LineCol,
-    ) -> Result<()> {
-        let (rhs, _pos) = context.value_stack.pop().unwrap();
-        let (lhs, _pos) = context.value_stack.pop().unwrap();
+        let rhs = context.value_stack.pop_integer();
+        let lhs = context.value_stack.pop_integer();
         let result = op(lhs, rhs).map_err(|e| Error::from_value_error(e, pos))?;
-        context.value_stack.push((result, pos));
+        context.value_stack.push_integer(result, pos);
         Ok(())
     }
 
-    /// Handles a binary operator that cannot fail.
-    fn exec_binary_op_cannot_fail<F: Fn(Value, Value) -> Value>(
+    /// Handles a binary equality operator for booleans that cannot fail.
+    fn exec_equality_boolean_op2<F: Fn(bool, bool) -> bool>(
         context: &mut Context,
         op: F,
         pos: LineCol,
     ) {
-        let (rhs, _pos) = context.value_stack.pop().unwrap();
-        let (lhs, _pos) = context.value_stack.pop().unwrap();
-        context.value_stack.push((op(lhs, rhs), pos));
+        let rhs = context.value_stack.pop_boolean();
+        let lhs = context.value_stack.pop_boolean();
+        context.value_stack.push_boolean(op(lhs, rhs), pos);
+    }
+
+    /// Handles a binary equality operator for doubles that cannot fail.
+    fn exec_equality_double_op2<F: Fn(f64, f64) -> bool>(
+        context: &mut Context,
+        op: F,
+        pos: LineCol,
+    ) {
+        let rhs = context.value_stack.pop_double();
+        let lhs = context.value_stack.pop_double();
+        context.value_stack.push_boolean(op(lhs, rhs), pos);
+    }
+
+    /// Handles a binary equality operator for integers that cannot fail.
+    fn exec_equality_integer_op2<F: Fn(i32, i32) -> bool>(
+        context: &mut Context,
+        op: F,
+        pos: LineCol,
+    ) {
+        let rhs = context.value_stack.pop_integer();
+        let lhs = context.value_stack.pop_integer();
+        context.value_stack.push_boolean(op(lhs, rhs), pos);
+    }
+
+    /// Handles a binary equality operator for strings that cannot fail.
+    fn exec_equality_string_op2<F: Fn(&str, &str) -> bool>(
+        context: &mut Context,
+        op: F,
+        pos: LineCol,
+    ) {
+        let rhs = context.value_stack.pop_string();
+        let lhs = context.value_stack.pop_string();
+        context.value_stack.push_boolean(op(&lhs, &rhs), pos);
+    }
+
+    /// Handles a unary arithmetic operator for doubles that cannot fail.
+    fn exec_arithmetic_double_op1<F: Fn(f64) -> f64>(context: &mut Context, op: F, pos: LineCol) {
+        let rhs = context.value_stack.pop_double();
+        context.value_stack.push_double(op(rhs), pos);
+    }
+
+    /// Handles a binary arithmetic operator for doubles that cannot fail.
+    fn exec_arithmetic_double_op2<F: Fn(f64, f64) -> f64>(
+        context: &mut Context,
+        op: F,
+        pos: LineCol,
+    ) {
+        let rhs = context.value_stack.pop_double();
+        let lhs = context.value_stack.pop_double();
+        context.value_stack.push_double(op(lhs, rhs), pos);
+    }
+
+    /// Handles a unary arithmetic operator for doubles that can fail.
+    fn exec_arithmetic_integer_op1<F: Fn(i32) -> value::Result<i32>>(
+        context: &mut Context,
+        op: F,
+        pos: LineCol,
+    ) -> Result<()> {
+        let rhs = context.value_stack.pop_integer();
+        let result = op(rhs).map_err(|e| Error::from_value_error(e, pos))?;
+        context.value_stack.push_integer(result, pos);
+        Ok(())
+    }
+
+    /// Handles a binary arithmetic operator for doubles that can fail.
+    fn exec_arithmetic_integer_op2<F: Fn(i32, i32) -> value::Result<i32>>(
+        context: &mut Context,
+        op: F,
+        pos: LineCol,
+    ) -> Result<()> {
+        let rhs = context.value_stack.pop_integer();
+        let lhs = context.value_stack.pop_integer();
+        let result = op(lhs, rhs).map_err(|e| Error::from_value_error(e, pos))?;
+        context.value_stack.push_integer(result, pos);
+        Ok(())
+    }
+
+    /// Handles a binary arithmetic operator for doubles that cannot fail.
+    fn exec_arithmetic_string_op2<F: Fn(&str, &str) -> String>(
+        context: &mut Context,
+        op: F,
+        pos: LineCol,
+    ) {
+        let rhs = context.value_stack.pop_string();
+        let lhs = context.value_stack.pop_string();
+        context.value_stack.push_string(op(&lhs, &rhs), pos);
     }
 
     /// Evaluates the subscripts of an array reference.
@@ -987,227 +1077,227 @@ impl Machine {
         let instr = &instrs[context.pc];
         match instr {
             Instruction::LogicalAnd(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::logical_and, *pos);
+                Machine::exec_logical_op2(context, |lhs, rhs| lhs && rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::LogicalOr(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::logical_or, *pos);
+                Machine::exec_logical_op2(context, |lhs, rhs| lhs || rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::LogicalXor(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::logical_xor, *pos);
+                Machine::exec_logical_op2(context, |lhs, rhs| lhs ^ rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::LogicalNot(pos) => {
-                Machine::exec_unary_op_cannot_fail(context, value::logical_not, *pos);
+                Machine::exec_logical_op1(context, |rhs| !rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::BitwiseAnd(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::bitwise_and, *pos);
+                Machine::exec_bitwise_op2(context, |lhs, rhs| lhs & rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::BitwiseOr(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::bitwise_or, *pos);
+                Machine::exec_bitwise_op2(context, |lhs, rhs| lhs | rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::BitwiseXor(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::bitwise_xor, *pos);
+                Machine::exec_bitwise_op2(context, |lhs, rhs| lhs ^ rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::BitwiseNot(pos) => {
-                Machine::exec_unary_op_cannot_fail(context, value::bitwise_not, *pos);
+                Machine::exec_bitwise_op1(context, |rhs| !rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::ShiftLeft(pos) => {
-                Machine::exec_binary_op_can_fail(context, value::bitwise_shl, *pos)?;
+                Machine::exec_bitwise_op2_err(context, value::bitwise_shl, *pos)?;
                 context.pc += 1;
             }
 
             Instruction::ShiftRight(pos) => {
-                Machine::exec_binary_op_can_fail(context, value::bitwise_shr, *pos)?;
+                Machine::exec_bitwise_op2_err(context, value::bitwise_shr, *pos)?;
                 context.pc += 1;
             }
 
             Instruction::EqualBooleans(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::eq_boolean, *pos);
+                Machine::exec_equality_boolean_op2(context, |lhs, rhs| lhs == rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::NotEqualBooleans(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::ne_boolean, *pos);
+                Machine::exec_equality_boolean_op2(context, |lhs, rhs| lhs != rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::EqualDoubles(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::eq_double, *pos);
+                Machine::exec_equality_double_op2(context, |lhs, rhs| lhs == rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::NotEqualDoubles(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::ne_double, *pos);
+                Machine::exec_equality_double_op2(context, |lhs, rhs| lhs != rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::LessDoubles(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::lt_double, *pos);
+                Machine::exec_equality_double_op2(context, |lhs, rhs| lhs < rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::LessEqualDoubles(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::le_double, *pos);
+                Machine::exec_equality_double_op2(context, |lhs, rhs| lhs <= rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::GreaterDoubles(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::gt_double, *pos);
+                Machine::exec_equality_double_op2(context, |lhs, rhs| lhs > rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::GreaterEqualDoubles(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::ge_double, *pos);
+                Machine::exec_equality_double_op2(context, |lhs, rhs| lhs >= rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::EqualIntegers(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::eq_integer, *pos);
+                Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs == rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::NotEqualIntegers(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::ne_integer, *pos);
+                Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs != rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::LessIntegers(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::lt_integer, *pos);
+                Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs < rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::LessEqualIntegers(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::le_integer, *pos);
+                Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs <= rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::GreaterIntegers(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::gt_integer, *pos);
+                Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs > rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::GreaterEqualIntegers(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::ge_integer, *pos);
+                Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs >= rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::EqualStrings(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::eq_text, *pos);
+                Machine::exec_equality_string_op2(context, |lhs, rhs| lhs == rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::NotEqualStrings(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::ne_text, *pos);
+                Machine::exec_equality_string_op2(context, |lhs, rhs| lhs != rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::LessStrings(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::lt_text, *pos);
+                Machine::exec_equality_string_op2(context, |lhs, rhs| lhs < rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::LessEqualStrings(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::le_text, *pos);
+                Machine::exec_equality_string_op2(context, |lhs, rhs| lhs <= rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::GreaterStrings(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::gt_text, *pos);
+                Machine::exec_equality_string_op2(context, |lhs, rhs| lhs > rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::GreaterEqualStrings(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::ge_text, *pos);
+                Machine::exec_equality_string_op2(context, |lhs, rhs| lhs >= rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::AddDoubles(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::add_double, *pos);
+                Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs + rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::SubtractDoubles(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::sub_double, *pos);
+                Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs - rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::MultiplyDoubles(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::mul_double, *pos);
+                Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs * rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::DivideDoubles(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::div_double, *pos);
+                Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs / rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::ModuloDoubles(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::modulo_double, *pos);
+                Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs % rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::PowerDoubles(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::pow_double, *pos);
+                Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs.powf(rhs), *pos);
                 context.pc += 1;
             }
 
             Instruction::NegateDouble(pos) => {
-                Machine::exec_unary_op_cannot_fail(context, value::neg_double, *pos);
+                Machine::exec_arithmetic_double_op1(context, |rhs| -rhs, *pos);
                 context.pc += 1;
             }
 
             Instruction::AddIntegers(pos) => {
-                Machine::exec_binary_op_can_fail(context, value::add_integer, *pos)?;
+                Machine::exec_arithmetic_integer_op2(context, value::add_integer, *pos)?;
                 context.pc += 1;
             }
 
             Instruction::SubtractIntegers(pos) => {
-                Machine::exec_binary_op_can_fail(context, value::sub_integer, *pos)?;
+                Machine::exec_arithmetic_integer_op2(context, value::sub_integer, *pos)?;
                 context.pc += 1;
             }
 
             Instruction::MultiplyIntegers(pos) => {
-                Machine::exec_binary_op_can_fail(context, value::mul_integer, *pos)?;
+                Machine::exec_arithmetic_integer_op2(context, value::mul_integer, *pos)?;
                 context.pc += 1;
             }
 
             Instruction::DivideIntegers(pos) => {
-                Machine::exec_binary_op_can_fail(context, value::div_integer, *pos)?;
+                Machine::exec_arithmetic_integer_op2(context, value::div_integer, *pos)?;
                 context.pc += 1;
             }
 
             Instruction::ModuloIntegers(pos) => {
-                Machine::exec_binary_op_can_fail(context, value::modulo_integer, *pos)?;
+                Machine::exec_arithmetic_integer_op2(context, value::modulo_integer, *pos)?;
                 context.pc += 1;
             }
 
             Instruction::PowerIntegers(pos) => {
-                Machine::exec_binary_op_can_fail(context, value::pow_integer, *pos)?;
+                Machine::exec_arithmetic_integer_op2(context, value::pow_integer, *pos)?;
                 context.pc += 1;
             }
 
             Instruction::NegateInteger(pos) => {
-                Machine::exec_unary_op_can_fail(context, value::neg_integer, *pos)?;
+                Machine::exec_arithmetic_integer_op1(context, value::neg_integer, *pos)?;
                 context.pc += 1;
             }
 
             Instruction::ConcatStrings(pos) => {
-                Machine::exec_binary_op_cannot_fail(context, value::add_text, *pos);
+                Machine::exec_arithmetic_string_op2(context, |lhs, rhs| lhs.to_owned() + rhs, *pos);
                 context.pc += 1;
             }
 

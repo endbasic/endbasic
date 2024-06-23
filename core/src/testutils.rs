@@ -491,13 +491,13 @@ impl Callable for SumFunction {
     }
 
     async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
-        let mut result = Value::Integer(0);
+        let mut result = 0;
         while scope.nargs() > 0 {
             let (i, pos) = scope.pop_integer_with_pos();
-            result = value::add_integer(result, Value::Integer(i))
-                .map_err(|e| CallError::EvalError(pos, e.message))?;
+            result =
+                value::add_integer(result, i).map_err(|e| CallError::EvalError(pos, e.message))?;
         }
-        scope.return_any(result)
+        scope.return_integer(result)
     }
 }
 
