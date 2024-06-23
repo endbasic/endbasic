@@ -72,7 +72,6 @@ impl Value {
             VarType::Double => parse_f64(&s),
             VarType::Integer => parse_i32(&s),
             VarType::Text => Ok(Value::Text(s)),
-            VarType::Void => panic!("Void values are not supported"),
         }
     }
 
@@ -554,14 +553,8 @@ mod tests {
     fn test_value_maybe_cast() {
         use std::i32;
 
-        let all_types = [
-            VarType::Auto,
-            VarType::Boolean,
-            VarType::Double,
-            VarType::Integer,
-            VarType::Text,
-            VarType::Void,
-        ];
+        let all_types =
+            [VarType::Auto, VarType::Boolean, VarType::Double, VarType::Integer, VarType::Text];
         for target in all_types {
             assert_eq!(Boolean(true), Boolean(true).maybe_cast(target).unwrap());
             if target != VarType::Integer {

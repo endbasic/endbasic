@@ -362,7 +362,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        Ok(Statement::Call(CallSpan { vref: VarRef::new(name, VarType::Void), vref_pos, args }))
+        Ok(Statement::Call(CallSpan { vref: VarRef::new(name, VarType::Auto), vref_pos, args }))
     }
 
     /// Starts processing either an array reference or a builtin call and disambiguates between the
@@ -1948,7 +1948,7 @@ mod tests {
             "PRINT a\nPRINT ; 3 , c$\nNOARGS\nNAME 3 AS 4",
             &[
                 Statement::Call(CallSpan {
-                    vref: VarRef::new("PRINT", VarType::Void),
+                    vref: VarRef::new("PRINT", VarType::Auto),
                     vref_pos: lc(1, 1),
                     args: vec![ArgSpan {
                         expr: Some(expr_symbol(VarRef::new("a", VarType::Auto), 1, 7)),
@@ -1957,7 +1957,7 @@ mod tests {
                     }],
                 }),
                 Statement::Call(CallSpan {
-                    vref: VarRef::new("PRINT", VarType::Void),
+                    vref: VarRef::new("PRINT", VarType::Auto),
                     vref_pos: lc(2, 1),
                     args: vec![
                         ArgSpan { expr: None, sep: ArgSep::Short, sep_pos: lc(2, 7) },
@@ -1974,12 +1974,12 @@ mod tests {
                     ],
                 }),
                 Statement::Call(CallSpan {
-                    vref: VarRef::new("NOARGS", VarType::Void),
+                    vref: VarRef::new("NOARGS", VarType::Auto),
                     vref_pos: lc(3, 1),
                     args: vec![],
                 }),
                 Statement::Call(CallSpan {
-                    vref: VarRef::new("NAME", VarType::Void),
+                    vref: VarRef::new("NAME", VarType::Auto),
                     vref_pos: lc(4, 1),
                     args: vec![
                         ArgSpan {
@@ -2005,7 +2005,7 @@ mod tests {
         do_ok_test(
             "PRINT(1)",
             &[Statement::Call(CallSpan {
-                vref: VarRef::new("PRINT", VarType::Void),
+                vref: VarRef::new("PRINT", VarType::Auto),
                 vref_pos: lc(1, 1),
                 args: vec![ArgSpan {
                     expr: Some(expr_integer(1, 1, 7)),
@@ -2018,7 +2018,7 @@ mod tests {
         do_ok_test(
             "PRINT(1), 2",
             &[Statement::Call(CallSpan {
-                vref: VarRef::new("PRINT", VarType::Void),
+                vref: VarRef::new("PRINT", VarType::Auto),
                 vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
@@ -2038,7 +2038,7 @@ mod tests {
         do_ok_test(
             "PRINT(1); 2",
             &[Statement::Call(CallSpan {
-                vref: VarRef::new("PRINT", VarType::Void),
+                vref: VarRef::new("PRINT", VarType::Auto),
                 vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
@@ -2058,7 +2058,7 @@ mod tests {
         do_ok_test(
             "PRINT(1);",
             &[Statement::Call(CallSpan {
-                vref: VarRef::new("PRINT", VarType::Void),
+                vref: VarRef::new("PRINT", VarType::Auto),
                 vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
@@ -2074,7 +2074,7 @@ mod tests {
         do_ok_test(
             "PRINT(1) + 2; 3",
             &[Statement::Call(CallSpan {
-                vref: VarRef::new("PRINT", VarType::Void),
+                vref: VarRef::new("PRINT", VarType::Auto),
                 vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
@@ -2474,7 +2474,7 @@ mod tests {
         do_ok_test(
             &format!("PRINT {}, 1", input),
             &[Statement::Call(CallSpan {
-                vref: VarRef::new("PRINT", VarType::Void),
+                vref: VarRef::new("PRINT", VarType::Auto),
                 vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
@@ -3176,7 +3176,7 @@ mod tests {
     /// Helper to instantiate a trivial `Statement::BuiltinCall` that has no arguments.
     fn make_bare_builtin_call(name: &str, line: usize, col: usize) -> Statement {
         Statement::Call(CallSpan {
-            vref: VarRef::new(name, VarType::Void),
+            vref: VarRef::new(name, VarType::Auto),
             vref_pos: LineCol { line, col },
             args: vec![],
         })
@@ -3616,7 +3616,7 @@ mod tests {
         do_if_uniline_allowed_test(
             "a 0",
             Statement::Call(CallSpan {
-                vref: VarRef::new("A", VarType::Void),
+                vref: VarRef::new("A", VarType::Auto),
                 vref_pos: lc(1, 11),
                 args: vec![ArgSpan {
                     expr: Some(expr_integer(0, 1, 13)),
