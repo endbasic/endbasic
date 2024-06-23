@@ -210,14 +210,14 @@ pub enum ExprType {
 impl ExprType {
     /// Converts a `VarType` into an `ExprType`.
     ///
-    /// If the `VarType` represents type inference (the `Auto` value), returns `auto_type`.
-    pub(crate) fn from_vartype(vtype: VarType, auto_type: ExprType) -> Self {
+    /// If the `VarType` represents type inference (the `None` value), returns `auto_type`.
+    pub(crate) fn from_vartype(vtype: Option<VarType>, auto_type: ExprType) -> Self {
         match vtype {
-            VarType::Auto => auto_type,
-            VarType::Boolean => ExprType::Boolean,
-            VarType::Double => ExprType::Double,
-            VarType::Integer => ExprType::Integer,
-            VarType::Text => ExprType::Text,
+            None => auto_type,
+            Some(VarType::Boolean) => ExprType::Boolean,
+            Some(VarType::Double) => ExprType::Double,
+            Some(VarType::Integer) => ExprType::Integer,
+            Some(VarType::Text) => ExprType::Text,
         }
     }
 
@@ -274,9 +274,6 @@ impl fmt::Display for ExprType {
 // types.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VarType {
-    /// Unspecified type identifier.  The type is determined by the value of the variable.
-    Auto,
-
     /// A boolean variable.
     Boolean,
 
@@ -295,7 +292,6 @@ impl VarType {
     /// Returns the type annotation for this type.
     pub fn annotation(&self) -> &'static str {
         match self {
-            VarType::Auto => "",
             VarType::Boolean => "?",
             VarType::Double => "#",
             VarType::Integer => "%",
@@ -307,7 +303,6 @@ impl VarType {
 impl fmt::Display for VarType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            VarType::Auto => panic!("Should not try to display an auto type"),
             VarType::Boolean => write!(f, "BOOLEAN"),
             VarType::Double => write!(f, "DOUBLE"),
             VarType::Integer => write!(f, "INTEGER"),
@@ -322,15 +317,15 @@ pub struct VarRef {
     /// Name of the variable this points to.
     name: String,
 
-    /// Type of the variable this points to, if explicitly specified.  If `Auto`, the type of the
-    /// variable is only known at runtime based on the values assigned to it.
-    ref_type: VarType,
+    /// Type of the variable this points to, if explicitly specified.
+    ///
+    /// If `None`, the type of the variable is subject to type inference.
+    ref_type: Option<VarType>,
 }
 
 impl VarRef {
-    /// Creates a new reference to the variable with `name` and the optional `vtype` type.
-    #[allow(clippy::redundant_field_names)]
-    pub fn new<T: Into<String>>(name: T, ref_type: VarType) -> Self {
+    /// Creates a new reference to the variable with `name` and the optional `ref_type` type.
+    pub fn new<T: Into<String>>(name: T, ref_type: Option<VarType>) -> Self {
         Self { name: name.into(), ref_type }
     }
 
@@ -347,38 +342,46 @@ impl VarRef {
 
     /// Adds the type annotation `ref_type` to this reference.
     ///
-    /// Assumes that the current annotation for this reference is `Auto`.
+    /// Assumes that the current annotation for this reference is not present.
     pub(crate) fn qualify(self, expr_type: Option<ExprType>) -> Self {
-        assert!(self.ref_type == VarType::Auto, "Reference already qualified");
+        assert!(self.ref_type.is_none(), "Reference already qualified");
         match expr_type {
-            None => Self { name: self.name, ref_type: VarType::Auto },
-            Some(expr_type) => Self { name: self.name, ref_type: expr_type.into() },
+            None => Self { name: self.name, ref_type: None },
+            Some(expr_type) => Self { name: self.name, ref_type: Some(expr_type.into()) },
         }
     }
 
     /// Returns the type of this reference.
-    pub fn ref_type(&self) -> VarType {
+    pub fn ref_type(&self) -> Option<VarType> {
         self.ref_type
     }
 
     /// Returns true if this reference is compatible with the given type.
     pub fn accepts(&self, other: ExprType) -> bool {
-        self.ref_type == VarType::Auto || self.ref_type == other.into()
+        match self.ref_type {
+            None => true,
+            Some(vtype) => vtype == other.into(),
+        }
     }
 
     /// Returns true if this reference is compatible with the return type of a callable.
     pub fn accepts_callable(&self, other: Option<ExprType>) -> bool {
-        let other_type = match other {
-            Some(other) => other.into(),
-            None => VarType::Auto,
-        };
-        self.ref_type == VarType::Auto || self.ref_type == other_type
+        match self.ref_type {
+            None => true,
+            Some(vtype) => match other {
+                Some(other) => vtype == other.into(),
+                None => false,
+            },
+        }
     }
 }
 
 impl fmt::Display for VarRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self.name, self.ref_type().annotation())
+        match self.ref_type {
+            None => self.name.fmt(f),
+            Some(vtype) => write!(f, "{}{}", self.name, vtype.annotation()),
+        }
     }
 }
 
@@ -879,39 +882,39 @@ mod tests {
 
     #[test]
     fn test_varref_display() {
-        assert_eq!("name", format!("{}", VarRef::new("name", VarType::Auto)));
-        assert_eq!("abc?", format!("{}", VarRef::new("abc", VarType::Boolean)));
-        assert_eq!("cba#", format!("{}", VarRef::new("cba", VarType::Double)));
-        assert_eq!("def%", format!("{}", VarRef::new("def", VarType::Integer)));
-        assert_eq!("ghi$", format!("{}", VarRef::new("ghi", VarType::Text)));
+        assert_eq!("name", format!("{}", VarRef::new("name", None)));
+        assert_eq!("abc?", format!("{}", VarRef::new("abc", Some(VarType::Boolean))));
+        assert_eq!("cba#", format!("{}", VarRef::new("cba", Some(VarType::Double))));
+        assert_eq!("def%", format!("{}", VarRef::new("def", Some(VarType::Integer))));
+        assert_eq!("ghi$", format!("{}", VarRef::new("ghi", Some(VarType::Text))));
     }
 
     #[test]
     fn test_varref_accepts() {
-        assert!(VarRef::new("a", VarType::Auto).accepts(ExprType::Boolean));
-        assert!(VarRef::new("a", VarType::Auto).accepts(ExprType::Double));
-        assert!(VarRef::new("a", VarType::Auto).accepts(ExprType::Integer));
-        assert!(VarRef::new("a", VarType::Auto).accepts(ExprType::Text));
+        assert!(VarRef::new("a", None).accepts(ExprType::Boolean));
+        assert!(VarRef::new("a", None).accepts(ExprType::Double));
+        assert!(VarRef::new("a", None).accepts(ExprType::Integer));
+        assert!(VarRef::new("a", None).accepts(ExprType::Text));
 
-        assert!(VarRef::new("a", VarType::Boolean).accepts(ExprType::Boolean));
-        assert!(!VarRef::new("a", VarType::Boolean).accepts(ExprType::Double));
-        assert!(!VarRef::new("a", VarType::Boolean).accepts(ExprType::Integer));
-        assert!(!VarRef::new("a", VarType::Boolean).accepts(ExprType::Text));
+        assert!(VarRef::new("a", Some(VarType::Boolean)).accepts(ExprType::Boolean));
+        assert!(!VarRef::new("a", Some(VarType::Boolean)).accepts(ExprType::Double));
+        assert!(!VarRef::new("a", Some(VarType::Boolean)).accepts(ExprType::Integer));
+        assert!(!VarRef::new("a", Some(VarType::Boolean)).accepts(ExprType::Text));
 
-        assert!(!VarRef::new("a", VarType::Double).accepts(ExprType::Boolean));
-        assert!(VarRef::new("a", VarType::Double).accepts(ExprType::Double));
-        assert!(!VarRef::new("a", VarType::Double).accepts(ExprType::Integer));
-        assert!(!VarRef::new("a", VarType::Double).accepts(ExprType::Text));
+        assert!(!VarRef::new("a", Some(VarType::Double)).accepts(ExprType::Boolean));
+        assert!(VarRef::new("a", Some(VarType::Double)).accepts(ExprType::Double));
+        assert!(!VarRef::new("a", Some(VarType::Double)).accepts(ExprType::Integer));
+        assert!(!VarRef::new("a", Some(VarType::Double)).accepts(ExprType::Text));
 
-        assert!(!VarRef::new("a", VarType::Integer).accepts(ExprType::Boolean));
-        assert!(!VarRef::new("a", VarType::Integer).accepts(ExprType::Double));
-        assert!(VarRef::new("a", VarType::Integer).accepts(ExprType::Integer));
-        assert!(!VarRef::new("a", VarType::Integer).accepts(ExprType::Text));
+        assert!(!VarRef::new("a", Some(VarType::Integer)).accepts(ExprType::Boolean));
+        assert!(!VarRef::new("a", Some(VarType::Integer)).accepts(ExprType::Double));
+        assert!(VarRef::new("a", Some(VarType::Integer)).accepts(ExprType::Integer));
+        assert!(!VarRef::new("a", Some(VarType::Integer)).accepts(ExprType::Text));
 
-        assert!(!VarRef::new("a", VarType::Text).accepts(ExprType::Boolean));
-        assert!(!VarRef::new("a", VarType::Text).accepts(ExprType::Double));
-        assert!(!VarRef::new("a", VarType::Text).accepts(ExprType::Integer));
-        assert!(VarRef::new("a", VarType::Text).accepts(ExprType::Text));
+        assert!(!VarRef::new("a", Some(VarType::Text)).accepts(ExprType::Boolean));
+        assert!(!VarRef::new("a", Some(VarType::Text)).accepts(ExprType::Double));
+        assert!(!VarRef::new("a", Some(VarType::Text)).accepts(ExprType::Integer));
+        assert!(VarRef::new("a", Some(VarType::Text)).accepts(ExprType::Text));
     }
 
     #[test]

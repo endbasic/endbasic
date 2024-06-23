@@ -58,7 +58,6 @@ impl Value {
 
         let s = s.into();
         match vtype {
-            VarType::Auto => parse_i32(&s),
             VarType::Boolean => {
                 let raw = s.to_uppercase();
                 if raw == "TRUE" || raw == "YES" || raw == "Y" {
@@ -80,10 +79,10 @@ impl Value {
     ///
     /// Can return an error when the conversion is feasible but it is not possible, such as trying
     /// to cast a NaN to an integer.
-    pub(crate) fn maybe_cast(self, target: VarType) -> Result<Value> {
+    pub(crate) fn maybe_cast(self, target: Option<VarType>) -> Result<Value> {
         match (target, self) {
-            (VarType::Integer, Value::Double(d)) => Ok(Value::Integer(double_to_integer(d)?)),
-            (VarType::Double, Value::Integer(i)) => Ok(Value::Double(integer_to_double(i))),
+            (Some(VarType::Integer), Value::Double(d)) => Ok(Value::Integer(double_to_integer(d)?)),
+            (Some(VarType::Double), Value::Integer(i)) => Ok(Value::Double(integer_to_double(i))),
             (_, v) => Ok(v),
         }
     }
@@ -443,19 +442,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_value_parse_as_auto() {
-        assert_eq!(Integer(5), Value::parse_as(VarType::Auto, "5").unwrap());
-        assert_eq!(
-            "Invalid integer literal true",
-            format!("{}", Value::parse_as(VarType::Auto, "true").unwrap_err())
-        );
-        assert_eq!(
-            "Invalid integer literal a b",
-            format!("{}", Value::parse_as(VarType::Auto, "a b").unwrap_err())
-        );
-    }
-
-    #[test]
     fn test_value_parse_as_boolean() {
         for s in &["true", "TrUe", "TRUE", "yes", "Yes", "y", "Y"] {
             assert_eq!(Boolean(true), Value::parse_as(VarType::Boolean, *s).unwrap());
@@ -553,33 +539,41 @@ mod tests {
     fn test_value_maybe_cast() {
         use std::i32;
 
-        let all_types =
-            [VarType::Auto, VarType::Boolean, VarType::Double, VarType::Integer, VarType::Text];
+        let all_types = [VarType::Boolean, VarType::Double, VarType::Integer, VarType::Text];
         for target in all_types {
-            assert_eq!(Boolean(true), Boolean(true).maybe_cast(target).unwrap());
+            assert_eq!(Boolean(true), Boolean(true).maybe_cast(Some(target)).unwrap());
             if target != VarType::Integer {
-                assert_eq!(Double(3.8), Double(3.8).maybe_cast(target).unwrap());
-                match Double(f64::NAN).maybe_cast(target).unwrap() {
+                assert_eq!(Double(3.8), Double(3.8).maybe_cast(Some(target)).unwrap());
+                match Double(f64::NAN).maybe_cast(Some(target)).unwrap() {
                     Double(d) => assert!(d.is_nan()),
                     _ => panic!(),
                 }
             }
             if target != VarType::Double {
-                assert_eq!(Integer(3), Integer(3).maybe_cast(target).unwrap());
+                assert_eq!(Integer(3), Integer(3).maybe_cast(Some(target)).unwrap());
             }
-            assert_eq!(Text("a".to_owned()), Text("a".to_owned()).maybe_cast(target).unwrap());
+            assert_eq!(
+                Text("a".to_owned()),
+                Text("a".to_owned()).maybe_cast(Some(target)).unwrap()
+            );
         }
 
-        assert_eq!(Integer(8), Double(8.4).maybe_cast(VarType::Integer).unwrap());
-        assert_eq!(Integer(9), Double(8.5).maybe_cast(VarType::Integer).unwrap());
-        assert_eq!(Integer(9), Double(8.6).maybe_cast(VarType::Integer).unwrap());
-        assert_eq!(Double(7.0), Integer(7).maybe_cast(VarType::Double).unwrap());
+        assert_eq!(Integer(8), Double(8.4).maybe_cast(Some(VarType::Integer)).unwrap());
+        assert_eq!(Integer(9), Double(8.5).maybe_cast(Some(VarType::Integer)).unwrap());
+        assert_eq!(Integer(9), Double(8.6).maybe_cast(Some(VarType::Integer)).unwrap());
+        assert_eq!(Double(7.0), Integer(7).maybe_cast(Some(VarType::Double)).unwrap());
 
-        Double(f64::NAN).maybe_cast(VarType::Integer).unwrap_err();
-        assert_eq!(Double(i32::MAX as f64), Integer(i32::MAX).maybe_cast(VarType::Double).unwrap());
-        Double(i32::MAX as f64 + 1.0).maybe_cast(VarType::Integer).unwrap_err();
-        assert_eq!(Double(i32::MIN as f64), Integer(i32::MIN).maybe_cast(VarType::Double).unwrap());
-        Double(i32::MIN as f64 - 1.0).maybe_cast(VarType::Integer).unwrap_err();
+        Double(f64::NAN).maybe_cast(Some(VarType::Integer)).unwrap_err();
+        assert_eq!(
+            Double(i32::MAX as f64),
+            Integer(i32::MAX).maybe_cast(Some(VarType::Double)).unwrap()
+        );
+        Double(i32::MAX as f64 + 1.0).maybe_cast(Some(VarType::Integer)).unwrap_err();
+        assert_eq!(
+            Double(i32::MIN as f64),
+            Integer(i32::MIN).maybe_cast(Some(VarType::Double)).unwrap()
+        );
+        Double(i32::MIN as f64 - 1.0).maybe_cast(Some(VarType::Integer)).unwrap_err();
     }
 
     #[test]

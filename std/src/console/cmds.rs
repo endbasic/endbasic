@@ -345,7 +345,7 @@ impl Callable for InputCommand {
 
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
-        let vref = VarRef::new(vname.to_string(), vtype.into());
+        let vref = VarRef::new(vname.to_string(), Some(vtype.into()));
         loop {
             match read_line(&mut *console, &prompt, &previous_answer, None).await {
                 Ok(answer) => match Value::parse_as(vtype.into(), answer.trim_end()) {

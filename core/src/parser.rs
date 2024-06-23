@@ -40,7 +40,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// This is only valid for references that have no annotations in them.
 fn vref_to_unannotated_string(vref: VarRef, pos: LineCol) -> Result<String> {
-    if vref.ref_type() != VarType::Auto {
+    if vref.ref_type().is_some() {
         return Err(Error::Bad(pos, format!("Type annotation not allowed in {}", vref)));
     }
     Ok(vref.take_name())
@@ -362,7 +362,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        Ok(Statement::Call(CallSpan { vref: VarRef::new(name, VarType::Auto), vref_pos, args }))
+        Ok(Statement::Call(CallSpan { vref: VarRef::new(name, None), vref_pos, args }))
     }
 
     /// Starts processing either an array reference or a builtin call and disambiguates between the
@@ -1184,7 +1184,7 @@ impl<'a> Parser<'a> {
         let token_span = self.lexer.read()?;
         let iterator = match token_span.token {
             Token::Symbol(iterator) => match iterator.ref_type() {
-                VarType::Auto | VarType::Double | VarType::Integer => iterator,
+                None | Some(VarType::Double) | Some(VarType::Integer) => iterator,
                 _ => {
                     return Err(Error::Bad(
                         token_span.pos,
@@ -1768,11 +1768,8 @@ mod tests {
     fn test_varref_to_unannotated_string() {
         assert_eq!(
             "print",
-            &vref_to_unannotated_string(
-                VarRef::new("print", VarType::Auto),
-                LineCol { line: 0, col: 0 }
-            )
-            .unwrap()
+            &vref_to_unannotated_string(VarRef::new("print", None), LineCol { line: 0, col: 0 })
+                .unwrap()
         );
 
         assert_eq!(
@@ -1780,7 +1777,7 @@ mod tests {
             format!(
                 "{}",
                 &vref_to_unannotated_string(
-                    VarRef::new("print", VarType::Text),
+                    VarRef::new("print", Some(VarType::Text)),
                     LineCol { line: 7, col: 6 }
                 )
                 .unwrap_err()
@@ -1831,22 +1828,22 @@ mod tests {
             "a=1\nb=2:c=3:' A comment: that follows\nd=4",
             &[
                 Statement::Assignment(AssignmentSpan {
-                    vref: VarRef::new("a", VarType::Auto),
+                    vref: VarRef::new("a", None),
                     vref_pos: lc(1, 1),
                     expr: expr_integer(1, 1, 3),
                 }),
                 Statement::Assignment(AssignmentSpan {
-                    vref: VarRef::new("b", VarType::Auto),
+                    vref: VarRef::new("b", None),
                     vref_pos: lc(2, 1),
                     expr: expr_integer(2, 2, 3),
                 }),
                 Statement::Assignment(AssignmentSpan {
-                    vref: VarRef::new("c", VarType::Auto),
+                    vref: VarRef::new("c", None),
                     vref_pos: lc(2, 5),
                     expr: expr_integer(3, 2, 7),
                 }),
                 Statement::Assignment(AssignmentSpan {
-                    vref: VarRef::new("d", VarType::Auto),
+                    vref: VarRef::new("d", None),
                     vref_pos: lc(3, 1),
                     expr: expr_integer(4, 3, 3),
                 }),
@@ -1860,24 +1857,24 @@ mod tests {
             "a(1)=100\nfoo(2, 3)=\"text\"\nabc$ (5 + z, 6) = TRUE OR FALSE",
             &[
                 Statement::ArrayAssignment(ArrayAssignmentSpan {
-                    vref: VarRef::new("a", VarType::Auto),
+                    vref: VarRef::new("a", None),
                     vref_pos: lc(1, 1),
                     subscripts: vec![expr_integer(1, 1, 3)],
                     expr: expr_integer(100, 1, 6),
                 }),
                 Statement::ArrayAssignment(ArrayAssignmentSpan {
-                    vref: VarRef::new("foo", VarType::Auto),
+                    vref: VarRef::new("foo", None),
                     vref_pos: lc(2, 1),
                     subscripts: vec![expr_integer(2, 2, 5), expr_integer(3, 2, 8)],
                     expr: expr_text("text", 2, 11),
                 }),
                 Statement::ArrayAssignment(ArrayAssignmentSpan {
-                    vref: VarRef::new("abc", VarType::Text),
+                    vref: VarRef::new("abc", Some(VarType::Text)),
                     vref_pos: lc(3, 1),
                     subscripts: vec![
                         Expr::Add(Box::from(BinaryOpSpan {
                             lhs: expr_integer(5, 3, 7),
-                            rhs: expr_symbol(VarRef::new("z".to_owned(), VarType::Auto), 3, 11),
+                            rhs: expr_symbol(VarRef::new("z".to_owned(), None), 3, 11),
                             pos: lc(3, 9),
                         })),
                         expr_integer(6, 3, 14),
@@ -1911,21 +1908,21 @@ mod tests {
             "a=1\nfoo$ = \"bar\"\nb$ = 3 + z",
             &[
                 Statement::Assignment(AssignmentSpan {
-                    vref: VarRef::new("a", VarType::Auto),
+                    vref: VarRef::new("a", None),
                     vref_pos: lc(1, 1),
                     expr: expr_integer(1, 1, 3),
                 }),
                 Statement::Assignment(AssignmentSpan {
-                    vref: VarRef::new("foo", VarType::Text),
+                    vref: VarRef::new("foo", Some(VarType::Text)),
                     vref_pos: lc(2, 1),
                     expr: expr_text("bar", 2, 8),
                 }),
                 Statement::Assignment(AssignmentSpan {
-                    vref: VarRef::new("b", VarType::Text),
+                    vref: VarRef::new("b", Some(VarType::Text)),
                     vref_pos: lc(3, 1),
                     expr: Expr::Add(Box::from(BinaryOpSpan {
                         lhs: expr_integer(3, 3, 6),
-                        rhs: expr_symbol(VarRef::new("z", VarType::Auto), 3, 10),
+                        rhs: expr_symbol(VarRef::new("z", None), 3, 10),
                         pos: lc(3, 8),
                     })),
                 }),
@@ -1948,16 +1945,16 @@ mod tests {
             "PRINT a\nPRINT ; 3 , c$\nNOARGS\nNAME 3 AS 4",
             &[
                 Statement::Call(CallSpan {
-                    vref: VarRef::new("PRINT", VarType::Auto),
+                    vref: VarRef::new("PRINT", None),
                     vref_pos: lc(1, 1),
                     args: vec![ArgSpan {
-                        expr: Some(expr_symbol(VarRef::new("a", VarType::Auto), 1, 7)),
+                        expr: Some(expr_symbol(VarRef::new("a", None), 1, 7)),
                         sep: ArgSep::End,
                         sep_pos: lc(1, 8),
                     }],
                 }),
                 Statement::Call(CallSpan {
-                    vref: VarRef::new("PRINT", VarType::Auto),
+                    vref: VarRef::new("PRINT", None),
                     vref_pos: lc(2, 1),
                     args: vec![
                         ArgSpan { expr: None, sep: ArgSep::Short, sep_pos: lc(2, 7) },
@@ -1967,19 +1964,19 @@ mod tests {
                             sep_pos: lc(2, 11),
                         },
                         ArgSpan {
-                            expr: Some(expr_symbol(VarRef::new("c", VarType::Text), 2, 13)),
+                            expr: Some(expr_symbol(VarRef::new("c", Some(VarType::Text)), 2, 13)),
                             sep: ArgSep::End,
                             sep_pos: lc(2, 15),
                         },
                     ],
                 }),
                 Statement::Call(CallSpan {
-                    vref: VarRef::new("NOARGS", VarType::Auto),
+                    vref: VarRef::new("NOARGS", None),
                     vref_pos: lc(3, 1),
                     args: vec![],
                 }),
                 Statement::Call(CallSpan {
-                    vref: VarRef::new("NAME", VarType::Auto),
+                    vref: VarRef::new("NAME", None),
                     vref_pos: lc(4, 1),
                     args: vec![
                         ArgSpan {
@@ -2005,7 +2002,7 @@ mod tests {
         do_ok_test(
             "PRINT(1)",
             &[Statement::Call(CallSpan {
-                vref: VarRef::new("PRINT", VarType::Auto),
+                vref: VarRef::new("PRINT", None),
                 vref_pos: lc(1, 1),
                 args: vec![ArgSpan {
                     expr: Some(expr_integer(1, 1, 7)),
@@ -2018,7 +2015,7 @@ mod tests {
         do_ok_test(
             "PRINT(1), 2",
             &[Statement::Call(CallSpan {
-                vref: VarRef::new("PRINT", VarType::Auto),
+                vref: VarRef::new("PRINT", None),
                 vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
@@ -2038,7 +2035,7 @@ mod tests {
         do_ok_test(
             "PRINT(1); 2",
             &[Statement::Call(CallSpan {
-                vref: VarRef::new("PRINT", VarType::Auto),
+                vref: VarRef::new("PRINT", None),
                 vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
@@ -2058,7 +2055,7 @@ mod tests {
         do_ok_test(
             "PRINT(1);",
             &[Statement::Call(CallSpan {
-                vref: VarRef::new("PRINT", VarType::Auto),
+                vref: VarRef::new("PRINT", None),
                 vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
@@ -2074,7 +2071,7 @@ mod tests {
         do_ok_test(
             "PRINT(1) + 2; 3",
             &[Statement::Call(CallSpan {
-                vref: VarRef::new("PRINT", VarType::Auto),
+                vref: VarRef::new("PRINT", None),
                 vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
@@ -2291,7 +2288,7 @@ mod tests {
                 dimensions: vec![
                     Add(Box::from(BinaryOpSpan {
                         lhs: Call(CallSpan {
-                            vref: VarRef::new("bar", VarType::Text),
+                            vref: VarRef::new("bar", Some(VarType::Text)),
                             vref_pos: lc(1, 9),
                             args: vec![],
                         }),
@@ -2474,7 +2471,7 @@ mod tests {
         do_ok_test(
             &format!("PRINT {}, 1", input),
             &[Statement::Call(CallSpan {
-                vref: VarRef::new("PRINT", VarType::Auto),
+                vref: VarRef::new("PRINT", None),
                 vref_pos: lc(1, 1),
                 args: vec![
                     ArgSpan {
@@ -2509,8 +2506,8 @@ mod tests {
 
     #[test]
     fn test_expr_symbols() {
-        do_expr_ok_test("foo", expr_symbol(VarRef::new("foo", VarType::Auto), 1, 7));
-        do_expr_ok_test("bar$", expr_symbol(VarRef::new("bar", VarType::Text), 1, 7));
+        do_expr_ok_test("foo", expr_symbol(VarRef::new("foo", None), 1, 7));
+        do_expr_ok_test("bar$", expr_symbol(VarRef::new("bar", Some(VarType::Text)), 1, 7));
     }
 
     #[test]
@@ -2776,7 +2773,7 @@ mod tests {
         do_expr_ok_test(
             "-a",
             Negate(Box::from(UnaryOpSpan {
-                expr: expr_symbol(VarRef::new("a", VarType::Auto), 1, 8),
+                expr: expr_symbol(VarRef::new("a", None), 1, 8),
                 pos: lc(1, 7),
             })),
         );
@@ -2869,16 +2866,12 @@ mod tests {
         use Expr::*;
         do_expr_ok_test(
             "zero()",
-            Call(CallSpan {
-                vref: VarRef::new("zero", VarType::Auto),
-                vref_pos: lc(1, 7),
-                args: vec![],
-            }),
+            Call(CallSpan { vref: VarRef::new("zero", None), vref_pos: lc(1, 7), args: vec![] }),
         );
         do_expr_ok_test(
             "one%(1)",
             Call(CallSpan {
-                vref: VarRef::new("one", VarType::Integer),
+                vref: VarRef::new("one", Some(VarType::Integer)),
                 vref_pos: lc(1, 7),
                 args: vec![ArgSpan {
                     expr: Some(expr_integer(1, 1, 12)),
@@ -2890,7 +2883,7 @@ mod tests {
         do_expr_ok_test(
             "many$(3, \"x\", TRUE)",
             Call(CallSpan {
-                vref: VarRef::new("many", VarType::Text),
+                vref: VarRef::new("many", Some(VarType::Text)),
                 vref_pos: lc(1, 7),
                 args: vec![
                     ArgSpan {
@@ -2919,11 +2912,11 @@ mod tests {
         do_expr_ok_test(
             "consecutive(parenthesis())",
             Call(CallSpan {
-                vref: VarRef::new("consecutive", VarType::Auto),
+                vref: VarRef::new("consecutive", None),
                 vref_pos: lc(1, 7),
                 args: vec![ArgSpan {
                     expr: Some(Call(CallSpan {
-                        vref: VarRef::new("parenthesis", VarType::Auto),
+                        vref: VarRef::new("parenthesis", None),
                         vref_pos: lc(1, 19),
                         args: vec![],
                     })),
@@ -2935,7 +2928,7 @@ mod tests {
         do_expr_ok_test(
             "outer?(1, inner1(2, 3), 4, inner2(), 5)",
             Call(CallSpan {
-                vref: VarRef::new("outer", VarType::Boolean),
+                vref: VarRef::new("outer", Some(VarType::Boolean)),
                 vref_pos: lc(1, 7),
                 args: vec![
                     ArgSpan {
@@ -2945,7 +2938,7 @@ mod tests {
                     },
                     ArgSpan {
                         expr: Some(Call(CallSpan {
-                            vref: VarRef::new("inner1", VarType::Auto),
+                            vref: VarRef::new("inner1", None),
                             vref_pos: lc(1, 17),
                             args: vec![
                                 ArgSpan {
@@ -2970,7 +2963,7 @@ mod tests {
                     },
                     ArgSpan {
                         expr: Some(Call(CallSpan {
-                            vref: VarRef::new("inner2", VarType::Auto),
+                            vref: VarRef::new("inner2", None),
                             vref_pos: lc(1, 34),
                             args: vec![],
                         })),
@@ -2993,9 +2986,9 @@ mod tests {
         do_expr_ok_test(
             "b AND ask?(34 + 15, ask(1, FALSE), -5)",
             And(Box::from(BinaryOpSpan {
-                lhs: expr_symbol(VarRef::new("b".to_owned(), VarType::Auto), 1, 7),
+                lhs: expr_symbol(VarRef::new("b".to_owned(), None), 1, 7),
                 rhs: Call(CallSpan {
-                    vref: VarRef::new("ask", VarType::Boolean),
+                    vref: VarRef::new("ask", Some(VarType::Boolean)),
                     vref_pos: lc(1, 13),
                     args: vec![
                         ArgSpan {
@@ -3009,7 +3002,7 @@ mod tests {
                         },
                         ArgSpan {
                             expr: Some(Call(CallSpan {
-                                vref: VarRef::new("ask", VarType::Auto),
+                                vref: VarRef::new("ask", None),
                                 vref_pos: lc(1, 27),
                                 args: vec![
                                     ArgSpan {
@@ -3045,8 +3038,8 @@ mod tests {
     #[test]
     fn test_expr_functions_not_confused_with_symbols() {
         use Expr::*;
-        let iref = VarRef::new("i", VarType::Auto);
-        let jref = VarRef::new("j", VarType::Auto);
+        let iref = VarRef::new("i", None);
+        let jref = VarRef::new("j", None);
         do_expr_ok_test(
             "i = 0 OR i = (j - 1)",
             Or(Box::from(BinaryOpSpan {
@@ -3109,7 +3102,7 @@ mod tests {
             "1 + PRINT",
             Add(Box::from(BinaryOpSpan {
                 lhs: expr_integer(1, 1, 7),
-                rhs: expr_symbol(VarRef::new("PRINT", VarType::Auto), 1, 11),
+                rhs: expr_symbol(VarRef::new("PRINT", None), 1, 11),
                 pos: lc(1, 9),
             })),
         );
@@ -3176,7 +3169,7 @@ mod tests {
     /// Helper to instantiate a trivial `Statement::BuiltinCall` that has no arguments.
     fn make_bare_builtin_call(name: &str, line: usize, col: usize) -> Statement {
         Statement::Call(CallSpan {
-            vref: VarRef::new(name, VarType::Auto),
+            vref: VarRef::new(name, None),
             vref_pos: LineCol { line, col },
             args: vec![],
         })
@@ -3591,7 +3584,7 @@ mod tests {
         do_if_uniline_allowed_test(
             "a = 3",
             Statement::Assignment(AssignmentSpan {
-                vref: VarRef::new("a", VarType::Auto),
+                vref: VarRef::new("a", None),
                 vref_pos: lc(1, 11),
                 expr: expr_integer(3, 1, 15),
             }),
@@ -3603,7 +3596,7 @@ mod tests {
         do_if_uniline_allowed_test(
             "a(3) = 5",
             Statement::ArrayAssignment(ArrayAssignmentSpan {
-                vref: VarRef::new("a", VarType::Auto),
+                vref: VarRef::new("a", None),
                 vref_pos: lc(1, 11),
                 subscripts: vec![expr_integer(3, 1, 13)],
                 expr: expr_integer(5, 1, 18),
@@ -3616,7 +3609,7 @@ mod tests {
         do_if_uniline_allowed_test(
             "a 0",
             Statement::Call(CallSpan {
-                vref: VarRef::new("A", VarType::Auto),
+                vref: VarRef::new("A", None),
                 vref_pos: lc(1, 11),
                 args: vec![ArgSpan {
                     expr: Some(expr_integer(0, 1, 13)),
@@ -3639,7 +3632,7 @@ mod tests {
 
     #[test]
     fn test_for_empty() {
-        let auto_iter = VarRef::new("i", VarType::Auto);
+        let auto_iter = VarRef::new("i", None);
         do_ok_test(
             "FOR i = 1 TO 10\nNEXT",
             &[Statement::For(ForSpan {
@@ -3661,7 +3654,7 @@ mod tests {
             })],
         );
 
-        let typed_iter = VarRef::new("d", VarType::Double);
+        let typed_iter = VarRef::new("d", Some(VarType::Double));
         do_ok_test(
             "FOR d# = 1.0 TO 10.2\nREM Nothing to do\nNEXT",
             &[Statement::For(ForSpan {
@@ -3686,7 +3679,7 @@ mod tests {
 
     #[test]
     fn test_for_incrementing() {
-        let iter = VarRef::new("i", VarType::Auto);
+        let iter = VarRef::new("i", None);
         do_ok_test(
             "FOR i = 0 TO 5\nA\nB\nNEXT",
             &[Statement::For(ForSpan {
@@ -3711,7 +3704,7 @@ mod tests {
 
     #[test]
     fn test_for_incrementing_with_step() {
-        let iter = VarRef::new("i", VarType::Auto);
+        let iter = VarRef::new("i", None);
         do_ok_test(
             "FOR i = 0 TO 5 STEP 2\nA\nNEXT",
             &[Statement::For(ForSpan {
@@ -3733,7 +3726,7 @@ mod tests {
             })],
         );
 
-        let iter = VarRef::new("i", VarType::Auto);
+        let iter = VarRef::new("i", None);
         do_ok_test(
             "FOR i = 0 TO 5 STEP 2.5\nA\nNEXT",
             &[Statement::For(ForSpan {
@@ -3758,7 +3751,7 @@ mod tests {
 
     #[test]
     fn test_for_decrementing_with_step() {
-        let iter = VarRef::new("i", VarType::Auto);
+        let iter = VarRef::new("i", None);
         do_ok_test(
             "FOR i = 5 TO 0 STEP -1\nA\nNEXT",
             &[Statement::For(ForSpan {
@@ -3780,7 +3773,7 @@ mod tests {
             })],
         );
 
-        let iter = VarRef::new("i", VarType::Auto);
+        let iter = VarRef::new("i", None);
         do_ok_test(
             "FOR i = 5 TO 0 STEP -1.2\nA\nNEXT",
             &[Statement::For(ForSpan {

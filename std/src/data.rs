@@ -114,7 +114,7 @@ impl Callable for ReadCommand {
             };
             *index += 1;
 
-            let vref = VarRef::new(vname.to_string(), vtype.into());
+            let vref = VarRef::new(vname.to_string(), Some(vtype.into()));
             machine
                 .get_mut_symbols()
                 .set_var(&vref, datum)

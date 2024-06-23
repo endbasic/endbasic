@@ -22,7 +22,7 @@ use crate::gpio;
 use crate::program::Program;
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{ExprType, Value, VarRef, VarType};
+use endbasic_core::ast::{ExprType, Value, VarRef};
 use endbasic_core::exec::{self, Machine, StopReason};
 use endbasic_core::syms::{Array, Callable, Symbol};
 use futures_lite::future::block_on;
@@ -482,7 +482,7 @@ impl Tester {
 
     /// Sets a variable to an initial value.
     pub fn set_var(mut self, name: &str, value: Value) -> Self {
-        self.machine.get_mut_symbols().set_var(&VarRef::new(name, VarType::Auto), value).unwrap();
+        self.machine.get_mut_symbols().set_var(&VarRef::new(name, None), value).unwrap();
         self
     }
 
