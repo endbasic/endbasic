@@ -208,19 +208,6 @@ pub enum ExprType {
 }
 
 impl ExprType {
-    /// Converts a `VarType` into an `ExprType`.
-    ///
-    /// If the `VarType` represents type inference (the `None` value), returns `auto_type`.
-    pub(crate) fn from_vartype(vtype: Option<VarType>, auto_type: ExprType) -> Self {
-        match vtype {
-            None => auto_type,
-            Some(VarType::Boolean) => ExprType::Boolean,
-            Some(VarType::Double) => ExprType::Double,
-            Some(VarType::Integer) => ExprType::Integer,
-            Some(VarType::Text) => ExprType::Text,
-        }
-    }
-
     /// Returns true if this expression type is numerical.
     pub(crate) fn is_numerical(self) -> bool {
         self == Self::Double || self == Self::Integer
@@ -247,17 +234,6 @@ impl ExprType {
     }
 }
 
-impl From<ExprType> for VarType {
-    fn from(value: ExprType) -> Self {
-        match value {
-            ExprType::Boolean => VarType::Boolean,
-            ExprType::Double => VarType::Double,
-            ExprType::Integer => VarType::Integer,
-            ExprType::Text => VarType::Text,
-        }
-    }
-}
-
 impl fmt::Display for ExprType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -265,48 +241,6 @@ impl fmt::Display for ExprType {
             ExprType::Double => write!(f, "DOUBLE"),
             ExprType::Integer => write!(f, "INTEGER"),
             ExprType::Text => write!(f, "STRING"),
-        }
-    }
-}
-
-/// Collection of types for a variable.
-// TODO(jmmv): Consider combining with `Value` and using `Discriminant<Value>` for the variable
-// types.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum VarType {
-    /// A boolean variable.
-    Boolean,
-
-    /// A double-precision floating point variable.
-    Double,
-
-    /// An integer variable.
-    Integer,
-
-    /// A string variable.  This should really be called `String` but it would get confusing with
-    /// the built-in Rust type.
-    Text,
-}
-
-impl VarType {
-    /// Returns the type annotation for this type.
-    pub fn annotation(&self) -> &'static str {
-        match self {
-            VarType::Boolean => "?",
-            VarType::Double => "#",
-            VarType::Integer => "%",
-            VarType::Text => "$",
-        }
-    }
-}
-
-impl fmt::Display for VarType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            VarType::Boolean => write!(f, "BOOLEAN"),
-            VarType::Double => write!(f, "DOUBLE"),
-            VarType::Integer => write!(f, "INTEGER"),
-            VarType::Text => write!(f, "STRING"),
         }
     }
 }
@@ -320,12 +254,12 @@ pub struct VarRef {
     /// Type of the variable this points to, if explicitly specified.
     ///
     /// If `None`, the type of the variable is subject to type inference.
-    ref_type: Option<VarType>,
+    ref_type: Option<ExprType>,
 }
 
 impl VarRef {
     /// Creates a new reference to the variable with `name` and the optional `ref_type` type.
-    pub fn new<T: Into<String>>(name: T, ref_type: Option<VarType>) -> Self {
+    pub fn new<T: Into<String>>(name: T, ref_type: Option<ExprType>) -> Self {
         Self { name: name.into(), ref_type }
     }
 
@@ -347,12 +281,12 @@ impl VarRef {
         assert!(self.ref_type.is_none(), "Reference already qualified");
         match expr_type {
             None => Self { name: self.name, ref_type: None },
-            Some(expr_type) => Self { name: self.name, ref_type: Some(expr_type.into()) },
+            Some(expr_type) => Self { name: self.name, ref_type: Some(expr_type) },
         }
     }
 
     /// Returns the type of this reference.
-    pub fn ref_type(&self) -> Option<VarType> {
+    pub fn ref_type(&self) -> Option<ExprType> {
         self.ref_type
     }
 
@@ -360,7 +294,7 @@ impl VarRef {
     pub fn accepts(&self, other: ExprType) -> bool {
         match self.ref_type {
             None => true,
-            Some(vtype) => vtype == other.into(),
+            Some(vtype) => vtype == other,
         }
     }
 
@@ -369,7 +303,7 @@ impl VarRef {
         match self.ref_type {
             None => true,
             Some(vtype) => match other {
-                Some(other) => vtype == other.into(),
+                Some(other) => vtype == other,
                 None => false,
             },
         }
@@ -883,10 +817,10 @@ mod tests {
     #[test]
     fn test_varref_display() {
         assert_eq!("name", format!("{}", VarRef::new("name", None)));
-        assert_eq!("abc?", format!("{}", VarRef::new("abc", Some(VarType::Boolean))));
-        assert_eq!("cba#", format!("{}", VarRef::new("cba", Some(VarType::Double))));
-        assert_eq!("def%", format!("{}", VarRef::new("def", Some(VarType::Integer))));
-        assert_eq!("ghi$", format!("{}", VarRef::new("ghi", Some(VarType::Text))));
+        assert_eq!("abc?", format!("{}", VarRef::new("abc", Some(ExprType::Boolean))));
+        assert_eq!("cba#", format!("{}", VarRef::new("cba", Some(ExprType::Double))));
+        assert_eq!("def%", format!("{}", VarRef::new("def", Some(ExprType::Integer))));
+        assert_eq!("ghi$", format!("{}", VarRef::new("ghi", Some(ExprType::Text))));
     }
 
     #[test]
@@ -896,25 +830,25 @@ mod tests {
         assert!(VarRef::new("a", None).accepts(ExprType::Integer));
         assert!(VarRef::new("a", None).accepts(ExprType::Text));
 
-        assert!(VarRef::new("a", Some(VarType::Boolean)).accepts(ExprType::Boolean));
-        assert!(!VarRef::new("a", Some(VarType::Boolean)).accepts(ExprType::Double));
-        assert!(!VarRef::new("a", Some(VarType::Boolean)).accepts(ExprType::Integer));
-        assert!(!VarRef::new("a", Some(VarType::Boolean)).accepts(ExprType::Text));
+        assert!(VarRef::new("a", Some(ExprType::Boolean)).accepts(ExprType::Boolean));
+        assert!(!VarRef::new("a", Some(ExprType::Boolean)).accepts(ExprType::Double));
+        assert!(!VarRef::new("a", Some(ExprType::Boolean)).accepts(ExprType::Integer));
+        assert!(!VarRef::new("a", Some(ExprType::Boolean)).accepts(ExprType::Text));
 
-        assert!(!VarRef::new("a", Some(VarType::Double)).accepts(ExprType::Boolean));
-        assert!(VarRef::new("a", Some(VarType::Double)).accepts(ExprType::Double));
-        assert!(!VarRef::new("a", Some(VarType::Double)).accepts(ExprType::Integer));
-        assert!(!VarRef::new("a", Some(VarType::Double)).accepts(ExprType::Text));
+        assert!(!VarRef::new("a", Some(ExprType::Double)).accepts(ExprType::Boolean));
+        assert!(VarRef::new("a", Some(ExprType::Double)).accepts(ExprType::Double));
+        assert!(!VarRef::new("a", Some(ExprType::Double)).accepts(ExprType::Integer));
+        assert!(!VarRef::new("a", Some(ExprType::Double)).accepts(ExprType::Text));
 
-        assert!(!VarRef::new("a", Some(VarType::Integer)).accepts(ExprType::Boolean));
-        assert!(!VarRef::new("a", Some(VarType::Integer)).accepts(ExprType::Double));
-        assert!(VarRef::new("a", Some(VarType::Integer)).accepts(ExprType::Integer));
-        assert!(!VarRef::new("a", Some(VarType::Integer)).accepts(ExprType::Text));
+        assert!(!VarRef::new("a", Some(ExprType::Integer)).accepts(ExprType::Boolean));
+        assert!(!VarRef::new("a", Some(ExprType::Integer)).accepts(ExprType::Double));
+        assert!(VarRef::new("a", Some(ExprType::Integer)).accepts(ExprType::Integer));
+        assert!(!VarRef::new("a", Some(ExprType::Integer)).accepts(ExprType::Text));
 
-        assert!(!VarRef::new("a", Some(VarType::Text)).accepts(ExprType::Boolean));
-        assert!(!VarRef::new("a", Some(VarType::Text)).accepts(ExprType::Double));
-        assert!(!VarRef::new("a", Some(VarType::Text)).accepts(ExprType::Integer));
-        assert!(VarRef::new("a", Some(VarType::Text)).accepts(ExprType::Text));
+        assert!(!VarRef::new("a", Some(ExprType::Text)).accepts(ExprType::Boolean));
+        assert!(!VarRef::new("a", Some(ExprType::Text)).accepts(ExprType::Double));
+        assert!(!VarRef::new("a", Some(ExprType::Text)).accepts(ExprType::Integer));
+        assert!(VarRef::new("a", Some(ExprType::Text)).accepts(ExprType::Text));
     }
 
     #[test]

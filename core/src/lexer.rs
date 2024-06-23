@@ -15,7 +15,7 @@
 
 //! Tokenizer for the EndBASIC language.
 
-use crate::ast::{VarRef, VarType};
+use crate::ast::{ExprType, VarRef};
 use crate::reader::{CharReader, CharSpan, LineCol};
 use std::cell::RefCell;
 use std::iter::Peekable;
@@ -473,25 +473,25 @@ impl<'a> Lexer<'a> {
                     ch if ch.is_word() => s.push(self.input.next().unwrap()?.ch),
                     ch if ch.is_separator() => break,
                     '?' => {
-                        vtype = Some(VarType::Boolean);
+                        vtype = Some(ExprType::Boolean);
                         self.input.next().unwrap()?;
                         token_len += 1;
                         break;
                     }
                     '#' => {
-                        vtype = Some(VarType::Double);
+                        vtype = Some(ExprType::Double);
                         self.input.next().unwrap()?;
                         token_len += 1;
                         break;
                     }
                     '%' => {
-                        vtype = Some(VarType::Integer);
+                        vtype = Some(ExprType::Integer);
                         self.input.next().unwrap()?;
                         token_len += 1;
                         break;
                     }
                     '$' => {
-                        vtype = Some(VarType::Text);
+                        vtype = Some(ExprType::Text);
                         self.input.next().unwrap()?;
                         token_len += 1;
                         break;
@@ -1011,10 +1011,10 @@ mod tests {
             "a b? d# i% s$",
             &[
                 ts(new_auto_symbol("a"), 1, 1, 1),
-                ts(Token::Symbol(VarRef::new("b", Some(VarType::Boolean))), 1, 3, 2),
-                ts(Token::Symbol(VarRef::new("d", Some(VarType::Double))), 1, 6, 2),
-                ts(Token::Symbol(VarRef::new("i", Some(VarType::Integer))), 1, 9, 2),
-                ts(Token::Symbol(VarRef::new("s", Some(VarType::Text))), 1, 12, 2),
+                ts(Token::Symbol(VarRef::new("b", Some(ExprType::Boolean))), 1, 3, 2),
+                ts(Token::Symbol(VarRef::new("d", Some(ExprType::Double))), 1, 6, 2),
+                ts(Token::Symbol(VarRef::new("i", Some(ExprType::Integer))), 1, 9, 2),
+                ts(Token::Symbol(VarRef::new("s", Some(ExprType::Text))), 1, 12, 2),
                 ts(Token::Eof, 1, 14, 0),
             ],
         );

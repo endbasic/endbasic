@@ -335,7 +335,7 @@ fn compile_required_ref(
                     }
                     debug_assert!(!require_array);
 
-                    let vtype = ExprType::from_vartype(span.vref.ref_type(), ExprType::Integer);
+                    let vtype = span.vref.ref_type().unwrap_or(ExprType::Integer);
 
                     if !span.vref.accepts(vtype) {
                         return Err(CallError::ArgumentError(
@@ -1299,7 +1299,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", Some(VarType::Integer)),
+                    vref: VarRef::new("foo", Some(ExprType::Integer)),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1348,7 +1348,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", Some(VarType::Text)),
+                    vref: VarRef::new("foo", Some(ExprType::Text)),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1516,7 +1516,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", Some(VarType::Integer)),
+                    vref: VarRef::new("foo", Some(ExprType::Integer)),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1647,7 +1647,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", Some(VarType::Boolean)),
+                    vref: VarRef::new("foo", Some(ExprType::Boolean)),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,
@@ -1889,7 +1889,7 @@ mod compile_tests {
             )
             .compile_command([ArgSpan {
                 expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", Some(VarType::Text)),
+                    vref: VarRef::new("foo", Some(ExprType::Text)),
                     pos: lc(1, 2),
                 })),
                 sep: ArgSep::End,

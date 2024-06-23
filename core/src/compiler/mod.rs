@@ -352,7 +352,7 @@ impl Compiler {
                 // TODO(jmmv): Compile separate Dim instructions for new variables instead of
                 // checking this every time.
                 let key = key.clone();
-                let vtype = ExprType::from_vartype(vref.ref_type(), etype);
+                let vtype = vref.ref_type().unwrap_or(etype);
                 self.symtable.insert(key, SymbolPrototype::Variable(vtype));
                 vtype
             }
@@ -367,7 +367,7 @@ impl Compiler {
         }
 
         if let Some(ref_type) = vref.ref_type() {
-            if ref_type != vtype.into() {
+            if ref_type != vtype {
                 return Err(Error::new(
                     vref_pos,
                     format!("Incompatible types in {} reference", vref),
@@ -455,8 +455,8 @@ impl Compiler {
     fn compile_for(&mut self, span: ForSpan) -> Result<()> {
         debug_assert!(
             span.iter.ref_type().is_none()
-                || span.iter.ref_type().unwrap() == VarType::Double
-                || span.iter.ref_type().unwrap() == VarType::Integer
+                || span.iter.ref_type().unwrap() == ExprType::Double
+                || span.iter.ref_type().unwrap() == ExprType::Integer
         );
 
         if span.iter_double && span.iter.ref_type().is_none() {

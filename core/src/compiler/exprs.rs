@@ -419,7 +419,7 @@ fn compile_expr_symbol_ref(
     let key = SymbolKey::from(span.vref.name());
     match symtable.get(&key) {
         None => {
-            let vtype = ExprType::from_vartype(span.vref.ref_type(), ExprType::Integer);
+            let vtype = span.vref.ref_type().unwrap_or(ExprType::Integer);
 
             if !span.vref.accepts(vtype) {
                 return Err(Error::new(
