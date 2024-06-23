@@ -218,7 +218,6 @@ impl ExprType {
             VarType::Double => ExprType::Double,
             VarType::Integer => ExprType::Integer,
             VarType::Text => ExprType::Text,
-            VarType::Void => unreachable!(),
         }
     }
 
@@ -290,9 +289,6 @@ pub enum VarType {
     /// A string variable.  This should really be called `String` but it would get confusing with
     /// the built-in Rust type.
     Text,
-
-    /// The nothingness type.  Used to represent the return value of commands.
-    Void,
 }
 
 impl VarType {
@@ -304,7 +300,6 @@ impl VarType {
             VarType::Double => "#",
             VarType::Integer => "%",
             VarType::Text => "$",
-            VarType::Void => "",
         }
     }
 }
@@ -317,7 +312,6 @@ impl fmt::Display for VarType {
             VarType::Double => write!(f, "DOUBLE"),
             VarType::Integer => write!(f, "INTEGER"),
             VarType::Text => write!(f, "STRING"),
-            VarType::Void => panic!("Should not try to display a void type"),
         }
     }
 }
@@ -357,7 +351,7 @@ impl VarRef {
     pub(crate) fn qualify(self, expr_type: Option<ExprType>) -> Self {
         assert!(self.ref_type == VarType::Auto, "Reference already qualified");
         match expr_type {
-            None => Self { name: self.name, ref_type: VarType::Void },
+            None => Self { name: self.name, ref_type: VarType::Auto },
             Some(expr_type) => Self { name: self.name, ref_type: expr_type.into() },
         }
     }
@@ -376,7 +370,7 @@ impl VarRef {
     pub fn accepts_callable(&self, other: Option<ExprType>) -> bool {
         let other_type = match other {
             Some(other) => other.into(),
-            None => VarType::Void,
+            None => VarType::Auto,
         };
         self.ref_type == VarType::Auto || self.ref_type == other_type
     }
