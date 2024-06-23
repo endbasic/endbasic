@@ -16,7 +16,6 @@
 //! Operations on EndBASIC values.
 
 use crate::ast::*;
-use paste::paste;
 use std::convert::TryFrom;
 
 /// Evaluation errors.
@@ -105,77 +104,8 @@ pub(crate) fn integer_to_double(i: i32) -> f64 {
     i as f64
 }
 
-/// Performs a logical "and" operation.
-pub(crate) fn logical_and(lhs: Value, rhs: Value) -> Value {
-    match (lhs, rhs) {
-        (Value::Boolean(lhs), Value::Boolean(rhs)) => Value::Boolean(lhs && rhs),
-        (_, _) => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs a logical "or" operation.
-pub(crate) fn logical_or(lhs: Value, rhs: Value) -> Value {
-    match (lhs, rhs) {
-        (Value::Boolean(lhs), Value::Boolean(rhs)) => Value::Boolean(lhs || rhs),
-        (_, _) => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs a logical "xor" operation.
-pub(crate) fn logical_xor(lhs: Value, rhs: Value) -> Value {
-    match (lhs, rhs) {
-        (Value::Boolean(lhs), Value::Boolean(rhs)) => Value::Boolean(lhs ^ rhs),
-        (_, _) => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs a logical "not" operation.
-pub(crate) fn logical_not(value: Value) -> Value {
-    match value {
-        Value::Boolean(b) => Value::Boolean(!b),
-        _ => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs a bitwise "and" operation.
-pub(crate) fn bitwise_and(lhs: Value, rhs: Value) -> Value {
-    match (lhs, rhs) {
-        (Value::Integer(lhs), Value::Integer(rhs)) => Value::Integer(lhs & rhs),
-        (_, _) => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs a bitwise "or" operation.
-pub(crate) fn bitwise_or(lhs: Value, rhs: Value) -> Value {
-    match (lhs, rhs) {
-        (Value::Integer(lhs), Value::Integer(rhs)) => Value::Integer(lhs | rhs),
-        (_, _) => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs a bitwise "xor" operation.
-pub(crate) fn bitwise_xor(lhs: Value, rhs: Value) -> Value {
-    match (lhs, rhs) {
-        (Value::Integer(lhs), Value::Integer(rhs)) => Value::Integer(lhs ^ rhs),
-        (_, _) => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs a bitwise "not" operation.
-pub(crate) fn bitwise_not(value: Value) -> Value {
-    match value {
-        Value::Integer(b) => Value::Integer(!b),
-        _ => unreachable!("Types validated during compilation"),
-    }
-}
-
 /// Performs a left shift.
-pub(crate) fn bitwise_shl(lhs: Value, rhs: Value) -> Result<Value> {
-    let (lhs, rhs) = match (lhs, rhs) {
-        (Value::Integer(lhs), Value::Integer(rhs)) => (lhs, rhs),
-        (_, _) => unreachable!("Types validated during compilation"),
-    };
-
+pub(crate) fn bitwise_shl(lhs: i32, rhs: i32) -> Result<i32> {
     let bits = match u32::try_from(rhs) {
         Ok(n) => n,
         Err(_) => {
@@ -184,18 +114,13 @@ pub(crate) fn bitwise_shl(lhs: Value, rhs: Value) -> Result<Value> {
     };
 
     match lhs.checked_shl(bits) {
-        Some(i) => Ok(Value::Integer(i)),
-        None => Ok(Value::Integer(0)),
+        Some(i) => Ok(i),
+        None => Ok(0),
     }
 }
 
 /// Performs a right shift.
-pub(crate) fn bitwise_shr(lhs: Value, rhs: Value) -> Result<Value> {
-    let (lhs, rhs) = match (lhs, rhs) {
-        (Value::Integer(lhs), Value::Integer(rhs)) => (lhs, rhs),
-        (_, _) => unreachable!("Types validated during compilation"),
-    };
-
+pub(crate) fn bitwise_shr(lhs: i32, rhs: i32) -> Result<i32> {
     let bits = match u32::try_from(rhs) {
         Ok(n) => n,
         Err(_) => {
@@ -204,237 +129,77 @@ pub(crate) fn bitwise_shr(lhs: Value, rhs: Value) -> Result<Value> {
     };
 
     match lhs.checked_shr(bits) {
-        Some(i) => Ok(Value::Integer(i)),
-        None if lhs < 0 => Ok(Value::Integer(-1)),
-        None => Ok(Value::Integer(0)),
-    }
-}
-
-macro_rules! equality_ops {
-    ( $name:ident, $vtype:expr ) => {
-        paste! {
-            /// Performs an equality check.
-            pub(crate) fn [< eq_ $name >](lhs: Value, rhs: Value) -> Value {
-                match (lhs, rhs) {
-                    ($vtype(lhs), $vtype(rhs)) => Value::Boolean(lhs == rhs),
-                    (_, _) => unreachable!("Types validated during compilation"),
-                }
-            }
-
-            /// Performs an inequality check.
-            pub(crate) fn [< ne_ $name >](lhs: Value, rhs: Value) -> Value {
-                match (lhs, rhs) {
-                    ($vtype(lhs), $vtype(rhs)) => Value::Boolean(lhs != rhs),
-                    (_, _) => unreachable!("Types validated during compilation"),
-                }
-            }
-        }
-    };
-}
-
-equality_ops!(boolean, Value::Boolean);
-equality_ops!(double, Value::Double);
-equality_ops!(integer, Value::Integer);
-equality_ops!(text, Value::Text);
-
-macro_rules! relational_ops {
-    ( $name:ident, $vtype:expr ) => {
-        paste! {
-            /// Performs an equality check.
-            pub(crate) fn [< lt_ $name >](lhs: Value, rhs: Value) -> Value {
-                match (lhs, rhs) {
-                    ($vtype(lhs), $vtype(rhs)) => Value::Boolean(lhs < rhs),
-                    (_, _) => unreachable!("Types validated during compilation"),
-                }
-            }
-
-            /// Performs an equality check.
-            pub(crate) fn [< le_ $name >](lhs: Value, rhs: Value) -> Value {
-                match (lhs, rhs) {
-                    ($vtype(lhs), $vtype(rhs)) => Value::Boolean(lhs <= rhs),
-                    (_, _) => unreachable!("Types validated during compilation"),
-                }
-            }
-
-            /// Performs an equality check.
-            pub(crate) fn [< gt_ $name >](lhs: Value, rhs: Value) -> Value {
-                match (lhs, rhs) {
-                    ($vtype(lhs), $vtype(rhs)) => Value::Boolean(lhs > rhs),
-                    (_, _) => unreachable!("Types validated during compilation"),
-                }
-            }
-
-            /// Performs an equality check.
-            pub(crate) fn [< ge_ $name >](lhs: Value, rhs: Value) -> Value {
-                match (lhs, rhs) {
-                    ($vtype(lhs), $vtype(rhs)) => Value::Boolean(lhs >= rhs),
-                    (_, _) => unreachable!("Types validated during compilation"),
-                }
-            }
-        }
-    };
-}
-
-relational_ops!(double, Value::Double);
-relational_ops!(integer, Value::Integer);
-relational_ops!(text, Value::Text);
-
-/// Performs an arithmetic addition of doubles.
-pub fn add_double(lhs: Value, rhs: Value) -> Value {
-    match (lhs, rhs) {
-        (Value::Double(lhs), Value::Double(rhs)) => Value::Double(lhs + rhs),
-        (_, _) => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs an arithmetic subtraction of doubles.
-pub fn sub_double(lhs: Value, rhs: Value) -> Value {
-    match (lhs, rhs) {
-        (Value::Double(lhs), Value::Double(rhs)) => Value::Double(lhs - rhs),
-        (_, _) => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs a multiplication of doubles.
-pub fn mul_double(lhs: Value, rhs: Value) -> Value {
-    match (lhs, rhs) {
-        (Value::Double(lhs), Value::Double(rhs)) => Value::Double(lhs * rhs),
-        (_, _) => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs an arithmetic division of doubles.
-pub fn div_double(lhs: Value, rhs: Value) -> Value {
-    match (lhs, rhs) {
-        (Value::Double(lhs), Value::Double(rhs)) => Value::Double(lhs / rhs),
-        (_, _) => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs a modulo operation of doubles.
-pub fn modulo_double(lhs: Value, rhs: Value) -> Value {
-    match (lhs, rhs) {
-        (Value::Double(lhs), Value::Double(rhs)) => Value::Double(lhs % rhs),
-        (_, _) => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs a power operation of doubles.
-pub fn pow_double(lhs: Value, rhs: Value) -> Value {
-    match (lhs, rhs) {
-        (Value::Double(lhs), Value::Double(rhs)) => Value::Double(lhs.powf(rhs)),
-        (_, _) => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs an arithmetic negation of a double.
-pub fn neg_double(value: Value) -> Value {
-    match value {
-        Value::Double(d) => Value::Double(-d),
-        _ => unreachable!("Types validated during compilation"),
+        Some(i) => Ok(i),
+        None if lhs < 0 => Ok(-1),
+        None => Ok(0),
     }
 }
 
 /// Performs an arithmetic addition of integers.
-pub fn add_integer(lhs: Value, rhs: Value) -> Result<Value> {
-    match (lhs, rhs) {
-        (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_add(rhs) {
-            Some(i) => Ok(Value::Integer(i)),
-            None => Err(Error::new("Integer overflow".to_owned())),
-        },
-        (_, _) => unreachable!("Types validated during compilation"),
+pub fn add_integer(lhs: i32, rhs: i32) -> Result<i32> {
+    match lhs.checked_add(rhs) {
+        Some(i) => Ok(i),
+        None => Err(Error::new("Integer overflow".to_owned())),
     }
 }
 
 /// Performs an arithmetic subtraction of integers.
-pub fn sub_integer(lhs: Value, rhs: Value) -> Result<Value> {
-    match (lhs, rhs) {
-        (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_sub(rhs) {
-            Some(i) => Ok(Value::Integer(i)),
-            None => Err(Error::new("Integer underflow".to_owned())),
-        },
-        (_, _) => unreachable!("Types validated during compilation"),
+pub fn sub_integer(lhs: i32, rhs: i32) -> Result<i32> {
+    match lhs.checked_sub(rhs) {
+        Some(i) => Ok(i),
+        None => Err(Error::new("Integer underflow".to_owned())),
     }
 }
 
 /// Performs a multiplication of integers.
-pub fn mul_integer(lhs: Value, rhs: Value) -> Result<Value> {
-    match (lhs, rhs) {
-        (Value::Integer(lhs), Value::Integer(rhs)) => match lhs.checked_mul(rhs) {
-            Some(i) => Ok(Value::Integer(i)),
-            None => Err(Error::new("Integer overflow".to_owned())),
-        },
-        (_, _) => unreachable!("Types validated during compilation"),
+pub fn mul_integer(lhs: i32, rhs: i32) -> Result<i32> {
+    match lhs.checked_mul(rhs) {
+        Some(i) => Ok(i),
+        None => Err(Error::new("Integer overflow".to_owned())),
     }
 }
 
 /// Performs an arithmetic division of integers.
-pub fn div_integer(lhs: Value, rhs: Value) -> Result<Value> {
-    match (lhs, rhs) {
-        (Value::Integer(lhs), Value::Integer(rhs)) => {
-            if rhs == 0 {
-                return Err(Error::new("Division by zero"));
-            }
-            match lhs.checked_div(rhs) {
-                Some(i) => Ok(Value::Integer(i)),
-                None => Err(Error::new("Integer underflow".to_owned())),
-            }
-        }
-        (_, _) => unreachable!("Types validated during compilation"),
+pub fn div_integer(lhs: i32, rhs: i32) -> Result<i32> {
+    if rhs == 0 {
+        return Err(Error::new("Division by zero"));
+    }
+    match lhs.checked_div(rhs) {
+        Some(i) => Ok(i),
+        None => Err(Error::new("Integer underflow".to_owned())),
     }
 }
 
 /// Performs a modulo operation of integers.
-pub fn modulo_integer(lhs: Value, rhs: Value) -> Result<Value> {
-    match (lhs, rhs) {
-        (Value::Integer(lhs), Value::Integer(rhs)) => {
-            if rhs == 0 {
-                return Err(Error::new("Modulo by zero"));
-            }
-            match lhs.checked_rem(rhs) {
-                Some(i) => Ok(Value::Integer(i)),
-                None => Err(Error::new("Integer underflow".to_owned())),
-            }
-        }
-        (_, _) => unreachable!("Types validated during compilation"),
+pub fn modulo_integer(lhs: i32, rhs: i32) -> Result<i32> {
+    if rhs == 0 {
+        return Err(Error::new("Modulo by zero"));
+    }
+    match lhs.checked_rem(rhs) {
+        Some(i) => Ok(i),
+        None => Err(Error::new("Integer underflow".to_owned())),
     }
 }
 
 /// Performs a power operation of integers.
-pub fn pow_integer(lhs: Value, rhs: Value) -> Result<Value> {
-    match (lhs, rhs) {
-        (Value::Integer(lhs), Value::Integer(rhs)) => {
-            let exp = match u32::try_from(rhs) {
-                Ok(exp) => exp,
-                Err(_) => {
-                    return Err(Error::new(format!("Exponent {} cannot be negative", rhs)));
-                }
-            };
-            match lhs.checked_pow(exp) {
-                Some(i) => Ok(Value::Integer(i)),
-                None => Err(Error::new("Integer overflow".to_owned())),
-            }
+pub fn pow_integer(lhs: i32, rhs: i32) -> Result<i32> {
+    let exp = match u32::try_from(rhs) {
+        Ok(exp) => exp,
+        Err(_) => {
+            return Err(Error::new(format!("Exponent {} cannot be negative", rhs)));
         }
-        (_, _) => unreachable!("Types validated during compilation"),
+    };
+    match lhs.checked_pow(exp) {
+        Some(i) => Ok(i),
+        None => Err(Error::new("Integer overflow".to_owned())),
     }
 }
 
 /// Performs an arithmetic negation of an integer.
-pub fn neg_integer(value: Value) -> Result<Value> {
-    match value {
-        Value::Integer(i) => match i.checked_neg() {
-            Some(i) => Ok(Value::Integer(i)),
-            None => Err(Error::new("Integer underflow".to_owned())),
-        },
-        _ => unreachable!("Types validated during compilation"),
-    }
-}
-
-/// Performs the concatenation of strings.
-pub fn add_text(lhs: Value, rhs: Value) -> Value {
-    match (lhs, rhs) {
-        (Value::Text(lhs), Value::Text(rhs)) => Value::Text(format!("{}{}", lhs, rhs)),
-        (_, _) => unreachable!("Types validated during compilation"),
+pub fn neg_integer(i: i32) -> Result<i32> {
+    match i.checked_neg() {
+        Some(i) => Ok(i),
+        None => Err(Error::new("Integer underflow".to_owned())),
     }
 }
 
@@ -599,384 +364,101 @@ mod tests {
     }
 
     #[test]
-    fn test_value_logical_and() {
-        assert_eq!(Boolean(false), logical_and(Boolean(false), Boolean(false)));
-        assert_eq!(Boolean(false), logical_and(Boolean(false), Boolean(true)));
-        assert_eq!(Boolean(false), logical_and(Boolean(true), Boolean(false)));
-        assert_eq!(Boolean(true), logical_and(Boolean(true), Boolean(true)));
-    }
-
-    #[test]
-    fn test_value_logical_or() {
-        assert_eq!(Boolean(false), logical_or(Boolean(false), Boolean(false)));
-        assert_eq!(Boolean(true), logical_or(Boolean(false), Boolean(true)));
-        assert_eq!(Boolean(true), logical_or(Boolean(true), Boolean(false)));
-        assert_eq!(Boolean(true), logical_or(Boolean(true), Boolean(true)));
-    }
-
-    #[test]
-    fn test_value_logical_xor() {
-        assert_eq!(Boolean(false), logical_xor(Boolean(false), Boolean(false)));
-        assert_eq!(Boolean(true), logical_xor(Boolean(false), Boolean(true)));
-        assert_eq!(Boolean(true), logical_xor(Boolean(true), Boolean(false)));
-        assert_eq!(Boolean(false), logical_xor(Boolean(true), Boolean(true)));
-    }
-
-    #[test]
-    fn test_value_logical_not() {
-        assert_eq!(Boolean(true), logical_not(Boolean(false)));
-        assert_eq!(Boolean(false), logical_not(Boolean(true)));
-    }
-
-    #[test]
-    fn test_value_bitwise_and() {
-        assert_eq!(Integer(5), bitwise_and(Integer(7), Integer(5)));
-        assert_eq!(Integer(0), bitwise_and(Integer(2), Integer(4)));
-        assert_eq!(Integer(1234), bitwise_and(Integer(-1), Integer(1234)));
-    }
-
-    #[test]
-    fn test_value_bitwise_or() {
-        assert_eq!(Integer(7), bitwise_or(Integer(7), Integer(5)));
-        assert_eq!(Integer(6), bitwise_or(Integer(2), Integer(4)));
-        assert_eq!(Integer(-1), bitwise_or(Integer(-1), Integer(1234)));
-    }
-
-    #[test]
-    fn test_value_bitwise_xor() {
-        assert_eq!(Integer(2), bitwise_xor(Integer(7), Integer(5)));
-        assert_eq!(Integer(6), bitwise_xor(Integer(2), Integer(4)));
-        assert_eq!(Integer(-1235), bitwise_xor(Integer(-1), Integer(1234)));
-    }
-
-    #[test]
-    fn test_value_bitwise_not() {
-        assert_eq!(Integer(-1), bitwise_not(Integer(0)));
-    }
-
-    #[test]
     fn test_value_shl() {
-        assert_eq!(Integer(12), bitwise_shl(Integer(3), Integer(2)).unwrap());
-        assert_eq!(
-            Integer(0xf0000000u32 as i32),
-            bitwise_shl(Integer(0xf0000000u32 as i32), Integer(0)).unwrap()
-        );
-        assert_eq!(Integer(0x80000000u32 as i32), bitwise_shl(Integer(1), Integer(31)).unwrap());
-        assert_eq!(Integer(0), bitwise_shl(Integer(0xf0000000u32 as i32), Integer(31)).unwrap());
+        assert_eq!(12, bitwise_shl(3, 2).unwrap());
+        assert_eq!(0xf0000000u32 as i32, bitwise_shl(0xf0000000u32 as i32, 0).unwrap());
+        assert_eq!(0x80000000u32 as i32, bitwise_shl(1, 31).unwrap());
+        assert_eq!(0, bitwise_shl(0xf0000000u32 as i32, 31).unwrap());
 
-        assert_eq!(
-            Integer(0xe0000000u32 as i32),
-            bitwise_shl(Integer(0xf0000000u32 as i32), Integer(1)).unwrap()
-        );
-        assert_eq!(Integer(0), bitwise_shl(Integer(0x80000000u32 as i32), Integer(1)).unwrap());
-        assert_eq!(Integer(0), bitwise_shl(Integer(1), Integer(32)).unwrap());
-        assert_eq!(Integer(0), bitwise_shl(Integer(1), Integer(64)).unwrap());
+        assert_eq!(0xe0000000u32 as i32, bitwise_shl(0xf0000000u32 as i32, 1).unwrap());
+        assert_eq!(0, bitwise_shl(0x80000000u32 as i32, 1).unwrap());
+        assert_eq!(0, bitwise_shl(1, 32).unwrap());
+        assert_eq!(0, bitwise_shl(1, 64).unwrap());
 
         assert_eq!(
             "Number of bits to << (-1) must be positive",
-            format!("{}", bitwise_shl(Integer(3), Integer(-1)).unwrap_err())
+            format!("{}", bitwise_shl(3, -1).unwrap_err())
         );
     }
 
     #[test]
     fn test_value_shr() {
-        assert_eq!(Integer(3), bitwise_shr(Integer(12), Integer(2)).unwrap());
-        assert_eq!(
-            Integer(0xf0000000u32 as i32),
-            bitwise_shr(Integer(0xf0000000u32 as i32), Integer(0)).unwrap()
-        );
-        assert_eq!(Integer(-1), bitwise_shr(Integer(0xf0000000u32 as i32), Integer(31)).unwrap());
-        assert_eq!(Integer(1), bitwise_shr(Integer(0x70000000u32 as i32), Integer(30)).unwrap());
-        assert_eq!(Integer(-2), bitwise_shr(Integer(-8), Integer(2)).unwrap());
+        assert_eq!(3, bitwise_shr(12, 2).unwrap());
+        assert_eq!(0xf0000000u32 as i32, bitwise_shr(0xf0000000u32 as i32, 0).unwrap());
+        assert_eq!(-1, bitwise_shr(0xf0000000u32 as i32, 31).unwrap());
+        assert_eq!(1, bitwise_shr(0x70000000u32 as i32, 30).unwrap());
+        assert_eq!(-2, bitwise_shr(-8, 2).unwrap());
 
-        assert_eq!(
-            Integer(0xf0000000u32 as i32),
-            bitwise_shr(Integer(0xe0000000u32 as i32), Integer(1)).unwrap()
-        );
-        assert_eq!(
-            Integer(0xc0000000u32 as i32),
-            bitwise_shr(Integer(0x80000000u32 as i32), Integer(1)).unwrap()
-        );
-        assert_eq!(Integer(0x38000000), bitwise_shr(Integer(0x70000000), Integer(1)).unwrap());
-        assert_eq!(Integer(0), bitwise_shr(Integer(0x70000000u32 as i32), Integer(32)).unwrap());
-        assert_eq!(Integer(0), bitwise_shr(Integer(0x70000000u32 as i32), Integer(32)).unwrap());
-        assert_eq!(Integer(-1), bitwise_shr(Integer(0x80000000u32 as i32), Integer(32)).unwrap());
-        assert_eq!(Integer(-1), bitwise_shr(Integer(0x80000000u32 as i32), Integer(64)).unwrap());
+        assert_eq!(0xf0000000u32 as i32, bitwise_shr(0xe0000000u32 as i32, 1).unwrap());
+        assert_eq!(0xc0000000u32 as i32, bitwise_shr(0x80000000u32 as i32, 1).unwrap());
+        assert_eq!(0x38000000, bitwise_shr(0x70000000, 1).unwrap());
+        assert_eq!(0, bitwise_shr(0x70000000u32 as i32, 32).unwrap());
+        assert_eq!(0, bitwise_shr(0x70000000u32 as i32, 32).unwrap());
+        assert_eq!(-1, bitwise_shr(0x80000000u32 as i32, 32).unwrap());
+        assert_eq!(-1, bitwise_shr(0x80000000u32 as i32, 64).unwrap());
 
         assert_eq!(
             "Number of bits to >> (-1) must be positive",
-            format!("{}", bitwise_shr(Integer(3), Integer(-1)).unwrap_err())
+            format!("{}", bitwise_shr(3, -1).unwrap_err())
         );
-    }
-
-    #[test]
-    fn test_value_eq_boolean() {
-        assert_eq!(Boolean(true), eq_boolean(Boolean(false), Boolean(false)));
-        assert_eq!(Boolean(false), eq_boolean(Boolean(true), Boolean(false)));
-    }
-
-    #[test]
-    fn test_value_eq_double() {
-        assert_eq!(Boolean(true), eq_double(Double(2.5), Double(2.5)));
-        assert_eq!(Boolean(false), eq_double(Double(3.5), Double(3.6)));
-    }
-
-    #[test]
-    fn test_value_eq_integer() {
-        assert_eq!(Boolean(true), eq_integer(Integer(2), Integer(2)));
-        assert_eq!(Boolean(false), eq_integer(Integer(3), Integer(4)));
-    }
-
-    #[test]
-    fn test_value_eq_text() {
-        assert_eq!(Boolean(true), eq_text(Text("a".to_owned()), Text("a".to_owned())));
-        assert_eq!(Boolean(false), eq_text(Text("b".to_owned()), Text("c".to_owned())));
-    }
-
-    #[test]
-    fn test_value_ne_boolean() {
-        assert_eq!(Boolean(false), ne_boolean(Boolean(false), Boolean(false)));
-        assert_eq!(Boolean(true), ne_boolean(Boolean(true), Boolean(false)));
-    }
-
-    #[test]
-    fn test_value_ne_double() {
-        assert_eq!(Boolean(false), ne_double(Double(2.5), Double(2.5)));
-        assert_eq!(Boolean(true), ne_double(Double(3.5), Double(3.6)));
-    }
-
-    #[test]
-    fn test_value_ne_integer() {
-        assert_eq!(Boolean(false), ne_integer(Integer(2), Integer(2)));
-        assert_eq!(Boolean(true), ne_integer(Integer(3), Integer(4)));
-    }
-
-    #[test]
-    fn test_value_ne_text() {
-        assert_eq!(Boolean(false), ne_text(Text("a".to_owned()), Text("a".to_owned())));
-        assert_eq!(Boolean(true), ne_text(Text("b".to_owned()), Text("c".to_owned())));
-    }
-
-    #[test]
-    fn test_value_lt_double() {
-        assert_eq!(Boolean(false), lt_double(Double(2.5), Double(2.5)));
-        assert_eq!(Boolean(true), lt_double(Double(3.5), Double(3.6)));
-    }
-
-    #[test]
-    fn test_value_lt_integer() {
-        assert_eq!(Boolean(false), lt_integer(Integer(2), Integer(2)));
-        assert_eq!(Boolean(true), lt_integer(Integer(3), Integer(4)));
-    }
-
-    #[test]
-    fn test_value_lt_text() {
-        assert_eq!(Boolean(false), lt_text(Text("a".to_owned()), Text("a".to_owned())));
-        assert_eq!(Boolean(true), lt_text(Text("a".to_owned()), Text("c".to_owned())));
-    }
-
-    #[test]
-    fn test_value_le_double() {
-        assert_eq!(Boolean(false), le_double(Double(2.1), Double(2.0)));
-        assert_eq!(Boolean(true), le_double(Double(2.1), Double(2.1)));
-        assert_eq!(Boolean(true), le_double(Double(2.1), Double(2.2)));
-    }
-
-    #[test]
-    fn test_value_le_integer() {
-        assert_eq!(Boolean(false), le_integer(Integer(2), Integer(1)));
-        assert_eq!(Boolean(true), le_integer(Integer(2), Integer(2)));
-        assert_eq!(Boolean(true), le_integer(Integer(2), Integer(3)));
-    }
-
-    #[test]
-    fn test_value_le_text() {
-        assert_eq!(Boolean(false), le_text(Text("b".to_owned()), Text("a".to_owned())));
-        assert_eq!(Boolean(true), le_text(Text("a".to_owned()), Text("a".to_owned())));
-        assert_eq!(Boolean(true), le_text(Text("a".to_owned()), Text("c".to_owned())));
-    }
-
-    #[test]
-    fn test_value_gt_double() {
-        assert_eq!(Boolean(false), gt_double(Double(2.1), Double(2.1)));
-        assert_eq!(Boolean(true), gt_double(Double(4.1), Double(4.0)));
-    }
-
-    #[test]
-    fn test_value_gt_integer() {
-        assert_eq!(Boolean(false), gt_integer(Integer(2), Integer(2)));
-        assert_eq!(Boolean(true), gt_integer(Integer(4), Integer(3)));
-    }
-
-    #[test]
-    fn test_value_gt_text() {
-        assert_eq!(Boolean(false), gt_text(Text("a".to_owned()), Text("a".to_owned())));
-        assert_eq!(Boolean(true), gt_text(Text("c".to_owned()), Text("a".to_owned())));
-    }
-
-    #[test]
-    fn test_value_ge_double() {
-        assert_eq!(Boolean(false), ge_double(Double(2.0), Double(2.1)));
-        assert_eq!(Boolean(true), ge_double(Double(2.1), Double(2.1)));
-        assert_eq!(Boolean(true), ge_double(Double(2.2), Double(2.1)));
-    }
-
-    #[test]
-    fn test_value_ge_integer() {
-        assert_eq!(Boolean(false), ge_integer(Integer(1), Integer(2)));
-        assert_eq!(Boolean(true), ge_integer(Integer(2), Integer(2)));
-        assert_eq!(Boolean(true), ge_integer(Integer(4), Integer(3)));
-    }
-
-    #[test]
-    fn test_value_ge_text() {
-        assert_eq!(Boolean(false), ge_text(Text("".to_owned()), Text("b".to_owned())));
-        assert_eq!(Boolean(true), ge_text(Text("a".to_owned()), Text("a".to_owned())));
-        assert_eq!(Boolean(true), ge_text(Text("c".to_owned()), Text("a".to_owned())));
-    }
-
-    #[test]
-    fn test_value_add_double() {
-        assert_eq!(Double(7.1), add_double(Double(2.1), Double(5.0)));
-    }
-
-    #[test]
-    fn test_value_sub_double() {
-        assert_eq!(Double(-1.0), sub_double(Double(2.5), Double(3.5)));
-    }
-
-    #[test]
-    fn test_value_mul_double() {
-        assert_eq!(Double(40.0), mul_double(Double(4.0), Double(10.0)));
-    }
-
-    #[test]
-    fn test_value_div_double() {
-        assert_eq!(Double(4.0), div_double(Double(10.0), Double(2.5)));
-        assert_eq!(Double(f64::INFINITY), div_double(Double(1.0), Double(0.0)));
-    }
-
-    #[test]
-    fn test_value_modulo_double() {
-        assert_eq!(Double(0.0), modulo_double(Double(10.0), Double(2.5)));
-        match modulo_double(Double(1.0), Double(0.0)) {
-            Double(d) => assert!(d.is_nan()),
-            _ => panic!("Did not get a double"),
-        };
-    }
-
-    #[test]
-    fn test_value_pow_double() {
-        assert_eq!(Double(1.0), pow_double(Double(0.0), Double(0.0)));
-        assert_eq!(Double(2.0f64.powf(3.1)), pow_double(Double(2.0), Double(3.1)));
-    }
-
-    #[test]
-    fn test_value_neg_double() {
-        assert_eq!(Double(-6.12), neg_double(Double(6.12)));
-        assert_eq!(Double(5.53), neg_double(Double(-5.53)));
     }
 
     #[test]
     fn test_value_add_integer() {
-        assert_eq!(Integer(5), add_integer(Integer(2), Integer(3)).unwrap());
-        assert_eq!(
-            Integer(std::i32::MAX),
-            add_integer(Integer(std::i32::MAX), Integer(0)).unwrap()
-        );
-        assert_eq!(
-            "Integer overflow",
-            format!("{}", add_integer(Integer(std::i32::MAX), Integer(1)).unwrap_err())
-        );
+        assert_eq!(5, add_integer(2, 3).unwrap());
+        assert_eq!(std::i32::MAX, add_integer(std::i32::MAX, 0).unwrap());
+        assert_eq!("Integer overflow", format!("{}", add_integer(std::i32::MAX, 1).unwrap_err()));
     }
 
     #[test]
     fn test_value_sub_integer() {
-        assert_eq!(Integer(-1), sub_integer(Integer(2), Integer(3)).unwrap());
-        assert_eq!(
-            Integer(std::i32::MIN),
-            sub_integer(Integer(std::i32::MIN), Integer(0)).unwrap()
-        );
-        assert_eq!(
-            "Integer underflow",
-            format!("{}", sub_integer(Integer(std::i32::MIN), Integer(1)).unwrap_err())
-        );
+        assert_eq!(-1, sub_integer(2, 3).unwrap());
+        assert_eq!(std::i32::MIN, sub_integer(std::i32::MIN, 0).unwrap());
+        assert_eq!("Integer underflow", format!("{}", sub_integer(std::i32::MIN, 1).unwrap_err()));
     }
 
     #[test]
     fn test_value_mul_integer() {
-        assert_eq!(Integer(6), mul_integer(Integer(2), Integer(3)).unwrap());
-        assert_eq!(
-            Integer(std::i32::MAX),
-            mul_integer(Integer(std::i32::MAX), Integer(1)).unwrap()
-        );
-        assert_eq!(
-            "Integer overflow",
-            format!("{}", mul_integer(Integer(std::i32::MAX), Integer(2)).unwrap_err())
-        );
+        assert_eq!(6, mul_integer(2, 3).unwrap());
+        assert_eq!(std::i32::MAX, mul_integer(std::i32::MAX, 1).unwrap());
+        assert_eq!("Integer overflow", format!("{}", mul_integer(std::i32::MAX, 2).unwrap_err()));
     }
 
     #[test]
     fn test_value_div_integer() {
-        assert_eq!(Integer(2), div_integer(Integer(10), Integer(5)).unwrap());
-        assert_eq!(Integer(6), div_integer(Integer(20), Integer(3)).unwrap());
-        assert_eq!(
-            Integer(std::i32::MIN),
-            div_integer(Integer(std::i32::MIN), Integer(1)).unwrap()
-        );
-        assert_eq!(
-            "Division by zero",
-            format!("{}", div_integer(Integer(4), Integer(0)).unwrap_err())
-        );
-        assert_eq!(
-            "Integer underflow",
-            format!("{}", div_integer(Integer(std::i32::MIN), Integer(-1)).unwrap_err())
-        );
+        assert_eq!(2, div_integer(10, 5).unwrap());
+        assert_eq!(6, div_integer(20, 3).unwrap());
+        assert_eq!(std::i32::MIN, div_integer(std::i32::MIN, 1).unwrap());
+        assert_eq!("Division by zero", format!("{}", div_integer(4, 0).unwrap_err()));
+        assert_eq!("Integer underflow", format!("{}", div_integer(std::i32::MIN, -1).unwrap_err()));
     }
 
     #[test]
     fn test_value_modulo_integer() {
-        assert_eq!(Integer(0), modulo_integer(Integer(10), Integer(5)).unwrap());
-        assert_eq!(Integer(2), modulo_integer(Integer(20), Integer(3)).unwrap());
-        assert_eq!(
-            "Modulo by zero",
-            format!("{}", modulo_integer(Integer(4), Integer(0)).unwrap_err())
-        );
+        assert_eq!(0, modulo_integer(10, 5).unwrap());
+        assert_eq!(2, modulo_integer(20, 3).unwrap());
+        assert_eq!("Modulo by zero", format!("{}", modulo_integer(4, 0).unwrap_err()));
         assert_eq!(
             "Integer underflow",
-            format!("{}", modulo_integer(Integer(std::i32::MIN), Integer(-1)).unwrap_err())
+            format!("{}", modulo_integer(std::i32::MIN, -1).unwrap_err())
         );
     }
 
     #[test]
     fn test_value_pow_integer() {
-        assert_eq!(Integer(1), pow_integer(Integer(0), Integer(0)).unwrap());
-        assert_eq!(Integer(9), pow_integer(Integer(3), Integer(2)).unwrap());
-        assert_eq!(
-            Integer(std::i32::MAX),
-            pow_integer(Integer(std::i32::MAX), Integer(1)).unwrap()
-        );
-        assert_eq!(
-            "Integer overflow",
-            format!("{}", pow_integer(Integer(std::i32::MAX), Integer(2)).unwrap_err())
-        );
+        assert_eq!(1, pow_integer(0, 0).unwrap());
+        assert_eq!(9, pow_integer(3, 2).unwrap());
+        assert_eq!(std::i32::MAX, pow_integer(std::i32::MAX, 1).unwrap());
+        assert_eq!("Integer overflow", format!("{}", pow_integer(std::i32::MAX, 2).unwrap_err()));
         assert_eq!(
             "Exponent -3 cannot be negative",
-            format!("{}", pow_integer(Integer(1), Integer(-3)).unwrap_err())
+            format!("{}", pow_integer(1, -3).unwrap_err())
         );
     }
 
     #[test]
     fn test_value_neg_integer() {
-        assert_eq!(Integer(-6), neg_integer(Integer(6)).unwrap());
-        assert_eq!(Integer(5), neg_integer(Integer(-5)).unwrap());
-    }
-
-    #[test]
-    fn test_value_add_text() {
-        assert_eq!(
-            Text("foobar".to_owned()),
-            add_text(Text("foo".to_owned()), Text("bar".to_owned()))
-        );
+        assert_eq!(-6, neg_integer(6).unwrap());
+        assert_eq!(5, neg_integer(-5).unwrap());
     }
 }
