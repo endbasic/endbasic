@@ -345,10 +345,10 @@ impl Callable for InputCommand {
 
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
-        let vref = VarRef::new(vname.to_string(), Some(vtype.into()));
+        let vref = VarRef::new(vname.to_string(), Some(vtype));
         loop {
             match read_line(&mut *console, &prompt, &previous_answer, None).await {
-                Ok(answer) => match Value::parse_as(vtype.into(), answer.trim_end()) {
+                Ok(answer) => match Value::parse_as(vtype, answer.trim_end()) {
                     Ok(value) => {
                         machine
                             .get_mut_symbols()

@@ -17,7 +17,7 @@
 
 use crate::*;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value, VarType};
+use endbasic_core::ast::{ArgSep, ExprType, Value};
 use endbasic_core::compiler::{
     ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
@@ -456,7 +456,7 @@ cloud service.  You will be asked for confirmation before proceeding.",
         loop {
             match read_line(console, prompt, "", None).await? {
                 s if s.is_empty() => return Ok(default),
-                s => match Value::parse_as(VarType::Boolean, s.trim_end()) {
+                s => match Value::parse_as(ExprType::Boolean, s.trim_end()) {
                     Ok(Value::Boolean(b)) => return Ok(b),
                     Ok(_) => unreachable!(),
                     Err(_) => {

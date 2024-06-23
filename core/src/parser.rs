@@ -1184,7 +1184,7 @@ impl<'a> Parser<'a> {
         let token_span = self.lexer.read()?;
         let iterator = match token_span.token {
             Token::Symbol(iterator) => match iterator.ref_type() {
-                None | Some(VarType::Double) | Some(VarType::Integer) => iterator,
+                None | Some(ExprType::Double) | Some(ExprType::Integer) => iterator,
                 _ => {
                     return Err(Error::Bad(
                         token_span.pos,
@@ -1732,7 +1732,7 @@ pub fn parse(input: &mut dyn io::Read) -> Result<Vec<Statement>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::VarType;
+    use crate::ast::ExprType;
 
     /// Syntactic sugar to instantiate a `LineCol` for testing.
     fn lc(line: usize, col: usize) -> LineCol {
@@ -1777,7 +1777,7 @@ mod tests {
             format!(
                 "{}",
                 &vref_to_unannotated_string(
-                    VarRef::new("print", Some(VarType::Text)),
+                    VarRef::new("print", Some(ExprType::Text)),
                     LineCol { line: 7, col: 6 }
                 )
                 .unwrap_err()
@@ -1869,7 +1869,7 @@ mod tests {
                     expr: expr_text("text", 2, 11),
                 }),
                 Statement::ArrayAssignment(ArrayAssignmentSpan {
-                    vref: VarRef::new("abc", Some(VarType::Text)),
+                    vref: VarRef::new("abc", Some(ExprType::Text)),
                     vref_pos: lc(3, 1),
                     subscripts: vec![
                         Expr::Add(Box::from(BinaryOpSpan {
@@ -1913,12 +1913,12 @@ mod tests {
                     expr: expr_integer(1, 1, 3),
                 }),
                 Statement::Assignment(AssignmentSpan {
-                    vref: VarRef::new("foo", Some(VarType::Text)),
+                    vref: VarRef::new("foo", Some(ExprType::Text)),
                     vref_pos: lc(2, 1),
                     expr: expr_text("bar", 2, 8),
                 }),
                 Statement::Assignment(AssignmentSpan {
-                    vref: VarRef::new("b", Some(VarType::Text)),
+                    vref: VarRef::new("b", Some(ExprType::Text)),
                     vref_pos: lc(3, 1),
                     expr: Expr::Add(Box::from(BinaryOpSpan {
                         lhs: expr_integer(3, 3, 6),
@@ -1964,7 +1964,7 @@ mod tests {
                             sep_pos: lc(2, 11),
                         },
                         ArgSpan {
-                            expr: Some(expr_symbol(VarRef::new("c", Some(VarType::Text)), 2, 13)),
+                            expr: Some(expr_symbol(VarRef::new("c", Some(ExprType::Text)), 2, 13)),
                             sep: ArgSep::End,
                             sep_pos: lc(2, 15),
                         },
@@ -2288,7 +2288,7 @@ mod tests {
                 dimensions: vec![
                     Add(Box::from(BinaryOpSpan {
                         lhs: Call(CallSpan {
-                            vref: VarRef::new("bar", Some(VarType::Text)),
+                            vref: VarRef::new("bar", Some(ExprType::Text)),
                             vref_pos: lc(1, 9),
                             args: vec![],
                         }),
@@ -2507,7 +2507,7 @@ mod tests {
     #[test]
     fn test_expr_symbols() {
         do_expr_ok_test("foo", expr_symbol(VarRef::new("foo", None), 1, 7));
-        do_expr_ok_test("bar$", expr_symbol(VarRef::new("bar", Some(VarType::Text)), 1, 7));
+        do_expr_ok_test("bar$", expr_symbol(VarRef::new("bar", Some(ExprType::Text)), 1, 7));
     }
 
     #[test]
@@ -2871,7 +2871,7 @@ mod tests {
         do_expr_ok_test(
             "one%(1)",
             Call(CallSpan {
-                vref: VarRef::new("one", Some(VarType::Integer)),
+                vref: VarRef::new("one", Some(ExprType::Integer)),
                 vref_pos: lc(1, 7),
                 args: vec![ArgSpan {
                     expr: Some(expr_integer(1, 1, 12)),
@@ -2883,7 +2883,7 @@ mod tests {
         do_expr_ok_test(
             "many$(3, \"x\", TRUE)",
             Call(CallSpan {
-                vref: VarRef::new("many", Some(VarType::Text)),
+                vref: VarRef::new("many", Some(ExprType::Text)),
                 vref_pos: lc(1, 7),
                 args: vec![
                     ArgSpan {
@@ -2928,7 +2928,7 @@ mod tests {
         do_expr_ok_test(
             "outer?(1, inner1(2, 3), 4, inner2(), 5)",
             Call(CallSpan {
-                vref: VarRef::new("outer", Some(VarType::Boolean)),
+                vref: VarRef::new("outer", Some(ExprType::Boolean)),
                 vref_pos: lc(1, 7),
                 args: vec![
                     ArgSpan {
@@ -2988,7 +2988,7 @@ mod tests {
             And(Box::from(BinaryOpSpan {
                 lhs: expr_symbol(VarRef::new("b".to_owned(), None), 1, 7),
                 rhs: Call(CallSpan {
-                    vref: VarRef::new("ask", Some(VarType::Boolean)),
+                    vref: VarRef::new("ask", Some(ExprType::Boolean)),
                     vref_pos: lc(1, 13),
                     args: vec![
                         ArgSpan {
@@ -3654,7 +3654,7 @@ mod tests {
             })],
         );
 
-        let typed_iter = VarRef::new("d", Some(VarType::Double));
+        let typed_iter = VarRef::new("d", Some(ExprType::Double));
         do_ok_test(
             "FOR d# = 1.0 TO 10.2\nREM Nothing to do\nNEXT",
             &[Statement::For(ForSpan {

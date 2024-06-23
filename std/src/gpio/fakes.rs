@@ -16,7 +16,7 @@
 //! Fake implementations of GPIO pins that work on all platforms.
 
 use crate::gpio::{Pin, PinMode, Pins};
-use endbasic_core::ast::{Value, VarRef, VarType};
+use endbasic_core::ast::{ExprType, Value, VarRef};
 use endbasic_core::syms::{Array, Symbol, Symbols};
 use std::io;
 
@@ -145,7 +145,7 @@ impl<'a> MockPins<'a> {
 
     /// Obtains the value of `__GPIO_MOCK_LAST` if present.
     fn get_last(symbols: &Symbols) -> Option<i32> {
-        match symbols.get(&VarRef::new("__GPIO_MOCK_LAST", Some(VarType::Integer))) {
+        match symbols.get(&VarRef::new("__GPIO_MOCK_LAST", Some(ExprType::Integer))) {
             Ok(Some(Symbol::Variable(Value::Integer(i)))) => Some(*i),
             _ => None,
         }
@@ -153,7 +153,7 @@ impl<'a> MockPins<'a> {
 
     /// Obtains a mutable reference to `__GPIO_MOCK_DATA` if present.
     fn get_mut_data(symbols: &mut Symbols) -> Option<&mut Array> {
-        match symbols.get_mut(&VarRef::new("__GPIO_MOCK_DATA", Some(VarType::Integer))) {
+        match symbols.get_mut(&VarRef::new("__GPIO_MOCK_DATA", Some(ExprType::Integer))) {
             Ok(Some(Symbol::Array(data))) if data.dimensions().len() == 1 => Some(data),
             _ => None,
         }
@@ -174,7 +174,7 @@ impl<'a> MockPins<'a> {
         let new_last = Value::Integer(last + 1);
         match self
             .symbols
-            .set_var(&VarRef::new("__GPIO_MOCK_LAST", Some(VarType::Integer)), new_last)
+            .set_var(&VarRef::new("__GPIO_MOCK_LAST", Some(ExprType::Integer)), new_last)
         {
             Ok(()) => Ok(()),
             Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e.to_string())),

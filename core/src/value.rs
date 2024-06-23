@@ -37,8 +37,8 @@ impl Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl Value {
-    /// Parses a string `s` and constructs a `Value` that matches a given `VarType`.
-    pub fn parse_as<T: Into<String>>(vtype: VarType, s: T) -> Result<Value> {
+    /// Parses a string `s` and constructs a `Value` that matches a given `ExprType`.
+    pub fn parse_as<T: Into<String>>(vtype: ExprType, s: T) -> Result<Value> {
         fn parse_f64(s: &str) -> Result<Value> {
             match s.parse::<f64>() {
                 Ok(d) => Ok(Value::Double(d)),
@@ -58,7 +58,7 @@ impl Value {
 
         let s = s.into();
         match vtype {
-            VarType::Boolean => {
+            ExprType::Boolean => {
                 let raw = s.to_uppercase();
                 if raw == "TRUE" || raw == "YES" || raw == "Y" {
                     Ok(Value::Boolean(true))
@@ -68,9 +68,9 @@ impl Value {
                     Err(Error::new(format!("Invalid boolean literal {}", s)))
                 }
             }
-            VarType::Double => parse_f64(&s),
-            VarType::Integer => parse_i32(&s),
-            VarType::Text => Ok(Value::Text(s)),
+            ExprType::Double => parse_f64(&s),
+            ExprType::Integer => parse_i32(&s),
+            ExprType::Text => Ok(Value::Text(s)),
         }
     }
 
@@ -79,10 +79,12 @@ impl Value {
     ///
     /// Can return an error when the conversion is feasible but it is not possible, such as trying
     /// to cast a NaN to an integer.
-    pub(crate) fn maybe_cast(self, target: Option<VarType>) -> Result<Value> {
+    pub(crate) fn maybe_cast(self, target: Option<ExprType>) -> Result<Value> {
         match (target, self) {
-            (Some(VarType::Integer), Value::Double(d)) => Ok(Value::Integer(double_to_integer(d)?)),
-            (Some(VarType::Double), Value::Integer(i)) => Ok(Value::Double(integer_to_double(i))),
+            (Some(ExprType::Integer), Value::Double(d)) => {
+                Ok(Value::Integer(double_to_integer(d)?))
+            }
+            (Some(ExprType::Double), Value::Integer(i)) => Ok(Value::Double(integer_to_double(i))),
             (_, v) => Ok(v),
         }
     }
@@ -444,79 +446,79 @@ mod tests {
     #[test]
     fn test_value_parse_as_boolean() {
         for s in &["true", "TrUe", "TRUE", "yes", "Yes", "y", "Y"] {
-            assert_eq!(Boolean(true), Value::parse_as(VarType::Boolean, *s).unwrap());
+            assert_eq!(Boolean(true), Value::parse_as(ExprType::Boolean, *s).unwrap());
         }
 
         for s in &["false", "FaLsE", "FALSE", "no", "No", "n", "N"] {
-            assert_eq!(Boolean(false), Value::parse_as(VarType::Boolean, *s).unwrap());
+            assert_eq!(Boolean(false), Value::parse_as(ExprType::Boolean, *s).unwrap());
         }
 
         for s in &["ye", "0", "1", " true"] {
             assert_eq!(
                 format!("Invalid boolean literal {}", s),
-                format!("{}", Value::parse_as(VarType::Boolean, *s).unwrap_err())
+                format!("{}", Value::parse_as(ExprType::Boolean, *s).unwrap_err())
             );
         }
     }
 
     #[test]
     fn test_value_parse_as_double() {
-        assert_eq!(Double(10.0), Value::parse_as(VarType::Double, "10").unwrap());
-        assert_eq!(Double(0.0), Value::parse_as(VarType::Double, "0").unwrap());
-        assert_eq!(Double(-21.0), Value::parse_as(VarType::Double, "-21").unwrap());
-        assert_eq!(Double(1.0), Value::parse_as(VarType::Double, "1.0").unwrap());
-        assert_eq!(Double(0.01), Value::parse_as(VarType::Double, ".01").unwrap());
+        assert_eq!(Double(10.0), Value::parse_as(ExprType::Double, "10").unwrap());
+        assert_eq!(Double(0.0), Value::parse_as(ExprType::Double, "0").unwrap());
+        assert_eq!(Double(-21.0), Value::parse_as(ExprType::Double, "-21").unwrap());
+        assert_eq!(Double(1.0), Value::parse_as(ExprType::Double, "1.0").unwrap());
+        assert_eq!(Double(0.01), Value::parse_as(ExprType::Double, ".01").unwrap());
 
         assert_eq!(
             Double(123456789012345680000000000000.0),
-            Value::parse_as(VarType::Double, "123456789012345678901234567890.1").unwrap()
+            Value::parse_as(ExprType::Double, "123456789012345678901234567890.1").unwrap()
         );
 
         assert_eq!(
             Double(1.1234567890123457),
-            Value::parse_as(VarType::Double, "1.123456789012345678901234567890").unwrap()
+            Value::parse_as(ExprType::Double, "1.123456789012345678901234567890").unwrap()
         );
 
         assert_eq!(
             "Invalid double-precision floating point literal ",
-            format!("{}", Value::parse_as(VarType::Double, "").unwrap_err())
+            format!("{}", Value::parse_as(ExprType::Double, "").unwrap_err())
         );
         assert_eq!(
             "Invalid double-precision floating point literal - 3.0",
-            format!("{}", Value::parse_as(VarType::Double, "- 3.0").unwrap_err())
+            format!("{}", Value::parse_as(ExprType::Double, "- 3.0").unwrap_err())
         );
         assert_eq!(
             "Invalid double-precision floating point literal 34ab3.1",
-            format!("{}", Value::parse_as(VarType::Double, "34ab3.1").unwrap_err())
+            format!("{}", Value::parse_as(ExprType::Double, "34ab3.1").unwrap_err())
         );
     }
 
     #[test]
     fn test_value_parse_as_integer() {
-        assert_eq!(Integer(10), Value::parse_as(VarType::Integer, "10").unwrap());
-        assert_eq!(Integer(0), Value::parse_as(VarType::Integer, "0").unwrap());
-        assert_eq!(Integer(-21), Value::parse_as(VarType::Integer, "-21").unwrap());
+        assert_eq!(Integer(10), Value::parse_as(ExprType::Integer, "10").unwrap());
+        assert_eq!(Integer(0), Value::parse_as(ExprType::Integer, "0").unwrap());
+        assert_eq!(Integer(-21), Value::parse_as(ExprType::Integer, "-21").unwrap());
 
         assert_eq!(
             "Invalid integer literal ",
-            format!("{}", Value::parse_as(VarType::Integer, "").unwrap_err())
+            format!("{}", Value::parse_as(ExprType::Integer, "").unwrap_err())
         );
         assert_eq!(
             "Invalid integer literal - 3",
-            format!("{}", Value::parse_as(VarType::Integer, "- 3").unwrap_err())
+            format!("{}", Value::parse_as(ExprType::Integer, "- 3").unwrap_err())
         );
         assert_eq!(
             "Invalid integer literal 34ab3",
-            format!("{}", Value::parse_as(VarType::Integer, "34ab3").unwrap_err())
+            format!("{}", Value::parse_as(ExprType::Integer, "34ab3").unwrap_err())
         );
     }
 
     #[test]
     fn test_value_parse_as_text() {
-        assert_eq!(Text("".to_owned()), Value::parse_as(VarType::Text, "").unwrap());
-        assert_eq!(Text("true".to_owned()), Value::parse_as(VarType::Text, "true").unwrap());
-        assert_eq!(Text("32".to_owned()), Value::parse_as(VarType::Text, "32").unwrap());
-        assert_eq!(Text("a b".to_owned()), Value::parse_as(VarType::Text, "a b").unwrap());
+        assert_eq!(Text("".to_owned()), Value::parse_as(ExprType::Text, "").unwrap());
+        assert_eq!(Text("true".to_owned()), Value::parse_as(ExprType::Text, "true").unwrap());
+        assert_eq!(Text("32".to_owned()), Value::parse_as(ExprType::Text, "32").unwrap());
+        assert_eq!(Text("a b".to_owned()), Value::parse_as(ExprType::Text, "a b").unwrap());
     }
 
     #[test]
@@ -539,17 +541,17 @@ mod tests {
     fn test_value_maybe_cast() {
         use std::i32;
 
-        let all_types = [VarType::Boolean, VarType::Double, VarType::Integer, VarType::Text];
+        let all_types = [ExprType::Boolean, ExprType::Double, ExprType::Integer, ExprType::Text];
         for target in all_types {
             assert_eq!(Boolean(true), Boolean(true).maybe_cast(Some(target)).unwrap());
-            if target != VarType::Integer {
+            if target != ExprType::Integer {
                 assert_eq!(Double(3.8), Double(3.8).maybe_cast(Some(target)).unwrap());
                 match Double(f64::NAN).maybe_cast(Some(target)).unwrap() {
                     Double(d) => assert!(d.is_nan()),
                     _ => panic!(),
                 }
             }
-            if target != VarType::Double {
+            if target != ExprType::Double {
                 assert_eq!(Integer(3), Integer(3).maybe_cast(Some(target)).unwrap());
             }
             assert_eq!(
@@ -558,41 +560,41 @@ mod tests {
             );
         }
 
-        assert_eq!(Integer(8), Double(8.4).maybe_cast(Some(VarType::Integer)).unwrap());
-        assert_eq!(Integer(9), Double(8.5).maybe_cast(Some(VarType::Integer)).unwrap());
-        assert_eq!(Integer(9), Double(8.6).maybe_cast(Some(VarType::Integer)).unwrap());
-        assert_eq!(Double(7.0), Integer(7).maybe_cast(Some(VarType::Double)).unwrap());
+        assert_eq!(Integer(8), Double(8.4).maybe_cast(Some(ExprType::Integer)).unwrap());
+        assert_eq!(Integer(9), Double(8.5).maybe_cast(Some(ExprType::Integer)).unwrap());
+        assert_eq!(Integer(9), Double(8.6).maybe_cast(Some(ExprType::Integer)).unwrap());
+        assert_eq!(Double(7.0), Integer(7).maybe_cast(Some(ExprType::Double)).unwrap());
 
-        Double(f64::NAN).maybe_cast(Some(VarType::Integer)).unwrap_err();
+        Double(f64::NAN).maybe_cast(Some(ExprType::Integer)).unwrap_err();
         assert_eq!(
             Double(i32::MAX as f64),
-            Integer(i32::MAX).maybe_cast(Some(VarType::Double)).unwrap()
+            Integer(i32::MAX).maybe_cast(Some(ExprType::Double)).unwrap()
         );
-        Double(i32::MAX as f64 + 1.0).maybe_cast(Some(VarType::Integer)).unwrap_err();
+        Double(i32::MAX as f64 + 1.0).maybe_cast(Some(ExprType::Integer)).unwrap_err();
         assert_eq!(
             Double(i32::MIN as f64),
-            Integer(i32::MIN).maybe_cast(Some(VarType::Double)).unwrap()
+            Integer(i32::MIN).maybe_cast(Some(ExprType::Double)).unwrap()
         );
-        Double(i32::MIN as f64 - 1.0).maybe_cast(Some(VarType::Integer)).unwrap_err();
+        Double(i32::MIN as f64 - 1.0).maybe_cast(Some(ExprType::Integer)).unwrap_err();
     }
 
     #[test]
     fn test_value_display_and_parse() {
         let v = Boolean(false);
-        assert_eq!(v, Value::parse_as(VarType::Boolean, format!("{}", v)).unwrap());
+        assert_eq!(v, Value::parse_as(ExprType::Boolean, format!("{}", v)).unwrap());
 
         let v = Double(10.1);
-        assert_eq!(v, Value::parse_as(VarType::Double, format!("{}", v)).unwrap());
+        assert_eq!(v, Value::parse_as(ExprType::Double, format!("{}", v)).unwrap());
 
         let v = Integer(9);
-        assert_eq!(v, Value::parse_as(VarType::Integer, format!("{}", v)).unwrap());
+        assert_eq!(v, Value::parse_as(ExprType::Integer, format!("{}", v)).unwrap());
 
         // The string parsing and printing is not symmetrical on purpose given that user input
         // does not provide strings as quoted but we want to show them as quoted for clarity.
         let v = Text("Some long text".to_owned());
         assert_eq!(
             Text("\"Some long text\"".to_owned()),
-            Value::parse_as(VarType::Text, format!("{}", v)).unwrap()
+            Value::parse_as(ExprType::Text, format!("{}", v)).unwrap()
         );
     }
 

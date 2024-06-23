@@ -655,7 +655,7 @@ impl Machine {
     pub fn get_var_as_bool(&self, name: &str) -> Result<bool> {
         match self
             .symbols
-            .get_var(&VarRef::new(name, Some(VarType::Boolean)))
+            .get_var(&VarRef::new(name, Some(ExprType::Boolean)))
             .map_err(Error::from_value_error_without_pos)?
         {
             Value::Boolean(b) => Ok(*b),
@@ -668,7 +668,7 @@ impl Machine {
     pub fn get_var_as_int(&self, name: &str) -> Result<i32> {
         match self
             .symbols
-            .get_var(&VarRef::new(name, Some(VarType::Integer)))
+            .get_var(&VarRef::new(name, Some(ExprType::Integer)))
             .map_err(Error::from_value_error_without_pos)?
         {
             Value::Integer(i) => Ok(*i),
@@ -690,7 +690,7 @@ impl Machine {
     pub fn get_var_as_string(&self, name: &str) -> Result<&str> {
         match self
             .symbols
-            .get_var(&VarRef::new(name, Some(VarType::Text)))
+            .get_var(&VarRef::new(name, Some(ExprType::Text)))
             .map_err(Error::from_value_error_without_pos)?
         {
             Value::Text(s) => Ok(s),
@@ -958,7 +958,7 @@ impl Machine {
         if cfg!(debug_assertions) {
             match context.value_stack.top() {
                 Some((value, _pos)) => {
-                    let fref_checker = VarRef::new(fname.to_string(), Some(ftype.into()));
+                    let fref_checker = VarRef::new(fname.to_string(), Some(ftype));
                     debug_assert!(
                         fref_checker.accepts(value.as_exprtype()),
                         "Value returned by function is incompatible with its type definition",
@@ -1498,8 +1498,8 @@ mod tests {
     impl Clearable for MockClearable {
         fn reset_state(&self, syms: &mut Symbols) {
             // Make sure we can see the symbols before they are cleared.
-            assert!(syms.get_var(&VarRef::new("a", Some(VarType::Boolean))).is_ok());
-            assert!(syms.get_var(&VarRef::new("b", Some(VarType::Integer))).is_ok());
+            assert!(syms.get_var(&VarRef::new("a", Some(ExprType::Boolean))).is_ok());
+            assert!(syms.get_var(&VarRef::new("b", Some(ExprType::Integer))).is_ok());
 
             *self.cleared.borrow_mut() = true;
         }

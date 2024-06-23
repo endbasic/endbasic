@@ -15,7 +15,7 @@
 
 //! Test utilities.
 
-use crate::ast::{ArgSep, ExprType, Value, VarRef, VarType};
+use crate::ast::{ArgSep, ExprType, Value, VarRef};
 use crate::compiler::{
     ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax, RequiredValueSyntax,
     SingularArgSyntax,
@@ -238,7 +238,7 @@ impl Callable for GetHiddenFunction {
     async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
         assert_eq!(1, scope.nargs());
         let name = scope.pop_string();
-        match machine.get_var(&VarRef::new(name, Some(VarType::Text))) {
+        match machine.get_var(&VarRef::new(name, Some(ExprType::Text))) {
             Ok(t) => scope.return_any(t.clone()),
             Err(_) => panic!("Invalid argument"),
         }
@@ -319,8 +319,8 @@ impl Callable for InCommand {
 
         let mut data = self.data.borrow_mut();
         let raw_value = data.next().unwrap().to_owned();
-        let value = Value::parse_as(vtype.into(), raw_value)
-            .map_err(|e| CallError::EvalError(pos, e.message))?;
+        let value =
+            Value::parse_as(vtype, raw_value).map_err(|e| CallError::EvalError(pos, e.message))?;
         machine.get_mut_symbols().assign(&vname, value);
         Ok(())
     }

@@ -39,7 +39,7 @@ fn parse_bound_args<'a>(
 ) -> Result<(&'a Array, usize), CallError> {
     let (arrayname, arraytype, arraypos) = scope.pop_varref_with_pos();
 
-    let arrayref = VarRef::new(arrayname.to_string(), Some(arraytype.into()));
+    let arrayref = VarRef::new(arrayname.to_string(), Some(arraytype));
     let array = match symbols
         .get(&arrayref)
         .map_err(|e| CallError::ArgumentError(arraypos, format!("{}", e)))?
