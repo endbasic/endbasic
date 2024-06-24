@@ -315,12 +315,16 @@ impl Callable for InCommand {
 
     async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
         debug_assert_eq!(1, scope.nargs());
-        let (vname, vtype, pos) = scope.pop_varref_with_pos();
+        let (vname, vtype) = scope.pop_varref();
 
         let mut data = self.data.borrow_mut();
-        let raw_value = data.next().unwrap().to_owned();
-        let value =
-            Value::parse_as(vtype, raw_value).map_err(|e| CallError::EvalError(pos, e.message))?;
+        let raw_value = data.next().unwrap();
+        let value = match vtype {
+            ExprType::Double => Value::Double(raw_value.parse::<f64>().unwrap()),
+            ExprType::Integer => Value::Integer(raw_value.parse::<i32>().unwrap()),
+            ExprType::Text => Value::Text(raw_value.to_string()),
+            _ => unreachable!("Unsupported target type"),
+        };
         machine.get_mut_symbols().assign(&vname, value);
         Ok(())
     }

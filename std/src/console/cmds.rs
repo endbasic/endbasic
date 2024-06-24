@@ -17,7 +17,9 @@
 
 use crate::console::readline::read_line;
 use crate::console::{CharsXY, ClearType, Console, ConsoleClearable, Key};
-use crate::strings::{format_boolean, format_double, format_integer};
+use crate::strings::{
+    format_boolean, format_double, format_integer, parse_boolean, parse_double, parse_integer,
+};
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, ExprType, Value, VarRef};
 use endbasic_core::compiler::{
@@ -348,19 +350,54 @@ impl Callable for InputCommand {
         let vref = VarRef::new(vname.to_string(), Some(vtype));
         loop {
             match read_line(&mut *console, &prompt, &previous_answer, None).await {
-                Ok(answer) => match Value::parse_as(vtype, answer.trim_end()) {
-                    Ok(value) => {
-                        machine
-                            .get_mut_symbols()
-                            .set_var(&vref, value)
-                            .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
-                        return Ok(());
-                    }
-                    Err(e) => {
-                        console.print(&format!("Retry input: {}", e))?;
-                        previous_answer = answer;
-                    }
-                },
+                Ok(answer) => {
+                    let trimmed_answer = answer.trim_end();
+                    let e = match vtype {
+                        ExprType::Boolean => match parse_boolean(trimmed_answer) {
+                            Ok(b) => {
+                                machine
+                                    .get_mut_symbols()
+                                    .set_var(&vref, Value::Boolean(b))
+                                    .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
+                                return Ok(());
+                            }
+                            Err(e) => e,
+                        },
+
+                        ExprType::Double => match parse_double(trimmed_answer) {
+                            Ok(d) => {
+                                machine
+                                    .get_mut_symbols()
+                                    .set_var(&vref, Value::Double(d))
+                                    .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
+                                return Ok(());
+                            }
+                            Err(e) => e,
+                        },
+
+                        ExprType::Integer => match parse_integer(trimmed_answer) {
+                            Ok(i) => {
+                                machine
+                                    .get_mut_symbols()
+                                    .set_var(&vref, Value::Integer(i))
+                                    .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
+                                return Ok(());
+                            }
+                            Err(e) => e,
+                        },
+
+                        ExprType::Text => {
+                            machine
+                                .get_mut_symbols()
+                                .set_var(&vref, Value::Text(trimmed_answer.to_owned()))
+                                .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
+                            return Ok(());
+                        }
+                    };
+
+                    console.print(&format!("Retry input: {}", e))?;
+                    previous_answer = answer;
+                }
                 Err(e) if e.kind() == io::ErrorKind::InvalidData => {
                     console.print(&format!("Retry input: {}", e))?
                 }

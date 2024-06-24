@@ -17,8 +17,9 @@
 
 use crate::console::{read_line, Console};
 use crate::storage::Storage;
+use crate::strings::parse_boolean;
 use async_trait::async_trait;
-use endbasic_core::ast::{ExprType, Value};
+use endbasic_core::ast::ExprType;
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope, StopReason};
 use endbasic_core::syms::{
@@ -144,10 +145,7 @@ pub async fn continue_if_modified(
         None => console.print("Current program has unsaved changes and has never been saved!")?,
     }
     let answer = read_line(console, "Discard and continue (y/N)? ", "", None).await?;
-    match Value::parse_as(ExprType::Boolean, answer) {
-        Ok(Value::Boolean(b)) => Ok(b),
-        _ => Ok(false),
-    }
+    Ok(parse_boolean(&answer).unwrap_or(false))
 }
 
 /// The `KILL` command.

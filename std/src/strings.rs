@@ -40,6 +40,18 @@ pub fn format_boolean(b: bool) -> &'static str {
     }
 }
 
+/// Parses a string `s` as a boolean.
+pub fn parse_boolean(s: &str) -> Result<bool, String> {
+    let raw = s.to_uppercase();
+    if raw == "TRUE" || raw == "YES" || raw == "Y" {
+        Ok(true)
+    } else if raw == "FALSE" || raw == "NO" || raw == "N" {
+        Ok(false)
+    } else {
+        Err(format!("Invalid boolean literal {}", s))
+    }
+}
+
 /// Formats a double `d` for display.
 pub fn format_double(d: f64) -> String {
     if !d.is_nan() && d.is_sign_negative() {
@@ -49,12 +61,28 @@ pub fn format_double(d: f64) -> String {
     }
 }
 
+/// Parses a string `s` as a double.
+pub fn parse_double(s: &str) -> Result<f64, String> {
+    match s.parse::<f64>() {
+        Ok(d) => Ok(d),
+        Err(_) => Err(format!("Invalid double-precision floating point literal {}", s)),
+    }
+}
+
 /// Formats an integer `i` for display.
 pub fn format_integer(i: i32) -> String {
     if i.is_negative() {
         i.to_string()
     } else {
         format!(" {}", i)
+    }
+}
+
+/// Parses a string `s` as an integer.
+pub fn parse_integer(s: &str) -> Result<i32, String> {
+    match s.parse::<i32>() {
+        Ok(d) => Ok(d),
+        Err(_) => Err(format!("Invalid integer literal {}", s)),
     }
 }
 
@@ -579,7 +607,69 @@ pub fn add_all(machine: &mut Machine) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::testutils::*;
+
+    #[test]
+    fn test_value_parse_boolean() {
+        for s in &["true", "TrUe", "TRUE", "yes", "Yes", "y", "Y"] {
+            assert!(parse_boolean(*s).unwrap());
+        }
+
+        for s in &["false", "FaLsE", "FALSE", "no", "No", "n", "N"] {
+            assert!(!parse_boolean(*s).unwrap());
+        }
+
+        for s in &["ye", "0", "1", " true"] {
+            assert_eq!(
+                format!("Invalid boolean literal {}", s),
+                format!("{}", parse_boolean(*s).unwrap_err())
+            );
+        }
+    }
+
+    #[test]
+    fn test_value_parse_double() {
+        assert_eq!(10.0, parse_double("10").unwrap());
+        assert_eq!(0.0, parse_double("0").unwrap());
+        assert_eq!(-21.0, parse_double("-21").unwrap());
+        assert_eq!(1.0, parse_double("1.0").unwrap());
+        assert_eq!(0.01, parse_double(".01").unwrap());
+
+        assert_eq!(
+            123456789012345680000000000000.0,
+            parse_double("123456789012345678901234567890.1").unwrap()
+        );
+
+        assert_eq!(1.1234567890123457, parse_double("1.123456789012345678901234567890").unwrap());
+
+        assert_eq!(
+            "Invalid double-precision floating point literal ",
+            format!("{}", parse_double("").unwrap_err())
+        );
+        assert_eq!(
+            "Invalid double-precision floating point literal - 3.0",
+            format!("{}", parse_double("- 3.0").unwrap_err())
+        );
+        assert_eq!(
+            "Invalid double-precision floating point literal 34ab3.1",
+            format!("{}", parse_double("34ab3.1").unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_value_parse_integer() {
+        assert_eq!(10, parse_integer("10").unwrap());
+        assert_eq!(0, parse_integer("0").unwrap());
+        assert_eq!(-21, parse_integer("-21").unwrap());
+
+        assert_eq!("Invalid integer literal ", format!("{}", parse_integer("").unwrap_err()));
+        assert_eq!("Invalid integer literal - 3", format!("{}", parse_integer("- 3").unwrap_err()));
+        assert_eq!(
+            "Invalid integer literal 34ab3",
+            format!("{}", parse_integer("34ab3").unwrap_err())
+        );
+    }
 
     #[test]
     fn test_asc() {

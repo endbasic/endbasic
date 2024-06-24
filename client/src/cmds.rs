@@ -17,7 +17,7 @@
 
 use crate::*;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value};
+use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{
     ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
@@ -28,6 +28,7 @@ use endbasic_core::syms::{
 use endbasic_core::LineCol;
 use endbasic_std::console::{is_narrow, read_line, read_line_secure, refill_and_print, Console};
 use endbasic_std::storage::{FileAcls, Storage};
+use endbasic_std::strings::parse_boolean;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::str;
@@ -456,9 +457,8 @@ cloud service.  You will be asked for confirmation before proceeding.",
         loop {
             match read_line(console, prompt, "", None).await? {
                 s if s.is_empty() => return Ok(default),
-                s => match Value::parse_as(ExprType::Boolean, s.trim_end()) {
-                    Ok(Value::Boolean(b)) => return Ok(b),
-                    Ok(_) => unreachable!(),
+                s => match parse_boolean(s.trim_end()) {
+                    Ok(b) => return Ok(b),
                     Err(_) => {
                         console.print("Invalid input; try again.")?;
                         continue;

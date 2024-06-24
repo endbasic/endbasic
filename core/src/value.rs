@@ -36,43 +36,6 @@ impl Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl Value {
-    /// Parses a string `s` and constructs a `Value` that matches a given `ExprType`.
-    pub fn parse_as<T: Into<String>>(vtype: ExprType, s: T) -> Result<Value> {
-        fn parse_f64(s: &str) -> Result<Value> {
-            match s.parse::<f64>() {
-                Ok(d) => Ok(Value::Double(d)),
-                Err(_) => Err(Error::new(format!(
-                    "Invalid double-precision floating point literal {}",
-                    s
-                ))),
-            }
-        }
-
-        fn parse_i32(s: &str) -> Result<Value> {
-            match s.parse::<i32>() {
-                Ok(i) => Ok(Value::Integer(i)),
-                Err(_) => Err(Error::new(format!("Invalid integer literal {}", s))),
-            }
-        }
-
-        let s = s.into();
-        match vtype {
-            ExprType::Boolean => {
-                let raw = s.to_uppercase();
-                if raw == "TRUE" || raw == "YES" || raw == "Y" {
-                    Ok(Value::Boolean(true))
-                } else if raw == "FALSE" || raw == "NO" || raw == "N" {
-                    Ok(Value::Boolean(false))
-                } else {
-                    Err(Error::new(format!("Invalid boolean literal {}", s)))
-                }
-            }
-            ExprType::Double => parse_f64(&s),
-            ExprType::Integer => parse_i32(&s),
-            ExprType::Text => Ok(Value::Text(s)),
-        }
-    }
-
     /// Given a `target` variable type, tries to convert the value to that type if they are
     /// compatible or otherwise returns self.
     ///
@@ -209,84 +172,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_value_parse_as_boolean() {
-        for s in &["true", "TrUe", "TRUE", "yes", "Yes", "y", "Y"] {
-            assert_eq!(Boolean(true), Value::parse_as(ExprType::Boolean, *s).unwrap());
-        }
-
-        for s in &["false", "FaLsE", "FALSE", "no", "No", "n", "N"] {
-            assert_eq!(Boolean(false), Value::parse_as(ExprType::Boolean, *s).unwrap());
-        }
-
-        for s in &["ye", "0", "1", " true"] {
-            assert_eq!(
-                format!("Invalid boolean literal {}", s),
-                format!("{}", Value::parse_as(ExprType::Boolean, *s).unwrap_err())
-            );
-        }
-    }
-
-    #[test]
-    fn test_value_parse_as_double() {
-        assert_eq!(Double(10.0), Value::parse_as(ExprType::Double, "10").unwrap());
-        assert_eq!(Double(0.0), Value::parse_as(ExprType::Double, "0").unwrap());
-        assert_eq!(Double(-21.0), Value::parse_as(ExprType::Double, "-21").unwrap());
-        assert_eq!(Double(1.0), Value::parse_as(ExprType::Double, "1.0").unwrap());
-        assert_eq!(Double(0.01), Value::parse_as(ExprType::Double, ".01").unwrap());
-
-        assert_eq!(
-            Double(123456789012345680000000000000.0),
-            Value::parse_as(ExprType::Double, "123456789012345678901234567890.1").unwrap()
-        );
-
-        assert_eq!(
-            Double(1.1234567890123457),
-            Value::parse_as(ExprType::Double, "1.123456789012345678901234567890").unwrap()
-        );
-
-        assert_eq!(
-            "Invalid double-precision floating point literal ",
-            format!("{}", Value::parse_as(ExprType::Double, "").unwrap_err())
-        );
-        assert_eq!(
-            "Invalid double-precision floating point literal - 3.0",
-            format!("{}", Value::parse_as(ExprType::Double, "- 3.0").unwrap_err())
-        );
-        assert_eq!(
-            "Invalid double-precision floating point literal 34ab3.1",
-            format!("{}", Value::parse_as(ExprType::Double, "34ab3.1").unwrap_err())
-        );
-    }
-
-    #[test]
-    fn test_value_parse_as_integer() {
-        assert_eq!(Integer(10), Value::parse_as(ExprType::Integer, "10").unwrap());
-        assert_eq!(Integer(0), Value::parse_as(ExprType::Integer, "0").unwrap());
-        assert_eq!(Integer(-21), Value::parse_as(ExprType::Integer, "-21").unwrap());
-
-        assert_eq!(
-            "Invalid integer literal ",
-            format!("{}", Value::parse_as(ExprType::Integer, "").unwrap_err())
-        );
-        assert_eq!(
-            "Invalid integer literal - 3",
-            format!("{}", Value::parse_as(ExprType::Integer, "- 3").unwrap_err())
-        );
-        assert_eq!(
-            "Invalid integer literal 34ab3",
-            format!("{}", Value::parse_as(ExprType::Integer, "34ab3").unwrap_err())
-        );
-    }
-
-    #[test]
-    fn test_value_parse_as_text() {
-        assert_eq!(Text("".to_owned()), Value::parse_as(ExprType::Text, "").unwrap());
-        assert_eq!(Text("true".to_owned()), Value::parse_as(ExprType::Text, "true").unwrap());
-        assert_eq!(Text("32".to_owned()), Value::parse_as(ExprType::Text, "32").unwrap());
-        assert_eq!(Text("a b".to_owned()), Value::parse_as(ExprType::Text, "a b").unwrap());
-    }
-
-    #[test]
     fn test_double_to_integer() {
         assert_eq!(8, double_to_integer(8.4).unwrap());
         assert_eq!(9, double_to_integer(8.5).unwrap());
@@ -341,26 +226,6 @@ mod tests {
             Integer(i32::MIN).maybe_cast(Some(ExprType::Double)).unwrap()
         );
         Double(i32::MIN as f64 - 1.0).maybe_cast(Some(ExprType::Integer)).unwrap_err();
-    }
-
-    #[test]
-    fn test_value_display_and_parse() {
-        let v = Boolean(false);
-        assert_eq!(v, Value::parse_as(ExprType::Boolean, format!("{}", v)).unwrap());
-
-        let v = Double(10.1);
-        assert_eq!(v, Value::parse_as(ExprType::Double, format!("{}", v)).unwrap());
-
-        let v = Integer(9);
-        assert_eq!(v, Value::parse_as(ExprType::Integer, format!("{}", v)).unwrap());
-
-        // The string parsing and printing is not symmetrical on purpose given that user input
-        // does not provide strings as quoted but we want to show them as quoted for clarity.
-        let v = Text("Some long text".to_owned());
-        assert_eq!(
-            Text("\"Some long text\"".to_owned()),
-            Value::parse_as(ExprType::Text, format!("{}", v)).unwrap()
-        );
     }
 
     #[test]
