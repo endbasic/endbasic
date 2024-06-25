@@ -3453,4 +3453,55 @@ mod tests {
         "#;
         do_ok_test(code, &[], &["0 9.7 8.7"]);
     }
+
+    #[test]
+    fn test_user_functions_annotated_argument_types() {
+        let code = r#"
+            FUNCTION f(b?, d#, i%, s$)
+                OUT b; d#; i; s$
+            END FUNCTION
+            OUT f(TRUE, 1.2, 3, "hi")
+        "#;
+        do_ok_test(code, &[], &["TRUE 1.2 3 hi", "0"]);
+    }
+
+    #[test]
+    fn test_user_functions_as_argument_types() {
+        let code = r#"
+            FUNCTION f(b AS BOOLEAN, d AS DOUBLE, i AS INTEGER, s AS STRING)
+                OUT b?; d; i%; s
+            END FUNCTION
+            OUT f(TRUE, 1.2, 3, "hi")
+        "#;
+        do_ok_test(code, &[], &["TRUE 1.2 3 hi", "0"]);
+    }
+
+    #[test]
+    fn test_user_functions_argument_evaluation_order() {
+        let code = r#"
+            DIM SHARED g
+            FUNCTION f(x, y)
+                g = g + 1
+                f = x + y
+            END FUNCTION
+            g = 0
+            OUT f(1, 2); g
+            g = 0
+            OUT g; f(1, 2)
+        "#;
+        do_ok_test(code, &[], &["3 0", "1 3"]);
+    }
+
+    #[test]
+    fn test_user_functions_recursion() {
+        let code = r#"
+            DIM SHARED calls
+            FUNCTION factorial(n)
+                IF n = 1 THEN factorial = 1 ELSE factorial = n * factorial(n - 1)
+                calls = calls + 1
+            END FUNCTION
+            OUT calls; factorial(5)
+        "#;
+        do_ok_test(code, &[], &["5 120"]);
+    }
 }

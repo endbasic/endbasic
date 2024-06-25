@@ -246,7 +246,6 @@ impl CallableSyntax {
 
     /// Creates a new callable arguments definition from its parts defined dynamically at
     /// runtime.
-    #[allow(unused)]
     pub(crate) fn new_dynamic(
         singular: Vec<SingularArgSyntax>,
         repeated: Option<RepeatedSyntax>,

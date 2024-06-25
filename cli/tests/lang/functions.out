@@ -22,3 +22,32 @@ defined_locally on exit:  3
 get_really_global returned:  2
 get_really_global returned:  4
 really_global is:  3
+>>> Arguments with annotations
+param_b is TRUE
+param_d is  3.4
+param_i is  5
+param_s is hello
+ 0
+>>> Arguments with types
+b is FALSE
+d is -1
+i is  2
+s is foo
+ 0
+>>> Type promotion in arguments
+d is  5
+i is  3
+ 0
+>>> Type promotion in return values
+ 3
+>>> Recursion
+entering level:  3
+entering level:  2
+entering level:  1
+ 0
+leaving level:  1
+ 0
+leaving level:  2
+ 0
+leaving level:  3
+ 0

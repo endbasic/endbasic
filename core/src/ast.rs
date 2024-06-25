@@ -655,6 +655,9 @@ pub struct FunctionSpan {
     /// Position of the name of the function.
     pub name_pos: LineCol,
 
+    /// Definition of the function parameters.
+    pub params: Vec<VarRef>,
+
     /// Statements within the function's body.
     pub body: Vec<Statement>,
 
