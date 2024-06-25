@@ -21,6 +21,7 @@ use crate::reader::LineCol;
 use crate::syms::{
     CallError, CallableMetadata, CallableMetadataBuilder, Symbol, SymbolKey, Symbols,
 };
+use std::borrow::Cow;
 use std::collections::HashMap;
 #[cfg(test)]
 use std::collections::HashSet;
@@ -897,9 +898,24 @@ impl Compiler {
             }
 
             Statement::Function(span) => {
+                let mut syntax = vec![];
+                for (i, param) in span.params.iter().enumerate() {
+                    let sep = if i == span.params.len() - 1 {
+                        ArgSepSyntax::End
+                    } else {
+                        ArgSepSyntax::Exactly(ArgSep::Long)
+                    };
+                    syntax.push(SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax {
+                            name: Cow::Owned(param.name().to_owned()),
+                            vtype: param.ref_type().unwrap_or(ExprType::Integer),
+                        },
+                        sep,
+                    ));
+                }
                 let md = CallableMetadataBuilder::new("USER DEFINED FUNCTION")
                     .with_return_type(span.name.ref_type().unwrap_or(ExprType::Integer))
-                    .with_syntax(&[(&[], None)])
+                    .with_dynamic_syntax(vec![(syntax, None)])
                     .with_category("User defined")
                     .with_description("User defined symbol")
                     .build();
@@ -987,6 +1003,13 @@ impl Compiler {
                 vtype: return_type,
             }));
             self.symtable.insert(return_value.clone(), SymbolPrototype::Variable(return_type));
+
+            for param in span.params {
+                let key = SymbolKey::from(param.name());
+                let ptype = param.ref_type().unwrap_or(ExprType::Integer);
+                self.emit(Instruction::Assign(key.clone()));
+                self.symtable.insert(key, SymbolPrototype::Variable(ptype));
+            }
 
             self.current_function = Some(key.clone());
             self.compile_many(span.body)?;

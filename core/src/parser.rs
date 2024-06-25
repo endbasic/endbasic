@@ -397,6 +397,24 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parses the type name of an `AS` type definition.
+    ///
+    /// The `AS` token has already been consumed, so all this does is read a literal type name and
+    /// convert it to the corresponding expression type.
+    fn parse_as_type(&mut self) -> Result<(ExprType, LineCol)> {
+        let token_span = self.lexer.read()?;
+        match token_span.token {
+            Token::BooleanName => Ok((ExprType::Boolean, token_span.pos)),
+            Token::DoubleName => Ok((ExprType::Double, token_span.pos)),
+            Token::IntegerName => Ok((ExprType::Integer, token_span.pos)),
+            Token::TextName => Ok((ExprType::Text, token_span.pos)),
+            t => Err(Error::Bad(
+                token_span.pos,
+                format!("Invalid type name {} in AS type definition", t),
+            )),
+        }
+    }
+
     /// Parses a `DATA` statement.
     fn parse_data(&mut self) -> Result<Statement> {
         let mut values = vec![];
@@ -477,19 +495,7 @@ impl<'a> Parser<'a> {
             Token::Eof | Token::Eol => (ExprType::Integer, peeked.pos),
             Token::As => {
                 self.lexer.consume_peeked();
-                let token_span = self.lexer.read()?;
-                match token_span.token {
-                    Token::BooleanName => (ExprType::Boolean, token_span.pos),
-                    Token::DoubleName => (ExprType::Double, token_span.pos),
-                    Token::IntegerName => (ExprType::Integer, token_span.pos),
-                    Token::TextName => (ExprType::Text, token_span.pos),
-                    t => {
-                        return Err(Error::Bad(
-                            token_span.pos,
-                            format!("Invalid type name {} in DIM AS statement", t),
-                        ))
-                    }
-                }
+                self.parse_as_type()?
             }
             _ => return Err(Error::Bad(peeked.pos, "Expected AS or end of statement".to_owned())),
         };
@@ -1291,7 +1297,47 @@ impl<'a> Parser<'a> {
         };
         let name_pos = token_span.pos;
 
-        // TODO(jmmv): Parse arguments.
+        let mut params = vec![];
+        let peeked = self.lexer.peek()?;
+        if peeked.token == Token::LeftParen {
+            self.lexer.consume_peeked();
+
+            loop {
+                let token_span = self.lexer.read()?;
+                match token_span.token {
+                    Token::Symbol(param) => {
+                        let peeked = self.lexer.peek()?;
+                        if peeked.token == Token::As {
+                            self.lexer.consume_peeked();
+
+                            let name = vref_to_unannotated_string(param, token_span.pos)?;
+                            let (vtype, _pos) = self.parse_as_type()?;
+                            params.push(VarRef::new(name, Some(vtype)));
+                        } else {
+                            params.push(param);
+                        }
+                    }
+                    _ => {
+                        return Err(Error::Bad(
+                            token_span.pos,
+                            "Expected a parameter name".to_owned(),
+                        ));
+                    }
+                }
+
+                let token_span = self.lexer.read()?;
+                match token_span.token {
+                    Token::Comma => (),
+                    Token::RightParen => break,
+                    _ => {
+                        return Err(Error::Bad(
+                            token_span.pos,
+                            "Expected comma, AS, or end of parameters list".to_owned(),
+                        ));
+                    }
+                }
+            }
+        }
 
         self.expect_and_consume(Token::Eol, "Expected newline after FUNCTION name")?;
 
@@ -1354,7 +1400,7 @@ impl<'a> Parser<'a> {
             "FUNCTION without END FUNCTION",
         )?;
 
-        Ok(Statement::Function(FunctionSpan { name, name_pos, body, end_pos }))
+        Ok(Statement::Function(FunctionSpan { name, name_pos, params, body, end_pos }))
     }
 
     /// Advances until the next statement after failing to parse a `FUNCTION` definition.
@@ -2477,9 +2523,9 @@ mod tests {
         do_error_test("DIM 3", "1:5: Expected variable name after DIM");
         do_error_test("DIM AS", "1:5: Expected variable name after DIM");
         do_error_test("DIM foo 3", "1:9: Expected AS or end of statement");
-        do_error_test("DIM a AS", "1:9: Invalid type name <<EOF>> in DIM AS statement");
+        do_error_test("DIM a AS", "1:9: Invalid type name <<EOF>> in AS type definition");
         do_error_test("DIM a$ AS", "1:5: Type annotation not allowed in a$");
-        do_error_test("DIM a AS 3", "1:10: Invalid type name 3 in DIM AS statement");
+        do_error_test("DIM a AS 3", "1:10: Invalid type name 3 in AS type definition");
         do_error_test("DIM a AS INTEGER 3", "1:18: Unexpected 3 in DIM statement");
 
         do_error_test("DIM a()", "1:6: Arrays require at least one dimension");
@@ -4001,6 +4047,7 @@ mod tests {
             &[Statement::Function(FunctionSpan {
                 name: VarRef::new("foo", Some(ExprType::Text)),
                 name_pos: lc(1, 10),
+                params: vec![],
                 body: vec![],
                 end_pos: lc(2, 1),
             })],
@@ -4021,6 +4068,7 @@ mod tests {
             &[Statement::Function(FunctionSpan {
                 name: VarRef::new("foo", Some(ExprType::Text)),
                 name_pos: lc(2, 26),
+                params: vec![],
                 body: vec![
                     make_bare_builtin_call("A", 3, 21),
                     Statement::End(EndSpan { code: None }),
@@ -4030,6 +4078,38 @@ mod tests {
                     make_bare_builtin_call("B", 6, 21),
                 ],
                 end_pos: lc(7, 17),
+            })],
+        );
+    }
+
+    #[test]
+    fn test_function_one_param() {
+        do_ok_test(
+            "FUNCTION foo$(x)\nEND FUNCTION",
+            &[Statement::Function(FunctionSpan {
+                name: VarRef::new("foo", Some(ExprType::Text)),
+                name_pos: lc(1, 10),
+                params: vec![VarRef::new("x", None)],
+                body: vec![],
+                end_pos: lc(2, 1),
+            })],
+        );
+    }
+
+    #[test]
+    fn test_function_multiple_params() {
+        do_ok_test(
+            "FUNCTION foo$(x$, y, z AS BOOLEAN)\nEND FUNCTION",
+            &[Statement::Function(FunctionSpan {
+                name: VarRef::new("foo", Some(ExprType::Text)),
+                name_pos: lc(1, 10),
+                params: vec![
+                    VarRef::new("x", Some(ExprType::Text)),
+                    VarRef::new("y", None),
+                    VarRef::new("z", Some(ExprType::Boolean)),
+                ],
+                body: vec![],
+                end_pos: lc(2, 1),
             })],
         );
     }
@@ -4045,6 +4125,17 @@ mod tests {
             "FUNCTION foo\nFUNCTION bar\nEND FUNCTION\nEND FUNCTION",
             "1:10: Cannot nest FUNCTION definitions",
         );
+        do_error_test("FUNCTION foo (", "1:15: Expected a parameter name");
+        do_error_test("FUNCTION foo ()", "1:15: Expected a parameter name");
+        do_error_test("FUNCTION foo (,)", "1:15: Expected a parameter name");
+        do_error_test("FUNCTION foo (a,)", "1:17: Expected a parameter name");
+        do_error_test("FUNCTION foo (,b)", "1:15: Expected a parameter name");
+        do_error_test("FUNCTION foo (a AS)", "1:19: Invalid type name ) in AS type definition");
+        do_error_test(
+            "FUNCTION foo (a INTEGER)",
+            "1:17: Expected comma, AS, or end of parameters list",
+        );
+        do_error_test("FUNCTION foo (a? AS BOOLEAN)", "1:15: Type annotation not allowed in a?");
     }
 
     #[test]

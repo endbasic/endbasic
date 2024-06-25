@@ -579,6 +579,32 @@ impl CallableMetadataBuilder {
         self
     }
 
+    /// Sets the syntax specifications for this callable.
+    pub fn with_dynamic_syntax(
+        mut self,
+        syntaxes: Vec<(Vec<SingularArgSyntax>, Option<RepeatedSyntax>)>,
+    ) -> Self {
+        let syntaxes = syntaxes
+            .into_iter()
+            .map(|s| CallableSyntax::new_dynamic(s.0, s.1))
+            .collect::<Vec<CallableSyntax>>();
+        if syntaxes.is_empty() {
+            self.syntax = Some("no arguments".to_owned());
+        } else if syntaxes.len() == 1 {
+            self.syntax = Some(syntaxes.first().unwrap().describe());
+        } else {
+            self.syntax = Some(
+                syntaxes
+                    .iter()
+                    .map(|syn| format!("<{}>", syn.describe()))
+                    .collect::<Vec<String>>()
+                    .join(" | "),
+            );
+        };
+        self.syntaxes = syntaxes;
+        self
+    }
+
     /// Sets the category for this callable.  All callables with the same category name will be
     /// grouped together in help messages.
     pub fn with_category(mut self, category: &'static str) -> Self {

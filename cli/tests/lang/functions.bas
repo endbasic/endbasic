@@ -109,3 +109,56 @@ END FUNCTION
 PRINT "get_really_global returned: "; get_really_global
 PRINT "get_really_global returned: "; get_really_global
 PRINT "really_global is: "; really_global
+
+PRINT ">>> Arguments with annotations"
+
+param_b = 1234
+
+FUNCTION annotated_params(param_b?, param_d#, param_i%, param_s$)
+    PRINT "param_b is "; param_b
+    PRINT "param_d is "; param_d
+    PRINT "param_i is "; param_i
+    PRINT "param_s is "; param_s
+END FUNCTION
+
+PRINT annotated_params(TRUE, 3.4, 5, "hello")
+
+PRINT ">>> Arguments with types"
+
+FUNCTION params_with_as(b AS BOOLEAN, d AS DOUBLE, i AS INTEGER, s AS STRING)
+    PRINT "b is "; b
+    PRINT "d is "; d
+    PRINT "i is "; i
+    PRINT "s is "; s
+END FUNCTION
+
+PRINT params_with_as(FALSE, -1.0, 2, "foo")
+
+PRINT ">>> Type promotion in arguments"
+
+FUNCTION args_promotion(d AS DOUBLE, i AS INTEGER)
+    PRINT "d is "; d
+    PRINT "i is "; i
+END FUNCTION
+
+PRINT args_promotion(5, 2.6)
+
+PRINT ">>> Type promotion in return values"
+
+FUNCTION return_promotion%
+    return_promotion = 2.8
+END FUNCTION
+
+PRINT return_promotion
+
+PRINT ">>> Recursion"
+
+FUNCTION recurse(i)
+    IF i > 0 THEN
+       PRINT "entering level: "; i
+       PRINT recurse(i - 1)
+       PRINT "leaving level: "; i
+    END IF
+END FUNCTION
+
+PRINT recurse(3)
