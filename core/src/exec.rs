@@ -643,7 +643,8 @@ impl Machine {
     }
 
     /// Obtains immutable access to the data values available during the *current* execution.
-    pub fn get_data(&self) -> &[Option<Value>] {
+    #[cfg(test)]
+    pub(crate) fn get_data(&self) -> &[Option<Value>] {
         &self.data
     }
 
@@ -666,6 +667,19 @@ impl Machine {
             .map_err(Error::from_value_error_without_pos)?
         {
             Value::Boolean(b) => Ok(*b),
+            _ => panic!("Invalid type check in get()"),
+        }
+    }
+
+    /// Retrieves the variable `name` as a double.  Fails if it is some other type or if it's not
+    /// defined.
+    pub fn get_var_as_double(&self, name: &str) -> Result<f64> {
+        match self
+            .symbols
+            .get_var(&VarRef::new(name, Some(ExprType::Double)))
+            .map_err(Error::from_value_error_without_pos)?
+        {
+            Value::Double(d) => Ok(*d),
             _ => panic!("Invalid type check in get()"),
         }
     }
@@ -694,6 +708,44 @@ impl Machine {
             Value::Text(s) => Ok(s),
             _ => panic!("Invalid type check in get()"),
         }
+    }
+
+    /// Extracts data members starting at `index` into the variable references described by `vrefs`.
+    ///
+    /// Produces an error if there is not enough data to fill all the references or if the types
+    /// of the references don't match the values.  On success, updates the index according to how
+    /// many values were successfully consumed.
+    pub fn assign_data(
+        &mut self,
+        vrefs: &[(SymbolKey, ExprType, LineCol)],
+        index: &mut usize,
+    ) -> CallResult {
+        for (vname, vtype, pos) in vrefs {
+            debug_assert!(*index <= self.data.len());
+            let datum = {
+                if *index == self.data.len() {
+                    return Err(CallError::ArgumentError(
+                        *pos,
+                        format!("Out of data reading into {}", vname),
+                    ));
+                }
+
+                match (vtype, &self.data[*index]) {
+                    (_, Some(datum)) => datum.clone(),
+                    (ExprType::Boolean, None) => Value::Boolean(false),
+                    (ExprType::Double, None) => Value::Double(0.0),
+                    (ExprType::Integer, None) => Value::Integer(0),
+                    (ExprType::Text, None) => Value::Text("".to_owned()),
+                }
+            };
+            *index += 1;
+
+            let vref = VarRef::new(vname.to_string(), Some(*vtype));
+            self.symbols
+                .set_var(&vref, datum)
+                .map_err(|e| CallError::ArgumentError(*pos, e.to_string()))?;
+        }
+        Ok(())
     }
 
     /// Returns true if execution should stop because we have hit a stop condition.
@@ -1898,6 +1950,25 @@ mod tests {
     }
 
     #[test]
+    fn test_get_var_as_double() {
+        let mut machine = Machine::default();
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.exec(&mut b"a = 3.2: b = \"foo\"".as_ref()))
+                .expect("Execution failed")
+        );
+        assert_eq!(3.2, machine.get_var_as_double("a").expect("Failed to query a"));
+        assert_eq!(
+            "Incompatible types in b# reference",
+            format!("{}", machine.get_var_as_double("b").expect_err("Querying b succeeded"))
+        );
+        assert_eq!(
+            "Undefined variable c",
+            format!("{}", machine.get_var_as_double("c").expect_err("Querying c succeeded"))
+        );
+    }
+
+    #[test]
     fn test_get_var_as_int() {
         let mut machine = Machine::default();
         assert_eq!(
@@ -1932,6 +2003,138 @@ mod tests {
             "Undefined variable c",
             format!("{}", machine.get_var_as_string("c").expect_err("Querying c succeeded"))
         );
+    }
+
+    #[test]
+    fn test_assign_data_same_var() {
+        let mut machine = Machine {
+            data: vec![Some(Value::Integer(3)), Some(Value::Double(5.2)), Some(Value::Integer(-7))],
+            ..Default::default()
+        };
+        let mut index = 0;
+        machine
+            .assign_data(
+                &[
+                    (SymbolKey::from("i"), ExprType::Integer, LineCol { line: 5, col: 7 }),
+                    (SymbolKey::from("i"), ExprType::Integer, LineCol { line: 5, col: 7 }),
+                ],
+                &mut index,
+            )
+            .unwrap();
+        assert_eq!(2, index);
+        assert_eq!(5, machine.get_var_as_int("i").unwrap());
+    }
+
+    #[test]
+    fn test_assign_data_multiple_vars() {
+        let mut machine = Machine {
+            data: vec![
+                Some(Value::Boolean(true)),
+                Some(Value::Double(3.2)),
+                Some(Value::Integer(5)),
+                Some(Value::Text("foo".to_owned())),
+            ],
+            ..Default::default()
+        };
+        let mut index = 0;
+        machine
+            .assign_data(
+                &[
+                    (SymbolKey::from("a"), ExprType::Boolean, LineCol { line: 5, col: 7 }),
+                    (SymbolKey::from("b"), ExprType::Double, LineCol { line: 5, col: 7 }),
+                    (SymbolKey::from("c"), ExprType::Integer, LineCol { line: 5, col: 7 }),
+                    (SymbolKey::from("d"), ExprType::Text, LineCol { line: 5, col: 7 }),
+                ],
+                &mut index,
+            )
+            .unwrap();
+        assert_eq!(4, index);
+        assert_eq!(true, machine.get_var_as_bool("a").unwrap());
+        assert_eq!(3.2, machine.get_var_as_double("b").unwrap());
+        assert_eq!(5, machine.get_var_as_int("c").unwrap());
+        assert_eq!("foo", machine.get_var_as_string("d").unwrap());
+    }
+
+    #[test]
+    fn test_assign_data_out_of_data() {
+        let mut machine = Machine { data: vec![Some(Value::Integer(3))], ..Default::default() };
+        let mut index = 0;
+        let err = machine
+            .assign_data(
+                &[
+                    (SymbolKey::from("i"), ExprType::Integer, LineCol { line: 5, col: 7 }),
+                    (SymbolKey::from("i"), ExprType::Integer, LineCol { line: 6, col: 8 }),
+                ],
+                &mut index,
+            )
+            .unwrap_err();
+        assert_eq!(1, index);
+        match err {
+            CallError::ArgumentError(pos, message) => {
+                assert_eq!(LineCol { line: 6, col: 8 }, pos);
+                assert_eq!("Out of data reading into I", message);
+            }
+            _ => panic!("{:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_assign_data_type_mismatch_source() {
+        let mut machine = Machine {
+            data: vec![Some(Value::Integer(8)), Some(Value::Integer(6)), Some(Value::Integer(7))],
+            ..Default::default()
+        };
+        let mut index = 0;
+        let err = machine
+            .assign_data(
+                &[
+                    (SymbolKey::from("a"), ExprType::Integer, LineCol { line: 5, col: 7 }),
+                    (SymbolKey::from("b"), ExprType::Boolean, LineCol { line: 6, col: 8 }),
+                    (SymbolKey::from("a"), ExprType::Integer, LineCol { line: 5, col: 7 }),
+                ],
+                &mut index,
+            )
+            .unwrap_err();
+        assert_eq!(2, index);
+        match err {
+            CallError::ArgumentError(pos, message) => {
+                assert_eq!(LineCol { line: 6, col: 8 }, pos);
+                assert_eq!(
+                    "Cannot assign value of type INTEGER to variable of type BOOLEAN",
+                    message
+                );
+            }
+            _ => panic!("{:?}", err),
+        }
+        assert_eq!(8, machine.get_var_as_int("a").unwrap());
+        machine.get_var_as_int("b").unwrap_err();
+    }
+
+    #[test]
+    fn test_assign_data_type_mismatch_target() {
+        let mut machine = Machine {
+            data: vec![Some(Value::Integer(8)), Some(Value::Integer(6))],
+            ..Default::default()
+        };
+        let mut index = 0;
+        let err = machine
+            .assign_data(
+                &[
+                    (SymbolKey::from("a"), ExprType::Integer, LineCol { line: 5, col: 7 }),
+                    (SymbolKey::from("a"), ExprType::Boolean, LineCol { line: 6, col: 8 }),
+                ],
+                &mut index,
+            )
+            .unwrap_err();
+        assert_eq!(2, index);
+        match err {
+            CallError::ArgumentError(pos, message) => {
+                assert_eq!(LineCol { line: 6, col: 8 }, pos);
+                assert_eq!("Incompatible types in A? reference", message);
+            }
+            _ => panic!("{:?}", err),
+        }
+        assert_eq!(8, machine.get_var_as_int("a").unwrap());
     }
 
     /// Runs the `input` code on a new test machine.

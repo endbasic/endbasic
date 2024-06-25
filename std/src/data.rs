@@ -16,12 +16,10 @@
 //! Commands to interact with the data provided by `DATA` statements.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value, VarRef};
+use endbasic_core::ast::ArgSep;
 use endbasic_core::compiler::{ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax};
 use endbasic_core::exec::{Clearable, Machine, Scope};
-use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
-};
+use endbasic_core::syms::{CallResult, Callable, CallableMetadata, CallableMetadataBuilder};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -94,34 +92,7 @@ impl Callable for ReadCommand {
         }
 
         let mut index = self.index.borrow_mut();
-        for (vname, vtype, pos) in vrefs {
-            let datum = {
-                let data = machine.get_data();
-                debug_assert!(*index <= data.len());
-                if *index == data.len() {
-                    return Err(CallError::InternalError(
-                        pos,
-                        format!("Out of data reading into {}", vname),
-                    ));
-                }
-
-                match (vtype, &data[*index]) {
-                    (_, Some(datum)) => datum.clone(),
-                    (ExprType::Boolean, None) => Value::Boolean(false),
-                    (ExprType::Double, None) => Value::Double(0.0),
-                    (ExprType::Integer, None) => Value::Integer(0),
-                    (ExprType::Text, None) => Value::Text("".to_owned()),
-                }
-            };
-            *index += 1;
-
-            let vref = VarRef::new(vname.to_string(), Some(vtype));
-            machine
-                .get_mut_symbols()
-                .set_var(&vref, datum)
-                .map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
-        }
-
+        machine.assign_data(&vrefs, &mut index)?;
         Ok(())
     }
 }
