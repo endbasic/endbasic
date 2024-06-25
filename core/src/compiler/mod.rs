@@ -122,8 +122,7 @@ impl From<&Symbols> for SymbolsTable {
                 }
                 Symbol::Variable(var) => SymbolPrototype::Variable(var.as_exprtype()),
             };
-            debug_assert_eq!(name, &name.to_ascii_uppercase());
-            table.insert(SymbolKey::from(name), proto);
+            table.insert(name.clone(), proto);
         }
         Self { table }
     }
