@@ -246,6 +246,9 @@ impl fmt::Display for ExprType {
 }
 
 /// Represents a reference to a variable (which doesn't have to exist).
+///
+/// Variable references are different from `SymbolKey`s because they maintain the case of the
+/// reference (for error display purposes) and because they carry an optional type annotation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VarRef {
     /// Name of the variable this points to.
@@ -307,6 +310,11 @@ impl VarRef {
                 None => false,
             },
         }
+    }
+
+    /// Converts this variable reference to a symbol key.
+    pub(crate) fn as_symbol_key(&self) -> SymbolKey {
+        SymbolKey::from(&self.name)
     }
 }
 

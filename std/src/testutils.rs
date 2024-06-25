@@ -24,7 +24,7 @@ use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{ExprType, Value, VarRef};
 use endbasic_core::exec::{self, Machine, StopReason};
-use endbasic_core::syms::{Array, Callable, Symbol};
+use endbasic_core::syms::{Array, Callable, Symbol, SymbolKey};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
@@ -541,8 +541,8 @@ pub struct Checker<'a> {
     exp_drives: HashMap<String, String>,
     exp_program_name: Option<String>,
     exp_program_text: String,
-    exp_arrays: HashMap<String, Array>,
-    exp_vars: HashMap<String, Value>,
+    exp_arrays: HashMap<SymbolKey, Array>,
+    exp_vars: HashMap<SymbolKey, Value>,
 }
 
 impl<'a> Checker<'a> {
@@ -595,7 +595,7 @@ impl<'a> Checker<'a> {
         let message = message.into();
         assert_eq!(Ok(StopReason::Eof), self.exp_result);
         self.exp_result = Err(message.clone());
-        self.exp_vars.insert("0ERRMSG".to_string(), Value::Text(message));
+        self.exp_vars.insert(SymbolKey::from("0ERRMSG"), Value::Text(message));
         self
     }
 
@@ -615,38 +615,38 @@ impl<'a> Checker<'a> {
     /// will be tested to have the same `subtype` and `dimensions`, as well as specific `contents`.
     /// The contents are provided as a collection of subscripts/value pairs to assign to the
     /// expected array.
-    pub fn expect_array<S: Into<String>>(
+    pub fn expect_array<S: AsRef<str>>(
         mut self,
         name: S,
         subtype: ExprType,
         dimensions: &[usize],
         contents: Vec<(&[i32], Value)>,
     ) -> Self {
-        let name = name.into().to_ascii_uppercase();
-        assert!(!self.exp_arrays.contains_key(&name));
+        let key = SymbolKey::from(name);
+        assert!(!self.exp_arrays.contains_key(&key));
         let mut array = Array::new(subtype, dimensions.to_owned());
         for (subscripts, value) in contents.into_iter() {
             array.assign(subscripts, value).unwrap();
         }
-        self.exp_arrays.insert(name, array);
+        self.exp_arrays.insert(key, array);
         self
     }
 
     /// Adds the `name` array as an array to expect in the final state of the machine.  The array
     /// will be tested to have the same `subtype` and only one dimension with `contents`.
-    pub fn expect_array_simple<S: Into<String>>(
+    pub fn expect_array_simple<S: AsRef<str>>(
         mut self,
         name: S,
         subtype: ExprType,
         contents: Vec<Value>,
     ) -> Self {
-        let name = name.into().to_ascii_uppercase();
-        assert!(!self.exp_arrays.contains_key(&name));
+        let key = SymbolKey::from(name);
+        assert!(!self.exp_arrays.contains_key(&key));
         let mut array = Array::new(subtype, vec![contents.len()]);
         for (i, value) in contents.into_iter().enumerate() {
             array.assign(&[i as i32], value).unwrap();
         }
-        self.exp_arrays.insert(name, array);
+        self.exp_arrays.insert(key, array);
         self
     }
 
@@ -704,10 +704,10 @@ impl<'a> Checker<'a> {
     }
 
     /// Adds the `name`/`value` pair as a variable to expect in the final state of the machine.
-    pub fn expect_var<S: Into<String>, V: Into<Value>>(mut self, name: S, value: V) -> Self {
-        let name = name.into().to_ascii_uppercase();
-        assert!(!self.exp_vars.contains_key(&name));
-        self.exp_vars.insert(name, value.into());
+    pub fn expect_var<S: AsRef<str>, V: Into<Value>>(mut self, name: S, value: V) -> Self {
+        let key = SymbolKey::from(name);
+        assert!(!self.exp_vars.contains_key(&key));
+        self.exp_vars.insert(key, value.into());
         self
     }
 
@@ -735,14 +735,14 @@ impl<'a> Checker<'a> {
                 Symbol::Array(array) => {
                     // TODO(jmmv): This array.clone() call is a hack to simplify the equality check
                     // below.  Should try to avoid it and remove the Clone impl from Array.
-                    arrays.insert(name.to_owned(), array.clone());
+                    arrays.insert(name.clone(), array.clone());
                 }
                 Symbol::Callable(_) => {
                     // We currently don't support user-defined callables at runtime so there is no
                     // need to validate anything about them.
                 }
                 Symbol::Variable(value) => {
-                    vars.insert(name.to_owned(), value.clone());
+                    vars.insert(name.clone(), value.clone());
                 }
             }
         }

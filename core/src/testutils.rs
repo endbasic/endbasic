@@ -23,7 +23,7 @@ use crate::compiler::{
 use crate::exec::{Machine, Scope, ValueTag};
 use crate::syms::{
     Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
-    Symbols,
+    SymbolKey, Symbols,
 };
 use crate::value;
 use async_trait::async_trait;
@@ -511,33 +511,30 @@ impl Callable for SumFunction {
 // in the real Symbols).
 #[derive(Default)]
 pub struct SymbolsBuilder {
-    by_name: HashMap<String, Symbol>,
+    by_name: HashMap<SymbolKey, Symbol>,
 }
 
 impl SymbolsBuilder {
     /// Adds the array named `name` of type `subtype` to the list of symbols.  The dimensions
     /// and contents of the array are unspecified.
-    pub fn add_array<S: Into<String>>(mut self, name: S, subtype: ExprType) -> Self {
-        let name = name.into();
-        assert!(name == name.to_ascii_uppercase());
+    pub fn add_array<S: AsRef<str>>(mut self, name: S, subtype: ExprType) -> Self {
+        let key = SymbolKey::from(name);
         let array = Array::new(subtype, vec![10]);
-        self.by_name.insert(name, Symbol::Array(array));
+        self.by_name.insert(key, Symbol::Array(array));
         self
     }
 
     /// Adds the `callable` to the list of symbols.
     pub fn add_callable(mut self, callable: Rc<dyn Callable>) -> Self {
         let name = callable.metadata().name();
-        assert!(name == name.to_ascii_uppercase());
-        self.by_name.insert(name.to_owned(), Symbol::Callable(callable));
+        self.by_name.insert(SymbolKey::from(name), Symbol::Callable(callable));
         self
     }
 
     /// Adds the variable named `name` with an initial `value` to the list of symbols.
-    pub fn add_var<S: Into<String>>(mut self, name: S, value: Value) -> Self {
-        let name = name.into();
-        assert!(name == name.to_ascii_uppercase());
-        self.by_name.insert(name, Symbol::Variable(value));
+    pub fn add_var<S: AsRef<str>>(mut self, name: S, value: Value) -> Self {
+        let key = SymbolKey::from(name);
+        self.by_name.insert(key, Symbol::Variable(value));
         self
     }
 

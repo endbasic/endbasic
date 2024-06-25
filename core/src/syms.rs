@@ -246,14 +246,13 @@ impl fmt::Debug for Symbol {
 #[derive(Default)]
 pub struct Symbols {
     /// Map of symbol names to their definitions.
-    // TODO(jmmv): The key should be a `SymbolKey`.
-    by_name: HashMap<String, Symbol>,
+    by_name: HashMap<SymbolKey, Symbol>,
 }
 
 impl Symbols {
     /// Constructs a symbols object from a flat map of symbol names to their definitions.
     #[cfg(test)]
-    pub(crate) fn from(by_name: HashMap<String, Symbol>) -> Self {
+    pub(crate) fn from(by_name: HashMap<SymbolKey, Symbol>) -> Self {
         Self { by_name }
     }
 
@@ -262,26 +261,25 @@ impl Symbols {
     /// Given that callable cannot be defined at runtime, specifying a non-unique name results in
     /// a panic.
     pub fn add_callable(&mut self, callable: Rc<dyn Callable>) {
-        let key = callable.metadata().name();
-        debug_assert!(key == key.to_ascii_uppercase());
-        assert!(!self.by_name.contains_key(key));
+        let key = SymbolKey::from(callable.metadata().name());
+        assert!(!self.by_name.contains_key(&key));
         self.by_name.insert(key.to_owned(), Symbol::Callable(callable));
     }
 
     /// Returns the mapping of all symbols.
-    pub fn as_hashmap(&self) -> &HashMap<String, Symbol> {
+    pub fn as_hashmap(&self) -> &HashMap<SymbolKey, Symbol> {
         &self.by_name
     }
 
     /// Clears all user-defined symbols.
     pub fn clear(&mut self) {
-        self.by_name.retain(|name, symbol| {
-            let is_internal = name.starts_with(|c: char| c.is_ascii_digit());
+        self.by_name.retain(|key, symbol| {
+            let is_internal = key.0.starts_with(|c: char| c.is_ascii_digit());
 
             // TODO(jmmv): Preserving symbols that start with __ is a hack that was added to support
             // the already-existing GPIO tests when RUN was changed to issue a CLEAR upfront.  This
             // is undocumented behavior and we should find a nicer way to do this.
-            let is_gpio_hack = name.starts_with("__");
+            let is_gpio_hack = key.0.starts_with("__");
 
             is_internal || is_gpio_hack || !symbol.user_defined()
         });
@@ -289,7 +287,7 @@ impl Symbols {
 
     /// Defines a new variable `key` of type `etype`.  The variable must not yet exist.
     pub fn dim(&mut self, key: SymbolKey, etype: ExprType) {
-        let previous = self.by_name.insert(key.0, Symbol::Variable(etype.default_value()));
+        let previous = self.by_name.insert(key, Symbol::Variable(etype.default_value()));
         debug_assert!(
             previous.is_none(),
             "Pre-existence of variables is checked at compilation time"
@@ -299,7 +297,7 @@ impl Symbols {
     /// Defines a new array `key` of type `subtype` with `dimensions`.  The array must not yet
     /// exist, and the name may not overlap function or variable names.
     pub fn dim_array(&mut self, key: SymbolKey, subtype: ExprType, dimensions: Vec<usize>) {
-        let previous = self.by_name.insert(key.0, Symbol::Array(Array::new(subtype, dimensions)));
+        let previous = self.by_name.insert(key, Symbol::Array(Array::new(subtype, dimensions)));
         debug_assert!(
             previous.is_none(),
             "Pre-existence of variables is checked at compilation time"
@@ -311,7 +309,7 @@ impl Symbols {
     /// This is meant to use by the compiler only.  All other users should call `get` instead
     /// to do the necessary runtime validity checks.
     pub(crate) fn load(&self, key: &SymbolKey) -> Option<&Symbol> {
-        self.by_name.get(&key.0)
+        self.by_name.get(key)
     }
 
     /// Obtains the value of a symbol or `None` if it is not defined.
@@ -319,7 +317,7 @@ impl Symbols {
     /// This is meant to use by the compiler only.  All other users should call `get` instead
     /// to do the necessary runtime validity checks.
     pub(crate) fn load_mut(&mut self, key: &SymbolKey) -> Option<&mut Symbol> {
-        self.by_name.get_mut(&key.0)
+        self.by_name.get_mut(key)
     }
 
     /// Obtains the value of a symbol or `None` if it is not defined.
@@ -339,7 +337,7 @@ impl Symbols {
 
     /// Obtains the value of a symbol or `None` if it is not defined.
     pub fn get_auto(&self, var: &str) -> Option<&Symbol> {
-        let key = var.to_ascii_uppercase();
+        let key = SymbolKey::from(var);
         self.by_name.get(&key)
     }
 
@@ -347,8 +345,7 @@ impl Symbols {
     ///
     /// Returns an error if the type annotation in the symbol reference does not match its type.
     pub fn get_mut(&mut self, vref: &VarRef) -> Result<Option<&mut Symbol>> {
-        let key = &vref.name().to_ascii_uppercase();
-        match self.by_name.get_mut(key) {
+        match self.by_name.get_mut(&vref.as_symbol_key()) {
             Some(symbol) => {
                 let stype = symbol.eval_type();
                 if !vref.accepts_callable(stype) {
@@ -376,8 +373,7 @@ impl Symbols {
     /// Adds a type annotation to the symbol reference if the symbol is already defined and the
     /// reference lacks one.
     pub fn qualify_varref(&self, vref: &VarRef) -> Result<VarRef> {
-        let key = vref.name().to_ascii_uppercase();
-        match self.by_name.get(&key) {
+        match self.by_name.get(&vref.as_symbol_key()) {
             Some(symbol) => match vref.ref_type() {
                 None => Ok(vref.clone().qualify(symbol.eval_type())),
                 _ => {
@@ -399,7 +395,7 @@ impl Symbols {
     /// This is meant to use by the compiler only.  All other users should call `set_var` instead
     /// to do the necessary runtime validity checks.
     pub(crate) fn assign(&mut self, key: &SymbolKey, value: Value) {
-        match self.by_name.get_mut(&key.0) {
+        match self.by_name.get_mut(key) {
             Some(Symbol::Variable(old_value)) => {
                 debug_assert_eq!(
                     mem::discriminant(old_value),
@@ -410,7 +406,7 @@ impl Symbols {
             }
             Some(_) => unreachable!("Type consistency is validated at compilation time"),
             None => {
-                self.by_name.insert(key.0.clone(), Symbol::Variable(value));
+                self.by_name.insert(key.clone(), Symbol::Variable(value));
             }
         }
     }
@@ -423,7 +419,7 @@ impl Symbols {
     /// If the variable is already defined, then the type of the new value must be compatible with
     /// the existing variable.  In other words: a variable cannot change types while it's alive.
     pub fn set_var(&mut self, vref: &VarRef, value: Value) -> Result<()> {
-        let key = SymbolKey::from(vref.name());
+        let key = vref.as_symbol_key();
         let value = value.maybe_cast(vref.ref_type())?;
         match self.get_mut(vref)? {
             Some(Symbol::Variable(old_value)) => {
@@ -449,7 +445,7 @@ impl Symbols {
                         )));
                     }
                 }
-                self.by_name.insert(key.0, Symbol::Variable(value));
+                self.by_name.insert(key, Symbol::Variable(value));
                 Ok(())
             }
         }
@@ -457,7 +453,7 @@ impl Symbols {
 
     /// Unsets the symbol `key` irrespective of its type.
     pub fn unset(&mut self, key: &SymbolKey) -> Result<()> {
-        match self.by_name.remove(&key.0) {
+        match self.by_name.remove(key) {
             Some(_) => Ok(()),
             None => Err(Error::new(format!("{} is not defined", key))),
         }
