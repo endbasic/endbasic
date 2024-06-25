@@ -107,7 +107,7 @@ fn js_sleep(
     yielder: Rc<RefCell<Yielder>>,
 ) -> Pin<Box<dyn Future<Output = CallResult>>> {
     let ms = d.as_millis();
-    if ms > std::i32::MAX as u128 {
+    if ms > i32::MAX as u128 {
         // The JavaScript setTimeout function only takes i32s so ensure our value fits.  If it
         // doesn't, you can imagine chaining calls to setTimeout to achieve the desired delay...
         // but the numbers we are talking about are so big that this doesn't make sense.
@@ -389,7 +389,7 @@ mod tests {
     async fn test_js_sleep_too_big() {
         let yielder = Rc::from(RefCell::from(Yielder::new()));
         match js_sleep(
-            Duration::from_millis(std::i32::MAX as u64 + 1),
+            Duration::from_millis(i32::MAX as u64 + 1),
             LineCol { line: 1, col: 2 },
             yielder,
         )

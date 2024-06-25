@@ -296,7 +296,7 @@ impl Callable for LenFunction {
         debug_assert_eq!(1, scope.nargs());
         let (s, spos) = scope.pop_string_with_pos();
 
-        if s.len() > std::i32::MAX as usize {
+        if s.len() > i32::MAX as usize {
             Err(CallError::InternalError(spos, "String too long".to_owned()))
         } else {
             scope.return_integer(s.len() as i32)
@@ -613,17 +613,17 @@ mod tests {
     #[test]
     fn test_value_parse_boolean() {
         for s in &["true", "TrUe", "TRUE", "yes", "Yes", "y", "Y"] {
-            assert!(parse_boolean(*s).unwrap());
+            assert!(parse_boolean(s).unwrap());
         }
 
         for s in &["false", "FaLsE", "FALSE", "no", "No", "n", "N"] {
-            assert!(!parse_boolean(*s).unwrap());
+            assert!(!parse_boolean(s).unwrap());
         }
 
         for s in &["ye", "0", "1", " true"] {
             assert_eq!(
                 format!("Invalid boolean literal {}", s),
-                format!("{}", parse_boolean(*s).unwrap_err())
+                format!("{}", parse_boolean(s).unwrap_err())
             );
         }
     }

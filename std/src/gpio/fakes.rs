@@ -111,7 +111,7 @@ impl MockOp {
             ));
         }
         let pin = datum / 100;
-        if pin > std::u8::MAX as i32 {
+        if pin > u8::MAX as i32 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Pin number too large at __GPIO_MOCK_DATA({})", pos),

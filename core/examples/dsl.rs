@@ -79,7 +79,7 @@ impl Callable for NumLightsFunction {
     async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         debug_assert_eq!(0, scope.nargs());
         let num = self.lights.borrow().len();
-        assert!(num <= std::i32::MAX as usize, "Ended up with too many lights");
+        assert!(num <= i32::MAX as usize, "Ended up with too many lights");
         scope.return_integer(num as i32)
     }
 }

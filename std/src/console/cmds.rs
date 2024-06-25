@@ -155,7 +155,7 @@ impl Callable for ColorCommand {
 
     async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
         fn get_color((i, pos): (i32, LineCol)) -> Result<Option<u8>, CallError> {
-            if i >= 0 && i <= std::u8::MAX as i32 {
+            if i >= 0 && i <= u8::MAX as i32 {
                 Ok(Some(i as u8))
             } else {
                 Err(CallError::ArgumentError(pos, "Color out of range".to_owned()))

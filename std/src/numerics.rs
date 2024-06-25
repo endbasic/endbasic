@@ -90,7 +90,7 @@ impl Prng {
 
     /// Returns the previously returned random number.
     fn last(&self) -> f64 {
-        (self.last as f64) / (std::u32::MAX as f64)
+        (self.last as f64) / (u32::MAX as f64)
     }
 
     /// Computes the next random number and returns it.

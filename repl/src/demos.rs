@@ -106,7 +106,7 @@ impl Drive for DemosDrive {
         }
         let files = self.demos.len();
 
-        let disk_quota = if bytes <= std::u64::MAX as usize && files <= std::u64::MAX as usize {
+        let disk_quota = if bytes <= u64::MAX as usize && files <= u64::MAX as usize {
             Some(DiskSpace::new(bytes as u64, files as u64))
         } else {
             // Cannot represent the amount of disk within a DiskSpace.

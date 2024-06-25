@@ -189,8 +189,6 @@ mod tests {
 
     #[test]
     fn test_value_maybe_cast() {
-        use std::i32;
-
         let all_types = [ExprType::Boolean, ExprType::Double, ExprType::Integer, ExprType::Text];
         for target in all_types {
             assert_eq!(Boolean(true), Boolean(true).maybe_cast(Some(target)).unwrap());
@@ -271,31 +269,31 @@ mod tests {
     #[test]
     fn test_value_add_integer() {
         assert_eq!(5, add_integer(2, 3).unwrap());
-        assert_eq!(std::i32::MAX, add_integer(std::i32::MAX, 0).unwrap());
-        assert_eq!("Integer overflow", format!("{}", add_integer(std::i32::MAX, 1).unwrap_err()));
+        assert_eq!(i32::MAX, add_integer(i32::MAX, 0).unwrap());
+        assert_eq!("Integer overflow", format!("{}", add_integer(i32::MAX, 1).unwrap_err()));
     }
 
     #[test]
     fn test_value_sub_integer() {
         assert_eq!(-1, sub_integer(2, 3).unwrap());
-        assert_eq!(std::i32::MIN, sub_integer(std::i32::MIN, 0).unwrap());
-        assert_eq!("Integer underflow", format!("{}", sub_integer(std::i32::MIN, 1).unwrap_err()));
+        assert_eq!(i32::MIN, sub_integer(i32::MIN, 0).unwrap());
+        assert_eq!("Integer underflow", format!("{}", sub_integer(i32::MIN, 1).unwrap_err()));
     }
 
     #[test]
     fn test_value_mul_integer() {
         assert_eq!(6, mul_integer(2, 3).unwrap());
-        assert_eq!(std::i32::MAX, mul_integer(std::i32::MAX, 1).unwrap());
-        assert_eq!("Integer overflow", format!("{}", mul_integer(std::i32::MAX, 2).unwrap_err()));
+        assert_eq!(i32::MAX, mul_integer(i32::MAX, 1).unwrap());
+        assert_eq!("Integer overflow", format!("{}", mul_integer(i32::MAX, 2).unwrap_err()));
     }
 
     #[test]
     fn test_value_div_integer() {
         assert_eq!(2, div_integer(10, 5).unwrap());
         assert_eq!(6, div_integer(20, 3).unwrap());
-        assert_eq!(std::i32::MIN, div_integer(std::i32::MIN, 1).unwrap());
+        assert_eq!(i32::MIN, div_integer(i32::MIN, 1).unwrap());
         assert_eq!("Division by zero", format!("{}", div_integer(4, 0).unwrap_err()));
-        assert_eq!("Integer underflow", format!("{}", div_integer(std::i32::MIN, -1).unwrap_err()));
+        assert_eq!("Integer underflow", format!("{}", div_integer(i32::MIN, -1).unwrap_err()));
     }
 
     #[test]
@@ -303,18 +301,15 @@ mod tests {
         assert_eq!(0, modulo_integer(10, 5).unwrap());
         assert_eq!(2, modulo_integer(20, 3).unwrap());
         assert_eq!("Modulo by zero", format!("{}", modulo_integer(4, 0).unwrap_err()));
-        assert_eq!(
-            "Integer underflow",
-            format!("{}", modulo_integer(std::i32::MIN, -1).unwrap_err())
-        );
+        assert_eq!("Integer underflow", format!("{}", modulo_integer(i32::MIN, -1).unwrap_err()));
     }
 
     #[test]
     fn test_value_pow_integer() {
         assert_eq!(1, pow_integer(0, 0).unwrap());
         assert_eq!(9, pow_integer(3, 2).unwrap());
-        assert_eq!(std::i32::MAX, pow_integer(std::i32::MAX, 1).unwrap());
-        assert_eq!("Integer overflow", format!("{}", pow_integer(std::i32::MAX, 2).unwrap_err()));
+        assert_eq!(i32::MAX, pow_integer(i32::MAX, 1).unwrap());
+        assert_eq!("Integer overflow", format!("{}", pow_integer(i32::MAX, 2).unwrap_err()));
         assert_eq!(
             "Exponent -3 cannot be negative",
             format!("{}", pow_integer(1, -3).unwrap_err())
