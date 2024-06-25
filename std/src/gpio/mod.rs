@@ -50,7 +50,7 @@ impl Pin {
                 format!("Pin number {} must be positive", i),
             ));
         }
-        if i > std::u8::MAX as i32 {
+        if i > u8::MAX as i32 {
             return Err(CallError::ArgumentError(pos, format!("Pin number {} is too large", i)));
         }
         Ok(Self(i as u8))
