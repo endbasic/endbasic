@@ -277,17 +277,6 @@ impl VarRef {
         self.name
     }
 
-    /// Adds the type annotation `ref_type` to this reference.
-    ///
-    /// Assumes that the current annotation for this reference is not present.
-    pub(crate) fn qualify(self, expr_type: Option<ExprType>) -> Self {
-        assert!(self.ref_type.is_none(), "Reference already qualified");
-        match expr_type {
-            None => Self { name: self.name, ref_type: None },
-            Some(expr_type) => Self { name: self.name, ref_type: Some(expr_type) },
-        }
-    }
-
     /// Returns the type of this reference.
     pub fn ref_type(&self) -> Option<ExprType> {
         self.ref_type

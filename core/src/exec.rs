@@ -681,7 +681,8 @@ impl Machine {
     /// Returns an error if the variable is not defined, if the referenced symbol is not a variable,
     /// or if the type annotation in the variable reference does not match the type of the value
     /// that the variable contains.
-    pub fn get_var(&self, vref: &VarRef) -> std::result::Result<&Value, value::Error> {
+    #[cfg(test)]
+    pub(crate) fn get_var(&self, vref: &VarRef) -> std::result::Result<&Value, value::Error> {
         self.symbols.get_var(vref)
     }
 

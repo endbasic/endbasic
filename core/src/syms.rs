@@ -362,31 +362,11 @@ impl Symbols {
     /// Returns an error if the variable is not defined, if the referenced symbol is not a variable,
     /// or if the type annotation in the variable reference does not match the type of the value
     /// that the variable contains.
-    pub fn get_var(&self, vref: &VarRef) -> Result<&Value> {
+    pub(crate) fn get_var(&self, vref: &VarRef) -> Result<&Value> {
         match self.get(vref)? {
             Some(Symbol::Variable(v)) => Ok(v),
             Some(_) => Err(Error::new(format!("{} is not a variable", vref.name()))),
             None => Err(Error::new(format!("Undefined variable {}", vref.name()))),
-        }
-    }
-
-    /// Adds a type annotation to the symbol reference if the symbol is already defined and the
-    /// reference lacks one.
-    pub fn qualify_varref(&self, vref: &VarRef) -> Result<VarRef> {
-        match self.by_name.get(&vref.as_symbol_key()) {
-            Some(symbol) => match vref.ref_type() {
-                None => Ok(vref.clone().qualify(symbol.eval_type())),
-                _ => {
-                    if !vref.accepts_callable(symbol.eval_type()) {
-                        return Err(Error::new(format!(
-                            "Incompatible types in {} reference",
-                            vref
-                        )));
-                    }
-                    Ok(vref.clone())
-                }
-            },
-            None => Ok(vref.clone()),
         }
     }
 
@@ -452,7 +432,7 @@ impl Symbols {
     }
 
     /// Unsets the symbol `key` irrespective of its type.
-    pub fn unset(&mut self, key: &SymbolKey) -> Result<()> {
+    pub(crate) fn unset(&mut self, key: &SymbolKey) -> Result<()> {
         match self.by_name.remove(key) {
             Some(_) => Ok(()),
             None => Err(Error::new(format!("{} is not defined", key))),
@@ -1070,36 +1050,6 @@ mod tests {
         // If modifying this test, update the identical test for get() and get_mut().
         let syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
         assert!(syms.get_auto("SOME_THIN").is_none());
-    }
-
-    #[test]
-    fn test_symbols_qualify_varref() {
-        let syms = SymbolsBuilder::default().add_array("V", ExprType::Boolean).build();
-
-        assert_eq!(
-            VarRef::new("v", Some(ExprType::Boolean)),
-            syms.qualify_varref(&VarRef::new("v", None)).unwrap(),
-        );
-        assert_eq!(
-            VarRef::new("v", Some(ExprType::Boolean)),
-            syms.qualify_varref(&VarRef::new("v", Some(ExprType::Boolean))).unwrap(),
-        );
-        assert_eq!(
-            "Incompatible types in v% reference",
-            format!(
-                "{}",
-                syms.qualify_varref(&VarRef::new("v", Some(ExprType::Integer))).unwrap_err()
-            ),
-        );
-
-        assert_eq!(
-            VarRef::new("undefined", None),
-            syms.qualify_varref(&VarRef::new("undefined", None)).unwrap(),
-        );
-        assert_eq!(
-            VarRef::new("undefined", Some(ExprType::Text)),
-            syms.qualify_varref(&VarRef::new("undefined", Some(ExprType::Text))).unwrap(),
-        );
     }
 
     /// Checks that the variable `name` in `syms` has the value in `exp_value`.
