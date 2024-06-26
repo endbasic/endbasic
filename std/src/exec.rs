@@ -24,6 +24,7 @@ use endbasic_core::syms::{
 };
 use endbasic_core::LineCol;
 use futures_lite::future::{BoxedLocal, FutureExt};
+use std::borrow::Cow;
 use std::rc::Rc;
 use std::thread;
 use std::time::Duration;
@@ -140,7 +141,10 @@ impl SleepCommand {
             metadata: CallableMetadataBuilder::new("SLEEP")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "seconds", vtype: ExprType::Double },
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("seconds"),
+                            vtype: ExprType::Double,
+                        },
                         ArgSepSyntax::End,
                     )],
                     None,

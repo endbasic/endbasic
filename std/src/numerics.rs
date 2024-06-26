@@ -27,6 +27,7 @@ use endbasic_core::syms::{
 use endbasic_core::value::double_to_integer;
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::rc::Rc;
@@ -114,7 +115,7 @@ impl AtnFunction {
                 .with_return_type(ExprType::Double)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "n", vtype: ExprType::Double },
+                        RequiredValueSyntax { name: Cow::Borrowed("n"), vtype: ExprType::Double },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -161,7 +162,10 @@ impl CintFunction {
                 .with_return_type(ExprType::Integer)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "expr", vtype: ExprType::Double },
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("expr"),
+                            vtype: ExprType::Double,
+                        },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -207,7 +211,10 @@ impl CosFunction {
                 .with_return_type(ExprType::Double)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "angle", vtype: ExprType::Double },
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("angle"),
+                            vtype: ExprType::Double,
+                        },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -286,7 +293,10 @@ impl IntFunction {
                 .with_return_type(ExprType::Integer)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "expr", vtype: ExprType::Double },
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("expr"),
+                            vtype: ExprType::Double,
+                        },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -332,7 +342,7 @@ impl MaxFunction {
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
-                        name: "expr",
+                        name: Cow::Borrowed("expr"),
                         type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Double),
                         sep: ArgSepSyntax::Exactly(ArgSep::Long),
                         require_one: true,
@@ -378,7 +388,7 @@ impl MinFunction {
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
-                        name: "expr",
+                        name: Cow::Borrowed("expr"),
                         type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Double),
                         sep: ArgSepSyntax::Exactly(ArgSep::Long),
                         require_one: true,
@@ -493,7 +503,10 @@ impl RandomizeCommand {
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "seed", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("seed"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         )],
                         None,
@@ -545,7 +558,10 @@ impl RndFunction {
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "n", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("n"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         )],
                         None,
@@ -603,7 +619,10 @@ impl SinFunction {
                 .with_return_type(ExprType::Double)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "angle", vtype: ExprType::Double },
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("angle"),
+                            vtype: ExprType::Double,
+                        },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -645,7 +664,7 @@ impl SqrFunction {
                 .with_return_type(ExprType::Double)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "num", vtype: ExprType::Double },
+                        RequiredValueSyntax { name: Cow::Borrowed("num"), vtype: ExprType::Double },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -691,7 +710,10 @@ impl TanFunction {
                 .with_return_type(ExprType::Double)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "angle", vtype: ExprType::Double },
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("angle"),
+                            vtype: ExprType::Double,
+                        },
                         ArgSepSyntax::End,
                     )],
                     None,

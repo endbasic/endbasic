@@ -29,6 +29,7 @@ use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
 use futures_lite::future::block_on;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -97,7 +98,7 @@ impl SwitchLightCommand {
             metadata: CallableMetadataBuilder::new("SWITCH_LIGHT")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "id", vtype: ExprType::Integer },
+                        RequiredValueSyntax { name: Cow::Borrowed("id"), vtype: ExprType::Integer },
                         ArgSepSyntax::End,
                     )],
                     None,

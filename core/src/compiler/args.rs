@@ -22,26 +22,27 @@ use crate::compiler::{ExprType, SymbolPrototype, SymbolsTable};
 use crate::exec::ValueTag;
 use crate::reader::LineCol;
 use crate::syms::{CallError, SymbolKey};
+use std::borrow::Cow;
 use std::ops::RangeInclusive;
 
 /// Result for argument compilation return values.
 type Result<T> = std::result::Result<T, CallError>;
 
 /// Details to compile a required scalar parameter.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RequiredValueSyntax {
     /// The name of the parameter for help purposes.
-    pub name: &'static str,
+    pub name: Cow<'static, str>,
 
     /// The type of the expected parameter.
     pub vtype: ExprType,
 }
 
 /// Details to compile a required reference parameter.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RequiredRefSyntax {
     /// The name of the parameter for help purposes.
-    pub name: &'static str,
+    pub name: Cow<'static, str>,
 
     /// If true, require an array reference; if false, a variable reference.
     pub require_array: bool,
@@ -55,10 +56,10 @@ pub struct RequiredRefSyntax {
 /// Details to compile an optional scalar parameter.
 ///
 /// Optional parameters are only supported in commands.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OptionalValueSyntax {
     /// The name of the parameter for help purposes.
-    pub name: &'static str,
+    pub name: Cow<'static, str>,
 
     /// The type of the expected parameter.
     pub vtype: ExprType,
@@ -72,7 +73,7 @@ pub struct OptionalValueSyntax {
 }
 
 /// Details to describe the type of a repeated parameter.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum RepeatedTypeSyntax {
     /// Allows any value type, including empty arguments.  The values pushed onto the stack have
     /// the same semantics as those pushed by `AnyValueSyntax`.
@@ -88,10 +89,10 @@ pub enum RepeatedTypeSyntax {
 /// Details to compile a repeated parameter.
 ///
 /// The repeated parameter must appear after all singular positional parameters.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RepeatedSyntax {
     /// The name of the parameter for help purposes.
-    pub name: &'static str,
+    pub name: Cow<'static, str>,
 
     /// The type of the expected parameters.
     pub type_syn: RepeatedTypeSyntax,
@@ -121,7 +122,7 @@ impl RepeatedSyntax {
             sep.describe(output);
         }
 
-        output.push_str(self.name);
+        output.push_str(&self.name);
         output.push('1');
         if let RepeatedTypeSyntax::TypedValue(vtype) = self.type_syn {
             output.push(vtype.annotation());
@@ -135,7 +136,7 @@ impl RepeatedSyntax {
         output.push_str("..");
         self.sep.describe(output);
 
-        output.push_str(self.name);
+        output.push_str(&self.name);
         output.push('N');
         if let RepeatedTypeSyntax::TypedValue(vtype) = self.type_syn {
             output.push(vtype.annotation());
@@ -146,10 +147,10 @@ impl RepeatedSyntax {
 }
 
 /// Details to compile a parameter of any scalar type.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct AnyValueSyntax {
     /// The name of the parameter for help purposes.
-    pub name: &'static str,
+    pub name: Cow<'static, str>,
 
     /// Whether to allow the parameter to not be present or not.  Can only be true for commands.
     pub allow_missing: bool,
@@ -202,7 +203,7 @@ impl ArgSepSyntax {
 ///
 /// Every item in this enum is composed of a struct that provides the details on the parameter and
 /// a struct that provides the details on how this parameter is separated from the next.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum SingularArgSyntax {
     /// A required scalar value.
     RequiredValue(RequiredValueSyntax, ArgSepSyntax),
@@ -227,19 +228,30 @@ pub enum SingularArgSyntax {
 #[derive(Clone, Debug)]
 pub(crate) struct CallableSyntax {
     /// Ordered list of singular arguments that appear before repeated arguments.
-    singular: &'static [SingularArgSyntax],
+    singular: Cow<'static, [SingularArgSyntax]>,
 
     /// Details on the repeated argument allowed after singular arguments.
-    repeated: Option<&'static RepeatedSyntax>,
+    repeated: Option<Cow<'static, RepeatedSyntax>>,
 }
 
 impl CallableSyntax {
-    /// Creates a new callable arguments definition from its parts.
-    pub(crate) fn new(
+    /// Creates a new callable arguments definition from its parts defined statically in the
+    /// code.
+    pub(crate) fn new_static(
         singular: &'static [SingularArgSyntax],
         repeated: Option<&'static RepeatedSyntax>,
     ) -> Self {
-        Self { singular, repeated }
+        Self { singular: Cow::Borrowed(singular), repeated: repeated.map(Cow::Borrowed) }
+    }
+
+    /// Creates a new callable arguments definition from its parts defined dynamically at
+    /// runtime.
+    #[allow(unused)]
+    pub(crate) fn new_dynamic(
+        singular: Vec<SingularArgSyntax>,
+        repeated: Option<RepeatedSyntax>,
+    ) -> Self {
+        Self { singular: Cow::Owned(singular), repeated: repeated.map(Cow::Owned) }
     }
 
     /// Computes the range of the expected number of parameters for this syntax.
@@ -262,19 +274,19 @@ impl CallableSyntax {
         for (i, s) in self.singular.iter().enumerate() {
             let sep = match s {
                 SingularArgSyntax::RequiredValue(details, sep) => {
-                    description.push_str(details.name);
+                    description.push_str(&details.name);
                     description.push(details.vtype.annotation());
                     sep
                 }
 
                 SingularArgSyntax::RequiredRef(details, sep) => {
-                    description.push_str(details.name);
+                    description.push_str(&details.name);
                     sep
                 }
 
                 SingularArgSyntax::OptionalValue(details, sep) => {
                     description.push('[');
-                    description.push_str(details.name);
+                    description.push_str(&details.name);
                     description.push(details.vtype.annotation());
                     description.push(']');
                     sep
@@ -284,7 +296,7 @@ impl CallableSyntax {
                     if details.allow_missing {
                         description.push('[');
                     }
-                    description.push_str(details.name);
+                    description.push_str(&details.name);
                     if details.allow_missing {
                         description.push(']');
                     }
@@ -300,7 +312,7 @@ impl CallableSyntax {
             }
         }
 
-        if let Some(syn) = self.repeated {
+        if let Some(syn) = &self.repeated {
             syn.describe(&mut description, last_singular_sep);
         }
 
@@ -743,7 +755,7 @@ mod testutils {
             singular: &'static [SingularArgSyntax],
             repeated: Option<&'static RepeatedSyntax>,
         ) -> Self {
-            self.syntaxes.push(CallableSyntax::new(singular, repeated));
+            self.syntaxes.push(CallableSyntax::new_static(singular, repeated));
             self
         }
 
@@ -868,16 +880,19 @@ mod description_tests {
 
     #[test]
     fn test_no_args() {
-        assert_eq!("", CallableSyntax::new(&[], None).describe());
+        assert_eq!("", CallableSyntax::new_static(&[], None).describe());
     }
 
     #[test]
     fn test_singular_required_value() {
         assert_eq!(
             "the-arg%",
-            CallableSyntax::new(
+            CallableSyntax::new_static(
                 &[SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax { name: "the-arg", vtype: ExprType::Integer },
+                    RequiredValueSyntax {
+                        name: Cow::Borrowed("the-arg"),
+                        vtype: ExprType::Integer
+                    },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -890,10 +905,10 @@ mod description_tests {
     fn test_singular_required_ref() {
         assert_eq!(
             "the-arg",
-            CallableSyntax::new(
+            CallableSyntax::new_static(
                 &[SingularArgSyntax::RequiredRef(
                     RequiredRefSyntax {
-                        name: "the-arg",
+                        name: Cow::Borrowed("the-arg"),
                         require_array: false,
                         define_undefined: false
                     },
@@ -909,10 +924,10 @@ mod description_tests {
     fn test_singular_optional_value() {
         assert_eq!(
             "[the-arg%]",
-            CallableSyntax::new(
+            CallableSyntax::new_static(
                 &[SingularArgSyntax::OptionalValue(
                     OptionalValueSyntax {
-                        name: "the-arg",
+                        name: Cow::Borrowed("the-arg"),
                         vtype: ExprType::Integer,
                         missing_value: 0,
                         present_value: 1,
@@ -929,9 +944,9 @@ mod description_tests {
     fn test_singular_any_value_required() {
         assert_eq!(
             "the-arg",
-            CallableSyntax::new(
+            CallableSyntax::new_static(
                 &[SingularArgSyntax::AnyValue(
-                    AnyValueSyntax { name: "the-arg", allow_missing: false },
+                    AnyValueSyntax { name: Cow::Borrowed("the-arg"), allow_missing: false },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -944,9 +959,9 @@ mod description_tests {
     fn test_singular_any_value_optional() {
         assert_eq!(
             "[the-arg]",
-            CallableSyntax::new(
+            CallableSyntax::new_static(
                 &[SingularArgSyntax::AnyValue(
-                    AnyValueSyntax { name: "the-arg", allow_missing: true },
+                    AnyValueSyntax { name: Cow::Borrowed("the-arg"), allow_missing: true },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -959,22 +974,22 @@ mod description_tests {
     fn test_singular_exactly_separators() {
         assert_eq!(
             "a; b AS c, d",
-            CallableSyntax::new(
+            CallableSyntax::new_static(
                 &[
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "a", allow_missing: false },
+                        AnyValueSyntax { name: Cow::Borrowed("a"), allow_missing: false },
                         ArgSepSyntax::Exactly(ArgSep::Short),
                     ),
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "b", allow_missing: false },
+                        AnyValueSyntax { name: Cow::Borrowed("b"), allow_missing: false },
                         ArgSepSyntax::Exactly(ArgSep::As),
                     ),
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "c", allow_missing: false },
+                        AnyValueSyntax { name: Cow::Borrowed("c"), allow_missing: false },
                         ArgSepSyntax::Exactly(ArgSep::Long),
                     ),
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "d", allow_missing: false },
+                        AnyValueSyntax { name: Cow::Borrowed("d"), allow_missing: false },
                         ArgSepSyntax::Exactly(ArgSep::End),
                     ),
                 ],
@@ -988,18 +1003,18 @@ mod description_tests {
     fn test_singular_oneof_separators() {
         assert_eq!(
             "a <;|,> b <AS|,> c",
-            CallableSyntax::new(
+            CallableSyntax::new_static(
                 &[
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "a", allow_missing: false },
+                        AnyValueSyntax { name: Cow::Borrowed("a"), allow_missing: false },
                         ArgSepSyntax::OneOf(ArgSep::Short, ArgSep::Long),
                     ),
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "b", allow_missing: false },
+                        AnyValueSyntax { name: Cow::Borrowed("b"), allow_missing: false },
                         ArgSepSyntax::OneOf(ArgSep::As, ArgSep::Long),
                     ),
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "c", allow_missing: false },
+                        AnyValueSyntax { name: Cow::Borrowed("c"), allow_missing: false },
                         ArgSepSyntax::Exactly(ArgSep::End),
                     ),
                 ],
@@ -1013,10 +1028,10 @@ mod description_tests {
     fn test_repeated_require_one() {
         assert_eq!(
             "rep1[; ..; repN]",
-            CallableSyntax::new(
+            CallableSyntax::new_static(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "rep",
+                    name: Cow::Borrowed("rep"),
                     type_syn: RepeatedTypeSyntax::AnyValue,
                     sep: ArgSepSyntax::Exactly(ArgSep::Short),
                     require_one: true,
@@ -1031,10 +1046,10 @@ mod description_tests {
     fn test_repeated_allow_missing() {
         assert_eq!(
             "[rep1, .., repN]",
-            CallableSyntax::new(
+            CallableSyntax::new_static(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "rep",
+                    name: Cow::Borrowed("rep"),
                     type_syn: RepeatedTypeSyntax::AnyValue,
                     sep: ArgSepSyntax::Exactly(ArgSep::Long),
                     require_one: false,
@@ -1049,10 +1064,10 @@ mod description_tests {
     fn test_repeated_value() {
         assert_eq!(
             "rep1$[ AS .. AS repN$]",
-            CallableSyntax::new(
+            CallableSyntax::new_static(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "rep",
+                    name: Cow::Borrowed("rep"),
                     type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Text),
                     sep: ArgSepSyntax::Exactly(ArgSep::As),
                     require_one: true,
@@ -1067,10 +1082,10 @@ mod description_tests {
     fn test_repeated_ref() {
         assert_eq!(
             "rep1[ AS .. AS repN]",
-            CallableSyntax::new(
+            CallableSyntax::new_static(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "rep",
+                    name: Cow::Borrowed("rep"),
                     type_syn: RepeatedTypeSyntax::VariableRef,
                     sep: ArgSepSyntax::Exactly(ArgSep::As),
                     require_one: true,
@@ -1085,13 +1100,13 @@ mod description_tests {
     fn test_singular_and_repeated() {
         assert_eq!(
             "arg%[, rep1 <;|,> .. <;|,> repN]",
-            CallableSyntax::new(
+            CallableSyntax::new_static(
                 &[SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax { name: "arg", vtype: ExprType::Integer },
+                    RequiredValueSyntax { name: Cow::Borrowed("arg"), vtype: ExprType::Integer },
                     ArgSepSyntax::Exactly(ArgSep::Long),
                 )],
                 Some(&RepeatedSyntax {
-                    name: "rep",
+                    name: Cow::Borrowed("rep"),
                     type_syn: RepeatedTypeSyntax::AnyValue,
                     sep: ArgSepSyntax::OneOf(ArgSep::Short, ArgSep::Long),
                     require_one: false,
@@ -1136,7 +1151,7 @@ mod compile_tests {
         Tester::default()
             .syntax(
                 &[SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax { name: "arg1", vtype: ExprType::Integer },
+                    RequiredValueSyntax { name: Cow::Borrowed("arg1"), vtype: ExprType::Integer },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -1156,7 +1171,7 @@ mod compile_tests {
         Tester::default()
             .syntax(
                 &[SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax { name: "arg1", vtype: ExprType::Integer },
+                    RequiredValueSyntax { name: Cow::Borrowed("arg1"), vtype: ExprType::Integer },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -1179,7 +1194,7 @@ mod compile_tests {
             .syntax(
                 &[SingularArgSyntax::RequiredRef(
                     RequiredRefSyntax {
-                        name: "ref",
+                        name: Cow::Borrowed("ref"),
                         require_array: false,
                         define_undefined: false,
                     },
@@ -1206,7 +1221,7 @@ mod compile_tests {
             .syntax(
                 &[SingularArgSyntax::RequiredRef(
                     RequiredRefSyntax {
-                        name: "ref",
+                        name: Cow::Borrowed("ref"),
                         require_array: false,
                         define_undefined: false,
                     },
@@ -1232,7 +1247,7 @@ mod compile_tests {
             .syntax(
                 &[SingularArgSyntax::RequiredRef(
                     RequiredRefSyntax {
-                        name: "ref",
+                        name: Cow::Borrowed("ref"),
                         require_array: false,
                         define_undefined: false,
                     },
@@ -1259,7 +1274,7 @@ mod compile_tests {
             .syntax(
                 &[SingularArgSyntax::RequiredRef(
                     RequiredRefSyntax {
-                        name: "ref",
+                        name: Cow::Borrowed("ref"),
                         require_array: false,
                         define_undefined: false,
                     },
@@ -1289,7 +1304,7 @@ mod compile_tests {
             .syntax(
                 &[SingularArgSyntax::RequiredRef(
                     RequiredRefSyntax {
-                        name: "ref",
+                        name: Cow::Borrowed("ref"),
                         require_array: false,
                         define_undefined: false,
                     },
@@ -1317,7 +1332,11 @@ mod compile_tests {
         Tester::default()
             .syntax(
                 &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "ref", require_array: false, define_undefined: true },
+                    RequiredRefSyntax {
+                        name: Cow::Borrowed("ref"),
+                        require_array: false,
+                        define_undefined: true,
+                    },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -1341,7 +1360,11 @@ mod compile_tests {
         Tester::default()
             .syntax(
                 &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "ref", require_array: false, define_undefined: true },
+                    RequiredRefSyntax {
+                        name: Cow::Borrowed("ref"),
+                        require_array: false,
+                        define_undefined: true,
+                    },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -1367,7 +1390,7 @@ mod compile_tests {
                 &[
                     SingularArgSyntax::RequiredRef(
                         RequiredRefSyntax {
-                            name: "ref1",
+                            name: Cow::Borrowed("ref1"),
                             require_array: false,
                             define_undefined: true,
                         },
@@ -1375,7 +1398,7 @@ mod compile_tests {
                     ),
                     SingularArgSyntax::RequiredRef(
                         RequiredRefSyntax {
-                            name: "ref2",
+                            name: Cow::Borrowed("ref2"),
                             require_array: false,
                             define_undefined: true,
                         },
@@ -1415,7 +1438,11 @@ mod compile_tests {
             .symbol("foo", SymbolPrototype::Array(ExprType::Text, 0))
             .syntax(
                 &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
+                    RequiredRefSyntax {
+                        name: Cow::Borrowed("ref"),
+                        require_array: true,
+                        define_undefined: false,
+                    },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -1438,7 +1465,11 @@ mod compile_tests {
         Tester::default()
             .syntax(
                 &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
+                    RequiredRefSyntax {
+                        name: Cow::Borrowed("ref"),
+                        require_array: true,
+                        define_undefined: false,
+                    },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -1460,7 +1491,11 @@ mod compile_tests {
         Tester::default()
             .syntax(
                 &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
+                    RequiredRefSyntax {
+                        name: Cow::Borrowed("ref"),
+                        require_array: true,
+                        define_undefined: false,
+                    },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -1483,7 +1518,11 @@ mod compile_tests {
             .symbol("foo", SymbolPrototype::Variable(ExprType::Text))
             .syntax(
                 &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
+                    RequiredRefSyntax {
+                        name: Cow::Borrowed("ref"),
+                        require_array: true,
+                        define_undefined: false,
+                    },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -1509,7 +1548,11 @@ mod compile_tests {
             .symbol("foo", SymbolPrototype::Array(ExprType::Text, 0))
             .syntax(
                 &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "ref", require_array: true, define_undefined: false },
+                    RequiredRefSyntax {
+                        name: Cow::Borrowed("ref"),
+                        require_array: true,
+                        define_undefined: false,
+                    },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -1535,7 +1578,7 @@ mod compile_tests {
             .syntax(
                 &[SingularArgSyntax::OptionalValue(
                     OptionalValueSyntax {
-                        name: "ref",
+                        name: Cow::Borrowed("ref"),
                         vtype: ExprType::Double,
                         missing_value: 10,
                         present_value: 20,
@@ -1561,7 +1604,7 @@ mod compile_tests {
             .syntax(
                 &[SingularArgSyntax::OptionalValue(
                     OptionalValueSyntax {
-                        name: "ref",
+                        name: Cow::Borrowed("ref"),
                         vtype: ExprType::Double,
                         missing_value: 10,
                         present_value: 20,
@@ -1582,19 +1625,19 @@ mod compile_tests {
             .syntax(
                 &[
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg1", allow_missing: false },
+                        AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: false },
                         ArgSepSyntax::Exactly(ArgSep::Long),
                     ),
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg2", allow_missing: false },
+                        AnyValueSyntax { name: Cow::Borrowed("arg2"), allow_missing: false },
                         ArgSepSyntax::Exactly(ArgSep::Long),
                     ),
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg3", allow_missing: false },
+                        AnyValueSyntax { name: Cow::Borrowed("arg3"), allow_missing: false },
                         ArgSepSyntax::Exactly(ArgSep::Long),
                     ),
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg4", allow_missing: false },
+                        AnyValueSyntax { name: Cow::Borrowed("arg4"), allow_missing: false },
                         ArgSepSyntax::End,
                     ),
                 ],
@@ -1640,7 +1683,7 @@ mod compile_tests {
             .symbol("foo", SymbolPrototype::Variable(ExprType::Double))
             .syntax(
                 &[SingularArgSyntax::AnyValue(
-                    AnyValueSyntax { name: "arg1", allow_missing: false },
+                    AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: false },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -1666,7 +1709,7 @@ mod compile_tests {
             .symbol("foo", SymbolPrototype::Variable(ExprType::Double))
             .syntax(
                 &[SingularArgSyntax::AnyValue(
-                    AnyValueSyntax { name: "arg1", allow_missing: false },
+                    AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: false },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -1684,7 +1727,7 @@ mod compile_tests {
         Tester::default()
             .syntax(
                 &[SingularArgSyntax::AnyValue(
-                    AnyValueSyntax { name: "arg1", allow_missing: true },
+                    AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: true },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -1701,19 +1744,19 @@ mod compile_tests {
             .syntax(
                 &[
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg1", allow_missing: true },
+                        AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: true },
                         ArgSepSyntax::Exactly(ArgSep::As),
                     ),
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg2", allow_missing: true },
+                        AnyValueSyntax { name: Cow::Borrowed("arg2"), allow_missing: true },
                         ArgSepSyntax::OneOf(ArgSep::Long, ArgSep::Short),
                     ),
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg3", allow_missing: true },
+                        AnyValueSyntax { name: Cow::Borrowed("arg3"), allow_missing: true },
                         ArgSepSyntax::OneOf(ArgSep::Long, ArgSep::Short),
                     ),
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg4", allow_missing: true },
+                        AnyValueSyntax { name: Cow::Borrowed("arg4"), allow_missing: true },
                         ArgSepSyntax::End,
                     ),
                 ],
@@ -1741,11 +1784,11 @@ mod compile_tests {
             .syntax(
                 &[
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg1", allow_missing: true },
+                        AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: true },
                         ArgSepSyntax::Exactly(ArgSep::As),
                     ),
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg2", allow_missing: true },
+                        AnyValueSyntax { name: Cow::Borrowed("arg2"), allow_missing: true },
                         ArgSepSyntax::End,
                     ),
                 ],
@@ -1765,11 +1808,11 @@ mod compile_tests {
             .syntax(
                 &[
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg1", allow_missing: true },
+                        AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: true },
                         ArgSepSyntax::OneOf(ArgSep::Short, ArgSep::Long),
                     ),
                     SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "arg2", allow_missing: true },
+                        AnyValueSyntax { name: Cow::Borrowed("arg2"), allow_missing: true },
                         ArgSepSyntax::End,
                     ),
                 ],
@@ -1789,7 +1832,7 @@ mod compile_tests {
             .syntax(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "arg",
+                    name: Cow::Borrowed("arg"),
                     type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
                     sep: ArgSepSyntax::Exactly(ArgSep::Long),
                     allow_missing: false,
@@ -1807,7 +1850,7 @@ mod compile_tests {
             .syntax(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "arg",
+                    name: Cow::Borrowed("arg"),
                     type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
                     sep: ArgSepSyntax::Exactly(ArgSep::Long),
                     allow_missing: false,
@@ -1839,7 +1882,7 @@ mod compile_tests {
             .syntax(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "arg",
+                    name: Cow::Borrowed("arg"),
                     type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
                     sep: ArgSepSyntax::Exactly(ArgSep::Long),
                     allow_missing: false,
@@ -1862,7 +1905,7 @@ mod compile_tests {
             .syntax(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "arg",
+                    name: Cow::Borrowed("arg"),
                     type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
                     sep: ArgSepSyntax::Exactly(ArgSep::Long),
                     allow_missing: false,
@@ -1880,7 +1923,7 @@ mod compile_tests {
             .syntax(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "arg",
+                    name: Cow::Borrowed("arg"),
                     type_syn: RepeatedTypeSyntax::VariableRef,
                     sep: ArgSepSyntax::Exactly(ArgSep::Long),
                     allow_missing: false,
@@ -1906,7 +1949,7 @@ mod compile_tests {
             .syntax(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "arg",
+                    name: Cow::Borrowed("arg"),
                     type_syn: RepeatedTypeSyntax::VariableRef,
                     sep: ArgSepSyntax::Exactly(ArgSep::Long),
                     allow_missing: false,
@@ -1931,7 +1974,7 @@ mod compile_tests {
             .syntax(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "arg",
+                    name: Cow::Borrowed("arg"),
                     type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Double),
                     sep: ArgSepSyntax::OneOf(ArgSep::Long, ArgSep::Short),
                     allow_missing: false,
@@ -1970,7 +2013,7 @@ mod compile_tests {
             .syntax(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "arg",
+                    name: Cow::Borrowed("arg"),
                     type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Double),
                     sep: ArgSepSyntax::OneOf(ArgSep::Long, ArgSep::Short),
                     allow_missing: true,
@@ -1999,7 +2042,7 @@ mod compile_tests {
             .syntax(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "arg",
+                    name: Cow::Borrowed("arg"),
                     type_syn: RepeatedTypeSyntax::AnyValue,
                     sep: ArgSepSyntax::Exactly(ArgSep::Long),
                     allow_missing: true,
@@ -2047,11 +2090,11 @@ mod compile_tests {
         Tester::default()
             .syntax(
                 &[SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax { name: "arg", vtype: ExprType::Double },
+                    RequiredValueSyntax { name: Cow::Borrowed("arg"), vtype: ExprType::Double },
                     ArgSepSyntax::Exactly(ArgSep::Short),
                 )],
                 Some(&RepeatedSyntax {
-                    name: "rep",
+                    name: Cow::Borrowed("rep"),
                     type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
                     sep: ArgSepSyntax::Exactly(ArgSep::Long),
                     allow_missing: false,

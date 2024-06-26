@@ -480,8 +480,10 @@ impl CallableMetadataBuilder {
         mut self,
         syntaxes: &'static [(&'static [SingularArgSyntax], Option<&'static RepeatedSyntax>)],
     ) -> Self {
-        let syntaxes =
-            syntaxes.iter().map(|s| CallableSyntax::new(s.0, s.1)).collect::<Vec<CallableSyntax>>();
+        let syntaxes = syntaxes
+            .iter()
+            .map(|s| CallableSyntax::new_static(s.0, s.1))
+            .collect::<Vec<CallableSyntax>>();
         if syntaxes.is_empty() {
             self.syntax = Some("no arguments".to_owned());
         } else if syntaxes.len() == 1 {
@@ -535,7 +537,7 @@ impl CallableMetadataBuilder {
     /// present.  Only useful for testing.
     pub fn test_build(mut self) -> CallableMetadata {
         if self.syntaxes.is_empty() {
-            self.syntaxes.push(CallableSyntax::new(&[], None));
+            self.syntaxes.push(CallableSyntax::new_static(&[], None));
         }
         CallableMetadata {
             name: self.name,

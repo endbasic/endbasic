@@ -819,6 +819,7 @@ mod tests {
         RequiredValueSyntax, SingularArgSyntax,
     };
     use crate::syms::CallableMetadataBuilder;
+    use std::borrow::Cow;
 
     #[test]
     fn test_compile_expr_literals() {
@@ -868,7 +869,10 @@ mod tests {
                 CallableMetadataBuilder::new("F").with_return_type(ExprType::Integer).with_syntax(
                     &[(
                         &[SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "i", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("i"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         )],
                         None,
@@ -886,7 +890,11 @@ mod tests {
         Tester::default()
             .define_callable(CallableMetadataBuilder::new("C").with_syntax(&[(
                 &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "x", require_array: false, define_undefined: false },
+                    RequiredRefSyntax {
+                        name: Cow::Borrowed("x"),
+                        require_array: false,
+                        define_undefined: false,
+                    },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -922,7 +930,11 @@ mod tests {
         Tester::default()
             .define_callable(CallableMetadataBuilder::new("C").with_syntax(&[(
                 &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "x", require_array: false, define_undefined: false },
+                    RequiredRefSyntax {
+                        name: Cow::Borrowed("x"),
+                        require_array: false,
+                        define_undefined: false,
+                    },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -938,7 +950,11 @@ mod tests {
         Tester::default()
             .define_callable(CallableMetadataBuilder::new("C").with_syntax(&[(
                 &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "x", require_array: false, define_undefined: false },
+                    RequiredRefSyntax {
+                        name: Cow::Borrowed("x"),
+                        require_array: false,
+                        define_undefined: false,
+                    },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -966,7 +982,11 @@ mod tests {
             .define(SymbolKey::from("a"), SymbolPrototype::Array(ExprType::Integer, 1))
             .define_callable(CallableMetadataBuilder::new("C").with_syntax(&[(
                 &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "x", require_array: true, define_undefined: false },
+                    RequiredRefSyntax {
+                        name: Cow::Borrowed("x"),
+                        require_array: true,
+                        define_undefined: false,
+                    },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -996,7 +1016,11 @@ mod tests {
         Tester::default()
             .define_callable(CallableMetadataBuilder::new("C").with_syntax(&[(
                 &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax { name: "x", require_array: false, define_undefined: false },
+                    RequiredRefSyntax {
+                        name: Cow::Borrowed("x"),
+                        require_array: false,
+                        define_undefined: false,
+                    },
                     ArgSepSyntax::End,
                 )],
                 None,
@@ -1281,7 +1305,7 @@ mod tests {
                     .with_syntax(&[(
                         &[],
                         Some(&RepeatedSyntax {
-                            name: "expr",
+                            name: Cow::Borrowed("expr"),
                             type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
                             sep: ArgSepSyntax::Exactly(ArgSep::Long),
                             require_one: true,

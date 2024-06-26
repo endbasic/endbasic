@@ -27,6 +27,7 @@ use crate::syms::{
 };
 use crate::value;
 use async_trait::async_trait;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
@@ -135,7 +136,7 @@ impl RaisefFunction {
                 .with_return_type(ExprType::Boolean)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "arg", vtype: ExprType::Text },
+                        RequiredValueSyntax { name: Cow::Borrowed("arg"), vtype: ExprType::Text },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -176,7 +177,7 @@ impl RaiseCommand {
             metadata: CallableMetadataBuilder::new("RAISE")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "arg", vtype: ExprType::Text },
+                        RequiredValueSyntax { name: Cow::Borrowed("arg"), vtype: ExprType::Text },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -219,7 +220,10 @@ impl GetHiddenFunction {
                 .with_return_type(ExprType::Text)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "varname", vtype: ExprType::Text },
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("varname"),
+                            vtype: ExprType::Text,
+                        },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -293,7 +297,7 @@ impl InCommand {
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredRef(
                         RequiredRefSyntax {
-                            name: "vref",
+                            name: Cow::Borrowed("vref"),
                             require_array: false,
                             define_undefined: true,
                         },
@@ -347,7 +351,7 @@ impl OutCommand {
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
-                        name: "arg",
+                        name: Cow::Borrowed("arg"),
                         type_syn: RepeatedTypeSyntax::AnyValue,
                         sep: ArgSepSyntax::Exactly(ArgSep::Short),
                         require_one: false,
@@ -422,7 +426,7 @@ impl OutfFunction {
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
-                        name: "expr",
+                        name: Cow::Borrowed("expr"),
                         type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
                         sep: ArgSepSyntax::Exactly(ArgSep::Long),
                         require_one: false,
@@ -476,7 +480,7 @@ impl SumFunction {
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
-                        name: "n",
+                        name: Cow::Borrowed("n"),
                         type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
                         sep: ArgSepSyntax::Exactly(ArgSep::Long),
                         require_one: false,

@@ -24,6 +24,7 @@ use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
 use endbasic_core::LineCol;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::rc::Rc;
@@ -78,15 +79,24 @@ impl GfxCircleCommand {
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "x", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "y", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "r", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("r"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         ),
                     ],
@@ -138,15 +148,24 @@ impl GfxCirclefCommand {
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "x", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "y", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "r", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("r"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         ),
                     ],
@@ -234,19 +253,31 @@ impl GfxLineCommand {
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "x1", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x1"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "y1", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y1"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "x2", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x2"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "y2", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y2"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         ),
                     ],
@@ -298,11 +329,17 @@ impl GfxPixelCommand {
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "x", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "y", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         ),
                     ],
@@ -351,19 +388,31 @@ impl GfxRectCommand {
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "x1", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x1"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "y1", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y1"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "x2", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x2"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "y2", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y2"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         ),
                     ],
@@ -416,19 +465,31 @@ impl GfxRectfCommand {
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "x1", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x1"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "y1", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y1"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "x2", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x2"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "y2", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y2"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         ),
                     ],
@@ -481,7 +542,10 @@ impl GfxSyncCommand {
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "enabled", vtype: ExprType::Boolean },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("enabled"),
+                                vtype: ExprType::Boolean,
+                            },
                             ArgSepSyntax::End,
                         )],
                         None,

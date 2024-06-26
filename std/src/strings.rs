@@ -24,6 +24,7 @@ use endbasic_core::exec::{Machine, Scope, ValueTag};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
+use std::borrow::Cow;
 use std::cmp::min;
 use std::convert::TryFrom;
 use std::rc::Rc;
@@ -99,7 +100,7 @@ impl AscFunction {
                 .with_return_type(ExprType::Integer)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "char", vtype: ExprType::Text },
+                        RequiredValueSyntax { name: Cow::Borrowed("char"), vtype: ExprType::Text },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -166,7 +167,10 @@ impl ChrFunction {
                 .with_return_type(ExprType::Text)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "code", vtype: ExprType::Integer },
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("code"),
+                            vtype: ExprType::Integer,
+                        },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -220,11 +224,17 @@ impl LeftFunction {
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("expr"),
+                                vtype: ExprType::Text,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "n", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("n"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         ),
                     ],
@@ -274,7 +284,7 @@ impl LenFunction {
                 .with_return_type(ExprType::Integer)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                        RequiredValueSyntax { name: Cow::Borrowed("expr"), vtype: ExprType::Text },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -317,7 +327,7 @@ impl LtrimFunction {
                 .with_return_type(ExprType::Text)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                        RequiredValueSyntax { name: Cow::Borrowed("expr"), vtype: ExprType::Text },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -358,11 +368,17 @@ impl MidFunction {
                     (
                         &[
                             SingularArgSyntax::RequiredValue(
-                                RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("expr"),
+                                    vtype: ExprType::Text,
+                                },
                                 ArgSepSyntax::Exactly(ArgSep::Long),
                             ),
                             SingularArgSyntax::RequiredValue(
-                                RequiredValueSyntax { name: "start", vtype: ExprType::Integer },
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("start"),
+                                    vtype: ExprType::Integer,
+                                },
                                 ArgSepSyntax::End,
                             ),
                         ],
@@ -371,15 +387,24 @@ impl MidFunction {
                     (
                         &[
                             SingularArgSyntax::RequiredValue(
-                                RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("expr"),
+                                    vtype: ExprType::Text,
+                                },
                                 ArgSepSyntax::Exactly(ArgSep::Long),
                             ),
                             SingularArgSyntax::RequiredValue(
-                                RequiredValueSyntax { name: "start", vtype: ExprType::Integer },
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("start"),
+                                    vtype: ExprType::Integer,
+                                },
                                 ArgSepSyntax::Exactly(ArgSep::Long),
                             ),
                             SingularArgSyntax::RequiredValue(
-                                RequiredValueSyntax { name: "length", vtype: ExprType::Integer },
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("length"),
+                                    vtype: ExprType::Integer,
+                                },
                                 ArgSepSyntax::End,
                             ),
                         ],
@@ -446,11 +471,17 @@ impl RightFunction {
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("expr"),
+                                vtype: ExprType::Text,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "n", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("n"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         ),
                     ],
@@ -500,7 +531,7 @@ impl RtrimFunction {
                 .with_return_type(ExprType::Text)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "expr", vtype: ExprType::Text },
+                        RequiredValueSyntax { name: Cow::Borrowed("expr"), vtype: ExprType::Text },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -539,7 +570,7 @@ impl StrFunction {
                 .with_return_type(ExprType::Text)
                 .with_syntax(&[(
                     &[SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: "expr", allow_missing: false },
+                        AnyValueSyntax { name: Cow::Borrowed("expr"), allow_missing: false },
                         ArgSepSyntax::End,
                     )],
                     None,
