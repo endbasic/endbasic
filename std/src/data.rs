@@ -22,6 +22,7 @@ use endbasic_core::exec::{Clearable, Machine, Scope};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -50,7 +51,7 @@ impl ReadCommand {
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
-                        name: "vref",
+                        name: Cow::Borrowed("vref"),
                         type_syn: RepeatedTypeSyntax::VariableRef,
                         sep: ArgSepSyntax::Exactly(ArgSep::Long),
                         require_one: true,

@@ -31,6 +31,7 @@ use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
 use endbasic_core::LineCol;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::io;
@@ -105,7 +106,10 @@ impl ColorCommand {
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "fg", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("fg"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         )],
                         None,
@@ -114,7 +118,7 @@ impl ColorCommand {
                         &[
                             SingularArgSyntax::OptionalValue(
                                 OptionalValueSyntax {
-                                    name: "fg",
+                                    name: Cow::Borrowed("fg"),
                                     vtype: ExprType::Integer,
                                     missing_value: Self::NO_COLOR,
                                     present_value: Self::HAS_COLOR,
@@ -123,7 +127,7 @@ impl ColorCommand {
                             ),
                             SingularArgSyntax::OptionalValue(
                                 OptionalValueSyntax {
-                                    name: "bg",
+                                    name: Cow::Borrowed("bg"),
                                     vtype: ExprType::Integer,
                                     missing_value: Self::NO_COLOR,
                                     present_value: Self::HAS_COLOR,
@@ -268,7 +272,7 @@ impl InputCommand {
                     (
                         &[SingularArgSyntax::RequiredRef(
                             RequiredRefSyntax {
-                                name: "vref",
+                                name: Cow::Borrowed("vref"),
                                 require_array: false,
                                 define_undefined: true,
                             },
@@ -280,7 +284,7 @@ impl InputCommand {
                         &[
                             SingularArgSyntax::OptionalValue(
                                 OptionalValueSyntax {
-                                    name: "prompt",
+                                    name: Cow::Borrowed("prompt"),
                                     vtype: ExprType::Text,
                                     missing_value: 0,
                                     present_value: 1,
@@ -289,7 +293,7 @@ impl InputCommand {
                             ),
                             SingularArgSyntax::RequiredRef(
                                 RequiredRefSyntax {
-                                    name: "vref",
+                                    name: Cow::Borrowed("vref"),
                                     require_array: false,
                                     define_undefined: true,
                                 },
@@ -421,11 +425,17 @@ impl LocateCommand {
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "column", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("column"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "row", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("row"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         ),
                     ],
@@ -492,7 +502,7 @@ impl PrintCommand {
                 .with_syntax(&[(
                     &[],
                     Some(&RepeatedSyntax {
-                        name: "expr",
+                        name: Cow::Borrowed("expr"),
                         type_syn: RepeatedTypeSyntax::AnyValue,
                         sep: ArgSepSyntax::OneOf(ArgSep::Long, ArgSep::Short),
                         require_one: false,

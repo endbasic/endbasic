@@ -29,6 +29,7 @@ use endbasic_core::LineCol;
 use endbasic_std::console::{is_narrow, read_line, read_line_secure, refill_and_print, Console};
 use endbasic_std::storage::{FileAcls, Storage};
 use endbasic_std::strings::parse_boolean;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::str;
@@ -68,7 +69,10 @@ impl LoginCommand {
                 .with_syntax(&[
                     (
                         &[SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "username", vtype: ExprType::Text },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("username"),
+                                vtype: ExprType::Text,
+                            },
                             ArgSepSyntax::End,
                         )],
                         None,
@@ -76,11 +80,17 @@ impl LoginCommand {
                     (
                         &[
                             SingularArgSyntax::RequiredValue(
-                                RequiredValueSyntax { name: "username", vtype: ExprType::Text },
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("username"),
+                                    vtype: ExprType::Text,
+                                },
                                 ArgSepSyntax::Exactly(ArgSep::Long),
                             ),
                             SingularArgSyntax::RequiredValue(
-                                RequiredValueSyntax { name: "password", vtype: ExprType::Text },
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("password"),
+                                    vtype: ExprType::Text,
+                                },
                                 ArgSepSyntax::End,
                             ),
                         ],
@@ -258,11 +268,14 @@ impl ShareCommand {
             metadata: CallableMetadataBuilder::new("SHARE")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "filename", vtype: ExprType::Text },
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("filename"),
+                            vtype: ExprType::Text,
+                        },
                         ArgSepSyntax::Exactly(ArgSep::Long),
                     )],
                     Some(&RepeatedSyntax {
-                        name: "acl",
+                        name: Cow::Borrowed("acl"),
                         type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Text),
                         sep: ArgSepSyntax::Exactly(ArgSep::Long),
                         require_one: false,

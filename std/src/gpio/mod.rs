@@ -23,6 +23,7 @@ use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
 };
 use endbasic_core::LineCol;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -143,11 +144,17 @@ impl GpioSetupCommand {
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "pin", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("pin"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "mode", vtype: ExprType::Text },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("mode"),
+                                vtype: ExprType::Text,
+                            },
                             ArgSepSyntax::End,
                         ),
                     ],
@@ -210,7 +217,10 @@ impl GpioClearCommand {
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "pin", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("pin"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::End,
                         )],
                         None,
@@ -272,7 +282,10 @@ impl GpioReadFunction {
                 .with_return_type(ExprType::Boolean)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "pin", vtype: ExprType::Integer },
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("pin"),
+                            vtype: ExprType::Integer,
+                        },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -323,11 +336,17 @@ impl GpioWriteCommand {
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "pin", vtype: ExprType::Integer },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("pin"),
+                                vtype: ExprType::Integer,
+                            },
                             ArgSepSyntax::Exactly(ArgSep::Long),
                         ),
                         SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "value", vtype: ExprType::Boolean },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("value"),
+                                vtype: ExprType::Boolean,
+                            },
                             ArgSepSyntax::End,
                         ),
                     ],

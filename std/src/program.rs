@@ -25,6 +25,7 @@ use endbasic_core::exec::{Machine, Scope, StopReason};
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::io;
 use std::path::PathBuf;
@@ -164,7 +165,10 @@ impl KillCommand {
             metadata: CallableMetadataBuilder::new("KILL")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "filename", vtype: ExprType::Text },
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("filename"),
+                            vtype: ExprType::Text,
+                        },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -296,7 +300,10 @@ impl LoadCommand {
             metadata: CallableMetadataBuilder::new("LOAD")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "filename", vtype: ExprType::Text },
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("filename"),
+                            vtype: ExprType::Text,
+                        },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -474,7 +481,10 @@ impl SaveCommand {
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "filename", vtype: ExprType::Text },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("filename"),
+                                vtype: ExprType::Text,
+                            },
                             ArgSepSyntax::End,
                         )],
                         None,

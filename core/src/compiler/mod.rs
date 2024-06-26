@@ -1060,6 +1060,7 @@ mod tests {
     use super::testutils::*;
     use super::*;
     use crate::syms::CallableMetadataBuilder;
+    use std::borrow::Cow;
 
     #[test]
     fn test_compile_nothing() {
@@ -1276,7 +1277,7 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("CMD").with_syntax(&[(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: "expr",
+                    name: Cow::Borrowed("expr"),
                     type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
                     sep: ArgSepSyntax::Exactly(ArgSep::Long),
                     require_one: false,

@@ -22,6 +22,7 @@ use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{CallResult, Callable, CallableMetadata, CallableMetadataBuilder};
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp;
 use std::io;
@@ -131,7 +132,7 @@ impl CdCommand {
             metadata: CallableMetadataBuilder::new("CD")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "path", vtype: ExprType::Text },
+                        RequiredValueSyntax { name: Cow::Borrowed("path"), vtype: ExprType::Text },
                         ArgSepSyntax::End,
                     )],
                     None,
@@ -176,7 +177,10 @@ impl DirCommand {
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "path", vtype: ExprType::Text },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("path"),
+                                vtype: ExprType::Text,
+                            },
                             ArgSepSyntax::End,
                         )],
                         None,
@@ -228,11 +232,17 @@ impl MountCommand {
                     (
                         &[
                             SingularArgSyntax::RequiredValue(
-                                RequiredValueSyntax { name: "target", vtype: ExprType::Text },
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("target"),
+                                    vtype: ExprType::Text,
+                                },
                                 ArgSepSyntax::Exactly(ArgSep::As),
                             ),
                             SingularArgSyntax::RequiredValue(
-                                RequiredValueSyntax { name: "drive_name", vtype: ExprType::Text },
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("drive_name"),
+                                    vtype: ExprType::Text,
+                                },
                                 ArgSepSyntax::End,
                             ),
                         ],
@@ -339,7 +349,10 @@ impl UnmountCommand {
             metadata: CallableMetadataBuilder::new("UNMOUNT")
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: "drive_name", vtype: ExprType::Text },
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("drive_name"),
+                            vtype: ExprType::Text,
+                        },
                         ArgSepSyntax::End,
                     )],
                     None,

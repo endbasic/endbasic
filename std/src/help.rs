@@ -26,6 +26,7 @@ use endbasic_core::syms::{
 };
 use endbasic_core::LineCol;
 use radix_trie::{Trie, TrieCommon};
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::io;
@@ -416,7 +417,10 @@ impl HelpCommand {
                     (&[], None),
                     (
                         &[SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "topic", vtype: ExprType::Text },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("topic"),
+                                vtype: ExprType::Text,
+                            },
                             ArgSepSyntax::End,
                         )],
                         None,
@@ -541,7 +545,10 @@ pub(crate) mod testutils {
                 metadata: CallableMetadataBuilder::new(name)
                     .with_syntax(&[(
                         &[SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "sample", vtype: ExprType::Text },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("sample"),
+                                vtype: ExprType::Text,
+                            },
                             ArgSepSyntax::End,
                         )],
                         None,
@@ -589,7 +596,10 @@ Second paragraph of the extended description.",
                     .with_return_type(ExprType::Text)
                     .with_syntax(&[(
                         &[SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax { name: "sample", vtype: ExprType::Text },
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("sample"),
+                                vtype: ExprType::Text,
+                            },
                             ArgSepSyntax::End,
                         )],
                         None,

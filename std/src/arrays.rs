@@ -25,6 +25,7 @@ use endbasic_core::syms::{
     Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
     Symbols,
 };
+use std::borrow::Cow;
 use std::rc::Rc;
 
 /// Category description for all symbols provided by this module.
@@ -97,7 +98,7 @@ impl LboundFunction {
                     (
                         &[SingularArgSyntax::RequiredRef(
                             RequiredRefSyntax {
-                                name: "array",
+                                name: Cow::Borrowed("array"),
                                 require_array: true,
                                 define_undefined: false,
                             },
@@ -109,14 +110,17 @@ impl LboundFunction {
                         &[
                             SingularArgSyntax::RequiredRef(
                                 RequiredRefSyntax {
-                                    name: "array",
+                                    name: Cow::Borrowed("array"),
                                     require_array: true,
                                     define_undefined: false,
                                 },
                                 ArgSepSyntax::Exactly(ArgSep::Long),
                             ),
                             SingularArgSyntax::RequiredValue(
-                                RequiredValueSyntax { name: "dimension", vtype: ExprType::Integer },
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("dimension"),
+                                    vtype: ExprType::Integer,
+                                },
                                 ArgSepSyntax::End,
                             ),
                         ],
@@ -163,7 +167,7 @@ impl UboundFunction {
                     (
                         &[SingularArgSyntax::RequiredRef(
                             RequiredRefSyntax {
-                                name: "array",
+                                name: Cow::Borrowed("array"),
                                 require_array: true,
                                 define_undefined: false,
                             },
@@ -175,14 +179,17 @@ impl UboundFunction {
                         &[
                             SingularArgSyntax::RequiredRef(
                                 RequiredRefSyntax {
-                                    name: "array",
+                                    name: Cow::Borrowed("array"),
                                     require_array: true,
                                     define_undefined: false,
                                 },
                                 ArgSepSyntax::Exactly(ArgSep::Long),
                             ),
                             SingularArgSyntax::RequiredValue(
-                                RequiredValueSyntax { name: "dimension", vtype: ExprType::Integer },
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("dimension"),
+                                    vtype: ExprType::Integer,
+                                },
                                 ArgSepSyntax::End,
                             ),
                         ],
