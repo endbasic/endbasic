@@ -13,3 +13,8 @@ argless_string_set: foobar
 >>> Call chains
 first:  5
 second: foo
+>>> Local variables
+defined_globally on exit:  2
+defined_locally on exit:  3
+ 0
+ 1

@@ -80,3 +80,18 @@ END FUNCTION
 
 PRINT "first: "; first
 PRINT "second: "; second
+
+PRINT ">>> Local variables"
+
+defined_globally = 1
+
+FUNCTION local
+    defined_globally = 2
+    defined_locally = 3
+    PRINT "defined_globally on exit: "; defined_globally
+    PRINT "defined_locally on exit: "; defined_locally
+END FUNCTION
+
+PRINT local
+PRINT defined_globally
+defined_locally = "foo"  ' Would yield type error if not unset on exit.

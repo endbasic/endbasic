@@ -504,7 +504,8 @@ impl Callable for SumFunction {
 // in the real Symbols).
 #[derive(Default)]
 pub struct SymbolsBuilder {
-    by_name: HashMap<SymbolKey, Symbol>,
+    globals: HashMap<SymbolKey, Symbol>,
+    scope: HashMap<SymbolKey, Symbol>,
 }
 
 impl SymbolsBuilder {
@@ -513,26 +514,26 @@ impl SymbolsBuilder {
     pub fn add_array<S: AsRef<str>>(mut self, name: S, subtype: ExprType) -> Self {
         let key = SymbolKey::from(name);
         let array = Array::new(subtype, vec![10]);
-        self.by_name.insert(key, Symbol::Array(array));
+        self.scope.insert(key, Symbol::Array(array));
         self
     }
 
     /// Adds the `callable` to the list of symbols.
     pub fn add_callable(mut self, callable: Rc<dyn Callable>) -> Self {
         let name = callable.metadata().name();
-        self.by_name.insert(SymbolKey::from(name), Symbol::Callable(callable));
+        self.globals.insert(SymbolKey::from(name), Symbol::Callable(callable));
         self
     }
 
     /// Adds the variable named `name` with an initial `value` to the list of symbols.
     pub fn add_var<S: AsRef<str>>(mut self, name: S, value: Value) -> Self {
         let key = SymbolKey::from(name);
-        self.by_name.insert(key, Symbol::Variable(value));
+        self.scope.insert(key, Symbol::Variable(value));
         self
     }
 
     pub fn build(self) -> Symbols {
-        Symbols::from(self.by_name)
+        Symbols::from(self.globals, self.scope)
     }
 }
 
