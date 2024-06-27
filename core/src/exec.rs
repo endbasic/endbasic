@@ -1352,6 +1352,11 @@ impl Machine {
                 self.end(context, *has_code)?;
             }
 
+            Instruction::EnterScope => {
+                self.symbols.enter_scope();
+                context.pc += 1;
+            }
+
             Instruction::IntegerToDouble => {
                 let (i, pos) = context.value_stack.pop_integer_with_pos();
                 context.value_stack.push_double(i as f64, pos);
@@ -1398,6 +1403,11 @@ impl Machine {
                     }
                     context.pc = *addr;
                 }
+            }
+
+            Instruction::LeaveScope => {
+                self.symbols.leave_scope();
+                context.pc += 1;
             }
 
             Instruction::LoadBoolean(key, pos) => {
@@ -3143,7 +3153,7 @@ mod tests {
 
         let mut machine = Machine::default();
         assert_eq!(StopReason::Eof, block_on(machine.exec(&mut code.as_bytes())).unwrap());
-        assert_eq!(1, machine.get_symbols().as_hashmap().len());
+        assert_eq!(1, machine.get_symbols().locals().len());
         assert_eq!(4, machine.get_var_as_int("I").unwrap());
     }
 
@@ -3400,5 +3410,23 @@ mod tests {
             OUT f%
         "#;
         do_error_test(code, &[], &[], "3:17: Incompatible type annotation in f% reference");
+    }
+
+    #[test]
+    fn test_user_functions_local_namespace() {
+        let code = r#"
+            v1 = 3
+            FUNCTION f1
+                v1 = 5
+                v2 = 7
+            END FUNCTION
+            FUNCTION f2
+                v1$ = "foo"
+                v2$ = "bar"
+            END FUNCTION
+            v2 = TRUE
+            OUT f1; f2; v1
+        "#;
+        do_ok_test(code, &[], &["0 0 3"]);
     }
 }

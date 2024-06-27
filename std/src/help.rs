@@ -337,21 +337,17 @@ impl Topics {
         }
 
         let mut categories = HashMap::new();
-        for (name, symbol) in symbols.as_hashmap().iter() {
-            if let Some(metadata) = symbol.metadata() {
-                let category_title = metadata.category().lines().next().unwrap();
-                categories
-                    .entry(category_title)
-                    .or_insert_with(Vec::default)
-                    .push(metadata.clone());
+        for (name, symbol) in symbols.callables().iter() {
+            let metadata = symbol.metadata();
+            let category_title = metadata.category().lines().next().unwrap();
+            categories.entry(category_title).or_insert_with(Vec::default).push(metadata.clone());
 
-                let name = match metadata.return_type() {
-                    None => metadata.name().to_owned(),
-                    Some(return_type) => format!("{}{}", name, return_type.annotation()),
-                };
+            let name = match metadata.return_type() {
+                None => metadata.name().to_owned(),
+                Some(return_type) => format!("{}{}", name, return_type.annotation()),
+            };
 
-                insert(&mut topics, Box::from(CallableTopic { name, metadata: metadata.clone() }));
-            }
+            insert(&mut topics, Box::from(CallableTopic { name, metadata: metadata.clone() }));
         }
         for (name, metadatas) in categories.into_iter() {
             let description = metadatas.first().expect("Must have at least one symbol").category();

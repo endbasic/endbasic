@@ -243,37 +243,80 @@ impl fmt::Debug for Symbol {
 }
 
 /// Storage for all symbols that exist at runtime.
-#[derive(Default)]
+///
+/// Symbols are represented as a two-layer map: the globals map contains all symbols that are
+/// visible by all scopes, and the scope contains all symbols that are only visible within a
+/// given scope.
+///
+/// The collection of symbols that is visible at any given point in time is thus the union of
+/// the global symbols and the symbols in the last scope.
+///
+/// Scopes are represented as a stack in order to support nested function calls.
 pub struct Symbols {
-    /// Map of symbol names to their definitions.
-    by_name: HashMap<SymbolKey, Symbol>,
+    /// Map of global symbol names to their definitions.
+    globals: HashMap<SymbolKey, Symbol>,
+
+    /// Map of local symbol names to their definitions.
+    scopes: Vec<HashMap<SymbolKey, Symbol>>,
+}
+
+impl Default for Symbols {
+    fn default() -> Self {
+        Self { globals: HashMap::default(), scopes: vec![HashMap::default()] }
+    }
 }
 
 impl Symbols {
     /// Constructs a symbols object from a flat map of symbol names to their definitions.
     #[cfg(test)]
-    pub(crate) fn from(by_name: HashMap<SymbolKey, Symbol>) -> Self {
-        Self { by_name }
+    pub(crate) fn from(
+        globals: HashMap<SymbolKey, Symbol>,
+        scope: HashMap<SymbolKey, Symbol>,
+    ) -> Self {
+        Self { globals, scopes: vec![scope] }
     }
 
-    /// Registers the given builtin callable.
+    /// Enters a new scope.
+    pub(crate) fn enter_scope(&mut self) {
+        self.scopes.push(HashMap::default());
+    }
+
+    /// Leaves the current scope.
+    pub(crate) fn leave_scope(&mut self) {
+        let last = self.scopes.pop();
+        assert!(last.is_some(), "Must have at least one scope to pop");
+        assert!(!self.scopes.is_empty(), "Cannot pop the global scope");
+    }
+
+    /// Registers the given builtin callable as a global symbol.
     ///
-    /// Given that callable cannot be defined at runtime, specifying a non-unique name results in
+    /// Given that callables cannot be defined at runtime, specifying a non-unique name results in
     /// a panic.
     pub fn add_callable(&mut self, callable: Rc<dyn Callable>) {
         let key = SymbolKey::from(callable.metadata().name());
-        assert!(!self.by_name.contains_key(&key));
-        self.by_name.insert(key.to_owned(), Symbol::Callable(callable));
+        assert!(!self.globals.contains_key(&key));
+        self.globals.insert(key.to_owned(), Symbol::Callable(callable));
     }
 
-    /// Returns the mapping of all symbols.
-    pub fn as_hashmap(&self) -> &HashMap<SymbolKey, Symbol> {
-        &self.by_name
+    /// Returns the mapping of all callables.
+    pub fn callables(&self) -> HashMap<&SymbolKey, Rc<dyn Callable>> {
+        let mut callables = HashMap::with_capacity(self.globals.len());
+        for (key, symbol) in &self.globals {
+            if let Symbol::Callable(c) = symbol {
+                callables.insert(key, c.clone());
+            }
+        }
+        callables
+    }
+
+    /// Returns the mapping of all symbols in the current scope that are not globals.
+    pub fn locals(&self) -> &HashMap<SymbolKey, Symbol> {
+        self.scopes.last().unwrap()
     }
 
     /// Clears all user-defined symbols.
     pub fn clear(&mut self) {
-        self.by_name.retain(|key, symbol| {
+        self.scopes.last_mut().unwrap().retain(|key, symbol| {
             let is_internal = key.0.starts_with(|c: char| c.is_ascii_digit());
 
             // TODO(jmmv): Preserving symbols that start with __ is a hack that was added to support
@@ -287,21 +330,21 @@ impl Symbols {
 
     /// Defines a new variable `key` of type `etype`.  The variable must not yet exist.
     pub fn dim(&mut self, key: SymbolKey, etype: ExprType) {
-        let previous = self.by_name.insert(key, Symbol::Variable(etype.default_value()));
         debug_assert!(
-            previous.is_none(),
+            !self.globals.contains_key(&key) && !self.scopes.last_mut().unwrap().contains_key(&key),
             "Pre-existence of variables is checked at compilation time"
         );
+        self.scopes.last_mut().unwrap().insert(key, Symbol::Variable(etype.default_value()));
     }
 
     /// Defines a new array `key` of type `subtype` with `dimensions`.  The array must not yet
     /// exist, and the name may not overlap function or variable names.
     pub fn dim_array(&mut self, key: SymbolKey, subtype: ExprType, dimensions: Vec<usize>) {
-        let previous = self.by_name.insert(key, Symbol::Array(Array::new(subtype, dimensions)));
         debug_assert!(
-            previous.is_none(),
+            !self.globals.contains_key(&key) && !self.scopes.last_mut().unwrap().contains_key(&key),
             "Pre-existence of variables is checked at compilation time"
         );
+        self.scopes.last_mut().unwrap().insert(key, Symbol::Array(Array::new(subtype, dimensions)));
     }
 
     /// Obtains the value of a symbol or `None` if it is not defined.
@@ -309,7 +352,11 @@ impl Symbols {
     /// This is meant to use by the compiler only.  All other users should call `get` instead
     /// to do the necessary runtime validity checks.
     pub(crate) fn load(&self, key: &SymbolKey) -> Option<&Symbol> {
-        self.by_name.get(key)
+        let local = self.scopes.last().unwrap().get(key);
+        if local.is_some() {
+            return local;
+        }
+        self.globals.get(key)
     }
 
     /// Obtains the value of a symbol or `None` if it is not defined.
@@ -317,7 +364,11 @@ impl Symbols {
     /// This is meant to use by the compiler only.  All other users should call `get` instead
     /// to do the necessary runtime validity checks.
     pub(crate) fn load_mut(&mut self, key: &SymbolKey) -> Option<&mut Symbol> {
-        self.by_name.get_mut(key)
+        let local = self.scopes.last_mut().unwrap().get_mut(key);
+        if local.is_some() {
+            return local;
+        }
+        self.globals.get_mut(key)
     }
 
     /// Obtains the value of a symbol or `None` if it is not defined.
@@ -338,14 +389,14 @@ impl Symbols {
     /// Obtains the value of a symbol or `None` if it is not defined.
     pub fn get_auto(&self, var: &str) -> Option<&Symbol> {
         let key = SymbolKey::from(var);
-        self.by_name.get(&key)
+        self.load(&key)
     }
 
     /// Obtains the value of a symbol or `None` if it is not defined.
     ///
     /// Returns an error if the type annotation in the symbol reference does not match its type.
     pub fn get_mut(&mut self, vref: &VarRef) -> Result<Option<&mut Symbol>> {
-        match self.by_name.get_mut(&vref.as_symbol_key()) {
+        match self.load_mut(&vref.as_symbol_key()) {
             Some(symbol) => {
                 let stype = symbol.eval_type();
                 if !vref.accepts_callable(stype) {
@@ -375,7 +426,7 @@ impl Symbols {
     /// This is meant to use by the compiler only.  All other users should call `set_var` instead
     /// to do the necessary runtime validity checks.
     pub(crate) fn assign(&mut self, key: &SymbolKey, value: Value) {
-        match self.by_name.get_mut(key) {
+        match self.scopes.last_mut().unwrap().get_mut(key) {
             Some(Symbol::Variable(old_value)) => {
                 debug_assert_eq!(
                     mem::discriminant(old_value),
@@ -386,7 +437,7 @@ impl Symbols {
             }
             Some(_) => unreachable!("Type consistency is validated at compilation time"),
             None => {
-                self.by_name.insert(key.clone(), Symbol::Variable(value));
+                self.scopes.last_mut().unwrap().insert(key.clone(), Symbol::Variable(value));
             }
         }
     }
@@ -425,7 +476,7 @@ impl Symbols {
                         )));
                     }
                 }
-                self.by_name.insert(key, Symbol::Variable(value));
+                self.scopes.last_mut().unwrap().insert(key, Symbol::Variable(value));
                 Ok(())
             }
         }
@@ -433,7 +484,7 @@ impl Symbols {
 
     /// Unsets the symbol `key` irrespective of its type.
     pub(crate) fn unset(&mut self, key: &SymbolKey) -> Result<()> {
-        match self.by_name.remove(key) {
+        match self.scopes.last_mut().unwrap().remove(key) {
             Some(_) => Ok(()),
             None => Err(Error::new(format!("{} is not defined", key))),
         }
@@ -1272,19 +1323,23 @@ mod tests {
             .add_var("SOMEVAR", Value::Boolean(true))
             .build();
 
-        let mut count = 4;
-        for name in ["SomeArray", "Out", "Sum", "SomeVar"] {
+        let mut count = 2;
+        for name in ["SomeArray", "SomeVar"] {
             syms.unset(&SymbolKey::from(name)).unwrap();
             count -= 1;
-            assert_eq!(count, syms.as_hashmap().len());
+            assert_eq!(count, syms.locals().len());
         }
         assert_eq!(0, count);
+
+        syms.unset(&SymbolKey::from("Out")).unwrap_err();
+        syms.unset(&SymbolKey::from("Sum")).unwrap_err();
+        assert_eq!(2, syms.callables().len());
     }
 
     #[test]
     fn test_symbols_unset_undefined() {
         let mut syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
         syms.unset(&SymbolKey::from("FOO")).unwrap_err();
-        assert_eq!(1, syms.as_hashmap().len());
+        assert_eq!(1, syms.locals().len());
     }
 }

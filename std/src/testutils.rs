@@ -716,7 +716,7 @@ impl<'a> Checker<'a> {
 
         let mut arrays = HashMap::default();
         let mut vars = HashMap::default();
-        for (name, symbol) in self.tester.machine.get_symbols().as_hashmap() {
+        for (name, symbol) in self.tester.machine.get_symbols().locals() {
             match symbol {
                 Symbol::Array(array) => {
                     // TODO(jmmv): This array.clone() call is a hack to simplify the equality check

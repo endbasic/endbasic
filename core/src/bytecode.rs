@@ -252,6 +252,9 @@ pub enum Instruction {
     /// at the top of the stack.
     End(bool),
 
+    /// Represents a request to create a new scope for symbols.
+    EnterScope,
+
     /// Represents a conversion of a float to an integer with rounding.
     DoubleToInteger,
 
@@ -269,6 +272,9 @@ pub enum Instruction {
 
     /// Represents an conditional jump that jumps if the condition is not met.
     JumpIfNotTrue(Address),
+
+    /// Represents a request to leave the current scope for symbols.
+    LeaveScope,
 
     /// Represents a load of a boolean variable's value from main memory into the stack.
     LoadBoolean(SymbolKey, LineCol),
@@ -370,7 +376,9 @@ impl Instruction {
             | Instruction::PushBoolean(_, _)
             | Instruction::PushDouble(_, _)
             | Instruction::PushInteger(_, _)
-            | Instruction::PushString(_, _) => false,
+            | Instruction::PushString(_, _)
+            | Instruction::EnterScope
+            | Instruction::LeaveScope => false,
 
             Instruction::ArrayAssignment(_, _, _)
             | Instruction::Assign(_)

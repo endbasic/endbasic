@@ -97,65 +97,121 @@ enum SymbolPrototype {
     Variable(ExprType),
 }
 
-/// Type for the symbols table.
-#[derive(Default)]
+/// The symbols table used during compilation.
+///
+/// Symbols are represented as a two-layer map: the globals map contains all symbols that are
+/// visible by all scopes, and the scope contains all symbols that are only visible within a
+/// given scope.
+///
+/// The collection of symbols that is visible at any given point in time is thus the union of
+/// the global symbols and the symbols in the last scope.
+///
+/// There is always at least one scope in the scopes stack: at the program level outside of
+/// functions, variables are not global by default and thus they are kept in their own scope.
+/// But because we do not support nested function definitions, the scopes "stack" should
+/// always have size of one or two.
 struct SymbolsTable {
-    table: HashMap<SymbolKey, SymbolPrototype>,
+    /// Map of global symbol names to their definitions.
+    globals: HashMap<SymbolKey, SymbolPrototype>,
+
+    /// Map of local symbol names to their definitions.
+    scopes: Vec<HashMap<SymbolKey, SymbolPrototype>>,
+}
+
+impl Default for SymbolsTable {
+    fn default() -> Self {
+        Self { globals: HashMap::default(), scopes: vec![HashMap::default()] }
+    }
 }
 
 impl From<HashMap<SymbolKey, SymbolPrototype>> for SymbolsTable {
-    fn from(table: HashMap<SymbolKey, SymbolPrototype>) -> Self {
-        Self { table }
+    fn from(globals: HashMap<SymbolKey, SymbolPrototype>) -> Self {
+        Self { globals, scopes: vec![HashMap::default()] }
     }
 }
 
 impl From<&Symbols> for SymbolsTable {
     fn from(syms: &Symbols) -> Self {
-        let mut table = HashMap::default();
-        for (name, symbol) in syms.as_hashmap() {
+        let mut globals = HashMap::default();
+        for (name, callable) in syms.callables() {
+            let proto = SymbolPrototype::Callable(callable.metadata().clone());
+            globals.insert(name.clone(), proto);
+        }
+
+        let mut scope = HashMap::default();
+        for (name, symbol) in syms.locals() {
             let proto = match symbol {
                 Symbol::Array(array) => {
                     SymbolPrototype::Array(array.subtype(), array.dimensions().len())
                 }
-                Symbol::Callable(callable) => {
-                    SymbolPrototype::Callable(callable.metadata().clone())
+                Symbol::Callable(_) => {
+                    unreachable!("Callables must only be global");
                 }
                 Symbol::Variable(var) => SymbolPrototype::Variable(var.as_exprtype()),
             };
-            table.insert(name.clone(), proto);
+            scope.insert(name.clone(), proto);
         }
-        Self { table }
+
+        Self { globals, scopes: vec![scope] }
     }
 }
 
 impl SymbolsTable {
+    /// Enters a new scope.
+    fn enter_scope(&mut self) {
+        self.scopes.push(HashMap::default());
+    }
+
+    /// Leaves the current scope.
+    fn leave_scope(&mut self) {
+        let last = self.scopes.pop();
+        assert!(last.is_some(), "Must have at least one scope to pop");
+        assert!(!self.scopes.is_empty(), "Cannot pop the global scope");
+    }
+
     /// Returns true if the symbols table contains `key`.
     fn contains_key(&mut self, key: &SymbolKey) -> bool {
-        self.table.contains_key(key)
+        self.scopes.last().unwrap().contains_key(key) || self.globals.contains_key(key)
     }
 
     /// Returns the information for the symbol `key` if it exists, otherwise `None`.
     fn get(&self, key: &SymbolKey) -> Option<&SymbolPrototype> {
-        self.table.get(key)
+        let proto = self.scopes.last().unwrap().get(key);
+        if proto.is_some() {
+            return proto;
+        }
+
+        self.globals.get(key)
     }
 
     /// Inserts the new information `proto` about symbol `key` into the symbols table.
     /// The symbol must not yet exist.
     fn insert(&mut self, key: SymbolKey, proto: SymbolPrototype) {
-        let previous = self.table.insert(key, proto);
-        assert!(previous.is_none(), "Cannot redefine a symbol");
+        debug_assert!(!self.globals.contains_key(&key), "Cannot redefine a symbol");
+        let previous = self.scopes.last_mut().unwrap().insert(key, proto);
+        debug_assert!(previous.is_none(), "Cannot redefine a symbol");
+    }
+
+    /// Inserts the new information `proto` about symbol `key` into the symbols table.
+    /// The symbol must not yet exist.
+    fn insert_global(&mut self, key: SymbolKey, proto: SymbolPrototype) {
+        let previous = self.globals.insert(key, proto);
+        debug_assert!(previous.is_none(), "Cannot redefine a symbol");
     }
 
     /// Removes information about the symbol `key`.
     fn remove(&mut self, key: SymbolKey) {
-        let previous = self.table.remove(&key);
-        assert!(previous.is_some(), "Cannot unset a non-existing symbol");
+        let previous = self.scopes.last_mut().unwrap().remove(&key);
+        debug_assert!(previous.is_some(), "Cannot unset a non-existing symbol");
     }
 
     /// Returns a view of the keys in the symbols table.
     #[cfg(test)]
     fn keys(&self) -> HashSet<&SymbolKey> {
-        self.table.keys().collect()
+        let mut keys = HashSet::default();
+        keys.extend(self.globals.keys());
+        keys.extend(self.scopes.last().unwrap().keys());
+        keys
     }
 }
 
@@ -830,8 +886,10 @@ impl Compiler {
                     .with_category("User defined")
                     .with_description("User defined symbol")
                     .build();
-                self.symtable
-                    .insert(SymbolKey::from(span.name.name()), SymbolPrototype::Callable(md));
+                self.symtable.insert_global(
+                    SymbolKey::from(span.name.name()),
+                    SymbolPrototype::Callable(md),
+                );
                 self.function_spans.push(span);
             }
 
@@ -903,6 +961,9 @@ impl Compiler {
 
             let return_type = span.name.ref_type().unwrap_or(ExprType::Integer);
 
+            self.emit(Instruction::EnterScope);
+            self.symtable.enter_scope();
+
             self.emit(Instruction::Dim(return_value.clone(), return_type));
             self.symtable.insert(return_value.clone(), SymbolPrototype::Variable(return_type));
 
@@ -917,11 +978,9 @@ impl Compiler {
                 ExprType::Text => Instruction::LoadString,
             };
             self.emit(load_inst(return_value.clone(), span.end_pos));
-            self.emit(Instruction::Unset(UnsetISpan {
-                name: return_value.clone(),
-                pos: span.end_pos,
-            }));
-            self.symtable.remove(return_value);
+
+            self.emit(Instruction::LeaveScope);
+            self.symtable.leave_scope();
             self.emit(Instruction::Return(span.end_pos));
 
             functions.insert(key, pc);
@@ -1811,19 +1870,14 @@ mod tests {
         Tester::default()
             .parse("FUNCTION foo: a = 3: END FUNCTION")
             .compile()
-            .expect_instr(0, Instruction::Jump(JumpISpan { addr: 7 }))
-            .expect_instr(1, Instruction::Dim(SymbolKey::from("0return_foo"), ExprType::Integer))
-            .expect_instr(2, Instruction::PushInteger(3, lc(1, 19)))
-            .expect_instr(3, Instruction::Assign(SymbolKey::from("a")))
-            .expect_instr(4, Instruction::LoadInteger(SymbolKey::from("0return_foo"), lc(1, 22)))
-            .expect_instr(
-                5,
-                Instruction::Unset(UnsetISpan {
-                    name: SymbolKey::from("0return_foo"),
-                    pos: lc(1, 22),
-                }),
-            )
-            .expect_instr(6, Instruction::Return(lc(1, 22)))
+            .expect_instr(0, Instruction::Jump(JumpISpan { addr: 8 }))
+            .expect_instr(1, Instruction::EnterScope)
+            .expect_instr(2, Instruction::Dim(SymbolKey::from("0return_foo"), ExprType::Integer))
+            .expect_instr(3, Instruction::PushInteger(3, lc(1, 19)))
+            .expect_instr(4, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(5, Instruction::LoadInteger(SymbolKey::from("0return_foo"), lc(1, 22)))
+            .expect_instr(6, Instruction::LeaveScope)
+            .expect_instr(7, Instruction::Return(lc(1, 22)))
             .expect_symtable(
                 SymbolKey::from("foo"),
                 SymbolPrototype::Callable(
@@ -1846,17 +1900,12 @@ mod tests {
             .expect_instr(1, Instruction::Assign(SymbolKey::from("before")))
             .expect_instr(2, Instruction::PushInteger(2, lc(1, 49)))
             .expect_instr(3, Instruction::Assign(SymbolKey::from("after")))
-            .expect_instr(4, Instruction::Jump(JumpISpan { addr: 9 }))
-            .expect_instr(5, Instruction::Dim(SymbolKey::from("0return_foo"), ExprType::Integer))
-            .expect_instr(6, Instruction::LoadInteger(SymbolKey::from("0return_foo"), lc(1, 27)))
-            .expect_instr(
-                7,
-                Instruction::Unset(UnsetISpan {
-                    name: SymbolKey::from("0return_foo"),
-                    pos: lc(1, 27),
-                }),
-            )
-            .expect_instr(8, Instruction::Return(lc(1, 27)))
+            .expect_instr(4, Instruction::Jump(JumpISpan { addr: 10 }))
+            .expect_instr(5, Instruction::EnterScope)
+            .expect_instr(6, Instruction::Dim(SymbolKey::from("0return_foo"), ExprType::Integer))
+            .expect_instr(7, Instruction::LoadInteger(SymbolKey::from("0return_foo"), lc(1, 27)))
+            .expect_instr(8, Instruction::LeaveScope)
+            .expect_instr(9, Instruction::Return(lc(1, 27)))
             .expect_symtable(
                 SymbolKey::from("foo"),
                 SymbolPrototype::Callable(
