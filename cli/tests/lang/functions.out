@@ -18,3 +18,7 @@ defined_globally on exit:  2
 defined_locally on exit:  3
  0
  1
+>>> Global variables
+get_really_global returned:  2
+get_really_global returned:  4
+really_global is:  3

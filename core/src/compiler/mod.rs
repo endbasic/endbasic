@@ -462,8 +462,16 @@ impl Compiler {
             ));
         }
 
-        self.emit(Instruction::Dim(key.clone(), span.vtype));
-        self.symtable.insert(key, SymbolPrototype::Variable(span.vtype));
+        self.emit(Instruction::Dim(DimISpan {
+            name: key.clone(),
+            shared: span.shared,
+            vtype: span.vtype,
+        }));
+        if span.shared {
+            self.symtable.insert_global(key, SymbolPrototype::Variable(span.vtype));
+        } else {
+            self.symtable.insert(key, SymbolPrototype::Variable(span.vtype));
+        }
 
         Ok(())
     }
@@ -537,7 +545,11 @@ impl Compiler {
 
             let iter_key = SymbolKey::from(span.iter.name());
             if self.symtable.get(&key).is_none() {
-                self.emit(Instruction::Dim(key, ExprType::Double));
+                self.emit(Instruction::Dim(DimISpan {
+                    name: key,
+                    shared: false,
+                    vtype: ExprType::Double,
+                }));
                 self.symtable.insert(iter_key.clone(), SymbolPrototype::Variable(ExprType::Double));
             }
 
@@ -842,12 +854,17 @@ impl Compiler {
                 self.emit(Instruction::DimArray(DimArrayISpan {
                     name: key.clone(),
                     name_pos: span.name_pos,
+                    shared: span.shared,
                     dimensions: nargs,
                     subtype: span.subtype,
                     subtype_pos: span.subtype_pos,
                 }));
 
-                self.symtable.insert(key, SymbolPrototype::Array(span.subtype, nargs));
+                if span.shared {
+                    self.symtable.insert_global(key, SymbolPrototype::Array(span.subtype, nargs));
+                } else {
+                    self.symtable.insert(key, SymbolPrototype::Array(span.subtype, nargs));
+                }
             }
 
             Statement::Do(span) => {
@@ -964,7 +981,11 @@ impl Compiler {
             self.emit(Instruction::EnterScope);
             self.symtable.enter_scope();
 
-            self.emit(Instruction::Dim(return_value.clone(), return_type));
+            self.emit(Instruction::Dim(DimISpan {
+                name: return_value.clone(),
+                shared: false,
+                vtype: return_type,
+            }));
             self.symtable.insert(return_value.clone(), SymbolPrototype::Variable(return_type));
 
             self.current_function = Some(key.clone());
@@ -1470,22 +1491,50 @@ mod tests {
         Tester::default()
             .parse("DIM var AS BOOLEAN")
             .compile()
-            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), ExprType::Boolean))
+            .expect_instr(
+                0,
+                Instruction::Dim(DimISpan {
+                    name: SymbolKey::from("var"),
+                    shared: false,
+                    vtype: ExprType::Boolean,
+                }),
+            )
             .check();
         Tester::default()
             .parse("DIM var AS DOUBLE")
             .compile()
-            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), ExprType::Double))
+            .expect_instr(
+                0,
+                Instruction::Dim(DimISpan {
+                    name: SymbolKey::from("var"),
+                    shared: false,
+                    vtype: ExprType::Double,
+                }),
+            )
             .check();
         Tester::default()
             .parse("DIM var AS INTEGER")
             .compile()
-            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), ExprType::Integer))
+            .expect_instr(
+                0,
+                Instruction::Dim(DimISpan {
+                    name: SymbolKey::from("var"),
+                    shared: false,
+                    vtype: ExprType::Integer,
+                }),
+            )
             .check();
         Tester::default()
             .parse("DIM var AS STRING")
             .compile()
-            .expect_instr(0, Instruction::Dim(SymbolKey::from("var"), ExprType::Text))
+            .expect_instr(
+                0,
+                Instruction::Dim(DimISpan {
+                    name: SymbolKey::from("var"),
+                    shared: false,
+                    vtype: ExprType::Text,
+                }),
+            )
             .check();
     }
 
@@ -1525,6 +1574,37 @@ mod tests {
     }
 
     #[test]
+    fn test_compile_dim_shared_ok() {
+        Tester::default()
+            .parse("DIM SHARED var AS BOOLEAN")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::Dim(DimISpan {
+                    name: SymbolKey::from("var"),
+                    shared: true,
+                    vtype: ExprType::Boolean,
+                }),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_dim_shared_name_overlap_with_local() {
+        Tester::default()
+            .parse("DIM var AS BOOLEAN: DIM SHARED Var AS BOOLEAN")
+            .compile()
+            .expect_err("1:32: Cannot DIM already-defined symbol Var")
+            .check();
+
+        Tester::default()
+            .parse("DIM SHARED var AS BOOLEAN: DIM Var AS BOOLEAN")
+            .compile()
+            .expect_err("1:32: Cannot DIM already-defined symbol Var")
+            .check();
+    }
+
+    #[test]
     fn test_compile_dim_array_immediate() {
         Tester::default()
             .parse("DIM var(1) AS INTEGER")
@@ -1535,6 +1615,7 @@ mod tests {
                 Instruction::DimArray(DimArrayISpan {
                     name: SymbolKey::from("var"),
                     name_pos: lc(1, 5),
+                    shared: false,
                     dimensions: 1,
                     subtype: ExprType::Integer,
                     subtype_pos: lc(1, 15),
@@ -1558,6 +1639,7 @@ mod tests {
                 Instruction::DimArray(DimArrayISpan {
                     name: SymbolKey::from("var"),
                     name_pos: lc(1, 5),
+                    shared: false,
                     dimensions: 2,
                     subtype: ExprType::Integer,
                     subtype_pos: lc(1, 22),
@@ -1578,6 +1660,7 @@ mod tests {
                 Instruction::DimArray(DimArrayISpan {
                     name: SymbolKey::from("var"),
                     name_pos: lc(1, 5),
+                    shared: false,
                     dimensions: 1,
                     subtype: ExprType::Integer,
                     subtype_pos: lc(1, 17),
@@ -1592,6 +1675,41 @@ mod tests {
             .parse("DIM var(TRUE) AS INTEGER")
             .compile()
             .expect_err("1:9: BOOLEAN is not a number")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_dim_array_shared_ok() {
+        Tester::default()
+            .parse("DIM SHARED var(1) AS INTEGER")
+            .compile()
+            .expect_instr(0, Instruction::PushInteger(1, lc(1, 16)))
+            .expect_instr(
+                1,
+                Instruction::DimArray(DimArrayISpan {
+                    name: SymbolKey::from("var"),
+                    name_pos: lc(1, 12),
+                    shared: true,
+                    dimensions: 1,
+                    subtype: ExprType::Integer,
+                    subtype_pos: lc(1, 22),
+                }),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_dim_array_shared_name_overlap_with_local() {
+        Tester::default()
+            .parse("DIM var(1) AS BOOLEAN: DIM SHARED Var(1) AS BOOLEAN")
+            .compile()
+            .expect_err("1:35: Cannot DIM already-defined symbol Var")
+            .check();
+
+        Tester::default()
+            .parse("DIM SHARED var(1) AS BOOLEAN: DIM Var(1) AS BOOLEAN")
+            .compile()
+            .expect_err("1:35: Cannot DIM already-defined symbol Var")
             .check();
     }
 
@@ -1848,7 +1966,14 @@ mod tests {
                     addr: 2,
                 }),
             )
-            .expect_instr(1, Instruction::Dim(SymbolKey::from("iter"), ExprType::Double))
+            .expect_instr(
+                1,
+                Instruction::Dim(DimISpan {
+                    name: SymbolKey::from("iter"),
+                    shared: false,
+                    vtype: ExprType::Double,
+                }),
+            )
             .expect_instr(2, Instruction::PushInteger(0, lc(1, 12)))
             .expect_instr(3, Instruction::IntegerToDouble)
             .expect_instr(4, Instruction::Assign(SymbolKey::from("iter")))
@@ -1872,7 +1997,14 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::Jump(JumpISpan { addr: 8 }))
             .expect_instr(1, Instruction::EnterScope)
-            .expect_instr(2, Instruction::Dim(SymbolKey::from("0return_foo"), ExprType::Integer))
+            .expect_instr(
+                2,
+                Instruction::Dim(DimISpan {
+                    name: SymbolKey::from("0return_foo"),
+                    shared: false,
+                    vtype: ExprType::Integer,
+                }),
+            )
             .expect_instr(3, Instruction::PushInteger(3, lc(1, 19)))
             .expect_instr(4, Instruction::Assign(SymbolKey::from("a")))
             .expect_instr(5, Instruction::LoadInteger(SymbolKey::from("0return_foo"), lc(1, 22)))
@@ -1902,7 +2034,14 @@ mod tests {
             .expect_instr(3, Instruction::Assign(SymbolKey::from("after")))
             .expect_instr(4, Instruction::Jump(JumpISpan { addr: 10 }))
             .expect_instr(5, Instruction::EnterScope)
-            .expect_instr(6, Instruction::Dim(SymbolKey::from("0return_foo"), ExprType::Integer))
+            .expect_instr(
+                6,
+                Instruction::Dim(DimISpan {
+                    name: SymbolKey::from("0return_foo"),
+                    shared: false,
+                    vtype: ExprType::Integer,
+                }),
+            )
             .expect_instr(7, Instruction::LoadInteger(SymbolKey::from("0return_foo"), lc(1, 27)))
             .expect_instr(8, Instruction::LeaveScope)
             .expect_instr(9, Instruction::Return(lc(1, 27)))

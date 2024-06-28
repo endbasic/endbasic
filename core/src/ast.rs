@@ -516,6 +516,9 @@ pub struct DimSpan {
     /// Position of the name.
     pub name_pos: LineCol,
 
+    /// Whether the variable is global or not.
+    pub shared: bool,
+
     /// Type of the variable to be defined.
     pub vtype: ExprType,
 
@@ -533,6 +536,9 @@ pub struct DimArraySpan {
 
     /// Position of the name.
     pub name_pos: LineCol,
+
+    /// Whether the array is global or not.
+    pub shared: bool,
 
     /// Expressions to compute the dimensions of the array.
     pub dimensions: Vec<Expr>,

@@ -63,6 +63,8 @@ for the time being.**
 
 *   Issue #112: Added user-defined functions.
 
+*   Issue #112: Added support for global variables via `DIM SHARED`.
+
 ## Changes in version 0.10.0
 
 **Released on 2022-12-27.**

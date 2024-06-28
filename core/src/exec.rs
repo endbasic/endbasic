@@ -773,7 +773,11 @@ impl Machine {
             }
             ds.push(i as usize);
         }
-        self.symbols.dim_array(span.name.clone(), span.subtype, ds);
+        if span.shared {
+            self.symbols.dim_shared_array(span.name.clone(), span.subtype, ds);
+        } else {
+            self.symbols.dim_array(span.name.clone(), span.subtype, ds);
+        }
         Ok(())
     }
 
@@ -1338,8 +1342,12 @@ impl Machine {
                 context.pc += 1;
             }
 
-            Instruction::Dim(name, etype) => {
-                self.symbols.dim(name.clone(), *etype);
+            Instruction::Dim(span) => {
+                if span.shared {
+                    self.symbols.dim_shared(span.name.clone(), span.vtype);
+                } else {
+                    self.symbols.dim(span.name.clone(), span.vtype);
+                }
                 context.pc += 1;
             }
 
@@ -3428,5 +3436,21 @@ mod tests {
             OUT f1; f2; v1
         "#;
         do_ok_test(code, &[], &["0 0 3"]);
+    }
+
+    #[test]
+    fn test_user_functions_global_namespace() {
+        let code = r#"
+            DIM SHARED v1 AS DOUBLE
+            v1 = 8.7
+            FUNCTION f1
+                v1 = 9.2
+            END FUNCTION
+            FUNCTION f2#
+                f2 = v1 + 1
+            END FUNCTION
+            OUT f1; f2; v1
+        "#;
+        do_ok_test(code, &[], &["0 9.7 8.7"]);
     }
 }

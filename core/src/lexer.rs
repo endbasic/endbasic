@@ -98,6 +98,7 @@ pub enum Token {
     While,
 
     Dim,
+    Shared,
     As,
     BooleanName,
     DoubleName,
@@ -180,6 +181,7 @@ impl fmt::Display for Token {
             Token::While => write!(f, "WHILE"),
 
             Token::Dim => write!(f, "DIM"),
+            Token::Shared => write!(f, "SHARED"),
             Token::As => write!(f, "AS"),
             Token::BooleanName => write!(f, "BOOLEAN"),
             Token::DoubleName => write!(f, "DOUBLE"),
@@ -543,6 +545,7 @@ impl<'a> Lexer<'a> {
             "RESUME" => Token::Resume,
             "RETURN" => Token::Return,
             "SELECT" => Token::Select,
+            "SHARED" => Token::Shared,
             "STEP" => Token::Step,
             "STRING" => Token::TextName,
             "THEN" => Token::Then,
@@ -1082,8 +1085,13 @@ mod tests {
     #[test]
     fn test_dim() {
         do_ok_test(
-            "DIM AS",
-            &[ts(Token::Dim, 1, 1, 3), ts(Token::As, 1, 5, 2), ts(Token::Eof, 1, 7, 0)],
+            "DIM SHARED AS",
+            &[
+                ts(Token::Dim, 1, 1, 3),
+                ts(Token::Shared, 1, 5, 6),
+                ts(Token::As, 1, 12, 2),
+                ts(Token::Eof, 1, 14, 0),
+            ],
         );
         do_ok_test(
             "BOOLEAN DOUBLE INTEGER STRING",
@@ -1097,8 +1105,13 @@ mod tests {
         );
 
         do_ok_test(
-            "dim as",
-            &[ts(Token::Dim, 1, 1, 3), ts(Token::As, 1, 5, 2), ts(Token::Eof, 1, 7, 0)],
+            "dim shared as",
+            &[
+                ts(Token::Dim, 1, 1, 3),
+                ts(Token::Shared, 1, 5, 6),
+                ts(Token::As, 1, 12, 2),
+                ts(Token::Eof, 1, 14, 0),
+            ],
         );
         do_ok_test(
             "boolean double integer string",
