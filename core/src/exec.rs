@@ -574,6 +574,7 @@ pub struct Machine {
     signals_chan: (Sender<Signal>, Receiver<Signal>),
     check_stop: bool,
     stop_reason: Option<StopReason>,
+    last_error: Option<String>,
     data: Vec<Option<Value>>,
 }
 
@@ -602,6 +603,7 @@ impl Machine {
             signals_chan: signals,
             check_stop: false,
             stop_reason: None,
+            last_error: None,
             data: vec![],
         }
     }
@@ -632,7 +634,12 @@ impl Machine {
             clearable.reset_state(&mut self.symbols);
         }
         self.symbols.clear();
-        let _ = self.symbols.unset(&SymbolKey::from("0errmsg"));
+        self.last_error = None;
+    }
+
+    /// Returns the last execution error.
+    pub fn last_error(&self) -> Option<&str> {
+        self.last_error.as_deref()
     }
 
     /// Obtains immutable access to the data values available during the *current* execution.
@@ -674,16 +681,6 @@ impl Machine {
             Value::Integer(i) => Ok(*i),
             _ => panic!("Invalid type check in get()"),
         }
-    }
-
-    /// Obtains the value of a variable.
-    ///
-    /// Returns an error if the variable is not defined, if the referenced symbol is not a variable,
-    /// or if the type annotation in the variable reference does not match the type of the value
-    /// that the variable contains.
-    #[cfg(test)]
-    pub(crate) fn get_var(&self, vref: &VarRef) -> std::result::Result<&Value, value::Error> {
-        self.symbols.get_var(vref)
     }
 
     /// Retrieves the variable `name` as a string.  Fails if it is some other type or if it's not
@@ -1505,7 +1502,7 @@ impl Machine {
         let mut result = self.exec_safe(context, instrs).await;
         if let Err(e) = result.as_ref() {
             if e.is_catchable() {
-                self.symbols.assign(&SymbolKey::from("0errmsg"), Value::Text(format!("{}", e)));
+                self.last_error = Some(format!("{}", e));
 
                 match context.err_handler {
                     ErrorHandlerISpan::Jump(addr) => {
@@ -1932,7 +1929,7 @@ mod tests {
         machine.add_callable(ArglessFunction::new(Value::Integer(1234)));
         machine.add_callable(ClearCommand::new());
         machine.add_callable(CountFunction::new());
-        machine.add_callable(GetHiddenFunction::new());
+        machine.add_callable(LastErrorFunction::new());
         machine.add_callable(InCommand::new(Box::from(RefCell::from(golden_in.iter()))));
         machine.add_callable(OutCommand::new(captured_out.clone()));
         machine.add_callable(OutfFunction::new(captured_out));
@@ -2892,7 +2889,7 @@ mod tests {
             OUT 1
             OUT RAISEF("syntax")
             OUT 2
-            100 OUT GETHIDDEN("0ERRMSG")
+            100 OUT LAST_ERROR
             "#,
             &[],
             &["1", "4:17: In call to RAISEF: expected arg$"],
@@ -2908,7 +2905,7 @@ mod tests {
             OUT RAISEF("syntax")
             OUT 2
             @foo
-            OUT GETHIDDEN("0ERRMSG")
+            OUT LAST_ERROR
             "#,
             &[],
             &["1", "4:17: In call to RAISEF: expected arg$"],
@@ -2940,7 +2937,7 @@ mod tests {
             ON ERROR RESUME NEXT
             OUT 1
             OUT RAISEF("syntax")
-            OUT GETHIDDEN("0ERRMSG")
+            OUT LAST_ERROR
             "#,
             &[],
             &["1", "4:17: In call to RAISEF: expected arg$"],
@@ -2954,7 +2951,7 @@ mod tests {
             ON ERROR RESUME NEXT
             OUT 1
             RAISE "syntax"
-            OUT GETHIDDEN("0ERRMSG")
+            OUT LAST_ERROR
             "#,
             &[],
             &["1", "4:13: In call to RAISE: expected arg$"],
@@ -2966,7 +2963,7 @@ mod tests {
         do_ok_test(
             r#"
             ON ERROR RESUME NEXT
-            OUT 1: OUT RAISEF("syntax"): OUT GETHIDDEN("0ERRMSG")
+            OUT 1: OUT RAISEF("syntax"): OUT LAST_ERROR
             "#,
             &[],
             &["1", "3:24: In call to RAISEF: expected arg$"],
@@ -2978,7 +2975,7 @@ mod tests {
         do_ok_test(
             r#"
             ON ERROR RESUME NEXT
-            OUT 1: RAISE "syntax": OUT GETHIDDEN("0ERRMSG")
+            OUT 1: RAISE "syntax": OUT LAST_ERROR
             "#,
             &[],
             &["1", "3:20: In call to RAISE: expected arg$"],
@@ -2988,31 +2985,31 @@ mod tests {
     #[test]
     fn test_on_error_types() {
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISEF("argument"): OUT GETHIDDEN("0ERRMSG")"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISEF("argument"): OUT LAST_ERROR"#,
             &[],
             &["1:27: In call to RAISEF: 1:34: Bad argument"],
         );
 
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISEF("eval"): OUT GETHIDDEN("0ERRMSG")"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISEF("eval"): OUT LAST_ERROR"#,
             &[],
             &["1:27: In call to RAISEF: 1:34: Some eval error"],
         );
 
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISEF("internal"): OUT GETHIDDEN("0ERRMSG")"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISEF("internal"): OUT LAST_ERROR"#,
             &[],
             &["1:27: In call to RAISEF: 1:34: Some internal error"],
         );
 
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISEF("io"): OUT GETHIDDEN("0ERRMSG")"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISEF("io"): OUT LAST_ERROR"#,
             &[],
             &["1:27: In call to RAISEF: Some I/O error"],
         );
 
         do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISEF("syntax"): OUT GETHIDDEN("0ERRMSG")"#,
+            r#"ON ERROR RESUME NEXT: OUT RAISEF("syntax"): OUT LAST_ERROR"#,
             &[],
             &["1:27: In call to RAISEF: expected arg$"],
         );

@@ -322,7 +322,6 @@ mod tests {
             .run("after = 5")
             .expect_var("a", 1)
             .expect_var("after", 5)
-            .expect_var("0ERRMSG", "2:7: Number of bits to >> (-1) must be positive")
             .expect_prints([
                 "Loading AUTOEXEC.BAS...",
                 "AUTOEXEC.BAS failed: 2:7: Number of bits to >> (-1) must be positive",
