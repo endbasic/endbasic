@@ -881,17 +881,14 @@ mod tests {
             "1:1: In call to INPUT: expected <vref> | <[prompt$] <,|;> vref>",
             "INPUT \"foo\" AS bar",
         );
-        check_stmt_uncatchable_err(
-            "1:1: In call to INPUT: 1:7: Undefined variable a",
-            "INPUT a + 1 ; b",
-        );
+        check_stmt_err("1:1: In call to INPUT: 1:7: Undefined variable a", "INPUT a + 1 ; b");
         Tester::default()
             .run("a = 3: INPUT ; a + 1")
             .expect_compilation_err(
                 "1:8: In call to INPUT: 1:16: Requires a variable reference, not a value",
             )
             .check();
-        check_stmt_uncatchable_err(
+        check_stmt_err(
             "1:1: In call to INPUT: 1:11: Cannot + STRING and BOOLEAN",
             "INPUT \"a\" + TRUE; b?",
         );
@@ -1050,8 +1047,8 @@ mod tests {
             "PRINT 3, 4 AS 5",
         );
         // Ensure type errors from `Expr` and `Value` bubble up.
-        check_stmt_uncatchable_err("1:9: Unexpected value in expression", "PRINT a b");
-        check_stmt_uncatchable_err("1:9: Cannot + INTEGER and BOOLEAN", "PRINT 3 + TRUE");
+        check_stmt_err("1:9: Unexpected value in expression", "PRINT a b");
+        check_stmt_err("1:9: Cannot + INTEGER and BOOLEAN", "PRINT 3 + TRUE");
     }
 
     #[test]

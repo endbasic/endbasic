@@ -16,11 +16,11 @@
 //! Commands that manipulate the machine's state or the program's execution.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ExprType, Value};
+use endbasic_core::ast::ExprType;
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Scope};
 use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
+    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
 };
 use endbasic_core::LineCol;
 use futures_lite::future::{BoxedLocal, FutureExt};
@@ -104,13 +104,8 @@ impl Callable for ErrmsgFunction {
     async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
         debug_assert_eq!(0, scope.nargs());
 
-        // TODO(jmmv): Instead of abusing a private variable to propagate the error message from
-        // the machine to here, we should query the last error message from the machine itself via
-        // a method, but this is difficult (from a refactoring perspective) because a function's
-        // exec() does not have access to the Machine.
-        match machine.get_symbols().get_auto("0errmsg") {
-            Some(Symbol::Variable(Value::Text(t))) => scope.return_string(t),
-            Some(_) => panic!("Internal symbol must be of a specific type"),
+        match machine.last_error() {
+            Some(message) => scope.return_string(message),
             None => scope.return_string("".to_owned()),
         }
     }
@@ -223,7 +218,6 @@ mod tests {
     fn test_errmsg_after_error() {
         Tester::default()
             .run("ON ERROR RESUME NEXT: COLOR -1: PRINT \"Captured: \"; ERRMSG")
-            .expect_var("0ERRMSG", "1:23: In call to COLOR: 1:29: Color out of range")
             .expect_prints(["Captured: 1:23: In call to COLOR: 1:29: Color out of range"])
             .check();
     }

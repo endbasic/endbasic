@@ -15,7 +15,7 @@
 
 //! Test utilities.
 
-use crate::ast::{ArgSep, ExprType, Value, VarRef};
+use crate::ast::{ArgSep, ExprType, Value};
 use crate::compiler::{
     ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax, RequiredValueSyntax,
     SingularArgSyntax,
@@ -207,44 +207,33 @@ impl Callable for RaiseCommand {
     }
 }
 
-/// Grabs the value of a hidden variable.
-pub(crate) struct GetHiddenFunction {
+/// Grabs the last error stored in the machine.
+pub(crate) struct LastErrorFunction {
     metadata: CallableMetadata,
 }
 
-impl GetHiddenFunction {
+impl LastErrorFunction {
     /// Creates a new command that sets aside all data values.
     pub(crate) fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("GETHIDDEN")
+            metadata: CallableMetadataBuilder::new("LAST_ERROR")
                 .with_return_type(ExprType::Text)
-                .with_syntax(&[(
-                    &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax {
-                            name: Cow::Borrowed("varname"),
-                            vtype: ExprType::Text,
-                        },
-                        ArgSepSyntax::End,
-                    )],
-                    None,
-                )])
                 .test_build(),
         })
     }
 }
 
 #[async_trait(?Send)]
-impl Callable for GetHiddenFunction {
+impl Callable for LastErrorFunction {
     fn metadata(&self) -> &CallableMetadata {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
-        assert_eq!(1, scope.nargs());
-        let name = scope.pop_string();
-        match machine.get_var(&VarRef::new(name, Some(ExprType::Text))) {
-            Ok(t) => scope.return_any(t.clone()),
-            Err(_) => panic!("Invalid argument"),
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+        assert_eq!(0, scope.nargs());
+        match machine.last_error() {
+            Some(message) => scope.return_string(message),
+            None => scope.return_string("".to_owned()),
         }
     }
 }

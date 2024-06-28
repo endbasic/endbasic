@@ -949,9 +949,7 @@ This is the first and only topic with just one line.
         let mut t =
             tester().add_callable(DoNothingCommand::new()).add_callable(EmptyFunction::new());
 
-        t.run(r#"HELP foo bar"#)
-            .expect_uncatchable_err("1:10: Unexpected value in expression")
-            .check();
+        t.run(r#"HELP foo bar"#).expect_err("1:10: Unexpected value in expression").check();
         t.run(r#"HELP foo"#)
             .expect_compilation_err("1:1: In call to HELP: 1:6: Undefined variable foo")
             .check();
