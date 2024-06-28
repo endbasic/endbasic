@@ -316,7 +316,7 @@ impl Symbols {
 
     /// Clears all user-defined symbols.
     pub fn clear(&mut self) {
-        self.scopes.last_mut().unwrap().retain(|key, symbol| {
+        fn filter(key: &SymbolKey, symbol: &mut Symbol) -> bool {
             let is_internal = key.0.starts_with(|c: char| c.is_ascii_digit());
 
             // TODO(jmmv): Preserving symbols that start with __ is a hack that was added to support
@@ -325,16 +325,28 @@ impl Symbols {
             let is_gpio_hack = key.0.starts_with("__");
 
             is_internal || is_gpio_hack || !symbol.user_defined()
-        });
+        }
+
+        self.globals.retain(filter);
+        self.scopes.last_mut().unwrap().retain(filter);
     }
 
-    /// Defines a new variable `key` of type `etype`.  The variable must not yet exist.
+    /// Defines a new local variable `key` of type `etype`.  The variable must not yet exist.
     pub fn dim(&mut self, key: SymbolKey, etype: ExprType) {
         debug_assert!(
             !self.globals.contains_key(&key) && !self.scopes.last_mut().unwrap().contains_key(&key),
             "Pre-existence of variables is checked at compilation time"
         );
         self.scopes.last_mut().unwrap().insert(key, Symbol::Variable(etype.default_value()));
+    }
+
+    /// Defines a new global variable `key` of type `etype`.  The variable must not yet exist.
+    pub fn dim_shared(&mut self, key: SymbolKey, etype: ExprType) {
+        debug_assert!(
+            !self.globals.contains_key(&key) && !self.scopes.last_mut().unwrap().contains_key(&key),
+            "Pre-existence of variables is checked at compilation time"
+        );
+        self.globals.insert(key, Symbol::Variable(etype.default_value()));
     }
 
     /// Defines a new array `key` of type `subtype` with `dimensions`.  The array must not yet
@@ -345,6 +357,16 @@ impl Symbols {
             "Pre-existence of variables is checked at compilation time"
         );
         self.scopes.last_mut().unwrap().insert(key, Symbol::Array(Array::new(subtype, dimensions)));
+    }
+
+    /// Defines a new global array `key` of type `subtype` with `dimensions`.  The array must not yet
+    /// exist, and the name may not overlap function or variable names.
+    pub fn dim_shared_array(&mut self, key: SymbolKey, subtype: ExprType, dimensions: Vec<usize>) {
+        debug_assert!(
+            !self.globals.contains_key(&key) && !self.scopes.last_mut().unwrap().contains_key(&key),
+            "Pre-existence of variables is checked at compilation time"
+        );
+        self.globals.insert(key, Symbol::Array(Array::new(subtype, dimensions)));
     }
 
     /// Obtains the value of a symbol or `None` if it is not defined.
@@ -426,7 +448,12 @@ impl Symbols {
     /// This is meant to use by the compiler only.  All other users should call `set_var` instead
     /// to do the necessary runtime validity checks.
     pub(crate) fn assign(&mut self, key: &SymbolKey, value: Value) {
-        match self.scopes.last_mut().unwrap().get_mut(key) {
+        let old_value = match self.globals.get_mut(key) {
+            Some(value) => Some(value),
+            None => self.scopes.last_mut().unwrap().get_mut(key),
+        };
+
+        match old_value {
             Some(Symbol::Variable(old_value)) => {
                 debug_assert_eq!(
                     mem::discriminant(old_value),
@@ -814,6 +841,8 @@ mod tests {
             .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
             .add_var("__SYSTEM_VAR", Value::Integer(42))
+            .add_global_var("GLOBAL_VAR", Value::Integer(43))
+            .add_global_var("__GLOBAL_SYSTEM_VAR", Value::Integer(44))
             .build();
 
         assert!(syms.get(&VarRef::new("SOMEARRAY", None)).unwrap().is_some());
@@ -821,12 +850,16 @@ mod tests {
         assert!(syms.get(&VarRef::new("SUM", None)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SOMEVAR", None)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("__SYSTEM_VAR", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("GLOBAL_VAR", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("__GLOBAL_SYSTEM_VAR", None)).unwrap().is_some());
         syms.clear();
         assert!(syms.get(&VarRef::new("SOMEARRAY", None)).unwrap().is_none());
         assert!(syms.get(&VarRef::new("OUT", None)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SUM", None)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SOMEVAR", None)).unwrap().is_none());
         assert!(syms.get(&VarRef::new("__SYSTEM_VAR", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("GLOBAL_VAR", None)).unwrap().is_none());
+        assert!(syms.get(&VarRef::new("__GLOBAL_SYSTEM_VAR", None)).unwrap().is_some());
     }
 
     #[test]
@@ -835,6 +868,62 @@ mod tests {
 
         syms.dim(SymbolKey::from("A_Boolean"), ExprType::Boolean);
         match syms.get(&VarRef::new("a_boolean", None)).unwrap().unwrap() {
+            Symbol::Variable(value) => assert_eq!(&Value::Boolean(false), value),
+            _ => panic!("Got something that is not the variable we asked for"),
+        }
+    }
+
+    #[test]
+    fn test_symbols_dim_shared_ok() {
+        let mut syms = Symbols::default();
+
+        syms.dim_shared(SymbolKey::from("A_Boolean"), ExprType::Boolean);
+        match syms.get(&VarRef::new("a_boolean", None)).unwrap().unwrap() {
+            Symbol::Variable(value) => assert_eq!(&Value::Boolean(false), value),
+            _ => panic!("Got something that is not the variable we asked for"),
+        }
+    }
+
+    #[test]
+    fn test_symbols_scopes_dim() {
+        let mut syms = Symbols::default();
+
+        syms.dim(SymbolKey::from("Local_Var"), ExprType::Boolean);
+        syms.dim(SymbolKey::from("Other_Var"), ExprType::Double);
+
+        syms.enter_scope();
+        syms.dim(SymbolKey::from("Local_Var"), ExprType::Integer);
+        match syms.get(&VarRef::new("local_var", None)).unwrap().unwrap() {
+            Symbol::Variable(value) => assert_eq!(&Value::Integer(0), value),
+            _ => panic!("Got something that is not the variable we asked for"),
+        }
+        assert!(syms.get(&VarRef::new("other_var", None)).unwrap().is_none());
+        syms.leave_scope();
+
+        match syms.get(&VarRef::new("local_var", None)).unwrap().unwrap() {
+            Symbol::Variable(value) => assert_eq!(&Value::Boolean(false), value),
+            _ => panic!("Got something that is not the variable we asked for"),
+        }
+        match syms.get(&VarRef::new("other_var", None)).unwrap().unwrap() {
+            Symbol::Variable(value) => assert_eq!(&Value::Double(0.0), value),
+            _ => panic!("Got something that is not the variable we asked for"),
+        }
+    }
+
+    #[test]
+    fn test_symbols_scopes_dim_shared() {
+        let mut syms = Symbols::default();
+
+        syms.dim_shared(SymbolKey::from("Global_Var"), ExprType::Boolean);
+
+        syms.enter_scope();
+        match syms.get(&VarRef::new("global_var", None)).unwrap().unwrap() {
+            Symbol::Variable(value) => assert_eq!(&Value::Boolean(false), value),
+            _ => panic!("Got something that is not the variable we asked for"),
+        }
+        syms.leave_scope();
+
+        match syms.get(&VarRef::new("global_var", None)).unwrap().unwrap() {
             Symbol::Variable(value) => assert_eq!(&Value::Boolean(false), value),
             _ => panic!("Got something that is not the variable we asked for"),
         }
@@ -1284,6 +1373,21 @@ mod tests {
                     .unwrap_err()
             )
         );
+    }
+
+    #[test]
+    fn test_symbols_set_var_global() {
+        let mut syms = Symbols::default();
+        syms.dim_shared(SymbolKey::from("global"), ExprType::Integer);
+        syms.set_var(&VarRef::new("global", None), Value::Integer(5)).unwrap();
+        check_var(&syms, "global", Value::Integer(5));
+
+        syms.enter_scope();
+        syms.set_var(&VarRef::new("global", None), Value::Integer(7)).unwrap();
+        check_var(&syms, "global", Value::Integer(7));
+        syms.leave_scope();
+
+        check_var(&syms, "global", Value::Integer(7));
     }
 
     #[test]

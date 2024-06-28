@@ -532,6 +532,13 @@ impl SymbolsBuilder {
         self
     }
 
+    /// Adds the variable named `name` with an initial `value` to the global list of symbols.
+    pub(crate) fn add_global_var<S: AsRef<str>>(mut self, name: S, value: Value) -> Self {
+        let key = SymbolKey::from(name);
+        self.globals.insert(key, Symbol::Variable(value));
+        self
+    }
+
     pub fn build(self) -> Symbols {
         Symbols::from(self.globals, self.scope)
     }

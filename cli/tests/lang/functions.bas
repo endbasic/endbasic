@@ -95,3 +95,17 @@ END FUNCTION
 PRINT local
 PRINT defined_globally
 defined_locally = "foo"  ' Would yield type error if not unset on exit.
+
+PRINT ">>> Global variables"
+
+DIM SHARED really_global
+really_global = 1
+
+FUNCTION get_really_global
+    get_really_global = really_global * 2
+    really_global = really_global + 1
+END FUNCTION
+
+PRINT "get_really_global returned: "; get_really_global
+PRINT "get_really_global returned: "; get_really_global
+PRINT "really_global is: "; really_global

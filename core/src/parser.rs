@@ -505,6 +505,13 @@ impl<'a> Parser<'a> {
 
     /// Parses a `DIM` statement.
     fn parse_dim(&mut self) -> Result<Statement> {
+        let peeked = self.lexer.peek()?;
+        let mut shared = false;
+        if peeked.token == Token::Shared {
+            self.lexer.consume_peeked();
+            shared = true;
+        }
+
         let token_span = self.lexer.read()?;
         let vref = match token_span.token {
             Token::Symbol(vref) => vref,
@@ -532,6 +539,7 @@ impl<'a> Parser<'a> {
                 Ok(Statement::DimArray(DimArraySpan {
                     name,
                     name_pos,
+                    shared,
                     dimensions: argspans_to_exprs(dimensions),
                     subtype,
                     subtype_pos,
@@ -539,7 +547,7 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let (vtype, vtype_pos) = self.parse_dim_as()?;
-                Ok(Statement::Dim(DimSpan { name, name_pos, vtype, vtype_pos }))
+                Ok(Statement::Dim(DimSpan { name, name_pos, shared, vtype, vtype_pos }))
             }
         }
     }
@@ -916,6 +924,7 @@ impl<'a> Parser<'a> {
                 | Token::Resume
                 | Token::Return
                 | Token::Select
+                | Token::Shared
                 | Token::TextName
                 | Token::Until
                 | Token::Wend
@@ -2289,6 +2298,7 @@ mod tests {
             &[Statement::Dim(DimSpan {
                 name: "i".to_owned(),
                 name_pos: lc(1, 5),
+                shared: false,
                 vtype: ExprType::Integer,
                 vtype_pos: lc(1, 6),
             })],
@@ -2302,6 +2312,7 @@ mod tests {
             &[Statement::Dim(DimSpan {
                 name: "i".to_owned(),
                 name_pos: lc(1, 5),
+                shared: false,
                 vtype: ExprType::Boolean,
                 vtype_pos: lc(1, 10),
             })],
@@ -2311,6 +2322,7 @@ mod tests {
             &[Statement::Dim(DimSpan {
                 name: "i".to_owned(),
                 name_pos: lc(1, 5),
+                shared: false,
                 vtype: ExprType::Double,
                 vtype_pos: lc(1, 10),
             })],
@@ -2320,6 +2332,7 @@ mod tests {
             &[Statement::Dim(DimSpan {
                 name: "i".to_owned(),
                 name_pos: lc(1, 5),
+                shared: false,
                 vtype: ExprType::Integer,
                 vtype_pos: lc(1, 10),
             })],
@@ -2329,6 +2342,7 @@ mod tests {
             &[Statement::Dim(DimSpan {
                 name: "i".to_owned(),
                 name_pos: lc(1, 5),
+                shared: false,
                 vtype: ExprType::Text,
                 vtype_pos: lc(1, 10),
             })],
@@ -2343,22 +2357,49 @@ mod tests {
                 Statement::Dim(DimSpan {
                     name: "i".to_owned(),
                     name_pos: lc(1, 5),
+                    shared: false,
                     vtype: ExprType::Integer,
                     vtype_pos: lc(1, 6),
                 }),
                 Statement::Dim(DimSpan {
                     name: "j".to_owned(),
                     name_pos: lc(2, 5),
+                    shared: false,
                     vtype: ExprType::Boolean,
                     vtype_pos: lc(2, 10),
                 }),
                 Statement::Dim(DimSpan {
                     name: "k".to_owned(),
                     name_pos: lc(3, 5),
+                    shared: false,
                     vtype: ExprType::Integer,
                     vtype_pos: lc(3, 6),
                 }),
             ],
+        );
+    }
+
+    #[test]
+    fn test_dim_shared() {
+        do_ok_test(
+            "DIM SHARED i",
+            &[Statement::Dim(DimSpan {
+                name: "i".to_owned(),
+                name_pos: lc(1, 12),
+                shared: true,
+                vtype: ExprType::Integer,
+                vtype_pos: lc(1, 13),
+            })],
+        );
+        do_ok_test(
+            "DIM SHARED i AS BOOLEAN",
+            &[Statement::Dim(DimSpan {
+                name: "i".to_owned(),
+                name_pos: lc(1, 12),
+                shared: true,
+                vtype: ExprType::Boolean,
+                vtype_pos: lc(1, 17),
+            })],
         );
     }
 
@@ -2371,6 +2412,7 @@ mod tests {
             &[Statement::DimArray(DimArraySpan {
                 name: "i".to_owned(),
                 name_pos: lc(1, 5),
+                shared: false,
                 dimensions: vec![expr_integer(10, 1, 7)],
                 subtype: ExprType::Integer,
                 subtype_pos: lc(1, 10),
@@ -2382,6 +2424,7 @@ mod tests {
             &[Statement::DimArray(DimArraySpan {
                 name: "foo".to_owned(),
                 name_pos: lc(1, 5),
+                shared: false,
                 dimensions: vec![
                     Negate(Box::from(UnaryOpSpan { expr: expr_integer(5, 1, 10), pos: lc(1, 9) })),
                     expr_integer(0, 1, 13),
@@ -2396,6 +2439,7 @@ mod tests {
             &[Statement::DimArray(DimArraySpan {
                 name: "foo".to_owned(),
                 name_pos: lc(1, 5),
+                shared: false,
                 dimensions: vec![
                     Add(Box::from(BinaryOpSpan {
                         lhs: Call(CallSpan {
@@ -2411,6 +2455,18 @@ mod tests {
                 ],
                 subtype: ExprType::Integer,
                 subtype_pos: lc(1, 27),
+            })],
+        );
+
+        do_ok_test(
+            "DIM SHARED i(10)",
+            &[Statement::DimArray(DimArraySpan {
+                name: "i".to_owned(),
+                name_pos: lc(1, 12),
+                shared: true,
+                dimensions: vec![expr_integer(10, 1, 14)],
+                subtype: ExprType::Integer,
+                subtype_pos: lc(1, 17),
             })],
         );
     }

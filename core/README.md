@@ -34,11 +34,13 @@ currently supports:
 
 *   Variable types: boolean (`?`), double (`#`), integer (`%`), and string
     (`$`).
+*   Arrays via `DIM name(1, 2, 3) AS type`.
 *   Strong typing with optional variable type annotations.
 *   `DATA` statements for literal primitive values.  Booleans, numbers, and
     strings are supported, but strings must be double-quoted.
 *   `DO` / `LOOP` statements with optional `UNTIL` / `WHILE` pre- and
     post-guards and optional `EXIT DO` early terminations.
+*   `DIM SHARED` for global variables.
 *   `FUNCTION name` / `END FUNCTION`.
 *   `IF ... THEN ... [ELSE ...]` uniline statements.
 *   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` multiline

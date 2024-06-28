@@ -22,6 +22,20 @@ use crate::syms::SymbolKey;
 /// Convenience type to represent a program address.
 pub type Address = usize;
 
+/// Components of a variable definition.
+#[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
+pub struct DimISpan {
+    /// Name of the variable to define.
+    pub name: SymbolKey,
+
+    /// Whether the variable is global or not.
+    pub shared: bool,
+
+    /// Type of the variable to be defined.
+    pub vtype: ExprType,
+}
+
 /// Components of an array definition.
 #[derive(Debug, PartialEq)]
 #[cfg_attr(test, derive(Clone))]
@@ -31,6 +45,9 @@ pub struct DimArrayISpan {
 
     /// Position of the name.
     pub name_pos: LineCol,
+
+    /// Whether the array is global or not.
+    pub shared: bool,
 
     /// Number of values in the stack representing the dimensions of the array.
     pub dimensions: usize,
@@ -243,7 +260,7 @@ pub enum Instruction {
     FunctionCall(SymbolKey, ExprType, LineCol, usize),
 
     /// Represents a variable definition.
-    Dim(SymbolKey, ExprType),
+    Dim(DimISpan),
 
     /// Represents an array definition.
     DimArray(DimArrayISpan),
@@ -384,7 +401,7 @@ impl Instruction {
             | Instruction::Assign(_)
             | Instruction::BuiltinCall(_, _, _)
             | Instruction::Call(_)
-            | Instruction::Dim(_, _)
+            | Instruction::Dim(_)
             | Instruction::DimArray(_)
             | Instruction::End(_)
             | Instruction::Jump(_)
