@@ -210,6 +210,7 @@ Output from HELP "LANG":
     >> [38;5;14mDO         [39m    Do loops
     >> [38;5;14mExpressions[39m    Expressions and operators
     >> [38;5;14mFOR        [39m    For loops
+    >> [38;5;14mFunctions  [39m    User-defined functions
     >> [38;5;14mIF         [39m    Multiline and uniline IF statements
     >> [38;5;14mJumps      [39m    GOTO, GOSUB, END, and labels
     >> [38;5;14mON ERROR   [39m    Error handling
@@ -370,6 +371,26 @@ Output from HELP "FOR":
         FOR a = 10 to 1 STEP -2
             PRINT a
         NEXT
+
+Output from HELP "FUNCTIONS":
+
+[38;5;11m    User-defined functions
+[39m
+    To define a function, use the `FUNCTION` keyword followed by an
+    arbitrary list of argument definitions.  Argument declarations can use
+    type annotations or `AS type` suffixes to define their types, but not
+    both in a single argument.  The return value of a function is specified
+    by assigning a value to the variable named after the function:
+
+        FUNCTION my_function#(b AS BOOLEAN, i%)
+            IF b THEN my_function = i * 2.3 ELSE my_function = 1.1
+        END FUNCTION
+
+        PRINT my_function(TRUE, 5) ' Prints 11.5.
+        PRINT my_function(FALSE, 8) ' Prints 1.1.
+
+    Global variables can be defined via the `DIM SHARED` keyword.  See the
+    "Variables" help topic for details.
 
 Output from HELP "IF":
 
@@ -563,6 +584,11 @@ Output from HELP "VARIABLES":
 
         DIM matrix%(10, 100) AS INTEGER
         matrix%(5, 15) = 1234
+
+    Global variables can be defined via `DIM SHARED` and will be readable
+    and settable from within user-defined functions:
+
+        DIM SHARED global AS DOUBLE
 
 Output from HELP "WHILE":
 
