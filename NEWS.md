@@ -61,7 +61,8 @@ for the time being.**
     definitions that `HELP` prints now follow a consistent pattern and that such
     help strings truly match what the commands and functions expect.
 
-*   Issue #112: Added user-defined functions.
+*   Issue #112: Added user-defined functions and the `FIBONACCI.BAS` demo
+    program to demonstrate how they work.
 
 *   Issue #112: Added support for global variables via `DIM SHARED`.
 

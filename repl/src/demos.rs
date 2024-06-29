@@ -48,6 +48,14 @@ impl Default for DemosDrive {
     fn default() -> Self {
         let mut demos = HashMap::default();
         {
+            let content = process_demo(include_bytes!("../examples/fibonacci.bas"));
+            let metadata = Metadata {
+                date: time::OffsetDateTime::from_unix_timestamp(1719672741).unwrap(),
+                length: content.len() as u64,
+            };
+            demos.insert("FIBONACCI.BAS", (metadata, content));
+        }
+        {
             let content = process_demo(include_bytes!("../examples/guess.bas"));
             let metadata = Metadata {
                 date: time::OffsetDateTime::from_unix_timestamp(1608693152).unwrap(),
@@ -179,6 +187,7 @@ mod tests {
         let drive = DemosDrive::default();
 
         let files = block_on(drive.enumerate()).unwrap();
+        assert!(files.dirents().contains_key("FIBONACCI.BAS"));
         assert!(files.dirents().contains_key("GPIO.BAS"));
         assert!(files.dirents().contains_key("GUESS.BAS"));
         assert!(files.dirents().contains_key("HELLO.BAS"));
@@ -186,7 +195,7 @@ mod tests {
         assert!(files.dirents().contains_key("TOUR.BAS"));
 
         assert!(files.disk_quota().unwrap().bytes() > 0);
-        assert_eq!(5, files.disk_quota().unwrap().files());
+        assert_eq!(6, files.disk_quota().unwrap().files());
         assert_eq!(DiskSpace::new(0, 0), files.disk_free().unwrap());
     }
 
