@@ -66,6 +66,10 @@ Arrays must be defined with the `DIM` keyword before they can be used.  The foll
     DIM matrix%(10, 100) AS INTEGER
     matrix%(5, 15) = 1234
 
+Global variables can be defined via `DIM SHARED` and will be readable and settable from within user-defined functions:
+
+    DIM SHARED global AS DOUBLE
+
 # Expressions
 
 Expressions and operators
@@ -265,3 +269,18 @@ To reset the error handler to its default, which terminates program execution on
     ON ERROR GOTO 0
 
 The ERRMSG function can be used to fetch the textual description of the string that was caught.
+
+# Functions
+
+User-defined functions
+
+To define a function, use the `FUNCTION` keyword followed by an arbitrary list of argument definitions.  Argument declarations can use type annotations or `AS type` suffixes to define their types, but not both in a single argument.  The return value of a function is specified by assigning a value to the variable named after the function:
+
+    FUNCTION my_function#(b AS BOOLEAN, i%)
+        IF b THEN my_function = i * 2.3 ELSE my_function = 1.1
+    END FUNCTION
+
+    PRINT my_function(TRUE, 5)  ' Prints 11.5.
+    PRINT my_function(FALSE, 8)  ' Prints 1.1.
+
+Global variables can be defined via the `DIM SHARED` keyword.  See the "Variables" help topic for details.
