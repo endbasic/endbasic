@@ -341,6 +341,18 @@ fn test_cli_version() {
 }
 
 #[test]
+fn test_example_fibonacci() {
+    check(
+        bin_path("endbasic"),
+        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/examples/fibonacci.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/examples/fibonacci.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_example_gpio() {
     check(
         bin_path("endbasic"),
