@@ -493,6 +493,26 @@ pub struct CallSpan {
     pub args: Vec<ArgSpan>,
 }
 
+/// Components of a `FUNCTION` or `SUB` definition.
+#[derive(Debug, PartialEq)]
+pub struct CallableSpan {
+    /// Name of the callable, expressed as a variable reference.  For functions, this contains
+    /// a type, and for subroutines, it does not.
+    pub name: VarRef,
+
+    /// Position of the name of the callable.
+    pub name_pos: LineCol,
+
+    /// Definition of the callable parameters.
+    pub params: Vec<VarRef>,
+
+    /// Statements within the callable's body.
+    pub body: Vec<Statement>,
+
+    /// Position of the end of the callable, used when injecting the implicit return.
+    pub end_pos: LineCol,
+}
+
 /// Components of a data statement.
 #[derive(Debug, PartialEq)]
 pub struct DataSpan {
@@ -646,25 +666,6 @@ pub struct ForSpan {
     pub body: Vec<Statement>,
 }
 
-/// Components of a `FUNCTION` definition.
-#[derive(Debug, PartialEq)]
-pub struct FunctionSpan {
-    /// Name of the function, expressed as a variable reference.
-    pub name: VarRef,
-
-    /// Position of the name of the function.
-    pub name_pos: LineCol,
-
-    /// Definition of the function parameters.
-    pub params: Vec<VarRef>,
-
-    /// Statements within the function's body.
-    pub body: Vec<Statement>,
-
-    /// Position of the end of the function, used when injecting the implicit return.
-    pub end_pos: LineCol,
-}
-
 /// Components of a `GOTO` or a `GOSUB` statement.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GotoSpan {
@@ -786,6 +787,10 @@ pub enum Statement {
     /// Represents a call to a builtin command such as `PRINT`.
     Call(CallSpan),
 
+    /// Represents a `FUNCTION` or `SUB` definition.  The difference between the two lies in just
+    /// the presence or absence of a return type in the callable.
+    Callable(CallableSpan),
+
     /// Represents a `DATA` statement.
     Data(DataSpan),
 
@@ -806,9 +811,6 @@ pub enum Statement {
 
     /// Represents a `FOR` statement.
     For(ForSpan),
-
-    /// Represents a `FUNCTION` definition.
-    Function(FunctionSpan),
 
     /// Represents a `GOSUB` statement.
     Gosub(GotoSpan),

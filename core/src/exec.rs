@@ -3504,4 +3504,52 @@ mod tests {
         "#;
         do_ok_test(code, &[], &["5 120"]);
     }
+
+    #[test]
+    fn test_user_functions_call_as_command() {
+        let code = r#"
+            FUNCTION f: OUT "foo": END FUNCTION
+            f
+        "#;
+        do_error_test(code, &[], &[], "3:13: F is not a command");
+    }
+
+    #[test]
+    fn test_user_subs_recursion() {
+        let code = r#"
+            DIM SHARED counter
+            SUB count_down(prefix$)
+                OUT prefix; counter
+                IF counter > 1 THEN
+                    counter = counter - 1
+                    count_down prefix
+                END IF
+            END SUB
+            counter = 3
+            count_down "counter is"
+        "#;
+        do_ok_test(code, &[], &["counter is 3", "counter is 2", "counter is 1"]);
+    }
+
+    #[test]
+    fn test_user_subs_return_type_not_allowed() {
+        let code = r#"
+            SUB f$: f = 3: END SUB
+        "#;
+        do_error_test(
+            code,
+            &[],
+            &[],
+            "2:17: SUBs cannot return a value so type annotations are not allowed",
+        );
+    }
+
+    #[test]
+    fn test_user_subs_call_as_function() {
+        let code = r#"
+            SUB f: OUT "foo": END SUB
+            OUT f
+        "#;
+        do_error_test(code, &[], &[], "3:17: f is not an array nor a function");
+    }
 }

@@ -286,8 +286,8 @@ struct Compiler {
     /// Name of the function being compiled, needed to set the return value in assignment operators.
     current_function: Option<SymbolKey>,
 
-    /// Functions to be compiled.
-    function_spans: Vec<FunctionSpan>,
+    /// Callables to be compiled.
+    callable_spans: Vec<CallableSpan>,
 }
 
 impl Compiler {
@@ -897,7 +897,7 @@ impl Compiler {
                 self.compile_for(span)?;
             }
 
-            Statement::Function(span) => {
+            Statement::Callable(span) => {
                 let mut syntax = vec![];
                 for (i, param) in span.params.iter().enumerate() {
                     let sep = if i == span.params.len() - 1 {
@@ -913,17 +913,18 @@ impl Compiler {
                         sep,
                     ));
                 }
-                let md = CallableMetadataBuilder::new("USER DEFINED FUNCTION")
-                    .with_return_type(span.name.ref_type().unwrap_or(ExprType::Integer))
+                let mut builder = CallableMetadataBuilder::new("USER DEFINED CALLABLE")
                     .with_dynamic_syntax(vec![(syntax, None)])
                     .with_category("User defined")
-                    .with_description("User defined symbol")
-                    .build();
+                    .with_description("User defined symbol");
+                if let Some(ctype) = span.name.ref_type() {
+                    builder = builder.with_return_type(ctype);
+                }
                 self.symtable.insert_global(
                     SymbolKey::from(span.name.name()),
-                    SymbolPrototype::Callable(md),
+                    SymbolPrototype::Callable(builder.build()),
                 );
-                self.function_spans.push(span);
+                self.callable_spans.push(span);
             }
 
             Statement::Gosub(span) => {
@@ -979,62 +980,94 @@ impl Compiler {
         Ok(())
     }
 
-    /// Compiles all functions discovered during the first phase and fixes up all call sites to
+    /// Compiles all callables discovered during the first phase and fixes up all call sites to
     /// point to the compiled code.
-    fn compile_functions(&mut self) -> Result<()> {
+    fn compile_callables(&mut self) -> Result<()> {
         let end = self.emit(Instruction::Nop);
 
-        let mut functions = HashMap::with_capacity(self.function_spans.len());
-        let function_spans = std::mem::take(&mut self.function_spans);
-        for span in function_spans {
+        let mut functions = HashMap::with_capacity(self.callable_spans.len());
+        let mut subs = HashMap::with_capacity(self.callable_spans.len());
+        let callable_spans = std::mem::take(&mut self.callable_spans);
+        for span in callable_spans {
             let pc = self.next_pc;
 
             let key = SymbolKey::from(span.name.name());
             let return_value = Compiler::return_key(&key);
+            match span.name.ref_type() {
+                Some(return_type) => {
+                    self.emit(Instruction::EnterScope);
+                    self.symtable.enter_scope();
 
-            let return_type = span.name.ref_type().unwrap_or(ExprType::Integer);
+                    self.emit(Instruction::Dim(DimISpan {
+                        name: return_value.clone(),
+                        shared: false,
+                        vtype: return_type,
+                    }));
+                    self.symtable
+                        .insert(return_value.clone(), SymbolPrototype::Variable(return_type));
 
-            self.emit(Instruction::EnterScope);
-            self.symtable.enter_scope();
+                    for param in span.params {
+                        let key = SymbolKey::from(param.name());
+                        let ptype = param.ref_type().unwrap_or(ExprType::Integer);
+                        self.emit(Instruction::Assign(key.clone()));
+                        self.symtable.insert(key, SymbolPrototype::Variable(ptype));
+                    }
 
-            self.emit(Instruction::Dim(DimISpan {
-                name: return_value.clone(),
-                shared: false,
-                vtype: return_type,
-            }));
-            self.symtable.insert(return_value.clone(), SymbolPrototype::Variable(return_type));
+                    self.current_function = Some(key.clone());
+                    self.compile_many(span.body)?;
+                    self.current_function = None;
 
-            for param in span.params {
-                let key = SymbolKey::from(param.name());
-                let ptype = param.ref_type().unwrap_or(ExprType::Integer);
-                self.emit(Instruction::Assign(key.clone()));
-                self.symtable.insert(key, SymbolPrototype::Variable(ptype));
+                    let load_inst = match return_type {
+                        ExprType::Boolean => Instruction::LoadBoolean,
+                        ExprType::Double => Instruction::LoadDouble,
+                        ExprType::Integer => Instruction::LoadInteger,
+                        ExprType::Text => Instruction::LoadString,
+                    };
+                    self.emit(load_inst(return_value.clone(), span.end_pos));
+
+                    self.emit(Instruction::LeaveScope);
+                    self.symtable.leave_scope();
+                    self.emit(Instruction::Return(span.end_pos));
+
+                    functions.insert(key, pc);
+                }
+                None => {
+                    self.emit(Instruction::EnterScope);
+                    self.symtable.enter_scope();
+
+                    for param in span.params {
+                        let key = SymbolKey::from(param.name());
+                        let ptype = param.ref_type().unwrap_or(ExprType::Integer);
+                        self.emit(Instruction::Assign(key.clone()));
+                        self.symtable.insert(key, SymbolPrototype::Variable(ptype));
+                    }
+
+                    self.compile_many(span.body)?;
+
+                    self.emit(Instruction::LeaveScope);
+                    self.symtable.leave_scope();
+                    self.emit(Instruction::Return(span.end_pos));
+
+                    subs.insert(key, pc);
+                }
             }
-
-            self.current_function = Some(key.clone());
-            self.compile_many(span.body)?;
-            self.current_function = None;
-
-            let load_inst = match return_type {
-                ExprType::Boolean => Instruction::LoadBoolean,
-                ExprType::Double => Instruction::LoadDouble,
-                ExprType::Integer => Instruction::LoadInteger,
-                ExprType::Text => Instruction::LoadString,
-            };
-            self.emit(load_inst(return_value.clone(), span.end_pos));
-
-            self.emit(Instruction::LeaveScope);
-            self.symtable.leave_scope();
-            self.emit(Instruction::Return(span.end_pos));
-
-            functions.insert(key, pc);
         }
 
         for instr in &mut self.instrs {
-            if let Instruction::FunctionCall(key, _, _, _) = instr {
-                if let Some(addr) = functions.get(key) {
-                    *instr = Instruction::Call(JumpISpan { addr: *addr });
+            match instr {
+                Instruction::BuiltinCall(key, _, _) => {
+                    if let Some(addr) = subs.get(key) {
+                        *instr = Instruction::Call(JumpISpan { addr: *addr });
+                    }
                 }
+
+                Instruction::FunctionCall(key, _, _, _) => {
+                    if let Some(addr) = functions.get(key) {
+                        *instr = Instruction::Call(JumpISpan { addr: *addr });
+                    }
+                }
+
+                _ => (),
             }
         }
 
@@ -1046,8 +1079,8 @@ impl Compiler {
     /// Finishes compilation and returns the image representing the compiled program.
     #[allow(clippy::wrong_self_convention)]
     fn to_image(mut self) -> Result<(Image, SymbolsTable)> {
-        if !self.function_spans.is_empty() {
-            self.compile_functions()?;
+        if !self.callable_spans.is_empty() {
+            self.compile_callables()?;
         }
 
         for (pc, fixup) in self.fixups {

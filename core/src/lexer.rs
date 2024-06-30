@@ -90,6 +90,7 @@ pub enum Token {
     Resume,
     Return,
     Select,
+    Sub,
     Step,
     Then,
     To,
@@ -173,6 +174,7 @@ impl fmt::Display for Token {
             Token::Resume => write!(f, "RESUME"),
             Token::Return => write!(f, "RETURN"),
             Token::Select => write!(f, "SELECT"),
+            Token::Sub => write!(f, "SUB"),
             Token::Step => write!(f, "STEP"),
             Token::Then => write!(f, "THEN"),
             Token::To => write!(f, "TO"),
@@ -548,6 +550,7 @@ impl<'a> Lexer<'a> {
             "SHARED" => Token::Shared,
             "STEP" => Token::Step,
             "STRING" => Token::TextName,
+            "SUB" => Token::Sub,
             "THEN" => Token::Then,
             "TO" => Token::To,
             "TRUE" => Token::Boolean(true),
@@ -1318,6 +1321,31 @@ mod tests {
                 ts(Token::Else, 1, 16, 4),
                 ts(Token::End, 1, 21, 3),
                 ts(Token::Eof, 1, 24, 0),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_sub() {
+        do_ok_test(
+            "SUB FOO END SUB",
+            &[
+                ts(Token::Sub, 1, 1, 3),
+                ts(Token::Symbol(VarRef::new("FOO", None)), 1, 5, 3),
+                ts(Token::End, 1, 9, 3),
+                ts(Token::Sub, 1, 13, 3),
+                ts(Token::Eof, 1, 16, 0),
+            ],
+        );
+
+        do_ok_test(
+            "sub foo end sub",
+            &[
+                ts(Token::Sub, 1, 1, 3),
+                ts(Token::Symbol(VarRef::new("foo", None)), 1, 5, 3),
+                ts(Token::End, 1, 9, 3),
+                ts(Token::Sub, 1, 13, 3),
+                ts(Token::Eof, 1, 16, 0),
             ],
         );
     }

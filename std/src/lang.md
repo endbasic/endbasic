@@ -284,3 +284,18 @@ To define a function, use the `FUNCTION` keyword followed by an arbitrary list o
     PRINT my_function(FALSE, 8)  ' Prints 1.1.
 
 Global variables can be defined via the `DIM SHARED` keyword.  See the "Variables" help topic for details.
+
+# Subroutines
+
+User-defined subroutines
+
+To define a subroutine (also known as procedure or command), use the `SUB` keyword followed by an arbitrary list of argument definitions.  Argument declarations can use type annotations or `AS type` suffixes to define their types, but not both in a single argument:
+
+    SUB my_command(b AS BOOLEAN, i%)
+        IF b THEN PRINT i * 2.3 ELSE PRINT 1.1
+    END SUB
+
+    my_command TRUE, 5  ' Prints 11.5.
+    my_command FALSE, 8  ' Prints 1.1.
+
+Global variables can be defined via the `DIM SHARED` keyword.  See the "Variables" help topic for details.

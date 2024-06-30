@@ -50,6 +50,7 @@ currently supports:
 *   `GOTO line` / `GOTO @label` statements and `@label` annotations.
 *   `SELECT CASE` / `CASE ...` / `CASE IS ...` / `CASE ... TO ...` /
     `END SELECT` statements.
+*   `SUB name` / `END SUB`.
 *   `WHILE ...` / `WEND` loops.
 *   Error handling via `ON ERROR GOTO` and `ON ERROR RESUME NEXT`.
 *   UTF-8 everywhere (I think).
