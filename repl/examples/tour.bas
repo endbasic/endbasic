@@ -13,45 +13,39 @@
 ' License for the specific language governing permissions and limitations
 ' under the License.
 
-title$ = ""
-
-GOTO @main
-
 ' Clears the screen and prints the title in `title$`.
-@banner
-CLS
-GFX_SYNC FALSE
-COLOR 11
-PRINT
-title$ = " EndBASIC tour: " + title$
-underline$ = ""
-FOR i = 1 TO LEN%(title$) + 1
-    underline$ = underline$ + "="
-NEXT
-PRINT title$
-PRINT underline
-COLOR
-PRINT
-RETURN
+SUB banner (title$)
+    CLS
+    GFX_SYNC FALSE
+    COLOR 11
+    PRINT
+    title$ = " EndBASIC tour: " + title$
+    underline$ = ""
+    FOR i = 1 TO LEN%(title$) + 1
+        underline$ = underline$ + "="
+    NEXT
+    PRINT title$
+    PRINT underline
+    COLOR
+    PRINT
+END SUB
 
 ' Waits for a key press at the end of a demo screen.
-@wait
-PRINT
-COLOR 11
-PRINT "Press ENTER to continue or ESC to exit the demo...";
-GFX_SYNC TRUE
-DO
-    SELECT CASE INKEY
-    CASE "ENTER": EXIT DO
-    CASE "ESC": GOTO @end
-    CASE ELSE: SLEEP 0.01
-    END SELECT
-LOOP
-RETURN
+SUB wait
+    PRINT
+    COLOR 11
+    PRINT "Press ENTER to continue or ESC to exit the demo...";
+    GFX_SYNC TRUE
+    DO
+        SELECT CASE INKEY
+        CASE "ENTER": EXIT DO
+        CASE "ESC": GOTO @end
+        CASE ELSE: SLEEP 0.01
+        END SELECT
+    LOOP
+END SUB
 
-@main
-
-title = "Welcome!": GOSUB @banner
+banner "Welcome!"
 PRINT "Welcome to the EndBASIC tour demo program.  I'm glad you have made it this far!"
 PRINT
 PRINT "EndBASIC is an interpreter for a BASIC-like language and is inspired by"
@@ -74,9 +68,9 @@ PRINT "system."
 COLOR
 PRINT
 PRINT "Without further ado, let's get started!"
-GOSUB @wait
+wait
 
-title = "Language basics": GOSUB @banner
+banner "Language basics"
 PRINT "There are four primitive types: booleans (?), double-precision floating"
 PRINT "point numbers (#), 32-bit signed integers (%), and strings ($)."
 PRINT
@@ -90,9 +84,9 @@ PRINT "    IF n <= 10 THEN GOTO @retry"
 PRINT "    PRINT \"Good job!\""
 PRINT
 PRINT "Type HELP \"LANG\" for specific details about the language constructs."
-GOSUB @wait
+wait
 
-title = "File manipulation": GOSUB @banner
+banner "File manipulation"
 PRINT "Given that you are reading this tour, you have already encountered how to"
 PRINT "load a program and run it.  But here is how you'd go about creating a new"
 PRINT "program from scratch:"
@@ -111,9 +105,9 @@ PRINT "a different name."
 PRINT
 PRINT "If you are in the browser, rest assured that all programs are stored in"
 PRINT "your browser's local storage.  Nothing goes to the cloud."
-GOSUB @wait
+wait
 
-title = "The file system": GOSUB @banner
+banner "The file system"
 PRINT "In the previous page, you learned how to create files and how to save and"
 PRINT "load them.  Those examples used relative paths.  However, EndBASIC supports"
 PRINT "multiple drives (although it does not yet support directories)."
@@ -136,9 +130,9 @@ PRINT
 PRINT "Pay attention to the double quotes surrounding these arguments: these are"
 PRINT "EndBASIC commands and thus you must provide the arguments as strings.  You"
 PRINT "are bound to trip over this a few times due to muscle memory..."
-GOSUB @wait
+wait
 
-title = "Screen manipulation": GOSUB @banner
+banner "Screen manipulation"
 PRINT "You have several commands at your disposal to manipulate the contents of"
 PRINT "the screen.  Visual features are particularly interesting for teaching"
 PRINT "purposes, so expect more in this regard."
@@ -157,18 +151,18 @@ FOR c% = 8 TO 15
     PRINT "This is color"; c%
 NEXT
 COLOR
-GOSUB @wait
+wait
 
-title = "Hardware access": GOSUB @banner
+banner "Hardware access"
 PRINT "If you happen to be running on a Raspberry Pi, EndBASIC has some support"
 PRINT "to manipulate its hardware.  At the moment this includes only basic access"
 PRINT "to the GPIO lines.  See the \"DEMOS:/GPIO.BAS\" demo for an example."
 PRINT
 PRINT "Please note that you have to be running on a Raspberry Pi *AND* you must"
 PRINT "have compiled EndBASIC with --features=rpi for this to work."
-GOSUB @wait
+wait
 
-title = "Enjoy": GOSUB @banner
+banner "Enjoy"
 PRINT "And that's it for the tour.  You can now type EDIT to see the code that"
 PRINT "took you over this journey, load other demo files or... just go forth and"
 PRINT "explore.  HELP, MOUNT, and DIR are your friends at any point, but so that"
