@@ -647,6 +647,7 @@ impl<'a> Parser<'a> {
             Token::Function => Ok(Err(Token::Function)),
             Token::If => Ok(Err(Token::If)),
             Token::Select => Ok(Err(Token::Select)),
+            Token::Sub => Ok(Err(Token::Sub)),
             _ => {
                 let code = self.parse_expr(None)?;
                 Ok(Ok(Statement::End(EndSpan { code })))
@@ -931,6 +932,7 @@ impl<'a> Parser<'a> {
                 | Token::Return
                 | Token::Select
                 | Token::Shared
+                | Token::Sub
                 | Token::TextName
                 | Token::Until
                 | Token::Wend
@@ -1283,20 +1285,9 @@ impl<'a> Parser<'a> {
         self.reset()
     }
 
-    /// Parses a `FUNCTION` definition.
-    fn parse_function(&mut self, function_pos: LineCol) -> Result<Statement> {
-        let token_span = self.lexer.read()?;
-        let name = match token_span.token {
-            Token::Symbol(name) => name,
-            _ => {
-                return Err(Error::Bad(
-                    token_span.pos,
-                    "Expected a function name after FUNCTION".to_owned(),
-                ));
-            }
-        };
-        let name_pos = token_span.pos;
-
+    /// Parses the optional parameter list that may appear after a `FUNCTION` or `SUB` definition,
+    /// including the opening and closing parenthesis.
+    fn parse_callable_args(&mut self) -> Result<Vec<VarRef>> {
         let mut params = vec![];
         let peeked = self.lexer.peek()?;
         if peeked.token == Token::LeftParen {
@@ -1338,8 +1329,17 @@ impl<'a> Parser<'a> {
                 }
             }
         }
+        Ok(params)
+    }
 
-        self.expect_and_consume(Token::Eol, "Expected newline after FUNCTION name")?;
+    /// Parses the body of a callable and returns the collection of statements and the position
+    /// of the end of the body.
+    fn parse_callable_body(
+        &mut self,
+        start_pos: LineCol,
+        exp_token: Token,
+    ) -> Result<(Vec<Statement>, LineCol)> {
+        debug_assert!(matches!(exp_token, Token::Function | Token::Sub));
 
         let mut body = vec![];
         let end_pos;
@@ -1355,10 +1355,10 @@ impl<'a> Parser<'a> {
                     self.lexer.consume_peeked();
                 }
 
-                Token::Function => {
+                Token::Function | Token::Sub => {
                     return Err(Error::Bad(
-                        token_span.pos,
-                        "Cannot nest FUNCTION definitions".to_owned(),
+                        peeked.pos,
+                        "Cannot nest FUNCTION or SUB definitions".to_owned(),
                     ));
                 }
 
@@ -1368,7 +1368,7 @@ impl<'a> Parser<'a> {
                         Ok(stmt) => {
                             body.push(stmt);
                         }
-                        Err(Token::Function) => {
+                        Err(token) if token == exp_token => {
                             end_pos = end_span.pos;
                             break;
                         }
@@ -1381,13 +1381,13 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-                // TODO(jmmv): Handle `EXIT FUNCTION`.
+                // TODO(jmmv): Handle `EXIT FUNCTION` or `EXIT SUB`.
                 _ => match self.parse_one_safe()? {
                     Some(stmt) => body.push(stmt),
                     None => {
                         return Err(Error::Bad(
-                            token_span.pos,
-                            "FUNCTION without END FUNCTION".to_owned(),
+                            start_pos,
+                            format!("{} without END {}", exp_token, exp_token),
                         ));
                     }
                 },
@@ -1395,27 +1395,84 @@ impl<'a> Parser<'a> {
         }
 
         self.expect_and_consume_with_pos(
-            Token::Function,
-            function_pos,
-            "FUNCTION without END FUNCTION",
+            exp_token.clone(),
+            start_pos,
+            format!("{} without END {}", exp_token, exp_token),
         )?;
 
-        Ok(Statement::Function(FunctionSpan { name, name_pos, params, body, end_pos }))
+        Ok((body, end_pos))
     }
 
-    /// Advances until the next statement after failing to parse a `FUNCTION` definition.
-    fn reset_function(&mut self, function_pos: LineCol) -> Result<()> {
+    /// Parses a `FUNCTION` definition.
+    fn parse_function(&mut self, function_pos: LineCol) -> Result<Statement> {
+        let token_span = self.lexer.read()?;
+        let name = match token_span.token {
+            Token::Symbol(name) => {
+                if name.ref_type().is_none() {
+                    VarRef::new(name.take_name(), Some(ExprType::Integer))
+                } else {
+                    name
+                }
+            }
+            _ => {
+                return Err(Error::Bad(
+                    token_span.pos,
+                    "Expected a function name after FUNCTION".to_owned(),
+                ));
+            }
+        };
+        let name_pos = token_span.pos;
+
+        let params = self.parse_callable_args()?;
+        self.expect_and_consume(Token::Eol, "Expected newline after FUNCTION name")?;
+
+        let (body, end_pos) = self.parse_callable_body(function_pos, Token::Function)?;
+
+        Ok(Statement::Callable(CallableSpan { name, name_pos, params, body, end_pos }))
+    }
+
+    /// Parses a `SUB` definition.
+    fn parse_sub(&mut self, sub_pos: LineCol) -> Result<Statement> {
+        let token_span = self.lexer.read()?;
+        let name = match token_span.token {
+            Token::Symbol(name) => {
+                if name.ref_type().is_some() {
+                    return Err(Error::Bad(
+                        token_span.pos,
+                        "SUBs cannot return a value so type annotations are not allowed".to_owned(),
+                    ));
+                }
+                name
+            }
+            _ => {
+                return Err(Error::Bad(
+                    token_span.pos,
+                    "Expected a function name after SUB".to_owned(),
+                ));
+            }
+        };
+        let name_pos = token_span.pos;
+
+        let params = self.parse_callable_args()?;
+        self.expect_and_consume(Token::Eol, "Expected newline after SUB name")?;
+
+        let (body, end_pos) = self.parse_callable_body(sub_pos, Token::Sub)?;
+
+        Ok(Statement::Callable(CallableSpan { name, name_pos, params, body, end_pos }))
+    }
+
+    /// Advances until the next statement after failing to parse a `FUNCTION` or `SUB` definition.
+    fn reset_callable(&mut self, exp_token: Token) -> Result<()> {
         loop {
             match self.lexer.peek()?.token {
                 Token::Eof => break,
                 Token::End => {
                     self.lexer.consume_peeked();
-                    self.expect_and_consume_with_pos(
-                        Token::Function,
-                        function_pos,
-                        "FUNCTION without END FUNCTION",
-                    )?;
-                    break;
+
+                    let token_span = self.lexer.read()?;
+                    if token_span.token == exp_token {
+                        break;
+                    }
                 }
                 _ => {
                     self.lexer.consume_peeked();
@@ -1787,7 +1844,7 @@ impl<'a> Parser<'a> {
             Token::Function => {
                 let result = self.parse_function(token_span.pos);
                 if result.is_err() {
-                    self.reset_function(token_span.pos)?;
+                    self.reset_callable(Token::Function)?;
                 }
                 Ok(Some(result?))
             }
@@ -1816,6 +1873,13 @@ impl<'a> Parser<'a> {
                 let result = self.parse_select(token_span.pos);
                 if result.is_err() {
                     self.reset_select(token_span.pos)?;
+                }
+                Ok(Some(result?))
+            }
+            Token::Sub => {
+                let result = self.parse_sub(token_span.pos);
+                if result.is_err() {
+                    self.reset_callable(Token::Sub)?;
                 }
                 Ok(Some(result?))
             }
@@ -4044,7 +4108,7 @@ mod tests {
     fn test_function_empty() {
         do_ok_test(
             "FUNCTION foo$\nEND FUNCTION",
-            &[Statement::Function(FunctionSpan {
+            &[Statement::Callable(CallableSpan {
                 name: VarRef::new("foo", Some(ExprType::Text)),
                 name_pos: lc(1, 10),
                 params: vec![],
@@ -4065,7 +4129,7 @@ mod tests {
                     B
                 END FUNCTION
             "#,
-            &[Statement::Function(FunctionSpan {
+            &[Statement::Callable(CallableSpan {
                 name: VarRef::new("foo", Some(ExprType::Text)),
                 name_pos: lc(2, 26),
                 params: vec![],
@@ -4086,7 +4150,7 @@ mod tests {
     fn test_function_one_param() {
         do_ok_test(
             "FUNCTION foo$(x)\nEND FUNCTION",
-            &[Statement::Function(FunctionSpan {
+            &[Statement::Callable(CallableSpan {
                 name: VarRef::new("foo", Some(ExprType::Text)),
                 name_pos: lc(1, 10),
                 params: vec![VarRef::new("x", None)],
@@ -4100,7 +4164,7 @@ mod tests {
     fn test_function_multiple_params() {
         do_ok_test(
             "FUNCTION foo$(x$, y, z AS BOOLEAN)\nEND FUNCTION",
-            &[Statement::Function(FunctionSpan {
+            &[Statement::Callable(CallableSpan {
                 name: VarRef::new("foo", Some(ExprType::Text)),
                 name_pos: lc(1, 10),
                 params: vec![
@@ -4121,9 +4185,14 @@ mod tests {
         do_error_test("FUNCTION foo 3", "1:14: Expected newline after FUNCTION name");
         do_error_test("FUNCTION foo\nEND", "1:1: FUNCTION without END FUNCTION");
         do_error_test("FUNCTION foo\nEND IF", "2:1: END IF without IF");
+        do_error_test("FUNCTION foo\nEND SUB", "2:1: END SUB without SUB");
         do_error_test(
             "FUNCTION foo\nFUNCTION bar\nEND FUNCTION\nEND FUNCTION",
-            "1:10: Cannot nest FUNCTION definitions",
+            "2:1: Cannot nest FUNCTION or SUB definitions",
+        );
+        do_error_test(
+            "FUNCTION foo\nSUB bar\nEND SUB\nEND FUNCTION",
+            "2:1: Cannot nest FUNCTION or SUB definitions",
         );
         do_error_test("FUNCTION foo (", "1:15: Expected a parameter name");
         do_error_test("FUNCTION foo ()", "1:15: Expected a parameter name");
@@ -4537,6 +4606,114 @@ mod tests {
         do_case_error_test(
             "2 + 5 TO 8 AS",
             "2:17: Expected comma, newline, or TO after expression",
+        );
+    }
+
+    #[test]
+    fn test_sub_empty() {
+        do_ok_test(
+            "SUB foo\nEND SUB",
+            &[Statement::Callable(CallableSpan {
+                name: VarRef::new("foo", None),
+                name_pos: lc(1, 5),
+                params: vec![],
+                body: vec![],
+                end_pos: lc(2, 1),
+            })],
+        );
+    }
+
+    #[test]
+    fn test_sub_some_content() {
+        do_ok_test(
+            r#"
+                SUB foo
+                    A
+                    END
+                    END 8
+                    B
+                END SUB
+            "#,
+            &[Statement::Callable(CallableSpan {
+                name: VarRef::new("foo", None),
+                name_pos: lc(2, 21),
+                params: vec![],
+                body: vec![
+                    make_bare_builtin_call("A", 3, 21),
+                    Statement::End(EndSpan { code: None }),
+                    Statement::End(EndSpan {
+                        code: Some(Expr::Integer(IntegerSpan { value: 8, pos: lc(5, 25) })),
+                    }),
+                    make_bare_builtin_call("B", 6, 21),
+                ],
+                end_pos: lc(7, 17),
+            })],
+        );
+    }
+
+    #[test]
+    fn test_sub_one_param() {
+        do_ok_test(
+            "SUB foo(x)\nEND SUB",
+            &[Statement::Callable(CallableSpan {
+                name: VarRef::new("foo", None),
+                name_pos: lc(1, 5),
+                params: vec![VarRef::new("x", None)],
+                body: vec![],
+                end_pos: lc(2, 1),
+            })],
+        );
+    }
+
+    #[test]
+    fn test_sub_multiple_params() {
+        do_ok_test(
+            "SUB foo(x$, y, z AS BOOLEAN)\nEND SUB",
+            &[Statement::Callable(CallableSpan {
+                name: VarRef::new("foo", None),
+                name_pos: lc(1, 5),
+                params: vec![
+                    VarRef::new("x", Some(ExprType::Text)),
+                    VarRef::new("y", None),
+                    VarRef::new("z", Some(ExprType::Boolean)),
+                ],
+                body: vec![],
+                end_pos: lc(2, 1),
+            })],
+        );
+    }
+
+    #[test]
+    fn test_sub_errors() {
+        do_error_test("SUB", "1:4: Expected a function name after SUB");
+        do_error_test("SUB foo", "1:8: Expected newline after SUB name");
+        do_error_test("SUB foo 3", "1:9: Expected newline after SUB name");
+        do_error_test("SUB foo\nEND", "1:1: SUB without END SUB");
+        do_error_test("SUB foo\nEND IF", "2:1: END IF without IF");
+        do_error_test("SUB foo\nEND FUNCTION", "2:1: END FUNCTION without FUNCTION");
+        do_error_test(
+            "SUB foo\nSUB bar\nEND SUB\nEND SUB",
+            "2:1: Cannot nest FUNCTION or SUB definitions",
+        );
+        do_error_test(
+            "SUB foo\nFUNCTION bar\nEND FUNCTION\nEND SUB",
+            "2:1: Cannot nest FUNCTION or SUB definitions",
+        );
+        do_error_test("SUB foo (", "1:10: Expected a parameter name");
+        do_error_test("SUB foo ()", "1:10: Expected a parameter name");
+        do_error_test("SUB foo (,)", "1:10: Expected a parameter name");
+        do_error_test("SUB foo (a,)", "1:12: Expected a parameter name");
+        do_error_test("SUB foo (,b)", "1:10: Expected a parameter name");
+        do_error_test("SUB foo (a AS)", "1:14: Invalid type name ) in AS type definition");
+        do_error_test("SUB foo (a INTEGER)", "1:12: Expected comma, AS, or end of parameters list");
+        do_error_test("SUB foo (a? AS BOOLEAN)", "1:10: Type annotation not allowed in a?");
+        do_error_test(
+            "SUB foo$",
+            "1:5: SUBs cannot return a value so type annotations are not allowed",
+        );
+        do_error_test(
+            "SUB foo$\nEND SUB",
+            "1:5: SUBs cannot return a value so type annotations are not allowed",
         );
     }
 

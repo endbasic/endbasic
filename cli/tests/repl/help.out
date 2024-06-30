@@ -216,6 +216,7 @@ Output from HELP "LANG":
     >> [38;5;14mON ERROR   [39m    Error handling
     >> [38;5;14mSELECT CASE[39m    Conditional statement to choose among values
     >> [38;5;14mStyle      [39m    Spacing, comments, and general style
+    >> [38;5;14mSubroutines[39m    User-defined subroutines
     >> [38;5;14mTypes      [39m    Primitive types and arrays
     >> [38;5;14mVariables  [39m    Variable references, assignments, and the DIM keyword
     >> [38;5;14mWHILE      [39m    While loops
@@ -497,6 +498,25 @@ Output from HELP "SELECT CASE":
     only once at as the last case guard.
 
     When using the `IS` guard, all relational operators can be specified.
+
+Output from HELP "SUBROUTINES":
+
+[38;5;11m    User-defined subroutines
+[39m
+    To define a subroutine (also known as procedure or command), use the
+    `SUB` keyword followed by an arbitrary list of argument definitions.
+    Argument declarations can use type annotations or `AS type` suffixes to
+    define their types, but not both in a single argument:
+
+        SUB my_command(b AS BOOLEAN, i%)
+            IF b THEN PRINT i * 2.3 ELSE PRINT 1.1
+        END SUB
+
+        my_command TRUE, 5 ' Prints 11.5.
+        my_command FALSE, 8 ' Prints 1.1.
+
+    Global variables can be defined via the `DIM SHARED` keyword.  See the
+    "Variables" help topic for details.
 
 Output from HELP "STYLE":
 
