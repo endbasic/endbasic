@@ -913,10 +913,10 @@ impl Compiler {
                         sep,
                     ));
                 }
-                let mut builder = CallableMetadataBuilder::new("USER DEFINED CALLABLE")
+                let mut builder = CallableMetadataBuilder::new_dynamic(span.name.name().to_owned())
                     .with_dynamic_syntax(vec![(syntax, None)])
                     .with_category("User defined")
-                    .with_description("User defined symbol");
+                    .with_description("User defined symbol.");
                 if let Some(ctype) = span.name.ref_type() {
                     builder = builder.with_return_type(ctype);
                 }

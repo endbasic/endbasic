@@ -3506,6 +3506,17 @@ mod tests {
     }
 
     #[test]
+    fn test_user_functions_syntax_error() {
+        let code = r#"
+            FUNCTION foo(n)
+                OUT 5
+            END FUNCTION
+            OUT foo(3, 4)
+        "#;
+        do_error_test(code, &[], &[], "5:17: In call to FOO: expected n%");
+    }
+
+    #[test]
     fn test_user_functions_call_as_command() {
         let code = r#"
             FUNCTION f: OUT "foo": END FUNCTION
@@ -3551,5 +3562,16 @@ mod tests {
             OUT f
         "#;
         do_error_test(code, &[], &[], "3:17: f is not an array nor a function");
+    }
+
+    #[test]
+    fn test_user_subs_syntax_error() {
+        let code = r#"
+            SUB foo(n)
+                OUT 5
+            END SUB
+            foo 3, 4
+        "#;
+        do_error_test(code, &[], &[], "5:13: In call to FOO: expected n%");
     }
 }

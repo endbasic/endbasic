@@ -21,6 +21,7 @@ use crate::exec::{Machine, Scope};
 use crate::reader::LineCol;
 use crate::value::{Error, Result};
 use async_trait::async_trait;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::io;
@@ -520,7 +521,7 @@ impl Symbols {
 
 /// Builder pattern for a callable's metadata.
 pub struct CallableMetadataBuilder {
-    name: &'static str,
+    name: Cow<'static, str>,
     return_type: Option<ExprType>,
     category: Option<&'static str>,
     syntax: Option<String>,
@@ -538,7 +539,22 @@ impl CallableMetadataBuilder {
         assert!(name == name.to_ascii_uppercase(), "Callable name must be in uppercase");
 
         Self {
-            name,
+            name: Cow::Borrowed(name),
+            return_type: None,
+            syntax: None,
+            syntaxes: vec![],
+            category: None,
+            description: None,
+        }
+    }
+
+    /// Constructs a new metadata builder with the minimum information necessary.
+    ///
+    /// This is the same as `new` but using a dynamically-allocated name, which is necessary for
+    /// user-defined symbols.
+    pub fn new_dynamic(name: String) -> Self {
+        Self {
+            name: Cow::Owned(name.to_ascii_uppercase()),
             return_type: None,
             syntax: None,
             syntaxes: vec![],
@@ -660,7 +676,7 @@ impl CallableMetadataBuilder {
 /// queries fast.
 #[derive(Clone, Debug)]
 pub struct CallableMetadata {
-    name: &'static str,
+    name: Cow<'static, str>,
     return_type: Option<ExprType>,
     syntax: String,
     syntaxes: Vec<CallableSyntax>,
@@ -670,8 +686,8 @@ pub struct CallableMetadata {
 
 impl CallableMetadata {
     /// Gets the callable's name, all in uppercase.
-    pub fn name(&self) -> &'static str {
-        self.name
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// Gets the callable's return type.
