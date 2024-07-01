@@ -15,7 +15,7 @@
 
 //! Interactive help support.
 
-use crate::console::{refill_and_print, AnsiColor, Console};
+use crate::console::{refill_and_page, AnsiColor, Console, Pager};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
 use endbasic_core::ast::ExprType;
@@ -53,6 +53,7 @@ fn header() -> Vec<String> {
 }
 
 /// Handler for a specific help topic.
+#[async_trait(?Send)]
 trait Topic {
     /// Returns the name of the topic.
     fn name(&self) -> &str;
@@ -63,8 +64,8 @@ trait Topic {
     /// Indicates whether this topic shows up in the topics summary or not.
     fn show_in_summary(&self) -> bool;
 
-    /// Dumps the contents of this topic to the `_console`.
-    fn describe(&self, _console: &mut dyn Console) -> io::Result<()>;
+    /// Dumps the contents of this topic to the `pager`.
+    async fn describe(&self, pager: &mut Pager<'_>) -> io::Result<()>;
 }
 
 /// A help topic to describe a callable.
@@ -73,6 +74,7 @@ struct CallableTopic {
     metadata: CallableMetadata,
 }
 
+#[async_trait(?Send)]
 impl Topic for CallableTopic {
     fn name(&self) -> &str {
         &self.name
@@ -86,33 +88,35 @@ impl Topic for CallableTopic {
         false
     }
 
-    fn describe(&self, console: &mut dyn Console) -> io::Result<()> {
-        console.print("")?;
-        let previous = console.color();
-        console.set_color(Some(TITLE_COLOR), previous.1)?;
+    async fn describe(&self, pager: &mut Pager<'_>) -> io::Result<()> {
+        pager.print("").await?;
+        let previous = pager.color();
+        pager.set_color(Some(TITLE_COLOR), previous.1)?;
         match self.metadata.return_type() {
             None => {
                 if self.metadata.syntax().is_empty() {
-                    refill_and_print(console, [self.metadata.name()], "    ")?;
+                    refill_and_page(pager, [self.metadata.name()], "    ").await?;
                 } else {
-                    refill_and_print(
-                        console,
+                    refill_and_page(
+                        pager,
                         [&format!("{} {}", self.metadata.name(), self.metadata.syntax())],
                         "    ",
-                    )?;
+                    )
+                    .await?;
                 }
             }
             Some(return_type) => {
                 if self.metadata.is_argless() {
                     debug_assert!(self.metadata.syntax().is_empty());
-                    refill_and_print(
-                        console,
+                    refill_and_page(
+                        pager,
                         [&format!("{}{}", self.metadata.name(), return_type.annotation(),)],
                         "    ",
-                    )?;
+                    )
+                    .await?;
                 } else {
-                    refill_and_print(
-                        console,
+                    refill_and_page(
+                        pager,
                         [&format!(
                             "{}{}({})",
                             self.metadata.name(),
@@ -120,16 +124,17 @@ impl Topic for CallableTopic {
                             self.metadata.syntax(),
                         )],
                         "    ",
-                    )?;
+                    )
+                    .await?;
                 }
             }
         }
-        console.set_color(previous.0, previous.1)?;
+        pager.set_color(previous.0, previous.1)?;
         if !self.metadata.description().count() > 0 {
-            console.print("")?;
-            refill_and_print(console, self.metadata.description(), "    ")?;
+            pager.print("").await?;
+            refill_and_page(pager, self.metadata.description(), "    ").await?;
         }
-        console.print("")?;
+        pager.print("").await?;
         Ok(())
     }
 }
@@ -163,6 +168,7 @@ struct CategoryTopic {
     index: BTreeMap<String, &'static str>,
 }
 
+#[async_trait(?Send)]
 impl Topic for CategoryTopic {
     fn name(&self) -> &str {
         self.name
@@ -176,7 +182,7 @@ impl Topic for CategoryTopic {
         true
     }
 
-    fn describe(&self, console: &mut dyn Console) -> io::Result<()> {
+    async fn describe(&self, pager: &mut Pager<'_>) -> io::Result<()> {
         let max_length = self
             .index
             .keys()
@@ -184,36 +190,33 @@ impl Topic for CategoryTopic {
             .reduce(|a, k| if a > k { a } else { k })
             .expect("Must have at least one item in the index");
 
-        let previous = console.color();
+        let previous = pager.color();
 
         let mut lines = self.description.lines().peekable();
-        console.print("")?;
-        console.set_color(Some(TITLE_COLOR), previous.1)?;
-        refill_and_print(console, lines.next(), "    ")?;
-        console.set_color(previous.0, previous.1)?;
+        pager.print("").await?;
+        pager.set_color(Some(TITLE_COLOR), previous.1)?;
+        refill_and_page(pager, lines.next(), "    ").await?;
+        pager.set_color(previous.0, previous.1)?;
         if lines.peek().is_some() {
-            console.print("")?;
+            pager.print("").await?;
         }
-        refill_and_print(console, lines, "    ")?;
-        console.print("")?;
+        refill_and_page(pager, lines, "    ").await?;
+        pager.print("").await?;
 
         for (name, blurb) in self.index.iter() {
             let filler = " ".repeat(max_length - name.len());
-            // TODO(jmmv): Should use refill_and_print but continuation lines need special handling
+            // TODO(jmmv): Should use refill_and_page but continuation lines need special handling
             // to be indented properly.
-            console.write("    >> ")?;
-            console.set_color(Some(LINK_COLOR), previous.1)?;
-            console.write(&format!("{}{}", name, filler))?;
-            console.set_color(previous.0, previous.1)?;
-            console.print(&format!("    {}", blurb))?;
+            pager.write("    >> ")?;
+            pager.set_color(Some(LINK_COLOR), previous.1)?;
+            pager.write(&format!("{}{}", name, filler))?;
+            pager.set_color(previous.0, previous.1)?;
+            pager.print(&format!("    {}", blurb)).await?;
         }
-        console.print("")?;
-        refill_and_print(
-            console,
-            ["Type HELP followed by the name of a topic for details."],
-            "    ",
-        )?;
-        console.print("")?;
+        pager.print("").await?;
+        refill_and_page(pager, ["Type HELP followed by the name of a topic for details."], "    ")
+            .await?;
+        pager.print("").await?;
         Ok(())
     }
 }
@@ -224,6 +227,7 @@ struct LanguageTopic {
     text: &'static str,
 }
 
+#[async_trait(?Send)]
 impl Topic for LanguageTopic {
     fn name(&self) -> &str {
         self.name
@@ -237,23 +241,24 @@ impl Topic for LanguageTopic {
         false
     }
 
-    fn describe(&self, console: &mut dyn Console) -> io::Result<()> {
-        let previous = console.color();
+    async fn describe(&self, pager: &mut Pager<'_>) -> io::Result<()> {
+        let previous = pager.color();
 
         let mut lines = self.text.lines();
 
-        console.print("")?;
-        console.set_color(Some(TITLE_COLOR), previous.1)?;
-        refill_and_print(console, [lines.next().expect("Must have at least one line")], "    ")?;
-        console.set_color(previous.0, previous.1)?;
+        pager.print("").await?;
+        pager.set_color(Some(TITLE_COLOR), previous.1)?;
+        refill_and_page(pager, [lines.next().expect("Must have at least one line")], "    ")
+            .await?;
+        pager.set_color(previous.0, previous.1)?;
         for line in lines {
             if line.is_empty() {
-                console.print("")?;
+                pager.print("").await?;
             } else {
-                refill_and_print(console, [line], "    ")?;
+                refill_and_page(pager, [line], "    ").await?;
             }
         }
-        console.print("")?;
+        pager.print("").await?;
         Ok(())
     }
 }
@@ -438,46 +443,41 @@ equivalent: HELP \"CON\", HELP \"console\", HELP \"Console manipulation\".",
     }
 
     /// Prints a summary of all available help topics.
-    fn summary(&self, topics: &Topics, console: &mut dyn Console) -> io::Result<()> {
+    async fn summary(&self, topics: &Topics, pager: &mut Pager<'_>) -> io::Result<()> {
         for line in header() {
-            refill_and_print(&mut *console, [&line], "")?;
+            refill_and_page(pager, [&line], "").await?;
         }
 
-        let previous = console.color();
+        let previous = pager.color();
 
-        console.print("")?;
-        console.set_color(Some(TITLE_COLOR), previous.1)?;
-        refill_and_print(&mut *console, ["Top-level help topics"], "    ")?;
-        console.set_color(previous.0, previous.1)?;
-        console.print("")?;
+        pager.print("").await?;
+        pager.set_color(Some(TITLE_COLOR), previous.1)?;
+        refill_and_page(pager, ["Top-level help topics"], "    ").await?;
+        pager.set_color(previous.0, previous.1)?;
+        pager.print("").await?;
         for topic in topics.values() {
             if topic.show_in_summary() {
-                // TODO(jmmv): Should use refill_and_print but continuation lines need special
+                // TODO(jmmv): Should use refill_and_page but continuation lines need special
                 // handling to be indented properly.
-                console.write("    >> ")?;
-                console.set_color(Some(LINK_COLOR), previous.1)?;
-                console.print(topic.title())?;
-                console.set_color(previous.0, previous.1)?;
+                pager.write("    >> ")?;
+                pager.set_color(Some(LINK_COLOR), previous.1)?;
+                pager.print(topic.title()).await?;
+                pager.set_color(previous.0, previous.1)?;
             }
         }
-        console.print("")?;
-        refill_and_print(
-            &mut *console,
-            ["Type HELP followed by the name of a topic for details."],
-            "    ",
-        )?;
-        refill_and_print(
-            &mut *console,
+        pager.print("").await?;
+        refill_and_page(pager, ["Type HELP followed by the name of a topic for details."], "    ")
+            .await?;
+        refill_and_page(
+            pager,
             ["Type HELP \"HELP\" for details on how to specify topic names."],
             "    ",
-        )?;
-        refill_and_print(
-            &mut *console,
-            [r#"Type LOAD "DEMOS:/TOUR.BAS": RUN for a guided tour."#],
-            "    ",
-        )?;
-        refill_and_print(&mut *console, [r#"Type END or press CTRL+D to exit."#], "    ")?;
-        console.print("")?;
+        )
+        .await?;
+        refill_and_page(pager, [r#"Type LOAD "DEMOS:/TOUR.BAS": RUN for a guided tour."#], "    ")
+            .await?;
+        refill_and_page(pager, [r#"Type END or press CTRL+D to exit."#], "    ").await?;
+        pager.print("").await?;
 
         Ok(())
     }
@@ -495,7 +495,10 @@ impl Callable for HelpCommand {
         if scope.nargs() == 0 {
             let mut console = self.console.borrow_mut();
             let previous = console.set_sync(false)?;
-            let result = self.summary(&topics, &mut *console);
+            let result = {
+                let mut pager = Pager::new(&mut *console)?;
+                self.summary(&topics, &mut pager).await
+            };
             console.set_sync(previous)?;
             result?;
         } else {
@@ -505,7 +508,10 @@ impl Callable for HelpCommand {
             let topic = topics.find(&t, pos)?;
             let mut console = self.console.borrow_mut();
             let previous = console.set_sync(false)?;
-            let result = topic.describe(&mut *console);
+            let result = {
+                let mut pager = Pager::new(&mut *console)?;
+                topic.describe(&mut pager).await
+            };
             console.set_sync(previous)?;
             result?;
         }
@@ -630,6 +636,7 @@ Second paragraph of the extended description.",
 mod tests {
     use super::testutils::*;
     use super::*;
+    use crate::console::{CharsXY, Key};
     use crate::testutils::*;
 
     #[test]
@@ -996,6 +1003,64 @@ This is the first and only topic with just one line.
         t.run(r#"DIM undoc(3): HELP "undoc""#)
             .expect_err("1:15: In call to HELP: 1:20: Unknown help topic undoc")
             .expect_array("undoc", ExprType::Integer, &[3], vec![])
+            .check();
+    }
+
+    #[test]
+    fn test_help_paging() {
+        let mut t = tester();
+        t.get_console().borrow_mut().set_interactive(true);
+        t.get_console().borrow_mut().set_size_chars(CharsXY { x: 80, y: 9 });
+        t.get_console().borrow_mut().add_input_keys(&[Key::NewLine]);
+        t.get_console().borrow_mut().set_color(Some(100), Some(200)).unwrap();
+        t.run("HELP")
+            .expect_output([
+                CapturedOut::SetColor(Some(100), Some(200)),
+                CapturedOut::SetSync(false),
+            ])
+            .expect_prints(header())
+            .expect_prints([""])
+            .expect_output([
+                CapturedOut::SetColor(Some(TITLE_COLOR), Some(200)),
+                CapturedOut::Print("    Top-level help topics".to_owned()),
+                CapturedOut::SetColor(Some(100), Some(200)),
+            ])
+            .expect_prints([""])
+            .expect_output([
+                CapturedOut::SetColor(None, None),
+                CapturedOut::Print(
+                    " << Press any key for more; ESC or Ctrl+C to stop >> ".to_owned(),
+                ),
+                CapturedOut::SetColor(Some(100), Some(200)),
+            ])
+            .expect_output([
+                CapturedOut::Write("    >> ".to_owned()),
+                CapturedOut::SetColor(Some(LINK_COLOR), Some(200)),
+                CapturedOut::Print("Interpreter".to_owned()),
+                CapturedOut::SetColor(Some(100), Some(200)),
+            ])
+            .expect_output([
+                CapturedOut::Write("    >> ".to_owned()),
+                CapturedOut::SetColor(Some(LINK_COLOR), Some(200)),
+                CapturedOut::Print("Language reference".to_owned()),
+                CapturedOut::SetColor(Some(100), Some(200)),
+            ])
+            .expect_prints([
+                "",
+                "    Type HELP followed by the name of a topic for details.",
+                "    Type HELP \"HELP\" for details on how to specify topic names.",
+                "    Type LOAD \"DEMOS:/TOUR.BAS\": RUN for a guided tour.",
+                "    Type END or press CTRL+D to exit.",
+                "",
+            ])
+            .expect_output([
+                CapturedOut::SetColor(None, None),
+                CapturedOut::Print(
+                    " << Press any key for more; ESC or Ctrl+C to stop >> ".to_owned(),
+                ),
+                CapturedOut::SetColor(Some(100), Some(200)),
+            ])
+            .expect_output([CapturedOut::SetSync(true)])
             .check();
     }
 }

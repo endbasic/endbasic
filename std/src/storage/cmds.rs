@@ -15,7 +15,8 @@
 
 //! File system interaction.
 
-use crate::console::{is_narrow, Console};
+use super::time_format_error_to_io_error;
+use crate::console::{is_narrow, Console, Pager};
 use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, ExprType};
@@ -29,8 +30,6 @@ use std::io;
 use std::rc::Rc;
 use std::str;
 use time::format_description;
-
-use super::time_format_error_to_io_error;
 
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "File system
@@ -59,44 +58,49 @@ async fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> i
 
     let format = format_description::parse("[year]-[month]-[day] [hour]:[minute]")
         .expect("Hardcoded format must be valid");
+    let show_narrow = is_narrow(&*console);
 
-    console.print("")?;
-    console.print(&format!("    Directory of {}", canonical_path))?;
-    console.print("")?;
-    if is_narrow(&*console) {
+    let mut pager = Pager::new(console)?;
+    pager.print("").await?;
+    pager.print(&format!("    Directory of {}", canonical_path)).await?;
+    pager.print("").await?;
+    if show_narrow {
         let mut total_files = 0;
         for name in files.dirents().keys() {
-            console.print(&format!("    {}", name,))?;
+            pager.print(&format!("    {}", name,)).await?;
             total_files += 1;
         }
         if total_files > 0 {
-            console.print("")?;
+            pager.print("").await?;
         }
-        console.print(&format!("    {} file(s)", total_files))?;
+        pager.print(&format!("    {} file(s)", total_files)).await?;
     } else {
         let mut total_files = 0;
         let mut total_bytes = 0;
-        console.print("    Modified              Size    Name")?;
+        pager.print("    Modified              Size    Name").await?;
         for (name, details) in files.dirents() {
-            console.print(&format!(
-                "    {}    {:6}    {}",
-                details.date.format(&format).map_err(time_format_error_to_io_error)?,
-                details.length,
-                name,
-            ))?;
+            pager
+                .print(&format!(
+                    "    {}    {:6}    {}",
+                    details.date.format(&format).map_err(time_format_error_to_io_error)?,
+                    details.length,
+                    name,
+                ))
+                .await?;
             total_files += 1;
             total_bytes += details.length;
         }
         if total_files > 0 {
-            console.print("")?;
+            pager.print("").await?;
         }
-        console.print(&format!("    {} file(s), {} bytes", total_files, total_bytes))?;
+        pager.print(&format!("    {} file(s), {} bytes", total_files, total_bytes)).await?;
         if let (Some(disk_quota), Some(disk_free)) = (files.disk_quota(), files.disk_free()) {
-            console
-                .print(&format!("    {} of {} bytes free", disk_free.bytes, disk_quota.bytes))?;
+            pager
+                .print(&format!("    {} of {} bytes free", disk_free.bytes, disk_quota.bytes))
+                .await?;
         }
     }
-    console.print("")?;
+    pager.print("").await?;
     Ok(())
 }
 
@@ -400,7 +404,7 @@ pub fn add_all(
 
 #[cfg(test)]
 mod tests {
-    use crate::console::CharsXY;
+    use crate::console::{CharsXY, Key};
     use crate::storage::{DirectoryDriveFactory, DiskSpace, Drive, InMemoryDrive};
     use crate::testutils::*;
     use futures_lite::future::block_on;
@@ -596,6 +600,38 @@ mod tests {
                 "",
             ])
             .expect_file("MEMORY:/empty.bas", "")
+            .check();
+    }
+
+    #[test]
+    fn test_dir_paging() {
+        let t = Tester::default();
+        t.get_console().borrow_mut().set_interactive(true);
+        t.get_console().borrow_mut().set_size_chars(CharsXY { x: 80, y: 7 });
+        t.get_console().borrow_mut().add_input_keys(&[Key::NewLine]);
+        t.write_file("0.bas", "")
+            .write_file("1.bas", "")
+            .write_file("2.bas", "")
+            .write_file("3.bas", "")
+            .run("DIR")
+            .expect_prints([
+                "",
+                "    Directory of MEMORY:/",
+                "",
+                "    Modified              Size    Name",
+                "    2020-05-06 09:37         0    0.bas",
+                "    2020-05-06 09:37         0    1.bas",
+                " << Press any key for more; ESC or Ctrl+C to stop >> ",
+                "    2020-05-06 09:37         0    2.bas",
+                "    2020-05-06 09:37         0    3.bas",
+                "",
+                "    4 file(s), 0 bytes",
+                "",
+            ])
+            .expect_file("MEMORY:/0.bas", "")
+            .expect_file("MEMORY:/1.bas", "")
+            .expect_file("MEMORY:/2.bas", "")
+            .expect_file("MEMORY:/3.bas", "")
             .check();
     }
 
