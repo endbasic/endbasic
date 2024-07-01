@@ -168,9 +168,10 @@ impl MockConsole {
     pub fn set_interactive(&mut self, interactive: bool) {
         self.interactive = interactive;
     }
+}
 
-    /// Ensures that all prerecorded input characters were consumed.
-    fn verify_all_used(&mut self) {
+impl Drop for MockConsole {
+    fn drop(&mut self) {
         assert!(
             self.golden_in.is_empty(),
             "Not all golden input chars were consumed; {} left",
@@ -759,8 +760,6 @@ impl<'a> Checker<'a> {
         assert_eq!(self.exp_program_name.as_deref(), self.tester.program.borrow().name());
         assert_eq!(self.exp_program_text, self.tester.program.borrow().text());
         assert_eq!(self.exp_drives, drive_contents);
-
-        self.tester.console.borrow_mut().verify_all_used();
     }
 }
 

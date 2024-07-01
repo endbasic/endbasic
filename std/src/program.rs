@@ -15,7 +15,7 @@
 
 //! Stored program manipulation.
 
-use crate::console::{read_line, Console};
+use crate::console::{read_line, Console, Pager};
 use crate::storage::Storage;
 use crate::strings::parse_boolean;
 use async_trait::async_trait;
@@ -273,8 +273,9 @@ impl Callable for ListCommand {
         debug_assert_eq!(0, scope.nargs());
 
         let mut console = self.console.borrow_mut();
+        let mut pager = Pager::new(&mut *console)?;
         for line in self.program.borrow().text().lines() {
-            console.print(line)?;
+            pager.print(line).await?;
         }
         Ok(())
     }
@@ -561,6 +562,7 @@ pub fn add_all(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::console::{CharsXY, Key};
     use crate::testutils::*;
 
     const NO_ANSWERS: &[&str] =
@@ -625,6 +627,19 @@ mod tests {
             .run("LIST")
             .expect_prints(["one", "", "three"])
             .expect_program(None as Option<&str>, "one\n\nthree\n")
+            .check();
+    }
+
+    #[test]
+    fn test_list_paging() {
+        let t = Tester::default();
+        t.get_console().borrow_mut().set_interactive(true);
+        t.get_console().borrow_mut().set_size_chars(CharsXY { x: 30, y: 5 });
+        t.get_console().borrow_mut().add_input_keys(&[Key::NewLine]);
+        t.set_program(None, "one\n\nthree\nfour\nfive")
+            .run("LIST")
+            .expect_prints(["one", "", "three", "four", " << More >> ", "five"])
+            .expect_program(None as Option<&str>, "one\n\nthree\nfour\nfive")
             .check();
     }
 

@@ -15,6 +15,7 @@
 
 //! Utilities to format text.
 
+use super::Pager;
 use crate::console::Console;
 use std::io;
 
@@ -64,21 +65,20 @@ fn refill(paragraph: &str, width: usize) -> Vec<String> {
     lines
 }
 
-/// Same as `refill` but prints the lines of each paragraph to the console instead of returning
-/// them and prefixes them with an optional `indent`.
-///
-/// The width is automatically determined from the console's size.
-pub fn refill_and_print<S: AsRef<str>, P: IntoIterator<Item = S>>(
-    console: &mut dyn Console,
+/// Refills a collection of paragraphs, prefixing them with an optional `indent`.
+fn refill_many<S: AsRef<str>, P: IntoIterator<Item = S>>(
     paragraphs: P,
     indent: &str,
-) -> io::Result<()> {
+    width: usize,
+) -> Vec<String> {
+    let mut formatted = vec![];
+
     let mut first = true;
     for paragraph in paragraphs {
         let paragraph = paragraph.as_ref();
 
         if !first {
-            console.print("")?;
+            formatted.push(String::new());
         }
         first = false;
 
@@ -93,17 +93,48 @@ pub fn refill_and_print<S: AsRef<str>, P: IntoIterator<Item = S>>(
             }
         }
 
-        // TODO(jmmv): This queries the size on every print, which is not very efficient.  Should
-        // reuse this across calls, maybe by having a wrapper over Console and using it throughout.
-        let size = console.size_chars()?;
-        let lines = refill(paragraph, usize::from(size.x) - 4 - indent.len() - extra_indent.len());
+        let lines = refill(paragraph, width - 4 - indent.len() - extra_indent.len());
         for line in lines {
             if line.is_empty() {
-                console.print("")?;
+                formatted.push(String::new());
             } else {
-                console.print(&format!("{}{}{}", indent, extra_indent, line))?;
+                formatted.push(format!("{}{}{}", indent, extra_indent, line));
             }
         }
+    }
+
+    formatted
+}
+
+/// Same as `refill` but prints the lines of each paragraph to the console instead of returning
+/// them and prefixes them with an optional `indent`.
+///
+/// The width is automatically determined from the console's size.
+pub fn refill_and_print<S: AsRef<str>, P: IntoIterator<Item = S>>(
+    console: &mut dyn Console,
+    paragraphs: P,
+    indent: &str,
+) -> io::Result<()> {
+    // TODO(jmmv): This queries the size on every print, which is not very efficient.  Should
+    // reuse this across calls, maybe by having a wrapper over Console and using it throughout.
+    let size = console.size_chars()?;
+    for line in refill_many(paragraphs, indent, usize::from(size.x)) {
+        console.print(&line)?;
+    }
+    Ok(())
+}
+
+/// Same as `refill` but prints the lines of each paragraph to a pager instead of returning
+/// them and prefixes them with an optional `indent`.
+///
+/// The width is automatically determined from the console's size.
+pub(crate) async fn refill_and_page<S: AsRef<str>, P: IntoIterator<Item = S>>(
+    pager: &mut Pager<'_>,
+    paragraphs: P,
+    indent: &str,
+) -> io::Result<()> {
+    for line in refill_many(paragraphs, indent, usize::from(pager.columns())) {
+        pager.print(&line).await?;
     }
     Ok(())
 }
