@@ -138,6 +138,7 @@ impl CanvasRasterOps {
 
         let context = html_canvas_to_2d_context(canvas)?;
         context.set_font(&format!("{}px {}", DEFAULT_FONT_SIZE, DEFAULT_FONT_FACE));
+        context.set_image_smoothing_enabled(false);
         context.set_text_baseline("middle");
 
         let glyph_size = {
@@ -268,24 +269,32 @@ impl RasterOps for CanvasRasterOps {
         x2y2: PixelsXY,
         size: SizeInPixels,
     ) -> io::Result<()> {
-        let shifted = self
-            .context
-            .get_image_data(
-                f64::from(x1y1.x),
-                f64::from(x1y1.y),
-                f64::from(size.width),
-                f64::from(size.height),
+        // TODO(jmmv): This is much faster to do than reading and putting pixels... but means we
+        // cannot use the "_size" parameter to move just a portion of the image.  This is fine
+        // for now because this is only used for console scrolling... but highlights that this
+        // generic interface may need tweaking.
+        //
+        // https://stackoverflow.com/questions/8376534/shift-canvas-contents-to-the-left
+        debug_assert_eq!(
+            SizeInPixels::new(
+                self.size_pixels.width,
+                self.size_pixels.height - self.glyph_size.height,
+            ),
+            size
+        );
+
+        let saved = self.context.global_composite_operation().map_err(js_value_to_io_error)?;
+        self.context.set_global_composite_operation("copy").map_err(js_value_to_io_error)?;
+
+        self.context
+            .draw_image_with_html_canvas_element(
+                self.context.canvas().as_ref().expect("Canvas must be present in context"),
+                f64::from(x2y2.x - x1y1.x),
+                f64::from(x2y2.y - x1y1.y),
             )
             .map_err(js_value_to_io_error)?;
-        self.context.fill_rect(
-            f64::from(x1y1.x),
-            f64::from(x1y1.y),
-            f64::from(size.width),
-            f64::from(size.height),
-        );
-        self.context
-            .put_image_data(&shifted, f64::from(x2y2.x), f64::from(x2y2.y))
-            .map_err(js_value_to_io_error)
+
+        self.context.set_global_composite_operation(&saved).map_err(js_value_to_io_error)
     }
 
     fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()> {
