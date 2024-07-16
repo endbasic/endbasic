@@ -565,13 +565,16 @@ where
         debug_assert!(pos.x < self.size_chars.x);
         debug_assert!(pos.y < self.size_chars.y);
 
+        let previous = self.set_sync(false)?;
         self.clear_cursor()?;
         self.cursor_pos = pos;
         self.draw_cursor()?;
-        self.present_canvas()
+        self.set_sync(previous)?;
+        Ok(())
     }
 
     fn move_within_line(&mut self, off: i16) -> io::Result<()> {
+        let previous = self.set_sync(false)?;
         self.clear_cursor()?;
         if off < 0 {
             self.cursor_pos.x -= -off as u16;
@@ -579,17 +582,20 @@ where
             self.cursor_pos.x += off as u16;
         }
         self.draw_cursor()?;
-        self.present_canvas()
+        self.set_sync(previous)?;
+        Ok(())
     }
 
     fn print(&mut self, text: &str) -> io::Result<()> {
         let text = remove_control_chars(text);
 
+        let previous = self.set_sync(false)?;
         self.clear_cursor()?;
         self.raw_write_wrapped(text)?;
         self.open_line()?;
         self.draw_cursor()?;
-        self.present_canvas()
+        self.set_sync(previous)?;
+        Ok(())
     }
 
     async fn poll_key(&mut self) -> io::Result<Option<Key>> {
@@ -622,10 +628,12 @@ where
     fn write(&mut self, text: &str) -> io::Result<()> {
         let text = remove_control_chars(text);
 
+        let previous = self.set_sync(false)?;
         self.clear_cursor()?;
         self.raw_write_wrapped(text)?;
         self.draw_cursor()?;
-        self.present_canvas()
+        self.set_sync(previous)?;
+        Ok(())
     }
 
     fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
