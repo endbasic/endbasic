@@ -453,6 +453,45 @@ impl Compiler {
         Ok(())
     }
 
+    /// Compiles a `FUNCTION` or `SUB` definition.
+    fn compile_callable(&mut self, span: CallableSpan) -> Result<()> {
+        let key = SymbolKey::from(span.name.name());
+        if self.symtable.contains_key(&key) {
+            return Err(Error::new(
+                span.name_pos,
+                format!("Cannot define already-defined symbol {}", span.name),
+            ));
+        }
+
+        let mut syntax = vec![];
+        for (i, param) in span.params.iter().enumerate() {
+            let sep = if i == span.params.len() - 1 {
+                ArgSepSyntax::End
+            } else {
+                ArgSepSyntax::Exactly(ArgSep::Long)
+            };
+            syntax.push(SingularArgSyntax::RequiredValue(
+                RequiredValueSyntax {
+                    name: Cow::Owned(param.name().to_owned()),
+                    vtype: param.ref_type().unwrap_or(ExprType::Integer),
+                },
+                sep,
+            ));
+        }
+
+        let mut builder = CallableMetadataBuilder::new_dynamic(span.name.name().to_owned())
+            .with_dynamic_syntax(vec![(syntax, None)])
+            .with_category("User defined")
+            .with_description("User defined symbol.");
+        if let Some(ctype) = span.name.ref_type() {
+            builder = builder.with_return_type(ctype);
+        }
+        self.symtable.insert_global(key, SymbolPrototype::Callable(builder.build()));
+        self.callable_spans.push(span);
+
+        Ok(())
+    }
+
     /// Compiles a `DIM` statement.
     fn compile_dim(&mut self, span: DimSpan) -> Result<()> {
         let key = SymbolKey::from(&span.name);
@@ -831,6 +870,10 @@ impl Compiler {
                 self.emit(Instruction::BuiltinCall(key, span.vref_pos, nargs));
             }
 
+            Statement::Callable(span) => {
+                self.compile_callable(span)?;
+            }
+
             Statement::Data(mut span) => {
                 self.data.append(&mut span.values);
             }
@@ -895,36 +938,6 @@ impl Compiler {
 
             Statement::For(span) => {
                 self.compile_for(span)?;
-            }
-
-            Statement::Callable(span) => {
-                let mut syntax = vec![];
-                for (i, param) in span.params.iter().enumerate() {
-                    let sep = if i == span.params.len() - 1 {
-                        ArgSepSyntax::End
-                    } else {
-                        ArgSepSyntax::Exactly(ArgSep::Long)
-                    };
-                    syntax.push(SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax {
-                            name: Cow::Owned(param.name().to_owned()),
-                            vtype: param.ref_type().unwrap_or(ExprType::Integer),
-                        },
-                        sep,
-                    ));
-                }
-                let mut builder = CallableMetadataBuilder::new_dynamic(span.name.name().to_owned())
-                    .with_dynamic_syntax(vec![(syntax, None)])
-                    .with_category("User defined")
-                    .with_description("User defined symbol.");
-                if let Some(ctype) = span.name.ref_type() {
-                    builder = builder.with_return_type(ctype);
-                }
-                self.symtable.insert_global(
-                    SymbolKey::from(span.name.name()),
-                    SymbolPrototype::Callable(builder.build()),
-                );
-                self.callable_spans.push(span);
             }
 
             Statement::Gosub(span) => {
@@ -2111,6 +2124,60 @@ mod tests {
                         .build(),
                 ),
             )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_function_redefined_was_variable() {
+        Tester::default()
+            .parse("a = 1: FUNCTION a: END FUNCTION")
+            .compile()
+            .expect_err("1:17: Cannot define already-defined symbol a%")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_function_redefined_was_function() {
+        Tester::default()
+            .parse("FUNCTION a: END FUNCTION: FUNCTION A: END FUNCTION")
+            .compile()
+            .expect_err("1:36: Cannot define already-defined symbol A%")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_function_redefined_was_sub() {
+        Tester::default()
+            .parse("SUB a: END SUB: FUNCTION A: END FUNCTION")
+            .compile()
+            .expect_err("1:26: Cannot define already-defined symbol A%")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_sub_redefined_was_variable() {
+        Tester::default()
+            .parse("a = 1: SUB a: END SUB")
+            .compile()
+            .expect_err("1:12: Cannot define already-defined symbol a")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_sub_redefined_was_function() {
+        Tester::default()
+            .parse("FUNCTION a: END FUNCTION: SUB A: END SUB")
+            .compile()
+            .expect_err("1:31: Cannot define already-defined symbol A")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_sub_redefined_was_sub() {
+        Tester::default()
+            .parse("SUB a: END SUB: SUB A: END SUB")
+            .compile()
+            .expect_err("1:21: Cannot define already-defined symbol A")
             .check();
     }
 
