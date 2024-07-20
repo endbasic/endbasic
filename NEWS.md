@@ -10,12 +10,31 @@ to talk to the cloud service.  If you use the web interface, this should not be
 a problem, but if you use local builds, please try to stay on the latest release
 for the time being.**
 
-## Changes in version 0.10.99
+## Changes in version 0.11.0
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2024-07-20.**
 
-*   Fixed JSON requests to the service to properly set the correct
-    `Content-Type` header.
+Language changes:
+
+*   Issue #112: Added support for user-defined functions and subroutines via the
+    `FUNCTION` and `SUB` code blocks.  The new `DEMOS:FIBONACCI.BAS` demo program
+    demonstrates how they work.
+
+*   Issue #112: Added support for global variables via `DIM SHARED`.
+
+*   Added the `DISASM` command to show the disassembled version of a compiled
+    program.
+
+*   Made the `CLEAR` command be only available in the interactive interpreter
+    given that it cannot clear compilation state.
+
+*   Fixed the `MID` function so that the `length%` parameter is actually optional
+    as the documentation claimed.
+
+*   Changed the way integers with explicit bases are parsed so that they can
+    express integers with their highest bit set.  For bitmasks, this is needed.
+
+Console improvements:
 
 *   Improved support for narrow consoles: trimmed the width of the welcome
     banner, fixed the editor's status line handling, made `DIR` print a
@@ -26,55 +45,42 @@ for the time being.**
     paginate their output so that they are usable in short consoles.  Also
     applies to the new `DISASM` command.
 
+*   Added the new console `st7735s` for the Raspberry Pi.  This backend uses the
+    ST7735S 1.44in LCD for the console output and the terminal console for input,
+    but also recognizes the hat's buttons and injects them as keyboard events.
+
 *   Issue #110: Homogenized the implementation of the SDL and web consoles to
     guarantee consistent behavior and to have indirect test coverage of the
     web console.
 
-*   Added the new console `st7735s` for the Raspberry Pi.  This console uses the
-    ST7735S 1.44in LCD for the console output and the terminal console for input,
-    but also recognizes the hat's buttons and injects them as keyboard events.
+Compiler and virtual machine changes:
 
-*   Rewrote the expression evaluator to be bytecode based.  This opens the way
-    towards user-supplied functions and the ability to interrupt functions as
-    they execute.
-
-*   Changed the way integers with explicit bases are parsed so that they can
-    express integers with their highest bit set.  For bitmasks, this is needed.
-
-*   The `CLEAR` command is now only available in the interactive interpreter given
-    that it cannot clear compilation state.
+*   Rewrote the expression evaluator to be bytecode based.  This is in service of
+    supporting user-defined functions and adds the ability to interrupt functions
+    as they execute.
 
 *   Many errors that were previously discovered only at runtime (such as undefined
     variables) are now caught during the compilation stage.  This means that bad
     programs abort earlier instead of half-way during execution.
 
-*   Reverted integer-only operations to *not* perform automatic upgrades to
-    doubles on underflows, overflows, and other error conditions.  This behavior
-    was previously added in 0.10.0 but it's now problematic that we do type
-    propagation during compilation as it pushes too much responsibility to the
-    runtime.
-
 *   Major performance improvements: type checking now happens at compilation time
     and the interpreter checks for interrupts more rarely now.
 
-*   Fixed the `MID` function so that the `length%` parameter is actually optional
-    as the documentation claimed.
-    
+*   Reverted integer-only operations to *not* perform automatic upgrades to
+    doubles on underflows, overflows, and other error conditions.  This behavior
+    was previously added in 0.10.0 but has become problematic with the new type
+    propagation during compilation as it pushes too much responsibility to the
+    runtime.
+
 *   Homogenized the handling of command and function arguments into a single
     parser.  The user-visible effects of this change are that all syntax
     definitions that `HELP` prints now follow a consistent pattern and that such
     help strings truly match what the commands and functions expect.
 
-*   Issue #112: Added user-defined functions and the `FIBONACCI.BAS` demo
-    program to demonstrate how they work.
+Cloud service changes:
 
-*   Issue #112: Added support for global variables via `DIM SHARED`.
-
-*   Issue #112: Added user-defined subroutines (also known as procedures or
-    commands).
-
-*   Added the `DISASM` command to show the disassembled version of a compiled
-    program.
+*   Fixed JSON requests to the service to properly set the correct
+    `Content-Type` header.
 
 ## Changes in version 0.10.0
 
