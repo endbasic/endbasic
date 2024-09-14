@@ -66,7 +66,6 @@ main() {
         echo
     done >"${distname}/NOTICE"
 
-    local ext=
     local target=
     case "${name}" in
         linux-armv7-rpi)
@@ -81,8 +80,6 @@ main() {
             rm -f .cargo/config
 
             cp ./target/armv7-unknown-linux-gnueabihf/release/endbasic "${distname}"
-
-            ext=tgz
             ;;
 
         macos*)
@@ -110,7 +107,6 @@ main() {
 
             brew uninstall --ignore-dependencies sdl2 sdl2_ttf freetype libpng
             sanity_check "${distname}/endbasic"
-            ext=tgz
             ;;
 
         windows*)
@@ -120,7 +116,6 @@ main() {
             cp dlls/* "${distname}"
 
             sanity_check "${distname}/endbasic.exe"
-            ext=zip
             ;;
 
         *)
@@ -129,17 +124,9 @@ main() {
             cp ./target/release/endbasic "${distname}"
 
             sanity_check "${distname}/endbasic"
-            ext=tgz
             ;;
     esac
-    case "${ext}" in
-        tgz)
-            tar czvf "${outdir}/${distname}.${ext}" "${distname}"
-            ;;
-        zip)
-            zip -r "${outdir}/${distname}.${ext}" "${distname}"
-            ;;
-    esac
+    zip -r "${outdir}/${distname}.zip" "${distname}"
     rm -rf "${distname}"
 }
 
