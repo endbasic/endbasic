@@ -50,15 +50,15 @@ jobs:
                 path: endbasic-linux-x86_64-sdl/*
                 retention-days: 1
 
-    macos-x86_64-sdl:
+    macos-arm64-sdl:
         runs-on: macos-latest
         steps:
             - uses: actions/checkout@v2
-            - run: ./.github/workflows/release.sh macos-x86_64-sdl
+            - run: ./.github/workflows/release.sh macos-arm64-sdl
             - uses: actions/upload-artifact@v4
               with:
-                name: endbasic-macos-x86_64-sdl
-                path: endbasic-macos-x86_64-sdl/*
+                name: endbasic-macos-arm64-sdl
+                path: endbasic-macos-arm64-sdl/*
                 retention-days: 1
 
     windows-x86_64-sdl:
@@ -77,7 +77,7 @@ jobs:
 
     create-release:
         if: startsWith(github.ref, 'refs/tags/')
-        needs: [linux-armv7-rpi, linux-x86_64-sdl, macos-x86_64-sdl, windows-x86_64-sdl]
+        needs: [linux-armv7-rpi, linux-x86_64-sdl, macos-arm64-sdl, windows-x86_64-sdl]
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v2
