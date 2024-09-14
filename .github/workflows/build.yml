@@ -27,7 +27,7 @@ jobs:
                   toolchain: stable
                   default: true
                   target: armv7-unknown-linux-gnueabihf
-            - uses: actions/checkout@v2
+            - uses: actions/checkout@v4
             - run: sudo apt update
             - run: sudo apt install gcc-arm-linux-gnueabihf
             - run: ./.github/workflows/release.sh linux-armv7-rpi
@@ -40,7 +40,7 @@ jobs:
     linux-x86_64-sdl:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v2
+            - uses: actions/checkout@v4
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             - run: ./.github/workflows/release.sh linux-x86_64-sdl
@@ -53,7 +53,7 @@ jobs:
     macos-arm64-sdl:
         runs-on: macos-latest
         steps:
-            - uses: actions/checkout@v2
+            - uses: actions/checkout@v4
             - run: ./.github/workflows/release.sh macos-arm64-sdl
             - uses: actions/upload-artifact@v4
               with:
@@ -64,7 +64,7 @@ jobs:
     windows-x86_64-sdl:
         runs-on: windows-latest
         steps:
-            - uses: actions/checkout@v2
+            - uses: actions/checkout@v4
             - run: choco install unzip zip
             - run: ./.github/workflows/setup-sdl.ps1
             - run: ./.github/workflows/release.sh windows-x86_64-sdl
@@ -80,7 +80,7 @@ jobs:
         needs: [linux-armv7-rpi, linux-x86_64-sdl, macos-arm64-sdl, windows-x86_64-sdl]
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v2
+            - uses: actions/checkout@v4
             - run: ./.github/workflows/notes.sh >notes.md || touch notes.md
             - name: Fetch binary artifacts
               uses: actions/download-artifact@v4
