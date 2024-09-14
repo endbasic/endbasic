@@ -12,7 +12,7 @@ for the time being.**
 
 ## Changes in version 0.11.1
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2024-09-14.**
 
 *   Issue #246: Fixed double keyboard input on the Windows console.
 
