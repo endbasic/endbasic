@@ -235,7 +235,7 @@ mod tests {
     /// Validates error handling of `LBOUND` and `UBOUND` as given in `func`.
     fn do_bound_errors_test(func: &str) {
         Tester::default()
-            .run(&format!("DIM x(2): result = {}()", func))
+            .run(format!("DIM x(2): result = {}()", func))
             .expect_compilation_err(format!(
                 "1:20: In call to {}: expected <array> | <array, dimension%>",
                 func
@@ -243,7 +243,7 @@ mod tests {
             .check();
 
         Tester::default()
-            .run(&format!("DIM x(2): result = {}(x, 1, 2)", func))
+            .run(format!("DIM x(2): result = {}(x, 1, 2)", func))
             .expect_compilation_err(format!(
                 "1:20: In call to {}: expected <array> | <array, dimension%>",
                 func
@@ -251,13 +251,13 @@ mod tests {
             .check();
 
         Tester::default()
-            .run(&format!("DIM x(2): result = {}(x, -1)", func))
+            .run(format!("DIM x(2): result = {}(x, -1)", func))
             .expect_err(format!("1:20: In call to {}: 1:30: Dimension -1 must be positive", func))
             .expect_array("x", ExprType::Integer, &[2], vec![])
             .check();
 
         Tester::default()
-            .run(&format!("DIM x(2): result = {}(x, TRUE)", func))
+            .run(format!("DIM x(2): result = {}(x, TRUE)", func))
             .expect_compilation_err(format!(
                 "1:20: In call to {}: 1:30: BOOLEAN is not a number",
                 func
@@ -265,7 +265,7 @@ mod tests {
             .check();
 
         Tester::default()
-            .run(&format!("i = 0: result = {}(i)", func))
+            .run(format!("i = 0: result = {}(i)", func))
             .expect_compilation_err(format!(
                 "1:17: In call to {}: 1:24: i is not an array reference",
                 func
@@ -273,7 +273,7 @@ mod tests {
             .check();
 
         Tester::default()
-            .run(&format!("result = {}(3)", func))
+            .run(format!("result = {}(3)", func))
             .expect_compilation_err(format!(
                 "1:10: In call to {}: 1:17: Requires an array reference, not a value",
                 func
@@ -281,7 +281,7 @@ mod tests {
             .check();
 
         Tester::default()
-            .run(&format!("i = 0: result = {}(i)", func))
+            .run(format!("i = 0: result = {}(i)", func))
             .expect_compilation_err(format!(
                 "1:17: In call to {}: 1:24: i is not an array reference",
                 func
@@ -289,7 +289,7 @@ mod tests {
             .check();
 
         Tester::default()
-            .run(&format!("DIM i(3) AS BOOLEAN: result = {}(i$)", func))
+            .run(format!("DIM i(3) AS BOOLEAN: result = {}(i$)", func))
             .expect_compilation_err(format!(
                 "1:31: In call to {}: 1:38: Incompatible type annotation in i$ reference",
                 func
@@ -297,12 +297,12 @@ mod tests {
             .check();
 
         Tester::default()
-            .run(&format!("result = {}(x)", func))
+            .run(format!("result = {}(x)", func))
             .expect_compilation_err(format!("1:10: In call to {}: 1:17: Undefined array x", func))
             .check();
 
         Tester::default()
-            .run(&format!("DIM x(2, 3, 4): result = {}(x)", func))
+            .run(format!("DIM x(2, 3, 4): result = {}(x)", func))
             .expect_err(format!(
                 "1:26: In call to {}: 1:33: Requires a dimension for multidimensional arrays",
                 func
@@ -311,7 +311,7 @@ mod tests {
             .check();
 
         Tester::default()
-            .run(&format!("DIM x(2, 3, 4): result = {}(x, 5)", func))
+            .run(format!("DIM x(2, 3, 4): result = {}(x, 5)", func))
             .expect_err(format!(
                 "1:26: In call to {}: 1:36: Array X has only 3 dimensions but asked for 5",
                 func
