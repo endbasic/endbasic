@@ -21,13 +21,11 @@ jobs:
     lint:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions-rs/toolchain@v1
+            - uses: actions-rust-lang/setup-rust-toolchain@v1
               with:
-                  profile: minimal
                   # Use the latest stable Rust version for lint checks to
                   # verify any new Clippy warnings that may appear.
                   toolchain: stable
-                  default: true
                   components: clippy, rustfmt
             - uses: actions/checkout@v4
             - run: sudo apt update

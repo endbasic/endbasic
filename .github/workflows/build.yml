@@ -21,11 +21,9 @@ jobs:
     linux-armv7-rpi:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions-rs/toolchain@v1
+            - uses: actions-rust-lang/setup-rust-toolchain@v1
               with:
-                  profile: minimal
                   toolchain: stable
-                  default: true
                   target: armv7-unknown-linux-gnueabihf
             - uses: actions/checkout@v4
             - run: sudo apt update
