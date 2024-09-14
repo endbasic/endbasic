@@ -332,7 +332,7 @@ impl Console for TerminalConsole {
     }
 
     fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
-        #[cfg(not(release))]
+        #[cfg(debug_assertions)]
         {
             let size = self.size_chars()?;
             assert!(pos.x < size.x);
