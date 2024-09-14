@@ -31,7 +31,7 @@ jobs:
             - run: sudo apt update
             - run: sudo apt install gcc-arm-linux-gnueabihf
             - run: ./.github/workflows/release.sh linux-armv7-rpi
-            - uses: actions/upload-artifact@v2
+            - uses: actions/upload-artifact@v4
               with:
                 name: endbasic-linux-armv7-rpi
                 path: endbasic-linux-armv7-rpi/*
@@ -44,7 +44,7 @@ jobs:
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             - run: ./.github/workflows/release.sh linux-x86_64-sdl
-            - uses: actions/upload-artifact@v2
+            - uses: actions/upload-artifact@v4
               with:
                 name: endbasic-linux-x86_64-sdl
                 path: endbasic-linux-x86_64-sdl/*
@@ -55,7 +55,7 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - run: ./.github/workflows/release.sh macos-x86_64-sdl
-            - uses: actions/upload-artifact@v2
+            - uses: actions/upload-artifact@v4
               with:
                 name: endbasic-macos-x86_64-sdl
                 path: endbasic-macos-x86_64-sdl/*
@@ -69,7 +69,7 @@ jobs:
             - run: ./.github/workflows/setup-sdl.ps1
             - run: ./.github/workflows/release.sh windows-x86_64-sdl
               shell: bash
-            - uses: actions/upload-artifact@v2
+            - uses: actions/upload-artifact@v4
               with:
                 name: endbasic-windows-x86_64-sdl
                 path: endbasic-windows-x86_64-sdl/*
@@ -83,7 +83,7 @@ jobs:
             - uses: actions/checkout@v2
             - run: ./.github/workflows/notes.sh >notes.md || touch notes.md
             - name: Fetch binary artifacts
-              uses: actions/download-artifact@v2
+              uses: actions/download-artifact@v4
               with:
                 path: artifacts
             - name: Create release draft
