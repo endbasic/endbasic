@@ -24,7 +24,9 @@
 
 use async_channel::{Receiver, Sender, TryRecvError};
 use async_trait::async_trait;
-use crossterm::{cursor, event, style, terminal, tty::IsTty, QueueableCommand};
+use crossterm::event::{self, KeyEventKind};
+use crossterm::tty::IsTty;
+use crossterm::{cursor, style, terminal, QueueableCommand};
 use endbasic_core::exec::Signal;
 use endbasic_std::console::{
     get_env_var_as_u16, read_key_from_stdin, remove_control_chars, CharsXY, ClearType, Console, Key,
@@ -117,32 +119,46 @@ impl TerminalConsole {
         let mut done = false;
         while !done {
             let key = match event::read() {
-                Ok(event::Event::Key(ev)) => match ev.code {
-                    KeyCode::Backspace => Key::Backspace,
-                    KeyCode::End => Key::End,
-                    KeyCode::Esc => Key::Escape,
-                    KeyCode::Home => Key::Home,
-                    KeyCode::Tab => Key::Tab,
-                    KeyCode::Up => Key::ArrowUp,
-                    KeyCode::Down => Key::ArrowDown,
-                    KeyCode::Left => Key::ArrowLeft,
-                    KeyCode::Right => Key::ArrowRight,
-                    KeyCode::PageDown => Key::PageDown,
-                    KeyCode::PageUp => Key::PageUp,
-                    KeyCode::Char('a') if ev.modifiers == KeyModifiers::CONTROL => Key::Home,
-                    KeyCode::Char('b') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowLeft,
-                    KeyCode::Char('c') if ev.modifiers == KeyModifiers::CONTROL => Key::Interrupt,
-                    KeyCode::Char('d') if ev.modifiers == KeyModifiers::CONTROL => Key::Eof,
-                    KeyCode::Char('e') if ev.modifiers == KeyModifiers::CONTROL => Key::End,
-                    KeyCode::Char('f') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowRight,
-                    KeyCode::Char('j') if ev.modifiers == KeyModifiers::CONTROL => Key::NewLine,
-                    KeyCode::Char('m') if ev.modifiers == KeyModifiers::CONTROL => Key::NewLine,
-                    KeyCode::Char('n') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowDown,
-                    KeyCode::Char('p') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowUp,
-                    KeyCode::Char(ch) => Key::Char(ch),
-                    KeyCode::Enter => Key::NewLine,
-                    _ => Key::Unknown(format!("{:?}", ev)),
-                },
+                Ok(event::Event::Key(ev)) => {
+                    if ev.kind != KeyEventKind::Press {
+                        continue;
+                    }
+
+                    match ev.code {
+                        KeyCode::Backspace => Key::Backspace,
+                        KeyCode::End => Key::End,
+                        KeyCode::Esc => Key::Escape,
+                        KeyCode::Home => Key::Home,
+                        KeyCode::Tab => Key::Tab,
+                        KeyCode::Up => Key::ArrowUp,
+                        KeyCode::Down => Key::ArrowDown,
+                        KeyCode::Left => Key::ArrowLeft,
+                        KeyCode::Right => Key::ArrowRight,
+                        KeyCode::PageDown => Key::PageDown,
+                        KeyCode::PageUp => Key::PageUp,
+                        KeyCode::Char('a') if ev.modifiers == KeyModifiers::CONTROL => Key::Home,
+                        KeyCode::Char('b') if ev.modifiers == KeyModifiers::CONTROL => {
+                            Key::ArrowLeft
+                        }
+                        KeyCode::Char('c') if ev.modifiers == KeyModifiers::CONTROL => {
+                            Key::Interrupt
+                        }
+                        KeyCode::Char('d') if ev.modifiers == KeyModifiers::CONTROL => Key::Eof,
+                        KeyCode::Char('e') if ev.modifiers == KeyModifiers::CONTROL => Key::End,
+                        KeyCode::Char('f') if ev.modifiers == KeyModifiers::CONTROL => {
+                            Key::ArrowRight
+                        }
+                        KeyCode::Char('j') if ev.modifiers == KeyModifiers::CONTROL => Key::NewLine,
+                        KeyCode::Char('m') if ev.modifiers == KeyModifiers::CONTROL => Key::NewLine,
+                        KeyCode::Char('n') if ev.modifiers == KeyModifiers::CONTROL => {
+                            Key::ArrowDown
+                        }
+                        KeyCode::Char('p') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowUp,
+                        KeyCode::Char(ch) => Key::Char(ch),
+                        KeyCode::Enter => Key::NewLine,
+                        _ => Key::Unknown(format!("{:?}", ev)),
+                    }
+                }
                 Ok(_) => {
                     // Not a key event; ignore and try again.
                     continue;

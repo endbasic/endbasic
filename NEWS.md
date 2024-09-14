@@ -10,6 +10,12 @@ to talk to the cloud service.  If you use the web interface, this should not be
 a problem, but if you use local builds, please try to stay on the latest release
 for the time being.**
 
+## Changes in version 0.11.1
+
+**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+
+*   Issue #246: Fixed double keyboard input on the Windows console.
+
 ## Changes in version 0.11.0
 
 **Released on 2024-07-19.**
