@@ -58,10 +58,6 @@ pub enum Error {
     /// Syntax error.
     #[error("{}: {}", .0, .1)]
     SyntaxError(LineCol, String),
-
-    /// Value computation error during execution.
-    #[error("{0}")]
-    ValueError(value::Error),
 }
 
 impl Error {
@@ -104,14 +100,6 @@ impl Error {
         Self::EvalError(pos, e.message)
     }
 
-    /// Creates a position-less value computation error.
-    // TODO(jmmv): This only exists because of some public operations in `Machine` that operate
-    // "out of band".  We should probably remove those, put them elsewhere, and/or make them return
-    // a different error type rather than weakening what we store in `Error`.
-    fn from_value_error_without_pos(e: value::Error) -> Self {
-        Self::ValueError(e)
-    }
-
     /// Returns true if this type of error can be caught by `ON ERROR`.
     fn is_catchable(&self) -> bool {
         match self {
@@ -121,7 +109,6 @@ impl Error {
             Error::NestedError(_) => false,
             Error::ParseError(_) => false,
             Error::SyntaxError(..) => true,
-            Error::ValueError(_) => false,
         }
     }
 }
@@ -650,45 +637,6 @@ impl Machine {
     /// Obtains mutable access to the state of the symbols.
     pub fn get_mut_symbols(&mut self) -> &mut Symbols {
         &mut self.symbols
-    }
-
-    /// Retrieves the variable `name` as a boolean.  Fails if it is some other type or if it's not
-    /// defined.
-    pub fn get_var_as_bool(&self, name: &str) -> Result<bool> {
-        match self
-            .symbols
-            .get_var(&VarRef::new(name, Some(ExprType::Boolean)))
-            .map_err(Error::from_value_error_without_pos)?
-        {
-            Value::Boolean(b) => Ok(*b),
-            _ => panic!("Invalid type check in get()"),
-        }
-    }
-
-    /// Retrieves the variable `name` as an integer.  Fails if it is some other type or if it's not
-    /// defined.
-    pub fn get_var_as_int(&self, name: &str) -> Result<i32> {
-        match self
-            .symbols
-            .get_var(&VarRef::new(name, Some(ExprType::Integer)))
-            .map_err(Error::from_value_error_without_pos)?
-        {
-            Value::Integer(i) => Ok(*i),
-            _ => panic!("Invalid type check in get()"),
-        }
-    }
-
-    /// Retrieves the variable `name` as a string.  Fails if it is some other type or if it's not
-    /// defined.
-    pub fn get_var_as_string(&self, name: &str) -> Result<&str> {
-        match self
-            .symbols
-            .get_var(&VarRef::new(name, Some(ExprType::Text)))
-            .map_err(Error::from_value_error_without_pos)?
-        {
-            Value::Text(s) => Ok(s),
-            _ => panic!("Invalid type check in get()"),
-        }
     }
 
     /// Returns true if execution should stop because we have hit a stop condition.
@@ -1809,12 +1757,18 @@ mod tests {
             StopReason::Eof,
             block_on(machine.exec(&mut b"a = TRUE: b = 1".as_ref())).expect("Execution failed")
         );
-        assert!(machine.get_var_as_bool("a").is_ok());
-        assert!(machine.get_var_as_int("b").is_ok());
+        match machine.get_symbols().get_auto("a") {
+            Some(Symbol::Variable(Value::Boolean(_))) => (),
+            e => panic!("a is not a bool: {:?}", e),
+        }
+        match machine.get_symbols().get_auto("b") {
+            Some(Symbol::Variable(Value::Integer(_))) => (),
+            e => panic!("a is not an integer: {:?}", e),
+        }
         assert!(!*cleared.borrow());
         machine.clear();
-        assert!(machine.get_var_as_bool("a").is_err());
-        assert!(machine.get_var_as_int("b").is_err());
+        assert!(machine.get_symbols().get_auto("a").is_none());
+        assert!(machine.get_symbols().get_auto("b").is_none());
         assert!(*cleared.borrow());
     }
 
@@ -1872,61 +1826,6 @@ mod tests {
 
         block_on(machine.exec(&mut b"DATA 3: GOTO @foo".as_ref())).unwrap_err();
         assert!(machine.get_data().is_empty());
-    }
-
-    #[test]
-    fn test_get_var_as_bool() {
-        let mut machine = Machine::default();
-        assert_eq!(
-            StopReason::Eof,
-            block_on(machine.exec(&mut b"a = TRUE: b = 1".as_ref())).expect("Execution failed")
-        );
-        assert!(machine.get_var_as_bool("a").expect("Failed to query a"));
-        assert_eq!(
-            "Incompatible types in b? reference",
-            format!("{}", machine.get_var_as_bool("b").expect_err("Querying b succeeded"))
-        );
-        assert_eq!(
-            "Undefined variable c",
-            format!("{}", machine.get_var_as_bool("c").expect_err("Querying c succeeded"))
-        );
-    }
-
-    #[test]
-    fn test_get_var_as_int() {
-        let mut machine = Machine::default();
-        assert_eq!(
-            StopReason::Eof,
-            block_on(machine.exec(&mut b"a = 1: b = \"foo\"".as_ref())).expect("Execution failed")
-        );
-        assert_eq!(1, machine.get_var_as_int("a").expect("Failed to query a"));
-        assert_eq!(
-            "Incompatible types in b% reference",
-            format!("{}", machine.get_var_as_int("b").expect_err("Querying b succeeded"))
-        );
-        assert_eq!(
-            "Undefined variable c",
-            format!("{}", machine.get_var_as_int("c").expect_err("Querying c succeeded"))
-        );
-    }
-
-    #[test]
-    fn test_get_var_as_string() {
-        let mut machine = Machine::default();
-        assert_eq!(
-            StopReason::Eof,
-            block_on(machine.exec(&mut b"a = \"foo\": b = FALSE".as_ref()))
-                .expect("Execution failed")
-        );
-        assert_eq!("foo", machine.get_var_as_string("a").expect("Failed to query a"));
-        assert_eq!(
-            "Incompatible types in b$ reference",
-            format!("{}", machine.get_var_as_string("b").expect_err("Querying b succeeded"))
-        );
-        assert_eq!(
-            "Undefined variable c",
-            format!("{}", machine.get_var_as_string("c").expect_err("Querying c succeeded"))
-        );
     }
 
     /// Runs the `input` code on a new test machine.
@@ -3157,7 +3056,10 @@ mod tests {
         let mut machine = Machine::default();
         assert_eq!(StopReason::Eof, block_on(machine.exec(&mut code.as_bytes())).unwrap());
         assert_eq!(1, machine.get_symbols().locals().len());
-        assert_eq!(4, machine.get_var_as_int("I").unwrap());
+        match machine.get_symbols().get_auto("I") {
+            Some(Symbol::Variable(Value::Integer(i))) => assert_eq!(4, *i),
+            e => panic!("I is not an integer: {:?}", e),
+        }
     }
 
     #[test]

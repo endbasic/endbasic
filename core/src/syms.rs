@@ -436,6 +436,7 @@ impl Symbols {
     /// Returns an error if the variable is not defined, if the referenced symbol is not a variable,
     /// or if the type annotation in the variable reference does not match the type of the value
     /// that the variable contains.
+    #[cfg(test)]
     pub(crate) fn get_var(&self, vref: &VarRef) -> Result<&Value> {
         match self.get(vref)? {
             Some(Symbol::Variable(v)) => Ok(v),

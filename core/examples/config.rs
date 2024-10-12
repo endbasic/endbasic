@@ -20,7 +20,11 @@
 //! the scripted code cannot call back into Rust land, so the script's execution is guaranteed to
 //! not have side-effects.
 
-use endbasic_core::exec::{Machine, StopReason};
+use endbasic_core::{
+    ast::Value,
+    exec::{Machine, StopReason},
+    syms::Symbol,
+};
 use futures_lite::future::block_on;
 
 /// Sample configuration file to parse.
@@ -45,16 +49,22 @@ fn main() {
     }
 
     // Now that our script has run, inspect the variables it set on the machine.
-    match machine.get_var_as_int("foo_value") {
-        Ok(i) => println!("foo_value is {}", i),
-        Err(e) => println!("Input did not contain foo_value: {}", e),
+    match machine.get_symbols().get_auto("foo_value") {
+        Some(Symbol::Variable(Value::Integer(i))) => {
+            println!("foo_value is {}", i)
+        }
+        _ => println!("Input did not contain foo_value or is of an invalid type"),
     }
-    match machine.get_var_as_bool("enable_bar") {
-        Ok(b) => println!("enable_bar is {}", b),
-        Err(e) => println!("Input did not contain enable_bar: {}", e),
+    match machine.get_symbols().get_auto("enable_bar") {
+        Some(Symbol::Variable(Value::Boolean(b))) => {
+            println!("enable_bar is {}", b)
+        }
+        _ => println!("Input did not contain enable_bar or is of an invalid type"),
     }
-    match machine.get_var_as_string("enable_baz") {
-        Ok(b) => println!("enable_bar is {}", b),
-        Err(e) => println!("enable_baz is not set: {}", e),
+    match machine.get_symbols().get_auto("enable_baz") {
+        Some(_) => {
+            println!("enable_baz should not have been set")
+        }
+        _ => println!("enable_baz is not set"),
     }
 }

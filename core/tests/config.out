@@ -1,3 +1,3 @@
 foo_value is 123
 enable_bar is true
-enable_baz is not set: Undefined variable enable_baz
+enable_baz is not set
