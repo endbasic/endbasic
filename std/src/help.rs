@@ -94,7 +94,7 @@ impl Topic for CallableTopic {
         pager.set_color(Some(TITLE_COLOR), previous.1)?;
         match self.metadata.return_type() {
             None => {
-                if self.metadata.syntax().is_empty() {
+                if self.metadata.is_argless() {
                     refill_and_page(pager, [self.metadata.name()], "    ").await?;
                 } else {
                     refill_and_page(
@@ -107,7 +107,6 @@ impl Topic for CallableTopic {
             }
             Some(return_type) => {
                 if self.metadata.is_argless() {
-                    debug_assert!(self.metadata.syntax().is_empty());
                     refill_and_page(
                         pager,
                         [&format!("{}{}", self.metadata.name(), return_type.annotation(),)],
@@ -953,16 +952,12 @@ This is the first and only topic with just one line.
             tester().add_callable(DoNothingCommand::new()).add_callable(EmptyFunction::new());
 
         t.run(r#"HELP foo bar"#).expect_err("1:10: Unexpected value in expression").check();
-        t.run(r#"HELP foo"#)
-            .expect_compilation_err("1:1: In call to HELP: 1:6: Undefined variable foo")
-            .check();
+        t.run(r#"HELP foo"#).expect_compilation_err("1:6: Undefined symbol FOO").check();
 
         t.run(r#"HELP "foo", 3"#)
-            .expect_compilation_err("1:1: In call to HELP: expected <> | <topic$>")
+            .expect_compilation_err("1:1: HELP expected <> | <topic$>")
             .check();
-        t.run(r#"HELP 3"#)
-            .expect_compilation_err("1:1: In call to HELP: 1:6: INTEGER is not a STRING")
-            .check();
+        t.run(r#"HELP 3"#).expect_compilation_err("1:6: expected STRING but found INTEGER").check();
 
         t.run(r#"HELP "lang%""#)
             .expect_err("1:1: In call to HELP: 1:6: Unknown help topic lang%")

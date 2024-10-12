@@ -5,6 +5,6 @@
     Type HELP for interactive usage information.
 
 Got 123 from stdin
-ERROR: 1:1: Unknown builtin FOOBAR
+ERROR: 1:1: Undefined symbol FOOBAR
 Continuing
 End of input by CTRL-D

@@ -664,7 +664,7 @@ mod tests {
 
         Tester::default()
             .run("KILL")
-            .expect_compilation_err("1:1: In call to KILL: expected filename$")
+            .expect_compilation_err("1:1: KILL expected filename$")
             .check();
 
         check_stmt_err("1:1: In call to KILL: Entry not found", r#"KILL "missing-file""#);
@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn test_disasm_errors() {
-        check_stmt_compilation_err("1:1: In call to DISASM: expected no arguments", "DISASM 2");
+        check_stmt_compilation_err("1:1: DISASM expected no arguments", "DISASM 2");
     }
 
     #[test]
@@ -745,7 +745,7 @@ mod tests {
 
     #[test]
     fn test_edit_errors() {
-        check_stmt_compilation_err("1:1: In call to EDIT: expected no arguments", "EDIT 1");
+        check_stmt_compilation_err("1:1: EDIT expected no arguments", "EDIT 1");
     }
 
     #[test]
@@ -775,7 +775,7 @@ mod tests {
 
     #[test]
     fn test_list_errors() {
-        check_stmt_compilation_err("1:1: In call to LIST: expected no arguments", "LIST 2");
+        check_stmt_compilation_err("1:1: LIST expected no arguments", "LIST 2");
     }
 
     #[test]
@@ -882,8 +882,7 @@ mod tests {
         Tester::default()
             .run(format!("{} 3", cmd))
             .expect_compilation_err(format!(
-                "1:1: In call to {}: 1:{}: INTEGER is not a STRING",
-                cmd,
+                "1:{}: expected STRING but found INTEGER",
                 cmd.len() + 2,
             ))
             .check();
@@ -907,7 +906,7 @@ mod tests {
 
         Tester::default()
             .run("LOAD")
-            .expect_compilation_err("1:1: In call to LOAD: expected filename$")
+            .expect_compilation_err("1:1: LOAD expected filename$")
             .check();
 
         check_stmt_err("1:1: In call to LOAD: Entry not found", r#"LOAD "missing-file""#);
@@ -999,7 +998,7 @@ mod tests {
 
     #[test]
     fn test_new_errors() {
-        check_stmt_compilation_err("1:1: In call to NEW: expected no arguments", "NEW 10");
+        check_stmt_compilation_err("1:1: NEW expected no arguments", "NEW 10");
     }
 
     #[test]
@@ -1038,7 +1037,7 @@ mod tests {
 
     #[test]
     fn test_run_errors() {
-        check_stmt_compilation_err("1:1: In call to RUN: expected no arguments", "RUN 10");
+        check_stmt_compilation_err("1:1: RUN expected no arguments", "RUN 10");
     }
 
     #[test]
@@ -1088,7 +1087,7 @@ mod tests {
 
         Tester::default()
             .run("SAVE 2, 3")
-            .expect_compilation_err("1:1: In call to SAVE: expected <> | <filename$>")
+            .expect_compilation_err("1:1: SAVE expected <> | <filename$>")
             .check();
     }
 }

@@ -695,7 +695,7 @@ mod tests {
 
     #[test]
     fn test_cls_errors() {
-        check_stmt_compilation_err("1:1: In call to CLS: expected no arguments", "CLS 1");
+        check_stmt_compilation_err("1:1: CLS expected no arguments", "CLS 1");
     }
 
     #[test]
@@ -718,25 +718,16 @@ mod tests {
     #[test]
     fn test_color_errors() {
         check_stmt_compilation_err(
-            "1:1: In call to COLOR: expected <> | <fg%> | <[fg%], [bg%]>",
+            "1:1: COLOR expected <> | <fg%> | <[fg%], [bg%]>",
             "COLOR 1, 2, 3",
         );
-        check_stmt_compilation_err(
-            "1:1: In call to COLOR: expected <> | <fg%> | <[fg%], [bg%]>",
-            "COLOR 1; 2",
-        );
+        check_stmt_compilation_err("1:1: COLOR expected <> | <fg%> | <[fg%], [bg%]>", "COLOR 1; 2");
 
         check_stmt_err("1:1: In call to COLOR: 1:7: Color out of range", "COLOR 1000, 0");
         check_stmt_err("1:1: In call to COLOR: 1:10: Color out of range", "COLOR 0, 1000");
 
-        check_stmt_compilation_err(
-            "1:1: In call to COLOR: 1:7: BOOLEAN is not a number",
-            "COLOR TRUE, 0",
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to COLOR: 1:10: BOOLEAN is not a number",
-            "COLOR 0, TRUE",
-        );
+        check_stmt_compilation_err("1:7: BOOLEAN is not a number", "COLOR TRUE, 0");
+        check_stmt_compilation_err("1:10: BOOLEAN is not a number", "COLOR 0, TRUE");
     }
 
     #[test]
@@ -763,14 +754,8 @@ mod tests {
 
     #[test]
     fn test_inkey_errors() {
-        check_expr_compilation_error(
-            "1:10: In call to INKEY: expected no arguments nor parenthesis",
-            "INKEY()",
-        );
-        check_expr_compilation_error(
-            "1:10: In call to INKEY: expected no arguments nor parenthesis",
-            "INKEY(1)",
-        );
+        check_expr_compilation_error("1:10: INKEY expected no arguments", "INKEY()");
+        check_expr_compilation_error("1:10: INKEY expected no arguments", "INKEY(1)");
     }
 
     #[test]
@@ -861,37 +846,26 @@ mod tests {
 
     #[test]
     fn test_input_errors() {
+        check_stmt_compilation_err("1:1: INPUT expected <vref> | <[prompt$] <,|;> vref>", "INPUT");
         check_stmt_compilation_err(
-            "1:1: In call to INPUT: expected <vref> | <[prompt$] <,|;> vref>",
-            "INPUT",
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to INPUT: expected <vref> | <[prompt$] <,|;> vref>",
+            "1:1: INPUT expected <vref> | <[prompt$] <,|;> vref>",
             "INPUT ; ,",
         );
         check_stmt_compilation_err(
-            "1:1: In call to INPUT: expected <vref> | <[prompt$] <,|;> vref>",
+            "1:1: INPUT expected <vref> | <[prompt$] <,|;> vref>",
             "INPUT ;",
         );
+        check_stmt_compilation_err("1:7: expected STRING but found INTEGER", "INPUT 3 ; a");
         check_stmt_compilation_err(
-            "1:1: In call to INPUT: 1:7: INTEGER is not a STRING",
-            "INPUT 3 ; a",
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to INPUT: expected <vref> | <[prompt$] <,|;> vref>",
+            "1:1: INPUT expected <vref> | <[prompt$] <,|;> vref>",
             "INPUT \"foo\" AS bar",
         );
-        check_stmt_err("1:1: In call to INPUT: 1:7: Undefined variable a", "INPUT a + 1 ; b");
+        check_stmt_err("1:7: Undefined symbol A", "INPUT a + 1 ; b");
         Tester::default()
             .run("a = 3: INPUT ; a + 1")
-            .expect_compilation_err(
-                "1:8: In call to INPUT: 1:16: Requires a variable reference, not a value",
-            )
+            .expect_compilation_err("1:16: Requires a reference, not a value")
             .check();
-        check_stmt_err(
-            "1:1: In call to INPUT: 1:11: Cannot + STRING and BOOLEAN",
-            "INPUT \"a\" + TRUE; b?",
-        );
+        check_stmt_err("1:11: Cannot + STRING and BOOLEAN", "INPUT \"a\" + TRUE; b?");
     }
 
     #[test]
@@ -909,29 +883,20 @@ mod tests {
 
     #[test]
     fn test_locate_errors() {
-        check_stmt_compilation_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE");
-        check_stmt_compilation_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE 1");
-        check_stmt_compilation_err(
-            "1:1: In call to LOCATE: expected column%, row%",
-            "LOCATE 1, 2, 3",
-        );
-        check_stmt_compilation_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE 1; 2");
+        check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE");
+        check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE 1");
+        check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE 1, 2, 3");
+        check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE 1; 2");
 
         check_stmt_err("1:1: In call to LOCATE: 1:8: Column out of range", "LOCATE -1, 2");
         check_stmt_err("1:1: In call to LOCATE: 1:8: Column out of range", "LOCATE 70000, 2");
-        check_stmt_compilation_err(
-            "1:1: In call to LOCATE: 1:8: BOOLEAN is not a number",
-            "LOCATE TRUE, 2",
-        );
-        check_stmt_compilation_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE , 2");
+        check_stmt_compilation_err("1:8: BOOLEAN is not a number", "LOCATE TRUE, 2");
+        check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE , 2");
 
         check_stmt_err("1:1: In call to LOCATE: 1:11: Row out of range", "LOCATE 1, -2");
         check_stmt_err("1:1: In call to LOCATE: 1:11: Row out of range", "LOCATE 1, 70000");
-        check_stmt_compilation_err(
-            "1:1: In call to LOCATE: 1:11: BOOLEAN is not a number",
-            "LOCATE 1, TRUE",
-        );
-        check_stmt_compilation_err("1:1: In call to LOCATE: expected column%, row%", "LOCATE 1,");
+        check_stmt_compilation_err("1:11: BOOLEAN is not a number", "LOCATE 1, TRUE");
+        check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE 1,");
 
         let mut t = Tester::default();
         t.get_console().borrow_mut().set_size_chars(CharsXY { x: 30, y: 20 });
@@ -1039,11 +1004,11 @@ mod tests {
     #[test]
     fn test_print_errors() {
         check_stmt_compilation_err(
-            "1:1: In call to PRINT: expected [expr1 <,|;> .. <,|;> exprN]",
+            "1:1: PRINT expected [expr1 <,|;> .. <,|;> exprN]",
             "PRINT 3 AS 4",
         );
         check_stmt_compilation_err(
-            "1:1: In call to PRINT: expected [expr1 <,|;> .. <,|;> exprN]",
+            "1:1: PRINT expected [expr1 <,|;> .. <,|;> exprN]",
             "PRINT 3, 4 AS 5",
         );
         // Ensure type errors from `Expr` and `Value` bubble up.
@@ -1057,14 +1022,8 @@ mod tests {
         t.get_console().borrow_mut().set_size_chars(CharsXY { x: 12345, y: 0 });
         t.run("result = SCRCOLS").expect_var("result", 12345i32).check();
 
-        check_expr_compilation_error(
-            "1:10: In call to SCRCOLS: expected no arguments nor parenthesis",
-            "SCRCOLS()",
-        );
-        check_expr_compilation_error(
-            "1:10: In call to SCRCOLS: expected no arguments nor parenthesis",
-            "SCRCOLS(1)",
-        );
+        check_expr_compilation_error("1:10: SCRCOLS expected no arguments", "SCRCOLS()");
+        check_expr_compilation_error("1:10: SCRCOLS expected no arguments", "SCRCOLS(1)");
     }
 
     #[test]
@@ -1073,13 +1032,7 @@ mod tests {
         t.get_console().borrow_mut().set_size_chars(CharsXY { x: 0, y: 768 });
         t.run("result = SCRROWS").expect_var("result", 768i32).check();
 
-        check_expr_compilation_error(
-            "1:10: In call to SCRROWS: expected no arguments nor parenthesis",
-            "SCRROWS()",
-        );
-        check_expr_compilation_error(
-            "1:10: In call to SCRROWS: expected no arguments nor parenthesis",
-            "SCRROWS(1)",
-        );
+        check_expr_compilation_error("1:10: SCRROWS expected no arguments", "SCRROWS()");
+        check_expr_compilation_error("1:10: SCRROWS expected no arguments", "SCRROWS(1)");
     }
 }

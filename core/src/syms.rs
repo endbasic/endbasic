@@ -65,7 +65,7 @@ impl From<io::Error> for CallError {
 
 impl From<compiler::Error> for CallError {
     fn from(value: compiler::Error) -> Self {
-        Self::EvalError(value.pos, value.message)
+        Self::NestedError(exec::Error::CompilerError(value))
     }
 }
 
@@ -403,7 +403,10 @@ impl Symbols {
         if let Some(symbol) = symbol {
             let stype = symbol.eval_type();
             if !vref.accepts_callable(stype) {
-                return Err(Error::new(format!("Incompatible types in {} reference", vref)));
+                return Err(Error::new(format!(
+                    "Incompatible type annotation in {} reference",
+                    vref
+                )));
             }
         }
         Ok(symbol)
@@ -423,7 +426,10 @@ impl Symbols {
             Some(symbol) => {
                 let stype = symbol.eval_type();
                 if !vref.accepts_callable(stype) {
-                    return Err(Error::new(format!("Incompatible types in {} reference", vref)));
+                    return Err(Error::new(format!(
+                        "Incompatible type annotation in {} reference",
+                        vref
+                    )));
                 }
                 Ok(Some(symbol))
             }
@@ -525,7 +531,6 @@ pub struct CallableMetadataBuilder {
     name: Cow<'static, str>,
     return_type: Option<ExprType>,
     category: Option<&'static str>,
-    syntax: Option<String>,
     syntaxes: Vec<CallableSyntax>,
     description: Option<&'static str>,
 }
@@ -542,7 +547,6 @@ impl CallableMetadataBuilder {
         Self {
             name: Cow::Borrowed(name),
             return_type: None,
-            syntax: None,
             syntaxes: vec![],
             category: None,
             description: None,
@@ -557,7 +561,6 @@ impl CallableMetadataBuilder {
         Self {
             name: Cow::Owned(name.to_ascii_uppercase()),
             return_type: None,
-            syntax: None,
             syntaxes: vec![],
             category: None,
             description: None,
@@ -575,51 +578,29 @@ impl CallableMetadataBuilder {
         mut self,
         syntaxes: &'static [(&'static [SingularArgSyntax], Option<&'static RepeatedSyntax>)],
     ) -> Self {
-        let syntaxes = syntaxes
+        self.syntaxes = syntaxes
             .iter()
             .map(|s| CallableSyntax::new_static(s.0, s.1))
             .collect::<Vec<CallableSyntax>>();
-        if syntaxes.is_empty() {
-            self.syntax = Some("no arguments".to_owned());
-        } else if syntaxes.len() == 1 {
-            self.syntax = Some(syntaxes.first().unwrap().describe());
-        } else {
-            self.syntax = Some(
-                syntaxes
-                    .iter()
-                    .map(|syn| format!("<{}>", syn.describe()))
-                    .collect::<Vec<String>>()
-                    .join(" | "),
-            );
-        };
-        self.syntaxes = syntaxes;
         self
     }
 
     /// Sets the syntax specifications for this callable.
-    pub fn with_dynamic_syntax(
-        mut self,
+    pub(crate) fn with_syntaxes<S: Into<Vec<CallableSyntax>>>(mut self, syntaxes: S) -> Self {
+        self.syntaxes = syntaxes.into();
+        self
+    }
+
+    /// Sets the syntax specifications for this callable.
+    pub(crate) fn with_dynamic_syntax(
+        self,
         syntaxes: Vec<(Vec<SingularArgSyntax>, Option<RepeatedSyntax>)>,
     ) -> Self {
         let syntaxes = syntaxes
             .into_iter()
             .map(|s| CallableSyntax::new_dynamic(s.0, s.1))
             .collect::<Vec<CallableSyntax>>();
-        if syntaxes.is_empty() {
-            self.syntax = Some("no arguments".to_owned());
-        } else if syntaxes.len() == 1 {
-            self.syntax = Some(syntaxes.first().unwrap().describe());
-        } else {
-            self.syntax = Some(
-                syntaxes
-                    .iter()
-                    .map(|syn| format!("<{}>", syn.describe()))
-                    .collect::<Vec<String>>()
-                    .join(" | "),
-            );
-        };
-        self.syntaxes = syntaxes;
-        self
+        self.with_syntaxes(syntaxes)
     }
 
     /// Sets the category for this callable.  All callables with the same category name will be
@@ -647,7 +628,6 @@ impl CallableMetadataBuilder {
         CallableMetadata {
             name: self.name,
             return_type: self.return_type,
-            syntax: self.syntax.expect("All callables must specify a syntax"),
             syntaxes: self.syntaxes,
             category: self.category.expect("All callables must specify a category"),
             description: self.description.expect("All callables must specify a description"),
@@ -663,7 +643,6 @@ impl CallableMetadataBuilder {
         CallableMetadata {
             name: self.name,
             return_type: self.return_type,
-            syntax: self.syntax.unwrap_or("".to_owned()),
             syntaxes: self.syntaxes,
             category: self.category.unwrap_or(""),
             description: self.description.unwrap_or(""),
@@ -679,7 +658,6 @@ impl CallableMetadataBuilder {
 pub struct CallableMetadata {
     name: Cow<'static, str>,
     return_type: Option<ExprType>,
-    syntax: String,
     syntaxes: Vec<CallableSyntax>,
     category: &'static str,
     description: &'static str,
@@ -697,8 +675,24 @@ impl CallableMetadata {
     }
 
     /// Gets the callable's syntax specification.
-    pub fn syntax(&self) -> &str {
-        &self.syntax
+    pub fn syntax(&self) -> String {
+        fn format_one(cs: &CallableSyntax) -> String {
+            let mut syntax = cs.describe();
+            if syntax.is_empty() {
+                syntax.push_str("no arguments");
+            }
+            syntax
+        }
+
+        match self.syntaxes.as_slice() {
+            [] => panic!("Callables without syntaxes are not allowed at construction time"),
+            [one] => format_one(one),
+            many => many
+                .iter()
+                .map(|syn| format!("<{}>", syn.describe()))
+                .collect::<Vec<String>>()
+                .join(" | "),
+        }
     }
 
     /// Returns the callable's syntax definitions.
@@ -720,7 +714,7 @@ impl CallableMetadata {
 
     /// Returns true if this is a callable that takes no arguments.
     pub fn is_argless(&self) -> bool {
-        self.syntax.is_empty()
+        self.syntaxes.is_empty() || (self.syntaxes.len() == 1 && self.syntaxes[0].is_empty())
     }
 
     /// Returns true if this callable is a function (not a command).
@@ -1011,7 +1005,7 @@ mod tests {
             }
         }
         assert_eq!(
-            "Incompatible types in bool_array$ reference",
+            "Incompatible type annotation in bool_array$ reference",
             format!("{}", syms.get(&VarRef::new("bool_array", Some(ExprType::Text))).unwrap_err())
         );
 
@@ -1020,7 +1014,7 @@ mod tests {
             _ => panic!("Got something that is not the command we asked for"),
         }
         assert_eq!(
-            "Incompatible types in out# reference",
+            "Incompatible type annotation in out# reference",
             format!("{}", syms.get(&VarRef::new("out", Some(ExprType::Double))).unwrap_err())
         );
 
@@ -1033,7 +1027,7 @@ mod tests {
             }
         }
         assert_eq!(
-            "Incompatible types in sum# reference",
+            "Incompatible type annotation in sum# reference",
             format!("{}", syms.get(&VarRef::new("sum", Some(ExprType::Double))).unwrap_err())
         );
 
@@ -1044,7 +1038,7 @@ mod tests {
             }
         }
         assert_eq!(
-            "Incompatible types in string_var% reference",
+            "Incompatible type annotation in string_var% reference",
             format!(
                 "{}",
                 syms.get(&VarRef::new("string_var", Some(ExprType::Integer))).unwrap_err()
@@ -1099,7 +1093,7 @@ mod tests {
             }
         }
         assert_eq!(
-            "Incompatible types in bool_array$ reference",
+            "Incompatible type annotation in bool_array$ reference",
             format!(
                 "{}",
                 syms.get_mut(&VarRef::new("bool_array", Some(ExprType::Text))).unwrap_err()
@@ -1111,7 +1105,7 @@ mod tests {
             _ => panic!("Got something that is not the command we asked for"),
         }
         assert_eq!(
-            "Incompatible types in out# reference",
+            "Incompatible type annotation in out# reference",
             format!("{}", syms.get_mut(&VarRef::new("out", Some(ExprType::Double))).unwrap_err())
         );
 
@@ -1124,7 +1118,7 @@ mod tests {
             }
         }
         assert_eq!(
-            "Incompatible types in sum# reference",
+            "Incompatible type annotation in sum# reference",
             format!("{}", syms.get_mut(&VarRef::new("sum", Some(ExprType::Double))).unwrap_err())
         );
 
@@ -1135,7 +1129,7 @@ mod tests {
             }
         }
         assert_eq!(
-            "Incompatible types in string_var% reference",
+            "Incompatible type annotation in string_var% reference",
             format!(
                 "{}",
                 syms.get_mut(&VarRef::new("string_var", Some(ExprType::Integer))).unwrap_err()
@@ -1409,7 +1403,7 @@ mod tests {
         );
 
         assert_eq!(
-            "Incompatible types in SomeArray$ reference",
+            "Incompatible type annotation in SomeArray$ reference",
             format!(
                 "{}",
                 syms.set_var(&VarRef::new("SomeArray", Some(ExprType::Text)), Value::Integer(1))

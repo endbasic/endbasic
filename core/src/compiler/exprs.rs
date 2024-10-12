@@ -32,10 +32,7 @@ pub(super) fn compile_array_indices(
     name_pos: LineCol,
 ) -> Result<()> {
     if exp_nargs != args.len() {
-        return Err(Error::new(
-            name_pos,
-            format!("Cannot index array with {} subscripts; need {}", args.len(), exp_nargs),
-        ));
+        return Err(Error::ArrayIndexSubscriptsError(name_pos, args.len(), exp_nargs));
     }
 
     for arg in args.into_iter().rev() {
@@ -46,10 +43,7 @@ pub(super) fn compile_array_indices(
                 instrs.push(Instruction::DoubleToInteger);
             }
             itype => {
-                return Err(Error::new(
-                    arg_pos,
-                    format!("Array index must be INTEGER, not {}", itype),
-                ));
+                return Err(Error::NotANumber(arg_pos, itype));
             }
         }
     }
@@ -73,7 +67,7 @@ fn compile_not_op(
             instrs.push(Instruction::BitwiseNot(span.pos));
             Ok(ExprType::Integer)
         }
-        _ => Err(Error::new(span.pos, format!("Cannot apply NOT to {}", expr_type))),
+        _ => Err(Error::UnaryOpTypeError(span.pos, "NOT", expr_type)),
     }
 }
 
@@ -93,7 +87,7 @@ fn compile_neg_op(
             instrs.push(Instruction::NegateInteger(span.pos));
             Ok(ExprType::Integer)
         }
-        _ => Err(Error::new(span.pos, format!("Cannot negate {}", expr_type))),
+        _ => Err(Error::UnaryOpTypeError(span.pos, "negate", expr_type)),
     }
 }
 
@@ -104,7 +98,7 @@ fn compile_logical_binary_op<F1: Fn(LineCol) -> Instruction, F2: Fn(LineCol) -> 
     logical_make_inst: F1,
     bitwise_make_inst: F2,
     span: BinaryOpSpan,
-    op_name: &str,
+    op_name: &'static str,
 ) -> Result<ExprType> {
     let lhs_type = compile_expr(instrs, symtable, span.lhs, false)?;
     let rhs_type = compile_expr(instrs, symtable, span.rhs, false)?;
@@ -117,9 +111,7 @@ fn compile_logical_binary_op<F1: Fn(LineCol) -> Instruction, F2: Fn(LineCol) -> 
             instrs.push(bitwise_make_inst(span.pos));
             Ok(ExprType::Integer)
         }
-        (_, _) => {
-            Err(Error::new(span.pos, format!("Cannot {} {} and {}", op_name, lhs_type, rhs_type)))
-        }
+        (_, _) => Err(Error::BinaryOpTypeError(span.pos, op_name, lhs_type, rhs_type)),
     }
 }
 
@@ -138,7 +130,7 @@ fn compile_equality_binary_op<
     integer_make_inst: F3,
     text_make_inst: F4,
     span: BinaryOpSpan,
-    op_name: &str,
+    op_name: &'static str,
 ) -> Result<ExprType> {
     let lhs_type = compile_expr(instrs, symtable, span.lhs, false)?;
     let pc = instrs.len();
@@ -161,10 +153,7 @@ fn compile_equality_binary_op<
         }
 
         (_, _) => {
-            return Err(Error::new(
-                span.pos,
-                format!("Cannot compare {} and {} with {}", lhs_type, rhs_type, op_name),
-            ));
+            return Err(Error::BinaryOpTypeError(span.pos, op_name, lhs_type, rhs_type));
         }
     };
 
@@ -195,7 +184,7 @@ fn compile_relational_binary_op<
     integer_make_inst: F2,
     text_make_inst: F3,
     span: BinaryOpSpan,
-    op_name: &str,
+    op_name: &'static str,
 ) -> Result<ExprType> {
     let lhs_type = compile_expr(instrs, symtable, span.lhs, false)?;
     let pc = instrs.len();
@@ -221,10 +210,7 @@ fn compile_relational_binary_op<
         }
 
         (_, _) => {
-            return Err(Error::new(
-                span.pos,
-                format!("Cannot compare {} and {} with {}", lhs_type, rhs_type, op_name),
-            ));
+            return Err(Error::BinaryOpTypeError(span.pos, op_name, lhs_type, rhs_type));
         }
     };
 
@@ -249,13 +235,13 @@ fn compile_shift_binary_op<F: Fn(LineCol) -> Instruction>(
     symtable: &SymbolsTable,
     make_inst: F,
     span: BinaryOpSpan,
-    op_name: &str,
+    op_name: &'static str,
 ) -> Result<ExprType> {
     let lhs_type = compile_expr(instrs, symtable, span.lhs, false)?;
     match lhs_type {
         ExprType::Integer => (),
         _ => {
-            return Err(Error::new(span.pos, format!("Cannot apply {} to {}", op_name, lhs_type)));
+            return Err(Error::UnaryOpTypeError(span.pos, op_name, lhs_type));
         }
     };
 
@@ -263,15 +249,7 @@ fn compile_shift_binary_op<F: Fn(LineCol) -> Instruction>(
     match rhs_type {
         ExprType::Integer => (),
         _ => {
-            return Err(Error::new(
-                span.pos,
-                format!(
-                    "Number of bits to {} must be an {}, not a {}",
-                    op_name,
-                    ExprType::Integer,
-                    rhs_type
-                ),
-            ));
+            return Err(Error::TypeMismatch(span.pos, rhs_type, ExprType::Integer));
         }
     };
 
@@ -288,7 +266,7 @@ fn compile_arithmetic_binary_op<F1: Fn(LineCol) -> Instruction, F2: Fn(LineCol) 
     double_make_inst: F1,
     integer_make_inst: F2,
     span: BinaryOpSpan,
-    op_name: &str,
+    op_name: &'static str,
 ) -> Result<ExprType> {
     let lhs_type = compile_expr(instrs, symtable, span.lhs, false)?;
     let pc = instrs.len();
@@ -313,10 +291,7 @@ fn compile_arithmetic_binary_op<F1: Fn(LineCol) -> Instruction, F2: Fn(LineCol) 
         }
 
         (_, _) => {
-            return Err(Error::new(
-                span.pos,
-                format!("Cannot {} {} and {}", op_name, lhs_type, rhs_type),
-            ));
+            return Err(Error::BinaryOpTypeError(span.pos, op_name, lhs_type, rhs_type));
         }
     };
 
@@ -347,18 +322,13 @@ fn compile_expr_symbol(
 ) -> Result<ExprType> {
     let key = SymbolKey::from(span.vref.name());
     let (instr, vtype) = match symtable.get(&key) {
-        None => {
-            return Err(Error::new(span.pos, format!("Undefined variable {}", span.vref.name())))
-        }
+        None => return Err(Error::UndefinedSymbol(span.pos, key)),
 
         Some(SymbolPrototype::Array(atype, _dims)) => {
             if allow_varrefs {
                 (Instruction::LoadRef(key, *atype, span.pos), *atype)
             } else {
-                return Err(Error::new(
-                    span.pos,
-                    format!("{} is not a variable", span.vref.name()),
-                ));
+                return Err(Error::NotAVariable(span.pos, span.vref));
             }
         }
 
@@ -380,31 +350,21 @@ fn compile_expr_symbol(
             let etype = match md.return_type() {
                 Some(etype) => etype,
                 None => {
-                    return Err(Error::new(
-                        span.pos,
-                        format!("{} is not an array nor a function", span.vref.name()),
-                    ));
+                    return Err(Error::NotArrayOrFunction(span.pos, key));
                 }
             };
 
             if !md.is_argless() {
-                return Err(Error::new(
-                    span.pos,
-                    format!("In call to {}: function requires arguments", span.vref.name()),
-                ));
+                return Err(Error::CallableSyntaxError(span.pos, md.clone()));
             }
 
-            let nargs = compile_function_args(md.syntaxes(), instrs, symtable, span.pos, vec![])
-                .map_err(|e| Error::from_call_error(md, e, span.pos))?;
+            let nargs = compile_function_args(md, instrs, symtable, span.pos, vec![])?;
             debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
             (Instruction::FunctionCall(key, etype, span.pos, 0), etype)
         }
     };
     if !span.vref.accepts(vtype) {
-        return Err(Error::new(
-            span.pos,
-            format!("Incompatible type annotation in {} reference", span.vref),
-        ));
+        return Err(Error::IncompatibleTypeAnnotationInReference(span.pos, span.vref));
     }
     instrs.push(instr);
     Ok(vtype)
@@ -422,10 +382,7 @@ fn compile_expr_symbol_ref(
             let vtype = span.vref.ref_type().unwrap_or(ExprType::Integer);
 
             if !span.vref.accepts(vtype) {
-                return Err(Error::new(
-                    span.pos,
-                    format!("Incompatible type annotation in {} reference", span.vref),
-                ));
+                return Err(Error::IncompatibleTypeAnnotationInReference(span.pos, span.vref));
             }
 
             symtable.insert(key.clone(), SymbolPrototype::Variable(vtype));
@@ -437,10 +394,7 @@ fn compile_expr_symbol_ref(
             let vtype = *vtype;
 
             if !span.vref.accepts(vtype) {
-                return Err(Error::new(
-                    span.pos,
-                    format!("Incompatible type annotation in {} reference", span.vref),
-                ));
+                return Err(Error::IncompatibleTypeAnnotationInReference(span.pos, span.vref));
             }
 
             instrs.push(Instruction::LoadRef(key, vtype, span.pos));
@@ -449,16 +403,10 @@ fn compile_expr_symbol_ref(
 
         Some(SymbolPrototype::Callable(md)) => {
             if !span.vref.accepts_callable(md.return_type()) {
-                return Err(Error::new(
-                    span.pos,
-                    format!("Incompatible type annotation in {} reference", span.vref),
-                ));
+                return Err(Error::IncompatibleTypeAnnotationInReference(span.pos, span.vref));
             }
 
-            Err(Error::new(
-                span.pos,
-                format!("{} is not an array nor a function", span.vref.name()),
-            ))
+            Err(Error::NotArrayOrFunction(span.pos, key))
         }
     }
 }
@@ -477,10 +425,7 @@ fn compile_array_ref(
     compile_array_indices(instrs, symtable, dimensions, exprs, span.vref_pos)?;
 
     if !span.vref.accepts(vtype) {
-        return Err(Error::new(
-            span.vref_pos,
-            format!("Incompatible type annotation in {} reference", span.vref),
-        ));
+        return Err(Error::IncompatibleTypeAnnotationInReference(span.vref_pos, span.vref));
     }
     instrs.push(Instruction::ArrayLoad(key, span.vref_pos, nargs));
     Ok(vtype)
@@ -715,49 +660,34 @@ pub(super) fn compile_expr(
 
                 Some(SymbolPrototype::Callable(md)) => {
                     if !span.vref.accepts_callable(md.return_type()) {
-                        return Err(Error::new(
+                        return Err(Error::IncompatibleTypeAnnotationInReference(
                             span.vref_pos,
-                            format!("Incompatible type annotation in {} reference", span.vref),
+                            span.vref,
                         ));
                     }
 
                     let vtype = match md.return_type() {
                         Some(vtype) => vtype,
                         None => {
-                            return Err(Error::new(
-                                span.vref_pos,
-                                format!("{} is not an array nor a function", span.vref.name()),
-                            ));
+                            return Err(Error::NotArrayOrFunction(span.vref_pos, key));
                         }
                     };
 
                     if md.is_argless() {
-                        return Err(Error::new(
-                            span.vref_pos,
-                            format!(
-                                "In call to {}: expected no arguments nor parenthesis",
-                                span.vref.name()
-                            ),
-                        ));
+                        return Err(Error::CallableSyntaxError(span.vref_pos, md.clone()));
                     }
 
                     let span_pos = span.vref_pos;
-                    let nargs =
-                        compile_function_args(md.syntaxes(), instrs, symtable, span_pos, span.args)
-                            .map_err(|e| Error::from_call_error(md, e, span_pos))?;
+                    let nargs = compile_function_args(md, instrs, symtable, span_pos, span.args)?;
                     instrs.push(Instruction::FunctionCall(key, vtype, span_pos, nargs));
                     Ok(vtype)
                 }
 
-                Some(SymbolPrototype::Variable(_)) => Err(Error::new(
-                    span.vref_pos,
-                    format!("{} is not an array nor a function", span.vref.name()),
-                )),
+                Some(SymbolPrototype::Variable(_)) => {
+                    Err(Error::NotArrayOrFunction(span.vref_pos, key))
+                }
 
-                None => Err(Error::new(
-                    span.vref_pos,
-                    format!("Unknown function or array {}", span.vref.name()),
-                )),
+                None => Err(Error::UndefinedSymbol(span.vref_pos, key)),
             }
         }
     }
@@ -804,9 +734,9 @@ pub(super) fn compile_expr_as_type(
         Ok(())
     } else {
         if target.is_numerical() {
-            Err(Error::new(epos, format!("{} is not a number", etype)))
+            Err(Error::NotANumber(epos, etype))
         } else {
-            Err(Error::new(epos, format!("{} is not a {}", etype, target)))
+            Err(Error::TypeMismatch(epos, etype, target))
         }
     }
 }
@@ -881,7 +811,7 @@ mod tests {
             )
             .parse("i = f")
             .compile()
-            .expect_err("1:5: In call to f: function requires arguments")
+            .expect_err("1:5: F expected i%")
             .check();
     }
 
@@ -902,7 +832,7 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("F").with_return_type(ExprType::Integer))
             .parse("c f")
             .compile()
-            .expect_err("1:1: In call to C: 1:3: f is not an array nor a function")
+            .expect_err("1:3: F is not an array nor a function")
             .check();
     }
 
@@ -941,7 +871,7 @@ mod tests {
             )]))
             .parse("a = 3: c a$")
             .compile()
-            .expect_err("1:8: In call to C: 1:10: Incompatible type annotation in a$ reference")
+            .expect_err("1:10: Incompatible type annotation in a$ reference")
             .check();
     }
 
@@ -962,7 +892,7 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("F").with_return_type(ExprType::Integer))
             .parse("c f$")
             .compile()
-            .expect_err("1:1: In call to C: 1:3: Incompatible type annotation in f$ reference")
+            .expect_err("1:3: Incompatible type annotation in f$ reference")
             .check();
     }
 
@@ -1007,7 +937,7 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("C"))
             .parse("b = c")
             .compile()
-            .expect_err("1:5: c is not an array nor a function")
+            .expect_err("1:5: C is not an array nor a function")
             .check();
     }
 
@@ -1027,7 +957,7 @@ mod tests {
             )]))
             .parse("c c")
             .compile()
-            .expect_err("1:1: In call to C: 1:3: c is not an array nor a function")
+            .expect_err("1:3: C is not an array nor a function")
             .check();
     }
 
@@ -1263,7 +1193,7 @@ mod tests {
             .define("FOO", SymbolPrototype::Array(ExprType::Integer, 1))
             .parse("i = FOO(FALSE)")
             .compile()
-            .expect_err("1:9: Array index must be INTEGER, not BOOLEAN")
+            .expect_err("1:9: BOOLEAN is not a number")
             .check();
     }
 
@@ -1279,11 +1209,7 @@ mod tests {
 
     #[test]
     fn test_compile_expr_array_ref_not_defined() {
-        Tester::default()
-            .parse("i = a(4)")
-            .compile()
-            .expect_err("1:5: Unknown function or array a")
-            .check();
+        Tester::default().parse("i = a(4)").compile().expect_err("1:5: Undefined symbol A").check();
     }
 
     #[test]
@@ -1292,7 +1218,7 @@ mod tests {
             .define("a", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = a(3)")
             .compile()
-            .expect_err("1:5: a is not an array nor a function")
+            .expect_err("1:5: A is not an array nor a function")
             .check();
     }
 
@@ -1339,7 +1265,7 @@ mod tests {
             .define("k", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = FOO(3, j, k + 1)")
             .compile()
-            .expect_err("1:5: Unknown function or array FOO")
+            .expect_err("1:5: Undefined symbol FOO")
             .check();
     }
 
@@ -1348,7 +1274,7 @@ mod tests {
         Tester::default()
             .parse("i = 3: j = i()")
             .compile()
-            .expect_err("1:12: i is not an array nor a function")
+            .expect_err("1:12: I is not an array nor a function")
             .check();
     }
 }

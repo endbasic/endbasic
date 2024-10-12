@@ -403,18 +403,19 @@ mod tests {
     /// Common checks for pin number validation.
     ///
     /// The given input `fmt` string contains the command to test with a placeholder `_PIN` for
-    /// where the pin number goes.  The `prefix` contains a possible prefix for the error messages.
-    fn check_pin_validation(prefix: &str, fmt: &str) {
+    /// where the pin number goes.  The `short_prefix` and `long_prefix` contain possible prefixes
+    /// for the error messages.
+    fn check_pin_validation(short_prefix: &str, long_prefix: &str, fmt: &str) {
         check_stmt_compilation_err(
-            format!(r#"{}BOOLEAN is not a number"#, prefix),
+            format!(r#"{}BOOLEAN is not a number"#, short_prefix),
             &fmt.replace("_PIN_", "TRUE"),
         );
         check_stmt_err(
-            format!(r#"{}Pin number 123456789 is too large"#, prefix),
+            format!(r#"{}Pin number 123456789 is too large"#, long_prefix),
             &fmt.replace("_PIN_", "123456789"),
         );
         check_stmt_err(
-            format!(r#"{}Pin number -1 must be positive"#, prefix),
+            format!(r#"{}Pin number -1 must be positive"#, long_prefix),
             &fmt.replace("_PIN_", "-1"),
         );
     }
@@ -506,24 +507,16 @@ mod tests {
 
     #[test]
     fn test_gpio_setup_errors() {
-        check_stmt_compilation_err(
-            "1:1: In call to GPIO_SETUP: expected pin%, mode$",
-            r#"GPIO_SETUP"#,
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to GPIO_SETUP: expected pin%, mode$",
-            r#"GPIO_SETUP 1"#,
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to GPIO_SETUP: 1:15: INTEGER is not a STRING",
-            r#"GPIO_SETUP 1; 2"#,
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to GPIO_SETUP: expected pin%, mode$",
-            r#"GPIO_SETUP 1, 2, 3"#,
-        );
+        check_stmt_compilation_err("1:1: GPIO_SETUP expected pin%, mode$", r#"GPIO_SETUP"#);
+        check_stmt_compilation_err("1:1: GPIO_SETUP expected pin%, mode$", r#"GPIO_SETUP 1"#);
+        check_stmt_compilation_err("1:15: expected STRING but found INTEGER", r#"GPIO_SETUP 1; 2"#);
+        check_stmt_compilation_err("1:1: GPIO_SETUP expected pin%, mode$", r#"GPIO_SETUP 1, 2, 3"#);
 
-        check_pin_validation("1:1: In call to GPIO_SETUP: 1:12: ", r#"GPIO_SETUP _PIN_, "IN""#);
+        check_pin_validation(
+            "1:12: ",
+            "1:1: In call to GPIO_SETUP: 1:12: ",
+            r#"GPIO_SETUP _PIN_, "IN""#,
+        );
 
         check_stmt_err(
             r#"1:1: In call to GPIO_SETUP: 1:15: Unknown pin mode IN-OUT"#,
@@ -544,16 +537,10 @@ mod tests {
 
     #[test]
     fn test_gpio_clear_errors() {
-        check_stmt_compilation_err(
-            "1:1: In call to GPIO_CLEAR: expected <> | <pin%>",
-            r#"GPIO_CLEAR 1,"#,
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to GPIO_CLEAR: expected <> | <pin%>",
-            r#"GPIO_CLEAR 1, 2"#,
-        );
+        check_stmt_compilation_err("1:1: GPIO_CLEAR expected <> | <pin%>", r#"GPIO_CLEAR 1,"#);
+        check_stmt_compilation_err("1:1: GPIO_CLEAR expected <> | <pin%>", r#"GPIO_CLEAR 1, 2"#);
 
-        check_pin_validation("1:1: In call to GPIO_CLEAR: 1:12: ", r#"GPIO_CLEAR _PIN_"#);
+        check_pin_validation("1:12: ", "1:1: In call to GPIO_CLEAR: 1:12: ", r#"GPIO_CLEAR _PIN_"#);
     }
 
     #[test]
@@ -570,13 +557,14 @@ mod tests {
 
     #[test]
     fn test_gpio_read_errors() {
-        check_expr_compilation_error("1:10: In call to GPIO_READ: expected pin%", r#"GPIO_READ()"#);
-        check_expr_compilation_error(
-            "1:10: In call to GPIO_READ: expected pin%",
-            r#"GPIO_READ(1, 2)"#,
-        );
+        check_expr_compilation_error("1:10: GPIO_READ expected pin%", r#"GPIO_READ()"#);
+        check_expr_compilation_error("1:10: GPIO_READ expected pin%", r#"GPIO_READ(1, 2)"#);
 
-        check_pin_validation("1:5: In call to GPIO_READ: 1:15: ", r#"v = GPIO_READ(_PIN_)"#);
+        check_pin_validation(
+            "1:15: ",
+            "1:5: In call to GPIO_READ: 1:15: ",
+            r#"v = GPIO_READ(_PIN_)"#,
+        );
     }
 
     #[test]
@@ -586,27 +574,25 @@ mod tests {
 
     #[test]
     fn test_gpio_write_errors() {
+        check_stmt_compilation_err("1:1: GPIO_WRITE expected pin%, value?", r#"GPIO_WRITE"#);
+        check_stmt_compilation_err("1:1: GPIO_WRITE expected pin%, value?", r#"GPIO_WRITE 2,"#);
         check_stmt_compilation_err(
-            "1:1: In call to GPIO_WRITE: expected pin%, value?",
-            r#"GPIO_WRITE"#,
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to GPIO_WRITE: expected pin%, value?",
-            r#"GPIO_WRITE 2,"#,
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to GPIO_WRITE: expected pin%, value?",
+            "1:1: GPIO_WRITE expected pin%, value?",
             r#"GPIO_WRITE 1, TRUE, 2"#,
         );
         check_stmt_compilation_err(
-            "1:1: In call to GPIO_WRITE: expected pin%, value?",
+            "1:1: GPIO_WRITE expected pin%, value?",
             r#"GPIO_WRITE 1; TRUE"#,
         );
 
-        check_pin_validation("1:1: In call to GPIO_WRITE: 1:12: ", r#"GPIO_WRITE _PIN_, TRUE"#);
+        check_pin_validation(
+            "1:12: ",
+            "1:1: In call to GPIO_WRITE: 1:12: ",
+            r#"GPIO_WRITE _PIN_, TRUE"#,
+        );
 
         check_stmt_compilation_err(
-            "1:1: In call to GPIO_WRITE: 1:15: INTEGER is not a BOOLEAN",
+            "1:15: expected BOOLEAN but found INTEGER",
             r#"GPIO_WRITE 1, 5"#,
         );
     }

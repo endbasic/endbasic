@@ -237,7 +237,7 @@ mod tests {
         Tester::default()
             .run(format!("DIM x(2): result = {}()", func))
             .expect_compilation_err(format!(
-                "1:20: In call to {}: expected <array> | <array, dimension%>",
+                "1:20: {} expected <array> | <array, dimension%>",
                 func
             ))
             .check();
@@ -245,7 +245,7 @@ mod tests {
         Tester::default()
             .run(format!("DIM x(2): result = {}(x, 1, 2)", func))
             .expect_compilation_err(format!(
-                "1:20: In call to {}: expected <array> | <array, dimension%>",
+                "1:20: {} expected <array> | <array, dimension%>",
                 func
             ))
             .check();
@@ -258,47 +258,32 @@ mod tests {
 
         Tester::default()
             .run(format!("DIM x(2): result = {}(x, TRUE)", func))
-            .expect_compilation_err(format!(
-                "1:20: In call to {}: 1:30: BOOLEAN is not a number",
-                func
-            ))
+            .expect_compilation_err("1:30: BOOLEAN is not a number")
             .check();
 
         Tester::default()
             .run(format!("i = 0: result = {}(i)", func))
-            .expect_compilation_err(format!(
-                "1:17: In call to {}: 1:24: i is not an array reference",
-                func
-            ))
+            .expect_compilation_err("1:24: Requires a reference, not a value")
             .check();
 
         Tester::default()
             .run(format!("result = {}(3)", func))
-            .expect_compilation_err(format!(
-                "1:10: In call to {}: 1:17: Requires an array reference, not a value",
-                func
-            ))
+            .expect_compilation_err("1:17: Requires a reference, not a value")
             .check();
 
         Tester::default()
             .run(format!("i = 0: result = {}(i)", func))
-            .expect_compilation_err(format!(
-                "1:17: In call to {}: 1:24: i is not an array reference",
-                func
-            ))
+            .expect_compilation_err("1:24: Requires a reference, not a value")
             .check();
 
         Tester::default()
             .run(format!("DIM i(3) AS BOOLEAN: result = {}(i$)", func))
-            .expect_compilation_err(format!(
-                "1:31: In call to {}: 1:38: Incompatible type annotation in i$ reference",
-                func
-            ))
+            .expect_compilation_err("1:38: Incompatible type annotation in i$ reference")
             .check();
 
         Tester::default()
             .run(format!("result = {}(x)", func))
-            .expect_compilation_err(format!("1:10: In call to {}: 1:17: Undefined array x", func))
+            .expect_compilation_err("1:17: Undefined symbol X")
             .check();
 
         Tester::default()

@@ -4,9 +4,9 @@
 
     Type HELP for interactive usage information.
 
-ERROR: 1:4: IF/ELSEIF require a boolean condition
-ERROR: 1:4: IF/ELSEIF require a boolean condition
-ERROR: 1:15: Cannot compare BOOLEAN and BOOLEAN with <=
+ERROR: 1:4: IF/ELSEIF requires a boolean condition
+ERROR: 1:4: IF/ELSEIF requires a boolean condition
+ERROR: 1:15: Cannot <= BOOLEAN and BOOLEAN
 ERROR: 1:7: WHILE requires a boolean condition
 ERROR: 1:16: LOOP requires a boolean condition
 ERROR: 1:16: LOOP requires a boolean condition
