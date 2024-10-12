@@ -1,6 +1,6 @@
 [package]
 name = "endbasic-rpi"
-version = "0.11.1" # ENDBASIC-VERSION
+version = "0.11.99" # ENDBASIC-VERSION
 license = "Apache-2.0"
 authors = ["Julio Merino <jmmv@endbasic.dev>"]
 categories = ["development-tools", "parser-implementations"]
@@ -18,15 +18,15 @@ rppal = "0.17"
 tokio = { version = "1", features = ["full"] }
 
 [dependencies.endbasic-core]
-version = "0.11.1" # ENDBASIC-VERSION
+version = "0.11.99" # ENDBASIC-VERSION
 path = "../core"
 
 [dependencies.endbasic-std]
-version = "0.11.1" # ENDBASIC-VERSION
+version = "0.11.99" # ENDBASIC-VERSION
 path = "../std"
 
 [dependencies.endbasic-terminal]
-version = "0.11.1" # ENDBASIC-VERSION
+version = "0.11.99" # ENDBASIC-VERSION
 path = "../terminal"
 
 [dev-dependencies]
