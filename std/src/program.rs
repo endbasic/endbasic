@@ -212,7 +212,7 @@ impl Callable for DisasmCommand {
                 while line.len() < 44 {
                     line.push(' ');
                 }
-                line += &format!("    # {}:{}", pos.line, pos.col);
+                line += &format!("    # {}", pos);
             }
             pager.print(&line).await?;
         }

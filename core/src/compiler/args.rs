@@ -829,8 +829,8 @@ mod testutils {
         /// Formats a `CallError` as a string to simplify comparisons.
         fn format_call_error(e: CallError) -> String {
             match e {
-                CallError::ArgumentError(pos, e) => format!("{}:{}: {}", pos.line, pos.col, e),
-                CallError::EvalError(pos, e) => format!("{}:{}: {}", pos.line, pos.col, e),
+                CallError::ArgumentError(pos, e) => format!("{}: {}", pos, e),
+                CallError::EvalError(pos, e) => format!("{}: {}", pos, e),
                 CallError::InternalError(_pos, e) => panic!("Must not happen here: {}", e),
                 CallError::IoError(e) => panic!("Must not happen here: {}", e),
                 CallError::NestedError(e) => panic!("Must not happen here: {}", e),

@@ -17,6 +17,7 @@
 
 use std::cell::RefCell;
 use std::char;
+use std::fmt;
 use std::io::{self, BufRead};
 use std::rc::Rc;
 
@@ -31,6 +32,12 @@ pub struct LineCol {
 
     /// Column number.
     pub col: usize,
+}
+
+impl fmt::Display for LineCol {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.line, self.col)
+    }
 }
 
 #[derive(Debug)]

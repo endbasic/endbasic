@@ -25,7 +25,7 @@ use std::io;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Bad syntax in the input program.
-    #[error("{}:{}: {}", .0.line, .0.col, .1)]
+    #[error("{}: {}", .0, .1)]
     Bad(LineCol, String),
 
     /// I/O error while parsing the input program.
