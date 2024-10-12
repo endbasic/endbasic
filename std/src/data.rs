@@ -304,15 +304,9 @@ mod tests {
 
     #[test]
     fn test_read_errors() {
-        check_stmt_compilation_err("1:1: In call to READ: expected vref1[, .., vrefN]", "READ");
-        check_stmt_compilation_err(
-            "1:1: In call to READ: 1:6: Requires a variable reference, not a value",
-            "READ 3",
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to READ: expected vref1[, .., vrefN]",
-            "READ i; j",
-        );
+        check_stmt_compilation_err("1:1: READ expected vref1[, .., vrefN]", "READ");
+        check_stmt_compilation_err("1:6: Requires a reference, not a value", "READ 3");
+        check_stmt_compilation_err("1:1: READ expected vref1[, .., vrefN]", "READ i; j");
 
         check_stmt_err(
             "1:11: In call to READ: 1:16: Cannot assign value of type STRING to variable of type INTEGER",
@@ -363,6 +357,6 @@ mod tests {
 
     #[test]
     fn test_restore_errors() {
-        check_stmt_compilation_err("1:1: In call to RESTORE: expected no arguments", "RESTORE 123");
+        check_stmt_compilation_err("1:1: RESTORE expected no arguments", "RESTORE 123");
     }
 }

@@ -774,12 +774,9 @@ mod tests {
 
         check_expr_ok_with_vars(123f64.atan(), "ATN(a)", [("a", 123i32.into())]);
 
-        check_expr_compilation_error("1:10: In call to ATN: expected n#", "ATN()");
-        check_expr_compilation_error(
-            "1:10: In call to ATN: 1:14: BOOLEAN is not a number",
-            "ATN(FALSE)",
-        );
-        check_expr_compilation_error("1:10: In call to ATN: expected n#", "ATN(3, 4)");
+        check_expr_compilation_error("1:10: ATN expected n#", "ATN()");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "ATN(FALSE)");
+        check_expr_compilation_error("1:10: ATN expected n#", "ATN(3, 4)");
     }
 
     #[test]
@@ -791,12 +788,9 @@ mod tests {
 
         check_expr_ok_with_vars(1, "CINT(d)", [("d", 0.9f64.into())]);
 
-        check_expr_compilation_error("1:10: In call to CINT: expected expr#", "CINT()");
-        check_expr_compilation_error(
-            "1:10: In call to CINT: 1:15: BOOLEAN is not a number",
-            "CINT(FALSE)",
-        );
-        check_expr_compilation_error("1:10: In call to CINT: expected expr#", "CINT(3.0, 4)");
+        check_expr_compilation_error("1:10: CINT expected expr#", "CINT()");
+        check_expr_compilation_error("1:15: BOOLEAN is not a number", "CINT(FALSE)");
+        check_expr_compilation_error("1:10: CINT expected expr#", "CINT(3.0, 4)");
 
         check_expr_error(
             "1:10: In call to CINT: 1:15: Cannot cast -1234567890123456 to integer due to overflow",
@@ -811,12 +805,9 @@ mod tests {
 
         check_expr_ok_with_vars(123f64.cos(), "COS(i)", [("i", 123i32.into())]);
 
-        check_expr_compilation_error("1:10: In call to COS: expected angle#", "COS()");
-        check_expr_compilation_error(
-            "1:10: In call to COS: 1:14: BOOLEAN is not a number",
-            "COS(FALSE)",
-        );
-        check_expr_compilation_error("1:10: In call to COS: expected angle#", "COS(3, 4)");
+        check_expr_compilation_error("1:10: COS expected angle#", "COS()");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "COS(FALSE)");
+        check_expr_compilation_error("1:10: COS expected angle#", "COS(3, 4)");
     }
 
     #[test]
@@ -837,8 +828,8 @@ mod tests {
 
     #[test]
     fn test_deg_rad_errors() {
-        check_stmt_compilation_err("1:1: In call to DEG: expected no arguments", "DEG 1");
-        check_stmt_compilation_err("1:1: In call to RAD: expected no arguments", "RAD 1");
+        check_stmt_compilation_err("1:1: DEG expected no arguments", "DEG 1");
+        check_stmt_compilation_err("1:1: RAD expected no arguments", "RAD 1");
     }
 
     #[test]
@@ -850,12 +841,9 @@ mod tests {
 
         check_expr_ok_with_vars(0, "INT(d)", [("d", 0.9f64.into())]);
 
-        check_expr_compilation_error("1:10: In call to INT: expected expr#", "INT()");
-        check_expr_compilation_error(
-            "1:10: In call to INT: 1:14: BOOLEAN is not a number",
-            "INT(FALSE)",
-        );
-        check_expr_compilation_error("1:10: In call to INT: expected expr#", "INT(3.0, 4)");
+        check_expr_compilation_error("1:10: INT expected expr#", "INT()");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "INT(FALSE)");
+        check_expr_compilation_error("1:10: INT expected expr#", "INT(3.0, 4)");
 
         check_expr_error(
             "1:10: In call to INT: 1:14: Cannot cast -1234567890123456 to integer due to overflow",
@@ -887,14 +875,8 @@ mod tests {
             [("i", 5i32.into()), ("j", 3i32.into()), ("k", 4i32.into())],
         );
 
-        check_expr_compilation_error(
-            "1:10: In call to MAX: expected expr1#[, .., exprN#]",
-            "MAX()",
-        );
-        check_expr_compilation_error(
-            "1:10: In call to MAX: 1:14: BOOLEAN is not a number",
-            "MAX(FALSE)",
-        );
+        check_expr_compilation_error("1:10: MAX expected expr1#[, .., exprN#]", "MAX()");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "MAX(FALSE)");
     }
 
     #[test]
@@ -921,28 +903,16 @@ mod tests {
             [("i", 5i32.into()), ("j", 3i32.into()), ("k", 4i32.into())],
         );
 
-        check_expr_compilation_error(
-            "1:10: In call to MIN: expected expr1#[, .., exprN#]",
-            "MIN()",
-        );
-        check_expr_compilation_error(
-            "1:10: In call to MIN: 1:14: BOOLEAN is not a number",
-            "MIN(FALSE)",
-        );
+        check_expr_compilation_error("1:10: MIN expected expr1#[, .., exprN#]", "MIN()");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "MIN(FALSE)");
     }
 
     #[test]
     fn test_pi() {
         check_expr_ok(std::f64::consts::PI, "PI");
 
-        check_expr_compilation_error(
-            "1:10: In call to PI: expected no arguments nor parenthesis",
-            "PI()",
-        );
-        check_expr_compilation_error(
-            "1:10: In call to PI: expected no arguments nor parenthesis",
-            "PI(3)",
-        );
+        check_expr_compilation_error("1:10: PI expected no arguments", "PI()");
+        check_expr_compilation_error("1:10: PI expected no arguments", "PI(3)");
     }
 
     #[test]
@@ -966,21 +936,12 @@ mod tests {
 
         t.run("result = RND(1)").expect_var("result", 0.7097578208683426).check();
 
-        check_expr_compilation_error("1:10: In call to RND: expected <> | <n%>", "RND(1, 7)");
-        check_expr_compilation_error(
-            "1:10: In call to RND: 1:14: BOOLEAN is not a number",
-            "RND(FALSE)",
-        );
+        check_expr_compilation_error("1:10: RND expected <> | <n%>", "RND(1, 7)");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "RND(FALSE)");
         check_expr_error("1:10: In call to RND: 1:14: n% cannot be negative", "RND(-1)");
 
-        check_stmt_compilation_err(
-            "1:1: In call to RANDOMIZE: expected <> | <seed%>",
-            "RANDOMIZE ,",
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to RANDOMIZE: 1:11: BOOLEAN is not a number",
-            "RANDOMIZE TRUE",
-        );
+        check_stmt_compilation_err("1:1: RANDOMIZE expected <> | <seed%>", "RANDOMIZE ,");
+        check_stmt_compilation_err("1:11: BOOLEAN is not a number", "RANDOMIZE TRUE");
     }
 
     #[test]
@@ -990,12 +951,9 @@ mod tests {
 
         check_expr_ok_with_vars(123f64.sin(), "SIN(i)", [("i", 123i32.into())]);
 
-        check_expr_compilation_error("1:10: In call to SIN: expected angle#", "SIN()");
-        check_expr_compilation_error(
-            "1:10: In call to SIN: 1:14: BOOLEAN is not a number",
-            "SIN(FALSE)",
-        );
-        check_expr_compilation_error("1:10: In call to SIN: expected angle#", "SIN(3, 4)");
+        check_expr_compilation_error("1:10: SIN expected angle#", "SIN()");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "SIN(FALSE)");
+        check_expr_compilation_error("1:10: SIN expected angle#", "SIN(3, 4)");
     }
 
     #[test]
@@ -1007,12 +965,9 @@ mod tests {
 
         check_expr_ok_with_vars(9f64.sqrt(), "SQR(i)", [("i", 9i32.into())]);
 
-        check_expr_compilation_error("1:10: In call to SQR: expected num#", "SQR()");
-        check_expr_compilation_error(
-            "1:10: In call to SQR: 1:14: BOOLEAN is not a number",
-            "SQR(FALSE)",
-        );
-        check_expr_compilation_error("1:10: In call to SQR: expected num#", "SQR(3, 4)");
+        check_expr_compilation_error("1:10: SQR expected num#", "SQR()");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "SQR(FALSE)");
+        check_expr_compilation_error("1:10: SQR expected num#", "SQR(3, 4)");
         check_expr_error(
             "1:10: In call to SQR: 1:14: Cannot take square root of a negative number",
             "SQR(-3)",
@@ -1030,11 +985,8 @@ mod tests {
 
         check_expr_ok_with_vars(123f64.tan(), "TAN(i)", [("i", 123i32.into())]);
 
-        check_expr_compilation_error("1:10: In call to TAN: expected angle#", "TAN()");
-        check_expr_compilation_error(
-            "1:10: In call to TAN: 1:14: BOOLEAN is not a number",
-            "TAN(FALSE)",
-        );
-        check_expr_compilation_error("1:10: In call to TAN: expected angle#", "TAN(3, 4)");
+        check_expr_compilation_error("1:10: TAN expected angle#", "TAN()");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "TAN(FALSE)");
+        check_expr_compilation_error("1:10: TAN expected angle#", "TAN(3, 4)");
     }
 }

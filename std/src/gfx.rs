@@ -660,7 +660,7 @@ mod tests {
     fn check_errors_two_xy(name: &'static str) {
         for args in &["1, 2, , 4", "1, 2, 3", "1, 2, 3, 4, 5", "2; 3, 4"] {
             check_stmt_compilation_err(
-                format!("1:1: In call to {}: expected x1%, y1%, x2%, y2%", name),
+                format!("1:1: {} expected x1%, y1%, x2%, y2%", name),
                 &format!("{} {}", name, args),
             );
         }
@@ -684,10 +684,7 @@ mod tests {
         for args in &["\"a\", 1, 1, 1", "1, \"a\", 1, 1", "1, 1, \"a\", 1", "1, 1, 1, \"a\""] {
             let stmt = &format!("{} {}", name, args);
             let pos = stmt.find('"').unwrap() + 1;
-            check_stmt_compilation_err(
-                format!("1:1: In call to {}: 1:{}: STRING is not a number", name, pos),
-                stmt,
-            );
+            check_stmt_compilation_err(format!("1:{}: STRING is not a number", pos), stmt);
         }
     }
 
@@ -695,7 +692,7 @@ mod tests {
     fn check_errors_xy_radius(name: &'static str) {
         for args in &["1, , 3", "1, 2", "1, 2, 3, 4", "2; 3, 4"] {
             check_stmt_compilation_err(
-                format!("1:1: In call to {}: expected x%, y%, r%", name),
+                format!("1:1: {} expected x%, y%, r%", name),
                 &format!("{} {}", name, args),
             );
         }
@@ -731,10 +728,7 @@ mod tests {
         for args in &["\"a\", 1, 1", "1, \"a\", 1", "1, 1, \"a\""] {
             let stmt = &format!("{} {}", name, args);
             let pos = stmt.find('"').unwrap() + 1;
-            check_stmt_compilation_err(
-                format!("1:1: In call to {}: 1:{}: STRING is not a number", name, pos),
-                stmt,
-            );
+            check_stmt_compilation_err(format!("1:{}: STRING is not a number", pos), stmt);
         }
 
         check_stmt_err(
@@ -803,14 +797,8 @@ mod tests {
             "GFX_HEIGHT",
         );
 
-        check_expr_compilation_error(
-            "1:10: In call to GFX_HEIGHT: expected no arguments nor parenthesis",
-            "GFX_HEIGHT()",
-        );
-        check_expr_compilation_error(
-            "1:10: In call to GFX_HEIGHT: expected no arguments nor parenthesis",
-            "GFX_HEIGHT(1)",
-        );
+        check_expr_compilation_error("1:10: GFX_HEIGHT expected no arguments", "GFX_HEIGHT()");
+        check_expr_compilation_error("1:10: GFX_HEIGHT expected no arguments", "GFX_HEIGHT(1)");
     }
 
     #[test]
@@ -858,7 +846,7 @@ mod tests {
     #[test]
     fn test_gfx_pixel_errors() {
         for cmd in &["GFX_PIXEL , 2", "GFX_PIXEL 1, 2, 3", "GFX_PIXEL 1", "GFX_PIXEL 1; 2"] {
-            check_stmt_compilation_err("1:1: In call to GFX_PIXEL: expected x%, y%", cmd);
+            check_stmt_compilation_err("1:1: GFX_PIXEL expected x%, y%", cmd);
         }
 
         for cmd in &["GFX_PIXEL -40000, 1", "GFX_PIXEL 1, -40000"] {
@@ -873,10 +861,7 @@ mod tests {
 
         for cmd in &["GFX_PIXEL \"a\", 1", "GFX_PIXEL 1, \"a\""] {
             let pos = cmd.find('"').unwrap() + 1;
-            check_stmt_compilation_err(
-                format!("1:1: In call to GFX_PIXEL: 1:{}: STRING is not a number", pos),
-                cmd,
-            );
+            check_stmt_compilation_err(format!("1:{}: STRING is not a number", pos), cmd);
         }
     }
 
@@ -943,14 +928,8 @@ mod tests {
 
     #[test]
     fn test_gfx_sync_errors() {
-        check_stmt_compilation_err(
-            "1:1: In call to GFX_SYNC: expected <> | <enabled?>",
-            "GFX_SYNC 2, 3",
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to GFX_SYNC: 1:10: INTEGER is not a BOOLEAN",
-            "GFX_SYNC 2",
-        );
+        check_stmt_compilation_err("1:1: GFX_SYNC expected <> | <enabled?>", "GFX_SYNC 2, 3");
+        check_stmt_compilation_err("1:10: expected BOOLEAN but found INTEGER", "GFX_SYNC 2");
     }
 
     #[test]
@@ -964,13 +943,7 @@ mod tests {
             "GFX_WIDTH",
         );
 
-        check_expr_compilation_error(
-            "1:10: In call to GFX_WIDTH: expected no arguments nor parenthesis",
-            "GFX_WIDTH()",
-        );
-        check_expr_compilation_error(
-            "1:10: In call to GFX_WIDTH: expected no arguments nor parenthesis",
-            "GFX_WIDTH(1)",
-        );
+        check_expr_compilation_error("1:10: GFX_WIDTH expected no arguments", "GFX_WIDTH()");
+        check_expr_compilation_error("1:10: GFX_WIDTH expected no arguments", "GFX_WIDTH(1)");
     }
 }

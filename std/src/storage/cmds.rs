@@ -423,9 +423,9 @@ mod tests {
     #[test]
     fn test_cd_errors() {
         check_stmt_err("1:1: In call to CD: Drive 'A' is not mounted", "CD \"A:\"");
-        check_stmt_compilation_err("1:1: In call to CD: expected path$", "CD");
-        check_stmt_compilation_err("1:1: In call to CD: expected path$", "CD 2, 3");
-        check_stmt_compilation_err("1:1: In call to CD: 1:4: INTEGER is not a STRING", "CD 2");
+        check_stmt_compilation_err("1:1: CD expected path$", "CD");
+        check_stmt_compilation_err("1:1: CD expected path$", "CD 2, 3");
+        check_stmt_compilation_err("1:4: expected STRING but found INTEGER", "CD 2");
     }
 
     #[test]
@@ -637,8 +637,8 @@ mod tests {
 
     #[test]
     fn test_dir_errors() {
-        check_stmt_compilation_err("1:1: In call to DIR: expected <> | <path$>", "DIR 2, 3");
-        check_stmt_compilation_err("1:1: In call to DIR: 1:5: INTEGER is not a STRING", "DIR 2");
+        check_stmt_compilation_err("1:1: DIR expected <> | <path$>", "DIR 2, 3");
+        check_stmt_compilation_err("1:5: expected STRING but found INTEGER", "DIR 2");
     }
 
     #[test]
@@ -684,23 +684,14 @@ mod tests {
 
     #[test]
     fn test_mount_errors() {
+        check_stmt_compilation_err("1:1: MOUNT expected <> | <target$ AS drive_name$>", "MOUNT 1");
         check_stmt_compilation_err(
-            "1:1: In call to MOUNT: expected <> | <target$ AS drive_name$>",
-            "MOUNT 1",
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to MOUNT: expected <> | <target$ AS drive_name$>",
+            "1:1: MOUNT expected <> | <target$ AS drive_name$>",
             "MOUNT 1, 2, 3",
         );
 
-        check_stmt_compilation_err(
-            "1:1: In call to MOUNT: 1:14: INTEGER is not a STRING",
-            r#"MOUNT "a" AS 1"#,
-        );
-        check_stmt_compilation_err(
-            "1:1: In call to MOUNT: 1:7: INTEGER is not a STRING",
-            r#"MOUNT 1 AS "a""#,
-        );
+        check_stmt_compilation_err("1:14: expected STRING but found INTEGER", r#"MOUNT "a" AS 1"#);
+        check_stmt_compilation_err("1:7: expected STRING but found INTEGER", r#"MOUNT 1 AS "a""#);
 
         check_stmt_err(
             "1:1: In call to MOUNT: Invalid drive name 'a:'",
@@ -768,13 +759,10 @@ mod tests {
 
     #[test]
     fn test_unmount_errors() {
-        check_stmt_compilation_err("1:1: In call to UNMOUNT: expected drive_name$", "UNMOUNT");
-        check_stmt_compilation_err("1:1: In call to UNMOUNT: expected drive_name$", "UNMOUNT 2, 3");
+        check_stmt_compilation_err("1:1: UNMOUNT expected drive_name$", "UNMOUNT");
+        check_stmt_compilation_err("1:1: UNMOUNT expected drive_name$", "UNMOUNT 2, 3");
 
-        check_stmt_compilation_err(
-            "1:1: In call to UNMOUNT: 1:9: INTEGER is not a STRING",
-            "UNMOUNT 1",
-        );
+        check_stmt_compilation_err("1:9: expected STRING but found INTEGER", "UNMOUNT 1");
 
         check_stmt_err("1:1: In call to UNMOUNT: Invalid drive name 'a:'", "UNMOUNT \"a:\"");
         check_stmt_err("1:1: In call to UNMOUNT: Drive 'a' is not mounted", "UNMOUNT \"a\"");

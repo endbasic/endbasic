@@ -747,31 +747,28 @@ mod tests {
     #[test]
     fn test_login_errors() {
         client_check_stmt_compilation_err(
-            "1:1: In call to LOGIN: expected <username$> | <username$, password$>",
+            "1:1: LOGIN expected <username$> | <username$, password$>",
             r#"LOGIN"#,
         );
         client_check_stmt_compilation_err(
-            "1:1: In call to LOGIN: expected <username$> | <username$, password$>",
+            "1:1: LOGIN expected <username$> | <username$, password$>",
             r#"LOGIN "a", "b", "c""#,
         );
         client_check_stmt_compilation_err(
-            "1:1: In call to LOGIN: expected <username$> | <username$, password$>",
+            "1:1: LOGIN expected <username$> | <username$, password$>",
             r#"LOGIN , "c""#,
         );
         client_check_stmt_compilation_err(
-            "1:1: In call to LOGIN: expected <username$> | <username$, password$>",
+            "1:1: LOGIN expected <username$> | <username$, password$>",
             r#"LOGIN ;"#,
         );
+        client_check_stmt_compilation_err("1:7: expected STRING but found INTEGER", r#"LOGIN 3"#);
         client_check_stmt_compilation_err(
-            "1:1: In call to LOGIN: 1:7: INTEGER is not a STRING",
-            r#"LOGIN 3"#,
-        );
-        client_check_stmt_compilation_err(
-            "1:1: In call to LOGIN: 1:7: INTEGER is not a STRING",
+            "1:7: expected STRING but found INTEGER",
             r#"LOGIN 3, "a""#,
         );
         client_check_stmt_compilation_err(
-            "1:1: In call to LOGIN: 1:12: INTEGER is not a STRING",
+            "1:12: expected STRING but found INTEGER",
             r#"LOGIN "a", 3"#,
         );
     }
@@ -810,10 +807,7 @@ mod tests {
 
     #[test]
     fn test_logout_errors() {
-        client_check_stmt_compilation_err(
-            "1:1: In call to LOGOUT: expected no arguments",
-            r#"LOGOUT "a""#,
-        );
+        client_check_stmt_compilation_err("1:1: LOGOUT expected no arguments", r#"LOGOUT "a""#);
         client_check_stmt_err("1:1: In call to LOGOUT: Must LOGIN first", r#"LOGOUT"#);
     }
 
@@ -948,31 +942,28 @@ mod tests {
     #[test]
     fn test_share_errors() {
         client_check_stmt_compilation_err(
-            "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
+            "1:1: SHARE expected filename$[, acl1$, .., aclN$]",
             r#"SHARE"#,
         );
+        client_check_stmt_compilation_err("1:7: expected STRING but found INTEGER", r#"SHARE 1"#);
         client_check_stmt_compilation_err(
-            "1:1: In call to SHARE: 1:7: INTEGER is not a STRING",
-            r#"SHARE 1"#,
-        );
-        client_check_stmt_compilation_err(
-            "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
+            "1:1: SHARE expected filename$[, acl1$, .., aclN$]",
             r#"SHARE , "a""#,
         );
         client_check_stmt_compilation_err(
-            "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
+            "1:1: SHARE expected filename$[, acl1$, .., aclN$]",
             r#"SHARE "a"; "b""#,
         );
         client_check_stmt_compilation_err(
-            "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
+            "1:1: SHARE expected filename$[, acl1$, .., aclN$]",
             r#"SHARE "a", "b"; "c""#,
         );
         client_check_stmt_compilation_err(
-            "1:1: In call to SHARE: expected filename$[, acl1$, .., aclN$]",
+            "1:1: SHARE expected filename$[, acl1$, .., aclN$]",
             r#"SHARE "a", , "b""#,
         );
         client_check_stmt_compilation_err(
-            "1:1: In call to SHARE: 1:12: INTEGER is not a STRING",
+            "1:12: expected STRING but found INTEGER",
             r#"SHARE "a", 3, "b""#,
         );
         client_check_stmt_err(
@@ -1118,10 +1109,7 @@ mod tests {
 
     #[test]
     fn test_singup_errors() {
-        client_check_stmt_compilation_err(
-            "1:1: In call to SIGNUP: expected no arguments",
-            r#"SIGNUP "a""#,
-        );
+        client_check_stmt_compilation_err("1:1: SIGNUP expected no arguments", r#"SIGNUP "a""#);
     }
 
     #[test]

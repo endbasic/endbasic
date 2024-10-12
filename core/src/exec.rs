@@ -1004,7 +1004,7 @@ impl Machine {
         match self.symbols.load(key) {
             Some(Symbol::Variable(v)) => Ok(v),
             Some(_) => unreachable!("Variable type checking has been done at compile time"),
-            None => new_syntax_error(pos, format!("Undefined variable {}", key)),
+            None => new_syntax_error(pos, format!("Undefined symbol {}", key)),
         }
     }
 
@@ -1757,7 +1757,7 @@ mod tests {
         }
         match machine.get_symbols().get_auto("b") {
             Some(Symbol::Variable(Value::Integer(_))) => (),
-            e => panic!("a is not an integer: {:?}", e),
+            e => panic!("A is not an integer: {:?}", e),
         }
         assert!(!*cleared.borrow());
         machine.clear();
@@ -1912,18 +1912,18 @@ mod tests {
 
     #[test]
     fn test_array_assignment_errors() {
-        do_simple_error_test("a() = 3\n", "1:1: Cannot index undefined array a");
+        do_simple_error_test("a() = 3\n", "1:1: Undefined symbol A");
         do_simple_error_test("a = 3\na(0) = 3\n", "2:1: Cannot index non-array a");
         do_simple_error_test(
             "DIM a(2)\na() = 3\n",
             "2:1: Cannot index array with 0 subscripts; need 1",
         );
         do_simple_error_test("DIM a(1)\na(-1) = 3\n", "2:1: Subscript -1 cannot be negative");
+        do_simple_error_test("DIM a(1, 2)\na(1, TRUE) = 3\n", "2:6: BOOLEAN is not a number");
         do_simple_error_test(
-            "DIM a(1, 2)\na(1, TRUE) = 3\n",
-            "2:6: Array index must be INTEGER, not BOOLEAN",
+            "DIM a(2)\na$(1) = 3",
+            "2:1: Incompatible type annotation in a$ reference",
         );
-        do_simple_error_test("DIM a(2)\na$(1) = 3", "2:1: Incompatible types in a$ reference");
     }
 
     #[test]
@@ -1976,7 +1976,7 @@ mod tests {
     #[test]
     fn test_assignment_errors() {
         do_simple_error_test("a =\n", "1:4: Missing expression in assignment");
-        do_simple_error_test("a = b\n", "1:5: Undefined variable b");
+        do_simple_error_test("a = b\n", "1:5: Undefined symbol B");
         do_simple_error_test(
             "a = 3\na = TRUE\n",
             "2:1: Cannot assign value of type BOOLEAN to variable of type INTEGER",
@@ -1994,9 +1994,9 @@ mod tests {
 
     #[test]
     fn test_dim_errors() {
-        do_simple_error_test("DIM i\nDIM i", "2:5: Cannot DIM already-defined symbol i");
-        do_simple_error_test("DIM i\nDIM I", "2:5: Cannot DIM already-defined symbol I");
-        do_simple_error_test("i = 0\nDIM i", "2:5: Cannot DIM already-defined symbol i");
+        do_simple_error_test("DIM i\nDIM i", "2:5: Cannot define already-defined symbol I");
+        do_simple_error_test("DIM i\nDIM I", "2:5: Cannot define already-defined symbol I");
+        do_simple_error_test("i = 0\nDIM i", "2:5: Cannot define already-defined symbol I");
     }
 
     #[test]
@@ -2018,7 +2018,7 @@ mod tests {
         do_simple_error_test("DIM i()", "1:6: Arrays require at least one dimension");
         do_simple_error_test("DIM i(FALSE)", "1:7: BOOLEAN is not a number");
         do_simple_error_test("DIM i(-3)", "1:7: Dimensions in DIM array must be positive");
-        do_simple_error_test("DIM i\nDIM i(3)", "2:5: Cannot DIM already-defined symbol i");
+        do_simple_error_test("DIM i\nDIM i(3)", "2:5: Cannot define already-defined symbol I");
     }
 
     #[test]
@@ -2401,7 +2401,7 @@ mod tests {
             "#,
             &[],
             &["running"],
-            "6:17: Undefined variable A",
+            "6:17: Undefined symbol A",
         )
     }
 
@@ -2464,7 +2464,7 @@ mod tests {
                 OUT "no match"
             END IF
         "#;
-        do_error_test(code, &["5"], &[], "5:20: IF/ELSEIF require a boolean condition");
+        do_error_test(code, &["5"], &[], "5:20: IF/ELSEIF requires a boolean condition");
     }
 
     #[test]
@@ -2477,10 +2477,10 @@ mod tests {
         do_simple_error_test("IF TRUE\nEND IF\nOUT 3", "1:8: No THEN in IF statement");
 
         do_simple_error_test("IF 2\nEND IF", "1:5: No THEN in IF statement");
-        do_simple_error_test("IF 2 THEN\nEND IF", "1:4: IF/ELSEIF require a boolean condition");
+        do_simple_error_test("IF 2 THEN\nEND IF", "1:4: IF/ELSEIF requires a boolean condition");
         do_simple_error_test(
             "IF FALSE THEN\nELSEIF 2 THEN\nEND IF",
-            "2:8: IF/ELSEIF require a boolean condition",
+            "2:8: IF/ELSEIF requires a boolean condition",
         );
     }
 
@@ -2579,22 +2579,16 @@ mod tests {
         do_simple_error_test("FOR\nNEXT", "1:4: No iterator name in FOR statement");
         do_simple_error_test("FOR a = 1 TO 10\nEND IF", "2:1: END IF without IF");
 
-        do_simple_error_test(
-            "FOR i = \"a\" TO 3\nNEXT",
-            "1:13: Cannot compare STRING and INTEGER with <=",
-        );
-        do_simple_error_test(
-            "FOR i = 1 TO \"a\"\nNEXT",
-            "1:11: Cannot compare INTEGER and STRING with <=",
-        );
+        do_simple_error_test("FOR i = \"a\" TO 3\nNEXT", "1:13: Cannot <= STRING and INTEGER");
+        do_simple_error_test("FOR i = 1 TO \"a\"\nNEXT", "1:11: Cannot <= INTEGER and STRING");
 
         do_simple_error_test(
             "FOR i = \"b\" TO 7 STEP -8\nNEXT",
-            "1:13: Cannot compare STRING and INTEGER with >=",
+            "1:13: Cannot >= STRING and INTEGER",
         );
         do_simple_error_test(
             "FOR i = 1 TO \"b\" STEP -8\nNEXT",
-            "1:11: Cannot compare INTEGER and STRING with >=",
+            "1:11: Cannot >= INTEGER and STRING",
         );
     }
 
@@ -2617,10 +2611,7 @@ mod tests {
         do_simple_error_test("OUT OUT()", "1:5: OUT is not an array nor a function");
         do_simple_error_test("OUT OUT(3)", "1:5: OUT is not an array nor a function");
         do_simple_error_test("OUT SUM?()", "1:5: Incompatible type annotation in SUM? reference");
-        do_simple_error_test(
-            "OUT TYPE_CHECK()",
-            "1:5: In call to TYPE_CHECK: expected no arguments nor parenthesis",
-        );
+        do_simple_error_test("OUT TYPE_CHECK()", "1:5: TYPE_CHECK expected no arguments");
     }
 
     #[test]
@@ -3123,7 +3114,7 @@ mod tests {
 
         do_simple_error_test(
             "SELECT CASE 2\nCASE FALSE\nEND SELECT",
-            "2:6: Cannot compare INTEGER and BOOLEAN with =",
+            "2:6: Cannot = INTEGER and BOOLEAN",
         );
     }
 
@@ -3198,8 +3189,8 @@ mod tests {
 
     #[test]
     fn test_top_level_compilation_errors_abort_execution() {
-        do_simple_error_test("FOO BAR", "1:1: Unknown builtin FOO");
-        do_error_test(r#"OUT "a": FOO BAR: OUT "b""#, &[], &[], "1:10: Unknown builtin FOO");
+        do_simple_error_test("FOO BAR", "1:1: Undefined symbol FOO");
+        do_error_test(r#"OUT "a": FOO BAR: OUT "b""#, &[], &[], "1:10: Undefined symbol FOO");
     }
 
     #[test]
@@ -3218,12 +3209,12 @@ mod tests {
 
     #[test]
     fn test_inner_level_compilation_errors_abort_execution() {
-        do_simple_error_test(r#"IF TRUE THEN: FOO BAR: END IF"#, "1:15: Unknown builtin FOO");
+        do_simple_error_test(r#"IF TRUE THEN: FOO BAR: END IF"#, "1:15: Undefined symbol FOO");
         do_error_test(
             r#"OUT "a": IF TRUE THEN: FOO BAR: END IF: OUT "b""#,
             &[],
             &[],
-            "1:24: Unknown builtin FOO",
+            "1:24: Undefined symbol FOO",
         );
     }
 
@@ -3404,7 +3395,7 @@ mod tests {
             END FUNCTION
             OUT foo(3, 4)
         "#;
-        do_error_test(code, &[], &[], "5:17: In call to FOO: expected n%");
+        do_error_test(code, &[], &[], "5:17: FOO expected n%");
     }
 
     #[test]
@@ -3452,7 +3443,7 @@ mod tests {
             SUB f: OUT "foo": END SUB
             OUT f
         "#;
-        do_error_test(code, &[], &[], "3:17: f is not an array nor a function");
+        do_error_test(code, &[], &[], "3:17: F is not an array nor a function");
     }
 
     #[test]
@@ -3463,6 +3454,6 @@ mod tests {
             END SUB
             foo 3, 4
         "#;
-        do_error_test(code, &[], &[], "5:13: In call to FOO: expected n%");
+        do_error_test(code, &[], &[], "5:13: FOO expected n%");
     }
 }

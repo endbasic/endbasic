@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn test_clear_errors() {
-        check_stmt_compilation_err("1:1: In call to CLEAR: expected no arguments", "CLEAR 123");
+        check_stmt_compilation_err("1:1: CLEAR expected no arguments", "CLEAR 123");
     }
 
     #[test]
@@ -224,14 +224,8 @@ mod tests {
 
     #[test]
     fn test_errmsg_errors() {
-        check_expr_compilation_error(
-            "1:10: In call to ERRMSG: expected no arguments nor parenthesis",
-            r#"ERRMSG()"#,
-        );
-        check_expr_compilation_error(
-            "1:10: In call to ERRMSG: expected no arguments nor parenthesis",
-            r#"ERRMSG(3)"#,
-        );
+        check_expr_compilation_error("1:10: ERRMSG expected no arguments", r#"ERRMSG()"#);
+        check_expr_compilation_error("1:10: ERRMSG expected no arguments", r#"ERRMSG(3)"#);
     }
 
     #[test]
@@ -272,13 +266,10 @@ mod tests {
 
     #[test]
     fn test_sleep_errors() {
-        check_stmt_compilation_err("1:1: In call to SLEEP: expected seconds#", "SLEEP");
-        check_stmt_compilation_err("1:1: In call to SLEEP: expected seconds#", "SLEEP 2, 3");
-        check_stmt_compilation_err("1:1: In call to SLEEP: expected seconds#", "SLEEP 2; 3");
-        check_stmt_compilation_err(
-            "1:1: In call to SLEEP: 1:7: STRING is not a number",
-            "SLEEP \"foo\"",
-        );
+        check_stmt_compilation_err("1:1: SLEEP expected seconds#", "SLEEP");
+        check_stmt_compilation_err("1:1: SLEEP expected seconds#", "SLEEP 2, 3");
+        check_stmt_compilation_err("1:1: SLEEP expected seconds#", "SLEEP 2; 3");
+        check_stmt_compilation_err("1:7: STRING is not a number", "SLEEP \"foo\"");
         check_stmt_err("1:1: In call to SLEEP: 1:7: Sleep time must be positive", "SLEEP -1");
         check_stmt_err("1:1: In call to SLEEP: 1:7: Sleep time must be positive", "SLEEP -0.001");
     }

@@ -306,7 +306,7 @@ mod tests {
             .expect_var("after", 5)
             .expect_prints([
                 "Loading AUTOEXEC.BAS...",
-                "AUTOEXEC.BAS failed: 2:5: Undefined variable undef",
+                "AUTOEXEC.BAS failed: 2:5: Undefined symbol UNDEF",
             ])
             .expect_file("MEMORY:/AUTOEXEC.BAS", autoexec)
             .check();

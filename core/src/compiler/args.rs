@@ -18,15 +18,13 @@
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::compiler::exprs::{compile_expr, compile_expr_as_type};
-use crate::compiler::{ExprType, SymbolPrototype, SymbolsTable};
+use crate::compiler::{Error, ExprType, Result, SymbolPrototype, SymbolsTable};
 use crate::exec::ValueTag;
 use crate::reader::LineCol;
-use crate::syms::{CallError, SymbolKey};
+use crate::syms::CallableMetadata;
+use crate::syms::SymbolKey;
 use std::borrow::Cow;
 use std::ops::RangeInclusive;
-
-/// Result for argument compilation return values.
-type Result<T> = std::result::Result<T, CallError>;
 
 /// Details to compile a required scalar parameter.
 #[derive(Clone, Debug)]
@@ -266,6 +264,11 @@ impl CallableSyntax {
         min..=max
     }
 
+    /// Returns true if this syntax represents "no arguments".
+    pub(crate) fn is_empty(&self) -> bool {
+        self.singular.is_empty() && self.repeated.is_none()
+    }
+
     /// Produces a user-friendly description of this callable syntax.
     pub(crate) fn describe(&self) -> String {
         let mut description = String::new();
@@ -326,6 +329,8 @@ impl CallableSyntax {
 /// not have mutable access to the `symtable` here.
 fn compile_required_ref(
     instrs: &mut Vec<Instruction>,
+    md: &CallableMetadata,
+    pos: LineCol,
     symtable: &SymbolsTable,
     require_array: bool,
     define_undefined: bool,
@@ -337,21 +342,15 @@ fn compile_required_ref(
             match symtable.get(&key) {
                 None => {
                     if !define_undefined {
-                        let message = if require_array {
-                            format!("Undefined array {}", span.vref.name())
-                        } else {
-                            format!("Undefined variable {}", span.vref.name())
-                        };
-                        return Err(CallError::ArgumentError(span.pos, message));
+                        return Err(Error::UndefinedSymbol(span.pos, key));
                     }
                     debug_assert!(!require_array);
 
                     let vtype = span.vref.ref_type().unwrap_or(ExprType::Integer);
 
                     if !span.vref.accepts(vtype) {
-                        return Err(CallError::ArgumentError(
-                            span.pos,
-                            format!("Incompatible type annotation in {} reference", span.vref),
+                        return Err(Error::IncompatibleTypeAnnotationInReference(
+                            span.pos, span.vref,
                         ));
                     }
 
@@ -363,17 +362,13 @@ fn compile_required_ref(
                     let vtype = *vtype;
 
                     if !span.vref.accepts(vtype) {
-                        return Err(CallError::ArgumentError(
-                            span.pos,
-                            format!("Incompatible type annotation in {} reference", span.vref),
+                        return Err(Error::IncompatibleTypeAnnotationInReference(
+                            span.pos, span.vref,
                         ));
                     }
 
                     if !require_array {
-                        return Err(CallError::ArgumentError(
-                            span.pos,
-                            format!("{} is not a variable reference", span.vref),
-                        ));
+                        return Err(Error::NotAReference(span.pos));
                     }
 
                     instrs.push(Instruction::LoadRef(key, vtype, span.pos));
@@ -384,17 +379,13 @@ fn compile_required_ref(
                     let vtype = *vtype;
 
                     if !span.vref.accepts(vtype) {
-                        return Err(CallError::ArgumentError(
-                            span.pos,
-                            format!("Incompatible type annotation in {} reference", span.vref),
+                        return Err(Error::IncompatibleTypeAnnotationInReference(
+                            span.pos, span.vref,
                         ));
                     }
 
                     if require_array {
-                        return Err(CallError::ArgumentError(
-                            span.pos,
-                            format!("{} is not an array reference", span.vref),
-                        ));
+                        return Err(Error::NotAReference(span.pos));
                     }
 
                     instrs.push(Instruction::LoadRef(key, vtype, span.pos));
@@ -403,43 +394,34 @@ fn compile_required_ref(
 
                 Some(SymbolPrototype::Callable(md)) => {
                     if !span.vref.accepts_callable(md.return_type()) {
-                        return Err(CallError::ArgumentError(
-                            span.pos,
-                            format!("Incompatible type annotation in {} reference", span.vref),
+                        return Err(Error::IncompatibleTypeAnnotationInReference(
+                            span.pos, span.vref,
                         ));
                     }
 
-                    Err(CallError::ArgumentError(
-                        span.pos,
-                        format!("{} is not an array nor a function", span.vref.name()),
-                    ))
+                    Err(Error::NotArrayOrFunction(span.pos, key))
                 }
             }
         }
 
-        Some(expr) => {
-            let message = if require_array {
-                "Requires an array reference, not a value"
-            } else {
-                "Requires a variable reference, not a value"
-            };
-            Err(CallError::ArgumentError(expr.start_pos(), message.to_owned()))
-        }
+        Some(expr) => Err(Error::NotAReference(expr.start_pos())),
 
-        None => Err(CallError::SyntaxError),
+        None => Err(Error::CallableSyntaxError(pos, md.clone())),
     }
 }
 
 /// Locates the syntax definition that can parse the given number of arguments.
 ///
 /// Panics if more than one syntax definition applies.
-fn find_syntax(syntaxes: &[CallableSyntax], nargs: usize) -> Result<&CallableSyntax> {
-    let mut matches = syntaxes.iter().filter(|s| s.expected_nargs().contains(&nargs));
+fn find_syntax(md: &CallableMetadata, pos: LineCol, nargs: usize) -> Result<&CallableSyntax> {
+    let mut matches = md.syntaxes().iter().filter(|s| s.expected_nargs().contains(&nargs));
     let syntax = matches.next();
-    debug_assert!(matches.next().is_none(), "Ambiguous syntax definitions");
     match syntax {
-        Some(syntax) => Ok(syntax),
-        None => Err(CallError::SyntaxError),
+        Some(syntax) => {
+            debug_assert!(matches.next().is_none(), "Ambiguous syntax definitions");
+            Ok(syntax)
+        }
+        None => Err(Error::CallableSyntaxError(pos, md.clone())),
     }
 }
 
@@ -454,8 +436,11 @@ fn find_syntax(syntaxes: &[CallableSyntax], nargs: usize) -> Result<&CallableSyn
 ///
 /// `is_last` indicates whether this is the last separator in the command call and is used
 /// only for diagnostics purposes.
+#[allow(clippy::too_many_arguments)]
 fn compile_syn_argsep(
     instrs: &mut Vec<Instruction>,
+    md: &CallableMetadata,
+    pos: LineCol,
     syn: &ArgSepSyntax,
     is_last: bool,
     sep: ArgSep,
@@ -471,7 +456,7 @@ fn compile_syn_argsep(
         ArgSepSyntax::Exactly(exp_sep) => {
             debug_assert!(*exp_sep != ArgSep::End, "Use ArgSepSyntax::End");
             if sep != ArgSep::End && sep != *exp_sep {
-                return Err(CallError::SyntaxError);
+                return Err(Error::CallableSyntaxError(pos, md.clone()));
             }
             Ok(0)
         }
@@ -483,7 +468,7 @@ fn compile_syn_argsep(
                 Ok(0)
             } else {
                 if sep != *exp_sep1 && sep != *exp_sep2 {
-                    return Err(CallError::SyntaxError);
+                    return Err(Error::CallableSyntaxError(pos, md.clone()));
                 }
                 instrs.insert(sep_tag_pc, Instruction::PushInteger(sep as i32, sep_pos));
                 Ok(1)
@@ -497,32 +482,18 @@ fn compile_syn_argsep(
     }
 }
 
-/// Compiles a single expression, expecting it to be of a `target` type.  Applies casts if
-/// possible.
-fn compile_arg_expr(
-    instrs: &mut Vec<Instruction>,
-    symtable: &SymbolsTable,
-    expr: Expr,
-    target: ExprType,
-) -> Result<()> {
-    match compile_expr_as_type(instrs, symtable, expr, target) {
-        Ok(()) => Ok(()),
-        Err(e) => Err(CallError::ArgumentError(e.pos, e.message)),
-    }
-}
-
 /// Parses the arguments to a command or a function and generates expressions to compute them.
 ///
 /// Returns the number of arguments that the instructions added to `instrs` will push into the
 /// stack and returns the list of new symbols that need to be inserted into `symtable`.
 fn compile_args(
-    syntaxes: &[CallableSyntax],
+    md: &CallableMetadata,
     instrs: &mut Vec<Instruction>,
     symtable: &SymbolsTable,
-    _pos: LineCol,
+    pos: LineCol,
     args: Vec<ArgSpan>,
 ) -> Result<(usize, Vec<(SymbolKey, SymbolPrototype)>)> {
-    let syntax = find_syntax(syntaxes, args.len())?;
+    let syntax = find_syntax(md, pos, args.len())?;
 
     let input_nargs = args.len();
     let mut aiter = args.into_iter().rev();
@@ -537,7 +508,7 @@ fn compile_args(
             min_nargs += 1;
         }
         if input_nargs < min_nargs {
-            return Err(CallError::SyntaxError);
+            return Err(Error::CallableSyntaxError(pos, md.clone()));
         }
 
         let need_tags = syn.allow_missing || matches!(syn.type_syn, RepeatedTypeSyntax::AnyValue);
@@ -561,8 +532,15 @@ fn compile_args(
                         }
 
                         RepeatedTypeSyntax::VariableRef => {
-                            let to_insert_one =
-                                compile_required_ref(instrs, symtable, false, true, Some(expr))?;
+                            let to_insert_one = compile_required_ref(
+                                instrs,
+                                md,
+                                pos,
+                                symtable,
+                                false,
+                                true,
+                                Some(expr),
+                            )?;
                             if let Some(to_insert_one) = to_insert_one {
                                 to_insert.push(to_insert_one);
                             }
@@ -570,7 +548,7 @@ fn compile_args(
                         }
 
                         RepeatedTypeSyntax::TypedValue(vtype) => {
-                            compile_arg_expr(instrs, symtable, expr, vtype)?;
+                            compile_expr_as_type(instrs, symtable, expr, vtype)?;
                             if need_tags {
                                 instrs.push(Instruction::PushInteger(
                                     ValueTag::from(vtype) as i32,
@@ -585,7 +563,7 @@ fn compile_args(
                 }
                 None => {
                     if !syn.allow_missing {
-                        return Err(CallError::SyntaxError);
+                        return Err(Error::CallableSyntaxError(pos, md.clone()));
                     }
                     instrs.push(Instruction::PushInteger(ValueTag::Missing as i32, span.sep_pos));
                     nargs += 1;
@@ -594,6 +572,8 @@ fn compile_args(
 
             nargs += compile_syn_argsep(
                 instrs,
+                md,
+                pos,
                 &syn.sep,
                 input_nargs == remaining,
                 span.sep,
@@ -616,10 +596,10 @@ fn compile_args(
             SingularArgSyntax::RequiredValue(details, sep) => {
                 match span.expr {
                     Some(expr) => {
-                        compile_arg_expr(instrs, symtable, expr, details.vtype)?;
+                        compile_expr_as_type(instrs, symtable, expr, details.vtype)?;
                         nargs += 1;
                     }
-                    None => return Err(CallError::SyntaxError),
+                    None => return Err(Error::CallableSyntaxError(pos, md.clone())),
                 }
                 sep
             }
@@ -627,6 +607,8 @@ fn compile_args(
             SingularArgSyntax::RequiredRef(details, sep) => {
                 let to_insert_one = compile_required_ref(
                     instrs,
+                    md,
+                    pos,
                     symtable,
                     details.require_array,
                     details.define_undefined,
@@ -643,7 +625,7 @@ fn compile_args(
                 let (tag, pos) = match span.expr {
                     Some(expr) => {
                         let pos = expr.start_pos();
-                        compile_arg_expr(instrs, symtable, expr, details.vtype)?;
+                        compile_expr_as_type(instrs, symtable, expr, details.vtype)?;
                         nargs += 1;
                         (details.present_value, pos)
                     }
@@ -664,10 +646,7 @@ fn compile_args(
                     }
                     None => {
                         if !details.allow_missing {
-                            return Err(CallError::ArgumentError(
-                                span.sep_pos,
-                                "Missing expression before separator".to_owned(),
-                            ));
+                            return Err(Error::CallableSyntaxError(span.sep_pos, md.clone()));
                         }
                         nargs += 1;
                         (ValueTag::Missing, span.sep_pos)
@@ -680,6 +659,8 @@ fn compile_args(
 
         nargs += compile_syn_argsep(
             instrs,
+            md,
+            pos,
             exp_sep,
             input_nargs == remaining,
             span.sep,
@@ -698,13 +679,13 @@ fn compile_args(
 /// This can be used to help the runtime by doing type checking during compilation and then
 /// allowing the runtime to assume that the values on the stack are correctly typed.
 pub(super) fn compile_command_args(
-    syntaxes: &[CallableSyntax],
+    md: &CallableMetadata,
     instrs: &mut Vec<Instruction>,
     symtable: &mut SymbolsTable,
     pos: LineCol,
     args: Vec<ArgSpan>,
 ) -> Result<usize> {
-    let (nargs, to_insert) = compile_args(syntaxes, instrs, symtable, pos, args)?;
+    let (nargs, to_insert) = compile_args(md, instrs, symtable, pos, args)?;
     for (key, proto) in to_insert {
         if !symtable.contains_key(&key) {
             symtable.insert(key, proto);
@@ -718,19 +699,21 @@ pub(super) fn compile_command_args(
 /// This can be used to help the runtime by doing type checking during compilation and then
 /// allowing the runtime to assume that the values on the stack are correctly typed.
 pub(super) fn compile_function_args(
-    syntaxes: &[CallableSyntax],
+    md: &CallableMetadata,
     instrs: &mut Vec<Instruction>,
     symtable: &SymbolsTable,
     pos: LineCol,
     args: Vec<ArgSpan>,
 ) -> Result<usize> {
-    let (nargs, to_insert) = compile_args(syntaxes, instrs, symtable, pos, args)?;
+    let (nargs, to_insert) = compile_args(md, instrs, symtable, pos, args)?;
     debug_assert!(to_insert.is_empty());
     Ok(nargs)
 }
 
 #[cfg(test)]
 mod testutils {
+    use crate::syms::CallableMetadataBuilder;
+
     use super::*;
     use std::collections::HashMap;
 
@@ -772,13 +755,9 @@ mod testutils {
                 // Start with one instruction to validate that the args compiler doesn't touch it.
                 Instruction::Nop,
             ];
-            let result = compile_command_args(
-                &self.syntaxes,
-                &mut instrs,
-                &mut self.symtable,
-                lc(1000, 2000),
-                args,
-            );
+            let md = CallableMetadataBuilder::new("TEST").with_syntaxes(self.syntaxes).test_build();
+            let result =
+                compile_command_args(&md, &mut instrs, &mut self.symtable, lc(1000, 2000), args);
             Checker {
                 result,
                 instrs,
@@ -809,7 +788,7 @@ mod testutils {
         }
 
         /// Expects the compilation to fail with the given `error`.
-        pub(super) fn exp_error(mut self, error: CallError) -> Self {
+        pub(super) fn exp_error(mut self, error: Error) -> Self {
             self.exp_result = Err(error);
             self
         }
@@ -826,24 +805,12 @@ mod testutils {
             self
         }
 
-        /// Formats a `CallError` as a string to simplify comparisons.
-        fn format_call_error(e: CallError) -> String {
-            match e {
-                CallError::ArgumentError(pos, e) => format!("{}: {}", pos, e),
-                CallError::EvalError(pos, e) => format!("{}: {}", pos, e),
-                CallError::InternalError(_pos, e) => panic!("Must not happen here: {}", e),
-                CallError::IoError(e) => panic!("Must not happen here: {}", e),
-                CallError::NestedError(e) => panic!("Must not happen here: {}", e),
-                CallError::SyntaxError => "Syntax error".to_owned(),
-            }
-        }
-
         /// Checks that the compilation ended with the configured expectations.
         pub(super) fn check(self) {
             let is_ok = self.result.is_ok();
             assert_eq!(
-                self.exp_result.map_err(Self::format_call_error),
-                self.result.map_err(Self::format_call_error),
+                self.exp_result.map_err(|e| format!("{}", e)),
+                self.result.map_err(|e| format!("{}", e)),
             );
 
             if !is_ok {
@@ -1121,11 +1088,7 @@ mod description_tests {
 mod compile_tests {
     use super::testutils::*;
     use super::*;
-
-    #[test]
-    fn test_no_syntaxes_yields_error() {
-        Tester::default().compile_command([]).exp_error(CallError::SyntaxError).check();
-    }
+    use crate::syms::CallableMetadataBuilder;
 
     #[test]
     fn test_no_args_ok() {
@@ -1141,7 +1104,10 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 3),
             }])
-            .exp_error(CallError::SyntaxError)
+            .exp_error(Error::CallableSyntaxError(
+                lc(1000, 2000),
+                CallableMetadataBuilder::new("TEST").test_build(),
+            ))
             .check();
     }
 
@@ -1236,7 +1202,7 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_error(CallError::ArgumentError(lc(1, 2), "Undefined variable foo".to_owned()))
+            .exp_error(Error::UndefinedSymbol(lc(1, 2), SymbolKey::from("foo")))
             .check();
     }
 
@@ -1259,10 +1225,7 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_error(CallError::ArgumentError(
-                lc(1, 2),
-                "Requires a variable reference, not a value".to_owned(),
-            ))
+            .exp_error(Error::NotAReference(lc(1, 2)))
             .check();
     }
 
@@ -1289,10 +1252,7 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_error(CallError::ArgumentError(
-                lc(1, 2),
-                "foo is not a variable reference".to_owned(),
-            ))
+            .exp_error(Error::NotAReference(lc(1, 2)))
             .check();
     }
 
@@ -1319,9 +1279,9 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_error(CallError::ArgumentError(
+            .exp_error(Error::IncompatibleTypeAnnotationInReference(
                 lc(1, 2),
-                "Incompatible type annotation in foo% reference".to_owned(),
+                VarRef::new("foo", Some(ExprType::Integer)),
             ))
             .check();
     }
@@ -1481,7 +1441,7 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_error(CallError::ArgumentError(lc(1, 2), "Undefined array foo".to_owned()))
+            .exp_error(Error::UndefinedSymbol(lc(1, 2), SymbolKey::from("foo")))
             .check();
     }
 
@@ -1504,10 +1464,7 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_error(CallError::ArgumentError(
-                lc(1, 2),
-                "Requires an array reference, not a value".to_owned(),
-            ))
+            .exp_error(Error::NotAReference(lc(1, 2)))
             .check();
     }
 
@@ -1534,10 +1491,7 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_error(CallError::ArgumentError(
-                lc(1, 2),
-                "foo is not an array reference".to_owned(),
-            ))
+            .exp_error(Error::NotAReference(lc(1, 2)))
             .check();
     }
 
@@ -1564,9 +1518,9 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_error(CallError::ArgumentError(
+            .exp_error(Error::IncompatibleTypeAnnotationInReference(
                 lc(1, 2),
-                "Incompatible type annotation in foo% reference".to_owned(),
+                VarRef::new("foo", Some(ExprType::Integer)),
             ))
             .check();
     }
@@ -1695,9 +1649,9 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 3),
             }])
-            .exp_error(CallError::ArgumentError(
+            .exp_error(Error::IncompatibleTypeAnnotationInReference(
                 lc(1, 2),
-                "Incompatible type annotation in foo? reference".to_owned(),
+                VarRef::new("foo", Some(ExprType::Boolean)),
             ))
             .check();
     }
@@ -1714,9 +1668,17 @@ mod compile_tests {
                 None,
             )
             .compile_command([ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 3) }])
-            .exp_error(CallError::ArgumentError(
+            .exp_error(Error::CallableSyntaxError(
                 lc(1, 3),
-                "Missing expression before separator".to_owned(),
+                CallableMetadataBuilder::new("TEST")
+                    .with_syntax(&[(
+                        &[SingularArgSyntax::AnyValue(
+                            AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: false },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    )])
+                    .test_build(),
             ))
             .check();
     }
@@ -1797,7 +1759,24 @@ mod compile_tests {
                 ArgSpan { expr: None, sep: ArgSep::Short, sep_pos: lc(1, 1) },
                 ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 4) },
             ])
-            .exp_error(CallError::SyntaxError)
+            .exp_error(Error::CallableSyntaxError(
+                lc(1000, 2000),
+                CallableMetadataBuilder::new("TEST")
+                    .with_syntax(&[(
+                        &[
+                            SingularArgSyntax::AnyValue(
+                                AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: true },
+                                ArgSepSyntax::Exactly(ArgSep::As),
+                            ),
+                            SingularArgSyntax::AnyValue(
+                                AnyValueSyntax { name: Cow::Borrowed("arg2"), allow_missing: true },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    )])
+                    .test_build(),
+            ))
             .check();
     }
 
@@ -1821,7 +1800,24 @@ mod compile_tests {
                 ArgSpan { expr: None, sep: ArgSep::As, sep_pos: lc(1, 1) },
                 ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 4) },
             ])
-            .exp_error(CallError::SyntaxError)
+            .exp_error(Error::CallableSyntaxError(
+                lc(1000, 2000),
+                CallableMetadataBuilder::new("TEST")
+                    .with_syntax(&[(
+                        &[
+                            SingularArgSyntax::AnyValue(
+                                AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: true },
+                                ArgSepSyntax::OneOf(ArgSep::Short, ArgSep::Long),
+                            ),
+                            SingularArgSyntax::AnyValue(
+                                AnyValueSyntax { name: Cow::Borrowed("arg2"), allow_missing: true },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    )])
+                    .test_build(),
+            ))
             .check();
     }
 
@@ -1912,7 +1908,21 @@ mod compile_tests {
                 }),
             )
             .compile_command([])
-            .exp_error(CallError::SyntaxError)
+            .exp_error(Error::CallableSyntaxError(
+                lc(1000, 2000),
+                CallableMetadataBuilder::new("TEST")
+                    .with_syntax(&[(
+                        &[],
+                        Some(&RepeatedSyntax {
+                            name: Cow::Borrowed("arg"),
+                            type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
+                            sep: ArgSepSyntax::Exactly(ArgSep::Long),
+                            allow_missing: false,
+                            require_one: true,
+                        }),
+                    )])
+                    .test_build(),
+            ))
             .check();
     }
 
@@ -1960,10 +1970,7 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 2),
             }])
-            .exp_error(CallError::ArgumentError(
-                lc(1, 2),
-                "Requires a variable reference, not a value".to_owned(),
-            ))
+            .exp_error(Error::NotAReference(lc(1, 2)))
             .check();
     }
 

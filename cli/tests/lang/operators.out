@@ -42,7 +42,7 @@ ERROR: 1:11: Cannot OR DOUBLE and DOUBLE
 ERROR: 1:11: Cannot XOR DOUBLE and DOUBLE
 >>> Test bitwise NOT
 -1
-ERROR: 1:7: Cannot apply NOT to DOUBLE
+ERROR: 1:7: Cannot NOT DOUBLE
 >>> Test bitwise shift left
  12
 -268435456
@@ -52,12 +52,12 @@ ERROR: 1:7: Cannot apply NOT to DOUBLE
  0
  0
  0
-ERROR: 1:13: Cannot apply << to BOOLEAN
-ERROR: 1:13: Cannot apply << to BOOLEAN
-ERROR: 1:11: Cannot apply << to DOUBLE
-ERROR: 1:13: Cannot apply << to STRING
-ERROR: 1:9: Number of bits to << must be an INTEGER, not a BOOLEAN
-ERROR: 1:9: Number of bits to << must be an INTEGER, not a DOUBLE
+ERROR: 1:13: Cannot << BOOLEAN
+ERROR: 1:13: Cannot << BOOLEAN
+ERROR: 1:11: Cannot << DOUBLE
+ERROR: 1:13: Cannot << STRING
+ERROR: 1:9: expected INTEGER but found BOOLEAN
+ERROR: 1:9: expected INTEGER but found DOUBLE
 ERROR: 1:9: Number of bits to << (-1) must be positive
 >>> Test bitwise shift right
  3
@@ -72,17 +72,17 @@ ERROR: 1:9: Number of bits to << (-1) must be positive
  0
 -1
 -1
-ERROR: 1:13: Cannot apply >> to BOOLEAN
-ERROR: 1:13: Cannot apply >> to BOOLEAN
-ERROR: 1:11: Cannot apply >> to DOUBLE
-ERROR: 1:13: Cannot apply >> to STRING
-ERROR: 1:9: Number of bits to >> must be an INTEGER, not a BOOLEAN
-ERROR: 1:9: Number of bits to >> must be an INTEGER, not a DOUBLE
+ERROR: 1:13: Cannot >> BOOLEAN
+ERROR: 1:13: Cannot >> BOOLEAN
+ERROR: 1:11: Cannot >> DOUBLE
+ERROR: 1:13: Cannot >> STRING
+ERROR: 1:9: expected INTEGER but found BOOLEAN
+ERROR: 1:9: expected INTEGER but found DOUBLE
 ERROR: 1:9: Number of bits to >> (-1) must be positive
 >>> Test = types
 TRUE
 FALSE
-ERROR: 1:12: Cannot compare BOOLEAN and INTEGER with =
+ERROR: 1:12: Cannot = BOOLEAN and INTEGER
 TRUE
 FALSE
 TRUE
@@ -93,11 +93,11 @@ TRUE
 FALSE
 TRUE
 FALSE
-ERROR: 1:10: Cannot compare STRING and BOOLEAN with =
+ERROR: 1:10: Cannot = STRING and BOOLEAN
 >>> Test <> types
 FALSE
 TRUE
-ERROR: 1:12: Cannot compare BOOLEAN and INTEGER with <>
+ERROR: 1:12: Cannot <> BOOLEAN and INTEGER
 FALSE
 TRUE
 FALSE
@@ -108,9 +108,9 @@ FALSE
 TRUE
 FALSE
 TRUE
-ERROR: 1:10: Cannot compare STRING and BOOLEAN with <>
+ERROR: 1:10: Cannot <> STRING and BOOLEAN
 >>> Test < types
-ERROR: 1:13: Cannot compare BOOLEAN and BOOLEAN with <
+ERROR: 1:13: Cannot < BOOLEAN and BOOLEAN
 FALSE
 TRUE
 FALSE
@@ -123,9 +123,9 @@ FALSE
 TRUE
 FALSE
 TRUE
-ERROR: 1:10: Cannot compare STRING and BOOLEAN with <
+ERROR: 1:10: Cannot < STRING and BOOLEAN
 >>> Test <= types
-ERROR: 1:13: Cannot compare BOOLEAN and BOOLEAN with <
+ERROR: 1:13: Cannot < BOOLEAN and BOOLEAN
 FALSE
 TRUE
 TRUE
@@ -141,9 +141,9 @@ TRUE
 FALSE
 TRUE
 TRUE
-ERROR: 1:10: Cannot compare STRING and BOOLEAN with <=
+ERROR: 1:10: Cannot <= STRING and BOOLEAN
 >>> Test > types
-ERROR: 1:13: Cannot compare BOOLEAN and BOOLEAN with >
+ERROR: 1:13: Cannot > BOOLEAN and BOOLEAN
 FALSE
 TRUE
 FALSE
@@ -156,9 +156,9 @@ FALSE
 TRUE
 FALSE
 TRUE
-ERROR: 1:10: Cannot compare STRING and BOOLEAN with >
+ERROR: 1:10: Cannot > STRING and BOOLEAN
 >>> Test >= types
-ERROR: 1:13: Cannot compare BOOLEAN and BOOLEAN with >
+ERROR: 1:13: Cannot > BOOLEAN and BOOLEAN
 FALSE
 TRUE
 TRUE
@@ -174,7 +174,7 @@ TRUE
 FALSE
 TRUE
 TRUE
-ERROR: 1:10: Cannot compare STRING and BOOLEAN with >=
+ERROR: 1:10: Cannot >= STRING and BOOLEAN
 >>> Test + types
 ERROR: 1:13: Cannot + BOOLEAN and BOOLEAN
  7.1

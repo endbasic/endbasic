@@ -18,9 +18,7 @@
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::reader::LineCol;
-use crate::syms::{
-    CallError, CallableMetadata, CallableMetadataBuilder, Symbol, SymbolKey, Symbols,
-};
+use crate::syms::{CallableMetadata, CallableMetadataBuilder, Symbol, SymbolKey, Symbols};
 use std::borrow::Cow;
 use std::collections::HashMap;
 #[cfg(test)]
@@ -33,48 +31,64 @@ use exprs::{compile_expr, compile_expr_as_type, compile_expr_in_command};
 
 /// Compilation errors.
 #[derive(Debug, thiserror::Error)]
-#[error("{}: {}", pos, message)]
-pub struct Error {
-    pub(crate) pos: LineCol,
-    pub(crate) message: String,
-}
+#[allow(missing_docs)] // The error messages and names are good enough.
+pub enum Error {
+    #[error("{0}: Cannot index array with {1} subscripts; need {2}")]
+    ArrayIndexSubscriptsError(LineCol, usize, usize),
 
-impl Error {
-    /// Constructs a new compilation error from its parts.
-    pub(crate) fn new<S: Into<String>>(pos: LineCol, message: S) -> Self {
-        let message = message.into();
-        Self { pos, message }
-    }
+    #[error("{0}: Cannot {1} {2} and {3}")]
+    BinaryOpTypeError(LineCol, &'static str, ExprType, ExprType),
 
-    /// Annotates a call evaluation error with the command's metadata.
-    // TODO(jmmv): This is a hack to support the transition to a parameterized arguments compilers
-    // in callables.  Should be removed and/or somehow unified with the `Error` in this module given
-    // that `CallError` can specify errors that make no sense in this context.
-    fn from_call_error(md: &CallableMetadata, e: CallError, pos: LineCol) -> Self {
-        match e {
-            CallError::ArgumentError(pos2, e) => {
-                Self::new(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
-            }
-            CallError::EvalError(pos2, e) => {
-                if !md.is_function() {
-                    Self::new(pos2, e)
-                } else {
-                    Self::new(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
-                }
-            }
-            CallError::InternalError(pos2, e) => {
-                Self::new(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
-            }
-            CallError::IoError(_) => unreachable!("I/O errors are not possible during compilation"),
-            CallError::NestedError(_) => unreachable!("Nested are not possible during compilation"),
-            CallError::SyntaxError if md.syntax().is_empty() => {
-                Self::new(pos, format!("In call to {}: expected no arguments", md.name()))
-            }
-            CallError::SyntaxError => {
-                Self::new(pos, format!("In call to {}: expected {}", md.name(), md.syntax()))
-            }
-        }
-    }
+    #[error("{0}: {} expected {}", .1.name(), .1.syntax())]
+    CallableSyntaxError(LineCol, CallableMetadata),
+
+    #[error("{0}: Duplicate label {1}")]
+    DuplicateLabel(LineCol, String),
+
+    #[error("{0}: Cannot assign value of type {1} to variable of type {2}")]
+    IncompatibleTypesInAssignment(LineCol, ExprType, ExprType),
+
+    #[error("{0}: Incompatible type annotation in {1} reference")]
+    IncompatibleTypeAnnotationInReference(LineCol, VarRef),
+
+    #[error("{0}: Cannot index non-array {1}")]
+    IndexNonArray(LineCol, String),
+
+    #[error("{0}: EXIT DO outside of DO loop")]
+    MisplacedExitDo(LineCol),
+
+    #[error("{0}: {1} requires a boolean condition")]
+    NotABooleanCondition(LineCol, String),
+
+    #[error("{0}: {1} is not a command")]
+    NotACommand(LineCol, VarRef),
+
+    #[error("{0}: {1} is not a number")]
+    NotANumber(LineCol, ExprType),
+
+    #[error("{0}: Requires a reference, not a value")]
+    NotAReference(LineCol),
+
+    #[error("{0}: {1} is not a variable")]
+    NotAVariable(LineCol, VarRef),
+
+    #[error("{0}: {1} is not an array nor a function")]
+    NotArrayOrFunction(LineCol, SymbolKey),
+
+    #[error("{0}: Cannot define already-defined symbol {1}")]
+    RedefinitionError(LineCol, SymbolKey),
+
+    #[error("{0}: expected {2} but found {1}")]
+    TypeMismatch(LineCol, ExprType, ExprType),
+
+    #[error("{0}: Cannot {1} {2}")]
+    UnaryOpTypeError(LineCol, &'static str, ExprType),
+
+    #[error("{0}: Undefined symbol {1}")]
+    UndefinedSymbol(LineCol, SymbolKey),
+
+    #[error("{0}: Unknown label {1}")]
+    UnknownLabel(LineCol, String),
 }
 
 /// Result for compiler return values.
@@ -360,33 +374,21 @@ impl Compiler {
         let (atype, dims) = match self.symtable.get(&key) {
             Some(SymbolPrototype::Array(atype, dims)) => (*atype, *dims),
             Some(_) => {
-                return Err(Error::new(
-                    span.vref_pos,
-                    format!("Cannot index non-array {}", span.vref),
-                ));
+                return Err(Error::IndexNonArray(span.vref_pos, span.vref.take_name()));
             }
             None => {
-                return Err(Error::new(
-                    span.vref_pos,
-                    format!("Cannot index undefined array {}", span.vref),
-                ));
+                return Err(Error::UndefinedSymbol(span.vref_pos, key));
             }
         };
 
         if !span.vref.accepts(atype) {
-            return Err(Error::new(
-                span.vref_pos,
-                format!("Incompatible types in {} reference", span.vref),
-            ));
+            return Err(Error::IncompatibleTypeAnnotationInReference(span.vref_pos, span.vref));
         }
 
         let etype = self.compile_expr(span.expr, false)?;
         let etype = self.maybe_cast(atype, etype);
         if etype != atype {
-            return Err(Error::new(
-                span.vref_pos,
-                format!("Cannot assign value of type {} to array of type {}", etype, atype),
-            ));
+            return Err(Error::IncompatibleTypesInAssignment(span.vref_pos, etype, atype));
         }
 
         let nargs = span.subscripts.len();
@@ -413,9 +415,7 @@ impl Compiler {
 
         let vtype = match self.symtable.get(&key) {
             Some(SymbolPrototype::Variable(vtype)) => *vtype,
-            Some(_) => {
-                return Err(Error::new(vref_pos, format!("Cannot redefine {} as a variable", vref)))
-            }
+            Some(_) => return Err(Error::RedefinitionError(vref_pos, key)),
             None => {
                 // TODO(jmmv): Compile separate Dim instructions for new variables instead of
                 // checking this every time.
@@ -428,18 +428,12 @@ impl Compiler {
 
         let etype = self.maybe_cast(vtype, etype);
         if etype != vtype {
-            return Err(Error::new(
-                vref_pos,
-                format!("Cannot assign value of type {} to variable of type {}", etype, vtype,),
-            ));
+            return Err(Error::IncompatibleTypesInAssignment(vref_pos, etype, vtype));
         }
 
         if let Some(ref_type) = vref.ref_type() {
             if ref_type != vtype {
-                return Err(Error::new(
-                    vref_pos,
-                    format!("Incompatible types in {} reference", vref),
-                ));
+                return Err(Error::IncompatibleTypeAnnotationInReference(vref_pos, vref));
             }
         }
 
@@ -452,10 +446,7 @@ impl Compiler {
     fn compile_callable(&mut self, span: CallableSpan) -> Result<()> {
         let key = SymbolKey::from(span.name.name());
         if self.symtable.contains_key(&key) {
-            return Err(Error::new(
-                span.name_pos,
-                format!("Cannot define already-defined symbol {}", span.name),
-            ));
+            return Err(Error::RedefinitionError(span.name_pos, key));
         }
 
         let mut syntax = vec![];
@@ -491,10 +482,7 @@ impl Compiler {
     fn compile_dim(&mut self, span: DimSpan) -> Result<()> {
         let key = SymbolKey::from(&span.name);
         if self.symtable.contains_key(&key) {
-            return Err(Error::new(
-                span.name_pos,
-                format!("Cannot DIM already-defined symbol {}", span.name),
-            ));
+            return Err(Error::RedefinitionError(span.name_pos, key));
         }
 
         self.emit(Instruction::Dim(DimISpan {
@@ -525,7 +513,7 @@ impl Compiler {
 
             DoGuard::PreUntil(guard) => {
                 let start_pc = self.next_pc;
-                self.compile_expr_guard(guard, "DO requires a boolean condition")?;
+                self.compile_expr_guard(guard, "DO")?;
                 let jump_pc = self.emit(Instruction::Nop);
                 self.compile_many(span.body)?;
                 end_pc = self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
@@ -534,7 +522,7 @@ impl Compiler {
 
             DoGuard::PreWhile(guard) => {
                 let start_pc = self.next_pc;
-                self.compile_expr_guard(guard, "DO requires a boolean condition")?;
+                self.compile_expr_guard(guard, "DO")?;
                 let jump_pc = self.emit(Instruction::Nop);
                 self.compile_many(span.body)?;
                 end_pc = self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
@@ -544,14 +532,14 @@ impl Compiler {
             DoGuard::PostUntil(guard) => {
                 let start_pc = self.next_pc;
                 self.compile_many(span.body)?;
-                self.compile_expr_guard(guard, "LOOP requires a boolean condition")?;
+                self.compile_expr_guard(guard, "LOOP")?;
                 end_pc = self.emit(Instruction::JumpIfNotTrue(start_pc));
             }
 
             DoGuard::PostWhile(guard) => {
                 let start_pc = self.next_pc;
                 self.compile_many(span.body)?;
-                self.compile_expr_guard(guard, "LOOP requires a boolean condition")?;
+                self.compile_expr_guard(guard, "LOOP")?;
                 end_pc = self.emit(Instruction::JumpIfTrue(start_pc));
             }
         }
@@ -624,7 +612,7 @@ impl Compiler {
         while let Some(branch) = next {
             let next2 = iter.next();
 
-            self.compile_expr_guard(branch.guard, "IF/ELSEIF require a boolean condition")?;
+            self.compile_expr_guard(branch.guard, "IF/ELSEIF")?;
             let jump_pc = self.emit(Instruction::Nop);
             self.compile_many(branch.body)?;
 
@@ -731,7 +719,7 @@ impl Compiler {
                     self.compile_many(case.body)?;
                 }
                 Some(guard) => {
-                    self.compile_expr_guard(guard, "SELECT requires a boolean condition")?;
+                    self.compile_expr_guard(guard, "SELECT")?;
                     let jump_pc = self.emit(Instruction::Nop);
                     self.compile_many(case.body)?;
 
@@ -761,7 +749,7 @@ impl Compiler {
     /// Compiles a `WHILE` loop and appends its instructions to the compilation context.
     fn compile_while(&mut self, span: WhileSpan) -> Result<()> {
         let start_pc = self.next_pc;
-        self.compile_expr_guard(span.expr, "WHILE requires a boolean condition")?;
+        self.compile_expr_guard(span.expr, "WHILE")?;
         let jump_pc = self.emit(Instruction::Nop);
 
         self.compile_many(span.body)?;
@@ -809,7 +797,7 @@ impl Compiler {
         let pos = guard.start_pos();
         match self.compile_expr(guard, false)? {
             ExprType::Boolean => Ok(()),
-            _ => Err(Error::new(pos, errmsg.into())),
+            _ => Err(Error::NotABooleanCondition(pos, errmsg.into())),
         }
     }
 
@@ -829,38 +817,26 @@ impl Compiler {
                 let md = match self.symtable.get(&key) {
                     Some(SymbolPrototype::Callable(md)) => {
                         if md.is_function() {
-                            return Err(Error::new(
-                                span.vref_pos,
-                                format!("{} is not a command", span.vref.name()),
-                            ));
+                            return Err(Error::NotACommand(span.vref_pos, span.vref));
                         }
                         md.clone()
                     }
 
                     Some(_) => {
-                        return Err(Error::new(
-                            span.vref_pos,
-                            format!("{} is not a command", span.vref.name()),
-                        ));
+                        return Err(Error::NotACommand(span.vref_pos, span.vref));
                     }
 
-                    None => {
-                        return Err(Error::new(
-                            span.vref_pos,
-                            format!("Unknown builtin {}", span.vref.name()),
-                        ))
-                    }
+                    None => return Err(Error::UndefinedSymbol(span.vref_pos, key)),
                 };
 
                 let name_pos = span.vref_pos;
                 let nargs = compile_command_args(
-                    md.syntaxes(),
+                    &md,
                     &mut self.instrs,
                     &mut self.symtable,
                     name_pos,
                     span.args,
-                )
-                .map_err(|e| Error::from_call_error(&md, e, name_pos))?;
+                )?;
                 self.next_pc = self.instrs.len();
                 self.emit(Instruction::BuiltinCall(key, span.vref_pos, nargs));
             }
@@ -880,10 +856,7 @@ impl Compiler {
             Statement::DimArray(span) => {
                 let key = SymbolKey::from(&span.name);
                 if self.symtable.contains_key(&key) {
-                    return Err(Error::new(
-                        span.name_pos,
-                        format!("Cannot DIM already-defined symbol {}", span.name),
-                    ));
+                    return Err(Error::RedefinitionError(span.name_pos, key));
                 }
 
                 let nargs = span.dimensions.len();
@@ -922,7 +895,7 @@ impl Compiler {
 
             Statement::ExitDo(span) => {
                 if self.exit_do_level.1 == 0 {
-                    return Err(Error::new(span.pos, "EXIT DO outside of DO loop".to_owned()));
+                    return Err(Error::MisplacedExitDo(span.pos));
                 }
                 let exit_do_pc = self.emit(Instruction::Nop);
                 self.fixups.insert(
@@ -951,10 +924,7 @@ impl Compiler {
 
             Statement::Label(span) => {
                 if self.labels.insert(span.name.clone(), self.next_pc).is_some() {
-                    return Err(Error::new(
-                        span.name_pos,
-                        format!("Duplicate label {}", span.name),
-                    ));
+                    return Err(Error::DuplicateLabel(span.name_pos, span.name));
                 }
             }
 
@@ -1095,10 +1065,7 @@ impl Compiler {
             let addr = match self.labels.get(&fixup.target) {
                 Some(addr) => *addr,
                 None => {
-                    return Err(Error::new(
-                        fixup.target_pos,
-                        format!("Unknown label {}", fixup.target),
-                    ));
+                    return Err(Error::UnknownLabel(fixup.target_pos, fixup.target));
                 }
             };
 
@@ -1344,7 +1311,7 @@ mod tests {
             .define("a", SymbolPrototype::Array(ExprType::Integer, 1))
             .parse("a(TRUE) = 1")
             .compile()
-            .expect_err("1:3: Array index must be INTEGER, not BOOLEAN")
+            .expect_err("1:3: BOOLEAN is not a number")
             .check();
     }
 
@@ -1354,7 +1321,7 @@ mod tests {
             .define("a", SymbolPrototype::Array(ExprType::Integer, 1))
             .parse("a#(0) = 1")
             .compile()
-            .expect_err("1:1: Incompatible types in a# reference")
+            .expect_err("1:1: Incompatible type annotation in a# reference")
             .check();
     }
 
@@ -1393,7 +1360,7 @@ mod tests {
             .define("i", SymbolPrototype::Variable(ExprType::Integer))
             .parse("a(3) = FALSE")
             .compile()
-            .expect_err("1:1: Cannot assign value of type BOOLEAN to array of type DOUBLE")
+            .expect_err("1:1: Cannot assign value of type BOOLEAN to variable of type DOUBLE")
             .check();
     }
 
@@ -1413,7 +1380,7 @@ mod tests {
         Tester::default()
             .parse("a(3) = FALSE")
             .compile()
-            .expect_err("1:1: Cannot index undefined array a")
+            .expect_err("1:1: Undefined symbol A")
             .check();
     }
 
@@ -1486,7 +1453,7 @@ mod tests {
             .define(SymbolKey::from("foo"), SymbolPrototype::Variable(ExprType::Text))
             .parse("foo# = \"hello\"")
             .compile()
-            .expect_err("1:1: Incompatible types in foo# reference")
+            .expect_err("1:1: Incompatible type annotation in foo# reference")
             .check();
     }
 
@@ -1607,7 +1574,7 @@ mod tests {
         Tester::default()
             .parse("DIM foo: DIM Foo")
             .compile()
-            .expect_err("1:14: Cannot DIM already-defined symbol Foo")
+            .expect_err("1:14: Cannot define already-defined symbol FOO")
             .check();
     }
 
@@ -1617,7 +1584,7 @@ mod tests {
             .define("SomeArray", SymbolPrototype::Array(ExprType::Integer, 3))
             .parse("DIM somearray")
             .compile()
-            .expect_err("1:5: Cannot DIM already-defined symbol somearray")
+            .expect_err("1:5: Cannot define already-defined symbol SOMEARRAY")
             .check();
 
         Tester::default()
@@ -1626,14 +1593,14 @@ mod tests {
             )
             .parse("DIM OuT")
             .compile()
-            .expect_err("1:5: Cannot DIM already-defined symbol OuT")
+            .expect_err("1:5: Cannot define already-defined symbol OUT")
             .check();
 
         Tester::default()
             .define("SomeVar", SymbolPrototype::Variable(ExprType::Integer))
             .parse("DIM SOMEVAR")
             .compile()
-            .expect_err("1:5: Cannot DIM already-defined symbol SOMEVAR")
+            .expect_err("1:5: Cannot define already-defined symbol SOMEVAR")
             .check();
     }
 
@@ -1658,13 +1625,13 @@ mod tests {
         Tester::default()
             .parse("DIM var AS BOOLEAN: DIM SHARED Var AS BOOLEAN")
             .compile()
-            .expect_err("1:32: Cannot DIM already-defined symbol Var")
+            .expect_err("1:32: Cannot define already-defined symbol VAR")
             .check();
 
         Tester::default()
             .parse("DIM SHARED var AS BOOLEAN: DIM Var AS BOOLEAN")
             .compile()
-            .expect_err("1:32: Cannot DIM already-defined symbol Var")
+            .expect_err("1:32: Cannot define already-defined symbol VAR")
             .check();
     }
 
@@ -1767,13 +1734,13 @@ mod tests {
         Tester::default()
             .parse("DIM var(1) AS BOOLEAN: DIM SHARED Var(1) AS BOOLEAN")
             .compile()
-            .expect_err("1:35: Cannot DIM already-defined symbol Var")
+            .expect_err("1:35: Cannot define already-defined symbol VAR")
             .check();
 
         Tester::default()
             .parse("DIM SHARED var(1) AS BOOLEAN: DIM Var(1) AS BOOLEAN")
             .compile()
-            .expect_err("1:35: Cannot DIM already-defined symbol Var")
+            .expect_err("1:35: Cannot define already-defined symbol VAR")
             .check();
     }
 
@@ -2127,7 +2094,7 @@ mod tests {
         Tester::default()
             .parse("a = 1: FUNCTION a: END FUNCTION")
             .compile()
-            .expect_err("1:17: Cannot define already-defined symbol a%")
+            .expect_err("1:17: Cannot define already-defined symbol A")
             .check();
     }
 
@@ -2136,7 +2103,7 @@ mod tests {
         Tester::default()
             .parse("FUNCTION a: END FUNCTION: FUNCTION A: END FUNCTION")
             .compile()
-            .expect_err("1:36: Cannot define already-defined symbol A%")
+            .expect_err("1:36: Cannot define already-defined symbol A")
             .check();
     }
 
@@ -2145,7 +2112,7 @@ mod tests {
         Tester::default()
             .parse("SUB a: END SUB: FUNCTION A: END FUNCTION")
             .compile()
-            .expect_err("1:26: Cannot define already-defined symbol A%")
+            .expect_err("1:26: Cannot define already-defined symbol A")
             .check();
     }
 
@@ -2154,7 +2121,7 @@ mod tests {
         Tester::default()
             .parse("a = 1: SUB a: END SUB")
             .compile()
-            .expect_err("1:12: Cannot define already-defined symbol a")
+            .expect_err("1:12: Cannot define already-defined symbol A")
             .check();
     }
 

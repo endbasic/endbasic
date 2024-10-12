@@ -710,12 +710,9 @@ mod tests {
 
         check_expr_ok_with_vars('a' as i32, r#"ASC(s)"#, [("s", "a".into())]);
 
-        check_expr_compilation_error("1:10: In call to ASC: expected char$", r#"ASC()"#);
-        check_expr_compilation_error(
-            "1:10: In call to ASC: 1:14: INTEGER is not a STRING",
-            r#"ASC(3)"#,
-        );
-        check_expr_compilation_error("1:10: In call to ASC: expected char$", r#"ASC("a", 1)"#);
+        check_expr_compilation_error("1:10: ASC expected char$", r#"ASC()"#);
+        check_expr_compilation_error("1:14: expected STRING but found INTEGER", r#"ASC(3)"#);
+        check_expr_compilation_error("1:10: ASC expected char$", r#"ASC("a", 1)"#);
         check_expr_error(
             "1:10: In call to ASC: 1:14: Input string \"\" must be 1-character long",
             r#"ASC("")"#,
@@ -735,12 +732,9 @@ mod tests {
 
         check_expr_ok_with_vars(" ", r#"CHR(i)"#, [("i", 32.into())]);
 
-        check_expr_compilation_error("1:10: In call to CHR: expected code%", r#"CHR()"#);
-        check_expr_compilation_error(
-            "1:10: In call to CHR: 1:14: BOOLEAN is not a number",
-            r#"CHR(FALSE)"#,
-        );
-        check_expr_compilation_error("1:10: In call to CHR: expected code%", r#"CHR("a", 1)"#);
+        check_expr_compilation_error("1:10: CHR expected code%", r#"CHR()"#);
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", r#"CHR(FALSE)"#);
+        check_expr_compilation_error("1:10: CHR expected code%", r#"CHR("a", 1)"#);
         check_expr_error(
             "1:10: In call to CHR: 1:14: Character code -1 must be positive",
             r#"CHR(-1)"#,
@@ -767,19 +761,10 @@ mod tests {
 
         check_expr_ok_with_vars("abc", r#"LEFT(s, i)"#, [("s", "abcdef".into()), ("i", 3.into())]);
 
-        check_expr_compilation_error("1:10: In call to LEFT: expected expr$, n%", r#"LEFT()"#);
-        check_expr_compilation_error(
-            "1:10: In call to LEFT: expected expr$, n%",
-            r#"LEFT("", 1, 2)"#,
-        );
-        check_expr_compilation_error(
-            "1:10: In call to LEFT: 1:15: INTEGER is not a STRING",
-            r#"LEFT(1, 2)"#,
-        );
-        check_expr_compilation_error(
-            "1:10: In call to LEFT: 1:19: STRING is not a number",
-            r#"LEFT("", "")"#,
-        );
+        check_expr_compilation_error("1:10: LEFT expected expr$, n%", r#"LEFT()"#);
+        check_expr_compilation_error("1:10: LEFT expected expr$, n%", r#"LEFT("", 1, 2)"#);
+        check_expr_compilation_error("1:15: expected STRING but found INTEGER", r#"LEFT(1, 2)"#);
+        check_expr_compilation_error("1:19: STRING is not a number", r#"LEFT("", "")"#);
         check_expr_error(
             "1:10: In call to LEFT: 1:25: n% cannot be negative",
             r#"LEFT("abcdef", -5)"#,
@@ -794,12 +779,9 @@ mod tests {
 
         check_expr_ok_with_vars(4, r#"LEN(s)"#, [("s", "1234".into())]);
 
-        check_expr_compilation_error("1:10: In call to LEN: expected expr$", r#"LEN()"#);
-        check_expr_compilation_error(
-            "1:10: In call to LEN: 1:14: INTEGER is not a STRING",
-            r#"LEN(3)"#,
-        );
-        check_expr_compilation_error("1:10: In call to LEN: expected expr$", r#"LEN(" ", 1)"#);
+        check_expr_compilation_error("1:10: LEN expected expr$", r#"LEN()"#);
+        check_expr_compilation_error("1:14: expected STRING but found INTEGER", r#"LEN(3)"#);
+        check_expr_compilation_error("1:10: LEN expected expr$", r#"LEN(" ", 1)"#);
     }
 
     #[test]
@@ -811,12 +793,9 @@ mod tests {
 
         check_expr_ok_with_vars("foo ", r#"LTRIM(s)"#, [("s", " foo ".into())]);
 
-        check_expr_compilation_error("1:10: In call to LTRIM: expected expr$", r#"LTRIM()"#);
-        check_expr_compilation_error(
-            "1:10: In call to LTRIM: 1:16: INTEGER is not a STRING",
-            r#"LTRIM(3)"#,
-        );
-        check_expr_compilation_error("1:10: In call to LTRIM: expected expr$", r#"LTRIM(" ", 1)"#);
+        check_expr_compilation_error("1:10: LTRIM expected expr$", r#"LTRIM()"#);
+        check_expr_compilation_error("1:16: expected STRING but found INTEGER", r#"LTRIM(3)"#);
+        check_expr_compilation_error("1:10: LTRIM expected expr$", r#"LTRIM(" ", 1)"#);
     }
 
     #[test]
@@ -839,25 +818,19 @@ mod tests {
         );
 
         check_expr_compilation_error(
-            "1:10: In call to MID: expected <expr$, start%> | <expr$, start%, length%>",
+            "1:10: MID expected <expr$, start%> | <expr$, start%, length%>",
             r#"MID()"#,
         );
         check_expr_compilation_error(
-            "1:10: In call to MID: expected <expr$, start%> | <expr$, start%, length%>",
+            "1:10: MID expected <expr$, start%> | <expr$, start%, length%>",
             r#"MID(3)"#,
         );
         check_expr_compilation_error(
-            "1:10: In call to MID: expected <expr$, start%> | <expr$, start%, length%>",
+            "1:10: MID expected <expr$, start%> | <expr$, start%, length%>",
             r#"MID(" ", 1, 1, 10)"#,
         );
-        check_expr_compilation_error(
-            "1:10: In call to MID: 1:19: STRING is not a number",
-            r#"MID(" ", "1", 2)"#,
-        );
-        check_expr_compilation_error(
-            "1:10: In call to MID: 1:22: STRING is not a number",
-            r#"MID(" ", 1, "2")"#,
-        );
+        check_expr_compilation_error("1:19: STRING is not a number", r#"MID(" ", "1", 2)"#);
+        check_expr_compilation_error("1:22: STRING is not a number", r#"MID(" ", 1, "2")"#);
         check_expr_error(
             "1:10: In call to MID: 1:24: start% cannot be negative",
             r#"MID("abcdef", -5, 10)"#,
@@ -878,19 +851,10 @@ mod tests {
 
         check_expr_ok_with_vars("def", r#"RIGHT(s, i)"#, [("s", "abcdef".into()), ("i", 3.into())]);
 
-        check_expr_compilation_error("1:10: In call to RIGHT: expected expr$, n%", r#"RIGHT()"#);
-        check_expr_compilation_error(
-            "1:10: In call to RIGHT: expected expr$, n%",
-            r#"RIGHT("", 1, 2)"#,
-        );
-        check_expr_compilation_error(
-            "1:10: In call to RIGHT: 1:16: INTEGER is not a STRING",
-            r#"RIGHT(1, 2)"#,
-        );
-        check_expr_compilation_error(
-            "1:10: In call to RIGHT: 1:20: STRING is not a number",
-            r#"RIGHT("", "")"#,
-        );
+        check_expr_compilation_error("1:10: RIGHT expected expr$, n%", r#"RIGHT()"#);
+        check_expr_compilation_error("1:10: RIGHT expected expr$, n%", r#"RIGHT("", 1, 2)"#);
+        check_expr_compilation_error("1:16: expected STRING but found INTEGER", r#"RIGHT(1, 2)"#);
+        check_expr_compilation_error("1:20: STRING is not a number", r#"RIGHT("", "")"#);
         check_expr_error(
             "1:10: In call to RIGHT: 1:26: n% cannot be negative",
             r#"RIGHT("abcdef", -5)"#,
@@ -906,12 +870,9 @@ mod tests {
 
         check_expr_ok_with_vars(" foo", r#"RTRIM(s)"#, [("s", " foo ".into())]);
 
-        check_expr_compilation_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM()"#);
-        check_expr_compilation_error(
-            "1:10: In call to RTRIM: 1:16: INTEGER is not a STRING",
-            r#"RTRIM(3)"#,
-        );
-        check_expr_compilation_error("1:10: In call to RTRIM: expected expr$", r#"RTRIM(" ", 1)"#);
+        check_expr_compilation_error("1:10: RTRIM expected expr$", r#"RTRIM()"#);
+        check_expr_compilation_error("1:16: expected STRING but found INTEGER", r#"RTRIM(3)"#);
+        check_expr_compilation_error("1:10: RTRIM expected expr$", r#"RTRIM(" ", 1)"#);
     }
 
     #[test]
@@ -933,8 +894,8 @@ mod tests {
 
         check_expr_ok_with_vars(" 1", r#"STR(i)"#, [("i", 1.into())]);
 
-        check_expr_compilation_error("1:10: In call to STR: expected expr", r#"STR()"#);
-        check_expr_compilation_error("1:10: In call to STR: expected expr", r#"STR(" ", 1)"#);
+        check_expr_compilation_error("1:10: STR expected expr", r#"STR()"#);
+        check_expr_compilation_error("1:10: STR expected expr", r#"STR(" ", 1)"#);
     }
 
     #[test]
