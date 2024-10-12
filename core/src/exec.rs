@@ -39,7 +39,7 @@ pub enum Error {
     CompilerError(#[from] compiler::Error),
 
     /// Evaluation error during execution.
-    #[error("{}:{}: {}", .0.line, .0.col, .1)]
+    #[error("{}: {}", .0, .1)]
     EvalError(LineCol, String),
 
     /// I/O error during execution.
@@ -56,7 +56,7 @@ pub enum Error {
     ParseError(#[from] parser::Error),
 
     /// Syntax error.
-    #[error("{}:{}: {}", .0.line, .0.col, .1)]
+    #[error("{}: {}", .0, .1)]
     SyntaxError(LineCol, String),
 
     /// Value computation error during execution.
@@ -71,27 +71,22 @@ impl Error {
     // somehow unified with the equivalent function in eval::Error.
     fn from_call_error(md: &CallableMetadata, e: CallError, pos: LineCol) -> Self {
         match e {
-            CallError::ArgumentError(pos2, e) => Self::SyntaxError(
-                pos,
-                format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
-            ),
+            CallError::ArgumentError(pos2, e) => {
+                Self::SyntaxError(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
+            }
             CallError::EvalError(pos2, e) => {
                 if !md.is_function() {
                     Self::EvalError(pos2, e)
                 } else {
-                    Self::EvalError(
-                        pos,
-                        format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
-                    )
+                    Self::EvalError(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
                 }
             }
-            CallError::InternalError(pos2, e) => Self::SyntaxError(
-                pos,
-                format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
-            ),
+            CallError::InternalError(pos2, e) => {
+                Self::SyntaxError(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
+            }
             CallError::IoError(e) => Self::IoError(io::Error::new(
                 e.kind(),
-                format!("{}:{}: In call to {}: {}", pos.line, pos.col, md.name(), e),
+                format!("{}: In call to {}: {}", pos, md.name(), e),
             )),
             CallError::NestedError(e) => Self::NestedError(e),
             CallError::SyntaxError if md.syntax().is_empty() => {

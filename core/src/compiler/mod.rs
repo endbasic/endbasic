@@ -33,7 +33,7 @@ use exprs::{compile_expr, compile_expr_as_type, compile_expr_in_command};
 
 /// Compilation errors.
 #[derive(Debug, thiserror::Error)]
-#[error("{}:{}: {}", pos.line, pos.col, message)]
+#[error("{}: {}", pos, message)]
 pub struct Error {
     pub(crate) pos: LineCol,
     pub(crate) message: String,
@@ -52,24 +52,19 @@ impl Error {
     // that `CallError` can specify errors that make no sense in this context.
     fn from_call_error(md: &CallableMetadata, e: CallError, pos: LineCol) -> Self {
         match e {
-            CallError::ArgumentError(pos2, e) => Self::new(
-                pos,
-                format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
-            ),
+            CallError::ArgumentError(pos2, e) => {
+                Self::new(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
+            }
             CallError::EvalError(pos2, e) => {
                 if !md.is_function() {
                     Self::new(pos2, e)
                 } else {
-                    Self::new(
-                        pos,
-                        format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
-                    )
+                    Self::new(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
                 }
             }
-            CallError::InternalError(pos2, e) => Self::new(
-                pos,
-                format!("In call to {}: {}:{}: {}", md.name(), pos2.line, pos2.col, e),
-            ),
+            CallError::InternalError(pos2, e) => {
+                Self::new(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
+            }
             CallError::IoError(_) => unreachable!("I/O errors are not possible during compilation"),
             CallError::NestedError(_) => unreachable!("Nested are not possible during compilation"),
             CallError::SyntaxError if md.syntax().is_empty() => {
