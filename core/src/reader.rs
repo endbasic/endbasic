@@ -15,11 +15,9 @@
 
 //! Character-based reader for an input stream with position tracking.
 
-use std::cell::RefCell;
 use std::char;
 use std::fmt;
 use std::io::{self, BufRead};
-use std::rc::Rc;
 
 /// Tab length used to compute the current position within a line when encountering a tab character.
 const TAB_LENGTH: usize = 8;
@@ -76,8 +74,12 @@ pub struct CharReader<'a> {
     /// Current state of any buffered data.
     pending: Pending,
 
+    /// If not none, contains the character read by `peek`, which will be consumed by the next call
+    /// to `read`.
+    peeked: Option<Option<io::Result<CharSpan>>>,
+
     /// Line and column number of the next character to be read.
-    next_pos: Rc<RefCell<LineCol>>,
+    next_pos: LineCol,
 }
 
 impl<'a> CharReader<'a> {
@@ -86,7 +88,8 @@ impl<'a> CharReader<'a> {
         Self {
             reader: io::BufReader::new(reader),
             pending: Pending::Unknown,
-            next_pos: Rc::from(RefCell::from(LineCol { line: 1, col: 1 })),
+            peeked: None,
+            next_pos: LineCol { line: 1, col: 1 },
         }
     }
 
@@ -103,10 +106,19 @@ impl<'a> CharReader<'a> {
         self.next()
     }
 
-    /// Obtains a view of the next position observed by this reader, which is necessary to compute
-    /// the location of EOF when the iterator is fully consumed.
-    pub(crate) fn next_pos_watcher(&self) -> Rc<RefCell<LineCol>> {
-        self.next_pos.clone()
+    /// Peeks into the next character without consuming it.
+    pub(crate) fn peek(&mut self) -> Option<&io::Result<CharSpan>> {
+        if self.peeked.is_none() {
+            let next = self.next();
+            self.peeked.replace(next);
+        }
+        self.peeked.as_ref().unwrap().as_ref()
+    }
+
+    /// Gets the current position of the read, which is the position that the next character will
+    /// carry.
+    pub(crate) fn next_pos(&self) -> LineCol {
+        self.next_pos
     }
 }
 
@@ -114,6 +126,10 @@ impl<'a> Iterator for CharReader<'a> {
     type Item = io::Result<CharSpan>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if let Some(peeked) = self.peeked.take() {
+            return peeked;
+        }
+
         match &mut self.pending {
             Pending::Unknown => self.refill_and_next(),
             Pending::Eof => None,
@@ -124,19 +140,18 @@ impl<'a> Iterator for CharReader<'a> {
                     let ch = chars[*last];
                     *last += 1;
 
-                    let mut next_pos = self.next_pos.borrow_mut();
-                    let pos = *next_pos;
+                    let pos = self.next_pos;
                     match ch {
                         '\n' => {
-                            next_pos.line += 1;
-                            next_pos.col = 1;
+                            self.next_pos.line += 1;
+                            self.next_pos.col = 1;
                         }
                         '\t' => {
-                            next_pos.col =
-                                (next_pos.col - 1 + TAB_LENGTH) / TAB_LENGTH * TAB_LENGTH + 1;
+                            self.next_pos.col =
+                                (self.next_pos.col - 1 + TAB_LENGTH) / TAB_LENGTH * TAB_LENGTH + 1;
                         }
                         _ => {
-                            next_pos.col += 1;
+                            self.next_pos.col += 1;
                         }
                     }
 
@@ -248,17 +263,16 @@ mod tests {
     }
 
     #[test]
-    fn test_next_pos_watcher() {
+    fn test_next_pos() {
         let mut input = "Hi".as_bytes();
         let mut reader = CharReader::from(&mut input);
-        let next_pos_watcher = reader.next_pos_watcher();
-        assert_eq!(LineCol { line: 1, col: 1 }, *next_pos_watcher.borrow());
+        assert_eq!(LineCol { line: 1, col: 1 }, reader.next_pos());
         assert_eq!(cs('H', 1, 1), reader.next().unwrap().unwrap());
-        assert_eq!(LineCol { line: 1, col: 2 }, *next_pos_watcher.borrow());
+        assert_eq!(LineCol { line: 1, col: 2 }, reader.next_pos());
         assert_eq!(cs('i', 1, 2), reader.next().unwrap().unwrap());
-        assert_eq!(LineCol { line: 1, col: 3 }, *next_pos_watcher.borrow());
+        assert_eq!(LineCol { line: 1, col: 3 }, reader.next_pos());
         assert!(reader.next().is_none());
-        assert_eq!(LineCol { line: 1, col: 3 }, *next_pos_watcher.borrow());
+        assert_eq!(LineCol { line: 1, col: 3 }, reader.next_pos());
     }
 
     /// A reader that generates an error only on the Nth read operation.

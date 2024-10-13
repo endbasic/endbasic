@@ -17,9 +17,6 @@
 
 use crate::ast::{ExprType, VarRef};
 use crate::reader::{CharReader, CharSpan, LineCol};
-use std::cell::RefCell;
-use std::iter::Peekable;
-use std::rc::Rc;
 use std::{fmt, io};
 
 /// Collection of valid tokens.
@@ -259,18 +256,13 @@ impl TokenSpan {
 /// Iterator over the tokens of the language.
 pub struct Lexer<'a> {
     /// Peekable iterator over the characters to scan.
-    input: Peekable<CharReader<'a>>,
-
-    next_pos_watcher: Rc<RefCell<LineCol>>,
+    input: CharReader<'a>,
 }
 
 impl<'a> Lexer<'a> {
     /// Creates a new lexer from the given readable.
     pub fn from(input: &'a mut dyn io::Read) -> Self {
-        let reader = CharReader::from(input);
-        let next_pos_watcher = reader.next_pos_watcher();
-        let input = reader.peekable();
-        Self { input, next_pos_watcher }
+        Self { input: CharReader::from(input) }
     }
 
     /// Handles an `input.next()` call that returned an unexpected character.
@@ -640,7 +632,7 @@ impl<'a> Lexer<'a> {
         loop {
             match self.input.next() {
                 None => {
-                    let last_pos = *self.next_pos_watcher.borrow();
+                    let last_pos = self.input.next_pos();
                     return Ok(TokenSpan::new(Token::Eof, last_pos, 0));
                 }
                 Some(Ok(ch_span)) if ch_span.ch == '\n' => {
@@ -672,7 +664,7 @@ impl<'a> Lexer<'a> {
     pub fn read(&mut self) -> io::Result<TokenSpan> {
         let ch_span = self.advance_and_read_next()?;
         if ch_span.is_none() {
-            let last_pos = *self.next_pos_watcher.borrow();
+            let last_pos = self.input.next_pos();
             return Ok(TokenSpan::new(Token::Eof, last_pos, 0));
         }
         let ch_span = ch_span.unwrap();
