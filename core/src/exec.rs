@@ -46,11 +46,6 @@ pub enum Error {
     #[error("{0}: {1}")]
     IoError(LineCol, io::Error),
 
-    /// Hack to support errors that arise from within a program that is `RUN`.
-    // TODO(jmmv): Consider unifying `CallError` with `exec::Error`.
-    #[error("{0}")]
-    NestedError(String),
-
     /// Parsing error during execution.
     #[error("{0}")]
     ParseError(#[from] parser::Error),
@@ -84,7 +79,7 @@ impl Error {
                 pos,
                 io::Error::new(e.kind(), format!("In call to {}: {}", md.name(), e)),
             ),
-            CallError::NestedError(e) => Self::NestedError(e),
+            CallError::NestedError(e) => e,
             CallError::SyntaxError if md.syntax().is_empty() => {
                 Self::SyntaxError(pos, format!("In call to {}: expected no arguments", md.name()))
             }
@@ -106,7 +101,6 @@ impl Error {
             Error::CompilerError(_) => false,
             Error::EvalError(..) => true,
             Error::IoError(..) => true,
-            Error::NestedError(_) => false,
             Error::ParseError(_) => false,
             Error::SyntaxError(..) => true,
         }
