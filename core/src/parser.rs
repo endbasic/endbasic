@@ -29,8 +29,14 @@ pub enum Error {
     Bad(LineCol, String),
 
     /// I/O error while parsing the input program.
-    #[error("read error")]
-    Io(#[from] io::Error),
+    #[error("{0}: {1}")]
+    Io(LineCol, io::Error),
+}
+
+impl From<(LineCol, io::Error)> for Error {
+    fn from(value: (LineCol, io::Error)) -> Self {
+        Self::Io(value.0, value.1)
+    }
 }
 
 /// Result for parser return values.

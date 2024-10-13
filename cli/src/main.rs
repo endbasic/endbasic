@@ -132,7 +132,7 @@ fn make_interactive(
 fn finish_interactive_build(
     mut builder: endbasic_std::InteractiveMachineBuilder,
     service_url: &str,
-) -> endbasic_core::exec::Result<endbasic_core::exec::Machine> {
+) -> Result<endbasic_core::exec::Machine> {
     let console = builder.get_console();
     let storage = builder.get_storage();
 
@@ -259,7 +259,7 @@ async fn run_repl_loop(
     console_spec: Option<&str>,
     local_drive_spec: &str,
     service_url: &str,
-) -> endbasic_core::exec::Result<i32> {
+) -> Result<i32> {
     let mut builder = make_interactive(new_machine_builder(console_spec)?);
 
     let console = builder.get_console();
@@ -275,10 +275,7 @@ async fn run_repl_loop(
 }
 
 /// Executes the `path` program in a fresh machine.
-async fn run_script<P: AsRef<Path>>(
-    path: P,
-    console_spec: Option<&str>,
-) -> endbasic_core::exec::Result<i32> {
+async fn run_script<P: AsRef<Path>>(path: P, console_spec: Option<&str>) -> Result<i32> {
     let mut machine = new_machine_builder(console_spec)?.build()?;
     let mut input = File::open(path)?;
     Ok(machine.exec(&mut input).await?.as_exit_code())
@@ -297,7 +294,7 @@ async fn run_interactive(
     console_spec: Option<&str>,
     local_drive_spec: &str,
     service_url: &str,
-) -> endbasic_core::exec::Result<i32> {
+) -> Result<i32> {
     let mut builder = make_interactive(new_machine_builder(console_spec)?);
 
     let console = builder.get_console();
@@ -310,7 +307,7 @@ async fn run_interactive(
 
     match path.strip_prefix("cloud://") {
         Some(username_path) => {
-            endbasic_repl::run_from_cloud(
+            let code = endbasic_repl::run_from_cloud(
                 &mut machine,
                 console.clone(),
                 storage.clone(),
@@ -318,7 +315,8 @@ async fn run_interactive(
                 username_path,
                 false,
             )
-            .await
+            .await?;
+            Ok(code)
         }
         None => {
             let mut input = File::open(path)?;

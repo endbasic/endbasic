@@ -19,6 +19,9 @@ use crate::ast::{ExprType, VarRef};
 use crate::reader::{CharReader, CharSpan, LineCol};
 use std::{fmt, io};
 
+/// Result type for the public methods of this module.
+type Result<T> = std::result::Result<T, (LineCol, io::Error)>;
+
 /// Collection of valid tokens.
 ///
 /// Of special interest are the `Eof` and `Bad` tokens, both of which denote exceptional
@@ -733,10 +736,10 @@ impl<'a> PeekableLexer<'a> {
     ///
     /// It is OK to call this function several times on the same token before extracting it from
     /// the lexer.
-    pub fn peek(&mut self) -> io::Result<&TokenSpan> {
+    pub fn peek(&mut self) -> Result<&TokenSpan> {
         if self.peeked.is_none() {
-            let n = self.read()?;
-            self.peeked.replace(n);
+            let span = self.read()?;
+            self.peeked.replace(span);
         }
         Ok(self.peeked.as_ref().unwrap())
     }
@@ -745,10 +748,13 @@ impl<'a> PeekableLexer<'a> {
     ///
     /// If the next token is invalid and results in a read error, the stream will remain valid and
     /// further tokens can be obtained with subsequent calls.
-    pub fn read(&mut self) -> io::Result<TokenSpan> {
+    pub fn read(&mut self) -> Result<TokenSpan> {
         match self.peeked.take() {
             Some(t) => Ok(t),
-            None => self.lexer.read(),
+            None => match self.lexer.read() {
+                Ok(span) => Ok(span),
+                Err(e) => Err((self.lexer.input.next_pos(), e)),
+            },
         }
     }
 }
