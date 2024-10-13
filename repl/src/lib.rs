@@ -89,7 +89,7 @@ pub async fn run_from_cloud(
     program: Rc<RefCell<dyn Program>>,
     username_path: &str,
     will_run_repl: bool,
-) -> endbasic_core::exec::Result<i32> {
+) -> io::Result<i32> {
     let (fs_uri, path) = match username_path.split_once('/') {
         Some((username, path)) => (format!("cloud://{}", username), format!("AUTORUN:/{}", path)),
         None => {

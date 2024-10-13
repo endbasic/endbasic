@@ -43,8 +43,8 @@ pub enum Error {
     EvalError(LineCol, String),
 
     /// I/O error during execution.
-    #[error("{0}")]
-    IoError(#[from] io::Error),
+    #[error("{0}: {1}")]
+    IoError(LineCol, io::Error),
 
     /// Hack to support errors that arise from within a program that is `RUN`.
     // TODO(jmmv): Consider unifying `CallError` with `exec::Error`.
@@ -80,10 +80,10 @@ impl Error {
             CallError::InternalError(pos2, e) => {
                 Self::SyntaxError(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
             }
-            CallError::IoError(e) => Self::IoError(io::Error::new(
-                e.kind(),
-                format!("{}: In call to {}: {}", pos, md.name(), e),
-            )),
+            CallError::IoError(e) => Self::IoError(
+                pos,
+                io::Error::new(e.kind(), format!("In call to {}: {}", md.name(), e)),
+            ),
             CallError::NestedError(e) => Self::NestedError(e),
             CallError::SyntaxError if md.syntax().is_empty() => {
                 Self::SyntaxError(pos, format!("In call to {}: expected no arguments", md.name()))
@@ -105,7 +105,7 @@ impl Error {
         match self {
             Error::CompilerError(_) => false,
             Error::EvalError(..) => true,
-            Error::IoError(_) => true,
+            Error::IoError(..) => true,
             Error::NestedError(_) => false,
             Error::ParseError(_) => false,
             Error::SyntaxError(..) => true,
