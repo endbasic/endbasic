@@ -17,7 +17,7 @@
 
 use crate::ast::{ExprType, Value, VarRef};
 use crate::compiler::{self, CallableSyntax, RepeatedSyntax, SingularArgSyntax};
-use crate::exec::{Machine, Scope};
+use crate::exec::{self, Machine, Scope};
 use crate::reader::LineCol;
 use crate::value::{Error, Result};
 use async_trait::async_trait;
@@ -50,7 +50,7 @@ pub enum CallError {
 
     /// Hack to support errors that arise from within a program that is `RUN`.
     // TODO(jmmv): Consider unifying `CallError` with `exec::Error`.
-    NestedError(String),
+    NestedError(exec::Error),
 
     /// General mismatch of parameters given to the function with expectations (different numbers,
     /// invalid types).

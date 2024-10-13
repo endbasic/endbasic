@@ -21,7 +21,7 @@ use crate::strings::parse_boolean;
 use async_trait::async_trait;
 use endbasic_core::ast::ExprType;
 use endbasic_core::compiler::{compile, ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{Machine, Scope, StopReason};
+use endbasic_core::exec::{self, Machine, Scope, StopReason};
 use endbasic_core::parser::parse;
 use endbasic_core::syms::{
     CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
@@ -192,7 +192,7 @@ impl Callable for DisasmCommand {
             let program = self.program.borrow_mut();
             let ast = match parse(&mut program.text().as_bytes()) {
                 Ok(ast) => ast,
-                Err(e) => return Err(CallError::NestedError(e.to_string())),
+                Err(e) => return Err(CallError::NestedError(exec::Error::ParseError(e))),
             };
             compile(ast, machine.get_symbols())?
         };
@@ -517,7 +517,7 @@ impl Callable for RunCommand {
         let program = self.program.borrow().text();
         let stop_reason = match machine.exec(&mut program.as_bytes()).await {
             Ok(stop_reason) => stop_reason,
-            Err(e) => return Err(CallError::NestedError(format!("{}", e))),
+            Err(e) => return Err(CallError::NestedError(e)),
         };
         match stop_reason {
             StopReason::Break => self.console.borrow_mut().print(BREAK_MSG)?,
