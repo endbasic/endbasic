@@ -119,7 +119,7 @@ impl Callable for ReadCommand {
             machine
                 .get_mut_symbols()
                 .set_var(&vref, datum)
-                .map_err(|e| CallError::ArgumentError(pos, format!("{}", e)))?;
+                .map_err(|e| CallError::SyntaxError(pos, format!("{}", e)))?;
         }
 
         Ok(())

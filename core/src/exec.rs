@@ -62,9 +62,6 @@ impl Error {
     // somehow unified with the equivalent function in eval::Error.
     fn from_call_error(md: &CallableMetadata, e: CallError, pos: LineCol) -> Self {
         match e {
-            CallError::ArgumentError(pos2, e) => {
-                Self::SyntaxError(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
-            }
             CallError::EvalError(pos2, e) => {
                 if !md.is_function() {
                     Self::EvalError(pos2, e)
@@ -80,13 +77,9 @@ impl Error {
                 io::Error::new(e.kind(), format!("In call to {}: {}", md.name(), e)),
             ),
             CallError::NestedError(e) => e,
-            CallError::SyntaxError if md.syntax().is_empty() => {
-                Self::SyntaxError(pos, format!("In call to {}: expected no arguments", md.name()))
+            CallError::SyntaxError(pos2, e) => {
+                Self::SyntaxError(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
             }
-            CallError::SyntaxError => Self::SyntaxError(
-                pos,
-                format!("In call to {}: expected {}", md.name(), md.syntax()),
-            ),
         }
     }
 
@@ -2784,12 +2777,12 @@ mod tests {
             r#"
             ON ERROR GOTO 100
             OUT 1
-            OUT RAISEF("syntax")
+            OUT RAISEF("internal")
             OUT 2
             100 OUT LAST_ERROR
             "#,
             &[],
-            &["1", "4:17: In call to RAISEF: expected arg$"],
+            &["1", "4:17: In call to RAISEF: 4:24: Some internal error"],
         );
     }
 
@@ -2799,13 +2792,13 @@ mod tests {
             r#"
             ON ERROR GOTO @foo
             OUT 1
-            OUT RAISEF("syntax")
+            OUT RAISEF("internal")
             OUT 2
             @foo
             OUT LAST_ERROR
             "#,
             &[],
-            &["1", "4:17: In call to RAISEF: expected arg$"],
+            &["1", "4:17: In call to RAISEF: 4:24: Some internal error"],
         );
     }
 
@@ -2815,15 +2808,15 @@ mod tests {
             r#"
             ON ERROR GOTO @foo
             OUT 1
-            OUT RAISEF("syntax")
+            OUT RAISEF("internal")
             @foo
             ON ERROR GOTO 0
             OUT 2
-            OUT RAISEF("syntax")
+            OUT RAISEF("internal")
             "#,
             &[],
             &["1", "2"],
-            "8:17: In call to RAISEF: expected arg$",
+            "8:17: In call to RAISEF: 8:24: Some internal error",
         );
     }
 
@@ -2833,11 +2826,11 @@ mod tests {
             r#"
             ON ERROR RESUME NEXT
             OUT 1
-            OUT RAISEF("syntax")
+            OUT RAISEF("internal")
             OUT LAST_ERROR
             "#,
             &[],
-            &["1", "4:17: In call to RAISEF: expected arg$"],
+            &["1", "4:17: In call to RAISEF: 4:24: Some internal error"],
         );
     }
 
@@ -2847,11 +2840,11 @@ mod tests {
             r#"
             ON ERROR RESUME NEXT
             OUT 1
-            RAISE "syntax"
+            RAISE "internal"
             OUT LAST_ERROR
             "#,
             &[],
-            &["1", "4:13: In call to RAISE: expected arg$"],
+            &["1", "4:13: In call to RAISE: 4:19: Some internal error"],
         );
     }
 
@@ -2860,10 +2853,10 @@ mod tests {
         do_ok_test(
             r#"
             ON ERROR RESUME NEXT
-            OUT 1: OUT RAISEF("syntax"): OUT LAST_ERROR
+            OUT 1: OUT RAISEF("internal"): OUT LAST_ERROR
             "#,
             &[],
-            &["1", "3:24: In call to RAISEF: expected arg$"],
+            &["1", "3:24: In call to RAISEF: 3:31: Some internal error"],
         );
     }
 
@@ -2872,10 +2865,10 @@ mod tests {
         do_ok_test(
             r#"
             ON ERROR RESUME NEXT
-            OUT 1: RAISE "syntax": OUT LAST_ERROR
+            OUT 1: RAISE "internal": OUT LAST_ERROR
             "#,
             &[],
-            &["1", "3:20: In call to RAISE: expected arg$"],
+            &["1", "3:20: In call to RAISE: 3:26: Some internal error"],
         );
     }
 
@@ -2903,12 +2896,6 @@ mod tests {
             r#"ON ERROR RESUME NEXT: OUT RAISEF("io"): OUT LAST_ERROR"#,
             &[],
             &["1:27: In call to RAISEF: Some I/O error"],
-        );
-
-        do_ok_test(
-            r#"ON ERROR RESUME NEXT: OUT RAISEF("syntax"): OUT LAST_ERROR"#,
-            &[],
-            &["1:27: In call to RAISEF: expected arg$"],
         );
     }
 

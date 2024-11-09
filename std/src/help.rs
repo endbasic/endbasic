@@ -381,7 +381,7 @@ impl Topics {
                     _ => {
                         let completions: Vec<String> =
                             children.iter().map(|(name, _topic)| (*name).to_owned()).collect();
-                        Err(CallError::ArgumentError(
+                        Err(CallError::SyntaxError(
                             pos,
                             format!(
                                 "Ambiguous help topic {}; candidates are: {}",
@@ -392,7 +392,7 @@ impl Topics {
                     }
                 }
             }
-            None => Err(CallError::ArgumentError(pos, format!("Unknown help topic {}", name))),
+            None => Err(CallError::SyntaxError(pos, format!("Unknown help topic {}", name))),
         }
     }
 

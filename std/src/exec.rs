@@ -167,7 +167,7 @@ impl Callable for SleepCommand {
         let (n, pos) = scope.pop_double_with_pos();
 
         if n < 0.0 {
-            return Err(CallError::ArgumentError(pos, "Sleep time must be positive".to_owned()));
+            return Err(CallError::SyntaxError(pos, "Sleep time must be positive".to_owned()));
         }
 
         (self.sleep_fn)(Duration::from_secs_f64(n), pos).await

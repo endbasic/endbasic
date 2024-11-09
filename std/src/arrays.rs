@@ -43,7 +43,7 @@ fn parse_bound_args<'a>(
     let arrayref = VarRef::new(arrayname.to_string(), Some(arraytype));
     let array = match symbols
         .get(&arrayref)
-        .map_err(|e| CallError::ArgumentError(arraypos, format!("{}", e)))?
+        .map_err(|e| CallError::SyntaxError(arraypos, format!("{}", e)))?
     {
         Some(Symbol::Array(array)) => array,
         _ => unreachable!(),
@@ -53,12 +53,12 @@ fn parse_bound_args<'a>(
         let (i, pos) = scope.pop_integer_with_pos();
 
         if i < 0 {
-            return Err(CallError::ArgumentError(pos, format!("Dimension {} must be positive", i)));
+            return Err(CallError::SyntaxError(pos, format!("Dimension {} must be positive", i)));
         }
         let i = i as usize;
 
         if i > array.dimensions().len() {
-            return Err(CallError::ArgumentError(
+            return Err(CallError::SyntaxError(
                 pos,
                 format!(
                     "Array {} has only {} dimensions but asked for {}",
@@ -73,7 +73,7 @@ fn parse_bound_args<'a>(
         debug_assert_eq!(0, scope.nargs());
 
         if array.dimensions().len() > 1 {
-            return Err(CallError::ArgumentError(
+            return Err(CallError::SyntaxError(
                 arraypos,
                 "Requires a dimension for multidimensional arrays".to_owned(),
             ));

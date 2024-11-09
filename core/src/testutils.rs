@@ -156,11 +156,10 @@ impl Callable for RaisefFunction {
         assert_eq!(1, scope.nargs());
         let (arg, pos) = scope.pop_string_with_pos();
         match arg.as_str() {
-            "argument" => Err(CallError::ArgumentError(pos, "Bad argument".to_owned())),
+            "argument" => Err(CallError::SyntaxError(pos, "Bad argument".to_owned())),
             "eval" => Err(CallError::EvalError(pos, "Some eval error".to_owned())),
             "internal" => Err(CallError::InternalError(pos, "Some internal error".to_owned())),
             "io" => Err(io::Error::new(io::ErrorKind::Other, "Some I/O error".to_owned()).into()),
-            "syntax" => Err(CallError::SyntaxError),
             _ => panic!("Invalid arguments"),
         }
     }
@@ -197,11 +196,10 @@ impl Callable for RaiseCommand {
         assert_eq!(1, scope.nargs());
         let (arg, pos) = scope.pop_string_with_pos();
         match arg.as_str() {
-            "argument" => Err(CallError::ArgumentError(pos, "Bad argument".to_owned())),
+            "argument" => Err(CallError::SyntaxError(pos, "Bad argument".to_owned())),
             "eval" => Err(CallError::EvalError(pos, "Some eval error".to_owned())),
             "internal" => Err(CallError::InternalError(pos, "Some internal error".to_owned())),
             "io" => Err(io::Error::new(io::ErrorKind::Other, "Some I/O error".to_owned()).into()),
-            "syntax" => Err(CallError::SyntaxError),
             _ => panic!("Invalid arguments"),
         }
     }
