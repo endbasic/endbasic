@@ -162,7 +162,7 @@ impl Callable for ColorCommand {
             if i >= 0 && i <= u8::MAX as i32 {
                 Ok(Some(i as u8))
             } else {
-                Err(CallError::ArgumentError(pos, "Color out of range".to_owned()))
+                Err(CallError::SyntaxError(pos, "Color out of range".to_owned()))
             }
         }
 
@@ -459,7 +459,7 @@ impl Callable for LocateCommand {
         fn get_coord((i, pos): (i32, LineCol), name: &str) -> Result<(u16, LineCol), CallError> {
             match u16::try_from(i) {
                 Ok(v) => Ok((v, pos)),
-                Err(_) => Err(CallError::ArgumentError(pos, format!("{} out of range", name))),
+                Err(_) => Err(CallError::SyntaxError(pos, format!("{} out of range", name))),
             }
         }
 
@@ -471,13 +471,13 @@ impl Callable for LocateCommand {
         let size = console.size_chars()?;
 
         if column >= size.x {
-            return Err(CallError::ArgumentError(
+            return Err(CallError::SyntaxError(
                 column_pos,
                 format!("Column {} exceeds visible range of {}", column, size.x - 1),
             ));
         }
         if row >= size.y {
-            return Err(CallError::ArgumentError(
+            return Err(CallError::SyntaxError(
                 row_pos,
                 format!("Row {} exceeds visible range of {}", row, size.y - 1),
             ));

@@ -123,14 +123,14 @@ impl Callable for SwitchLightCommand {
 
         let lights = &mut *self.lights.borrow_mut();
         if i < 1 {
-            return Err(CallError::ArgumentError(
+            return Err(CallError::SyntaxError(
                 ipos,
                 "Light id cannot be zero or negative".to_owned(),
             ));
         }
         let i = i as usize;
         if i > lights.len() {
-            return Err(CallError::ArgumentError(ipos, "Light id out of range".to_owned()));
+            return Err(CallError::SyntaxError(ipos, "Light id out of range".to_owned()));
         }
         if lights[i - 1] {
             println!("Turning light {} off", i);

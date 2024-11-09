@@ -320,7 +320,7 @@ impl ShareCommand {
             (username, "-r") if !username.is_empty() => remove.add_reader(username),
             (username, "-R") if !username.is_empty() => remove.add_reader(username),
             (username, change) => {
-                return Err(CallError::ArgumentError(
+                return Err(CallError::SyntaxError(
                     acl_pos,
                     format!(
                         "Invalid ACL '{}{}': must be of the form \"username+r\" or \"username-r\"",

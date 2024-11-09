@@ -191,8 +191,7 @@ impl Callable for CintFunction {
         debug_assert_eq!(1, scope.nargs());
         let (value, pos) = scope.pop_double_with_pos();
 
-        let i =
-            double_to_integer(value).map_err(|e| CallError::ArgumentError(pos, e.to_string()))?;
+        let i = double_to_integer(value).map_err(|e| CallError::SyntaxError(pos, e.to_string()))?;
         scope.return_integer(i)
     }
 }
@@ -323,7 +322,7 @@ impl Callable for IntFunction {
         let (value, pos) = scope.pop_double_with_pos();
 
         let i = double_to_integer(value.floor())
-            .map_err(|e| CallError::ArgumentError(pos, e.to_string()))?;
+            .map_err(|e| CallError::SyntaxError(pos, e.to_string()))?;
         scope.return_integer(i)
     }
 }
@@ -598,7 +597,7 @@ impl Callable for RndFunction {
                 Ordering::Equal => scope.return_double(self.prng.borrow_mut().last()),
                 Ordering::Greater => scope.return_double(self.prng.borrow_mut().next()),
                 Ordering::Less => {
-                    Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
+                    Err(CallError::SyntaxError(npos, "n% cannot be negative".to_owned()))
                 }
             }
         }
@@ -687,7 +686,7 @@ impl Callable for SqrFunction {
         let (num, numpos) = scope.pop_double_with_pos();
 
         if num < 0.0 {
-            return Err(CallError::ArgumentError(
+            return Err(CallError::SyntaxError(
                 numpos,
                 "Cannot take square root of a negative number".to_owned(),
             ));

@@ -36,9 +36,6 @@ use std::str::Lines;
 /// within the evaluation logic.
 #[derive(Debug)]
 pub enum CallError {
-    /// A specific parameter had an invalid value.
-    ArgumentError(LineCol, String),
-
     /// Error while evaluating input arguments.
     EvalError(LineCol, String),
 
@@ -52,9 +49,8 @@ pub enum CallError {
     // TODO(jmmv): Consider unifying `CallError` with `exec::Error`.
     NestedError(exec::Error),
 
-    /// General mismatch of parameters given to the function with expectations (different numbers,
-    /// invalid types).
-    SyntaxError,
+    /// A specific parameter had an invalid value.
+    SyntaxError(LineCol, String),
 }
 
 impl From<io::Error> for CallError {

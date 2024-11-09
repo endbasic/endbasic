@@ -46,13 +46,10 @@ impl Pin {
     /// Creates a new pin number from an EndBASIC integer value.
     fn from_i32(i: i32, pos: LineCol) -> Result<Self, CallError> {
         if i < 0 {
-            return Err(CallError::ArgumentError(
-                pos,
-                format!("Pin number {} must be positive", i),
-            ));
+            return Err(CallError::SyntaxError(pos, format!("Pin number {} must be positive", i)));
         }
         if i > u8::MAX as i32 {
-            return Err(CallError::ArgumentError(pos, format!("Pin number {} is too large", i)));
+            return Err(CallError::SyntaxError(pos, format!("Pin number {} is too large", i)));
         }
         Ok(Self(i as u8))
     }
@@ -82,7 +79,7 @@ impl PinMode {
             "IN-PULL-UP" => Ok(PinMode::InPullUp),
             "IN-PULL-DOWN" => Ok(PinMode::InPullDown),
             "OUT" => Ok(PinMode::Out),
-            s => Err(CallError::ArgumentError(pos, format!("Unknown pin mode {}", s))),
+            s => Err(CallError::SyntaxError(pos, format!("Unknown pin mode {}", s))),
         }
     }
 }

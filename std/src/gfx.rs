@@ -40,7 +40,7 @@ described in this section.";
 fn parse_coordinate(i: i32, pos: LineCol) -> Result<i16, CallError> {
     match i16::try_from(i) {
         Ok(i) => Ok(i),
-        Err(_) => Err(CallError::ArgumentError(pos, format!("Coordinate {} out of range", i))),
+        Err(_) => Err(CallError::SyntaxError(pos, format!("Coordinate {} out of range", i))),
     }
 }
 
@@ -59,9 +59,9 @@ fn parse_radius(i: i32, pos: LineCol) -> Result<u16, CallError> {
     match u16::try_from(i) {
         Ok(i) => Ok(i),
         Err(_) if i < 0 => {
-            Err(CallError::ArgumentError(pos, format!("Radius {} must be positive", i)))
+            Err(CallError::SyntaxError(pos, format!("Radius {} must be positive", i)))
         }
-        Err(_) => Err(CallError::ArgumentError(pos, format!("Radius {} out of range", i))),
+        Err(_) => Err(CallError::SyntaxError(pos, format!("Radius {} out of range", i))),
     }
 }
 

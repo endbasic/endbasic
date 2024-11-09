@@ -132,14 +132,14 @@ impl Callable for AscFunction {
         let ch = match chars.next() {
             Some(ch) => ch,
             None => {
-                return Err(CallError::ArgumentError(
+                return Err(CallError::SyntaxError(
                     spos,
                     format!("Input string \"{}\" must be 1-character long", s),
                 ));
             }
         };
         if chars.next().is_some() {
-            return Err(CallError::ArgumentError(
+            return Err(CallError::SyntaxError(
                 spos,
                 format!("Input string \"{}\" must be 1-character long", s),
             ));
@@ -196,7 +196,7 @@ impl Callable for ChrFunction {
         let (i, ipos) = scope.pop_integer_with_pos();
 
         if i < 0 {
-            return Err(CallError::ArgumentError(
+            return Err(CallError::SyntaxError(
                 ipos,
                 format!("Character code {} must be positive", i),
             ));
@@ -205,7 +205,7 @@ impl Callable for ChrFunction {
 
         match char::from_u32(code) {
             Some(ch) => scope.return_string(format!("{}", ch)),
-            None => Err(CallError::ArgumentError(ipos, format!("Invalid character code {}", code))),
+            None => Err(CallError::SyntaxError(ipos, format!("Invalid character code {}", code))),
         }
     }
 }
@@ -263,7 +263,7 @@ impl Callable for LeftFunction {
         let (n, npos) = scope.pop_integer_with_pos();
 
         if n < 0 {
-            Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
+            Err(CallError::SyntaxError(npos, "n% cannot be negative".to_owned()))
         } else {
             let n = min(s.len(), n as usize);
             scope.return_string(s[..n].to_owned())
@@ -437,13 +437,13 @@ impl Callable for MidFunction {
         debug_assert_eq!(0, scope.nargs());
 
         if start < 0 {
-            return Err(CallError::ArgumentError(startpos, "start% cannot be negative".to_owned()));
+            return Err(CallError::SyntaxError(startpos, "start% cannot be negative".to_owned()));
         }
         let start = min(s.len(), start as usize);
 
         let end = if let Some((length, lengthpos)) = lengtharg {
             if length < 0 {
-                return Err(CallError::ArgumentError(
+                return Err(CallError::SyntaxError(
                     lengthpos,
                     "length% cannot be negative".to_owned(),
                 ));
@@ -510,7 +510,7 @@ impl Callable for RightFunction {
         let (n, npos) = scope.pop_integer_with_pos();
 
         if n < 0 {
-            Err(CallError::ArgumentError(npos, "n% cannot be negative".to_owned()))
+            Err(CallError::SyntaxError(npos, "n% cannot be negative".to_owned()))
         } else {
             let n = min(s.len(), n as usize);
             scope.return_string(s[s.len() - n..].to_owned())
