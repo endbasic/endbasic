@@ -20,10 +20,8 @@ use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{
     ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
-use endbasic_core::exec::{Clearable, Machine, Scope};
-use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
-};
+use endbasic_core::exec::{Clearable, Error, Machine, Result, Scope};
+use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder, Symbols};
 use endbasic_core::value::double_to_integer;
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
@@ -56,7 +54,7 @@ impl Clearable for ClearableAngleMode {
 
 /// Gets the single argument to a trigonometric function, which is its angle.  Applies units
 /// conversion based on `angle_mode`.
-async fn get_angle(scope: &mut Scope<'_>, angle_mode: &AngleMode) -> Result<f64, CallError> {
+async fn get_angle(scope: &mut Scope<'_>, angle_mode: &AngleMode) -> Result<f64> {
     debug_assert_eq!(1, scope.nargs());
     let angle = scope.pop_double();
 
@@ -138,7 +136,7 @@ impl Callable for AtnFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let n = scope.pop_double();
 
@@ -187,11 +185,11 @@ impl Callable for CintFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let (value, pos) = scope.pop_double_with_pos();
 
-        let i = double_to_integer(value).map_err(|e| CallError::SyntaxError(pos, e.to_string()))?;
+        let i = double_to_integer(value).map_err(|e| Error::SyntaxError(pos, e.to_string()))?;
         scope.return_integer(i)
     }
 }
@@ -236,7 +234,7 @@ impl Callable for CosFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
         scope.return_double(angle.cos())
     }
@@ -272,7 +270,7 @@ impl Callable for DegCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
         *self.angle_mode.borrow_mut() = AngleMode::Degrees;
         Ok(())
@@ -317,12 +315,12 @@ impl Callable for IntFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let (value, pos) = scope.pop_double_with_pos();
 
-        let i = double_to_integer(value.floor())
-            .map_err(|e| CallError::SyntaxError(pos, e.to_string()))?;
+        let i =
+            double_to_integer(value.floor()).map_err(|e| Error::SyntaxError(pos, e.to_string()))?;
         scope.return_integer(i)
     }
 }
@@ -361,7 +359,7 @@ impl Callable for MaxFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         let mut max = f64::MIN;
         while scope.nargs() > 0 {
             let n = scope.pop_double();
@@ -407,7 +405,7 @@ impl Callable for MinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         let mut min = f64::MAX;
         while scope.nargs() > 0 {
             let n = scope.pop_double();
@@ -444,7 +442,7 @@ impl Callable for PiFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
         scope.return_double(std::f64::consts::PI)
     }
@@ -480,7 +478,7 @@ impl Callable for RadCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
         *self.angle_mode.borrow_mut() = AngleMode::Radians;
         Ok(())
@@ -529,7 +527,7 @@ impl Callable for RandomizeCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         if scope.nargs() == 0 {
             *self.prng.borrow_mut() = Prng::new_from_entryopy();
         } else {
@@ -587,7 +585,7 @@ impl Callable for RndFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         if scope.nargs() == 0 {
             scope.return_double(self.prng.borrow_mut().next())
         } else {
@@ -596,9 +594,7 @@ impl Callable for RndFunction {
             match n.cmp(&0) {
                 Ordering::Equal => scope.return_double(self.prng.borrow_mut().last()),
                 Ordering::Greater => scope.return_double(self.prng.borrow_mut().next()),
-                Ordering::Less => {
-                    Err(CallError::SyntaxError(npos, "n% cannot be negative".to_owned()))
-                }
+                Ordering::Less => Err(Error::SyntaxError(npos, "n% cannot be negative".to_owned())),
             }
         }
     }
@@ -644,7 +640,7 @@ impl Callable for SinFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
         scope.return_double(angle.sin())
     }
@@ -681,12 +677,12 @@ impl Callable for SqrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let (num, numpos) = scope.pop_double_with_pos();
 
         if num < 0.0 {
-            return Err(CallError::SyntaxError(
+            return Err(Error::SyntaxError(
                 numpos,
                 "Cannot take square root of a negative number".to_owned(),
             ));
@@ -735,7 +731,7 @@ impl Callable for TanFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
         scope.return_double(angle.tan())
     }
@@ -792,7 +788,7 @@ mod tests {
         check_expr_compilation_error("1:10: CINT expected expr#", "CINT(3.0, 4)");
 
         check_expr_error(
-            "1:10: In call to CINT: 1:15: Cannot cast -1234567890123456 to integer due to overflow",
+            "1:15: Cannot cast -1234567890123456 to integer due to overflow",
             "CINT(-1234567890123456.0)",
         );
     }
@@ -845,7 +841,7 @@ mod tests {
         check_expr_compilation_error("1:10: INT expected expr#", "INT(3.0, 4)");
 
         check_expr_error(
-            "1:10: In call to INT: 1:14: Cannot cast -1234567890123456 to integer due to overflow",
+            "1:14: Cannot cast -1234567890123456 to integer due to overflow",
             "INT(-1234567890123456.0)",
         );
     }
@@ -937,7 +933,7 @@ mod tests {
 
         check_expr_compilation_error("1:10: RND expected <> | <n%>", "RND(1, 7)");
         check_expr_compilation_error("1:14: BOOLEAN is not a number", "RND(FALSE)");
-        check_expr_error("1:10: In call to RND: 1:14: n% cannot be negative", "RND(-1)");
+        check_expr_error("1:14: n% cannot be negative", "RND(-1)");
 
         check_stmt_compilation_err("1:1: RANDOMIZE expected <> | <seed%>", "RANDOMIZE ,");
         check_stmt_compilation_err("1:11: BOOLEAN is not a number", "RANDOMIZE TRUE");
@@ -967,14 +963,8 @@ mod tests {
         check_expr_compilation_error("1:10: SQR expected num#", "SQR()");
         check_expr_compilation_error("1:14: BOOLEAN is not a number", "SQR(FALSE)");
         check_expr_compilation_error("1:10: SQR expected num#", "SQR(3, 4)");
-        check_expr_error(
-            "1:10: In call to SQR: 1:14: Cannot take square root of a negative number",
-            "SQR(-3)",
-        );
-        check_expr_error(
-            "1:10: In call to SQR: 1:14: Cannot take square root of a negative number",
-            "SQR(-0.1)",
-        );
+        check_expr_error("1:14: Cannot take square root of a negative number", "SQR(-3)");
+        check_expr_error("1:14: Cannot take square root of a negative number", "SQR(-0.1)");
     }
 
     #[test]

@@ -21,11 +21,9 @@ use crate::strings::parse_boolean;
 use async_trait::async_trait;
 use endbasic_core::ast::ExprType;
 use endbasic_core::compiler::{compile, ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{self, Machine, Scope, StopReason};
+use endbasic_core::exec::{Machine, Result, Scope, StopReason};
 use endbasic_core::parser::parse;
-use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
-};
+use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::io;
@@ -183,22 +181,19 @@ impl Callable for DisasmCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
 
         // TODO(jmmv): We shouldn't have to parse and compile the stored program here.  The machine
         // should hold a copy at all times.
         let image = {
             let program = self.program.borrow_mut();
-            let ast = match parse(&mut program.text().as_bytes()) {
-                Ok(ast) => ast,
-                Err(e) => return Err(CallError::NestedError(exec::Error::ParseError(e))),
-            };
+            let ast = parse(&mut program.text().as_bytes())?;
             compile(ast, machine.get_symbols())?
         };
 
         let mut console = self.console.borrow_mut();
-        let mut pager = Pager::new(&mut *console)?;
+        let mut pager = Pager::new(&mut *console).map_err(|e| scope.io_error(e))?;
         for (addr, instr) in image.instrs.iter().enumerate() {
             let (op, args) = instr.repr();
             let mut line = format!("{:04x}    {}", addr, op);
@@ -214,9 +209,9 @@ impl Callable for DisasmCommand {
                 }
                 line += &format!("    # {}", pos);
             }
-            pager.print(&line).await?;
+            pager.print(&line).await.map_err(|e| scope.io_error(e))?;
         }
-        pager.print("").await?;
+        pager.print("").await.map_err(|e| scope.io_error(e))?;
 
         Ok(())
     }
@@ -265,12 +260,12 @@ impl Callable for KillCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let name = scope.pop_string();
 
-        let name = add_extension(name)?;
-        self.storage.borrow_mut().delete(&name).await?;
+        let name = add_extension(name).map_err(|e| scope.io_error(e))?;
+        self.storage.borrow_mut().delete(&name).await.map_err(|e| scope.io_error(e))?;
 
         Ok(())
     }
@@ -304,12 +299,12 @@ impl Callable for EditCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let mut console = self.console.borrow_mut();
         let mut program = self.program.borrow_mut();
-        program.edit(&mut *console).await?;
+        program.edit(&mut *console).await.map_err(|e| scope.io_error(e))?;
         Ok(())
     }
 }
@@ -342,13 +337,13 @@ impl Callable for ListCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let mut console = self.console.borrow_mut();
-        let mut pager = Pager::new(&mut *console)?;
+        let mut pager = Pager::new(&mut *console).map_err(|e| scope.io_error(e))?;
         for line in self.program.borrow().text().lines() {
-            pager.print(line).await?;
+            pager.print(line).await.map_err(|e| scope.io_error(e))?;
         }
         Ok(())
     }
@@ -405,20 +400,26 @@ impl Callable for LoadCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let pathname = scope.pop_string();
 
-        if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut()).await? {
-            let pathname = add_extension(pathname)?;
-            let content = self.storage.borrow().get(&pathname).await?;
-            let full_name = self.storage.borrow().make_canonical(&pathname)?;
+        if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut())
+            .await
+            .map_err(|e| scope.io_error(e))?
+        {
+            let pathname = add_extension(pathname).map_err(|e| scope.io_error(e))?;
+            let content =
+                self.storage.borrow().get(&pathname).await.map_err(|e| scope.io_error(e))?;
+            let full_name =
+                self.storage.borrow().make_canonical(&pathname).map_err(|e| scope.io_error(e))?;
             self.program.borrow_mut().load(Some(&full_name), &content);
             machine.clear();
         } else {
             self.console
                 .borrow_mut()
-                .print("LOAD aborted; use SAVE to save your current changes.")?;
+                .print("LOAD aborted; use SAVE to save your current changes.")
+                .map_err(|e| scope.io_error(e))?;
         }
         Ok(())
     }
@@ -461,16 +462,20 @@ impl Callable for NewCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
 
-        if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut()).await? {
+        if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut())
+            .await
+            .map_err(|e| scope.io_error(e))?
+        {
             self.program.borrow_mut().load(None, "");
             machine.clear();
         } else {
             self.console
                 .borrow_mut()
-                .print("NEW aborted; use SAVE to save your current changes.")?;
+                .print("NEW aborted; use SAVE to save your current changes.")
+                .map_err(|e| scope.io_error(e))?;
         }
         Ok(())
     }
@@ -510,23 +515,22 @@ impl Callable for RunCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
 
         machine.clear();
         let program = self.program.borrow().text();
-        let stop_reason = match machine.exec(&mut program.as_bytes()).await {
-            Ok(stop_reason) => stop_reason,
-            Err(e) => return Err(CallError::NestedError(e)),
-        };
+        let stop_reason = machine.exec(&mut program.as_bytes()).await?;
         match stop_reason {
-            StopReason::Break => self.console.borrow_mut().print(BREAK_MSG)?,
+            StopReason::Break => {
+                self.console.borrow_mut().print(BREAK_MSG).map_err(|e| scope.io_error(e))?
+            }
             stop_reason => {
                 if stop_reason.as_exit_code() != 0 {
-                    self.console.borrow_mut().print(&format!(
-                        "Program exited with code {}",
-                        stop_reason.as_exit_code()
-                    ))?;
+                    self.console
+                        .borrow_mut()
+                        .print(&format!("Program exited with code {}", stop_reason.as_exit_code()))
+                        .map_err(|e| scope.io_error(e))?;
                 }
             }
         }
@@ -587,15 +591,12 @@ impl Callable for SaveCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         let name = if scope.nargs() == 0 {
             match self.program.borrow().name() {
                 Some(name) => name.to_owned(),
                 None => {
-                    return Err(CallError::IoError(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "Unnamed program; please provide a filename".to_owned(),
-                    )));
+                    return Err(scope.internal_error("Unnamed program; please provide a filename"));
                 }
             }
         } else {
@@ -603,13 +604,17 @@ impl Callable for SaveCommand {
             scope.pop_string()
         };
 
-        let name = add_extension(name)?;
-        let full_name = self.storage.borrow().make_canonical(&name)?;
+        let name = add_extension(name).map_err(|e| scope.io_error(e))?;
+        let full_name =
+            self.storage.borrow().make_canonical(&name).map_err(|e| scope.io_error(e))?;
         let content = self.program.borrow().text();
-        self.storage.borrow_mut().put(&name, &content).await?;
+        self.storage.borrow_mut().put(&name, &content).await.map_err(|e| scope.io_error(e))?;
         self.program.borrow_mut().set_name(&full_name);
 
-        self.console.borrow_mut().print(&format!("Saved as {}", full_name))?;
+        self.console
+            .borrow_mut()
+            .print(&format!("Saved as {}", full_name))
+            .map_err(|e| scope.io_error(e))?;
 
         Ok(())
     }
@@ -667,12 +672,12 @@ mod tests {
             .expect_compilation_err("1:1: KILL expected filename$")
             .check();
 
-        check_stmt_err("1:1: In call to KILL: Entry not found", r#"KILL "missing-file""#);
+        check_stmt_err("1:1: Entry not found", r#"KILL "missing-file""#);
 
         Tester::default()
             .write_file("mismatched-extension.bat", "")
             .run(r#"KILL "mismatched-extension""#)
-            .expect_err("1:1: In call to KILL: Entry not found")
+            .expect_err("1:1: Entry not found")
             .expect_file("MEMORY:/mismatched-extension.bat", "")
             .check();
     }
@@ -889,13 +894,13 @@ mod tests {
 
         Tester::default()
             .run(format!(r#"{} "a/b.bas""#, cmd))
-            .expect_err(format!("1:1: In call to {}: Too many / separators in path 'a/b.bas'", cmd))
+            .expect_err("1:1: Too many / separators in path 'a/b.bas'")
             .check();
 
         for p in &["foo.bak", "foo.ba", "foo.basic"] {
             Tester::default()
                 .run(format!(r#"{} "{}""#, cmd, p))
-                .expect_err(format!("1:1: In call to {}: Invalid filename extension", cmd))
+                .expect_err("1:1: Invalid filename extension")
                 .check();
         }
     }
@@ -909,12 +914,12 @@ mod tests {
             .expect_compilation_err("1:1: LOAD expected filename$")
             .check();
 
-        check_stmt_err("1:1: In call to LOAD: Entry not found", r#"LOAD "missing-file""#);
+        check_stmt_err("1:1: Entry not found", r#"LOAD "missing-file""#);
 
         Tester::default()
             .write_file("mismatched-extension.bat", "")
             .run(r#"LOAD "mismatched-extension""#)
-            .expect_err("1:1: In call to LOAD: Entry not found")
+            .expect_err("1:1: Entry not found")
             .expect_file("MEMORY:/mismatched-extension.bat", "")
             .check();
     }
@@ -1077,7 +1082,7 @@ mod tests {
             .add_input_chars("modified file\n")
             .run("EDIT: SAVE")
             .expect_program(None as Option<&str>, "modified file\n")
-            .expect_err("1:7: In call to SAVE: Unnamed program; please provide a filename")
+            .expect_err("1:7: Unnamed program; please provide a filename")
             .check();
     }
 

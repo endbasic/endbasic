@@ -18,10 +18,8 @@
 use async_trait::async_trait;
 use endbasic_core::ast::ExprType;
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{Machine, Scope};
-use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
-};
+use endbasic_core::exec::{Error, Machine, Result, Scope};
+use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use endbasic_core::LineCol;
 use futures_lite::future::{BoxedLocal, FutureExt};
 use std::borrow::Cow;
@@ -64,7 +62,7 @@ impl Callable for ClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
         machine.clear();
         Ok(())
@@ -101,7 +99,7 @@ impl Callable for ErrmsgFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
 
         match machine.last_error() {
@@ -112,10 +110,10 @@ impl Callable for ErrmsgFunction {
 }
 
 /// Type of the sleep function used by the `SLEEP` command to actually suspend execution.
-pub type SleepFn = Box<dyn Fn(Duration, LineCol) -> BoxedLocal<CallResult>>;
+pub type SleepFn = Box<dyn Fn(Duration, LineCol) -> BoxedLocal<Result<()>>>;
 
 /// An implementation of a `SleepFn` that stops the current thread.
-fn system_sleep(d: Duration, _pos: LineCol) -> BoxedLocal<CallResult> {
+fn system_sleep(d: Duration, _pos: LineCol) -> BoxedLocal<Result<()>> {
     async move {
         thread::sleep(d);
         Ok(())
@@ -162,12 +160,12 @@ impl Callable for SleepCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let (n, pos) = scope.pop_double_with_pos();
 
         if n < 0.0 {
-            return Err(CallError::SyntaxError(pos, "Sleep time must be positive".to_owned()));
+            return Err(Error::SyntaxError(pos, "Sleep time must be positive".to_owned()));
         }
 
         (self.sleep_fn)(Duration::from_secs_f64(n), pos).await
@@ -218,7 +216,7 @@ mod tests {
     fn test_errmsg_after_error() {
         Tester::default()
             .run("ON ERROR RESUME NEXT: COLOR -1: PRINT \"Captured: \"; ERRMSG")
-            .expect_prints(["Captured: 1:23: In call to COLOR: 1:29: Color out of range"])
+            .expect_prints(["Captured: 1:29: Color out of range"])
             .check();
     }
 
@@ -230,31 +228,31 @@ mod tests {
 
     #[test]
     fn test_sleep_ok_int() {
-        let sleep_fake = |d: Duration, pos: LineCol| -> BoxedLocal<CallResult> {
-            async move { Err(CallError::InternalError(pos, format!("Got {} ms", d.as_millis()))) }
+        let sleep_fake = |d: Duration, pos: LineCol| -> BoxedLocal<Result<()>> {
+            async move { Err(Error::InternalError(pos, format!("Got {} ms", d.as_millis()))) }
                 .boxed_local()
         };
 
         let mut t = Tester::empty().add_callable(SleepCommand::new(Box::from(sleep_fake)));
-        t.run("SLEEP 123").expect_err("1:1: In call to SLEEP: 1:7: Got 123000 ms").check();
+        t.run("SLEEP 123").expect_err("1:7: Got 123000 ms").check();
     }
 
     #[test]
     fn test_sleep_ok_float() {
-        let sleep_fake = |d: Duration, pos: LineCol| -> BoxedLocal<CallResult> {
+        let sleep_fake = |d: Duration, pos: LineCol| -> BoxedLocal<Result<()>> {
             async move {
                 let ms = d.as_millis();
                 if ms > 123095 && ms < 123105 {
-                    Err(CallError::InternalError(pos, "Good".to_owned()))
+                    Err(Error::InternalError(pos, "Good".to_owned()))
                 } else {
-                    Err(CallError::InternalError(pos, format!("Bad {}", ms)))
+                    Err(Error::InternalError(pos, format!("Bad {}", ms)))
                 }
             }
             .boxed_local()
         };
 
         let mut t = Tester::empty().add_callable(SleepCommand::new(Box::from(sleep_fake)));
-        t.run("SLEEP 123.1").expect_err("1:1: In call to SLEEP: 1:7: Good").check();
+        t.run("SLEEP 123.1").expect_err("1:7: Good").check();
     }
 
     #[test]
@@ -270,7 +268,7 @@ mod tests {
         check_stmt_compilation_err("1:1: SLEEP expected seconds#", "SLEEP 2, 3");
         check_stmt_compilation_err("1:1: SLEEP expected seconds#", "SLEEP 2; 3");
         check_stmt_compilation_err("1:7: STRING is not a number", "SLEEP \"foo\"");
-        check_stmt_err("1:1: In call to SLEEP: 1:7: Sleep time must be positive", "SLEEP -1");
-        check_stmt_err("1:1: In call to SLEEP: 1:7: Sleep time must be positive", "SLEEP -0.001");
+        check_stmt_err("1:7: Sleep time must be positive", "SLEEP -1");
+        check_stmt_err("1:7: Sleep time must be positive", "SLEEP -0.001");
     }
 }

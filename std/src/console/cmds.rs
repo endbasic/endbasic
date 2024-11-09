@@ -26,10 +26,8 @@ use endbasic_core::compiler::{
     ArgSepSyntax, OptionalValueSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax,
     RequiredValueSyntax, SingularArgSyntax,
 };
-use endbasic_core::exec::{Machine, Scope, ValueTag};
-use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
-};
+use endbasic_core::exec::{Error, Machine, Result, Scope, ValueTag};
+use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use endbasic_core::LineCol;
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -81,9 +79,9 @@ impl Callable for ClsCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
-        self.console.borrow_mut().clear(ClearType::All)?;
+        self.console.borrow_mut().clear(ClearType::All).map_err(|e| scope.io_error(e))?;
         Ok(())
     }
 }
@@ -157,16 +155,16 @@ impl Callable for ColorCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
-        fn get_color((i, pos): (i32, LineCol)) -> Result<Option<u8>, CallError> {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+        fn get_color((i, pos): (i32, LineCol)) -> Result<Option<u8>> {
             if i >= 0 && i <= u8::MAX as i32 {
                 Ok(Some(i as u8))
             } else {
-                Err(CallError::SyntaxError(pos, "Color out of range".to_owned()))
+                Err(Error::SyntaxError(pos, "Color out of range".to_owned()))
             }
         }
 
-        fn get_optional_color(scope: &mut Scope<'_>) -> Result<Option<u8>, CallError> {
+        fn get_optional_color(scope: &mut Scope<'_>) -> Result<Option<u8>> {
             match scope.pop_integer() {
                 ColorCommand::NO_COLOR => Ok(None),
                 ColorCommand::HAS_COLOR => get_color(scope.pop_integer_with_pos()),
@@ -182,7 +180,7 @@ impl Callable for ColorCommand {
             (get_optional_color(&mut scope)?, get_optional_color(&mut scope)?)
         };
 
-        self.console.borrow_mut().set_color(fg, bg)?;
+        self.console.borrow_mut().set_color(fg, bg).map_err(|e| scope.io_error(e))?;
         Ok(())
     }
 }
@@ -227,10 +225,10 @@ impl Callable for InKeyFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
 
-        let key = self.console.borrow_mut().poll_key().await?;
+        let key = self.console.borrow_mut().poll_key().await.map_err(|e| scope.io_error(e))?;
         let key_name = match key {
             Some(Key::ArrowDown) => "DOWN".to_owned(),
             Some(Key::ArrowLeft) => "LEFT".to_owned(),
@@ -324,7 +322,7 @@ impl Callable for InputCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         let prompt = if scope.nargs() == 1 {
             "".to_owned()
         } else {
@@ -362,7 +360,7 @@ impl Callable for InputCommand {
                                 machine
                                     .get_mut_symbols()
                                     .set_var(&vref, Value::Boolean(b))
-                                    .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
+                                    .map_err(|e| Error::EvalError(pos, format!("{}", e)))?;
                                 return Ok(());
                             }
                             Err(e) => e,
@@ -373,7 +371,7 @@ impl Callable for InputCommand {
                                 machine
                                     .get_mut_symbols()
                                     .set_var(&vref, Value::Double(d))
-                                    .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
+                                    .map_err(|e| Error::EvalError(pos, format!("{}", e)))?;
                                 return Ok(());
                             }
                             Err(e) => e,
@@ -384,7 +382,7 @@ impl Callable for InputCommand {
                                 machine
                                     .get_mut_symbols()
                                     .set_var(&vref, Value::Integer(i))
-                                    .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
+                                    .map_err(|e| Error::EvalError(pos, format!("{}", e)))?;
                                 return Ok(());
                             }
                             Err(e) => e,
@@ -394,18 +392,18 @@ impl Callable for InputCommand {
                             machine
                                 .get_mut_symbols()
                                 .set_var(&vref, Value::Text(trimmed_answer.to_owned()))
-                                .map_err(|e| CallError::EvalError(pos, format!("{}", e)))?;
+                                .map_err(|e| Error::EvalError(pos, format!("{}", e)))?;
                             return Ok(());
                         }
                     };
 
-                    console.print(&format!("Retry input: {}", e))?;
+                    console.print(&format!("Retry input: {}", e)).map_err(|e| scope.io_error(e))?;
                     previous_answer = answer;
                 }
                 Err(e) if e.kind() == io::ErrorKind::InvalidData => {
-                    console.print(&format!("Retry input: {}", e))?
+                    console.print(&format!("Retry input: {}", e)).map_err(|e| scope.io_error(e))?
                 }
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(scope.io_error(e)),
             }
         }
     }
@@ -455,11 +453,11 @@ impl Callable for LocateCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
-        fn get_coord((i, pos): (i32, LineCol), name: &str) -> Result<(u16, LineCol), CallError> {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+        fn get_coord((i, pos): (i32, LineCol), name: &str) -> Result<(u16, LineCol)> {
             match u16::try_from(i) {
                 Ok(v) => Ok((v, pos)),
-                Err(_) => Err(CallError::SyntaxError(pos, format!("{} out of range", name))),
+                Err(_) => Err(Error::SyntaxError(pos, format!("{} out of range", name))),
             }
         }
 
@@ -468,22 +466,22 @@ impl Callable for LocateCommand {
         let (row, row_pos) = get_coord(scope.pop_integer_with_pos(), "Row")?;
 
         let mut console = self.console.borrow_mut();
-        let size = console.size_chars()?;
+        let size = console.size_chars().map_err(|e| scope.io_error(e))?;
 
         if column >= size.x {
-            return Err(CallError::SyntaxError(
+            return Err(Error::SyntaxError(
                 column_pos,
                 format!("Column {} exceeds visible range of {}", column, size.x - 1),
             ));
         }
         if row >= size.y {
-            return Err(CallError::SyntaxError(
+            return Err(Error::SyntaxError(
                 row_pos,
                 format!("Row {} exceeds visible range of {}", row, size.y - 1),
             ));
         }
 
-        console.locate(CharsXY::new(column, row))?;
+        console.locate(CharsXY::new(column, row)).map_err(|e| scope.io_error(e))?;
         Ok(())
     }
 }
@@ -534,7 +532,7 @@ impl Callable for PrintCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         let mut text = String::new();
         let mut nl = true;
         while scope.nargs() > 0 {
@@ -588,9 +586,9 @@ impl Callable for PrintCommand {
         }
 
         if nl {
-            self.console.borrow_mut().print(&text)?;
+            self.console.borrow_mut().print(&text).map_err(|e| scope.io_error(e))?;
         } else {
-            self.console.borrow_mut().write(&text)?;
+            self.console.borrow_mut().write(&text).map_err(|e| scope.io_error(e))?;
         }
         Ok(())
     }
@@ -626,9 +624,9 @@ impl Callable for ScrColsFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
-        let size = self.console.borrow().size_chars()?;
+        let size = self.console.borrow().size_chars().map_err(|e| scope.io_error(e))?;
         scope.return_integer(i32::from(size.x))
     }
 }
@@ -663,9 +661,9 @@ impl Callable for ScrRowsFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
-        let size = self.console.borrow().size_chars()?;
+        let size = self.console.borrow().size_chars().map_err(|e| scope.io_error(e))?;
         scope.return_integer(i32::from(size.y))
     }
 }
@@ -723,8 +721,8 @@ mod tests {
         );
         check_stmt_compilation_err("1:1: COLOR expected <> | <fg%> | <[fg%], [bg%]>", "COLOR 1; 2");
 
-        check_stmt_err("1:1: In call to COLOR: 1:7: Color out of range", "COLOR 1000, 0");
-        check_stmt_err("1:1: In call to COLOR: 1:10: Color out of range", "COLOR 0, 1000");
+        check_stmt_err("1:7: Color out of range", "COLOR 1000, 0");
+        check_stmt_err("1:10: Color out of range", "COLOR 0, 1000");
 
         check_stmt_compilation_err("1:7: BOOLEAN is not a number", "COLOR TRUE, 0");
         check_stmt_compilation_err("1:10: BOOLEAN is not a number", "COLOR 0, TRUE");
@@ -888,30 +886,22 @@ mod tests {
         check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE 1, 2, 3");
         check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE 1; 2");
 
-        check_stmt_err("1:1: In call to LOCATE: 1:8: Column out of range", "LOCATE -1, 2");
-        check_stmt_err("1:1: In call to LOCATE: 1:8: Column out of range", "LOCATE 70000, 2");
+        check_stmt_err("1:8: Column out of range", "LOCATE -1, 2");
+        check_stmt_err("1:8: Column out of range", "LOCATE 70000, 2");
         check_stmt_compilation_err("1:8: BOOLEAN is not a number", "LOCATE TRUE, 2");
         check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE , 2");
 
-        check_stmt_err("1:1: In call to LOCATE: 1:11: Row out of range", "LOCATE 1, -2");
-        check_stmt_err("1:1: In call to LOCATE: 1:11: Row out of range", "LOCATE 1, 70000");
+        check_stmt_err("1:11: Row out of range", "LOCATE 1, -2");
+        check_stmt_err("1:11: Row out of range", "LOCATE 1, 70000");
         check_stmt_compilation_err("1:11: BOOLEAN is not a number", "LOCATE 1, TRUE");
         check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE 1,");
 
         let mut t = Tester::default();
         t.get_console().borrow_mut().set_size_chars(CharsXY { x: 30, y: 20 });
-        t.run("LOCATE 30, 0")
-            .expect_err("1:1: In call to LOCATE: 1:8: Column 30 exceeds visible range of 29")
-            .check();
-        t.run("LOCATE 31, 0")
-            .expect_err("1:1: In call to LOCATE: 1:8: Column 31 exceeds visible range of 29")
-            .check();
-        t.run("LOCATE 0, 20")
-            .expect_err("1:1: In call to LOCATE: 1:11: Row 20 exceeds visible range of 19")
-            .check();
-        t.run("LOCATE 0, 21")
-            .expect_err("1:1: In call to LOCATE: 1:11: Row 21 exceeds visible range of 19")
-            .check();
+        t.run("LOCATE 30, 0").expect_err("1:8: Column 30 exceeds visible range of 29").check();
+        t.run("LOCATE 31, 0").expect_err("1:8: Column 31 exceeds visible range of 29").check();
+        t.run("LOCATE 0, 20").expect_err("1:11: Row 20 exceeds visible range of 19").check();
+        t.run("LOCATE 0, 21").expect_err("1:11: Row 21 exceeds visible range of 19").check();
     }
 
     #[test]

@@ -23,8 +23,7 @@
 #![warn(unsafe_code)]
 
 use async_channel::{Receiver, Sender};
-use endbasic_core::exec::{Signal, YieldNowFn};
-use endbasic_core::syms::{self, CallResult};
+use endbasic_core::exec::{Error, Result, Signal, YieldNowFn};
 use endbasic_core::LineCol;
 use endbasic_std::console::{Console, GraphicsConsole};
 use std::cell::RefCell;
@@ -105,14 +104,14 @@ fn js_sleep(
     d: Duration,
     pos: LineCol,
     yielder: Rc<RefCell<Yielder>>,
-) -> Pin<Box<dyn Future<Output = CallResult>>> {
+) -> Pin<Box<dyn Future<Output = Result<()>>>> {
     let ms = d.as_millis();
     if ms > i32::MAX as u128 {
         // The JavaScript setTimeout function only takes i32s so ensure our value fits.  If it
         // doesn't, you can imagine chaining calls to setTimeout to achieve the desired delay...
         // but the numbers we are talking about are so big that this doesn't make sense.
         return Box::pin(async move {
-            Err(syms::CallError::InternalError(pos, "Cannot sleep for that long".to_owned()))
+            Err(Error::InternalError(pos, "Cannot sleep for that long".to_owned()))
         });
     }
     let ms = ms as i32;
@@ -363,7 +362,7 @@ pub fn get_build_id() -> String {
 }
 
 /// Module initialization.
-pub fn main() -> Result<(), JsValue> {
+pub fn main() -> std::result::Result<(), JsValue> {
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
 
@@ -396,7 +395,7 @@ mod tests {
         .await
         .unwrap_err()
         {
-            syms::CallError::InternalError(pos, e) => {
+            Error::InternalError(pos, e) => {
                 assert_eq!(LineCol { line: 1, col: 2 }, pos);
                 assert_eq!("Cannot sleep for that long", e);
             }

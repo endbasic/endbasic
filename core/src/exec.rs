@@ -20,9 +20,7 @@ use crate::bytecode::*;
 use crate::compiler;
 use crate::parser;
 use crate::reader::LineCol;
-use crate::syms::CallResult;
-use crate::syms::SymbolKey;
-use crate::syms::{CallError, Callable, CallableMetadata, Symbol, Symbols};
+use crate::syms::{Callable, Symbol, SymbolKey, Symbols};
 use crate::value;
 use crate::value::double_to_integer;
 use async_channel::{Receiver, Sender, TryRecvError};
@@ -39,8 +37,12 @@ pub enum Error {
     CompilerError(#[from] compiler::Error),
 
     /// Evaluation error during execution.
-    #[error("{}: {}", .0, .1)]
+    #[error("{0}: {1}")]
     EvalError(LineCol, String),
+
+    /// Any other error not representable by other values.
+    #[error("{0}: {1}")]
+    InternalError(LineCol, String),
 
     /// I/O error during execution.
     #[error("{0}: {1}")]
@@ -51,38 +53,11 @@ pub enum Error {
     ParseError(#[from] parser::Error),
 
     /// Syntax error.
-    #[error("{}: {}", .0, .1)]
+    #[error("{0}: {1}")]
     SyntaxError(LineCol, String),
 }
 
 impl Error {
-    /// Annotates a call evaluation error with the command's metadata.
-    // TODO(jmmv): This is a hack to support the transition to a better Command abstraction within
-    // Symbols and exists to minimize the amount of impacted tests.  Should be removed and/or
-    // somehow unified with the equivalent function in eval::Error.
-    fn from_call_error(md: &CallableMetadata, e: CallError, pos: LineCol) -> Self {
-        match e {
-            CallError::EvalError(pos2, e) => {
-                if !md.is_function() {
-                    Self::EvalError(pos2, e)
-                } else {
-                    Self::EvalError(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
-                }
-            }
-            CallError::InternalError(pos2, e) => {
-                Self::SyntaxError(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
-            }
-            CallError::IoError(e) => Self::IoError(
-                pos,
-                io::Error::new(e.kind(), format!("In call to {}: {}", md.name(), e)),
-            ),
-            CallError::NestedError(e) => e,
-            CallError::SyntaxError(pos2, e) => {
-                Self::SyntaxError(pos, format!("In call to {}: {}: {}", md.name(), pos2, e))
-            }
-        }
-    }
-
     /// Annotates a value computation error with a position.
     fn from_value_error(e: value::Error, pos: LineCol) -> Self {
         Self::EvalError(pos, e.message)
@@ -93,6 +68,7 @@ impl Error {
         match self {
             Error::CompilerError(_) => false,
             Error::EvalError(..) => true,
+            Error::InternalError(..) => true,
             Error::IoError(..) => true,
             Error::ParseError(_) => false,
             Error::SyntaxError(..) => true,
@@ -360,9 +336,20 @@ impl<'s> Scope<'s> {
         Self { stack, nargs, fref_pos }
     }
 
+    /// Removes all remaining arguments from the stack tracked by this scope.
     fn drain(&mut self) {
         self.stack.discard(self.nargs);
         self.nargs = 0;
+    }
+
+    /// Annotates an I/O error with the position of the callable that generated it.
+    pub fn io_error(&self, e: io::Error) -> Error {
+        Error::IoError(self.fref_pos, e)
+    }
+
+    /// Creates an internal error with the position of the callable that generated it.
+    pub fn internal_error<S: Into<String>>(&self, msg: S) -> Error {
+        Error::InternalError(self.fref_pos, msg.into())
     }
 
     /// Returns the number of arguments that can still be consumed.
@@ -481,35 +468,35 @@ impl<'s> Scope<'s> {
     }
 
     /// Sets the return value of this function to `value`.
-    pub fn return_any(mut self, value: Value) -> CallResult {
+    pub fn return_any(mut self, value: Value) -> Result<()> {
         self.drain();
         self.stack.push((value, self.fref_pos));
         Ok(())
     }
 
     /// Sets the return value of this function to the boolean `value`.
-    pub fn return_boolean(mut self, value: bool) -> CallResult {
+    pub fn return_boolean(mut self, value: bool) -> Result<()> {
         self.drain();
         self.stack.push((Value::Boolean(value), self.fref_pos));
         Ok(())
     }
 
     /// Sets the return value of this function to the double `value`.
-    pub fn return_double(mut self, value: f64) -> CallResult {
+    pub fn return_double(mut self, value: f64) -> Result<()> {
         self.drain();
         self.stack.push((Value::Double(value), self.fref_pos));
         Ok(())
     }
 
     /// Sets the return value of this function to the integer `value`.
-    pub fn return_integer(mut self, value: i32) -> CallResult {
+    pub fn return_integer(mut self, value: i32) -> Result<()> {
         self.drain();
         self.stack.push((Value::Integer(value), self.fref_pos));
         Ok(())
     }
 
     /// Sets the return value of this function to the string `value`.
-    pub fn return_string<S: Into<String>>(mut self, value: S) -> CallResult {
+    pub fn return_string<S: Into<String>>(mut self, value: S) -> Result<()> {
         self.drain();
         self.stack.push((Value::Text(value.into()), self.fref_pos));
         Ok(())
@@ -688,8 +675,7 @@ impl Machine {
         let scope = Scope::new(&mut context.value_stack, nargs, bref_pos);
 
         let b = b.clone();
-        b.exec(scope, self).await.map_err(|e| Error::from_call_error(b.metadata(), e, bref_pos))?;
-        Ok(())
+        b.exec(scope, self).await
     }
 
     /// Handles an array definition.  The array must not yet exist, and the name may not overlap
@@ -902,7 +888,7 @@ impl Machine {
         debug_assert_eq!(return_type, metadata.return_type().unwrap());
 
         let scope = Scope::new(&mut context.value_stack, nargs, fref_pos);
-        f.exec(scope, self).await.map_err(|e| Error::from_call_error(metadata, e, fref_pos))?;
+        f.exec(scope, self).await?;
         if cfg!(debug_assertions) {
             match context.value_stack.top() {
                 Some((value, _pos)) => {
@@ -974,9 +960,8 @@ impl Machine {
         fpos: LineCol,
         f: Rc<dyn Callable>,
     ) -> Result<()> {
-        let metadata = f.metadata();
         let scope = Scope::new(&mut context.value_stack, 0, fpos);
-        f.exec(scope, self).await.map_err(|e| Error::from_call_error(metadata, e, fpos))?;
+        f.exec(scope, self).await?;
         if cfg!(debug_assertions) {
             match context.value_stack.top() {
                 Some((value, _pos)) => {
@@ -2782,7 +2767,7 @@ mod tests {
             100 OUT LAST_ERROR
             "#,
             &[],
-            &["1", "4:17: In call to RAISEF: 4:24: Some internal error"],
+            &["1", "4:24: Some internal error"],
         );
     }
 
@@ -2798,7 +2783,7 @@ mod tests {
             OUT LAST_ERROR
             "#,
             &[],
-            &["1", "4:17: In call to RAISEF: 4:24: Some internal error"],
+            &["1", "4:24: Some internal error"],
         );
     }
 
@@ -2816,7 +2801,7 @@ mod tests {
             "#,
             &[],
             &["1", "2"],
-            "8:17: In call to RAISEF: 8:24: Some internal error",
+            "8:24: Some internal error",
         );
     }
 
@@ -2830,7 +2815,7 @@ mod tests {
             OUT LAST_ERROR
             "#,
             &[],
-            &["1", "4:17: In call to RAISEF: 4:24: Some internal error"],
+            &["1", "4:24: Some internal error"],
         );
     }
 
@@ -2844,7 +2829,7 @@ mod tests {
             OUT LAST_ERROR
             "#,
             &[],
-            &["1", "4:13: In call to RAISE: 4:19: Some internal error"],
+            &["1", "4:19: Some internal error"],
         );
     }
 
@@ -2856,7 +2841,7 @@ mod tests {
             OUT 1: OUT RAISEF("internal"): OUT LAST_ERROR
             "#,
             &[],
-            &["1", "3:24: In call to RAISEF: 3:31: Some internal error"],
+            &["1", "3:31: Some internal error"],
         );
     }
 
@@ -2868,7 +2853,7 @@ mod tests {
             OUT 1: RAISE "internal": OUT LAST_ERROR
             "#,
             &[],
-            &["1", "3:20: In call to RAISE: 3:26: Some internal error"],
+            &["1", "3:26: Some internal error"],
         );
     }
 
@@ -2877,25 +2862,25 @@ mod tests {
         do_ok_test(
             r#"ON ERROR RESUME NEXT: OUT RAISEF("argument"): OUT LAST_ERROR"#,
             &[],
-            &["1:27: In call to RAISEF: 1:34: Bad argument"],
+            &["1:34: Bad argument"],
         );
 
         do_ok_test(
             r#"ON ERROR RESUME NEXT: OUT RAISEF("eval"): OUT LAST_ERROR"#,
             &[],
-            &["1:27: In call to RAISEF: 1:34: Some eval error"],
+            &["1:34: Some eval error"],
         );
 
         do_ok_test(
             r#"ON ERROR RESUME NEXT: OUT RAISEF("internal"): OUT LAST_ERROR"#,
             &[],
-            &["1:27: In call to RAISEF: 1:34: Some internal error"],
+            &["1:34: Some internal error"],
         );
 
         do_ok_test(
             r#"ON ERROR RESUME NEXT: OUT RAISEF("io"): OUT LAST_ERROR"#,
             &[],
-            &["1:27: In call to RAISEF: Some I/O error"],
+            &["1:34: Some I/O error"],
         );
     }
 
@@ -3165,13 +3150,8 @@ mod tests {
 
     #[test]
     fn test_top_level_semantic_errors_allow_execution() {
-        do_simple_error_test(r#"OUT RAISEF("io")"#, "1:5: In call to RAISEF: Some I/O error");
-        do_error_test(
-            r#"OUT "a": OUT RAISEF("io"): OUT "b""#,
-            &[],
-            &["a"],
-            "1:14: In call to RAISEF: Some I/O error",
-        );
+        do_simple_error_test(r#"OUT RAISEF("io")"#, "1:12: Some I/O error");
+        do_error_test(r#"OUT "a": OUT RAISEF("io"): OUT "b""#, &[], &["a"], "1:21: Some I/O error");
     }
 
     #[test]
@@ -3182,15 +3162,12 @@ mod tests {
 
     #[test]
     fn test_inner_level_semantic_errors_allow_execution() {
-        do_simple_error_test(
-            r#"IF TRUE THEN: OUT RAISEF("io"): END IF"#,
-            "1:19: In call to RAISEF: Some I/O error",
-        );
+        do_simple_error_test(r#"IF TRUE THEN: OUT RAISEF("io"): END IF"#, "1:26: Some I/O error");
         do_error_test(
             r#"OUT "a": IF TRUE THEN: OUT RAISEF("io"): END IF: OUT "b""#,
             &[],
             &["a"],
-            "1:28: In call to RAISEF: Some I/O error",
+            "1:35: Some I/O error",
         );
     }
 

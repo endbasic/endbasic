@@ -21,8 +21,8 @@ use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{Machine, Scope};
-use endbasic_core::syms::{CallResult, Callable, CallableMetadata, CallableMetadataBuilder};
+use endbasic_core::exec::{Machine, Result, Scope};
+use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp;
@@ -155,11 +155,11 @@ impl Callable for CdCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let target = scope.pop_string();
 
-        self.storage.borrow_mut().cd(&target)?;
+        self.storage.borrow_mut().cd(&target).map_err(|e| scope.io_error(e))?;
 
         Ok(())
     }
@@ -205,7 +205,7 @@ impl Callable for DirCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         let path = if scope.nargs() == 0 {
             "".to_owned()
         } else {
@@ -213,7 +213,9 @@ impl Callable for DirCommand {
             scope.pop_string()
         };
 
-        show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), &path).await?;
+        show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), &path)
+            .await
+            .map_err(|e| scope.io_error(e))?;
 
         Ok(())
     }
@@ -273,16 +275,17 @@ impl Callable for MountCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         if scope.nargs() == 0 {
-            show_drives(&self.storage.borrow_mut(), &mut *self.console.borrow_mut())?;
+            show_drives(&self.storage.borrow_mut(), &mut *self.console.borrow_mut())
+                .map_err(|e| scope.io_error(e))?;
             Ok(())
         } else {
             debug_assert_eq!(2, scope.nargs());
             let target = scope.pop_string();
             let name = scope.pop_string();
 
-            self.storage.borrow_mut().mount(&name, &target)?;
+            self.storage.borrow_mut().mount(&name, &target).map_err(|e| scope.io_error(e))?;
             Ok(())
         }
     }
@@ -320,7 +323,7 @@ impl Callable for PwdCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let storage = self.storage.borrow();
@@ -328,13 +331,17 @@ impl Callable for PwdCommand {
         let system_cwd = storage.system_path(&cwd).expect("cwd must return a valid path");
 
         let console = &mut *self.console.borrow_mut();
-        console.print("")?;
-        console.print(&format!("    Working directory: {}", cwd))?;
+        console.print("").map_err(|e| scope.io_error(e))?;
+        console.print(&format!("    Working directory: {}", cwd)).map_err(|e| scope.io_error(e))?;
         match system_cwd {
-            Some(path) => console.print(&format!("    System location: {}", path.display()))?,
-            None => console.print("    No system location available")?,
+            Some(path) => console
+                .print(&format!("    System location: {}", path.display()))
+                .map_err(|e| scope.io_error(e))?,
+            None => {
+                console.print("    No system location available").map_err(|e| scope.io_error(e))?
+            }
         }
-        console.print("")?;
+        console.print("").map_err(|e| scope.io_error(e))?;
 
         Ok(())
     }
@@ -378,11 +385,11 @@ impl Callable for UnmountCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let drive = scope.pop_string();
 
-        self.storage.borrow_mut().unmount(&drive)?;
+        self.storage.borrow_mut().unmount(&drive).map_err(|e| scope.io_error(e))?;
 
         Ok(())
     }
@@ -422,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_cd_errors() {
-        check_stmt_err("1:1: In call to CD: Drive 'A' is not mounted", "CD \"A:\"");
+        check_stmt_err("1:1: Drive 'A' is not mounted", "CD \"A:\"");
         check_stmt_compilation_err("1:1: CD expected path$", "CD");
         check_stmt_compilation_err("1:1: CD expected path$", "CD 2, 3");
         check_stmt_compilation_err("1:4: expected STRING but found INTEGER", "CD 2");
@@ -693,18 +700,12 @@ mod tests {
         check_stmt_compilation_err("1:14: expected STRING but found INTEGER", r#"MOUNT "a" AS 1"#);
         check_stmt_compilation_err("1:7: expected STRING but found INTEGER", r#"MOUNT 1 AS "a""#);
 
+        check_stmt_err("1:1: Invalid drive name 'a:'", r#"MOUNT "memory://" AS "a:""#);
         check_stmt_err(
-            "1:1: In call to MOUNT: Invalid drive name 'a:'",
-            r#"MOUNT "memory://" AS "a:""#,
-        );
-        check_stmt_err(
-            "1:1: In call to MOUNT: Mount URI must be of the form scheme://path",
+            "1:1: Mount URI must be of the form scheme://path",
             r#"MOUNT "foo//bar" AS "a""#,
         );
-        check_stmt_err(
-            "1:1: In call to MOUNT: Unknown mount scheme 'foo'",
-            r#"MOUNT "foo://bar" AS "a""#,
-        );
+        check_stmt_err("1:1: Unknown mount scheme 'foo'", r#"MOUNT "foo://bar" AS "a""#);
     }
 
     #[test]
@@ -764,7 +765,7 @@ mod tests {
 
         check_stmt_compilation_err("1:9: expected STRING but found INTEGER", "UNMOUNT 1");
 
-        check_stmt_err("1:1: In call to UNMOUNT: Invalid drive name 'a:'", "UNMOUNT \"a:\"");
-        check_stmt_err("1:1: In call to UNMOUNT: Drive 'a' is not mounted", "UNMOUNT \"a\"");
+        check_stmt_err("1:1: Invalid drive name 'a:'", "UNMOUNT \"a:\"");
+        check_stmt_err("1:1: Drive 'a' is not mounted", "UNMOUNT \"a\"");
     }
 }

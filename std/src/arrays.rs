@@ -20,10 +20,9 @@ use endbasic_core::ast::{ArgSep, ExprType, VarRef};
 use endbasic_core::compiler::{
     ArgSepSyntax, RequiredRefSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
-use endbasic_core::exec::{Machine, Scope};
+use endbasic_core::exec::{Error, Machine, Result, Scope};
 use endbasic_core::syms::{
-    Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
-    Symbols,
+    Array, Callable, CallableMetadata, CallableMetadataBuilder, Symbol, Symbols,
 };
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -34,31 +33,26 @@ const CATEGORY: &str = "Array functions";
 /// Extracts the array reference and the dimension number from the list of arguments passed to
 /// either `LBOUND` or `UBOUND`.
 #[allow(clippy::needless_lifetimes)]
-fn parse_bound_args<'a>(
-    scope: &mut Scope<'_>,
-    symbols: &'a Symbols,
-) -> Result<(&'a Array, usize), CallError> {
+fn parse_bound_args<'a>(scope: &mut Scope<'_>, symbols: &'a Symbols) -> Result<(&'a Array, usize)> {
     let (arrayname, arraytype, arraypos) = scope.pop_varref_with_pos();
 
     let arrayref = VarRef::new(arrayname.to_string(), Some(arraytype));
-    let array = match symbols
-        .get(&arrayref)
-        .map_err(|e| CallError::SyntaxError(arraypos, format!("{}", e)))?
-    {
-        Some(Symbol::Array(array)) => array,
-        _ => unreachable!(),
-    };
+    let array =
+        match symbols.get(&arrayref).map_err(|e| Error::SyntaxError(arraypos, format!("{}", e)))? {
+            Some(Symbol::Array(array)) => array,
+            _ => unreachable!(),
+        };
 
     if scope.nargs() == 1 {
         let (i, pos) = scope.pop_integer_with_pos();
 
         if i < 0 {
-            return Err(CallError::SyntaxError(pos, format!("Dimension {} must be positive", i)));
+            return Err(Error::SyntaxError(pos, format!("Dimension {} must be positive", i)));
         }
         let i = i as usize;
 
         if i > array.dimensions().len() {
-            return Err(CallError::SyntaxError(
+            return Err(Error::SyntaxError(
                 pos,
                 format!(
                     "Array {} has only {} dimensions but asked for {}",
@@ -73,7 +67,7 @@ fn parse_bound_args<'a>(
         debug_assert_eq!(0, scope.nargs());
 
         if array.dimensions().len() > 1 {
-            return Err(CallError::SyntaxError(
+            return Err(Error::SyntaxError(
                 arraypos,
                 "Requires a dimension for multidimensional arrays".to_owned(),
             ));
@@ -146,7 +140,7 @@ impl Callable for LboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         let (_array, _dim) = parse_bound_args(&mut scope, machine.get_symbols())?;
         scope.return_integer(0)
     }
@@ -215,7 +209,7 @@ impl Callable for UboundFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         let (array, dim) = parse_bound_args(&mut scope, machine.get_symbols())?;
         scope.return_integer((array.dimensions()[dim - 1] - 1) as i32)
     }
@@ -252,7 +246,7 @@ mod tests {
 
         Tester::default()
             .run(format!("DIM x(2): result = {}(x, -1)", func))
-            .expect_err(format!("1:20: In call to {}: 1:30: Dimension -1 must be positive", func))
+            .expect_err("1:30: Dimension -1 must be positive")
             .expect_array("x", ExprType::Integer, &[2], vec![])
             .check();
 
@@ -288,19 +282,13 @@ mod tests {
 
         Tester::default()
             .run(format!("DIM x(2, 3, 4): result = {}(x)", func))
-            .expect_err(format!(
-                "1:26: In call to {}: 1:33: Requires a dimension for multidimensional arrays",
-                func
-            ))
+            .expect_err("1:33: Requires a dimension for multidimensional arrays")
             .expect_array("x", ExprType::Integer, &[2, 3, 4], vec![])
             .check();
 
         Tester::default()
             .run(format!("DIM x(2, 3, 4): result = {}(x, 5)", func))
-            .expect_err(format!(
-                "1:26: In call to {}: 1:36: Array X has only 3 dimensions but asked for 5",
-                func
-            ))
+            .expect_err("1:36: Array X has only 3 dimensions but asked for 5")
             .expect_array("x", ExprType::Integer, &[2, 3, 4], vec![])
             .check();
     }

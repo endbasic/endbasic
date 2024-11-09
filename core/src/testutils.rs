@@ -20,10 +20,9 @@ use crate::compiler::{
     ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax, RequiredValueSyntax,
     SingularArgSyntax,
 };
-use crate::exec::{Machine, Scope, ValueTag};
+use crate::exec::{Error, Machine, Result, Scope, ValueTag};
 use crate::syms::{
-    Array, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbol,
-    SymbolKey, Symbols,
+    Array, Callable, CallableMetadata, CallableMetadataBuilder, Symbol, SymbolKey, Symbols,
 };
 use crate::value;
 use async_trait::async_trait;
@@ -57,7 +56,7 @@ impl Callable for ArglessFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         assert_eq!(0, scope.nargs());
         scope.return_any(self.value.clone())
     }
@@ -84,7 +83,7 @@ impl Callable for ClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         assert_eq!(0, scope.nargs());
         machine.clear();
         Ok(())
@@ -115,7 +114,7 @@ impl Callable for CountFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         assert_eq!(0, scope.nargs());
         let mut counter = self.counter.borrow_mut();
         *counter += 1;
@@ -152,14 +151,17 @@ impl Callable for RaisefFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         assert_eq!(1, scope.nargs());
         let (arg, pos) = scope.pop_string_with_pos();
         match arg.as_str() {
-            "argument" => Err(CallError::SyntaxError(pos, "Bad argument".to_owned())),
-            "eval" => Err(CallError::EvalError(pos, "Some eval error".to_owned())),
-            "internal" => Err(CallError::InternalError(pos, "Some internal error".to_owned())),
-            "io" => Err(io::Error::new(io::ErrorKind::Other, "Some I/O error".to_owned()).into()),
+            "argument" => Err(Error::SyntaxError(pos, "Bad argument".to_owned())),
+            "eval" => Err(Error::EvalError(pos, "Some eval error".to_owned())),
+            "internal" => Err(Error::InternalError(pos, "Some internal error".to_owned())),
+            "io" => Err(Error::IoError(
+                pos,
+                io::Error::new(io::ErrorKind::Other, "Some I/O error".to_owned()),
+            )),
             _ => panic!("Invalid arguments"),
         }
     }
@@ -192,14 +194,17 @@ impl Callable for RaiseCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         assert_eq!(1, scope.nargs());
         let (arg, pos) = scope.pop_string_with_pos();
         match arg.as_str() {
-            "argument" => Err(CallError::SyntaxError(pos, "Bad argument".to_owned())),
-            "eval" => Err(CallError::EvalError(pos, "Some eval error".to_owned())),
-            "internal" => Err(CallError::InternalError(pos, "Some internal error".to_owned())),
-            "io" => Err(io::Error::new(io::ErrorKind::Other, "Some I/O error".to_owned()).into()),
+            "argument" => Err(Error::SyntaxError(pos, "Bad argument".to_owned())),
+            "eval" => Err(Error::EvalError(pos, "Some eval error".to_owned())),
+            "internal" => Err(Error::InternalError(pos, "Some internal error".to_owned())),
+            "io" => Err(Error::IoError(
+                pos,
+                io::Error::new(io::ErrorKind::Other, "Some I/O error".to_owned()),
+            )),
             _ => panic!("Invalid arguments"),
         }
     }
@@ -227,7 +232,7 @@ impl Callable for LastErrorFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         assert_eq!(0, scope.nargs());
         match machine.last_error() {
             Some(message) => scope.return_string(message),
@@ -260,7 +265,7 @@ impl Callable for GetDataCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         assert_eq!(0, scope.nargs());
         *self.data.borrow_mut() = machine.get_data().to_vec();
         Ok(())
@@ -304,7 +309,7 @@ impl Callable for InCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let (vname, vtype) = scope.pop_varref();
 
@@ -357,7 +362,7 @@ impl Callable for OutCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         let mut first = true;
         let mut text = String::new();
         while scope.nargs() > 0 {
@@ -432,7 +437,7 @@ impl Callable for OutfFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         assert_ne!(0, scope.nargs());
 
         let result = scope.pop_integer();
@@ -485,12 +490,11 @@ impl Callable for SumFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         let mut result = 0;
         while scope.nargs() > 0 {
             let (i, pos) = scope.pop_integer_with_pos();
-            result =
-                value::add_integer(result, i).map_err(|e| CallError::EvalError(pos, e.message))?;
+            result = value::add_integer(result, i).map_err(|e| Error::EvalError(pos, e.message))?;
         }
         scope.return_integer(result)
     }
@@ -567,7 +571,7 @@ impl Callable for TypeCheckFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         assert_eq!(0, scope.nargs());
         scope.return_any(self.value.clone())
     }

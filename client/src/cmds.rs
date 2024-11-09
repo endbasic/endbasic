@@ -21,10 +21,8 @@ use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{
     ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
-use endbasic_core::exec::{Machine, Scope};
-use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
-};
+use endbasic_core::exec::{Error, Machine, Result, Scope};
+use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use endbasic_core::LineCol;
 use endbasic_std::console::{is_narrow, read_line, read_line_secure, refill_and_print, Console};
 use endbasic_std::storage::{FileAcls, Storage};
@@ -113,7 +111,7 @@ To create an account, use the SIGNUP command.",
     }
 
     /// Performs the login workflow against the server.
-    async fn do_login(&self, username: &str, password: &str) -> CallResult {
+    async fn do_login(&self, username: &str, password: &str) -> io::Result<()> {
         let response = self.service.borrow_mut().login(username, password).await?;
 
         {
@@ -142,24 +140,22 @@ impl Callable for LoginCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         if self.service.borrow().is_logged_in() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Cannot LOGIN again before LOGOUT".to_owned(),
-            )
-            .into());
+            return Err(scope.internal_error("Cannot LOGIN again before LOGOUT"));
         }
 
         let username = scope.pop_string();
         let password = if scope.nargs() == 0 {
-            read_line_secure(&mut *self.console.borrow_mut(), "Password: ").await?
+            read_line_secure(&mut *self.console.borrow_mut(), "Password: ")
+                .await
+                .map_err(|e| scope.io_error(e))?
         } else {
             debug_assert_eq!(1, scope.nargs());
             scope.pop_string()
         };
 
-        self.do_login(&username, &password).await
+        self.do_login(&username, &password).await.map_err(|e| scope.io_error(e))
     }
 }
 
@@ -201,41 +197,39 @@ impl Callable for LogoutCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
 
         if !self.service.borrow().is_logged_in() {
             // TODO(jmmv): Now that the access tokens are part of the service, we can easily allow
             // logging in more than once within a session.  Consider adding a LOGOUT command first
             // to make it easier to handle the CLOUD: drive on a second login.
-            return Err(
-                io::Error::new(io::ErrorKind::InvalidInput, "Must LOGIN first".to_owned()).into()
-            );
+            return Err(scope.internal_error("Must LOGIN first"));
         }
 
         let unmounted = match self.storage.borrow_mut().unmount("CLOUD") {
             Ok(()) => true,
             Err(e) if e.kind() == io::ErrorKind::NotFound => false,
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-                return Err(io::Error::new(
-                    e.kind(),
-                    "Cannot log out while the CLOUD drive is active".to_owned(),
-                )
-                .into())
+                return Err(scope.internal_error("Cannot log out while the CLOUD drive is active"));
             }
-            Err(e) => return Err(io::Error::new(e.kind(), format!("Cannot log out: {}", e)).into()),
+            Err(e) => {
+                return Err(
+                    scope.io_error(io::Error::new(e.kind(), format!("Cannot log out: {}", e)))
+                )
+            }
         };
 
-        self.service.borrow_mut().logout().await?;
+        self.service.borrow_mut().logout().await.map_err(|e| scope.io_error(e))?;
 
         {
             let mut console = self.console.borrow_mut();
-            console.print("")?;
+            console.print("").map_err(|e| scope.io_error(e))?;
             if unmounted {
-                console.print("    Unmounted CLOUD drive")?;
+                console.print("    Unmounted CLOUD drive").map_err(|e| scope.io_error(e))?;
             }
-            console.print("    Good bye!")?;
-            console.print("")?;
+            console.print("    Good bye!").map_err(|e| scope.io_error(e))?;
+            console.print("").map_err(|e| scope.io_error(e))?;
         }
 
         Ok(())
@@ -311,7 +305,7 @@ impl ShareCommand {
         acl_pos: LineCol,
         add: &mut FileAcls,
         remove: &mut FileAcls,
-    ) -> Result<(), CallError> {
+    ) -> Result<()> {
         let change = if acl.len() < 3 { String::new() } else { acl.split_off(acl.len() - 2) };
         let username = acl; // For clarity after splitting off the ACL change request.
         match (username, change.as_str()) {
@@ -320,7 +314,7 @@ impl ShareCommand {
             (username, "-r") if !username.is_empty() => remove.add_reader(username),
             (username, "-R") if !username.is_empty() => remove.add_reader(username),
             (username, change) => {
-                return Err(CallError::SyntaxError(
+                return Err(Error::SyntaxError(
                     acl_pos,
                     format!(
                         "Invalid ACL '{}{}': must be of the form \"username+r\" or \"username-r\"",
@@ -343,7 +337,7 @@ impl ShareCommand {
     }
 
     /// Fetches and prints the ACLs for `filename`.
-    async fn show_acls(&self, filename: &str) -> CallResult {
+    async fn show_acls(&self, filename: &str) -> io::Result<()> {
         let acls = self.storage.borrow().get_acls(filename).await?;
 
         let mut console = self.console.borrow_mut();
@@ -356,9 +350,7 @@ impl ShareCommand {
                 console.print(&format!("    {}", acl))?;
             }
         }
-        console.print("")?;
-
-        Ok(())
+        console.print("")
     }
 }
 
@@ -368,7 +360,7 @@ impl Callable for ShareCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_ne!(0, scope.nargs());
         let filename = scope.pop_string();
 
@@ -380,10 +372,14 @@ impl Callable for ShareCommand {
         }
 
         if add.is_empty() && remove.is_empty() {
-            return self.show_acls(&filename).await;
+            return self.show_acls(&filename).await.map_err(|e| scope.io_error(e));
         }
 
-        self.storage.borrow_mut().update_acls(&filename, &add, &remove).await?;
+        self.storage
+            .borrow_mut()
+            .update_acls(&filename, &add, &remove)
+            .await
+            .map_err(|e| scope.io_error(e))?;
 
         if Self::has_public_acl(&add) {
             let filename = match filename.split_once('/') {
@@ -392,7 +388,7 @@ impl Callable for ShareCommand {
             };
 
             let mut console = self.console.borrow_mut();
-            console.print("")?;
+            console.print("").map_err(|e| scope.io_error(e))?;
             refill_and_print(
                 &mut *console,
                 [
@@ -409,8 +405,9 @@ auto-run your public file by visiting:",
                     ),
                 ],
                 "    ",
-            )?;
-            console.print("")?;
+            )
+            .map_err(|e| scope.io_error(e))?;
+            console.print("").map_err(|e| scope.io_error(e))?;
         }
 
         Ok(())
@@ -418,7 +415,7 @@ auto-run your public file by visiting:",
 }
 
 /// Checks if a password is sufficiently complex and returns an error when it isn't.
-fn validate_password_complexity(password: &str) -> Result<(), &'static str> {
+fn validate_password_complexity(password: &str) -> std::result::Result<(), &'static str> {
     if password.len() < 8 {
         return Err("Must be at least 8 characters long");
     }
@@ -510,24 +507,25 @@ impl Callable for SignupCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let console = &mut *self.console.borrow_mut();
-        console.print("")?;
+        console.print("").map_err(|e| scope.io_error(e))?;
         refill_and_print(
             console,
             ["Let's gather some information to create your cloud account.",
 "You can abort this process at any time by hitting Ctrl+C and you will be given a chance to \
 review your inputs before creating the account."],
             "    ",
-        )?;
-        console.print("")?;
+        ).map_err(|e| scope.io_error(e))?;
+        console.print("").map_err(|e| scope.io_error(e))?;
 
-        let username = read_line(console, "Username: ", "", None).await?;
-        let password = Self::read_password(console).await?;
+        let username =
+            read_line(console, "Username: ", "", None).await.map_err(|e| scope.io_error(e))?;
+        let password = Self::read_password(console).await.map_err(|e| scope.io_error(e))?;
 
-        console.print("")?;
+        console.print("").map_err(|e| scope.io_error(e))?;
         refill_and_print(
             console,
             [
@@ -538,28 +536,34 @@ promotional email messages (like new release announcements) or not, and your sel
 have no adverse impact in the service you receive.",
             ],
             "    ",
-        )?;
-        console.print("")?;
+        )
+        .map_err(|e| scope.io_error(e))?;
+        console.print("").map_err(|e| scope.io_error(e))?;
 
-        let email = read_line(console, "Email address: ", "", None).await?;
+        let email =
+            read_line(console, "Email address: ", "", None).await.map_err(|e| scope.io_error(e))?;
         let promotional_email =
-            Self::read_bool(console, "Receive promotional email (y/N)? ", false).await?;
+            Self::read_bool(console, "Receive promotional email (y/N)? ", false)
+                .await
+                .map_err(|e| scope.io_error(e))?;
 
-        console.print("")?;
+        console.print("").map_err(|e| scope.io_error(e))?;
         refill_and_print(
             console,
             ["We are ready to go. Please review your answers before proceeding."],
             "    ",
-        )?;
-        console.print("")?;
+        )
+        .map_err(|e| scope.io_error(e))?;
+        console.print("").map_err(|e| scope.io_error(e))?;
 
-        console.print(&format!("Username: {}", username))?;
-        console.print(&format!("Email address: {}", email))?;
-        console.print(&format!(
-            "Promotional email: {}",
-            if promotional_email { "yes" } else { "no" }
-        ))?;
-        let proceed = Self::read_bool(console, "Continue (y/N)? ", false).await?;
+        console.print(&format!("Username: {}", username)).map_err(|e| scope.io_error(e))?;
+        console.print(&format!("Email address: {}", email)).map_err(|e| scope.io_error(e))?;
+        console
+            .print(&format!("Promotional email: {}", if promotional_email { "yes" } else { "no" }))
+            .map_err(|e| scope.io_error(e))?;
+        let proceed = Self::read_bool(console, "Continue (y/N)? ", false)
+            .await
+            .map_err(|e| scope.io_error(e))?;
         if !proceed {
             // TODO(jmmv): This should return an error of some form once we have error handling in
             // the language.
@@ -567,9 +571,9 @@ have no adverse impact in the service you receive.",
         }
 
         let request = SignupRequest { username, password, email, promotional_email };
-        self.service.borrow_mut().signup(&request).await?;
+        self.service.borrow_mut().signup(&request).await.map_err(|e| scope.io_error(e))?;
 
-        console.print("")?;
+        console.print("").map_err(|e| scope.io_error(e))?;
         refill_and_print(
             console,
             ["Your account has been created and is pending activation.",
@@ -578,8 +582,8 @@ in it to activate your account.  Make sure to check your spam folder.",
 "Once your account is activated, come back here and use LOGIN to get started!",
 "If you encounter any problems, please contact support@endbasic.dev."],
             "    ",
-        )?;
-        console.print("")?;
+        ).map_err(|e| scope.io_error(e))?;
+        console.print("").map_err(|e| scope.io_error(e))?;
 
         Ok(())
     }
@@ -715,7 +719,7 @@ mod tests {
             Err(io::Error::new(io::ErrorKind::PermissionDenied, "Unknown user")),
         );
         t.run(format!(r#"LOGIN "{}", "{}""#, "bad-user", "the-password"))
-            .expect_err("1:1: In call to LOGIN: Unknown user")
+            .expect_err("1:1: Unknown user")
             .check();
         t.get_service().borrow_mut().add_mock_login(
             "the-username",
@@ -723,7 +727,7 @@ mod tests {
             Err(io::Error::new(io::ErrorKind::PermissionDenied, "Invalid password")),
         );
         t.run(format!(r#"LOGIN "{}", "{}""#, "the-username", "bad-password"))
-            .expect_err("1:1: In call to LOGIN: Invalid password")
+            .expect_err("1:1: Invalid password")
             .check();
         assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
     }
@@ -739,7 +743,7 @@ mod tests {
         assert!(!t.get_storage().borrow().mounted().contains_key("CLOUD"));
         t.run(r#"LOGIN "the-username", "the-password": LOGIN "a", "b""#)
             .expect_access_token("random token")
-            .expect_err("1:39: In call to LOGIN: Cannot LOGIN again before LOGOUT")
+            .expect_err("1:39: Cannot LOGIN again before LOGOUT")
             .check();
         assert!(t.get_storage().borrow().mounted().contains_key("CLOUD"));
     }
@@ -799,7 +803,7 @@ mod tests {
         t.get_storage().borrow_mut().mount("CLOUD", "memory://").unwrap();
         t.get_storage().borrow_mut().cd("CLOUD:/").unwrap();
         t.run(r#"LOGOUT"#)
-            .expect_err("1:1: In call to LOGOUT: Cannot log out while the CLOUD drive is active")
+            .expect_err("1:1: Cannot log out while the CLOUD drive is active")
             .expect_access_token("$")
             .check();
         assert!(t.get_storage().borrow().mounted().contains_key("CLOUD"));
@@ -808,7 +812,7 @@ mod tests {
     #[test]
     fn test_logout_errors() {
         client_check_stmt_compilation_err("1:1: LOGOUT expected no arguments", r#"LOGOUT "a""#);
-        client_check_stmt_err("1:1: In call to LOGOUT: Must LOGIN first", r#"LOGOUT"#);
+        client_check_stmt_err("1:1: Must LOGIN first", r#"LOGOUT"#);
     }
 
     #[test]
@@ -967,7 +971,7 @@ mod tests {
             r#"SHARE "a", 3, "b""#,
         );
         client_check_stmt_err(
-            r#"1:1: In call to SHARE: 1:12: Invalid ACL 'foobar': must be of the form "username+r" or "username-r""#,
+            r#"1:12: Invalid ACL 'foobar': must be of the form "username+r" or "username-r""#,
             r#"SHARE "a", "foobar""#,
         );
     }
@@ -1135,7 +1139,7 @@ mod tests {
             .add_input_chars("true\n"); // Confirmation.
         let mut c = t.run("SIGNUP".to_owned());
         let output = flatten_output(c.take_captured_out());
-        c.expect_err("1:1: In call to SIGNUP: Some error").check();
+        c.expect_err("1:1: Some error").check();
 
         assert!(output.contains("Username: the-username"));
         assert!(output.contains("Email address: some@example.com"));

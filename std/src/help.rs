@@ -20,10 +20,8 @@ use crate::exec::CATEGORY;
 use async_trait::async_trait;
 use endbasic_core::ast::ExprType;
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{Machine, Scope};
-use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
-};
+use endbasic_core::exec::{Error, Machine, Result, Scope};
+use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder, Symbols};
 use endbasic_core::LineCol;
 use radix_trie::{Trie, TrieCommon};
 use std::borrow::Cow;
@@ -366,7 +364,7 @@ impl Topics {
     ///
     /// If `name` is not long enough to uniquely identify a topic or if the topic does not exist,
     /// returns an error.
-    fn find(&self, name: &str, pos: LineCol) -> Result<&dyn Topic, CallError> {
+    fn find(&self, name: &str, pos: LineCol) -> Result<&dyn Topic> {
         let key = name.to_ascii_uppercase();
 
         if let Some(topic) = self.0.get(&key) {
@@ -381,7 +379,7 @@ impl Topics {
                     _ => {
                         let completions: Vec<String> =
                             children.iter().map(|(name, _topic)| (*name).to_owned()).collect();
-                        Err(CallError::SyntaxError(
+                        Err(Error::SyntaxError(
                             pos,
                             format!(
                                 "Ambiguous help topic {}; candidates are: {}",
@@ -392,7 +390,7 @@ impl Topics {
                     }
                 }
             }
-            None => Err(CallError::SyntaxError(pos, format!("Unknown help topic {}", name))),
+            None => Err(Error::SyntaxError(pos, format!("Unknown help topic {}", name))),
         }
     }
 
@@ -488,31 +486,31 @@ impl Callable for HelpCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         let topics = Topics::new(machine.get_symbols());
 
         if scope.nargs() == 0 {
             let mut console = self.console.borrow_mut();
-            let previous = console.set_sync(false)?;
+            let previous = console.set_sync(false).map_err(|e| scope.io_error(e))?;
             let result = {
-                let mut pager = Pager::new(&mut *console)?;
+                let mut pager = Pager::new(&mut *console).map_err(|e| scope.io_error(e))?;
                 self.summary(&topics, &mut pager).await
             };
-            console.set_sync(previous)?;
-            result?;
+            console.set_sync(previous).map_err(|e| scope.io_error(e))?;
+            result.map_err(|e| scope.io_error(e))?;
         } else {
             debug_assert_eq!(1, scope.nargs());
             let (t, pos) = scope.pop_string_with_pos();
 
             let topic = topics.find(&t, pos)?;
             let mut console = self.console.borrow_mut();
-            let previous = console.set_sync(false)?;
+            let previous = console.set_sync(false).map_err(|e| scope.io_error(e))?;
             let result = {
-                let mut pager = Pager::new(&mut *console)?;
+                let mut pager = Pager::new(&mut *console).map_err(|e| scope.io_error(e))?;
                 topic.describe(&mut pager).await
             };
-            console.set_sync(previous)?;
-            result?;
+            console.set_sync(previous).map_err(|e| scope.io_error(e))?;
+            result.map_err(|e| scope.io_error(e))?;
         }
 
         Ok(())
@@ -527,7 +525,7 @@ pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
 #[cfg(test)]
 pub(crate) mod testutils {
     use super::*;
-    use endbasic_core::syms::{CallResult, Callable, CallableMetadata, CallableMetadataBuilder};
+    use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 
     /// A command that does nothing.
     pub(crate) struct DoNothingCommand {
@@ -574,7 +572,7 @@ Second paragraph of the extended description.",
             &self.metadata
         }
 
-        async fn exec(&self, _scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        async fn exec(&self, _scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
             Ok(())
         }
     }
@@ -625,7 +623,7 @@ Second paragraph of the extended description.",
             &self.metadata
         }
 
-        async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+        async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
             scope.return_string("irrelevant".to_owned())
         }
     }
@@ -942,7 +940,7 @@ This is the first and only topic with just one line.
             .add_callable(EmptyFunction::new_with_name("ZABC"))
             .add_callable(EmptyFunction::new_with_name("ZAABC"))
             .run(r#"help "za""#)
-            .expect_err("1:1: In call to HELP: 1:6: Ambiguous help topic za; candidates are: ZAABC$, ZAB, ZABC$")
+            .expect_err("1:6: Ambiguous help topic za; candidates are: ZAABC$, ZAB, ZABC$")
             .check();
     }
 
@@ -959,44 +957,30 @@ This is the first and only topic with just one line.
             .check();
         t.run(r#"HELP 3"#).expect_compilation_err("1:6: expected STRING but found INTEGER").check();
 
-        t.run(r#"HELP "lang%""#)
-            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic lang%")
-            .check();
+        t.run(r#"HELP "lang%""#).expect_err("1:6: Unknown help topic lang%").check();
 
-        t.run(r#"HELP "foo$""#)
-            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic foo$")
-            .check();
-        t.run(r#"HELP "foo""#)
-            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic foo")
-            .check();
+        t.run(r#"HELP "foo$""#).expect_err("1:6: Unknown help topic foo$").check();
+        t.run(r#"HELP "foo""#).expect_err("1:6: Unknown help topic foo").check();
 
-        t.run(r#"HELP "do_nothing$""#)
-            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic do_nothing$")
-            .check();
-        t.run(r#"HELP "empty?""#)
-            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic empty?")
-            .check();
+        t.run(r#"HELP "do_nothing$""#).expect_err("1:6: Unknown help topic do_nothing$").check();
+        t.run(r#"HELP "empty?""#).expect_err("1:6: Unknown help topic empty?").check();
 
         t.run(r#"topic = "foo$": HELP topic$"#)
-            .expect_err("1:17: In call to HELP: 1:22: Unknown help topic foo$")
+            .expect_err("1:22: Unknown help topic foo$")
             .expect_var("topic", "foo$")
             .check();
 
         let mut t = tester();
-        t.run(r#"HELP "undoc""#)
-            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic undoc")
-            .check();
+        t.run(r#"HELP "undoc""#).expect_err("1:6: Unknown help topic undoc").check();
         t.run(r#"undoc = 3: HELP "undoc""#)
-            .expect_err("1:12: In call to HELP: 1:17: Unknown help topic undoc")
+            .expect_err("1:17: Unknown help topic undoc")
             .expect_var("undoc", 3)
             .check();
 
         let mut t = tester();
-        t.run(r#"HELP "undoc""#)
-            .expect_err("1:1: In call to HELP: 1:6: Unknown help topic undoc")
-            .check();
+        t.run(r#"HELP "undoc""#).expect_err("1:6: Unknown help topic undoc").check();
         t.run(r#"DIM undoc(3): HELP "undoc""#)
-            .expect_err("1:15: In call to HELP: 1:20: Unknown help topic undoc")
+            .expect_err("1:20: Unknown help topic undoc")
             .expect_array("undoc", ExprType::Integer, &[3], vec![])
             .check();
     }

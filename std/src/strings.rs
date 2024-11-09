@@ -20,10 +20,8 @@ use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{
     AnyValueSyntax, ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
-use endbasic_core::exec::{Machine, Scope, ValueTag};
-use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
-};
+use endbasic_core::exec::{Error, Machine, Result, Scope, ValueTag};
+use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use std::borrow::Cow;
 use std::cmp::min;
 use std::convert::TryFrom;
@@ -42,7 +40,7 @@ pub fn format_boolean(b: bool) -> &'static str {
 }
 
 /// Parses a string `s` as a boolean.
-pub fn parse_boolean(s: &str) -> Result<bool, String> {
+pub fn parse_boolean(s: &str) -> std::result::Result<bool, String> {
     let raw = s.to_uppercase();
     if raw == "TRUE" || raw == "YES" || raw == "Y" {
         Ok(true)
@@ -63,7 +61,7 @@ pub fn format_double(d: f64) -> String {
 }
 
 /// Parses a string `s` as a double.
-pub fn parse_double(s: &str) -> Result<f64, String> {
+pub fn parse_double(s: &str) -> std::result::Result<f64, String> {
     match s.parse::<f64>() {
         Ok(d) => Ok(d),
         Err(_) => Err(format!("Invalid double-precision floating point literal {}", s)),
@@ -80,7 +78,7 @@ pub fn format_integer(i: i32) -> String {
 }
 
 /// Parses a string `s` as an integer.
-pub fn parse_integer(s: &str) -> Result<i32, String> {
+pub fn parse_integer(s: &str) -> std::result::Result<i32, String> {
     match s.parse::<i32>() {
         Ok(d) => Ok(d),
         Err(_) => Err(format!("Invalid integer literal {}", s)),
@@ -124,7 +122,7 @@ impl Callable for AscFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let (s, spos) = scope.pop_string_with_pos();
 
@@ -132,14 +130,14 @@ impl Callable for AscFunction {
         let ch = match chars.next() {
             Some(ch) => ch,
             None => {
-                return Err(CallError::SyntaxError(
+                return Err(Error::SyntaxError(
                     spos,
                     format!("Input string \"{}\" must be 1-character long", s),
                 ));
             }
         };
         if chars.next().is_some() {
-            return Err(CallError::SyntaxError(
+            return Err(Error::SyntaxError(
                 spos,
                 format!("Input string \"{}\" must be 1-character long", s),
             ));
@@ -191,21 +189,18 @@ impl Callable for ChrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let (i, ipos) = scope.pop_integer_with_pos();
 
         if i < 0 {
-            return Err(CallError::SyntaxError(
-                ipos,
-                format!("Character code {} must be positive", i),
-            ));
+            return Err(Error::SyntaxError(ipos, format!("Character code {} must be positive", i)));
         }
         let code = i as u32;
 
         match char::from_u32(code) {
             Some(ch) => scope.return_string(format!("{}", ch)),
-            None => Err(CallError::SyntaxError(ipos, format!("Invalid character code {}", code))),
+            None => Err(Error::SyntaxError(ipos, format!("Invalid character code {}", code))),
         }
     }
 }
@@ -257,13 +252,13 @@ impl Callable for LeftFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(2, scope.nargs());
         let s = scope.pop_string();
         let (n, npos) = scope.pop_integer_with_pos();
 
         if n < 0 {
-            Err(CallError::SyntaxError(npos, "n% cannot be negative".to_owned()))
+            Err(Error::SyntaxError(npos, "n% cannot be negative".to_owned()))
         } else {
             let n = min(s.len(), n as usize);
             scope.return_string(s[..n].to_owned())
@@ -302,12 +297,12 @@ impl Callable for LenFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let (s, spos) = scope.pop_string_with_pos();
 
         if s.len() > i32::MAX as usize {
-            Err(CallError::InternalError(spos, "String too long".to_owned()))
+            Err(Error::InternalError(spos, "String too long".to_owned()))
         } else {
             scope.return_integer(s.len() as i32)
         }
@@ -345,7 +340,7 @@ impl Callable for LtrimFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let s = scope.pop_string();
 
@@ -429,7 +424,7 @@ impl Callable for MidFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert!((2..=3).contains(&scope.nargs()));
         let s = scope.pop_string();
         let (start, startpos) = scope.pop_integer_with_pos();
@@ -437,16 +432,13 @@ impl Callable for MidFunction {
         debug_assert_eq!(0, scope.nargs());
 
         if start < 0 {
-            return Err(CallError::SyntaxError(startpos, "start% cannot be negative".to_owned()));
+            return Err(Error::SyntaxError(startpos, "start% cannot be negative".to_owned()));
         }
         let start = min(s.len(), start as usize);
 
         let end = if let Some((length, lengthpos)) = lengtharg {
             if length < 0 {
-                return Err(CallError::SyntaxError(
-                    lengthpos,
-                    "length% cannot be negative".to_owned(),
-                ));
+                return Err(Error::SyntaxError(lengthpos, "length% cannot be negative".to_owned()));
             }
             min(start + (length as usize), s.len())
         } else {
@@ -504,13 +496,13 @@ impl Callable for RightFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(2, scope.nargs());
         let s = scope.pop_string();
         let (n, npos) = scope.pop_integer_with_pos();
 
         if n < 0 {
-            Err(CallError::SyntaxError(npos, "n% cannot be negative".to_owned()))
+            Err(Error::SyntaxError(npos, "n% cannot be negative".to_owned()))
         } else {
             let n = min(s.len(), n as usize);
             scope.return_string(s[s.len() - n..].to_owned())
@@ -549,7 +541,7 @@ impl Callable for RtrimFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let s = scope.pop_string();
 
@@ -597,7 +589,7 @@ impl Callable for StrFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(2, scope.nargs());
         match scope.pop_value_tag() {
             ValueTag::Boolean => {
@@ -713,14 +705,8 @@ mod tests {
         check_expr_compilation_error("1:10: ASC expected char$", r#"ASC()"#);
         check_expr_compilation_error("1:14: expected STRING but found INTEGER", r#"ASC(3)"#);
         check_expr_compilation_error("1:10: ASC expected char$", r#"ASC("a", 1)"#);
-        check_expr_error(
-            "1:10: In call to ASC: 1:14: Input string \"\" must be 1-character long",
-            r#"ASC("")"#,
-        );
-        check_expr_error(
-            "1:10: In call to ASC: 1:14: Input string \"ab\" must be 1-character long",
-            r#"ASC("ab")"#,
-        );
+        check_expr_error("1:14: Input string \"\" must be 1-character long", r#"ASC("")"#);
+        check_expr_error("1:14: Input string \"ab\" must be 1-character long", r#"ASC("ab")"#);
     }
 
     #[test]
@@ -735,14 +721,8 @@ mod tests {
         check_expr_compilation_error("1:10: CHR expected code%", r#"CHR()"#);
         check_expr_compilation_error("1:14: BOOLEAN is not a number", r#"CHR(FALSE)"#);
         check_expr_compilation_error("1:10: CHR expected code%", r#"CHR("a", 1)"#);
-        check_expr_error(
-            "1:10: In call to CHR: 1:14: Character code -1 must be positive",
-            r#"CHR(-1)"#,
-        );
-        check_expr_error(
-            "1:10: In call to CHR: 1:14: Invalid character code 55296",
-            r#"CHR(55296)"#,
-        );
+        check_expr_error("1:14: Character code -1 must be positive", r#"CHR(-1)"#);
+        check_expr_error("1:14: Invalid character code 55296", r#"CHR(55296)"#);
     }
 
     #[test]
@@ -765,10 +745,7 @@ mod tests {
         check_expr_compilation_error("1:10: LEFT expected expr$, n%", r#"LEFT("", 1, 2)"#);
         check_expr_compilation_error("1:15: expected STRING but found INTEGER", r#"LEFT(1, 2)"#);
         check_expr_compilation_error("1:19: STRING is not a number", r#"LEFT("", "")"#);
-        check_expr_error(
-            "1:10: In call to LEFT: 1:25: n% cannot be negative",
-            r#"LEFT("abcdef", -5)"#,
-        );
+        check_expr_error("1:25: n% cannot be negative", r#"LEFT("abcdef", -5)"#);
     }
 
     #[test]
@@ -831,14 +808,8 @@ mod tests {
         );
         check_expr_compilation_error("1:19: STRING is not a number", r#"MID(" ", "1", 2)"#);
         check_expr_compilation_error("1:22: STRING is not a number", r#"MID(" ", 1, "2")"#);
-        check_expr_error(
-            "1:10: In call to MID: 1:24: start% cannot be negative",
-            r#"MID("abcdef", -5, 10)"#,
-        );
-        check_expr_error(
-            "1:10: In call to MID: 1:27: length% cannot be negative",
-            r#"MID("abcdef", 3, -5)"#,
-        );
+        check_expr_error("1:24: start% cannot be negative", r#"MID("abcdef", -5, 10)"#);
+        check_expr_error("1:27: length% cannot be negative", r#"MID("abcdef", 3, -5)"#);
     }
 
     #[test]
@@ -855,10 +826,7 @@ mod tests {
         check_expr_compilation_error("1:10: RIGHT expected expr$, n%", r#"RIGHT("", 1, 2)"#);
         check_expr_compilation_error("1:16: expected STRING but found INTEGER", r#"RIGHT(1, 2)"#);
         check_expr_compilation_error("1:20: STRING is not a number", r#"RIGHT("", "")"#);
-        check_expr_error(
-            "1:10: In call to RIGHT: 1:26: n% cannot be negative",
-            r#"RIGHT("abcdef", -5)"#,
-        );
+        check_expr_error("1:26: n% cannot be negative", r#"RIGHT("abcdef", -5)"#);
     }
 
     #[test]
