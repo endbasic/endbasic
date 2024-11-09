@@ -18,16 +18,13 @@
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{Clearable, Machine, Scope};
-use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Symbols,
-};
+use endbasic_core::exec::{Clearable, Error, Machine, Result, Scope};
+use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder, Symbols};
 use endbasic_core::LineCol;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
-use std::result::Result;
 
 mod fakes;
 pub(crate) use fakes::{MockPins, NoopPins};
@@ -44,12 +41,12 @@ pub struct Pin(pub u8);
 
 impl Pin {
     /// Creates a new pin number from an EndBASIC integer value.
-    fn from_i32(i: i32, pos: LineCol) -> Result<Self, CallError> {
+    fn from_i32(i: i32, pos: LineCol) -> Result<Self> {
         if i < 0 {
-            return Err(CallError::SyntaxError(pos, format!("Pin number {} must be positive", i)));
+            return Err(Error::SyntaxError(pos, format!("Pin number {} must be positive", i)));
         }
         if i > u8::MAX as i32 {
-            return Err(CallError::SyntaxError(pos, format!("Pin number {} is too large", i)));
+            return Err(Error::SyntaxError(pos, format!("Pin number {} is too large", i)));
         }
         Ok(Self(i as u8))
     }
@@ -73,13 +70,13 @@ pub enum PinMode {
 
 impl PinMode {
     /// Obtains a `PinMode` from a value.
-    fn parse(s: &str, pos: LineCol) -> Result<PinMode, CallError> {
+    fn parse(s: &str, pos: LineCol) -> Result<PinMode> {
         match s.to_ascii_uppercase().as_ref() {
             "IN" => Ok(PinMode::In),
             "IN-PULL-UP" => Ok(PinMode::InPullUp),
             "IN-PULL-DOWN" => Ok(PinMode::InPullDown),
             "OUT" => Ok(PinMode::Out),
-            s => Err(CallError::SyntaxError(pos, format!("Unknown pin mode {}", s))),
+            s => Err(Error::SyntaxError(pos, format!("Unknown pin mode {}", s))),
         }
     }
 }
@@ -180,7 +177,7 @@ impl Callable for GpioSetupCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(2, scope.nargs());
         let pin = {
             let (i, pos) = scope.pop_integer_with_pos();
@@ -192,8 +189,8 @@ impl Callable for GpioSetupCommand {
         };
 
         match MockPins::try_new(machine.get_mut_symbols()) {
-            Some(mut pins) => pins.setup(pin, mode)?,
-            None => self.pins.borrow_mut().setup(pin, mode)?,
+            Some(mut pins) => pins.setup(pin, mode).map_err(|e| scope.io_error(e))?,
+            None => self.pins.borrow_mut().setup(pin, mode).map_err(|e| scope.io_error(e))?,
         };
         Ok(())
     }
@@ -242,11 +239,11 @@ impl Callable for GpioClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         if scope.nargs() == 0 {
             match MockPins::try_new(machine.get_mut_symbols()) {
-                Some(mut pins) => pins.clear_all()?,
-                None => self.pins.borrow_mut().clear_all()?,
+                Some(mut pins) => pins.clear_all().map_err(|e| scope.io_error(e))?,
+                None => self.pins.borrow_mut().clear_all().map_err(|e| scope.io_error(e))?,
             };
         } else {
             debug_assert_eq!(1, scope.nargs());
@@ -256,8 +253,8 @@ impl Callable for GpioClearCommand {
             };
 
             match MockPins::try_new(machine.get_mut_symbols()) {
-                Some(mut pins) => pins.clear(pin)?,
-                None => self.pins.borrow_mut().clear(pin)?,
+                Some(mut pins) => pins.clear(pin).map_err(|e| scope.io_error(e))?,
+                None => self.pins.borrow_mut().clear(pin).map_err(|e| scope.io_error(e))?,
             };
         }
 
@@ -304,7 +301,7 @@ impl Callable for GpioReadFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let pin = {
             let (i, pos) = scope.pop_integer_with_pos();
@@ -312,8 +309,8 @@ impl Callable for GpioReadFunction {
         };
 
         let value = match MockPins::try_new(machine.get_mut_symbols()) {
-            Some(mut pins) => pins.read(pin)?,
-            None => self.pins.borrow_mut().read(pin)?,
+            Some(mut pins) => pins.read(pin).map_err(|e| scope.io_error(e))?,
+            None => self.pins.borrow_mut().read(pin).map_err(|e| scope.io_error(e))?,
         };
         scope.return_boolean(value)
     }
@@ -366,7 +363,7 @@ impl Callable for GpioWriteCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(2, scope.nargs());
         let pin = {
             let (i, pos) = scope.pop_integer_with_pos();
@@ -375,8 +372,8 @@ impl Callable for GpioWriteCommand {
         let value = scope.pop_boolean();
 
         match MockPins::try_new(machine.get_mut_symbols()) {
-            Some(mut pins) => pins.write(pin, value)?,
-            None => self.pins.borrow_mut().write(pin, value)?,
+            Some(mut pins) => pins.write(pin, value).map_err(|e| scope.io_error(e))?,
+            None => self.pins.borrow_mut().write(pin, value).map_err(|e| scope.io_error(e))?,
         };
         Ok(())
     }
@@ -461,20 +458,11 @@ mod tests {
     /// features to validate operation.
     #[test]
     fn test_real_backend() {
-        check_stmt_err(
-            "1:1: In call to GPIO_SETUP: GPIO backend not compiled in",
-            "GPIO_SETUP 0, \"IN\"",
-        );
-        check_stmt_err("1:1: In call to GPIO_CLEAR: GPIO backend not compiled in", "GPIO_CLEAR");
-        check_stmt_err("1:1: In call to GPIO_CLEAR: GPIO backend not compiled in", "GPIO_CLEAR 0");
-        check_expr_error(
-            "1:10: In call to GPIO_READ: GPIO backend not compiled in",
-            "GPIO_READ(0)",
-        );
-        check_stmt_err(
-            "1:1: In call to GPIO_WRITE: GPIO backend not compiled in",
-            "GPIO_WRITE 0, TRUE",
-        );
+        check_stmt_err("1:1: GPIO backend not compiled in", "GPIO_SETUP 0, \"IN\"");
+        check_stmt_err("1:1: GPIO backend not compiled in", "GPIO_CLEAR");
+        check_stmt_err("1:1: GPIO backend not compiled in", "GPIO_CLEAR 0");
+        check_expr_error("1:10: GPIO backend not compiled in", "GPIO_READ(0)");
+        check_stmt_err("1:1: GPIO backend not compiled in", "GPIO_WRITE 0, TRUE");
     }
 
     #[test]
@@ -509,16 +497,9 @@ mod tests {
         check_stmt_compilation_err("1:15: expected STRING but found INTEGER", r#"GPIO_SETUP 1; 2"#);
         check_stmt_compilation_err("1:1: GPIO_SETUP expected pin%, mode$", r#"GPIO_SETUP 1, 2, 3"#);
 
-        check_pin_validation(
-            "1:12: ",
-            "1:1: In call to GPIO_SETUP: 1:12: ",
-            r#"GPIO_SETUP _PIN_, "IN""#,
-        );
+        check_pin_validation("1:12: ", "1:12: ", r#"GPIO_SETUP _PIN_, "IN""#);
 
-        check_stmt_err(
-            r#"1:1: In call to GPIO_SETUP: 1:15: Unknown pin mode IN-OUT"#,
-            r#"GPIO_SETUP 1, "IN-OUT""#,
-        );
+        check_stmt_err(r#"1:15: Unknown pin mode IN-OUT"#, r#"GPIO_SETUP 1, "IN-OUT""#);
     }
 
     #[test]
@@ -537,7 +518,7 @@ mod tests {
         check_stmt_compilation_err("1:1: GPIO_CLEAR expected <> | <pin%>", r#"GPIO_CLEAR 1,"#);
         check_stmt_compilation_err("1:1: GPIO_CLEAR expected <> | <pin%>", r#"GPIO_CLEAR 1, 2"#);
 
-        check_pin_validation("1:12: ", "1:1: In call to GPIO_CLEAR: 1:12: ", r#"GPIO_CLEAR _PIN_"#);
+        check_pin_validation("1:12: ", "1:12: ", r#"GPIO_CLEAR _PIN_"#);
     }
 
     #[test]
@@ -557,11 +538,7 @@ mod tests {
         check_expr_compilation_error("1:10: GPIO_READ expected pin%", r#"GPIO_READ()"#);
         check_expr_compilation_error("1:10: GPIO_READ expected pin%", r#"GPIO_READ(1, 2)"#);
 
-        check_pin_validation(
-            "1:15: ",
-            "1:5: In call to GPIO_READ: 1:15: ",
-            r#"v = GPIO_READ(_PIN_)"#,
-        );
+        check_pin_validation("1:15: ", "1:15: ", r#"v = GPIO_READ(_PIN_)"#);
     }
 
     #[test]
@@ -582,11 +559,7 @@ mod tests {
             r#"GPIO_WRITE 1; TRUE"#,
         );
 
-        check_pin_validation(
-            "1:12: ",
-            "1:1: In call to GPIO_WRITE: 1:12: ",
-            r#"GPIO_WRITE _PIN_, TRUE"#,
-        );
+        check_pin_validation("1:12: ", "1:12: ", r#"GPIO_WRITE _PIN_, TRUE"#);
 
         check_stmt_compilation_err(
             "1:15: expected BOOLEAN but found INTEGER",

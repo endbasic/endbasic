@@ -18,10 +18,8 @@
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, ExprType, Value, VarRef};
 use endbasic_core::compiler::{ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax};
-use endbasic_core::exec::{Clearable, Machine, Scope};
-use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
-};
+use endbasic_core::exec::{Clearable, Error, Machine, Result, Scope};
+use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -85,7 +83,7 @@ impl Callable for ReadCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         debug_assert_ne!(0, scope.nargs());
 
         let mut vrefs = Vec::with_capacity(scope.nargs());
@@ -99,7 +97,7 @@ impl Callable for ReadCommand {
                 let data = machine.get_data();
                 debug_assert!(*index <= data.len());
                 if *index == data.len() {
-                    return Err(CallError::InternalError(
+                    return Err(Error::InternalError(
                         pos,
                         format!("Out of data reading into {}", vname),
                     ));
@@ -119,7 +117,7 @@ impl Callable for ReadCommand {
             machine
                 .get_mut_symbols()
                 .set_var(&vref, datum)
-                .map_err(|e| CallError::SyntaxError(pos, format!("{}", e)))?;
+                .map_err(|e| Error::SyntaxError(pos, format!("{}", e)))?;
         }
 
         Ok(())
@@ -156,7 +154,7 @@ impl Callable for RestoreCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
         *self.index.borrow_mut() = 0;
         Ok(())
@@ -254,7 +252,7 @@ mod tests {
     fn test_read_out_of_data() {
         Tester::default()
             .run(r#"DATA 5: READ i: READ j"#)
-            .expect_err("1:17: In call to READ: 1:22: Out of data reading into J")
+            .expect_err("1:22: Out of data reading into J")
             .expect_var("I", Value::Integer(5))
             .check();
     }
@@ -278,7 +276,7 @@ mod tests {
         let mut t = Tester::default();
         t.run(r#"DATA 1: READ i, j"#)
             .expect_var("i", Value::Integer(1))
-            .expect_err("1:9: In call to READ: 1:17: Out of data reading into J")
+            .expect_err("1:17: Out of data reading into J")
             .check();
 
         // This represents a second invocation in the REPL, which in principle should work to avoid
@@ -289,7 +287,7 @@ mod tests {
         // extra hooks into `machine.exec()` just for this single use case seems overkill.
         t.run(r#"DATA 1, 2: READ i, j"#)
             .expect_var("i", Value::Integer(2))
-            .expect_err("1:12: In call to READ: 1:20: Out of data reading into J")
+            .expect_err("1:20: Out of data reading into J")
             .check();
 
         // Running `CLEAR` explicitly should resolve the issue described above and give us the
@@ -309,12 +307,13 @@ mod tests {
         check_stmt_compilation_err("1:1: READ expected vref1[, .., vrefN]", "READ i; j");
 
         check_stmt_err(
-            "1:11: In call to READ: 1:16: Cannot assign value of type STRING to variable of type INTEGER",
+            "1:16: Cannot assign value of type STRING to variable of type INTEGER",
             "DATA \"x\": READ i",
         );
         check_stmt_err(
-            "1:13: In call to READ: 1:18: Cannot assign value of type BOOLEAN to variable of type INTEGER",
-            "DATA FALSE: READ s%");
+            "1:18: Cannot assign value of type BOOLEAN to variable of type INTEGER",
+            "DATA FALSE: READ s%",
+        );
     }
 
     #[test]

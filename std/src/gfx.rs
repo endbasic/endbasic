@@ -19,10 +19,8 @@ use crate::console::{Console, PixelsXY};
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{Machine, Scope};
-use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
-};
+use endbasic_core::exec::{Error, Machine, Result, Scope};
+use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use endbasic_core::LineCol;
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -37,31 +35,24 @@ the commands described in HELP \"CONSOLE\", and the pixel-based system, used by 
 described in this section.";
 
 /// Parses an expression that represents a single coordinate.
-fn parse_coordinate(i: i32, pos: LineCol) -> Result<i16, CallError> {
+fn parse_coordinate(i: i32, pos: LineCol) -> Result<i16> {
     match i16::try_from(i) {
         Ok(i) => Ok(i),
-        Err(_) => Err(CallError::SyntaxError(pos, format!("Coordinate {} out of range", i))),
+        Err(_) => Err(Error::SyntaxError(pos, format!("Coordinate {} out of range", i))),
     }
 }
 
 /// Parses a pair of expressions that represent an (x,y) coordinate pair.
-fn parse_coordinates(
-    xvalue: i32,
-    xpos: LineCol,
-    yvalue: i32,
-    ypos: LineCol,
-) -> Result<PixelsXY, CallError> {
+fn parse_coordinates(xvalue: i32, xpos: LineCol, yvalue: i32, ypos: LineCol) -> Result<PixelsXY> {
     Ok(PixelsXY { x: parse_coordinate(xvalue, xpos)?, y: parse_coordinate(yvalue, ypos)? })
 }
 
 /// Parses an expression that represents a radius.
-fn parse_radius(i: i32, pos: LineCol) -> Result<u16, CallError> {
+fn parse_radius(i: i32, pos: LineCol) -> Result<u16> {
     match u16::try_from(i) {
         Ok(i) => Ok(i),
-        Err(_) if i < 0 => {
-            Err(CallError::SyntaxError(pos, format!("Radius {} must be positive", i)))
-        }
-        Err(_) => Err(CallError::SyntaxError(pos, format!("Radius {} out of range", i))),
+        Err(_) if i < 0 => Err(Error::SyntaxError(pos, format!("Radius {} must be positive", i))),
+        Err(_) => Err(Error::SyntaxError(pos, format!("Radius {} out of range", i))),
     }
 }
 
@@ -120,7 +111,7 @@ impl Callable for GfxCircleCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(3, scope.nargs());
         let (xvalue, xpos) = scope.pop_integer_with_pos();
         let (yvalue, ypos) = scope.pop_integer_with_pos();
@@ -129,7 +120,7 @@ impl Callable for GfxCircleCommand {
         let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
         let r = parse_radius(rvalue, rpos)?;
 
-        self.console.borrow_mut().draw_circle(xy, r)?;
+        self.console.borrow_mut().draw_circle(xy, r).map_err(|e| scope.io_error(e))?;
         Ok(())
     }
 }
@@ -188,7 +179,7 @@ impl Callable for GfxCirclefCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(3, scope.nargs());
         let (xvalue, xpos) = scope.pop_integer_with_pos();
         let (yvalue, ypos) = scope.pop_integer_with_pos();
@@ -197,7 +188,7 @@ impl Callable for GfxCirclefCommand {
         let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
         let r = parse_radius(rvalue, rpos)?;
 
-        self.console.borrow_mut().draw_circle_filled(xy, r)?;
+        self.console.borrow_mut().draw_circle_filled(xy, r).map_err(|e| scope.io_error(e))?;
         Ok(())
     }
 }
@@ -232,9 +223,9 @@ impl Callable for GfxHeightFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
-        let size = self.console.borrow().size_pixels()?;
+        let size = self.console.borrow().size_pixels().map_err(|e| scope.io_error(e))?;
         scope.return_integer(i32::from(size.height))
     }
 }
@@ -300,7 +291,7 @@ impl Callable for GfxLineCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(4, scope.nargs());
         let (x1value, x1pos) = scope.pop_integer_with_pos();
         let (y1value, y1pos) = scope.pop_integer_with_pos();
@@ -310,7 +301,7 @@ impl Callable for GfxLineCommand {
         let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
 
-        self.console.borrow_mut().draw_line(x1y1, x2y2)?;
+        self.console.borrow_mut().draw_line(x1y1, x2y2).map_err(|e| scope.io_error(e))?;
         Ok(())
     }
 }
@@ -362,14 +353,14 @@ impl Callable for GfxPixelCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(2, scope.nargs());
         let (xvalue, xpos) = scope.pop_integer_with_pos();
         let (yvalue, ypos) = scope.pop_integer_with_pos();
 
         let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
 
-        self.console.borrow_mut().draw_pixel(xy)?;
+        self.console.borrow_mut().draw_pixel(xy).map_err(|e| scope.io_error(e))?;
         Ok(())
     }
 }
@@ -436,7 +427,7 @@ impl Callable for GfxRectCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(4, scope.nargs());
         let (x1value, x1pos) = scope.pop_integer_with_pos();
         let (y1value, y1pos) = scope.pop_integer_with_pos();
@@ -446,7 +437,7 @@ impl Callable for GfxRectCommand {
         let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
 
-        self.console.borrow_mut().draw_rect(x1y1, x2y2)?;
+        self.console.borrow_mut().draw_rect(x1y1, x2y2).map_err(|e| scope.io_error(e))?;
         Ok(())
     }
 }
@@ -512,7 +503,7 @@ impl Callable for GfxRectfCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(4, scope.nargs());
         let (x1value, x1pos) = scope.pop_integer_with_pos();
         let (y1value, y1pos) = scope.pop_integer_with_pos();
@@ -522,7 +513,7 @@ impl Callable for GfxRectfCommand {
         let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
         let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
 
-        self.console.borrow_mut().draw_rect_filled(x1y1, x2y2)?;
+        self.console.borrow_mut().draw_rect_filled(x1y1, x2y2).map_err(|e| scope.io_error(e))?;
         Ok(())
     }
 }
@@ -580,9 +571,9 @@ impl Callable for GfxSyncCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         if scope.nargs() == 0 {
-            self.console.borrow_mut().sync_now()?;
+            self.console.borrow_mut().sync_now().map_err(|e| scope.io_error(e))?;
             Ok(())
         } else {
             debug_assert_eq!(1, scope.nargs());
@@ -590,11 +581,11 @@ impl Callable for GfxSyncCommand {
 
             let mut console = self.console.borrow_mut();
             if enabled {
-                console.show_cursor()?;
+                console.show_cursor().map_err(|e| scope.io_error(e))?;
             } else {
-                console.hide_cursor()?;
+                console.hide_cursor().map_err(|e| scope.io_error(e))?;
             }
-            console.set_sync(enabled)?;
+            console.set_sync(enabled).map_err(|e| scope.io_error(e))?;
             Ok(())
         }
     }
@@ -630,9 +621,9 @@ impl Callable for GfxWidthFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
-        let size = self.console.borrow().size_pixels()?;
+        let size = self.console.borrow().size_pixels().map_err(|e| scope.io_error(e))?;
         scope.return_integer(i32::from(size.width))
     }
 }
@@ -668,7 +659,7 @@ mod tests {
         for args in &["-40000, 1, 1, 1", "1, -40000, 1, 1", "1, 1, -40000, 1", "1, 1, 1, -40000"] {
             let pos = name.len() + 1 + args.find('-').unwrap() + 1;
             check_stmt_err(
-                format!("1:1: In call to {}: 1:{}: Coordinate -40000 out of range", name, pos),
+                format!("1:{}: Coordinate -40000 out of range", pos),
                 &format!("{} {}", name, args),
             );
         }
@@ -676,7 +667,7 @@ mod tests {
         for args in &["40000, 1, 1, 1", "1, 40000, 1, 1", "1, 1, 40000, 1", "1, 1, 1, 40000"] {
             let pos = name.len() + 1 + args.find('4').unwrap() + 1;
             check_stmt_err(
-                format!("1:1: In call to {}: 1:{}: Coordinate 40000 out of range", name, pos),
+                format!("1:{}: Coordinate 40000 out of range", pos),
                 &format!("{} {}", name, args),
             );
         }
@@ -700,28 +691,24 @@ mod tests {
         for args in &["-40000, 1, 1", "1, -40000, 1"] {
             let pos = name.len() + 1 + args.find('-').unwrap() + 1;
             check_stmt_err(
-                format!("1:1: In call to {}: 1:{}: Coordinate -40000 out of range", name, pos),
+                format!("1:{}: Coordinate -40000 out of range", pos),
                 &format!("{} {}", name, args),
             );
         }
         check_stmt_err(
-            format!(
-                "1:1: In call to {}: 1:{}: Radius -40000 must be positive",
-                name,
-                name.len() + 8
-            ),
+            format!("1:{}: Radius -40000 must be positive", name.len() + 8),
             &format!("{} 1, 1, -40000", name),
         );
 
         for args in &["40000, 1, 1", "1, 40000, 1"] {
             let pos = name.len() + 1 + args.find('4').unwrap() + 1;
             check_stmt_err(
-                format!("1:1: In call to {}: 1:{}: Coordinate 40000 out of range", name, pos),
+                format!("1:{}: Coordinate 40000 out of range", pos),
                 &format!("{} {}", name, args),
             );
         }
         check_stmt_err(
-            format!("1:1: In call to {}: 1:{}: Radius 80000 out of range", name, name.len() + 8),
+            format!("1:{}: Radius 80000 out of range", name.len() + 8),
             &format!("{} 1, 1, 80000", name),
         );
 
@@ -732,7 +719,7 @@ mod tests {
         }
 
         check_stmt_err(
-            format!("1:1: In call to {}: 1:{}: Radius -1 must be positive", name, name.len() + 8),
+            format!("1:{}: Radius -1 must be positive", name.len() + 8),
             &format!("{} 1, 1, -1", name),
         );
     }
@@ -792,10 +779,7 @@ mod tests {
         t.get_console().borrow_mut().set_size_pixels(SizeInPixels::new(1, 768));
         t.run("result = GFX_HEIGHT").expect_var("result", 768i32).check();
 
-        check_expr_error(
-            "1:10: In call to GFX_HEIGHT: Graphical console size not yet set",
-            "GFX_HEIGHT",
-        );
+        check_expr_error("1:10: Graphical console size not yet set", "GFX_HEIGHT");
 
         check_expr_compilation_error("1:10: GFX_HEIGHT expected no arguments", "GFX_HEIGHT()");
         check_expr_compilation_error("1:10: GFX_HEIGHT expected no arguments", "GFX_HEIGHT(1)");
@@ -851,10 +835,7 @@ mod tests {
 
         for cmd in &["GFX_PIXEL -40000, 1", "GFX_PIXEL 1, -40000"] {
             check_stmt_err(
-                format!(
-                    "1:1: In call to GFX_PIXEL: 1:{}: Coordinate -40000 out of range",
-                    cmd.find('-').unwrap() + 1
-                ),
+                format!("1:{}: Coordinate -40000 out of range", cmd.find('-').unwrap() + 1),
                 cmd,
             );
         }
@@ -938,10 +919,7 @@ mod tests {
         t.get_console().borrow_mut().set_size_pixels(SizeInPixels::new(12345, 1));
         t.run("result = GFX_WIDTH").expect_var("result", 12345i32).check();
 
-        check_expr_error(
-            "1:10: In call to GFX_WIDTH: Graphical console size not yet set",
-            "GFX_WIDTH",
-        );
+        check_expr_error("1:10: Graphical console size not yet set", "GFX_WIDTH");
 
         check_expr_compilation_error("1:10: GFX_WIDTH expected no arguments", "GFX_WIDTH()");
         check_expr_compilation_error("1:10: GFX_WIDTH expected no arguments", "GFX_WIDTH(1)");

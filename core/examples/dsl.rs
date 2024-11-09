@@ -24,10 +24,8 @@
 use async_trait::async_trait;
 use endbasic_core::ast::ExprType;
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{Machine, Scope, StopReason};
-use endbasic_core::syms::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
-};
+use endbasic_core::exec::{Error, Machine, Result, Scope, StopReason};
+use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use futures_lite::future::block_on;
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -77,7 +75,7 @@ impl Callable for NumLightsFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
         let num = self.lights.borrow().len();
         assert!(num <= i32::MAX as usize, "Ended up with too many lights");
@@ -117,20 +115,17 @@ impl Callable for SwitchLightCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> CallResult {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let (i, ipos) = scope.pop_integer_with_pos();
 
         let lights = &mut *self.lights.borrow_mut();
         if i < 1 {
-            return Err(CallError::SyntaxError(
-                ipos,
-                "Light id cannot be zero or negative".to_owned(),
-            ));
+            return Err(Error::SyntaxError(ipos, "Light id cannot be zero or negative".to_owned()));
         }
         let i = i as usize;
         if i > lights.len() {
-            return Err(CallError::SyntaxError(ipos, "Light id out of range".to_owned()));
+            return Err(Error::SyntaxError(ipos, "Light id out of range".to_owned()));
         }
         if lights[i - 1] {
             println!("Turning light {} off", i);

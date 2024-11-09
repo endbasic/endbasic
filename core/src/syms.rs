@@ -16,57 +16,16 @@
 //! Symbol definitions and symbols table representation.
 
 use crate::ast::{ExprType, Value, VarRef};
-use crate::compiler::{self, CallableSyntax, RepeatedSyntax, SingularArgSyntax};
+use crate::compiler::{CallableSyntax, RepeatedSyntax, SingularArgSyntax};
 use crate::exec::{self, Machine, Scope};
-use crate::reader::LineCol;
-use crate::value::{Error, Result};
+use crate::value;
 use async_trait::async_trait;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
-use std::io;
 use std::mem;
 use std::rc::Rc;
 use std::str::Lines;
-
-/// Command or function execution errors.
-///
-/// These are separate from the more generic `Error` type because they are not annotated with the
-/// specific callable that triggered the error.  We add such annotation once we capture the error
-/// within the evaluation logic.
-#[derive(Debug)]
-pub enum CallError {
-    /// Error while evaluating input arguments.
-    EvalError(LineCol, String),
-
-    /// Any other error not representable by other values.
-    InternalError(LineCol, String),
-
-    /// I/O error during execution.
-    IoError(io::Error),
-
-    /// Hack to support errors that arise from within a program that is `RUN`.
-    // TODO(jmmv): Consider unifying `CallError` with `exec::Error`.
-    NestedError(exec::Error),
-
-    /// A specific parameter had an invalid value.
-    SyntaxError(LineCol, String),
-}
-
-impl From<io::Error> for CallError {
-    fn from(e: io::Error) -> Self {
-        Self::IoError(e)
-    }
-}
-
-impl From<compiler::Error> for CallError {
-    fn from(value: compiler::Error) -> Self {
-        Self::NestedError(exec::Error::CompilerError(value))
-    }
-}
-
-/// Result for callable execution return values.
-pub type CallResult = std::result::Result<(), CallError>;
 
 /// The key of a symbol in the symbols table.
 #[derive(Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
@@ -126,11 +85,11 @@ impl Array {
     }
 
     /// Validates that the subscript `i` is in the `[0,max)` range and converts it to an `usize`.
-    fn validate_subscript(i: i32, max: usize) -> Result<usize> {
+    fn validate_subscript(i: i32, max: usize) -> value::Result<usize> {
         if i < 0 {
-            Err(Error::new(format!("Subscript {} cannot be negative", i)))
+            Err(value::Error::new(format!("Subscript {} cannot be negative", i)))
         } else if (i as usize) >= max {
-            Err(Error::new(format!("Subscript {} exceeds limit of {}", i, max)))
+            Err(value::Error::new(format!("Subscript {} exceeds limit of {}", i, max)))
         } else {
             Ok(i as usize)
         }
@@ -140,7 +99,7 @@ impl Array {
     ///
     /// It is an error if `dimensions` and `subscripts` have different sizes, or if the values in
     /// `subscripts` are negative.
-    fn native_index(dimensions: &[usize], subscripts: &[i32]) -> Result<usize> {
+    fn native_index(dimensions: &[usize], subscripts: &[i32]) -> value::Result<usize> {
         debug_assert_eq!(
             subscripts.len(),
             dimensions.len(),
@@ -161,7 +120,7 @@ impl Array {
     }
 
     /// Assings the `value` to the array position indicated by the `subscripts`.
-    pub fn assign(&mut self, subscripts: &[i32], value: Value) -> Result<()> {
+    pub fn assign(&mut self, subscripts: &[i32], value: Value) -> value::Result<()> {
         debug_assert_eq!(
             subscripts.len(),
             self.dimensions.len(),
@@ -180,7 +139,7 @@ impl Array {
     }
 
     /// Obtains the value contained in the array position indicated by the `subscripts`.
-    pub fn index(&self, subscripts: &[i32]) -> Result<&Value> {
+    pub fn index(&self, subscripts: &[i32]) -> value::Result<&Value> {
         let i = Array::native_index(&self.dimensions, subscripts)?;
         let value = &self.values[i];
         debug_assert!(value.as_exprtype() == self.subtype);
@@ -393,13 +352,13 @@ impl Symbols {
     /// Obtains the value of a symbol or `None` if it is not defined.
     ///
     /// Returns an error if the type annotation in the symbol reference does not match its type.
-    pub fn get(&self, vref: &VarRef) -> Result<Option<&Symbol>> {
+    pub fn get(&self, vref: &VarRef) -> value::Result<Option<&Symbol>> {
         let key = SymbolKey::from(vref.name());
         let symbol = self.load(&key);
         if let Some(symbol) = symbol {
             let stype = symbol.eval_type();
             if !vref.accepts_callable(stype) {
-                return Err(Error::new(format!(
+                return Err(value::Error::new(format!(
                     "Incompatible type annotation in {} reference",
                     vref
                 )));
@@ -417,12 +376,12 @@ impl Symbols {
     /// Obtains the value of a symbol or `None` if it is not defined.
     ///
     /// Returns an error if the type annotation in the symbol reference does not match its type.
-    pub fn get_mut(&mut self, vref: &VarRef) -> Result<Option<&mut Symbol>> {
+    pub fn get_mut(&mut self, vref: &VarRef) -> value::Result<Option<&mut Symbol>> {
         match self.load_mut(&vref.as_symbol_key()) {
             Some(symbol) => {
                 let stype = symbol.eval_type();
                 if !vref.accepts_callable(stype) {
-                    return Err(Error::new(format!(
+                    return Err(value::Error::new(format!(
                         "Incompatible type annotation in {} reference",
                         vref
                     )));
@@ -439,11 +398,11 @@ impl Symbols {
     /// or if the type annotation in the variable reference does not match the type of the value
     /// that the variable contains.
     #[cfg(test)]
-    pub(crate) fn get_var(&self, vref: &VarRef) -> Result<&Value> {
+    pub(crate) fn get_var(&self, vref: &VarRef) -> value::Result<&Value> {
         match self.get(vref)? {
             Some(Symbol::Variable(v)) => Ok(v),
-            Some(_) => Err(Error::new(format!("{} is not a variable", vref.name()))),
-            None => Err(Error::new(format!("Undefined variable {}", vref.name()))),
+            Some(_) => Err(value::Error::new(format!("{} is not a variable", vref.name()))),
+            None => Err(value::Error::new(format!("Undefined variable {}", vref.name()))),
         }
     }
 
@@ -480,14 +439,14 @@ impl Symbols {
     ///
     /// If the variable is already defined, then the type of the new value must be compatible with
     /// the existing variable.  In other words: a variable cannot change types while it's alive.
-    pub fn set_var(&mut self, vref: &VarRef, value: Value) -> Result<()> {
+    pub fn set_var(&mut self, vref: &VarRef, value: Value) -> value::Result<()> {
         let key = vref.as_symbol_key();
         let value = value.maybe_cast(vref.ref_type())?;
         match self.get_mut(vref)? {
             Some(Symbol::Variable(old_value)) => {
                 let value = value.maybe_cast(Some(old_value.as_exprtype()))?;
                 if mem::discriminant(&value) != mem::discriminant(old_value) {
-                    return Err(Error::new(format!(
+                    return Err(value::Error::new(format!(
                         "Cannot assign value of type {} to variable of type {}",
                         value.as_exprtype(),
                         old_value.as_exprtype(),
@@ -496,11 +455,11 @@ impl Symbols {
                 self.assign(&key, value);
                 Ok(())
             }
-            Some(_) => Err(Error::new(format!("Cannot redefine {} as a variable", vref))),
+            Some(_) => Err(value::Error::new(format!("Cannot redefine {} as a variable", vref))),
             None => {
                 if let Some(ref_type) = vref.ref_type() {
                     if !vref.accepts(value.as_exprtype()) {
-                        return Err(Error::new(format!(
+                        return Err(value::Error::new(format!(
                             "Cannot assign value of type {} to variable of type {}",
                             value.as_exprtype(),
                             ref_type,
@@ -514,10 +473,10 @@ impl Symbols {
     }
 
     /// Unsets the symbol `key` irrespective of its type.
-    pub(crate) fn unset(&mut self, key: &SymbolKey) -> Result<()> {
+    pub(crate) fn unset(&mut self, key: &SymbolKey) -> value::Result<()> {
         match self.scopes.last_mut().unwrap().remove(key) {
             Some(_) => Ok(()),
-            None => Err(Error::new(format!("{} is not defined", key))),
+            None => Err(value::Error::new(format!("{} is not defined", key))),
         }
     }
 }
@@ -740,7 +699,7 @@ pub trait Callable {
     /// `args` contains the arguments to the function call.
     ///
     /// `machine` provides mutable access to the current state of the machine invoking the function.
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> CallResult;
+    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> exec::Result<()>;
 }
 
 #[cfg(test)]
