@@ -32,10 +32,12 @@ Copy-Item .\SDL2-2.26.1\lib\x64\*.txt,.\SDL2_ttf-2.0.15\lib\x64\*.txt dlls
 Remove-Item -Recurse -Force .\SDL2-2.26.1,.\SDL2_ttf-2.0.15,SDL2*.zip
 
 foreach ($dir in
+    ".",
     "target",
     "target\debug", "target\debug\deps", "target\debug\examples",
     "target\release", "target\release\deps", "target\release\examples") {
     [void](New-Item -Force -Type Directory $dir)
+    Write-Output "Copying SDL2 libs and dlls to $dir"
     Copy-Item dlls\* $dir
     Copy-Item libs\* $dir
 }
