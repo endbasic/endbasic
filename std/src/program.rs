@@ -22,7 +22,6 @@ use async_trait::async_trait;
 use endbasic_core::ast::ExprType;
 use endbasic_core::compiler::{compile, ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Machine, Result, Scope, StopReason};
-use endbasic_core::parser::parse;
 use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -188,8 +187,7 @@ impl Callable for DisasmCommand {
         // should hold a copy at all times.
         let image = {
             let program = self.program.borrow_mut();
-            let ast = parse(&mut program.text().as_bytes())?;
-            compile(ast, machine.get_symbols())?
+            compile(&mut program.text().as_bytes(), machine.get_symbols())?
         };
 
         let mut console = self.console.borrow_mut();

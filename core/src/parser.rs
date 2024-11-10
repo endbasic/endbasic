@@ -1955,14 +1955,21 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// Extracts all statements from the input stream.
-pub fn parse(input: &mut dyn io::Read) -> Result<Vec<Statement>> {
-    let mut parser = Parser::from(input);
-    let mut statements = vec![];
-    while let Some(statement) = parser.parse_one_safe()? {
-        statements.push(statement);
+pub(crate) struct StatementIter<'a> {
+    parser: Parser<'a>,
+}
+
+impl<'a> Iterator for StatementIter<'a> {
+    type Item = Result<Statement>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.parser.parse_one_safe().transpose()
     }
-    Ok(statements)
+}
+
+/// Extracts all statements from the input stream.
+pub(crate) fn parse(input: &mut dyn io::Read) -> StatementIter {
+    StatementIter { parser: Parser::from(input) }
 }
 
 #[cfg(test)]
@@ -2025,7 +2032,8 @@ mod tests {
     /// `exp_statements`.
     fn do_ok_test(input: &str, exp_statements: &[Statement]) {
         let mut input = input.as_bytes();
-        let statements = parse(&mut input).expect("Parsing failed");
+        let statements =
+            parse(&mut input).map(|r| r.expect("Parsing failed")).collect::<Vec<Statement>>();
         assert_eq!(exp_statements, statements.as_slice());
     }
 
@@ -2047,10 +2055,13 @@ mod tests {
     // parsed next.
     fn do_error_test_no_reset(input: &str, expected_err: &str) {
         let mut input = input.as_bytes();
-        assert_eq!(
-            expected_err,
-            format!("{}", parse(&mut input).expect_err("Parsing did not fail"))
-        );
+        for result in parse(&mut input) {
+            if let Err(e) = result {
+                assert_eq!(expected_err, format!("{}", e));
+                return;
+            }
+        }
+        panic!("Parsing did not fail")
     }
 
     #[test]

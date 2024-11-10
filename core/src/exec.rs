@@ -18,7 +18,6 @@
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::compiler;
-use crate::parser;
 use crate::reader::LineCol;
 use crate::syms::{Callable, Symbol, SymbolKey, Symbols};
 use crate::value;
@@ -48,10 +47,6 @@ pub enum Error {
     #[error("{0}: {1}")]
     IoError(LineCol, io::Error),
 
-    /// Parsing error during execution.
-    #[error("{0}")]
-    ParseError(#[from] parser::Error),
-
     /// Syntax error.
     #[error("{0}: {1}")]
     SyntaxError(LineCol, String),
@@ -70,7 +65,6 @@ impl Error {
             Error::EvalError(..) => true,
             Error::InternalError(..) => true,
             Error::IoError(..) => true,
-            Error::ParseError(_) => false,
             Error::SyntaxError(..) => true,
         }
     }
@@ -1473,10 +1467,7 @@ impl Machine {
         debug_assert!(!self.check_stop);
         debug_assert!(self.stop_reason.is_none());
 
-        // TODO(jmmv): It should be possible to make the parser return statements one at a time and
-        // stream them to the compiler, instead of buffering everything in a vector.
-        let stmts = parser::parse(input)?;
-        let image = compiler::compile(stmts, &self.symbols)?;
+        let image = compiler::compile(input, &self.symbols)?;
 
         assert!(self.data.is_empty());
         self.data = image.data;

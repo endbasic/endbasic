@@ -17,12 +17,14 @@
 
 use crate::ast::*;
 use crate::bytecode::*;
+use crate::parser;
 use crate::reader::LineCol;
 use crate::syms::{CallableMetadata, CallableMetadataBuilder, Symbol, SymbolKey, Symbols};
 use std::borrow::Cow;
 use std::collections::HashMap;
 #[cfg(test)]
 use std::collections::HashSet;
+use std::io;
 
 mod args;
 pub use args::*;
@@ -54,6 +56,9 @@ pub enum Error {
     #[error("{0}: Cannot index non-array {1}")]
     IndexNonArray(LineCol, String),
 
+    #[error("{0}: I/O error during compilation: {1}")]
+    IoError(LineCol, io::Error),
+
     #[error("{0}: EXIT DO outside of DO loop")]
     MisplacedExitDo(LineCol),
 
@@ -75,6 +80,9 @@ pub enum Error {
     #[error("{0}: {1} is not an array nor a function")]
     NotArrayOrFunction(LineCol, SymbolKey),
 
+    #[error("{0}: {1}")]
+    ParseError(LineCol, String),
+
     #[error("{0}: Cannot define already-defined symbol {1}")]
     RedefinitionError(LineCol, SymbolKey),
 
@@ -89,6 +97,15 @@ pub enum Error {
 
     #[error("{0}: Unknown label {1}")]
     UnknownLabel(LineCol, String),
+}
+
+impl From<parser::Error> for Error {
+    fn from(value: parser::Error) -> Self {
+        match value {
+            parser::Error::Bad(pos, message) => Self::ParseError(pos, message),
+            parser::Error::Io(pos, e) => Self::IoError(pos, e),
+        }
+    }
 }
 
 /// Result for compiler return values.
@@ -1086,9 +1103,11 @@ impl Compiler {
 ///
 /// `symtable` is the symbols table as used by the compiler and should be prepopulated with any
 /// callables that the compiled program should recognize.
-fn compile_aux(stmts: Vec<Statement>, symtable: SymbolsTable) -> Result<(Image, SymbolsTable)> {
+fn compile_aux(input: &mut dyn io::Read, symtable: SymbolsTable) -> Result<(Image, SymbolsTable)> {
     let mut compiler = Compiler { symtable, ..Default::default() };
-    compiler.compile_many(stmts)?;
+    for stmt in parser::parse(input) {
+        compiler.compile_one(stmt?)?;
+    }
     compiler.to_image()
 }
 
@@ -1098,21 +1117,20 @@ fn compile_aux(stmts: Vec<Statement>, symtable: SymbolsTable) -> Result<(Image, 
 /// that exist in the virtual machine.
 // TODO(jmmv): This is ugly.  Now that we have a symbols table in here, we should not _also_ have a
 // Symbols object to maintain runtime state (or if we do, we shouldn't be getting it here).
-pub fn compile(stmts: Vec<Statement>, syms: &Symbols) -> Result<Image> {
-    compile_aux(stmts, SymbolsTable::from(syms)).map(|(image, _symtable)| image)
+pub fn compile(input: &mut dyn io::Read, syms: &Symbols) -> Result<Image> {
+    compile_aux(input, SymbolsTable::from(syms)).map(|(image, _symtable)| image)
 }
 
 #[cfg(test)]
 mod testutils {
     use super::*;
-    use crate::parser;
     use crate::syms::CallableMetadataBuilder;
 
     /// Builder pattern to prepare the compiler for testing purposes.
     #[derive(Default)]
     #[must_use]
     pub(crate) struct Tester {
-        stmts: Vec<Statement>,
+        source: String,
         symtable: SymbolsTable,
     }
 
@@ -1139,8 +1157,8 @@ mod testutils {
 
         /// Parses and appends statements to the list of statements to be compiled.
         pub(crate) fn parse(mut self, input: &str) -> Self {
-            let mut stmts = parser::parse(&mut input.as_bytes()).unwrap();
-            self.stmts.append(&mut stmts);
+            self.source.push_str(input);
+            self.source.push('\n');
             self
         }
 
@@ -1148,7 +1166,7 @@ mod testutils {
         /// validate expectations about the compilation.
         pub(crate) fn compile(self) -> Checker {
             Checker {
-                result: compile_aux(self.stmts, self.symtable),
+                result: compile_aux(&mut self.source.as_bytes(), self.symtable),
                 exp_error: None,
                 ignore_instrs: false,
                 exp_instrs: vec![],
