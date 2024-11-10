@@ -48,15 +48,15 @@ pub(crate) fn js_value_to_io_error(e: JsValue) -> io::Error {
 
 /// Returns the 2D rendering context for a given `canvas` element.
 fn html_canvas_to_2d_context(canvas: HtmlCanvasElement) -> io::Result<CanvasRenderingContext2d> {
-    let mut attrs = ContextAttributes2d::new();
+    let attrs = ContextAttributes2d::new();
 
     // We don't use transparency for anything, so disable the alpha channel for performance reasons.
-    attrs.alpha(false);
+    attrs.set_alpha(false);
 
     // Chrome recommends setting this to true because we read from the canvas to move the cursor
     // and to scroll the console, but these operations needn't be fast.  It seems better to keep
     // this disabled to optimize for the rendering path of graphical applications.
-    attrs.will_read_frequently(false);
+    attrs.set_will_read_frequently(false);
 
     let context = match canvas
         .get_context_with_context_options("2d", &attrs)
@@ -194,10 +194,7 @@ impl CanvasRasterOps {
     /// Sets the fill color of the canvas to `rgb`.
     fn set_fill_style_rgb(&mut self, rgb: RGB) {
         if self.fill_color != rgb {
-            self.context.set_fill_style(&JsValue::from_str(&format!(
-                "rgb({}, {}, {})",
-                rgb.0, rgb.1, rgb.2
-            )));
+            self.context.set_fill_style_str(&format!("rgb({}, {}, {})", rgb.0, rgb.1, rgb.2));
             self.fill_color = rgb;
         }
     }
@@ -205,10 +202,7 @@ impl CanvasRasterOps {
     /// Sets the stroke color of the canvas to `rgb`.
     fn set_stroke_style_rgb(&mut self, rgb: RGB) {
         if self.stroke_color != rgb {
-            self.context.set_stroke_style(&JsValue::from_str(&format!(
-                "rgb({}, {}, {})",
-                rgb.0, rgb.1, rgb.2
-            )));
+            self.context.set_stroke_style_str(&format!("rgb({}, {}, {})", rgb.0, rgb.1, rgb.2));
             self.stroke_color = rgb;
         }
     }
