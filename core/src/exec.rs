@@ -85,11 +85,53 @@ pub enum Signal {
     Break,
 }
 
+/// Request to exit the VM execution loop to execute a native command or function.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct UpcallData {
+    /// Name of the callable to execute.
+    name: SymbolKey,
+
+    /// Expected type of the value returned by the callable (if a function).
+    return_type: Option<ExprType>,
+
+    /// Position of the invocation.
+    pos: LineCol,
+
+    /// Number of arguments to extract from the stack for the invocation.
+    nargs: usize,
+}
+
+/// Describes how the machine stopped execution while it was running a portion of a script.
+///
+/// This is different from `StopReason` which represents "user-visible" stop conditions.  Instead,
+/// the stop conditions represented by this enum are "internal".  The bytecode interpreter may have
+/// to exit from its inner loop to perform "expensive" operations, which are all still handled here.
+///
+/// One reason for the entries in this enum, such as `CheckStop` and `Upcall`, is to keep the tight
+/// inner loop of the bytecode interpreter sync.  Early benchmarks showed a 25% performance
+/// improvement just by removing async from the loop and pushing the infrequent async awaits to an
+/// outer loop.
+enum InternalStopReason {
+    /// Execution terminated because the bytecode reached a point in the instructions where an
+    /// interruption, if any, should be processed.
+    CheckStop,
+
+    /// Execution terminated because the machine reached the end of the input.
+    Eof,
+
+    /// Execution terminated because the machine was asked to terminate with `END`.
+    Exited(u8),
+
+    /// Execution terminated because the bytecode requires the caller to issue a builtin function
+    /// or command call.
+    Upcall(UpcallData),
+}
+
 /// Describes how the machine stopped execution while it was running a script via `exec()`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[must_use]
 pub enum StopReason {
-    /// Execution terminates because the machine reached the end of the input.
+    /// Execution terminated because the machine reached the end of the input.
     Eof,
 
     /// Execution terminated because the machine was asked to terminate with `END`.
@@ -522,8 +564,6 @@ pub struct Machine {
     clearables: Vec<Box<dyn Clearable>>,
     yield_now_fn: Option<YieldNowFn>,
     signals_chan: (Sender<Signal>, Receiver<Signal>),
-    check_stop: bool,
-    stop_reason: Option<StopReason>,
     last_error: Option<String>,
     data: Vec<Option<Value>>,
 }
@@ -551,8 +591,6 @@ impl Machine {
             clearables: vec![],
             yield_now_fn,
             signals_chan: signals,
-            check_stop: false,
-            stop_reason: None,
             last_error: None,
             data: vec![],
         }
@@ -614,15 +652,10 @@ impl Machine {
         }
 
         match self.signals_chan.1.try_recv() {
-            Ok(Signal::Break) => {
-                self.check_stop = true;
-                self.stop_reason = Some(StopReason::Break)
-            }
-            Err(TryRecvError::Empty) => (),
+            Ok(Signal::Break) => true,
+            Err(TryRecvError::Empty) => false,
             Err(TryRecvError::Closed) => panic!("Channel unexpectedly closed"),
         }
-
-        self.stop_reason.is_some()
     }
 
     /// Handles an array assignment.
@@ -699,7 +732,7 @@ impl Machine {
     }
 
     /// Tells the machine to stop execution at the next statement boundary.
-    fn end(&mut self, context: &mut Context, has_code: bool) -> Result<()> {
+    fn end(&mut self, context: &mut Context, has_code: bool) -> Result<InternalStopReason> {
         let code = if has_code {
             let (code, code_pos) = context.value_stack.pop_integer_with_pos();
             if code < 0 {
@@ -718,9 +751,7 @@ impl Machine {
         } else {
             0
         };
-        self.check_stop = true;
-        self.stop_reason = Some(StopReason::Exited(code));
-        Ok(())
+        Ok(InternalStopReason::Exited(code))
     }
 
     /// Handles a unary logical operator that cannot fail.
@@ -939,7 +970,11 @@ impl Machine {
                     ));
                 }
                 let f = f.clone();
-                self.do_function_call(context, return_type, fref_pos, nargs, f).await
+                if f.metadata().is_argless() {
+                    self.argless_function_call(context, name, return_type, fref_pos, f).await
+                } else {
+                    self.do_function_call(context, return_type, fref_pos, nargs, f).await
+                }
             }
             _ => unreachable!("Function existence and type checking has been done at compile time"),
         }
@@ -980,483 +1015,562 @@ impl Machine {
         }
     }
 
-    /// Helper for `exec_one` that only worries about execution of a single instruction.
-    ///
-    /// Errors are handled on the caller side depending on the `ON ERROR` handling policy that is
-    /// currently configured.
-    async fn exec_safe(&mut self, context: &mut Context, instrs: &[Instruction]) -> Result<()> {
-        let instr = &instrs[context.pc];
-        match instr {
-            Instruction::LogicalAnd(pos) => {
-                Machine::exec_logical_op2(context, |lhs, rhs| lhs && rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::LogicalOr(pos) => {
-                Machine::exec_logical_op2(context, |lhs, rhs| lhs || rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::LogicalXor(pos) => {
-                Machine::exec_logical_op2(context, |lhs, rhs| lhs ^ rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::LogicalNot(pos) => {
-                Machine::exec_logical_op1(context, |rhs| !rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::BitwiseAnd(pos) => {
-                Machine::exec_bitwise_op2(context, |lhs, rhs| lhs & rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::BitwiseOr(pos) => {
-                Machine::exec_bitwise_op2(context, |lhs, rhs| lhs | rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::BitwiseXor(pos) => {
-                Machine::exec_bitwise_op2(context, |lhs, rhs| lhs ^ rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::BitwiseNot(pos) => {
-                Machine::exec_bitwise_op1(context, |rhs| !rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::ShiftLeft(pos) => {
-                Machine::exec_bitwise_op2_err(context, value::bitwise_shl, *pos)?;
-                context.pc += 1;
-            }
-
-            Instruction::ShiftRight(pos) => {
-                Machine::exec_bitwise_op2_err(context, value::bitwise_shr, *pos)?;
-                context.pc += 1;
-            }
-
-            Instruction::EqualBooleans(pos) => {
-                Machine::exec_equality_boolean_op2(context, |lhs, rhs| lhs == rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::NotEqualBooleans(pos) => {
-                Machine::exec_equality_boolean_op2(context, |lhs, rhs| lhs != rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::EqualDoubles(pos) => {
-                Machine::exec_equality_double_op2(context, |lhs, rhs| lhs == rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::NotEqualDoubles(pos) => {
-                Machine::exec_equality_double_op2(context, |lhs, rhs| lhs != rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::LessDoubles(pos) => {
-                Machine::exec_equality_double_op2(context, |lhs, rhs| lhs < rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::LessEqualDoubles(pos) => {
-                Machine::exec_equality_double_op2(context, |lhs, rhs| lhs <= rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::GreaterDoubles(pos) => {
-                Machine::exec_equality_double_op2(context, |lhs, rhs| lhs > rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::GreaterEqualDoubles(pos) => {
-                Machine::exec_equality_double_op2(context, |lhs, rhs| lhs >= rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::EqualIntegers(pos) => {
-                Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs == rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::NotEqualIntegers(pos) => {
-                Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs != rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::LessIntegers(pos) => {
-                Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs < rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::LessEqualIntegers(pos) => {
-                Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs <= rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::GreaterIntegers(pos) => {
-                Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs > rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::GreaterEqualIntegers(pos) => {
-                Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs >= rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::EqualStrings(pos) => {
-                Machine::exec_equality_string_op2(context, |lhs, rhs| lhs == rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::NotEqualStrings(pos) => {
-                Machine::exec_equality_string_op2(context, |lhs, rhs| lhs != rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::LessStrings(pos) => {
-                Machine::exec_equality_string_op2(context, |lhs, rhs| lhs < rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::LessEqualStrings(pos) => {
-                Machine::exec_equality_string_op2(context, |lhs, rhs| lhs <= rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::GreaterStrings(pos) => {
-                Machine::exec_equality_string_op2(context, |lhs, rhs| lhs > rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::GreaterEqualStrings(pos) => {
-                Machine::exec_equality_string_op2(context, |lhs, rhs| lhs >= rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::AddDoubles(pos) => {
-                Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs + rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::SubtractDoubles(pos) => {
-                Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs - rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::MultiplyDoubles(pos) => {
-                Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs * rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::DivideDoubles(pos) => {
-                Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs / rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::ModuloDoubles(pos) => {
-                Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs % rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::PowerDoubles(pos) => {
-                Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs.powf(rhs), *pos);
-                context.pc += 1;
-            }
-
-            Instruction::NegateDouble(pos) => {
-                Machine::exec_arithmetic_double_op1(context, |rhs| -rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::AddIntegers(pos) => {
-                Machine::exec_arithmetic_integer_op2(context, value::add_integer, *pos)?;
-                context.pc += 1;
-            }
-
-            Instruction::SubtractIntegers(pos) => {
-                Machine::exec_arithmetic_integer_op2(context, value::sub_integer, *pos)?;
-                context.pc += 1;
-            }
-
-            Instruction::MultiplyIntegers(pos) => {
-                Machine::exec_arithmetic_integer_op2(context, value::mul_integer, *pos)?;
-                context.pc += 1;
-            }
-
-            Instruction::DivideIntegers(pos) => {
-                Machine::exec_arithmetic_integer_op2(context, value::div_integer, *pos)?;
-                context.pc += 1;
-            }
-
-            Instruction::ModuloIntegers(pos) => {
-                Machine::exec_arithmetic_integer_op2(context, value::modulo_integer, *pos)?;
-                context.pc += 1;
-            }
-
-            Instruction::PowerIntegers(pos) => {
-                Machine::exec_arithmetic_integer_op2(context, value::pow_integer, *pos)?;
-                context.pc += 1;
-            }
-
-            Instruction::NegateInteger(pos) => {
-                Machine::exec_arithmetic_integer_op1(context, value::neg_integer, *pos)?;
-                context.pc += 1;
-            }
-
-            Instruction::ConcatStrings(pos) => {
-                Machine::exec_arithmetic_string_op2(context, |lhs, rhs| lhs.to_owned() + rhs, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::Assign(key) => {
-                let (value, _pos) = context.value_stack.pop().unwrap();
-                self.symbols.assign(key, value);
-                context.pc += 1;
-            }
-
-            Instruction::ArrayAssignment(name, vref_pos, nargs) => {
-                self.assign_array(context, name, *vref_pos, *nargs)?;
-                context.pc += 1;
-            }
-
-            Instruction::ArrayLoad(name, pos, nargs) => {
-                self.array_ref(context, name, *pos, *nargs)?;
-                context.pc += 1;
-            }
-
-            Instruction::BuiltinCall(name, bref_pos, nargs) => {
-                self.builtin_call(context, name, *bref_pos, *nargs).await?;
-                context.pc += 1;
-            }
-
-            Instruction::Call(span) => {
-                context.addr_stack.push(context.pc + 1);
-                context.pc = span.addr;
-            }
-
-            Instruction::DoubleToInteger => {
-                let (d, pos) = context.value_stack.pop_double_with_pos();
-                let i =
-                    double_to_integer(d.round()).map_err(|e| Error::from_value_error(e, pos))?;
-                context.value_stack.push_integer(i, pos);
-                context.pc += 1;
-            }
-
-            Instruction::FunctionCall(name, return_type, pos, nargs) => {
-                self.function_call(context, name, *return_type, *pos, *nargs).await?;
-                context.pc += 1;
-            }
-
-            Instruction::Dim(span) => {
-                if span.shared {
-                    self.symbols.dim_shared(span.name.clone(), span.vtype);
-                } else {
-                    self.symbols.dim(span.name.clone(), span.vtype);
+    /// Executes as many instructions as possible from `instrs`, starting at `context.pc`, until an
+    /// instruction asks to stop or execution reaches the end of the program.
+    fn exec_until_stop(
+        &mut self,
+        context: &mut Context,
+        instrs: &[Instruction],
+    ) -> Result<InternalStopReason> {
+        while context.pc < instrs.len() {
+            let instr = &instrs[context.pc];
+            match instr {
+                Instruction::LogicalAnd(pos) => {
+                    Machine::exec_logical_op2(context, |lhs, rhs| lhs && rhs, *pos);
+                    context.pc += 1;
                 }
-                context.pc += 1;
-            }
 
-            Instruction::DimArray(span) => {
-                self.dim_array(context, span)?;
-                context.pc += 1;
-            }
-
-            Instruction::End(has_code) => {
-                self.end(context, *has_code)?;
-            }
-
-            Instruction::EnterScope => {
-                self.symbols.enter_scope();
-                context.pc += 1;
-            }
-
-            Instruction::IntegerToDouble => {
-                let (i, pos) = context.value_stack.pop_integer_with_pos();
-                context.value_stack.push_double(i as f64, pos);
-                context.pc += 1;
-            }
-
-            Instruction::Jump(span) => {
-                if span.addr <= context.pc {
-                    self.check_stop = true;
+                Instruction::LogicalOr(pos) => {
+                    Machine::exec_logical_op2(context, |lhs, rhs| lhs || rhs, *pos);
+                    context.pc += 1;
                 }
-                context.pc = span.addr;
-            }
 
-            Instruction::JumpIfDefined(span) => {
-                if self.symbols.load(&span.var).is_some() {
-                    if span.addr <= context.pc {
-                        self.check_stop = true;
-                    }
+                Instruction::LogicalXor(pos) => {
+                    Machine::exec_logical_op2(context, |lhs, rhs| lhs ^ rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::LogicalNot(pos) => {
+                    Machine::exec_logical_op1(context, |rhs| !rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::BitwiseAnd(pos) => {
+                    Machine::exec_bitwise_op2(context, |lhs, rhs| lhs & rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::BitwiseOr(pos) => {
+                    Machine::exec_bitwise_op2(context, |lhs, rhs| lhs | rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::BitwiseXor(pos) => {
+                    Machine::exec_bitwise_op2(context, |lhs, rhs| lhs ^ rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::BitwiseNot(pos) => {
+                    Machine::exec_bitwise_op1(context, |rhs| !rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::ShiftLeft(pos) => {
+                    Machine::exec_bitwise_op2_err(context, value::bitwise_shl, *pos)?;
+                    context.pc += 1;
+                }
+
+                Instruction::ShiftRight(pos) => {
+                    Machine::exec_bitwise_op2_err(context, value::bitwise_shr, *pos)?;
+                    context.pc += 1;
+                }
+
+                Instruction::EqualBooleans(pos) => {
+                    Machine::exec_equality_boolean_op2(context, |lhs, rhs| lhs == rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::NotEqualBooleans(pos) => {
+                    Machine::exec_equality_boolean_op2(context, |lhs, rhs| lhs != rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::EqualDoubles(pos) => {
+                    Machine::exec_equality_double_op2(context, |lhs, rhs| lhs == rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::NotEqualDoubles(pos) => {
+                    Machine::exec_equality_double_op2(context, |lhs, rhs| lhs != rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::LessDoubles(pos) => {
+                    Machine::exec_equality_double_op2(context, |lhs, rhs| lhs < rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::LessEqualDoubles(pos) => {
+                    Machine::exec_equality_double_op2(context, |lhs, rhs| lhs <= rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::GreaterDoubles(pos) => {
+                    Machine::exec_equality_double_op2(context, |lhs, rhs| lhs > rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::GreaterEqualDoubles(pos) => {
+                    Machine::exec_equality_double_op2(context, |lhs, rhs| lhs >= rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::EqualIntegers(pos) => {
+                    Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs == rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::NotEqualIntegers(pos) => {
+                    Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs != rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::LessIntegers(pos) => {
+                    Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs < rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::LessEqualIntegers(pos) => {
+                    Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs <= rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::GreaterIntegers(pos) => {
+                    Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs > rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::GreaterEqualIntegers(pos) => {
+                    Machine::exec_equality_integer_op2(context, |lhs, rhs| lhs >= rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::EqualStrings(pos) => {
+                    Machine::exec_equality_string_op2(context, |lhs, rhs| lhs == rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::NotEqualStrings(pos) => {
+                    Machine::exec_equality_string_op2(context, |lhs, rhs| lhs != rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::LessStrings(pos) => {
+                    Machine::exec_equality_string_op2(context, |lhs, rhs| lhs < rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::LessEqualStrings(pos) => {
+                    Machine::exec_equality_string_op2(context, |lhs, rhs| lhs <= rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::GreaterStrings(pos) => {
+                    Machine::exec_equality_string_op2(context, |lhs, rhs| lhs > rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::GreaterEqualStrings(pos) => {
+                    Machine::exec_equality_string_op2(context, |lhs, rhs| lhs >= rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::AddDoubles(pos) => {
+                    Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs + rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::SubtractDoubles(pos) => {
+                    Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs - rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::MultiplyDoubles(pos) => {
+                    Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs * rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::DivideDoubles(pos) => {
+                    Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs / rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::ModuloDoubles(pos) => {
+                    Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs % rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::PowerDoubles(pos) => {
+                    Machine::exec_arithmetic_double_op2(context, |lhs, rhs| lhs.powf(rhs), *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::NegateDouble(pos) => {
+                    Machine::exec_arithmetic_double_op1(context, |rhs| -rhs, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::AddIntegers(pos) => {
+                    Machine::exec_arithmetic_integer_op2(context, value::add_integer, *pos)?;
+                    context.pc += 1;
+                }
+
+                Instruction::SubtractIntegers(pos) => {
+                    Machine::exec_arithmetic_integer_op2(context, value::sub_integer, *pos)?;
+                    context.pc += 1;
+                }
+
+                Instruction::MultiplyIntegers(pos) => {
+                    Machine::exec_arithmetic_integer_op2(context, value::mul_integer, *pos)?;
+                    context.pc += 1;
+                }
+
+                Instruction::DivideIntegers(pos) => {
+                    Machine::exec_arithmetic_integer_op2(context, value::div_integer, *pos)?;
+                    context.pc += 1;
+                }
+
+                Instruction::ModuloIntegers(pos) => {
+                    Machine::exec_arithmetic_integer_op2(context, value::modulo_integer, *pos)?;
+                    context.pc += 1;
+                }
+
+                Instruction::PowerIntegers(pos) => {
+                    Machine::exec_arithmetic_integer_op2(context, value::pow_integer, *pos)?;
+                    context.pc += 1;
+                }
+
+                Instruction::NegateInteger(pos) => {
+                    Machine::exec_arithmetic_integer_op1(context, value::neg_integer, *pos)?;
+                    context.pc += 1;
+                }
+
+                Instruction::ConcatStrings(pos) => {
+                    Machine::exec_arithmetic_string_op2(
+                        context,
+                        |lhs, rhs| lhs.to_owned() + rhs,
+                        *pos,
+                    );
+                    context.pc += 1;
+                }
+
+                Instruction::Assign(key) => {
+                    let (value, _pos) = context.value_stack.pop().unwrap();
+                    self.symbols.assign(key, value);
+                    context.pc += 1;
+                }
+
+                Instruction::ArrayAssignment(name, vref_pos, nargs) => {
+                    self.assign_array(context, name, *vref_pos, *nargs)?;
+                    context.pc += 1;
+                }
+
+                Instruction::ArrayLoad(name, pos, nargs) => {
+                    self.array_ref(context, name, *pos, *nargs)?;
+                    context.pc += 1;
+                }
+
+                Instruction::BuiltinCall(name, bref_pos, nargs) => {
+                    return Ok(InternalStopReason::Upcall(UpcallData {
+                        name: name.clone(),
+                        return_type: None,
+                        pos: *bref_pos,
+                        nargs: *nargs,
+                    }));
+                }
+
+                Instruction::Call(span) => {
+                    context.addr_stack.push(context.pc + 1);
                     context.pc = span.addr;
-                } else {
+                }
+
+                Instruction::DoubleToInteger => {
+                    let (d, pos) = context.value_stack.pop_double_with_pos();
+                    let i = double_to_integer(d.round())
+                        .map_err(|e| Error::from_value_error(e, pos))?;
+                    context.value_stack.push_integer(i, pos);
                     context.pc += 1;
                 }
-            }
 
-            Instruction::JumpIfTrue(addr) => {
-                let cond = context.value_stack.pop_boolean();
-                if cond {
-                    if *addr <= context.pc {
-                        self.check_stop = true;
+                Instruction::FunctionCall(name, return_type, pos, nargs) => {
+                    return Ok(InternalStopReason::Upcall(UpcallData {
+                        name: name.clone(),
+                        return_type: Some(*return_type),
+                        pos: *pos,
+                        nargs: *nargs,
+                    }));
+                }
+
+                Instruction::Dim(span) => {
+                    if span.shared {
+                        self.symbols.dim_shared(span.name.clone(), span.vtype);
+                    } else {
+                        self.symbols.dim(span.name.clone(), span.vtype);
                     }
-                    context.pc = *addr;
-                } else {
                     context.pc += 1;
                 }
-            }
 
-            Instruction::JumpIfNotTrue(addr) => {
-                let cond = context.value_stack.pop_boolean();
-                if cond {
+                Instruction::DimArray(span) => {
+                    self.dim_array(context, span)?;
                     context.pc += 1;
-                } else {
-                    if *addr <= context.pc {
-                        self.check_stop = true;
+                }
+
+                Instruction::End(has_code) => {
+                    context.pc += 1;
+                    return self.end(context, *has_code);
+                }
+
+                Instruction::EnterScope => {
+                    self.symbols.enter_scope();
+                    context.pc += 1;
+                }
+
+                Instruction::IntegerToDouble => {
+                    let (i, pos) = context.value_stack.pop_integer_with_pos();
+                    context.value_stack.push_double(i as f64, pos);
+                    context.pc += 1;
+                }
+
+                Instruction::Jump(span) => {
+                    let old_pc = context.pc;
+                    context.pc = span.addr;
+                    if span.addr <= old_pc {
+                        return Ok(InternalStopReason::CheckStop);
                     }
-                    context.pc = *addr;
                 }
-            }
 
-            Instruction::LeaveScope => {
-                self.symbols.leave_scope();
-                context.pc += 1;
-            }
-
-            Instruction::LoadBoolean(key, pos) => {
-                let b = match self.load(key, *pos)? {
-                    Value::Boolean(b) => b,
-                    _ => unreachable!("Types are validated at compilation time"),
-                };
-                context.value_stack.push_boolean(*b, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::LoadDouble(key, pos) => {
-                let d = match self.load(key, *pos)? {
-                    Value::Double(d) => d,
-                    _ => unreachable!("Types are validated at compilation time"),
-                };
-                context.value_stack.push_double(*d, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::LoadInteger(key, pos) => {
-                let i = match self.load(key, *pos)? {
-                    Value::Integer(i) => i,
-                    _ => unreachable!("Types are validated at compilation time"),
-                };
-                context.value_stack.push_integer(*i, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::LoadString(key, pos) => {
-                let s = match self.load(key, *pos)? {
-                    Value::Text(s) => s,
-                    _ => unreachable!("Types are validated at compilation time"),
-                };
-                context.value_stack.push_string(s.clone(), *pos);
-                context.pc += 1;
-            }
-
-            Instruction::LoadRef(key, etype, pos) => {
-                let sym = self.symbols.load(key);
-                if let Some(Symbol::Callable(f)) = sym {
-                    if f.metadata().is_argless() {
-                        let f = f.clone();
-                        self.argless_function_call(context, key, *etype, *pos, f).await?;
+                Instruction::JumpIfDefined(span) => {
+                    if self.symbols.load(&span.var).is_some() {
+                        let old_pc = context.pc;
+                        context.pc = span.addr;
+                        if span.addr <= old_pc {
+                            return Ok(InternalStopReason::CheckStop);
+                        }
+                    } else {
                         context.pc += 1;
-                        return Ok(());
                     }
-                };
-
-                context.value_stack.push_varref(key.clone(), *etype, *pos);
-                context.pc += 1;
-            }
-
-            Instruction::Nop => {
-                context.pc += 1;
-            }
-
-            Instruction::PushBoolean(value, pos) => {
-                context.value_stack.push((Value::Boolean(*value), *pos));
-                context.pc += 1;
-            }
-
-            Instruction::PushDouble(value, pos) => {
-                context.value_stack.push((Value::Double(*value), *pos));
-                context.pc += 1;
-            }
-
-            Instruction::PushInteger(value, pos) => {
-                context.value_stack.push((Value::Integer(*value), *pos));
-                context.pc += 1;
-            }
-
-            Instruction::PushString(value, pos) => {
-                context.value_stack.push((Value::Text(value.clone()), *pos));
-                context.pc += 1;
-            }
-
-            Instruction::Return(pos) => match context.addr_stack.pop() {
-                Some(addr) => {
-                    self.check_stop = true;
-                    context.pc = addr
                 }
-                None => return new_syntax_error(*pos, "No address to return to".to_owned()),
-            },
 
-            Instruction::SetErrorHandler(span) => {
-                context.err_handler = *span;
-                context.pc += 1;
-            }
+                Instruction::JumpIfTrue(addr) => {
+                    let cond = context.value_stack.pop_boolean();
+                    if cond {
+                        let old_pc = context.pc;
+                        context.pc = *addr;
+                        if *addr <= old_pc {
+                            return Ok(InternalStopReason::CheckStop);
+                        }
+                    } else {
+                        context.pc += 1;
+                    }
+                }
 
-            Instruction::Unset(span) => {
-                self.symbols.unset(&span.name).expect("Should only unset variables that were set");
-                context.pc += 1;
+                Instruction::JumpIfNotTrue(addr) => {
+                    let cond = context.value_stack.pop_boolean();
+                    if cond {
+                        context.pc += 1;
+                    } else {
+                        let old_pc = context.pc;
+                        context.pc = *addr;
+                        if *addr <= old_pc {
+                            return Ok(InternalStopReason::CheckStop);
+                        }
+                    }
+                }
+
+                Instruction::LeaveScope => {
+                    self.symbols.leave_scope();
+                    context.pc += 1;
+                }
+
+                Instruction::LoadBoolean(key, pos) => {
+                    let b = match self.load(key, *pos)? {
+                        Value::Boolean(b) => b,
+                        _ => unreachable!("Types are validated at compilation time"),
+                    };
+                    context.value_stack.push_boolean(*b, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::LoadDouble(key, pos) => {
+                    let d = match self.load(key, *pos)? {
+                        Value::Double(d) => d,
+                        _ => unreachable!("Types are validated at compilation time"),
+                    };
+                    context.value_stack.push_double(*d, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::LoadInteger(key, pos) => {
+                    let i = match self.load(key, *pos)? {
+                        Value::Integer(i) => i,
+                        _ => unreachable!("Types are validated at compilation time"),
+                    };
+                    context.value_stack.push_integer(*i, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::LoadString(key, pos) => {
+                    let s = match self.load(key, *pos)? {
+                        Value::Text(s) => s,
+                        _ => unreachable!("Types are validated at compilation time"),
+                    };
+                    context.value_stack.push_string(s.clone(), *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::LoadRef(key, etype, pos) => {
+                    let sym = self.symbols.load(key);
+                    if let Some(Symbol::Callable(f)) = sym {
+                        if f.metadata().is_argless() {
+                            return Ok(InternalStopReason::Upcall(UpcallData {
+                                name: key.clone(),
+                                return_type: Some(*etype),
+                                pos: *pos,
+                                nargs: 0,
+                            }));
+                        }
+                    };
+
+                    context.value_stack.push_varref(key.clone(), *etype, *pos);
+                    context.pc += 1;
+                }
+
+                Instruction::Nop => {
+                    context.pc += 1;
+                }
+
+                Instruction::PushBoolean(value, pos) => {
+                    context.value_stack.push((Value::Boolean(*value), *pos));
+                    context.pc += 1;
+                }
+
+                Instruction::PushDouble(value, pos) => {
+                    context.value_stack.push((Value::Double(*value), *pos));
+                    context.pc += 1;
+                }
+
+                Instruction::PushInteger(value, pos) => {
+                    context.value_stack.push((Value::Integer(*value), *pos));
+                    context.pc += 1;
+                }
+
+                Instruction::PushString(value, pos) => {
+                    context.value_stack.push((Value::Text(value.clone()), *pos));
+                    context.pc += 1;
+                }
+
+                Instruction::Return(pos) => match context.addr_stack.pop() {
+                    Some(addr) => {
+                        context.pc = addr;
+                        return Ok(InternalStopReason::CheckStop);
+                    }
+                    None => return new_syntax_error(*pos, "No address to return to".to_owned()),
+                },
+
+                Instruction::SetErrorHandler(span) => {
+                    context.err_handler = *span;
+                    context.pc += 1;
+                }
+
+                Instruction::Unset(span) => {
+                    self.symbols
+                        .unset(&span.name)
+                        .expect("Should only unset variables that were set");
+                    context.pc += 1;
+                }
             }
         }
 
-        Ok(())
+        Ok(InternalStopReason::Eof)
     }
 
-    /// Executes a single instruction in `instrs` as pointed to by the program counter in `context`.
-    async fn exec_one(&mut self, context: &mut Context, instrs: &[Instruction]) -> Result<()> {
-        let mut result = self.exec_safe(context, instrs).await;
-        if let Err(e) = result.as_ref() {
-            if e.is_catchable() {
-                self.last_error = Some(format!("{}", e));
+    /// Handles the given error `e` according to the current error handler previously set by
+    /// `ON ERROR`.  If the error can be handled gracefully, returns `Ok`; otherwise, returns the
+    /// input error unmodified.
+    fn handle_error(
+        &mut self,
+        instrs: &[Instruction],
+        context: &mut Context,
+        e: Error,
+    ) -> Result<()> {
+        if !e.is_catchable() {
+            return Err(e);
+        }
 
-                match context.err_handler {
-                    ErrorHandlerISpan::Jump(addr) => {
-                        context.pc = addr;
-                        result = Ok(());
-                    }
-                    ErrorHandlerISpan::None => (),
-                    ErrorHandlerISpan::ResumeNext => {
-                        if instrs[context.pc].is_statement() {
+        self.last_error = Some(format!("{}", e));
+
+        match context.err_handler {
+            ErrorHandlerISpan::Jump(addr) => {
+                context.pc = addr;
+                Ok(())
+            }
+            ErrorHandlerISpan::None => Err(e),
+            ErrorHandlerISpan::ResumeNext => {
+                if instrs[context.pc].is_statement() {
+                    context.pc += 1;
+                } else {
+                    loop {
+                        context.pc += 1;
+                        if context.pc >= instrs.len() {
+                            break;
+                        } else if instrs[context.pc].is_statement() {
                             context.pc += 1;
-                        } else {
-                            loop {
-                                context.pc += 1;
-                                if context.pc >= instrs.len() {
-                                    break;
-                                } else if instrs[context.pc].is_statement() {
-                                    context.pc += 1;
-                                    break;
-                                }
-                            }
+                            break;
                         }
-                        result = Ok(());
                     }
                 }
+                Ok(())
             }
         }
-        result
+    }
+
+    /// Executes the instructions given in `instr`.
+    ///
+    /// This is a helper to `exec`, which prepares the machine with the program's data upfront.
+    async fn exec_with_data(&mut self, instrs: &[Instruction]) -> Result<StopReason> {
+        let mut context = Context::default();
+        while context.pc < instrs.len() {
+            match self.exec_until_stop(&mut context, instrs) {
+                Ok(InternalStopReason::CheckStop) => {
+                    if self.should_stop().await {
+                        return Ok(StopReason::Break);
+                    }
+                }
+
+                Ok(InternalStopReason::Upcall(data)) => {
+                    let result;
+                    if let Some(return_type) = data.return_type {
+                        result = self
+                            .function_call(
+                                &mut context,
+                                &data.name,
+                                return_type,
+                                data.pos,
+                                data.nargs,
+                            )
+                            .await;
+                    } else {
+                        result =
+                            self.builtin_call(&mut context, &data.name, data.pos, data.nargs).await;
+                    }
+                    match result {
+                        Ok(()) => context.pc += 1,
+                        Err(e) => self.handle_error(instrs, &mut context, e)?,
+                    }
+                }
+
+                Ok(InternalStopReason::Eof) => {
+                    return Ok(StopReason::Eof);
+                }
+
+                Ok(InternalStopReason::Exited(code)) => {
+                    return Ok(StopReason::Exited(code));
+                }
+
+                Err(e) => self.handle_error(instrs, &mut context, e)?,
+            }
+        }
+        Ok(StopReason::Eof)
     }
 
     /// Executes a program extracted from the `input` readable.
@@ -1464,33 +1578,13 @@ impl Machine {
     /// Note that this does not consume `self`.  As a result, it is possible to execute multiple
     /// different programs on the same machine, all sharing state.
     pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<StopReason> {
-        debug_assert!(!self.check_stop);
-        debug_assert!(self.stop_reason.is_none());
-
         let image = compiler::compile(input, &self.symbols)?;
 
         assert!(self.data.is_empty());
         self.data = image.data;
-
-        let mut context = Context::default();
-        let mut result = Ok(());
-        while result.is_ok() && context.pc < image.instrs.len() {
-            debug_assert!(self.stop_reason.is_none() || self.check_stop);
-            if self.check_stop && image.instrs[context.pc].is_statement() {
-                if self.should_stop().await {
-                    break;
-                }
-                self.check_stop = false;
-            }
-
-            result = self.exec_one(&mut context, &image.instrs).await;
-        }
-
+        let result = self.exec_with_data(&image.instrs).await;
         self.data.clear();
-        result?;
-
-        self.check_stop = false;
-        Ok(self.stop_reason.take().unwrap_or(StopReason::Eof))
+        result
     }
 }
 

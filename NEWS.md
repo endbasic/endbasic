@@ -17,6 +17,8 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
 *   Cleaned up internal error handling, which changes how errors returned from
     commands and functions are displayed to the user.
 
+*   Improved the performance of the core interpreter by more than 2x.
+
 ## Changes in version 0.11.1
 
 **Released on 2024-09-14.**
