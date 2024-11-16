@@ -518,7 +518,8 @@ impl Callable for RunCommand {
 
         machine.clear();
         let program = self.program.borrow().text();
-        let stop_reason = machine.exec(&mut program.as_bytes()).await?;
+        let mut context = machine.compile(&mut program.as_bytes())?;
+        let stop_reason = machine.exec(&mut context).await?;
         match stop_reason {
             StopReason::Break => {
                 self.console.borrow_mut().print(BREAK_MSG).map_err(|e| scope.io_error(e))?

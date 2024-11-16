@@ -508,7 +508,11 @@ impl Tester {
     /// Runs `script` in the configured machine and returns a `Checker` object to validate
     /// expectations about the execution.
     pub fn run<S: Into<String>>(&mut self, script: S) -> Checker {
-        let result = block_on(self.machine.exec(&mut script.into().as_bytes()));
+        let mut context = match self.machine.compile(&mut script.into().as_bytes()) {
+            Ok(context) => context,
+            Err(e) => return Checker::new(self, Err(e)),
+        };
+        let result = block_on(self.machine.exec(&mut context));
         Checker::new(self, result)
     }
 
@@ -523,7 +527,10 @@ impl Tester {
     pub fn run_n(&mut self, scripts: &[&str]) -> Checker {
         let mut result = Ok(StopReason::Eof);
         for script in scripts {
-            result = block_on(self.machine.exec(&mut script.as_bytes()));
+            result = match self.machine.compile(&mut script.as_bytes()) {
+                Ok(mut context) => block_on(self.machine.exec(&mut context)),
+                Err(e) => Err(e),
+            };
             if result.is_err() {
                 break;
             }

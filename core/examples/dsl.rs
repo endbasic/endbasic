@@ -150,8 +150,9 @@ fn main() {
     // Execute the sample script, which will call back into our callable objects in Rust land to
     // manipulate the state of the lights.
     println!("Running script");
+    let mut context = machine.compile(&mut INPUT.as_bytes()).expect("Compilation error");
     loop {
-        match block_on(machine.exec(&mut INPUT.as_bytes())).expect("Execution error") {
+        match block_on(machine.exec(&mut context)).expect("Execution error") {
             StopReason::Eof => break,
             StopReason::Exited(i) => println!("Script explicitly exited with code {}", i),
             StopReason::Break => (), // Ignore signals.
