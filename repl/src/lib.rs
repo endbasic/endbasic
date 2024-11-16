@@ -71,7 +71,14 @@ pub async fn try_load_autoexec(
     };
 
     console.borrow_mut().print("Loading AUTOEXEC.BAS...")?;
-    match machine.exec(&mut code.as_bytes()).await {
+    let mut context = match machine.compile(&mut code.as_bytes()) {
+        Ok(context) => context,
+        Err(e) => {
+            console.borrow_mut().print(&format!("AUTOEXEC.BAS failed: {}", e))?;
+            return Ok(());
+        }
+    };
+    match machine.exec(&mut context).await {
         Ok(_) => Ok(()),
         Err(e) => {
             console.borrow_mut().print(&format!("AUTOEXEC.BAS failed: {}", e))?;
@@ -113,7 +120,9 @@ pub async fn run_from_cloud(
     console.borrow_mut().print("Starting...")?;
     console.borrow_mut().print("")?;
 
-    let result = machine.exec(&mut "RUN".as_bytes()).await;
+    let mut context =
+        machine.compile(&mut "RUN".as_bytes()).expect("Compilation of hardcoded code must succeed");
+    let result = machine.exec(&mut context).await;
 
     let mut console = console.borrow_mut();
 
@@ -182,13 +191,21 @@ pub async fn run_repl_loop(
         machine.drain_signals();
 
         match line {
-            Ok(line) => match machine.exec(&mut line.as_bytes()).await {
-                Ok(reason) => stop_reason = reason,
-                Err(e) => {
-                    let mut console = console.borrow_mut();
-                    console.print(format!("ERROR: {}", e).as_str())?;
-                }
-            },
+            Ok(line) => {
+                match machine.compile(&mut line.as_bytes()) {
+                    Ok(mut context) => match machine.exec(&mut context).await {
+                        Ok(reason) => stop_reason = reason,
+                        Err(e) => {
+                            let mut console = console.borrow_mut();
+                            console.print(format!("ERROR: {}", e).as_str())?;
+                        }
+                    },
+                    Err(e) => {
+                        let mut console = console.borrow_mut();
+                        console.print(format!("ERROR: {}", e).as_str())?;
+                    }
+                };
+            }
             Err(e) => {
                 if e.kind() == io::ErrorKind::Interrupted {
                     let mut console = console.borrow_mut();

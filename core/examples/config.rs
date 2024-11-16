@@ -40,8 +40,9 @@ fn main() {
 
     // Execute the sample script.  All this script can do is modify the state of the machine itself.
     // In other words: the script can set variables in the machine's environment, but that's it.
+    let mut context = machine.compile(&mut INPUT.as_bytes()).expect("Compilation error");
     loop {
-        match block_on(machine.exec(&mut INPUT.as_bytes())).expect("Execution error") {
+        match block_on(machine.exec(&mut context)).expect("Execution error") {
             StopReason::Eof => break,
             StopReason::Exited(i) => println!("Script explicitly exited with code {}", i),
             StopReason::Break => (), // Ignore signals.

@@ -43,7 +43,15 @@ fn safe_main() -> i32 {
         }
     };
 
-    match block_on(machine.exec(&mut input)) {
+    let mut context = match machine.compile(&mut input) {
+        Ok(context) => context,
+        Err(e) => {
+            eprintln!("ERROR: {}", e);
+            process::exit(1);
+        }
+    };
+
+    match block_on(machine.exec(&mut context)) {
         Ok(stop_reason) => stop_reason.as_exit_code(),
         Err(e) => {
             eprintln!("ERROR: {}", e);

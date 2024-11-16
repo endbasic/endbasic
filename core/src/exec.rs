@@ -552,7 +552,7 @@ impl<'s> Scope<'s> {
 }
 
 /// Machine state for the execution of an individual chunk of code.
-struct Context {
+pub struct Context {
     instrs: Vec<Instruction>,
     data: Vec<Option<Value>>,
     pc: Address,
@@ -1524,10 +1524,18 @@ impl Machine {
         }
     }
 
-    /// Executes the instructions in `context`.
+    /// Compiles a program extracted from `input` so that it can run on the configured machine and
+    /// returns an execution context.
     ///
-    /// This is a helper to `exec` which prepares the `context` from a script.
-    async fn exec_with_context(&mut self, context: &mut Context) -> Result<StopReason> {
+    /// The compiled program is bound to this specific machine configuration as it depends on the
+    /// symbols that are available in the machine at the time of compilation.
+    pub fn compile(&self, input: &mut dyn io::Read) -> Result<Context> {
+        let image = compiler::compile(input, &self.symbols)?;
+        Ok(Context::from(image))
+    }
+
+    /// Executes the instructions in `context`.
+    pub async fn exec(&mut self, context: &mut Context) -> Result<StopReason> {
         while context.pc < context.instrs.len() {
             match self.exec_until_stop(context) {
                 Ok(InternalStopReason::CheckStop) => {
@@ -1569,10 +1577,10 @@ impl Machine {
     ///
     /// Note that this does not consume `self`.  As a result, it is possible to execute multiple
     /// different programs on the same machine, all sharing state.
-    pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<StopReason> {
-        let image = compiler::compile(input, &self.symbols)?;
-        let mut context = Context::from(image);
-        self.exec_with_context(&mut context).await
+    #[cfg(test)]
+    async fn compile_and_exec(&mut self, input: &mut dyn io::Read) -> Result<StopReason> {
+        let mut context = self.compile(input)?;
+        self.exec(&mut context).await
     }
 }
 
@@ -1800,7 +1808,8 @@ mod tests {
 
         assert_eq!(
             StopReason::Eof,
-            block_on(machine.exec(&mut b"a = TRUE: b = 1".as_ref())).expect("Execution failed")
+            block_on(machine.compile_and_exec(&mut b"a = TRUE: b = 1".as_ref()))
+                .expect("Execution failed")
         );
         match machine.get_symbols().get_auto("a") {
             Some(Symbol::Variable(Value::Boolean(_))) => (),
@@ -1825,14 +1834,14 @@ mod tests {
 
         assert_eq!(
             StopReason::Eof,
-            block_on(machine.exec(&mut b"DATA 3: GETDATA".as_ref())).unwrap()
+            block_on(machine.compile_and_exec(&mut b"DATA 3: GETDATA".as_ref())).unwrap()
         );
         assert_eq!(&[Some(Value::Integer(3))], captured_data.borrow().as_slice());
 
         assert_eq!(
             StopReason::Eof,
             block_on(
-                machine.exec(
+                machine.compile_and_exec(
                     &mut b"
                         GETDATA
                         IF FALSE THEN: DATA 5: ELSE: DATA 6: END IF
@@ -1876,7 +1885,7 @@ mod tests {
         machine.add_callable(RaisefFunction::new());
         machine.add_callable(SumFunction::new());
         machine.add_callable(TypeCheckFunction::new(Value::Integer(5)));
-        block_on(machine.exec(&mut input.as_bytes()))
+        block_on(machine.compile_and_exec(&mut input.as_bytes()))
     }
 
     /// Runs the `input` code on a new test machine and verifies its output.
@@ -2156,7 +2165,7 @@ mod tests {
 
         assert_eq!(
             StopReason::Exited(10),
-            block_on(machine.exec(&mut "OUT 1\nEND 10\nOUT 2".as_bytes()))
+            block_on(machine.compile_and_exec(&mut "OUT 1\nEND 10\nOUT 2".as_bytes()))
                 .expect("Execution failed")
         );
         assert_eq!(&["1"], captured_out.borrow().as_slice());
@@ -2164,7 +2173,7 @@ mod tests {
         captured_out.borrow_mut().clear();
         assert_eq!(
             StopReason::Exited(11),
-            block_on(machine.exec(&mut "OUT 2\nEND 11\nOUT 3".as_bytes()))
+            block_on(machine.compile_and_exec(&mut "OUT 2\nEND 11\nOUT 3".as_bytes()))
                 .expect("Execution failed")
         );
         assert_eq!(&["2"], captured_out.borrow().as_slice());
@@ -2180,7 +2189,7 @@ mod tests {
         for _ in 0..10 {
             let input = &mut "WHILE TRUE: WEND".as_bytes();
             machine.drain_signals();
-            let future = machine.exec(input);
+            let future = machine.compile_and_exec(input);
 
             // There is no guarantee that the tight loop inside the machine is running immediately
             // at this point (particularly because we run with just one thread in this test), thus
@@ -2202,7 +2211,7 @@ mod tests {
         tx.send(Signal::Break).await.unwrap();
 
         let input = &mut code.as_bytes();
-        assert_eq!(StopReason::Eof, machine.exec(input).await.unwrap());
+        assert_eq!(StopReason::Eof, machine.compile_and_exec(input).await.unwrap());
 
         assert_eq!(1, tx.len());
     }
@@ -2229,7 +2238,7 @@ mod tests {
         tx.send(Signal::Break).await.unwrap();
 
         let input = &mut code.as_bytes();
-        assert_eq!(StopReason::Break, machine.exec(input).await.unwrap());
+        assert_eq!(StopReason::Break, machine.compile_and_exec(input).await.unwrap());
 
         assert_eq!(0, tx.len());
     }
@@ -3066,7 +3075,10 @@ mod tests {
         "#;
 
         let mut machine = Machine::default();
-        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut code.as_bytes())).unwrap());
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.compile_and_exec(&mut code.as_bytes())).unwrap()
+        );
         assert_eq!(1, machine.get_symbols().locals().len());
         match machine.get_symbols().get_auto("I") {
             Some(Symbol::Variable(Value::Integer(i))) => assert_eq!(4, *i),
@@ -3084,7 +3096,10 @@ mod tests {
 
         let mut machine = Machine::default();
         machine.add_callable(ClearCommand::new());
-        assert_eq!(StopReason::Eof, block_on(machine.exec(&mut code.as_bytes())).unwrap());
+        assert_eq!(
+            StopReason::Eof,
+            block_on(machine.compile_and_exec(&mut code.as_bytes())).unwrap()
+        );
     }
 
     #[test]
@@ -3242,11 +3257,11 @@ mod tests {
         let mut machine = Machine::default();
         assert_eq!(
             StopReason::Eof,
-            block_on(machine.exec(&mut b"a = 10".as_ref())).expect("Execution failed")
+            block_on(machine.compile_and_exec(&mut b"a = 10".as_ref())).expect("Execution failed")
         );
         assert_eq!(
             StopReason::Eof,
-            block_on(machine.exec(&mut b"b = a".as_ref())).expect("Execution failed")
+            block_on(machine.compile_and_exec(&mut b"b = a".as_ref())).expect("Execution failed")
         );
     }
 
