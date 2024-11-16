@@ -1527,10 +1527,13 @@ impl Machine {
     /// Executes the instructions given in `instr`.
     ///
     /// This is a helper to `exec`, which prepares the machine with the program's data upfront.
-    async fn exec_with_data(&mut self, instrs: &[Instruction]) -> Result<StopReason> {
-        let mut context = Context::default();
+    async fn exec_with_data(
+        &mut self,
+        context: &mut Context,
+        instrs: &[Instruction],
+    ) -> Result<StopReason> {
         while context.pc < instrs.len() {
-            match self.exec_until_stop(&mut context, instrs) {
+            match self.exec_until_stop(context, instrs) {
                 Ok(InternalStopReason::CheckStop) => {
                     if self.should_stop().await {
                         return Ok(StopReason::Break);
@@ -1541,21 +1544,14 @@ impl Machine {
                     let result;
                     if let Some(return_type) = data.return_type {
                         result = self
-                            .function_call(
-                                &mut context,
-                                &data.name,
-                                return_type,
-                                data.pos,
-                                data.nargs,
-                            )
+                            .function_call(context, &data.name, return_type, data.pos, data.nargs)
                             .await;
                     } else {
-                        result =
-                            self.builtin_call(&mut context, &data.name, data.pos, data.nargs).await;
+                        result = self.builtin_call(context, &data.name, data.pos, data.nargs).await;
                     }
                     match result {
                         Ok(()) => context.pc += 1,
-                        Err(e) => self.handle_error(instrs, &mut context, e)?,
+                        Err(e) => self.handle_error(instrs, context, e)?,
                     }
                 }
 
@@ -1567,7 +1563,7 @@ impl Machine {
                     return Ok(StopReason::Exited(code));
                 }
 
-                Err(e) => self.handle_error(instrs, &mut context, e)?,
+                Err(e) => self.handle_error(instrs, context, e)?,
             }
         }
         Ok(StopReason::Eof)
@@ -1580,9 +1576,11 @@ impl Machine {
     pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<StopReason> {
         let image = compiler::compile(input, &self.symbols)?;
 
+        let mut context = Context::default();
+
         assert!(self.data.is_empty());
         self.data = image.data;
-        let result = self.exec_with_data(&image.instrs).await;
+        let result = self.exec_with_data(&mut context, &image.instrs).await;
         self.data.clear();
         result
     }
