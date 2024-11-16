@@ -232,10 +232,13 @@ impl Callable for LastErrorFunction {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         assert_eq!(0, scope.nargs());
-        match machine.last_error() {
-            Some(message) => scope.return_string(message),
+        match scope.last_error() {
+            Some(message) => {
+                let message = message.to_owned();
+                scope.return_string(message)
+            }
             None => scope.return_string("".to_owned()),
         }
     }
