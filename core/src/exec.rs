@@ -1508,6 +1508,25 @@ impl Machine {
         Ok(InternalStopReason::Eof)
     }
 
+    /// Handles an upcall to the builtin callable described in `upcall`.
+    async fn handle_upcall(&mut self, context: &mut Context, upcall: &UpcallData) -> Result<()> {
+        let result;
+        if let Some(return_type) = upcall.return_type {
+            result = self
+                .function_call(context, &upcall.name, return_type, upcall.pos, upcall.nargs)
+                .await;
+        } else {
+            result = self.builtin_call(context, &upcall.name, upcall.pos, upcall.nargs).await;
+        }
+        match result {
+            Ok(()) => {
+                context.pc += 1;
+                Ok(())
+            }
+            Err(e) => self.handle_error(context, e),
+        }
+    }
+
     /// Handles the given error `e` according to the current error handler previously set by
     /// `ON ERROR`.  If the error can be handled gracefully, returns `Ok`; otherwise, returns the
     /// input error unmodified.
@@ -1564,18 +1583,7 @@ impl Machine {
                 }
 
                 Ok(InternalStopReason::Upcall(data)) => {
-                    let result;
-                    if let Some(return_type) = data.return_type {
-                        result = self
-                            .function_call(context, &data.name, return_type, data.pos, data.nargs)
-                            .await;
-                    } else {
-                        result = self.builtin_call(context, &data.name, data.pos, data.nargs).await;
-                    }
-                    match result {
-                        Ok(()) => context.pc += 1,
-                        Err(e) => self.handle_error(context, e)?,
-                    }
+                    self.handle_upcall(context, &data).await?;
                 }
 
                 Ok(InternalStopReason::Eof) => {
