@@ -94,7 +94,7 @@ impl Callable for ReadCommand {
         let mut index = self.index.borrow_mut();
         for (vname, vtype, pos) in vrefs {
             let datum = {
-                let data = machine.get_data();
+                let data = scope.data();
                 debug_assert!(*index <= data.len());
                 if *index == data.len() {
                     return Err(Error::InternalError(
