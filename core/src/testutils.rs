@@ -265,9 +265,9 @@ impl Callable for GetDataCommand {
         &self.metadata
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         assert_eq!(0, scope.nargs());
-        *self.data.borrow_mut() = machine.get_data().to_vec();
+        *self.data.borrow_mut() = scope.data().to_vec();
         Ok(())
     }
 }
