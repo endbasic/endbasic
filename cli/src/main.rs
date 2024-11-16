@@ -278,7 +278,8 @@ async fn run_repl_loop(
 async fn run_script<P: AsRef<Path>>(path: P, console_spec: Option<&str>) -> Result<i32> {
     let mut machine = new_machine_builder(console_spec)?.build()?;
     let mut input = File::open(path)?;
-    Ok(machine.exec(&mut input).await?.as_exit_code())
+    let mut context = machine.compile(&mut input)?;
+    Ok(machine.exec(&mut context).await?.as_exit_code())
 }
 
 /// Executes the `path` program in a fresh machine allowing any interactive-only calls.
@@ -320,7 +321,8 @@ async fn run_interactive(
         }
         None => {
             let mut input = File::open(path)?;
-            Ok(machine.exec(&mut input).await?.as_exit_code())
+            let mut context = machine.compile(&mut input)?;
+            Ok(machine.exec(&mut context).await?.as_exit_code())
         }
     }
 }
