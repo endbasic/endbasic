@@ -356,6 +356,7 @@ impl Stack {
 pub struct Scope<'s> {
     stack: &'s mut Stack,
     data: &'s [Option<Value>],
+    last_error: Option<&'s str>,
     nargs: usize,
     fref_pos: LineCol,
 }
@@ -372,11 +373,12 @@ impl<'s> Scope<'s> {
     fn new(
         stack: &'s mut Stack,
         data: &'s [Option<Value>],
+        last_error: Option<&'s str>,
         nargs: usize,
         fref_pos: LineCol,
     ) -> Self {
         debug_assert!(nargs <= stack.len());
-        Self { stack, data, nargs, fref_pos }
+        Self { stack, data, last_error, nargs, fref_pos }
     }
 
     /// Obtains immutable access to the data values available during the *current* execution.
@@ -398,6 +400,11 @@ impl<'s> Scope<'s> {
     /// Creates an internal error with the position of the callable that generated it.
     pub fn internal_error<S: Into<String>>(&self, msg: S) -> Error {
         Error::InternalError(self.fref_pos, msg.into())
+    }
+
+    /// Returns the last execution error.
+    pub fn last_error(&self) -> Option<&str> {
+        self.last_error
     }
 
     /// Returns the number of arguments that can still be consumed.
@@ -555,6 +562,7 @@ impl<'s> Scope<'s> {
 pub struct Context {
     instrs: Vec<Instruction>,
     data: Vec<Option<Value>>,
+    last_error: Option<String>,
     pc: Address,
     addr_stack: Vec<Address>,
     value_stack: Stack,
@@ -566,6 +574,7 @@ impl From<Image> for Context {
         Self {
             instrs: image.instrs,
             data: image.data,
+            last_error: None,
             pc: 0,
             addr_stack: vec![],
             value_stack: Stack::default(),
@@ -580,7 +589,6 @@ pub struct Machine {
     clearables: Vec<Box<dyn Clearable>>,
     yield_now_fn: Option<YieldNowFn>,
     signals_chan: (Sender<Signal>, Receiver<Signal>),
-    last_error: Option<String>,
 }
 
 impl Default for Machine {
@@ -606,7 +614,6 @@ impl Machine {
             clearables: vec![],
             yield_now_fn,
             signals_chan: signals,
-            last_error: None,
         }
     }
 
@@ -636,12 +643,6 @@ impl Machine {
             clearable.reset_state(&mut self.symbols);
         }
         self.symbols.clear();
-        self.last_error = None;
-    }
-
-    /// Returns the last execution error.
-    pub fn last_error(&self) -> Option<&str> {
-        self.last_error.as_deref()
     }
 
     /// Obtains immutable access to the state of the symbols.
@@ -708,7 +709,13 @@ impl Machine {
         let metadata = b.metadata();
         debug_assert!(!metadata.is_function());
 
-        let scope = Scope::new(&mut context.value_stack, &context.data, nargs, bref_pos);
+        let scope = Scope::new(
+            &mut context.value_stack,
+            &context.data,
+            context.last_error.as_deref(),
+            nargs,
+            bref_pos,
+        );
 
         let b = b.clone();
         b.exec(scope, self).await
@@ -921,7 +928,13 @@ impl Machine {
         let metadata = f.metadata();
         debug_assert_eq!(return_type, metadata.return_type().unwrap());
 
-        let scope = Scope::new(&mut context.value_stack, &context.data, nargs, fref_pos);
+        let scope = Scope::new(
+            &mut context.value_stack,
+            &context.data,
+            context.last_error.as_deref(),
+            nargs,
+            fref_pos,
+        );
         f.exec(scope, self).await?;
         if cfg!(debug_assertions) {
             match context.value_stack.top() {
@@ -998,7 +1011,13 @@ impl Machine {
         fpos: LineCol,
         f: Rc<dyn Callable>,
     ) -> Result<()> {
-        let scope = Scope::new(&mut context.value_stack, &context.data, 0, fpos);
+        let scope = Scope::new(
+            &mut context.value_stack,
+            &context.data,
+            context.last_error.as_deref(),
+            0,
+            fpos,
+        );
         f.exec(scope, self).await?;
         if cfg!(debug_assertions) {
             match context.value_stack.top() {
@@ -1492,12 +1511,12 @@ impl Machine {
     /// Handles the given error `e` according to the current error handler previously set by
     /// `ON ERROR`.  If the error can be handled gracefully, returns `Ok`; otherwise, returns the
     /// input error unmodified.
-    fn handle_error(&mut self, context: &mut Context, e: Error) -> Result<()> {
+    fn handle_error(&self, context: &mut Context, e: Error) -> Result<()> {
         if !e.is_catchable() {
             return Err(e);
         }
 
-        self.last_error = Some(format!("{}", e));
+        context.last_error = Some(format!("{}", e));
 
         match context.err_handler {
             ErrorHandlerISpan::Jump(addr) => {
@@ -1681,7 +1700,7 @@ mod tests {
     #[test]
     fn test_scope_and_stack_empty() {
         let mut stack = Stack::from([]);
-        let scope = Scope::new(&mut stack, &[], 0, LineCol { line: 50, col: 60 });
+        let scope = Scope::new(&mut stack, &[], None, 0, LineCol { line: 50, col: 60 });
         drop(scope);
         assert_eq!(0, stack.len());
     }
@@ -1689,7 +1708,7 @@ mod tests {
     #[test]
     fn test_scope_no_args() {
         let mut stack = Stack::from([(Value::Integer(3), LineCol { line: 1, col: 2 })]);
-        let scope = Scope::new(&mut stack, &[], 0, LineCol { line: 50, col: 60 });
+        let scope = Scope::new(&mut stack, &[], None, 0, LineCol { line: 50, col: 60 });
         drop(scope);
         assert_eq!(1, stack.len());
     }
@@ -1702,7 +1721,7 @@ mod tests {
             (Value::Integer(2), LineCol { line: 1, col: 2 }),
             (Value::Integer(4), LineCol { line: 1, col: 2 }),
         ]);
-        let mut scope = Scope::new(&mut stack, &[], 3, LineCol { line: 50, col: 60 });
+        let mut scope = Scope::new(&mut stack, &[], None, 3, LineCol { line: 50, col: 60 });
         assert_eq!(3, scope.nargs());
         assert_eq!(4, scope.pop_integer());
         assert_eq!(2, scope.nargs());
@@ -1722,7 +1741,7 @@ mod tests {
             (Value::Text("foo".to_owned()), LineCol { line: 1, col: 2 }),
             (Value::VarRef(SymbolKey::from("foo"), ExprType::Integer), LineCol { line: 1, col: 2 }),
         ]);
-        let mut scope = Scope::new(&mut stack, &[], 5, LineCol { line: 50, col: 60 });
+        let mut scope = Scope::new(&mut stack, &[], None, 5, LineCol { line: 50, col: 60 });
         assert_eq!((SymbolKey::from("foo"), ExprType::Integer), scope.pop_varref());
         assert_eq!("foo", scope.pop_string());
         assert_eq!(2, scope.pop_integer());
@@ -1742,7 +1761,7 @@ mod tests {
                 LineCol { line: 9, col: 10 },
             ),
         ]);
-        let mut scope = Scope::new(&mut stack, &[], 5, LineCol { line: 50, col: 60 });
+        let mut scope = Scope::new(&mut stack, &[], None, 5, LineCol { line: 50, col: 60 });
         assert_eq!(
             (SymbolKey::from("foo"), ExprType::Integer, LineCol { line: 9, col: 10 }),
             scope.pop_varref_with_pos()
@@ -1756,7 +1775,7 @@ mod tests {
     #[test]
     fn test_scope_return_any() {
         let mut stack = Stack::from([(Value::Boolean(false), LineCol { line: 1, col: 2 })]);
-        let scope = Scope::new(&mut stack, &[], 0, LineCol { line: 50, col: 60 });
+        let scope = Scope::new(&mut stack, &[], None, 0, LineCol { line: 50, col: 60 });
         assert!(scope.return_any(Value::Boolean(true)).is_ok());
         assert_eq!((true, LineCol { line: 50, col: 60 }), stack.pop_boolean_with_pos());
         assert_eq!((false, LineCol { line: 1, col: 2 }), stack.pop_boolean_with_pos());
@@ -1765,7 +1784,7 @@ mod tests {
     #[test]
     fn test_scope_return_boolean() {
         let mut stack = Stack::from([(Value::Boolean(false), LineCol { line: 1, col: 2 })]);
-        let scope = Scope::new(&mut stack, &[], 0, LineCol { line: 50, col: 60 });
+        let scope = Scope::new(&mut stack, &[], None, 0, LineCol { line: 50, col: 60 });
         assert!(scope.return_boolean(true).is_ok());
         assert_eq!((true, LineCol { line: 50, col: 60 }), stack.pop_boolean_with_pos());
         assert_eq!((false, LineCol { line: 1, col: 2 }), stack.pop_boolean_with_pos());
@@ -1774,7 +1793,7 @@ mod tests {
     #[test]
     fn test_scope_return_double() {
         let mut stack = Stack::from([(Value::Boolean(false), LineCol { line: 1, col: 2 })]);
-        let scope = Scope::new(&mut stack, &[], 0, LineCol { line: 50, col: 60 });
+        let scope = Scope::new(&mut stack, &[], None, 0, LineCol { line: 50, col: 60 });
         assert!(scope.return_double(4.5).is_ok());
         assert_eq!((4.5, LineCol { line: 50, col: 60 }), stack.pop_double_with_pos());
         assert_eq!((false, LineCol { line: 1, col: 2 }), stack.pop_boolean_with_pos());
@@ -1783,7 +1802,7 @@ mod tests {
     #[test]
     fn test_scope_return_integer() {
         let mut stack = Stack::from([(Value::Boolean(false), LineCol { line: 1, col: 2 })]);
-        let scope = Scope::new(&mut stack, &[], 0, LineCol { line: 50, col: 60 });
+        let scope = Scope::new(&mut stack, &[], None, 0, LineCol { line: 50, col: 60 });
         assert!(scope.return_integer(7).is_ok());
         assert_eq!((7, LineCol { line: 50, col: 60 }), stack.pop_integer_with_pos());
         assert_eq!((false, LineCol { line: 1, col: 2 }), stack.pop_boolean_with_pos());
@@ -1792,7 +1811,7 @@ mod tests {
     #[test]
     fn test_scope_return_string() {
         let mut stack = Stack::from([(Value::Boolean(false), LineCol { line: 1, col: 2 })]);
-        let scope = Scope::new(&mut stack, &[], 0, LineCol { line: 50, col: 60 });
+        let scope = Scope::new(&mut stack, &[], None, 0, LineCol { line: 50, col: 60 });
         assert!(scope.return_string("foo").is_ok());
         assert_eq!(("foo".to_owned(), LineCol { line: 50, col: 60 }), stack.pop_string_with_pos());
         assert_eq!((false, LineCol { line: 1, col: 2 }), stack.pop_boolean_with_pos());
