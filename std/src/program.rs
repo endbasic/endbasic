@@ -21,7 +21,7 @@ use crate::strings::parse_boolean;
 use async_trait::async_trait;
 use endbasic_core::ast::ExprType;
 use endbasic_core::compiler::{compile, ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{Machine, Result, Scope, StopReason};
+use endbasic_core::exec::{Machine, Result, Scope};
 use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -43,9 +43,6 @@ interpreter, or use the NEW command.  These operations will ask you to save the 
 have forgotten to do so, but it's better to get in the habit of saving often.
 See the \"File system\" help topic for information on where the programs can be saved and loaded \
 from.";
-
-/// Message to print on the console when receiving a break signal.
-pub const BREAK_MSG: &str = "**** BREAK ****";
 
 /// Representation of the single program that we can keep in memory.
 #[async_trait(?Send)]
@@ -482,7 +479,6 @@ impl Callable for NewCommand {
 /// The `RUN` command.
 pub struct RunCommand {
     metadata: CallableMetadata,
-    console: Rc<RefCell<dyn Console>>,
     program: Rc<RefCell<dyn Program>>,
 }
 
@@ -490,7 +486,7 @@ impl RunCommand {
     /// Creates a new `RUN` command that executes the `program`.
     ///
     /// Reports any non-successful return codes from the program to the console.
-    pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+    pub fn new(program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RUN")
                 .with_syntax(&[(&[], None)])
@@ -501,7 +497,6 @@ This issues a CLEAR operation before starting the program to prevent previous le
 from interfering with the new execution.",
                 )
                 .build(),
-            console,
             program,
         })
     }
@@ -515,25 +510,10 @@ impl Callable for RunCommand {
 
     async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(0, scope.nargs());
-
-        machine.clear();
         let program = self.program.borrow().text();
-        let mut context = machine.compile(&mut program.as_bytes())?;
-        let stop_reason = machine.exec(&mut context).await?;
-        match stop_reason {
-            StopReason::Break => {
-                self.console.borrow_mut().print(BREAK_MSG).map_err(|e| scope.io_error(e))?
-            }
-            stop_reason => {
-                if stop_reason.as_exit_code() != 0 {
-                    self.console
-                        .borrow_mut()
-                        .print(&format!("Program exited with code {}", stop_reason.as_exit_code()))
-                        .map_err(|e| scope.io_error(e))?;
-                }
-            }
-        }
-        Ok(())
+        machine.clear();
+        let context = machine.compile(&mut program.as_bytes())?;
+        scope.exec_next(context)
     }
 }
 
@@ -633,7 +613,7 @@ pub fn add_all(
     machine.add_callable(ListCommand::new(console.clone(), program.clone()));
     machine.add_callable(LoadCommand::new(console.clone(), storage.clone(), program.clone()));
     machine.add_callable(NewCommand::new(console.clone(), program.clone()));
-    machine.add_callable(RunCommand::new(console.clone(), program.clone()));
+    machine.add_callable(RunCommand::new(program.clone()));
     machine.add_callable(SaveCommand::new(console, storage, program));
 }
 
@@ -1034,7 +1014,7 @@ mod tests {
             .set_program(Some("untouched.bas"), program)
             .run(r#"RUN: PRINT "after""#)
             .expect_clear()
-            .expect_prints([" 5", "Program exited with code 1", "after"])
+            .expect_prints([" 5", "after"])
             .expect_program(Some("untouched.bas"), program)
             .check();
     }

@@ -154,8 +154,10 @@ fn main() {
     loop {
         match block_on(machine.exec(&mut context)).expect("Execution error") {
             StopReason::Eof => break,
-            StopReason::Exited(i) => println!("Script explicitly exited with code {}", i),
-            StopReason::Break => (), // Ignore signals.
+            StopReason::Exited(i, _is_final) => {
+                println!("Script explicitly exited with code {}", i)
+            }
+            StopReason::Break(_is_final) => (), // Ignore signals.
         }
     }
 

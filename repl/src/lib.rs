@@ -24,7 +24,7 @@
 
 use endbasic_core::exec::{Machine, StopReason};
 use endbasic_std::console::{self, is_narrow, refill_and_print, Console};
-use endbasic_std::program::{continue_if_modified, Program, BREAK_MSG};
+use endbasic_std::program::{continue_if_modified, Program};
 use endbasic_std::storage::Storage;
 use std::cell::RefCell;
 use std::io;
@@ -32,6 +32,9 @@ use std::rc::Rc;
 
 pub mod demos;
 pub mod editor;
+
+/// Message to print on the console when receiving a break signal.
+const BREAK_MSG: &str = "**** BREAK ****";
 
 /// Prints the EndBASIC welcome message to the given console.
 pub fn print_welcome(console: Rc<RefCell<dyn Console>>) -> io::Result<()> {
@@ -132,12 +135,12 @@ pub async fn run_from_cloud(
             console.print("**** Program exited due to EOF ****")?;
             r.as_exit_code()
         }
-        Ok(r @ StopReason::Exited(_)) => {
+        Ok(r @ StopReason::Exited(_code, _is_final)) => {
             let code = r.as_exit_code();
             console.print(&format!("**** Program exited with code {} ****", code))?;
             code
         }
-        Ok(r @ StopReason::Break) => {
+        Ok(r @ StopReason::Break(_is_final)) => {
             console.print("**** Program stopped due to BREAK ****")?;
             r.as_exit_code()
         }
@@ -216,20 +219,26 @@ pub async fn run_repl_loop(
                 } else if e.kind() == io::ErrorKind::UnexpectedEof {
                     let mut console = console.borrow_mut();
                     console.print("End of input by CTRL-D")?;
-                    stop_reason = StopReason::Exited(0);
+                    stop_reason = StopReason::Exited(0, true);
                 } else {
-                    stop_reason = StopReason::Exited(1);
+                    stop_reason = StopReason::Exited(1, true);
                 }
             }
         }
 
         match stop_reason {
             StopReason::Eof => (),
-            StopReason::Break => {
+            StopReason::Break(_is_final) => {
                 console.borrow_mut().print("**** BREAK ****")?;
                 stop_reason = StopReason::Eof;
             }
-            StopReason::Exited(_) => {
+            StopReason::Exited(_, false) => {
+                console
+                    .borrow_mut()
+                    .print(&format!("Program exited with code {}", stop_reason.as_exit_code()))?;
+                stop_reason = StopReason::Eof;
+            }
+            StopReason::Exited(_, true) => {
                 if !continue_if_modified(&*program.borrow(), &mut *console.borrow_mut()).await? {
                     console.borrow_mut().print("Exit aborted; resuming REPL loop.")?;
                     stop_reason = StopReason::Eof;

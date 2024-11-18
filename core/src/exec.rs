@@ -135,10 +135,18 @@ pub enum StopReason {
     Eof,
 
     /// Execution terminated because the machine was asked to terminate with `END`.
-    Exited(u8),
+    ///
+    /// The boolean indicates whether this stop is final.  If false, the stop request comes from a
+    /// nested invocation triggered by `RUN` so the caller may want to capture the stop and print a
+    /// message instead of exiting.
+    Exited(u8, bool),
 
     /// Execution terminated because the machine received a break signal.
-    Break,
+    ///
+    /// The boolean indicates whether this stop is final.  If false, the stop request comes from
+    /// cancelling the execution of a nested `RUN` so the caller may want to capture the stop and
+    /// print a message instead of exiting.
+    Break(bool),
 }
 
 impl StopReason {
@@ -146,8 +154,8 @@ impl StopReason {
     pub fn as_exit_code(&self) -> i32 {
         match self {
             StopReason::Eof => 0,
-            StopReason::Exited(i) => *i as i32,
-            StopReason::Break => {
+            StopReason::Exited(i, _is_final) => *i as i32,
+            StopReason::Break(_is_final) => {
                 // This mimics the behavior of typical Unix shells, which translate a signal to a
                 // numerical exit code, but this is not accurate.  First, because a CTRL+C sequence
                 // should be exposed as a SIGINT signal to whichever process is waiting for us, and
@@ -548,6 +556,14 @@ impl<'s> Scope<'s> {
         self.context.value_stack.push((Value::Text(value.into()), self.fref_pos));
         Ok(())
     }
+
+    /// Asks the machine to continue execution on `next_context`, abandoning the current execution.
+    ///
+    /// This exists to support the semantics of the `RUN` command.
+    pub fn exec_next(self, next_context: Context) -> Result<()> {
+        self.context.run_next = Some(Box::from(next_context));
+        Ok(())
+    }
 }
 
 /// Machine state for the execution of an individual chunk of code.
@@ -559,6 +575,8 @@ pub struct Context {
     addr_stack: Vec<Address>,
     value_stack: Stack,
     err_handler: ErrorHandlerISpan,
+    run_next: Option<Box<Context>>,
+    run_prev: Option<Box<Context>>,
 }
 
 impl Default for Context {
@@ -571,6 +589,8 @@ impl Default for Context {
             addr_stack: vec![],
             value_stack: Stack::default(),
             err_handler: ErrorHandlerISpan::None,
+            run_next: None,
+            run_prev: None,
         }
     }
 }
@@ -1501,6 +1521,17 @@ impl Machine {
         match result {
             Ok(()) => {
                 context.pc += 1;
+
+                // If we are coming back from a `RUN` command invocation, swap the current context
+                // with the one passed to `RUN` (stored in `run_next`), and save the current context
+                // in `run_prev` so that we can resume execution later on.
+                if let Some(mut next) = context.run_next.take() {
+                    let mut prev = Context::default();
+                    std::mem::swap(context, &mut prev);
+                    next.run_prev = Some(Box::from(prev));
+                    *context = *next;
+                }
+
                 Ok(())
             }
             Err(e) => self.handle_error(context, e),
@@ -1554,27 +1585,43 @@ impl Machine {
 
     /// Executes the instructions in `context`.
     pub async fn exec(&mut self, context: &mut Context) -> Result<StopReason> {
-        while context.pc < context.instrs.len() {
-            match self.exec_until_stop(context) {
-                Ok(InternalStopReason::CheckStop) => {
-                    if self.should_stop().await {
-                        return Ok(StopReason::Break);
+        loop {
+            while context.pc < context.instrs.len() {
+                match self.exec_until_stop(context) {
+                    Ok(InternalStopReason::CheckStop) => {
+                        if self.should_stop().await {
+                            return Ok(StopReason::Break(context.run_prev.is_none()));
+                        }
                     }
-                }
 
-                Ok(InternalStopReason::Upcall(data)) => {
-                    self.handle_upcall(context, &data).await?;
-                }
+                    Ok(InternalStopReason::Upcall(data)) => {
+                        self.handle_upcall(context, &data).await?;
+                    }
 
-                Ok(InternalStopReason::Eof) => {
-                    return Ok(StopReason::Eof);
-                }
+                    Ok(InternalStopReason::Eof) => {
+                        if context.run_prev.is_some() {
+                            break;
+                        }
 
-                Ok(InternalStopReason::Exited(code)) => {
-                    return Ok(StopReason::Exited(code));
-                }
+                        return Ok(StopReason::Eof);
+                    }
 
-                Err(e) => self.handle_error(context, e)?,
+                    Ok(InternalStopReason::Exited(code)) => {
+                        if context.run_prev.is_some() {
+                            break;
+                        }
+
+                        return Ok(StopReason::Exited(code, context.run_prev.is_none()));
+                    }
+
+                    Err(e) => self.handle_error(context, e)?,
+                }
+            }
+
+            if let Some(prev) = context.run_prev.take() {
+                *context = *prev;
+            } else {
+                break;
             }
         }
         Ok(StopReason::Eof)
@@ -2131,7 +2178,7 @@ mod tests {
     fn test_end_no_code() {
         let captured_out = Rc::from(RefCell::from(vec![]));
         assert_eq!(
-            StopReason::Exited(5),
+            StopReason::Exited(5, true),
             run("OUT 1\nEND 5\nOUT 2", &[], captured_out.clone()).expect("Execution failed")
         );
         assert_eq!(&["1"], captured_out.borrow().as_slice());
@@ -2140,7 +2187,7 @@ mod tests {
     fn do_end_with_code_test(code: u8) {
         let captured_out = Rc::from(RefCell::from(vec![]));
         assert_eq!(
-            StopReason::Exited(code),
+            StopReason::Exited(code, true),
             run(&format!("OUT 1: END {}: OUT 2", code), &[], captured_out.clone())
                 .expect("Execution failed")
         );
@@ -2148,7 +2195,7 @@ mod tests {
 
         let captured_out = Rc::from(RefCell::from(vec![]));
         assert_eq!(
-            StopReason::Exited(code),
+            StopReason::Exited(code, true),
             run(&format!("OUT 1: END {}.2: OUT 2", code), &[], captured_out.clone())
                 .expect("Execution failed")
         );
@@ -2185,7 +2232,7 @@ mod tests {
                 OUT OUTF(5, 500)
             END IF
             "#;
-        assert_eq!(StopReason::Exited(0), run(input, &[], captured_out.clone()).unwrap());
+        assert_eq!(StopReason::Exited(0, true), run(input, &[], captured_out.clone()).unwrap());
         assert_eq!(&["100", "1"], captured_out.borrow().as_slice());
     }
 
@@ -2193,7 +2240,7 @@ mod tests {
     fn test_end_for() {
         let captured_out = Rc::from(RefCell::from(vec![]));
         let input = r#"FOR i = 1 TO OUTF(10, i * 100): IF i = 3 THEN: END: END IF: OUT i: NEXT"#;
-        assert_eq!(StopReason::Exited(0), run(input, &[], captured_out.clone()).unwrap());
+        assert_eq!(StopReason::Exited(0, true), run(input, &[], captured_out.clone()).unwrap());
         assert_eq!(&["100", "1", "200", "2", "300"], captured_out.borrow().as_slice());
     }
 
@@ -2201,7 +2248,7 @@ mod tests {
     fn test_end_while() {
         let captured_out = Rc::from(RefCell::from(vec![]));
         let input = r#"i = 1: WHILE i < OUTF(10, i * 100): IF i = 4 THEN: END: END IF: OUT i: i = i + 1: WEND"#;
-        assert_eq!(StopReason::Exited(0), run(input, &[], captured_out.clone()).unwrap());
+        assert_eq!(StopReason::Exited(0, true), run(input, &[], captured_out.clone()).unwrap());
         assert_eq!(&["100", "1", "200", "2", "300", "3", "400"], captured_out.borrow().as_slice());
     }
 
@@ -2209,7 +2256,7 @@ mod tests {
     fn test_end_nested() {
         let captured_out = Rc::from(RefCell::from(vec![]));
         assert_eq!(
-            StopReason::Exited(42),
+            StopReason::Exited(42, true),
             run(
                 "FOR a = 0 TO 10\nOUT a\nIF a = 3 THEN\nEND 42\nOUT \"no\"\nEND IF\nNEXT",
                 &[],
@@ -2228,7 +2275,7 @@ mod tests {
         machine.add_callable(SumFunction::new());
 
         assert_eq!(
-            StopReason::Exited(10),
+            StopReason::Exited(10, true),
             block_on(machine.compile_and_exec(&mut "OUT 1\nEND 10\nOUT 2".as_bytes()))
                 .expect("Execution failed")
         );
@@ -2236,7 +2283,7 @@ mod tests {
 
         captured_out.borrow_mut().clear();
         assert_eq!(
-            StopReason::Exited(11),
+            StopReason::Exited(11, true),
             block_on(machine.compile_and_exec(&mut "OUT 2\nEND 11\nOUT 3".as_bytes()))
                 .expect("Execution failed")
         );
@@ -2264,7 +2311,7 @@ mod tests {
 
             signals_tx.send(Signal::Break).await.unwrap();
             let result = future.await;
-            assert_eq!(StopReason::Break, result.unwrap());
+            assert_eq!(StopReason::Break(true), result.unwrap());
         }
     }
 
@@ -2302,7 +2349,7 @@ mod tests {
         tx.send(Signal::Break).await.unwrap();
 
         let input = &mut code.as_bytes();
-        assert_eq!(StopReason::Break, machine.compile_and_exec(input).await.unwrap());
+        assert_eq!(StopReason::Break(true), machine.compile_and_exec(input).await.unwrap());
 
         assert_eq!(0, tx.len());
     }
@@ -2820,7 +2867,7 @@ mod tests {
     fn test_goto_as_last_statement() {
         let captured_out = Rc::from(RefCell::from(vec![]));
         assert_eq!(
-            StopReason::Exited(5),
+            StopReason::Exited(5, true),
             run(
                 "i = 0: @a: IF i = 5 THEN: END i: END IF: i = i + 1: GOTO @a",
                 &[],
