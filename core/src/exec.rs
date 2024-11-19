@@ -87,7 +87,7 @@ pub enum Signal {
 
 /// Request to exit the VM execution loop to execute a native command or function.
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct UpcallData {
+pub struct UpcallData {
     /// Name of the callable to execute.
     name: SymbolKey,
 
@@ -111,16 +111,24 @@ struct UpcallData {
 /// inner loop of the bytecode interpreter sync.  Early benchmarks showed a 25% performance
 /// improvement just by removing async from the loop and pushing the infrequent async awaits to an
 /// outer loop.
-enum InternalStopReason {
+pub enum InternalStopReason {
     /// Execution terminated because the bytecode reached a point in the instructions where an
     /// interruption, if any, should be processed.
-    CheckStop,
+    ///
+    /// The boolean indicates whether this stop is final.  If false, the stop request comes from a
+    /// nested invocation triggered by `RUN` so the caller may want to capture the stop and print a
+    /// message instead of exiting.
+    CheckStop(bool),
 
     /// Execution terminated because the machine reached the end of the input.
     Eof,
 
     /// Execution terminated because the machine was asked to terminate with `END`.
-    Exited(u8),
+    ///
+    /// The boolean indicates whether this stop is final.  If false, the stop request comes from
+    /// cancelling the execution of a nested `RUN` so the caller may want to capture the stop and
+    /// print a message instead of exiting.
+    Exited(u8, bool),
 
     /// Execution terminated because the bytecode requires the caller to issue a builtin function
     /// or command call.
@@ -674,7 +682,7 @@ impl Machine {
     }
 
     /// Returns true if execution should stop because we have hit a stop condition.
-    async fn should_stop(&mut self) -> bool {
+    pub async fn should_stop(&mut self) -> bool {
         if let Some(yield_now) = self.yield_now_fn.as_ref() {
             (yield_now)().await;
         }
@@ -779,7 +787,7 @@ impl Machine {
         } else {
             0
         };
-        Ok(InternalStopReason::Exited(code))
+        Ok(InternalStopReason::Exited(code, context.run_prev.is_none()))
     }
 
     /// Handles a unary logical operator that cannot fail.
@@ -1359,7 +1367,7 @@ impl Machine {
                     let old_pc = context.pc;
                     context.pc = span.addr;
                     if span.addr <= old_pc {
-                        return Ok(InternalStopReason::CheckStop);
+                        return Ok(InternalStopReason::CheckStop(context.run_prev.is_none()));
                     }
                 }
 
@@ -1368,7 +1376,7 @@ impl Machine {
                         let old_pc = context.pc;
                         context.pc = span.addr;
                         if span.addr <= old_pc {
-                            return Ok(InternalStopReason::CheckStop);
+                            return Ok(InternalStopReason::CheckStop(context.run_prev.is_none()));
                         }
                     } else {
                         context.pc += 1;
@@ -1381,7 +1389,7 @@ impl Machine {
                         let old_pc = context.pc;
                         context.pc = *addr;
                         if *addr <= old_pc {
-                            return Ok(InternalStopReason::CheckStop);
+                            return Ok(InternalStopReason::CheckStop(context.run_prev.is_none()));
                         }
                     } else {
                         context.pc += 1;
@@ -1396,7 +1404,7 @@ impl Machine {
                         let old_pc = context.pc;
                         context.pc = *addr;
                         if *addr <= old_pc {
-                            return Ok(InternalStopReason::CheckStop);
+                            return Ok(InternalStopReason::CheckStop(context.run_prev.is_none()));
                         }
                     }
                 }
@@ -1486,7 +1494,7 @@ impl Machine {
                 Instruction::Return(pos) => match context.addr_stack.pop() {
                     Some(addr) => {
                         context.pc = addr;
-                        return Ok(InternalStopReason::CheckStop);
+                        return Ok(InternalStopReason::CheckStop(context.run_prev.is_none()));
                     }
                     None => return new_syntax_error(*pos, "No address to return to".to_owned()),
                 },
@@ -1509,7 +1517,11 @@ impl Machine {
     }
 
     /// Handles an upcall to the builtin callable described in `upcall`.
-    async fn handle_upcall(&mut self, context: &mut Context, upcall: &UpcallData) -> Result<()> {
+    pub async fn handle_upcall(
+        &mut self,
+        context: &mut Context,
+        upcall: &UpcallData,
+    ) -> Result<()> {
         let result;
         if let Some(return_type) = upcall.return_type {
             result = self
@@ -1583,37 +1595,27 @@ impl Machine {
         Ok(Context::from(image))
     }
 
-    /// Executes the instructions in `context`.
-    pub async fn exec(&mut self, context: &mut Context) -> Result<StopReason> {
+    /// Executes the instructions in `context` until the bytecode performs an explicit exit or until
+    /// the bytecode requests the caller to perform a service on its behalf (such as an interrupt
+    /// check or a call to a built-in).
+    pub async fn resume(&mut self, context: &mut Context) -> Result<InternalStopReason> {
+        let mut stop_reason = InternalStopReason::Eof;
         loop {
             while context.pc < context.instrs.len() {
                 match self.exec_until_stop(context) {
-                    Ok(InternalStopReason::CheckStop) => {
-                        if self.should_stop().await {
-                            return Ok(StopReason::Break(context.run_prev.is_none()));
-                        }
+                    // Controlled stops asking for service do not abort chained execution because we
+                    // expect execution to resume.
+                    Ok(sr @ InternalStopReason::CheckStop(..)) => return Ok(sr),
+                    Ok(sr @ InternalStopReason::Upcall(..)) => return Ok(sr),
+
+                    // Explicit exits from the execution loop abort the current context but we need
+                    // to resume chained contexts if necessary.
+                    Ok(sr @ InternalStopReason::Eof) | Ok(sr @ InternalStopReason::Exited(..)) => {
+                        stop_reason = sr;
+                        break;
                     }
 
-                    Ok(InternalStopReason::Upcall(data)) => {
-                        self.handle_upcall(context, &data).await?;
-                    }
-
-                    Ok(InternalStopReason::Eof) => {
-                        if context.run_prev.is_some() {
-                            break;
-                        }
-
-                        return Ok(StopReason::Eof);
-                    }
-
-                    Ok(InternalStopReason::Exited(code)) => {
-                        if context.run_prev.is_some() {
-                            break;
-                        }
-
-                        return Ok(StopReason::Exited(code, context.run_prev.is_none()));
-                    }
-
+                    // Errors abort chained execution early.
                     Err(e) => self.handle_error(context, e)?,
                 }
             }
@@ -1624,7 +1626,32 @@ impl Machine {
                 break;
             }
         }
-        Ok(StopReason::Eof)
+        Ok(stop_reason)
+    }
+
+    /// Executes the instructions in `context` through completion.
+    pub async fn exec(&mut self, context: &mut Context) -> Result<StopReason> {
+        loop {
+            match self.resume(context).await? {
+                InternalStopReason::CheckStop(is_final) => {
+                    if self.should_stop().await {
+                        return Ok(StopReason::Break(is_final));
+                    }
+                }
+
+                InternalStopReason::Upcall(data) => {
+                    self.handle_upcall(context, &data).await?;
+                }
+
+                InternalStopReason::Eof => {
+                    return Ok(StopReason::Eof);
+                }
+
+                InternalStopReason::Exited(code, is_final) => {
+                    return Ok(StopReason::Exited(code, is_final));
+                }
+            }
+        }
     }
 
     /// Executes a program extracted from the `input` readable.

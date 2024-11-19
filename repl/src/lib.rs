@@ -22,7 +22,7 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
-use endbasic_core::exec::{Machine, StopReason};
+use endbasic_core::exec::{InternalStopReason, Machine, StopReason};
 use endbasic_std::console::{self, is_narrow, refill_and_print, Console};
 use endbasic_std::program::{continue_if_modified, Program};
 use endbasic_std::storage::Storage;
@@ -195,19 +195,45 @@ pub async fn run_repl_loop(
 
         match line {
             Ok(line) => {
-                match machine.compile(&mut line.as_bytes()) {
-                    Ok(mut context) => match machine.exec(&mut context).await {
-                        Ok(reason) => stop_reason = reason,
-                        Err(e) => {
-                            let mut console = console.borrow_mut();
-                            console.print(format!("ERROR: {}", e).as_str())?;
-                        }
-                    },
+                let mut context = match machine.compile(&mut line.as_bytes()) {
+                    Ok(context) => context,
                     Err(e) => {
                         let mut console = console.borrow_mut();
                         console.print(format!("ERROR: {}", e).as_str())?;
+                        continue;
                     }
                 };
+
+                loop {
+                    match machine.resume(&mut context).await {
+                        Ok(InternalStopReason::CheckStop(is_final)) => {
+                            if machine.should_stop().await {
+                                stop_reason = StopReason::Break(is_final);
+                                break;
+                            }
+                        }
+                        Ok(InternalStopReason::Upcall(data)) => {
+                            if let Err(e) = machine.handle_upcall(&mut context, &data).await {
+                                let mut console = console.borrow_mut();
+                                console.print(format!("ERROR: {}", e).as_str())?;
+                                break;
+                            }
+                        }
+                        Ok(InternalStopReason::Eof) => {
+                            stop_reason = StopReason::Eof;
+                            break;
+                        }
+                        Ok(InternalStopReason::Exited(code, is_final)) => {
+                            stop_reason = StopReason::Exited(code, is_final);
+                            break;
+                        }
+                        Err(e) => {
+                            let mut console = console.borrow_mut();
+                            console.print(format!("ERROR: {}", e).as_str())?;
+                            break;
+                        }
+                    }
+                }
             }
             Err(e) => {
                 if e.kind() == io::ErrorKind::Interrupted {
