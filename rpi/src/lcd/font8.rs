@@ -49,12 +49,13 @@
  *
  ******************************************************************************
  */
+use crate::lcd::{Font, LcdSize};
 
 /// Width of the font glyphs in pixels.
-pub(crate) const WIDTH: usize = 5;
+const WIDTH: usize = 5;
 
 /// Height of the font glyphs in pixels.
-pub(crate) const HEIGHT: usize = 8;
+const HEIGHT: usize = 8;
 
 /// Raw font data table for ASCII characters.  Use `glyph` to access.
 const DATA: &[u8] = &[
@@ -915,19 +916,25 @@ const DATA: &[u8] = &[
     0x00, //
 ];
 
-/// Returns the pixel data for the given `ch`.
-///
-/// The returned slice contains one byte per row, and each row indicates which pixels need to be
-/// drawn from left to right.  Only the first `WIDTH` bits in every row contain valid data.
-pub(crate) fn glyph(mut ch: char) -> &'static [u8] {
-    if !(' '..='~').contains(&ch) {
-        // TODO(jmmv): Would be nicer to draw an empty box, much like how unknown Unicode characters
-        // are typically displayed.
-        ch = '?';
+/// A small font to be used in small LCDs.
+#[derive(Default)]
+pub(crate) struct Font8 {}
+
+impl Font for Font8 {
+    fn size(&self) -> LcdSize {
+        LcdSize { width: WIDTH, height: HEIGHT }
     }
-    let offset = ((ch as usize) - (' ' as usize)) * HEIGHT;
-    debug_assert!(offset < (DATA.len() + HEIGHT));
-    &DATA[offset..offset + HEIGHT]
+
+    fn glyph(&self, mut ch: char) -> &'static [u8] {
+        if !(' '..='~').contains(&ch) {
+            // TODO(jmmv): Would be nicer to draw an empty box, much like how unknown Unicode
+            // characters are typically displayed.
+            ch = '?';
+        }
+        let offset = ((ch as usize) - (' ' as usize)) * HEIGHT;
+        debug_assert!(offset < (DATA.len() + HEIGHT));
+        &DATA[offset..offset + HEIGHT]
+    }
 }
 
 #[cfg(test)]
@@ -939,7 +946,8 @@ mod tests {
         let offset = (usize::from(b'a') - usize::from(b' ')) * 8;
         let expected = &DATA[offset..offset + 8];
 
-        let data = glyph('a');
+        let font = Font8::default();
+        let data = font.glyph('a');
         assert_eq!(expected, data);
     }
 
@@ -948,7 +956,8 @@ mod tests {
         let offset = (usize::from(b'?') - usize::from(b' ')) * 8;
         let expected = &DATA[offset..offset + 8];
 
-        let data = glyph(char::from(30));
+        let font = Font8::default();
+        let data = font.glyph(char::from(30));
         assert_eq!(expected, data);
     }
 }

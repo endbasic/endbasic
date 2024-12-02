@@ -20,7 +20,7 @@ use std::convert::TryFrom;
 use std::io;
 
 mod buffered;
-mod font8;
+pub(crate) mod font8;
 
 pub(crate) use buffered::BufferedLcd;
 
@@ -48,6 +48,18 @@ impl AsByteSlice for RGB888Pixel {
     fn as_slice(&self) -> &[u8] {
         &self.0
     }
+}
+
+/// Representation of a font.
+pub(crate) trait Font {
+    /// Returns the size of a glyph, in pixels.
+    fn size(&self) -> LcdSize;
+
+    /// Returns the pixel data for the given `ch`.
+    ///
+    /// The returned slice contains one byte per row, and each row indicates which pixels need to be
+    /// drawn from left to right.  Only the first `WIDTH` bits in every row contain valid data.
+    fn glyph(&self, ch: char) -> &'static [u8];
 }
 
 /// Primitives that an LCD must define.
