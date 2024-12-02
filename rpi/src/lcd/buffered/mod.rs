@@ -15,8 +15,7 @@
 
 //! Buffered implementation of the `RasterOps` for a hardware LCD.
 
-use crate::lcd::font8;
-use crate::lcd::{to_xy_size, AsByteSlice, Lcd, LcdSize, LcdXY};
+use crate::lcd::{to_xy_size, AsByteSlice, Font, Lcd, LcdSize, LcdXY};
 use endbasic_std::console::drawing;
 use endbasic_std::console::graphics::{RasterInfo, RasterOps};
 use endbasic_std::console::{CharsXY, PixelsXY, SizeInPixels, RGB};
@@ -28,14 +27,15 @@ mod tests;
 #[cfg(test)]
 mod testutils;
 
-/// Implements buffering for a backing slow LCD `L`.
+/// Implements buffering for a backing slow LCD `L` that renders text with the font `F`.
 ///
 /// All drawing operations are saved to a memory-backed framebuffer.  If syncing is enabled, drawing
 /// primitives are flushed right away to the device; otherwise, they are applied to memory only
 /// until an explicit sync is requested.  The framebuffer is also used to implement all pixel data
 /// reading.
-pub(crate) struct BufferedLcd<L: Lcd> {
+pub(crate) struct BufferedLcd<L: Lcd, F: Font> {
     lcd: L,
+    font: F,
 
     fb: Vec<u8>,
     stride: usize,
@@ -43,19 +43,19 @@ pub(crate) struct BufferedLcd<L: Lcd> {
     damage: Option<(LcdXY, LcdXY)>,
 
     size_pixels: LcdSize,
-    glyph_size: LcdSize,
     size_chars: CharsXY,
 
     draw_color: L::Pixel,
     row_buffer: Vec<u8>,
 }
 
-impl<L> BufferedLcd<L>
+impl<L, F> BufferedLcd<L, F>
 where
     L: Lcd,
+    F: Font,
 {
     /// Creates a new buffered LCD backed by `lcd`.
-    pub(crate) fn new(lcd: L) -> Self {
+    pub(crate) fn new(lcd: L, font: F) -> Self {
         let (size, stride) = lcd.info();
 
         let fb = {
@@ -63,7 +63,7 @@ where
             vec![0; pixels * stride]
         };
 
-        let glyph_size = LcdSize { width: font8::WIDTH, height: font8::HEIGHT };
+        let glyph_size = font.size();
         let size_chars = CharsXY::new(
             u16::try_from(size.width / glyph_size.width).expect("Must fit"),
             u16::try_from(size.height / glyph_size.height).expect("Must fit"),
@@ -74,12 +74,12 @@ where
 
         Self {
             lcd,
+            font,
             fb,
             stride,
             sync: true,
             damage: None,
             size_pixels: size,
-            glyph_size,
             size_chars,
             draw_color,
             row_buffer,
@@ -87,9 +87,9 @@ where
     }
 
     /// Executes mutations on the buffered LCD via `ops` while ensuring that syncing is disabled.
-    fn without_sync<F>(&mut self, ops: F) -> io::Result<()>
+    fn without_sync<O>(&mut self, ops: O) -> io::Result<()>
     where
-        F: Fn(&mut BufferedLcd<L>) -> io::Result<()>,
+        O: Fn(&mut BufferedLcd<L, F>) -> io::Result<()>,
     {
         if self.sync {
             let old_sync = self.sync;
@@ -329,9 +329,10 @@ where
     }
 }
 
-impl<L> Drop for BufferedLcd<L>
+impl<L, F> Drop for BufferedLcd<L, F>
 where
     L: Lcd,
+    F: Font,
 {
     fn drop(&mut self) {
         self.set_draw_color((0, 0, 0));
@@ -339,16 +340,17 @@ where
     }
 }
 
-impl<L> RasterOps for BufferedLcd<L>
+impl<L, F> RasterOps for BufferedLcd<L, F>
 where
     L: Lcd,
+    F: Font,
 {
     type ID = (Vec<u8>, SizeInPixels);
 
     fn get_info(&self) -> RasterInfo {
         RasterInfo {
             size_pixels: self.size_pixels.into(),
-            glyph_size: self.glyph_size.into(),
+            glyph_size: self.font.size().into(),
             size_chars: self.size_chars,
         }
     }
@@ -453,11 +455,11 @@ where
         self.without_sync(|self2| {
             let mut pos = x1y1;
             for ch in text.chars() {
-                let glyph = font8::glyph(ch);
-                debug_assert_eq!(self2.glyph_size.height, glyph.len());
+                let glyph = self2.font.glyph(ch);
+                debug_assert_eq!(self2.font.size().height, glyph.len());
                 for (j, row) in glyph.iter().enumerate() {
                     let mut mask = 0x80;
-                    for i in 0..self2.glyph_size.width {
+                    for i in 0..self2.font.size().width {
                         let bit = row & mask;
                         if bit != 0 {
                             let x = pos.x + i;
@@ -477,7 +479,7 @@ where
                     }
                 }
 
-                pos.x += self2.glyph_size.width;
+                pos.x += self2.font.size().width;
             }
             Ok(())
         })

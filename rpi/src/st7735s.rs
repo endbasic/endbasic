@@ -24,6 +24,7 @@
 //! Console driver for the ST7735S LCD.
 
 use crate::gpio::gpio_error_to_io_error;
+use crate::lcd::font8::Font8;
 use crate::lcd::{to_xy_size, BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel};
 use async_channel::Sender;
 use async_trait::async_trait;
@@ -363,7 +364,7 @@ pub struct ST7735SConsole {
 
     /// The graphical console itself.  We wrap it in a struct to prevent leaking all auxiliary types
     /// outside of this crate.
-    inner: GraphicsConsole<ST7735SInput, BufferedLcd<ST7735SLcd>>,
+    inner: GraphicsConsole<ST7735SInput, BufferedLcd<ST7735SLcd, Font8>>,
 }
 
 #[async_trait(?Send)]
@@ -471,7 +472,7 @@ pub fn new_st7735s_console(signals_tx: Sender<Signal>) -> io::Result<ST7735SCons
 
     let lcd = ST7735SLcd::new(&mut gpio)?;
     let input = ST7735SInput::new(&mut gpio, signals_tx)?;
-    let lcd = BufferedLcd::new(lcd);
+    let lcd = BufferedLcd::new(lcd, Font8::default());
     let inner = GraphicsConsole::new(input, lcd)?;
     Ok(ST7735SConsole { _gpio: gpio, inner })
 }

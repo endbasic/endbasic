@@ -15,7 +15,7 @@
 
 //! Utilities to implement tests for the `BufferedLcd`.
 
-use crate::lcd::{BufferedLcd, Lcd, LcdSize, LcdXY, RGB888Pixel};
+use crate::lcd::{font8::Font8, BufferedLcd, Lcd, LcdSize, LcdXY, RGB888Pixel};
 use endbasic_std::console::RGB;
 use std::io;
 
@@ -68,7 +68,7 @@ impl Lcd for LcdRecorder {
 #[must_use]
 pub(super) struct Tester {
     size: LcdSize,
-    buffered: BufferedLcd<LcdRecorder>,
+    buffered: BufferedLcd<LcdRecorder, Font8>,
     exp_fb: Vec<u8>,
     exp_damage: Option<(LcdXY, LcdXY)>,
     exp_ops: Vec<String>,
@@ -80,7 +80,7 @@ impl Tester {
         let fb_size = size.width * size.height * 3;
         Self {
             size,
-            buffered: BufferedLcd::new(LcdRecorder::new(size)),
+            buffered: BufferedLcd::new(LcdRecorder::new(size), Font8::default()),
             exp_fb: vec![0; fb_size],
             exp_damage: None,
             exp_ops: vec![],
@@ -90,7 +90,7 @@ impl Tester {
     /// Executes an operation on the backing `LcdRecorder`.
     pub(super) fn op<'a, F>(mut self, op: F) -> Self
     where
-        F: Fn(&mut BufferedLcd<LcdRecorder>),
+        F: Fn(&mut BufferedLcd<LcdRecorder, Font8>),
     {
         op(&mut self.buffered);
         self
