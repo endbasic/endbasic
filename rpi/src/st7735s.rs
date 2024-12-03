@@ -24,8 +24,6 @@
 //! Console driver for the ST7735S LCD.
 
 use crate::gpio::gpio_error_to_io_error;
-use crate::lcd::font8::Font8;
-use crate::lcd::{to_xy_size, BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel};
 use async_channel::Sender;
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
@@ -33,6 +31,7 @@ use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
     CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, SizeInPixels, RGB,
 };
+use endbasic_std::gfx::lcd::{to_xy_size, BufferedLcd, Font8, Lcd, LcdSize, LcdXY, RGB565Pixel};
 use endbasic_terminal::TerminalConsole;
 use rppal::gpio::{Gpio, InputPin, Level, OutputPin};
 use rppal::spi::{self, Bus, SlaveSelect, Spi};

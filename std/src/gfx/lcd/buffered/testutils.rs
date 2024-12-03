@@ -15,9 +15,21 @@
 
 //! Utilities to implement tests for the `BufferedLcd`.
 
-use crate::lcd::{font8::Font8, BufferedLcd, Lcd, LcdSize, LcdXY, RGB888Pixel};
-use endbasic_std::console::RGB;
+use crate::console::RGB;
+use crate::gfx::lcd::{AsByteSlice, BufferedLcd, Font8, Lcd, LcdSize, LcdXY};
 use std::io;
+
+/// Data for one pixel encoded as RGB888.
+#[cfg(test)]
+#[derive(Clone, Copy)]
+pub(super) struct RGB888Pixel(pub(super) [u8; 3]);
+
+#[cfg(test)]
+impl AsByteSlice for RGB888Pixel {
+    fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+}
 
 /// Syntactic sugar to instantiate a coordinate in the LCD space.
 pub(super) fn xy(x: usize, y: usize) -> LcdXY {
@@ -88,7 +100,7 @@ impl Tester {
     }
 
     /// Executes an operation on the backing `LcdRecorder`.
-    pub(super) fn op<'a, F>(mut self, op: F) -> Self
+    pub(super) fn op<F>(mut self, op: F) -> Self
     where
         F: Fn(&mut BufferedLcd<LcdRecorder, Font8>),
     {

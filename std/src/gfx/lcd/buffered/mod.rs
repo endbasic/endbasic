@@ -15,10 +15,10 @@
 
 //! Buffered implementation of the `RasterOps` for a hardware LCD.
 
-use crate::lcd::{to_xy_size, AsByteSlice, Font, Lcd, LcdSize, LcdXY};
-use endbasic_std::console::drawing;
-use endbasic_std::console::graphics::{RasterInfo, RasterOps};
-use endbasic_std::console::{CharsXY, PixelsXY, SizeInPixels, RGB};
+use crate::console::drawing;
+use crate::console::graphics::{RasterInfo, RasterOps};
+use crate::console::{CharsXY, PixelsXY, SizeInPixels, RGB};
+use crate::gfx::lcd::{to_xy_size, AsByteSlice, Font, Lcd, LcdSize, LcdXY};
 use std::convert::TryFrom;
 use std::io;
 
@@ -33,7 +33,7 @@ mod testutils;
 /// primitives are flushed right away to the device; otherwise, they are applied to memory only
 /// until an explicit sync is requested.  The framebuffer is also used to implement all pixel data
 /// reading.
-pub(crate) struct BufferedLcd<L: Lcd, F: Font> {
+pub struct BufferedLcd<L: Lcd, F: Font> {
     lcd: L,
     font: F,
 
@@ -55,7 +55,7 @@ where
     F: Font,
 {
     /// Creates a new buffered LCD backed by `lcd`.
-    pub(crate) fn new(lcd: L, font: F) -> Self {
+    pub fn new(lcd: L, font: F) -> Self {
         let (size, stride) = lcd.info();
 
         let fb = {

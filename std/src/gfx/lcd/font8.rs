@@ -49,7 +49,10 @@
  *
  ******************************************************************************
  */
-use crate::lcd::{Font, LcdSize};
+
+//! Small font for tiny displays.
+
+use crate::gfx::lcd::{Font, LcdSize};
 
 /// Width of the font glyphs in pixels.
 const WIDTH: usize = 5;
@@ -918,7 +921,7 @@ const DATA: &[u8] = &[
 
 /// A small font to be used in small LCDs.
 #[derive(Default)]
-pub(crate) struct Font8 {}
+pub struct Font8 {}
 
 impl Font for Font8 {
     fn size(&self) -> LcdSize {
