@@ -15,22 +15,25 @@
 
 //! Generic types to represent and manipulate LCDs.
 
-use endbasic_std::console::{SizeInPixels, RGB};
+use crate::console::{SizeInPixels, RGB};
 use std::convert::TryFrom;
 use std::io;
 
 mod buffered;
-pub(crate) mod font8;
+mod font8;
 
-pub(crate) use buffered::BufferedLcd;
+pub use buffered::BufferedLcd;
+pub use font8::Font8;
 
-pub(crate) trait AsByteSlice {
+/// Trait to convert a pixel to a sequence of bytes.
+pub trait AsByteSlice {
+    /// Returns the byte representation of a pixel.
     fn as_slice(&self) -> &[u8];
 }
 
 /// Data for one pixel encoded as RGB565.
 #[derive(Clone, Copy)]
-pub(crate) struct RGB565Pixel(pub(crate) [u8; 2]);
+pub struct RGB565Pixel(pub [u8; 2]);
 
 impl AsByteSlice for RGB565Pixel {
     fn as_slice(&self) -> &[u8] {
@@ -38,20 +41,8 @@ impl AsByteSlice for RGB565Pixel {
     }
 }
 
-/// Data for one pixel encoded as RGB888.
-#[cfg(test)]
-#[derive(Clone, Copy)]
-pub(crate) struct RGB888Pixel(pub(crate) [u8; 3]);
-
-#[cfg(test)]
-impl AsByteSlice for RGB888Pixel {
-    fn as_slice(&self) -> &[u8] {
-        &self.0
-    }
-}
-
 /// Representation of a font.
-pub(crate) trait Font {
+pub trait Font {
     /// Returns the size of a glyph, in pixels.
     fn size(&self) -> LcdSize;
 
@@ -63,7 +54,7 @@ pub(crate) trait Font {
 }
 
 /// Primitives that an LCD must define.
-pub(crate) trait Lcd {
+pub trait Lcd {
     /// The primitive type of the pixel data.
     type Pixel: AsByteSlice + Copy;
 
@@ -81,17 +72,23 @@ pub(crate) trait Lcd {
 /// Represents valid coordinates within the LCD space.
 #[derive(Clone, Copy)]
 #[cfg_attr(test, derive(Debug, PartialEq))]
-pub(crate) struct LcdXY {
-    pub(crate) x: usize,
-    pub(crate) y: usize,
+pub struct LcdXY {
+    /// The X coordinate.
+    pub x: usize,
+
+    /// The Y coordinate.
+    pub y: usize,
 }
 
 /// Represents a size that fits in the LCD space.
 #[derive(Clone, Copy)]
 #[cfg_attr(test, derive(Debug, PartialEq))]
-pub(crate) struct LcdSize {
-    pub(crate) width: usize,
-    pub(crate) height: usize,
+pub struct LcdSize {
+    /// The width.
+    pub width: usize,
+
+    /// The height.
+    pub height: usize,
 }
 
 impl LcdSize {
@@ -119,7 +116,7 @@ impl From<LcdSize> for SizeInPixels {
 }
 
 /// Converts a pair of coordinates to a top-left origin coordinate plus a size.
-pub(crate) fn to_xy_size(x1y1: LcdXY, x2y2: LcdXY) -> (LcdXY, LcdSize) {
+pub fn to_xy_size(x1y1: LcdXY, x2y2: LcdXY) -> (LcdXY, LcdSize) {
     let x1 = std::cmp::min(x1y1.x, x2y2.x);
     let y1 = std::cmp::min(x1y1.y, x2y2.y);
 

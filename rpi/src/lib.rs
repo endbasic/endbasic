@@ -23,6 +23,5 @@
 
 mod gpio;
 pub use gpio::RppalPins;
-pub mod lcd;
 mod st7735s;
 pub use st7735s::new_st7735s_console;

@@ -27,6 +27,8 @@ use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::rc::Rc;
 
+pub mod lcd;
+
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "Graphics
 The EndBASIC console overlays text and graphics in the same canvas.  The consequence of this \

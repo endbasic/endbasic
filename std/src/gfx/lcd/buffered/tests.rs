@@ -17,9 +17,9 @@
 
 use super::testutils::*;
 use super::*;
-use crate::lcd::font8::Font8;
-use endbasic_std::console::graphics::RasterOps;
-use endbasic_std::console::{CharsXY, PixelsXY, SizeInPixels};
+use crate::console::graphics::RasterOps;
+use crate::console::{CharsXY, PixelsXY, SizeInPixels};
+use crate::gfx::lcd::Font8;
 
 #[test]
 fn test_new_does_nothing() {
