@@ -247,7 +247,7 @@ impl Callable for InKeyFunction {
             Some(Key::PageDown) => "PGDOWN".to_owned(),
             Some(Key::PageUp) => "PGUP".to_owned(),
             Some(Key::Tab) => "TAB".to_owned(),
-            Some(Key::Unknown(_)) => "".to_owned(),
+            Some(Key::Unknown) => "?".to_owned(),
 
             None => "".to_owned(),
         };

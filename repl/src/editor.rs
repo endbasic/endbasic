@@ -425,7 +425,7 @@ impl Editor {
                 }
 
                 // TODO(jmmv): Should do something smarter with unknown keys.
-                Key::Unknown(_) => (),
+                Key::Unknown => (),
             }
         }
 
@@ -837,7 +837,7 @@ mod tests {
             Key::PageUp,
             Key::PageDown,
         ] {
-            cb.add_input_keys(&[k.clone()]);
+            cb.add_input_keys(&[*k]);
             ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
         }
 
