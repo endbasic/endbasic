@@ -45,7 +45,7 @@ mod linebuffer;
 pub use linebuffer::LineBuffer;
 
 /// Decoded key presses as returned by the console.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Key {
     /// The cursor down key.
     ArrowDown,
@@ -98,8 +98,8 @@ pub enum Key {
     /// The Tab key.
     Tab,
 
-    /// An unknown character or sequence. The text describes what went wrong.
-    Unknown(String),
+    /// An unknown character or sequence.
+    Unknown,
 }
 
 /// Indicates what part of the console to clear on a `Console::clear()` call.
@@ -380,7 +380,7 @@ fn line_to_keys(s: String) -> VecDeque<Key> {
         } else if !ch.is_control() {
             keys.push_back(Key::Char(ch));
         } else {
-            keys.push_back(Key::Unknown(format!("{}", ch)));
+            keys.push_back(Key::Unknown);
         }
     }
     keys

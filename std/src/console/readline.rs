@@ -251,7 +251,7 @@ async fn read_line_interactive(
             }
 
             // TODO(jmmv): Should do something smarter with unknown keys.
-            Key::Unknown(_) => (),
+            Key::Unknown => (),
         }
     }
 
@@ -294,7 +294,7 @@ async fn read_line_raw(console: &mut dyn Console) -> io::Result<String> {
             Key::NewLine => break,
             Key::PageDown | Key::PageUp => (),
             Key::Tab => (),
-            Key::Unknown(bad_input) => line += &bad_input,
+            Key::Unknown => line.push('?'),
         }
     }
     Ok(line)

@@ -35,7 +35,7 @@ fn on_input_event_into_key(dom_event: InputEvent) -> Key {
     if chars.len() == 1 {
         Key::Char(chars[0])
     } else {
-        Key::Unknown(format!("<data={:?}>", chars))
+        Key::Unknown
     }
 }
 
@@ -71,7 +71,7 @@ fn on_key_event_into_key(dom_event: KeyboardEvent) -> Key {
             if printable && chars.len() == 1 {
                 Key::Char(chars[0])
             } else {
-                Key::Unknown(format!("<keycode={}>", dom_event.key_code()))
+                Key::Unknown
             }
         }
     }

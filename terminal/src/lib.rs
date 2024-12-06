@@ -156,18 +156,16 @@ impl TerminalConsole {
                         KeyCode::Char('p') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowUp,
                         KeyCode::Char(ch) => Key::Char(ch),
                         KeyCode::Enter => Key::NewLine,
-                        _ => Key::Unknown(format!("{:?}", ev)),
+                        _ => Key::Unknown,
                     }
                 }
                 Ok(_) => {
                     // Not a key event; ignore and try again.
                     continue;
                 }
-                Err(e) => {
-                    // There is not much we can do if we get an error from crossterm.  Try to funnel
-                    // the error somehow to the caller so that we can display that something went
-                    // wrong... and continue anyhow.
-                    Key::Unknown(format!("{:?}", e))
+                Err(_) => {
+                    // There is not much we can do if we get an error from crossterm.
+                    Key::Unknown
                 }
             };
 
@@ -209,11 +207,9 @@ impl TerminalConsole {
         while !done {
             let key = match read_key_from_stdin(&mut buffer) {
                 Ok(key) => key,
-                Err(e) => {
-                    // There is not much we can do if we get an error from stdin.  Try to funnel
-                    // the error somehow to the caller so that we can display that something went
-                    // wrong... and continue anyhow.
-                    Key::Unknown(format!("{:?}", e))
+                Err(_) => {
+                    // There is not much we can do if we get an error from stdin.
+                    Key::Unknown
                 }
             };
 

@@ -100,7 +100,7 @@ impl ST7735SInput {
         tokio::task::spawn(async move {
             async fn read_button(pin: &InputPin, key: Key, tx: &Sender<Key>) {
                 if pin.read() == Level::Low {
-                    if let Err(e) = tx.send(key.clone()).await {
+                    if let Err(e) = tx.send(key).await {
                         eprintln!("Ignoring button {:?} due to error: {}", key, e);
                     }
                 }
