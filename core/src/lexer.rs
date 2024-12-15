@@ -722,7 +722,7 @@ pub struct PeekableLexer<'a> {
     peeked: Option<TokenSpan>,
 }
 
-impl<'a> PeekableLexer<'a> {
+impl PeekableLexer<'_> {
     /// Reads the previously-peeked token.
     ///
     /// Because `peek` reports read errors, this assumes that the caller already handled those

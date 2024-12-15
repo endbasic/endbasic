@@ -122,7 +122,7 @@ impl<'a> CharReader<'a> {
     }
 }
 
-impl<'a> Iterator for CharReader<'a> {
+impl Iterator for CharReader<'_> {
     type Item = io::Result<CharSpan>;
 
     fn next(&mut self) -> Option<Self::Item> {

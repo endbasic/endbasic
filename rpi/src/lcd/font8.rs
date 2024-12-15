@@ -13,7 +13,7 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-/**
+/*
  ******************************************************************************
  * @file    Font8.c
  * @author  MCD Application Team

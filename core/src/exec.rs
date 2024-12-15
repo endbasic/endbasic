@@ -359,7 +359,7 @@ pub struct Scope<'s> {
     fref_pos: LineCol,
 }
 
-impl<'s> Drop for Scope<'s> {
+impl Drop for Scope<'_> {
     fn drop(&mut self) {
         self.stack.discard(self.nargs);
     }
