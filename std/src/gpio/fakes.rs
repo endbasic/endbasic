@@ -214,7 +214,7 @@ impl<'a> MockPins<'a> {
     }
 }
 
-impl<'a> Pins for MockPins<'a> {
+impl Pins for MockPins<'_> {
     fn setup(&mut self, pin: Pin, mode: PinMode) -> io::Result<()> {
         let datum = match mode {
             PinMode::In => MockOp::encode(pin, MockOp::SetupIn),

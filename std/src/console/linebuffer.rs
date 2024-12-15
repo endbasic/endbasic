@@ -64,7 +64,7 @@ impl LineBuffer {
 
     /// Extracts a range of characters from this buffer.
     pub fn range(&self, start_pos: usize, end_pos: usize) -> String {
-        let count = if start_pos > end_pos { 0 } else { end_pos - start_pos };
+        let count = end_pos.saturating_sub(start_pos);
         self.chars().skip(start_pos).take(count).collect()
     }
 

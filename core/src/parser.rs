@@ -1959,7 +1959,7 @@ pub(crate) struct StatementIter<'a> {
     parser: Parser<'a>,
 }
 
-impl<'a> Iterator for StatementIter<'a> {
+impl Iterator for StatementIter<'_> {
     type Item = Result<Statement>;
 
     fn next(&mut self) -> Option<Self::Item> {
