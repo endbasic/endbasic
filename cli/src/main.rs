@@ -23,8 +23,6 @@
 #![warn(unsafe_code)]
 
 use anyhow::{anyhow, Result};
-use async_channel::Sender;
-use endbasic_core::exec::Signal;
 use endbasic_std::console::Console;
 use endbasic_std::storage::Storage;
 use getopts::Options;
@@ -107,10 +105,8 @@ fn new_machine_builder(console_spec: Option<&str>) -> io::Result<endbasic_std::M
         builder
     }
 
-    let signals_chan = async_channel::unbounded();
     let mut builder = endbasic_std::MachineBuilder::default();
-    builder = builder.with_console(setup_console(console_spec, signals_chan.0.clone())?);
-    builder = builder.with_signals_chan(signals_chan);
+    builder = builder.with_console(setup_console(console_spec)?);
     builder = add_gpio_pins(builder);
     Ok(builder)
 }
@@ -169,60 +165,49 @@ fn get_local_drive_spec(flag: Option<String>) -> Result<String> {
 }
 
 /// Sets up the console.
-fn setup_console(
-    console_spec: Option<&str>,
-    signals_tx: Sender<Signal>,
-) -> io::Result<Rc<RefCell<dyn Console>>> {
+fn setup_console(console_spec: Option<&str>) -> io::Result<Rc<RefCell<dyn Console>>> {
     /// Creates the textual console when crossterm support is built in.
     #[cfg(feature = "crossterm")]
-    fn setup_text_console(signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
-        Ok(Rc::from(RefCell::from(endbasic_terminal::TerminalConsole::from_stdio(signals_tx)?)))
+    fn setup_text_console() -> io::Result<Rc<RefCell<dyn Console>>> {
+        Ok(Rc::from(RefCell::from(endbasic_terminal::TerminalConsole::from_stdio()?)))
     }
 
     /// Creates the textual console with very basic features when crossterm support is not built in.
     #[cfg(not(feature = "crossterm"))]
-    fn setup_text_console(_signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
+    fn setup_text_console() -> io::Result<Rc<RefCell<dyn Console>>> {
         Ok(Rc::from(RefCell::from(endbasic_std::console::TrivialConsole::default())))
     }
 
     /// Creates the graphical console when SDL support is built in.
     #[cfg(feature = "sdl")]
-    pub fn setup_graphics_console(
-        signals_tx: Sender<Signal>,
-        spec: &str,
-    ) -> io::Result<Rc<RefCell<dyn Console>>> {
-        endbasic_sdl::setup(spec, signals_tx)
+    pub fn setup_graphics_console(spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
+        endbasic_sdl::setup(spec)
     }
 
     /// Errors out during the creation of the graphical console when SDL support is not compiled in.
     #[cfg(not(feature = "sdl"))]
-    pub fn setup_graphics_console(
-        _signals_tx: Sender<Signal>,
-        _spec: &str,
-    ) -> io::Result<Rc<RefCell<dyn Console>>> {
+    pub fn setup_graphics_console(_spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
         // TODO(jmmv): Make this io::ErrorKind::Unsupported when our MSRV allows it.
         Err(io::Error::new(io::ErrorKind::InvalidInput, "SDL support not compiled in"))
     }
 
     #[cfg(feature = "rpi")]
-    fn setup_st7735s_console(signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
-        Ok(Rc::from(RefCell::from(endbasic_rpi::new_st7735s_console(signals_tx)?)))
+    fn setup_st7735s_console() -> io::Result<Rc<RefCell<dyn Console>>> {
+        Ok(Rc::from(RefCell::from(endbasic_rpi::new_st7735s_console()?)))
     }
 
     #[cfg(not(feature = "rpi"))]
-    pub fn setup_st7735s_console(
-        _signals_tx: Sender<Signal>,
-    ) -> io::Result<Rc<RefCell<dyn Console>>> {
+    pub fn setup_st7735s_console() -> io::Result<Rc<RefCell<dyn Console>>> {
         Err(io::Error::new(io::ErrorKind::InvalidInput, "ST7735S support not compiled in"))
     }
 
     let console: Rc<RefCell<dyn Console>> = match console_spec {
-        None | Some("text") => setup_text_console(signals_tx)?,
+        None | Some("text") => setup_text_console()?,
 
-        Some("graphics") => setup_graphics_console(signals_tx, "")?,
-        Some("st7735s") => setup_st7735s_console(signals_tx)?,
+        Some("graphics") => setup_graphics_console("")?,
+        Some("st7735s") => setup_st7735s_console()?,
         Some(text) if text.starts_with("graphics:") => {
-            setup_graphics_console(signals_tx, &text["graphics:".len()..])?
+            setup_graphics_console(&text["graphics:".len()..])?
         }
 
         Some(text) => {

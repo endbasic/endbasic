@@ -36,6 +36,31 @@ pub mod editor;
 /// Message to print on the console when receiving a break signal.
 const BREAK_MSG: &str = "**** BREAK ****";
 
+/*
+/// Type of the function used by the execution loop to yield execution.
+pub type YieldNowFn = Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()> + 'static>>>;
+
+/// Consumes any pending signals so that they don't interfere with an upcoming execution.
+pub fn drain_signals(&mut self) {
+    while self.signals_chan.1.try_recv().is_ok() {
+        // Do nothing.
+    }
+}
+
+/// Returns true if execution should stop because we have hit a stop condition.
+pub async fn should_stop(&mut self) -> bool {
+    if let Some(yield_now) = self.yield_now_fn.as_ref() {
+        (yield_now)().await;
+    }
+
+    match self.signals_chan.1.try_recv() {
+        Ok(Signal::Break) => true,
+        Err(TryRecvError::Empty) => false,
+        Err(TryRecvError::Closed) => panic!("Channel unexpectedly closed"),
+    }
+}
+*/
+
 /// Prints the EndBASIC welcome message to the given console.
 pub fn print_welcome(console: Rc<RefCell<dyn Console>>) -> io::Result<()> {
     let mut console = console.borrow_mut();
@@ -140,10 +165,12 @@ pub async fn run_from_cloud(
             console.print(&format!("**** Program exited with code {} ****", code))?;
             code
         }
+        /* DO NOT SUBMIT
         Ok(r @ StopReason::Break(_is_final)) => {
             console.print("**** Program stopped due to BREAK ****")?;
             r.as_exit_code()
         }
+        */
         Err(e) => {
             console.print(&format!("**** ERROR: {} ****", e))?;
             1
@@ -191,7 +218,9 @@ pub async fn run_repl_loop(
 
         // Any signals entered during console input should not impact upcoming execution.  Drain
         // them all.
-        machine.drain_signals();
+        // DO NOT SUBMIT
+        //machine.drain_signals();
+        let _ = console.borrow_mut().take_signal().await;
 
         match line {
             Ok(line) => {
@@ -206,9 +235,11 @@ pub async fn run_repl_loop(
 
                 loop {
                     match machine.resume(&mut context).await {
-                        Ok(InternalStopReason::CheckStop(is_final)) => {
-                            if machine.should_stop().await {
-                                stop_reason = StopReason::Break(is_final);
+                        Ok(InternalStopReason::CheckStop(_is_final)) => {
+                            let mut console = console.borrow_mut();
+                            if console.take_signal().await.is_some() {
+                                console.print("**** BREAK ****")?;
+                                stop_reason = StopReason::Eof;
                                 break;
                             }
                         }
@@ -254,10 +285,6 @@ pub async fn run_repl_loop(
 
         match stop_reason {
             StopReason::Eof => (),
-            StopReason::Break(_is_final) => {
-                console.borrow_mut().print("**** BREAK ****")?;
-                stop_reason = StopReason::Eof;
-            }
             StopReason::Exited(_, false) => {
                 console
                     .borrow_mut()

@@ -22,10 +22,7 @@ use crate::reader::LineCol;
 use crate::syms::{Callable, Symbol, SymbolKey, Symbols};
 use crate::value;
 use crate::value::double_to_integer;
-use async_channel::{Receiver, Sender, TryRecvError};
-use std::future::Future;
 use std::io;
-use std::pin::Pin;
 use std::rc::Rc;
 
 /// Execution errors.
@@ -76,13 +73,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Instantiates a new `Err(Error::SyntaxError(...))` from a message.  Syntactic sugar.
 fn new_syntax_error<T, S: Into<String>>(pos: LineCol, message: S) -> Result<T> {
     Err(Error::SyntaxError(pos, message.into()))
-}
-
-/// Signals that can be delivered to the machine.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Signal {
-    /// Asks the machine to stop execution of the currently-running program.
-    Break,
 }
 
 /// Request to exit the VM execution loop to execute a native command or function.
@@ -148,13 +138,6 @@ pub enum StopReason {
     /// nested invocation triggered by `RUN` so the caller may want to capture the stop and print a
     /// message instead of exiting.
     Exited(u8, bool),
-
-    /// Execution terminated because the machine received a break signal.
-    ///
-    /// The boolean indicates whether this stop is final.  If false, the stop request comes from
-    /// cancelling the execution of a nested `RUN` so the caller may want to capture the stop and
-    /// print a message instead of exiting.
-    Break(bool),
 }
 
 impl StopReason {
@@ -163,14 +146,6 @@ impl StopReason {
         match self {
             StopReason::Eof => 0,
             StopReason::Exited(i, _is_final) => *i as i32,
-            StopReason::Break(_is_final) => {
-                // This mimics the behavior of typical Unix shells, which translate a signal to a
-                // numerical exit code, but this is not accurate.  First, because a CTRL+C sequence
-                // should be exposed as a SIGINT signal to whichever process is waiting for us, and
-                // second because this is not meaningful on Windows.  But for now this will do.
-                const SIGINT: i32 = 2;
-                128 + SIGINT
-            }
         }
     }
 }
@@ -181,9 +156,6 @@ pub trait Clearable {
     /// machine before they are cleared, in case some state is held in them too.
     fn reset_state(&self, syms: &mut Symbols);
 }
-
-/// Type of the function used by the execution loop to yield execution.
-pub type YieldNowFn = Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()> + 'static>>>;
 
 /// Tags used in the value stack to identify the type of their corresponding value.
 pub enum ValueTag {
@@ -610,39 +582,13 @@ impl From<Image> for Context {
 }
 
 /// Executes an EndBASIC program and tracks its state.
+#[derive(Default)]
 pub struct Machine {
     symbols: Symbols,
     clearables: Vec<Box<dyn Clearable>>,
-    yield_now_fn: Option<YieldNowFn>,
-    signals_chan: (Sender<Signal>, Receiver<Signal>),
-}
-
-impl Default for Machine {
-    fn default() -> Self {
-        Self::with_signals_chan_and_yield_now_fn(async_channel::unbounded(), None)
-    }
 }
 
 impl Machine {
-    /// Constructs a new empty machine with the given signals communication channel.
-    pub fn with_signals_chan(signals: (Sender<Signal>, Receiver<Signal>)) -> Self {
-        Self::with_signals_chan_and_yield_now_fn(signals, None)
-    }
-
-    /// Constructs a new empty machine with the given signals communication channel and yielding
-    /// function.
-    pub fn with_signals_chan_and_yield_now_fn(
-        signals: (Sender<Signal>, Receiver<Signal>),
-        yield_now_fn: Option<YieldNowFn>,
-    ) -> Self {
-        Self {
-            symbols: Symbols::default(),
-            clearables: vec![],
-            yield_now_fn,
-            signals_chan: signals,
-        }
-    }
-
     /// Registers the given clearable.
     ///
     /// In the common case, functions and commands hold a reference to the out-of-machine state
@@ -656,11 +602,6 @@ impl Machine {
     /// Registers the given builtin callable, which must not yet be registered.
     pub fn add_callable(&mut self, callable: Rc<dyn Callable>) {
         self.symbols.add_callable(callable)
-    }
-
-    /// Obtains a channel via which to send signals to the machine during execution.
-    pub fn get_signals_tx(&self) -> Sender<Signal> {
-        self.signals_chan.0.clone()
     }
 
     /// Resets the state of the machine by clearing all variable.
@@ -679,19 +620,6 @@ impl Machine {
     /// Obtains mutable access to the state of the symbols.
     pub fn get_mut_symbols(&mut self) -> &mut Symbols {
         &mut self.symbols
-    }
-
-    /// Returns true if execution should stop because we have hit a stop condition.
-    pub async fn should_stop(&mut self) -> bool {
-        if let Some(yield_now) = self.yield_now_fn.as_ref() {
-            (yield_now)().await;
-        }
-
-        match self.signals_chan.1.try_recv() {
-            Ok(Signal::Break) => true,
-            Err(TryRecvError::Empty) => false,
-            Err(TryRecvError::Closed) => panic!("Channel unexpectedly closed"),
-        }
     }
 
     /// Handles an array assignment.
@@ -758,13 +686,6 @@ impl Machine {
             self.symbols.dim_array(span.name.clone(), span.subtype, ds);
         }
         Ok(())
-    }
-
-    /// Consumes any pending signals so that they don't interfere with an upcoming execution.
-    pub fn drain_signals(&mut self) {
-        while self.signals_chan.1.try_recv().is_ok() {
-            // Do nothing.
-        }
     }
 
     /// Tells the machine to stop execution at the next statement boundary.
@@ -1630,14 +1551,13 @@ impl Machine {
     }
 
     /// Executes the instructions in `context` through completion.
+    ///
+    /// This execution loop is _not_ interruptible.  If the caller wants to respect stop signals,
+    /// the caller must use `resume()` instead.
     pub async fn exec(&mut self, context: &mut Context) -> Result<StopReason> {
         loop {
             match self.resume(context).await? {
-                InternalStopReason::CheckStop(is_final) => {
-                    if self.should_stop().await {
-                        return Ok(StopReason::Break(is_final));
-                    }
-                }
+                InternalStopReason::CheckStop(_is_final) => (),
 
                 InternalStopReason::Upcall(data) => {
                     self.handle_upcall(context, &data).await?;
@@ -2317,6 +2237,8 @@ mod tests {
         assert_eq!(&["2"], captured_out.borrow().as_slice());
     }
 
+    /* DO NOT SUBMIT
+
     #[tokio::test]
     async fn test_signals_stop() {
         let mut machine = Machine::default();
@@ -2421,6 +2343,7 @@ mod tests {
         do_check_stop_test("WHILE TRUE: WEND").await;
         do_check_stop_test("WHILE TRUE: a = 1: WEND").await;
     }
+    */
 
     #[test]
     fn test_do_infinite_ok() {

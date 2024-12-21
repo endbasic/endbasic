@@ -27,9 +27,9 @@ use async_trait::async_trait;
 use crossterm::event::{self, KeyEventKind};
 use crossterm::tty::IsTty;
 use crossterm::{cursor, style, terminal, QueueableCommand};
-use endbasic_core::exec::Signal;
 use endbasic_std::console::{
-    get_env_var_as_u16, read_key_from_stdin, remove_control_chars, CharsXY, ClearType, Console, Key,
+    get_env_var_as_u16, read_key_from_stdin, remove_control_chars, CharsXY, ClearType, Console,
+    Key, Signal,
 };
 use std::cmp::Ordering;
 use std::collections::VecDeque;
@@ -58,6 +58,8 @@ pub struct TerminalConsole {
 
     /// Channel to receive key presses from the terminal.
     on_key_rx: Receiver<Key>,
+
+    pending_signal: Option<Signal>,
 }
 
 impl Drop for TerminalConsole {
@@ -73,47 +75,33 @@ impl TerminalConsole {
     ///
     /// This spawns a background task to handle console input so this must be run in the context of
     /// an Tokio runtime.
-    pub fn from_stdio(signals_tx: Sender<Signal>) -> io::Result<Self> {
-        let (terminal, _on_key_tx) = Self::from_stdio_with_injector(signals_tx)?;
-        Ok(terminal)
-    }
-
-    /// Creates a new console based on the properties of stdin/stdout.
-    ///
-    /// This spawns a background task to handle console input so this must be run in the context of
-    /// an Tokio runtime.
-    ///
-    /// Compared to `from_stdio`, this also returns a key sender to inject extra events into the
-    /// queue maintained by the terminal.
-    pub fn from_stdio_with_injector(signals_tx: Sender<Signal>) -> io::Result<(Self, Sender<Key>)> {
+    pub fn from_stdio() -> io::Result<Self> {
         let (on_key_tx, on_key_rx) = async_channel::unbounded();
 
         let is_tty = io::stdin().is_tty() && io::stdout().is_tty();
 
         if is_tty {
             terminal::enable_raw_mode()?;
-            tokio::task::spawn(TerminalConsole::raw_key_handler(on_key_tx.clone(), signals_tx));
+            tokio::task::spawn(TerminalConsole::raw_key_handler(on_key_tx.clone()));
         } else {
             tokio::task::spawn(TerminalConsole::stdio_key_handler(on_key_tx.clone()));
         }
 
-        Ok((
-            Self {
-                is_tty,
-                fg_color: None,
-                bg_color: None,
-                cursor_visible: true,
-                alt_active: false,
-                sync_enabled: true,
-                on_key_rx,
-            },
-            on_key_tx,
-        ))
+        Ok(Self {
+            is_tty,
+            fg_color: None,
+            bg_color: None,
+            cursor_visible: true,
+            alt_active: false,
+            sync_enabled: true,
+            on_key_rx,
+            pending_signal: None,
+        })
     }
 
     /// Async task to wait for key events on a raw terminal and translate them into events for the
     /// console or the machine.
-    async fn raw_key_handler(on_key_tx: Sender<Key>, signals_tx: Sender<Signal>) {
+    async fn raw_key_handler(on_key_tx: Sender<Key>) {
         use event::{KeyCode, KeyModifiers};
 
         let mut done = false;
@@ -170,17 +158,6 @@ impl TerminalConsole {
             };
 
             done = key == Key::Eof;
-            if key == Key::Interrupt {
-                // Handling CTRL+C in this way isn't great because this is not the same as handling
-                // SIGINT on Unix builds.  First, we are unable to stop long-running operations like
-                // sleeps; and second, a real SIGINT will kill the interpreter completely instead of
-                // coming this way.  We need a real signal handler and we probably should not be
-                // running in raw mode all the time.
-                signals_tx
-                    .send(Signal::Break)
-                    .await
-                    .expect("Send to unbounded channel should not have failed")
-            }
 
             // This should never fail but can if the receiver outruns the console because we
             // don't await for the handler to terminate (which we cannot do safely because
@@ -188,7 +165,6 @@ impl TerminalConsole {
             let _ = on_key_tx.send(key).await;
         }
 
-        signals_tx.close();
         on_key_tx.close();
     }
 
@@ -366,9 +342,21 @@ impl Console for TerminalConsole {
         Ok(())
     }
 
+    async fn take_signal(&mut self) -> Option<Signal> {
+        if self.pending_signal.is_none() {
+            let _ = self.poll_key().await;
+        }
+        self.pending_signal.take()
+    }
+
     async fn poll_key(&mut self) -> io::Result<Option<Key>> {
         match self.on_key_rx.try_recv() {
-            Ok(k) => Ok(Some(k)),
+            Ok(k) => {
+                if k == Key::Interrupt {
+                    self.pending_signal = Some(Signal::Break);
+                }
+                Ok(Some(k))
+            }
             Err(TryRecvError::Empty) => Ok(None),
             Err(TryRecvError::Closed) => Ok(Some(Key::Eof)),
         }
@@ -376,7 +364,12 @@ impl Console for TerminalConsole {
 
     async fn read_key(&mut self) -> io::Result<Key> {
         match self.on_key_rx.recv().await {
-            Ok(k) => Ok(k),
+            Ok(k) => {
+                if k == Key::Interrupt {
+                    self.pending_signal = Some(Signal::Break);
+                }
+                Ok(k)
+            }
             Err(_) => Ok(Key::Eof),
         }
     }

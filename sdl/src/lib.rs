@@ -22,8 +22,6 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
-use async_channel::Sender;
-use endbasic_core::exec::Signal;
 use endbasic_std::console::Console;
 use std::cell::RefCell;
 use std::io;
@@ -40,18 +38,16 @@ fn string_error_to_io_error(e: String) -> io::Error {
 }
 
 /// Creates the graphical console based on the given `spec`.
-pub fn setup(spec: &str, signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
+pub fn setup(spec: &str) -> io::Result<Rc<RefCell<dyn Console>>> {
     let spec = spec::parse_graphics_spec(spec)?;
     let console = match spec.1 {
         None => {
             let default_font = spec::TempFont::default_font()?;
-            console::SdlConsole::new(spec.0, default_font.path(), spec.2, signals_tx)?
+            console::SdlConsole::new(spec.0, default_font.path(), spec.2)?
             // The console has been created at this point, so it should be safe to drop
             // default_font and clean up the on-disk file backing it up.
         }
-        Some(font_path) => {
-            console::SdlConsole::new(spec.0, font_path.to_owned(), spec.2, signals_tx)?
-        }
+        Some(font_path) => console::SdlConsole::new(spec.0, font_path.to_owned(), spec.2)?,
     };
     Ok(Rc::from(RefCell::from(console)))
 }

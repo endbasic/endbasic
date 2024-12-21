@@ -157,7 +157,6 @@ fn main() {
             StopReason::Exited(i, _is_final) => {
                 println!("Script explicitly exited with code {}", i)
             }
-            StopReason::Break(_is_final) => (), // Ignore signals.
         }
     }
 

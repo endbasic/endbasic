@@ -22,7 +22,6 @@ use crate::font::{font_error_to_io_error, MonospacedFont};
 use crate::spec::Resolution;
 use crate::string_error_to_io_error;
 use async_trait::async_trait;
-use endbasic_core::exec::Signal;
 use endbasic_std::console::drawing::{draw_circle, draw_circle_filled};
 use endbasic_std::console::graphics::{ClampedInto, ClampedMul, InputOps, RasterInfo, RasterOps};
 use endbasic_std::console::{
@@ -599,7 +598,6 @@ pub(crate) fn run(
     request_rx: Receiver<Request>,
     response_tx: SyncSender<Response>,
     on_key_tx: Sender<Key>,
-    signals_tx: async_channel::Sender<Signal>,
 ) {
     let ctx = match Context::new(resolution, font_path, font_size) {
         Ok(ctx) => ctx,
@@ -678,15 +676,6 @@ pub(crate) fn run(
 
         if let Some(event) = ctx.poll_event() {
             if let Some(key) = parse_event(event) {
-                if key == Key::Interrupt {
-                    // signals_tx is an async channel because that's what the execution engine
-                    // needs.  This means that we cannot use a regular "send" here because we
-                    // would need to await for it, which is a no-no because we are not in an
-                    // async context.  Using "try_send" should be sufficient though given that
-                    // the channel we use is not bounded.
-                    signals_tx.try_send(Signal::Break).expect("Channel must be alive and not full")
-                }
-
                 on_key_tx.send(key).expect("Channel must be alive");
             }
 

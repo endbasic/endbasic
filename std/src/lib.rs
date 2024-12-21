@@ -22,8 +22,7 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
-use async_channel::{Receiver, Sender};
-use endbasic_core::exec::{Machine, Result, Signal, YieldNowFn};
+use endbasic_core::exec::{Machine, Result};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -49,8 +48,6 @@ pub struct MachineBuilder {
     console: Option<Rc<RefCell<dyn console::Console>>>,
     gpio_pins: Option<Rc<RefCell<dyn gpio::Pins>>>,
     sleep_fn: Option<exec::SleepFn>,
-    yield_now_fn: Option<YieldNowFn>,
-    signals_chan: Option<(Sender<Signal>, Receiver<Signal>)>,
 }
 
 impl MachineBuilder {
@@ -69,18 +66,6 @@ impl MachineBuilder {
     /// Overrides the default sleep function with the given one.
     pub fn with_sleep_fn(mut self, sleep_fn: exec::SleepFn) -> Self {
         self.sleep_fn = Some(sleep_fn);
-        self
-    }
-
-    /// Overrides the default yielding function with the given one.
-    pub fn with_yield_now_fn(mut self, yield_now_fn: YieldNowFn) -> Self {
-        self.yield_now_fn = Some(yield_now_fn);
-        self
-    }
-
-    /// Overrides the default signals channel with the given one.
-    pub fn with_signals_chan(mut self, chan: (Sender<Signal>, Receiver<Signal>)) -> Self {
-        self.signals_chan = Some(chan);
         self
     }
 
@@ -105,13 +90,7 @@ impl MachineBuilder {
         let console = self.get_console();
         let gpio_pins = self.get_gpio_pins();
 
-        let signals_chan = match self.signals_chan {
-            Some(pair) => pair,
-            None => async_channel::unbounded(),
-        };
-
-        let mut machine =
-            Machine::with_signals_chan_and_yield_now_fn(signals_chan, self.yield_now_fn);
+        let mut machine = Machine::default();
         arrays::add_all(&mut machine);
         console::add_all(&mut machine, console.clone());
         data::add_all(&mut machine);

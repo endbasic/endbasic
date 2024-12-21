@@ -44,6 +44,13 @@ pub use trivial::TrivialConsole;
 mod linebuffer;
 pub use linebuffer::LineBuffer;
 
+/// Signals that can be delivered to the machine from the console.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Signal {
+    /// Asks the machine to stop execution of the currently-running program.
+    Break,
+}
+
 /// Decoded key presses as returned by the console.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Key {
@@ -229,6 +236,11 @@ pub trait Console {
     /// The input `text` is not supposed to contain any control characters, such as CR or LF.
     // TODO(jmmv): Remove this in favor of write?
     fn print(&mut self, text: &str) -> io::Result<()>;
+
+    /// DO NOT SUBMIT
+    async fn take_signal(&mut self) -> Option<Signal> {
+        None
+    }
 
     /// Returns the next key press if any is available.
     async fn poll_key(&mut self) -> io::Result<Option<Key>>;

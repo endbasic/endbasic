@@ -17,11 +17,9 @@
 
 use crate::host::{self, Request, Response};
 use crate::spec::Resolution;
-use async_channel::Sender;
 use async_trait::async_trait;
-use endbasic_core::exec::Signal;
 use endbasic_std::console::{
-    remove_control_chars, CharsXY, ClearType, Console, Key, PixelsXY, SizeInPixels,
+    remove_control_chars, CharsXY, ClearType, Console, Key, PixelsXY, Signal, SizeInPixels,
 };
 use std::io;
 use std::path::PathBuf;
@@ -39,6 +37,7 @@ pub(crate) struct SdlConsole {
     on_key_rx: Receiver<Key>,
     fg_color: Option<u8>,
     bg_color: Option<u8>,
+    pending_signal: Option<Signal>,
 }
 
 impl SdlConsole {
@@ -53,21 +52,12 @@ impl SdlConsole {
         resolution: Resolution,
         font_path: PathBuf,
         font_size: u16,
-        signals_tx: Sender<Signal>,
     ) -> io::Result<Self> {
         let (request_tx, request_rx) = mpsc::sync_channel(1);
         let (response_tx, response_rx) = mpsc::sync_channel(1);
         let (on_key_tx, on_key_rx) = mpsc::channel();
         let handle = thread::spawn(move || {
-            host::run(
-                resolution,
-                font_path,
-                font_size,
-                request_rx,
-                response_tx,
-                on_key_tx,
-                signals_tx,
-            );
+            host::run(resolution, font_path, font_size, request_rx, response_tx, on_key_tx);
         });
 
         // Wait for the console to be up and running.  We must do this for error propagation but
@@ -80,6 +70,7 @@ impl SdlConsole {
                 on_key_rx,
                 fg_color: None,
                 bg_color: None,
+                pending_signal: None,
             }),
             Response::Empty(Err(e)) => Err(e),
             r => panic!("Unexpected response {:?}", r),
@@ -155,16 +146,32 @@ impl Console for SdlConsole {
         self.call(Request::Print(text))
     }
 
+    async fn take_signal(&mut self) -> Option<Signal> {
+        if self.pending_signal.is_none() {
+            let _ = self.poll_key().await;
+        }
+        self.pending_signal.take()
+    }
+
     async fn poll_key(&mut self) -> io::Result<Option<Key>> {
         match self.on_key_rx.try_recv() {
-            Ok(k) => Ok(Some(k)),
+            Ok(k) => {
+                if k == Key::Interrupt {
+                    self.pending_signal = Some(Signal::Break);
+                }
+                Ok(Some(k))
+            }
             Err(TryRecvError::Empty) => Ok(None),
             Err(TryRecvError::Disconnected) => panic!("Channel must be alive"),
         }
     }
 
     async fn read_key(&mut self) -> io::Result<Key> {
-        Ok(self.on_key_rx.recv().expect("Channel must be alive"))
+        let key = self.on_key_rx.recv().expect("Channel must be alive");
+        if key == Key::Interrupt {
+            self.pending_signal = Some(Signal::Break);
+        }
+        Ok(key)
     }
 
     fn show_cursor(&mut self) -> io::Result<()> {
@@ -232,7 +239,6 @@ impl Console for SdlConsole {
 #[cfg(test)]
 mod testutils {
     use super::*;
-    use async_channel::{Receiver, TryRecvError};
     use flate2::read::GzDecoder;
     use flate2::write::GzEncoder;
     use flate2::Compression;
@@ -281,9 +287,6 @@ mod testutils {
         /// The SDL console under test.
         console: SdlConsole,
 
-        /// Channel via which we receive signals from the console.
-        signals_rx: Receiver<Signal>,
-
         /// Guard to ensure there is a single `SdlConsole` alive at any given time. This must come
         /// after `console` because the Rust drop rules dictate that struct elements are dropped in
         /// the order in which they are defined.
@@ -294,15 +297,13 @@ mod testutils {
         /// Creates a new test context and ensures no other test is running at the same time.
         pub(crate) fn new() -> Self {
             let lock = TEST_LOCK.lock().unwrap();
-            let signals_chan = async_channel::unbounded();
             let console = SdlConsole::new(
                 Resolution::windowed(800, 600).unwrap(),
                 src_path("sdl/src/IBMPlexMono-Regular-6.0.0.ttf"),
                 16,
-                signals_chan.0,
             )
             .unwrap();
-            Self { _lock: lock, signals_rx: signals_chan.1, console }
+            Self { _lock: lock, console }
         }
 
         /// Obtains access to the SDL console.
