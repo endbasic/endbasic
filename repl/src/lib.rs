@@ -42,7 +42,7 @@ pub fn print_welcome(console: Rc<RefCell<dyn Console>>) -> io::Result<()> {
     } else {
         console.print("")?;
         console.print(&format!("    EndBASIC {}", env!("CARGO_PKG_VERSION")))?;
-        console.print("    Copyright 2020-2024 Julio Merino")?;
+        console.print("    Copyright 2020-2025 Julio Merino")?;
         console.print("")?;
         console.print("    Type HELP for interactive usage information.")?;
     }
