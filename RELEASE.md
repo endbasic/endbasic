@@ -39,5 +39,6 @@
     *   `( cd client && cargo publish )`
     *   `( cd terminal && cargo publish )`
     *   `( cd sdl && cargo publish )`
+    *   `( cd st7735s && cargo publish )`
     *   `( cd rpi && cargo publish )`
     *   `( cd cli && cargo publish )`

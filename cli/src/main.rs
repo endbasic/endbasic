@@ -212,7 +212,12 @@ fn setup_console(
 
     #[cfg(feature = "rpi")]
     fn setup_st7735s_console(signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
-        Ok(Rc::from(RefCell::from(endbasic_rpi::new_st7735s_console(signals_tx)?)))
+        let console = endbasic_st7735s::new_console(
+            endbasic_rpi::RppalPins::default(),
+            endbasic_rpi::spi_bus_open,
+            signals_tx,
+        )?;
+        Ok(Rc::from(RefCell::from(console)))
     }
 
     #[cfg(not(feature = "rpi"))]
