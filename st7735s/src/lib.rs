@@ -23,8 +23,6 @@
 
 //! Console driver for the ST7735S LCD.
 
-use crate::spi::{spi_bus_open, RppalSpiBus};
-use crate::RppalPins;
 use async_channel::Sender;
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
@@ -346,17 +344,15 @@ impl<P: Pins, B: SpiBus> Lcd for ST7735SLcd<P, B> {
     }
 }
 
-/// Console implementation using a ST7735S LCD.
-// TODO(jmmv): Delete this wrapper.  Once the console moves to `std`, I don't think there will be
-// anything left behind to "hide".
-pub struct ST7735SConsole {
+/// Console implementation using an ST7735S LCD.
+pub struct ST7735SConsole<P: Pins + Send, B: SpiBus> {
     /// The graphical console itself.  We wrap it in a struct to prevent leaking all auxiliary types
     /// outside of this crate.
-    inner: GraphicsConsole<ST7735SInput, BufferedLcd<ST7735SLcd<RppalPins, RppalSpiBus>, Font8>>,
+    inner: GraphicsConsole<ST7735SInput, BufferedLcd<ST7735SLcd<P, B>, Font8>>,
 }
 
 #[async_trait(?Send)]
-impl Console for ST7735SConsole {
+impl<P: Pins + Send, B: SpiBus> Console for ST7735SConsole<P, B> {
     fn clear(&mut self, how: ClearType) -> io::Result<()> {
         self.inner.clear(how)
     }
@@ -455,10 +451,13 @@ impl Console for ST7735SConsole {
 }
 
 /// Initializes a new console on a ST7735S LCD.
-pub fn new_st7735s_console(signals_tx: Sender<Signal>) -> io::Result<ST7735SConsole> {
-    let pins = Arc::from(Mutex::from(RppalPins::default()));
-
-    let lcd = ST7735SLcd::new(pins.clone(), spi_bus_open)?;
+pub fn new_console<P: Pins + Send + 'static, B: SpiBus>(
+    pins: P,
+    new_spi: SpiFactory<B>,
+    signals_tx: Sender<Signal>,
+) -> io::Result<ST7735SConsole<P, B>> {
+    let pins = Arc::from(Mutex::from(pins));
+    let lcd = ST7735SLcd::new(pins.clone(), new_spi)?;
     let input = ST7735SInput::new(pins, signals_tx)?;
     let lcd = BufferedLcd::new(lcd, Font8::default());
     let inner = GraphicsConsole::new(input, lcd)?;

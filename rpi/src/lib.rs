@@ -24,5 +24,4 @@
 mod gpio;
 pub use gpio::RppalPins;
 mod spi;
-mod st7735s;
-pub use st7735s::new_st7735s_console;
+pub use spi::{spi_bus_open, RppalSpiBus};

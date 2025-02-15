@@ -6,6 +6,7 @@ members = [
     "repl",
     "rpi",
     "sdl",
+    "st7735s",
     "std",
     "terminal",
     "web",
