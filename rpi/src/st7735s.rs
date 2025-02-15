@@ -32,9 +32,11 @@ use endbasic_std::console::{
     CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, SizeInPixels, RGB,
 };
 use endbasic_std::gfx::lcd::{to_xy_size, BufferedLcd, Font8, Lcd, LcdSize, LcdXY, RGB565Pixel};
+use endbasic_std::spi::{SpiBus, SpiFactory, SpiMode};
 use endbasic_terminal::TerminalConsole;
 use rppal::gpio::{Gpio, InputPin, Level, OutputPin};
 use rppal::spi::{self, Bus, SlaveSelect, Spi};
+use std::io::Write;
 use std::path::Path;
 use std::time::Duration;
 use std::{fs, io};
@@ -73,6 +75,55 @@ fn query_spi_bufsiz(path: Option<&Path>) -> io::Result<usize> {
             io::ErrorKind::InvalidData,
             format!("Failed to read {}: invalid content: {}", path.display(), e),
         )),
+    }
+}
+
+/// An implementation of an `SpiBus` using rppal.
+struct RppalSpiBus {
+    spi: Spi,
+    bufsiz: usize,
+}
+
+/// Factory function to open an `RppalSpiBus`.
+fn spi_bus_open(bus: u8, slave: u8, clock_hz: u32, mode: SpiMode) -> io::Result<RppalSpiBus> {
+    let bus = match bus {
+        0 => Bus::Spi0,
+        _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Only bus 0 is supported")),
+    };
+
+    let slave = match slave {
+        0 => SlaveSelect::Ss0,
+        _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Only slave 0 is supported")),
+    };
+
+    let mode = match mode {
+        SpiMode::Mode0 => spi::Mode::Mode0,
+        SpiMode::Mode1 => spi::Mode::Mode1,
+        SpiMode::Mode2 => spi::Mode::Mode2,
+        SpiMode::Mode3 => spi::Mode::Mode3,
+    };
+
+    let spi = Spi::new(bus, slave, clock_hz, mode).map_err(spi_error_to_io_error)?;
+    spi.set_ss_polarity(spi::Polarity::ActiveLow).map_err(spi_error_to_io_error)?;
+
+    let bufsiz = query_spi_bufsiz(None)?;
+
+    Ok(RppalSpiBus { spi, bufsiz })
+}
+
+impl Write for RppalSpiBus {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.spi.write(buf).map_err(spi_error_to_io_error)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl SpiBus for RppalSpiBus {
+    fn max_size(&self) -> usize {
+        self.bufsiz
     }
 }
 
@@ -136,9 +187,8 @@ impl InputOps for ST7735SInput {
 }
 
 /// LCD handler for the ST7735S console.
-struct ST7735SLcd {
-    spi: Spi,
-    spi_bufsiz: usize,
+struct ST7735SLcd<B> {
+    spi_bus: B,
 
     lcd_rst: OutputPin,
     lcd_dc: OutputPin,
@@ -147,9 +197,9 @@ struct ST7735SLcd {
     size_pixels: LcdSize,
 }
 
-impl ST7735SLcd {
+impl<B: SpiBus> ST7735SLcd<B> {
     /// Initializes the LCD.
-    pub fn new(gpio: &mut Gpio) -> io::Result<Self> {
+    pub fn new(gpio: &mut Gpio, spi_factory: SpiFactory<B>) -> io::Result<Self> {
         let mut lcd_cs = gpio.get(8).map_err(gpio_error_to_io_error)?.into_output();
         let lcd_rst = gpio.get(27).map_err(gpio_error_to_io_error)?.into_output();
         let lcd_dc = gpio.get(25).map_err(gpio_error_to_io_error)?.into_output();
@@ -158,15 +208,11 @@ impl ST7735SLcd {
         lcd_cs.write(Level::High);
         lcd_bl.write(Level::High);
 
-        let spi = Spi::new(Bus::Spi0, SlaveSelect::Ss0, 9000000, spi::Mode::Mode0)
-            .map_err(spi_error_to_io_error)?;
-        spi.set_ss_polarity(spi::Polarity::ActiveLow).map_err(spi_error_to_io_error)?;
-
-        let spi_bufsiz = query_spi_bufsiz(None)?;
+        let spi_bus = spi_factory(0, 0, 9000000, SpiMode::Mode0)?;
 
         let size_pixels = LcdSize { width: 128, height: 128 };
 
-        let mut device = Self { spi, spi_bufsiz, lcd_rst, lcd_dc, lcd_bl, size_pixels };
+        let mut device = Self { spi_bus, lcd_rst, lcd_dc, lcd_bl, size_pixels };
 
         device.lcd_init()?;
 
@@ -177,10 +223,12 @@ impl ST7735SLcd {
     ///
     /// The input data is chunked to respect the maximum write size accepted by the SPI bus.
     fn lcd_write(&mut self, data: &[u8]) -> io::Result<()> {
-        for chunk in data.chunks(self.spi_bufsiz) {
+        // TODO(jmmv): Do we really need to chunk the data ourselves, or can we try to write it
+        // all to the bus and then expect the write to return partial results?
+        for chunk in data.chunks(self.spi_bus.max_size()) {
             let mut i = 0;
             loop {
-                let n = self.spi.write(&chunk[i..]).map_err(spi_error_to_io_error)?;
+                let n = self.spi_bus.write(&chunk[i..])?;
                 if n == 0 {
                     break;
                 }
@@ -325,13 +373,13 @@ impl ST7735SLcd {
     }
 }
 
-impl Drop for ST7735SLcd {
+impl<B> Drop for ST7735SLcd<B> {
     fn drop(&mut self) {
         self.lcd_bl.write(Level::Low);
     }
 }
 
-impl Lcd for ST7735SLcd {
+impl<B: SpiBus> Lcd for ST7735SLcd<B> {
     type Pixel = RGB565Pixel;
 
     fn info(&self) -> (LcdSize, usize) {
@@ -363,7 +411,7 @@ pub struct ST7735SConsole {
 
     /// The graphical console itself.  We wrap it in a struct to prevent leaking all auxiliary types
     /// outside of this crate.
-    inner: GraphicsConsole<ST7735SInput, BufferedLcd<ST7735SLcd, Font8>>,
+    inner: GraphicsConsole<ST7735SInput, BufferedLcd<ST7735SLcd<RppalSpiBus>, Font8>>,
 }
 
 #[async_trait(?Send)]
@@ -469,7 +517,7 @@ impl Console for ST7735SConsole {
 pub fn new_st7735s_console(signals_tx: Sender<Signal>) -> io::Result<ST7735SConsole> {
     let mut gpio = Gpio::new().map_err(gpio_error_to_io_error)?;
 
-    let lcd = ST7735SLcd::new(&mut gpio)?;
+    let lcd = ST7735SLcd::new(&mut gpio, spi_bus_open)?;
     let input = ST7735SInput::new(&mut gpio, signals_tx)?;
     let lcd = BufferedLcd::new(lcd, Font8::default());
     let inner = GraphicsConsole::new(input, lcd)?;

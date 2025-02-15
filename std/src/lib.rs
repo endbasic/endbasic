@@ -37,6 +37,7 @@ pub mod gpio;
 pub mod help;
 pub mod numerics;
 pub mod program;
+pub mod spi;
 pub mod storage;
 pub mod strings;
 pub mod testutils;
