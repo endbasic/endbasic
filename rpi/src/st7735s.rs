@@ -23,8 +23,8 @@
 
 //! Console driver for the ST7735S LCD.
 
-use crate::gpio::gpio_error_to_io_error;
 use crate::spi::{spi_bus_open, RppalSpiBus};
+use crate::RppalPins;
 use async_channel::Sender;
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
@@ -33,11 +33,28 @@ use endbasic_std::console::{
     CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, SizeInPixels, RGB,
 };
 use endbasic_std::gfx::lcd::{to_xy_size, BufferedLcd, Font8, Lcd, LcdSize, LcdXY, RGB565Pixel};
+use endbasic_std::gpio::{Pin, PinMode, Pins};
 use endbasic_std::spi::{SpiBus, SpiFactory, SpiMode};
 use endbasic_terminal::TerminalConsole;
-use rppal::gpio::{Gpio, InputPin, Level, OutputPin};
 use std::io;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+const INPUT_PINS: &[(Pin, Key)] = &[
+    (Pin(6), Key::ArrowUp),
+    (Pin(19), Key::ArrowDown),
+    (Pin(5), Key::ArrowLeft),
+    (Pin(26), Key::ArrowRight),
+    (Pin(13), Key::NewLine),
+    (Pin(21), Key::Char('1')),
+    (Pin(20), Key::Char('2')),
+    (Pin(16), Key::Char('3')),
+];
+
+const OUTPUT_PIN_CS: Pin = Pin(8);
+const OUTPUT_PIN_RST: Pin = Pin(27);
+const OUTPUT_PIN_DC: Pin = Pin(25);
+const OUTPUT_PIN_BL: Pin = Pin(24);
 
 /// Input handler for the ST7735S console.
 ///
@@ -48,36 +65,41 @@ struct ST7735SInput {
 }
 
 impl ST7735SInput {
-    fn new(gpio: &mut Gpio, signals_tx: Sender<Signal>) -> io::Result<Self> {
+    fn new<P: Pins + Send + 'static>(
+        pins: Arc<Mutex<P>>,
+        signals_tx: Sender<Signal>,
+    ) -> io::Result<Self> {
         let (terminal, on_key_tx) = TerminalConsole::from_stdio_with_injector(signals_tx)?;
 
-        let key_up = gpio.get(6).map_err(gpio_error_to_io_error)?.into_input_pullup();
-        let key_down = gpio.get(19).map_err(gpio_error_to_io_error)?.into_input_pullup();
-        let key_left = gpio.get(5).map_err(gpio_error_to_io_error)?.into_input_pullup();
-        let key_right = gpio.get(26).map_err(gpio_error_to_io_error)?.into_input_pullup();
-        let key_press = gpio.get(13).map_err(gpio_error_to_io_error)?.into_input_pullup();
-        let key_1 = gpio.get(21).map_err(gpio_error_to_io_error)?.into_input_pullup();
-        let key_2 = gpio.get(20).map_err(gpio_error_to_io_error)?.into_input_pullup();
-        let key_3 = gpio.get(16).map_err(gpio_error_to_io_error)?.into_input_pullup();
+        {
+            let mut pins = pins.lock().unwrap();
+            for (pin, _key) in INPUT_PINS {
+                pins.setup(*pin, PinMode::InPullUp)?;
+            }
+        }
 
         tokio::task::spawn(async move {
-            async fn read_button(pin: &InputPin, key: Key, tx: &Sender<Key>) {
-                if pin.read() == Level::Low {
-                    if let Err(e) = tx.send(key).await {
+            loop {
+                let mut keys = vec![];
+                {
+                    let mut pins = pins.lock().unwrap();
+                    for (pin, key) in INPUT_PINS {
+                        match pins.read(*pin) {
+                            Ok(false) => keys.push(*key),
+                            Ok(true) => (),
+                            Err(e) => {
+                                eprintln!("Ignoring button {:?} due to error: {}", key, e);
+                                continue;
+                            }
+                        };
+                    }
+                }
+
+                for key in keys {
+                    if let Err(e) = on_key_tx.send(key).await {
                         eprintln!("Ignoring button {:?} due to error: {}", key, e);
                     }
                 }
-            }
-
-            loop {
-                read_button(&key_up, Key::ArrowUp, &on_key_tx).await;
-                read_button(&key_down, Key::ArrowDown, &on_key_tx).await;
-                read_button(&key_left, Key::ArrowLeft, &on_key_tx).await;
-                read_button(&key_right, Key::ArrowRight, &on_key_tx).await;
-                read_button(&key_press, Key::NewLine, &on_key_tx).await;
-                read_button(&key_1, Key::Char('1'), &on_key_tx).await;
-                read_button(&key_2, Key::Char('2'), &on_key_tx).await;
-                read_button(&key_3, Key::Char('3'), &on_key_tx).await;
 
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
@@ -99,32 +121,27 @@ impl InputOps for ST7735SInput {
 }
 
 /// LCD handler for the ST7735S console.
-struct ST7735SLcd<B> {
+struct ST7735SLcd<P: Pins, B> {
+    pins: Arc<Mutex<P>>,
     spi_bus: B,
-
-    lcd_rst: OutputPin,
-    lcd_dc: OutputPin,
-    lcd_bl: OutputPin,
-
     size_pixels: LcdSize,
 }
 
-impl<B: SpiBus> ST7735SLcd<B> {
+impl<P: Pins, B: SpiBus> ST7735SLcd<P, B> {
     /// Initializes the LCD.
-    pub fn new(gpio: &mut Gpio, spi_factory: SpiFactory<B>) -> io::Result<Self> {
-        let mut lcd_cs = gpio.get(8).map_err(gpio_error_to_io_error)?.into_output();
-        let lcd_rst = gpio.get(27).map_err(gpio_error_to_io_error)?.into_output();
-        let lcd_dc = gpio.get(25).map_err(gpio_error_to_io_error)?.into_output();
-        let mut lcd_bl = gpio.get(24).map_err(gpio_error_to_io_error)?.into_output();
-
-        lcd_cs.write(Level::High);
-        lcd_bl.write(Level::High);
+    pub fn new(pins: Arc<Mutex<P>>, spi_factory: SpiFactory<B>) -> io::Result<Self> {
+        {
+            let mut pins = pins.lock().unwrap();
+            for pin in [OUTPUT_PIN_CS, OUTPUT_PIN_RST, OUTPUT_PIN_DC, OUTPUT_PIN_BL] {
+                pins.setup(pin, PinMode::Out)?;
+            }
+        }
 
         let spi_bus = spi_factory(0, 0, 9000000, SpiMode::Mode0)?;
 
         let size_pixels = LcdSize { width: 128, height: 128 };
 
-        let mut device = Self { spi_bus, lcd_rst, lcd_dc, lcd_bl, size_pixels };
+        let mut device = Self { pins, spi_bus, size_pixels };
 
         device.lcd_init()?;
 
@@ -134,13 +151,13 @@ impl<B: SpiBus> ST7735SLcd<B> {
     /// Writes arbitrary data to the SPI bus.
     ///
     /// The input data is chunked to respect the maximum write size accepted by the SPI bus.
-    fn lcd_write(&mut self, data: &[u8]) -> io::Result<()> {
+    fn lcd_write(spi_bus: &mut B, data: &[u8]) -> io::Result<()> {
         // TODO(jmmv): Do we really need to chunk the data ourselves, or can we try to write it
         // all to the bus and then expect the write to return partial results?
-        for chunk in data.chunks(self.spi_bus.max_size()) {
+        for chunk in data.chunks(spi_bus.max_size()) {
             let mut i = 0;
             loop {
-                let n = self.spi_bus.write(&chunk[i..])?;
+                let n = spi_bus.write(&chunk[i..])?;
                 if n == 0 {
                     break;
                 }
@@ -151,120 +168,132 @@ impl<B: SpiBus> ST7735SLcd<B> {
     }
 
     /// Selects the registers to affect by the next data write.
-    fn lcd_write_reg(&mut self, regs: &[u8]) -> io::Result<()> {
-        self.lcd_dc.write(Level::Low);
-        self.lcd_write(regs)
+    fn lcd_write_reg(pins: &mut P, spi_bus: &mut B, regs: &[u8]) -> io::Result<()> {
+        pins.write(OUTPUT_PIN_DC, false)?;
+        Self::lcd_write(spi_bus, regs)
     }
 
     /// Writes data to the device.  A register should have been selected before.
-    fn lcd_write_data(&mut self, data: &[u8]) -> io::Result<()> {
-        self.lcd_dc.write(Level::High);
-        self.lcd_write(data)
+    fn lcd_write_data(pins: &mut P, spi_bus: &mut B, data: &[u8]) -> io::Result<()> {
+        pins.write(OUTPUT_PIN_DC, true)?;
+        Self::lcd_write(spi_bus, data)
     }
 
     /// Resets the LCD.
-    fn lcd_reset(&mut self) {
-        self.lcd_rst.write(Level::High);
+    fn lcd_reset(pins: &mut P) -> io::Result<()> {
+        pins.write(OUTPUT_PIN_RST, true)?;
         std::thread::sleep(Duration::from_millis(100));
-        self.lcd_rst.write(Level::Low);
+        pins.write(OUTPUT_PIN_RST, false)?;
         std::thread::sleep(Duration::from_millis(100));
-        self.lcd_rst.write(Level::High);
+        pins.write(OUTPUT_PIN_RST, true)?;
         std::thread::sleep(Duration::from_millis(100));
+        Ok(())
     }
 
     /// Sets up the LCD registers.
-    fn lcd_init_reg(&mut self) -> io::Result<()> {
+    fn lcd_init_reg(pins: &mut P, spi_bus: &mut B) -> io::Result<()> {
         // ST7735R Frame Rate.
-        self.lcd_write_reg(&[0xb1])?;
-        self.lcd_write_data(&[0x01, 0x2c, 0x2d])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xb1])?;
+        Self::lcd_write_data(pins, spi_bus, &[0x01, 0x2c, 0x2d])?;
 
-        self.lcd_write_reg(&[0xb2])?;
-        self.lcd_write_data(&[0x01, 0x2c, 0x2d])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xb2])?;
+        Self::lcd_write_data(pins, spi_bus, &[0x01, 0x2c, 0x2d])?;
 
-        self.lcd_write_reg(&[0xb3])?;
-        self.lcd_write_data(&[0x01, 0x2c, 0x2d, 0x01, 0x2c, 0x2d])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xb3])?;
+        Self::lcd_write_data(pins, spi_bus, &[0x01, 0x2c, 0x2d, 0x01, 0x2c, 0x2d])?;
 
         // Column inversion.
-        self.lcd_write_reg(&[0xb4])?;
-        self.lcd_write_data(&[0x07])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xb4])?;
+        Self::lcd_write_data(pins, spi_bus, &[0x07])?;
 
         // ST7735R Power Sequence.
-        self.lcd_write_reg(&[0xc0])?;
-        self.lcd_write_data(&[0xa2, 0x02, 0x84])?;
-        self.lcd_write_reg(&[0xc1])?;
-        self.lcd_write_data(&[0xc5])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xc0])?;
+        Self::lcd_write_data(pins, spi_bus, &[0xa2, 0x02, 0x84])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xc1])?;
+        Self::lcd_write_data(pins, spi_bus, &[0xc5])?;
 
-        self.lcd_write_reg(&[0xc2])?;
-        self.lcd_write_data(&[0x0a, 0x00])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xc2])?;
+        Self::lcd_write_data(pins, spi_bus, &[0x0a, 0x00])?;
 
-        self.lcd_write_reg(&[0xc3])?;
-        self.lcd_write_data(&[0x8a, 0x2a])?;
-        self.lcd_write_reg(&[0xc4])?;
-        self.lcd_write_data(&[0x8a, 0xee])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xc3])?;
+        Self::lcd_write_data(pins, spi_bus, &[0x8a, 0x2a])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xc4])?;
+        Self::lcd_write_data(pins, spi_bus, &[0x8a, 0xee])?;
 
         // VCOM.
-        self.lcd_write_reg(&[0xc5])?;
-        self.lcd_write_data(&[0x0e])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xc5])?;
+        Self::lcd_write_data(pins, spi_bus, &[0x0e])?;
 
         // ST7735R Gamma Sequence.
-        self.lcd_write_reg(&[0xe0])?;
-        self.lcd_write_data(&[
-            0x0f, 0x1a, 0x0f, 0x18, 0x2f, 0x28, 0x20, 0x22, 0x1f, 0x1b, 0x23, 0x37, 0x00, 0x07,
-            0x02, 0x10,
-        ])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xe0])?;
+        Self::lcd_write_data(
+            pins,
+            spi_bus,
+            &[
+                0x0f, 0x1a, 0x0f, 0x18, 0x2f, 0x28, 0x20, 0x22, 0x1f, 0x1b, 0x23, 0x37, 0x00, 0x07,
+                0x02, 0x10,
+            ],
+        )?;
 
-        self.lcd_write_reg(&[0xe1])?;
-        self.lcd_write_data(&[
-            0x0f, 0x1b, 0x0f, 0x17, 0x33, 0x2c, 0x29, 0x2e, 0x30, 0x30, 0x39, 0x3f, 0x00, 0x07,
-            0x03, 0x10,
-        ])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xe1])?;
+        Self::lcd_write_data(
+            pins,
+            spi_bus,
+            &[
+                0x0f, 0x1b, 0x0f, 0x17, 0x33, 0x2c, 0x29, 0x2e, 0x30, 0x30, 0x39, 0x3f, 0x00, 0x07,
+                0x03, 0x10,
+            ],
+        )?;
 
         // Enable test command.
-        self.lcd_write_reg(&[0xf0])?;
-        self.lcd_write_data(&[0x01])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xf0])?;
+        Self::lcd_write_data(pins, spi_bus, &[0x01])?;
 
         // Disable ram power save mode.
-        self.lcd_write_reg(&[0xf6])?;
-        self.lcd_write_data(&[0x00])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0xf6])?;
+        Self::lcd_write_data(pins, spi_bus, &[0x00])?;
 
         // 65k mode.
-        self.lcd_write_reg(&[0x3a])?;
-        self.lcd_write_data(&[0x05])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0x3a])?;
+        Self::lcd_write_data(pins, spi_bus, &[0x05])?;
 
         Ok(())
     }
 
     /// Initializes the LCD scan direction and pixel color encoding.
-    fn lcd_set_gram_scan_way(&mut self) -> io::Result<()> {
-        self.lcd_write_reg(&[0x36])?; // MX, MY, RGB mode.
+    fn lcd_set_gram_scan_way(pins: &mut P, spi_bus: &mut B) -> io::Result<()> {
+        Self::lcd_write_reg(pins, spi_bus, &[0x36])?; // MX, MY, RGB mode.
         let scan_dir = 0x40 | 0x20; // X, Y.
         let rgb_mode = 0x08; // RGB for 1.44in display.
-        self.lcd_write_data(&[scan_dir | rgb_mode])?;
+        Self::lcd_write_data(pins, spi_bus, &[scan_dir | rgb_mode])?;
         Ok(())
     }
 
     /// Initializes the LCD.
     fn lcd_init(&mut self) -> io::Result<()> {
-        self.lcd_bl.write(Level::High);
+        let mut pins = self.pins.lock().unwrap();
 
-        self.lcd_reset();
-        self.lcd_init_reg()?;
+        pins.write(OUTPUT_PIN_CS, true)?;
+        pins.write(OUTPUT_PIN_BL, true)?;
 
-        self.lcd_set_gram_scan_way()?;
+        Self::lcd_reset(&mut *pins)?;
+        Self::lcd_init_reg(&mut *pins, &mut self.spi_bus)?;
+
+        Self::lcd_set_gram_scan_way(&mut *pins, &mut self.spi_bus)?;
         std::thread::sleep(Duration::from_millis(200));
 
-        self.lcd_write_reg(&[0x11])?;
+        Self::lcd_write_reg(&mut *pins, &mut self.spi_bus, &[0x11])?;
         std::thread::sleep(Duration::from_millis(200));
 
         // Turn display on.
-        self.lcd_write_reg(&[0x29])?;
+        Self::lcd_write_reg(&mut *pins, &mut self.spi_bus, &[0x29])?;
 
         Ok(())
     }
 
     /// Configures the LCD so that the next write, which carries pixel data, affects the specified
     /// region.
-    fn lcd_set_window(&mut self, xy: LcdXY, size: LcdSize) -> io::Result<()> {
+    fn lcd_set_window(pins: &mut P, spi_bus: &mut B, xy: LcdXY, size: LcdSize) -> io::Result<()> {
         let adjust_x = 1;
         let adjust_y = 2;
 
@@ -273,25 +302,26 @@ impl<B: SpiBus> ST7735SLcd<B> {
         let y1 = ((xy.y & 0xff) + adjust_y) as u8;
         let y2 = (((xy.y + size.height) + adjust_y - 1) & 0xff) as u8;
 
-        self.lcd_write_reg(&[0x2a])?;
-        self.lcd_write_data(&[0x00, x1, 0x00, x2])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0x2a])?;
+        Self::lcd_write_data(pins, spi_bus, &[0x00, x1, 0x00, x2])?;
 
-        self.lcd_write_reg(&[0x2b])?;
-        self.lcd_write_data(&[0x00, y1, 0x00, y2])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0x2b])?;
+        Self::lcd_write_data(pins, spi_bus, &[0x00, y1, 0x00, y2])?;
 
-        self.lcd_write_reg(&[0x2c])?;
+        Self::lcd_write_reg(pins, spi_bus, &[0x2c])?;
 
         Ok(())
     }
 }
 
-impl<B> Drop for ST7735SLcd<B> {
+impl<P: Pins, B> Drop for ST7735SLcd<P, B> {
     fn drop(&mut self) {
-        self.lcd_bl.write(Level::Low);
+        let mut pins = self.pins.lock().unwrap();
+        let _result = pins.write(OUTPUT_PIN_BL, false);
     }
 }
 
-impl<B: SpiBus> Lcd for ST7735SLcd<B> {
+impl<P: Pins, B: SpiBus> Lcd for ST7735SLcd<P, B> {
     type Pixel = RGB565Pixel;
 
     fn info(&self) -> (LcdSize, usize) {
@@ -310,20 +340,19 @@ impl<B: SpiBus> Lcd for ST7735SLcd<B> {
 
     fn set_data(&mut self, x1y1: LcdXY, x2y2: LcdXY, data: &[u8]) -> io::Result<()> {
         let (xy, size) = to_xy_size(x1y1, x2y2);
-        self.lcd_set_window(xy, size)?;
-        self.lcd_write_data(data)
+        let mut pins = self.pins.lock().unwrap();
+        Self::lcd_set_window(&mut *pins, &mut self.spi_bus, xy, size)?;
+        Self::lcd_write_data(&mut *pins, &mut self.spi_bus, data)
     }
 }
 
 /// Console implementation using a ST7735S LCD.
+// TODO(jmmv): Delete this wrapper.  Once the console moves to `std`, I don't think there will be
+// anything left behind to "hide".
 pub struct ST7735SConsole {
-    /// GPIO controller used for the LCD and the input buttons.  Must be kept alive for as long as
-    /// `inner` is.
-    _gpio: Gpio,
-
     /// The graphical console itself.  We wrap it in a struct to prevent leaking all auxiliary types
     /// outside of this crate.
-    inner: GraphicsConsole<ST7735SInput, BufferedLcd<ST7735SLcd<RppalSpiBus>, Font8>>,
+    inner: GraphicsConsole<ST7735SInput, BufferedLcd<ST7735SLcd<RppalPins, RppalSpiBus>, Font8>>,
 }
 
 #[async_trait(?Send)]
@@ -427,11 +456,11 @@ impl Console for ST7735SConsole {
 
 /// Initializes a new console on a ST7735S LCD.
 pub fn new_st7735s_console(signals_tx: Sender<Signal>) -> io::Result<ST7735SConsole> {
-    let mut gpio = Gpio::new().map_err(gpio_error_to_io_error)?;
+    let pins = Arc::from(Mutex::from(RppalPins::default()));
 
-    let lcd = ST7735SLcd::new(&mut gpio, spi_bus_open)?;
-    let input = ST7735SInput::new(&mut gpio, signals_tx)?;
+    let lcd = ST7735SLcd::new(pins.clone(), spi_bus_open)?;
+    let input = ST7735SInput::new(pins, signals_tx)?;
     let lcd = BufferedLcd::new(lcd, Font8::default());
     let inner = GraphicsConsole::new(input, lcd)?;
-    Ok(ST7735SConsole { _gpio: gpio, inner })
+    Ok(ST7735SConsole { inner })
 }
