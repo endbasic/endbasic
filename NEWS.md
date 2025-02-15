@@ -24,6 +24,10 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
     `--console=graphics`) and the optional parameters given to `sdl` are now of
     the form `key=value` parameters.
 
+*   Added a new `endbasic-st7735s` crate to assimilate the driver for the
+    ST7735S LCD, decoupling its implementation from the Linux-specific bits in
+    the `endbasic-rpi` crate.
+
 ## Changes in version 0.11.1
 
 **Released on 2024-09-14.**

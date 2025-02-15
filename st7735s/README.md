@@ -1,7 +1,7 @@
-# The EndBASIC programming language - Raspbery Pi support
+# The EndBASIC programming language - st7735s console
 
-[![Crates.io](https://img.shields.io/crates/v/endbasic-rpi.svg)](https://crates.io/crates/endbasic-rpi/)
-[![Docs.rs](https://docs.rs/endbasic-rpi/badge.svg)](https://docs.rs/endbasic-rpi/)
+[![Crates.io](https://img.shields.io/crates/v/endbasic-st7735s.svg)](https://crates.io/crates/endbasic-st7735s/)
+[![Docs.rs](https://docs.rs/endbasic-st7735s/badge.svg)](https://docs.rs/endbasic-st7735s/)
 
 EndBASIC is an interpreter for a BASIC-like language and is inspired by
 Amstrad's Locomotive BASIC 1.1 and Microsoft's QuickBASIC 4.5.  Like the former,
@@ -23,8 +23,4 @@ EndBASIC is free software under the [Apache 2.0 License](LICENSE).
 
 ## What's in this crate?
 
-`endbasic-rpi` provides Raspberry Pi support for the following features defined
-in the `endbasic-std` crate:
-
-*   GPIO pins support.
-*   SPI bus support.
+`endbasic-st7735s` provides a console implementation on an ST7735S hat.

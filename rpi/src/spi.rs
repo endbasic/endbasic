@@ -59,18 +59,13 @@ fn query_spi_bufsiz(path: Option<&Path>) -> io::Result<usize> {
 }
 
 /// An implementation of an `SpiBus` using rppal.
-pub(crate) struct RppalSpiBus {
+pub struct RppalSpiBus {
     spi: Spi,
     bufsiz: usize,
 }
 
 /// Factory function to open an `RppalSpiBus`.
-pub(crate) fn spi_bus_open(
-    bus: u8,
-    slave: u8,
-    clock_hz: u32,
-    mode: SpiMode,
-) -> io::Result<RppalSpiBus> {
+pub fn spi_bus_open(bus: u8, slave: u8, clock_hz: u32, mode: SpiMode) -> io::Result<RppalSpiBus> {
     let bus = match bus {
         0 => Bus::Spi0,
         _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Only bus 0 is supported")),
