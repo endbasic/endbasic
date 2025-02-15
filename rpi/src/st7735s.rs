@@ -24,6 +24,7 @@
 //! Console driver for the ST7735S LCD.
 
 use crate::gpio::gpio_error_to_io_error;
+use crate::spi::{spi_bus_open, RppalSpiBus};
 use async_channel::Sender;
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
@@ -35,97 +36,8 @@ use endbasic_std::gfx::lcd::{to_xy_size, BufferedLcd, Font8, Lcd, LcdSize, LcdXY
 use endbasic_std::spi::{SpiBus, SpiFactory, SpiMode};
 use endbasic_terminal::TerminalConsole;
 use rppal::gpio::{Gpio, InputPin, Level, OutputPin};
-use rppal::spi::{self, Bus, SlaveSelect, Spi};
-use std::io::Write;
-use std::path::Path;
+use std::io;
 use std::time::Duration;
-use std::{fs, io};
-
-/// Path to the configuration file containing the maximum SPI transfer size.
-const SPIDEV_BUFSIZ_PATH: &str = "/sys/module/spidev/parameters/bufsiz";
-
-/// Converts an SPI error to an IO error.
-fn spi_error_to_io_error(e: spi::Error) -> io::Error {
-    match e {
-        spi::Error::Io(e) => e,
-        e => io::Error::new(io::ErrorKind::InvalidInput, e.to_string()),
-    }
-}
-
-/// Queries the maximum SPI transfer size from `path`.  If `path` is not provided, defaults to
-/// `SPIDEV_BUFSIZ_PATH`.
-fn query_spi_bufsiz(path: Option<&Path>) -> io::Result<usize> {
-    let path = path.unwrap_or(Path::new(SPIDEV_BUFSIZ_PATH));
-
-    let content = match fs::read_to_string(path) {
-        Ok(content) => content,
-        Err(e) => {
-            return Err(io::Error::new(
-                e.kind(),
-                format!("Failed to read {}: {}", path.display(), e),
-            ));
-        }
-    };
-
-    let content = content.trim_end();
-
-    match content.parse::<usize>() {
-        Ok(i) => Ok(i),
-        Err(e) => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Failed to read {}: invalid content: {}", path.display(), e),
-        )),
-    }
-}
-
-/// An implementation of an `SpiBus` using rppal.
-struct RppalSpiBus {
-    spi: Spi,
-    bufsiz: usize,
-}
-
-/// Factory function to open an `RppalSpiBus`.
-fn spi_bus_open(bus: u8, slave: u8, clock_hz: u32, mode: SpiMode) -> io::Result<RppalSpiBus> {
-    let bus = match bus {
-        0 => Bus::Spi0,
-        _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Only bus 0 is supported")),
-    };
-
-    let slave = match slave {
-        0 => SlaveSelect::Ss0,
-        _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Only slave 0 is supported")),
-    };
-
-    let mode = match mode {
-        SpiMode::Mode0 => spi::Mode::Mode0,
-        SpiMode::Mode1 => spi::Mode::Mode1,
-        SpiMode::Mode2 => spi::Mode::Mode2,
-        SpiMode::Mode3 => spi::Mode::Mode3,
-    };
-
-    let spi = Spi::new(bus, slave, clock_hz, mode).map_err(spi_error_to_io_error)?;
-    spi.set_ss_polarity(spi::Polarity::ActiveLow).map_err(spi_error_to_io_error)?;
-
-    let bufsiz = query_spi_bufsiz(None)?;
-
-    Ok(RppalSpiBus { spi, bufsiz })
-}
-
-impl Write for RppalSpiBus {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.spi.write(buf).map_err(spi_error_to_io_error)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-impl SpiBus for RppalSpiBus {
-    fn max_size(&self) -> usize {
-        self.bufsiz
-    }
-}
 
 /// Input handler for the ST7735S console.
 ///
@@ -522,25 +434,4 @@ pub fn new_st7735s_console(signals_tx: Sender<Signal>) -> io::Result<ST7735SCons
     let lcd = BufferedLcd::new(lcd, Font8::default());
     let inner = GraphicsConsole::new(input, lcd)?;
     Ok(ST7735SConsole { _gpio: gpio, inner })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_query_spi_bufsiz_with_newline() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let tempfile = tempdir.path().join("bufsiz");
-        fs::write(&tempfile, "1024\n").unwrap();
-        assert_eq!(1024, query_spi_bufsiz(Some(&tempfile)).unwrap());
-    }
-
-    #[test]
-    fn test_query_spi_bufsiz_without_newline() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let tempfile = tempdir.path().join("bufsiz");
-        fs::write(&tempfile, "4096").unwrap();
-        assert_eq!(4096, query_spi_bufsiz(Some(&tempfile)).unwrap());
-    }
 }
