@@ -28,3 +28,4 @@ in the `endbasic-std` crate:
 
 *   Console support on an ST7735S hat.
 *   GPIO pins support.
+*   SPI bus support.
