@@ -101,6 +101,9 @@ fn new_machine_builder(console_spec: Option<&str>) -> io::Result<endbasic_std::M
     /// Obtains the default set of pins for a Raspberry Pi.
     #[cfg(feature = "rpi")]
     fn add_gpio_pins(builder: endbasic_std::MachineBuilder) -> endbasic_std::MachineBuilder {
+        // TODO(jmmv): If st7735s is in use, this basically creates a secondary set of pins.
+        // Which... should work OK, but then the user can interfere with the display in ways that
+        // should not be allowed, probably.
         builder.with_gpio_pins(Rc::from(RefCell::from(endbasic_rpi::RppalPins::default())))
     }
 
