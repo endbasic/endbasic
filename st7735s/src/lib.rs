@@ -281,7 +281,10 @@ impl<P: Pins, B: SpiBus> ST7735SLcd<P, B> {
     fn lcd_init(&mut self) -> io::Result<()> {
         let mut pins = self.pins.lock().unwrap();
 
-        pins.write(OUTPUT_PIN_CS, true)?;
+        // I'm not sure what this does.  This does not have an effect on Linux but
+        // setting this to high on NetBSD causes the LCD to remain lit up.
+        pins.write(OUTPUT_PIN_CS, false)?;
+
         pins.write(OUTPUT_PIN_BL, true)?;
 
         Self::lcd_reset(&mut *pins)?;
