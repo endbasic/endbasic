@@ -84,7 +84,6 @@ pub fn spi_bus_open(bus: u8, slave: u8, clock_hz: u32, mode: SpiMode) -> io::Res
     };
 
     let spi = Spi::new(bus, slave, clock_hz, mode).map_err(spi_error_to_io_error)?;
-    spi.set_ss_polarity(spi::Polarity::ActiveLow).map_err(spi_error_to_io_error)?;
 
     let bufsiz = query_spi_bufsiz(None)?;
 
