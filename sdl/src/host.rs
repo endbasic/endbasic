@@ -19,14 +19,13 @@
 //! from a single thread.
 
 use crate::font::{font_error_to_io_error, MonospacedFont};
-use crate::spec::Resolution;
 use crate::string_error_to_io_error;
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
 use endbasic_std::console::drawing::{draw_circle, draw_circle_filled};
 use endbasic_std::console::graphics::{ClampedInto, ClampedMul, InputOps, RasterInfo, RasterOps};
 use endbasic_std::console::{
-    CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, SizeInPixels, RGB,
+    CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, Resolution, SizeInPixels, RGB,
 };
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
@@ -253,12 +252,12 @@ impl Context {
                 window
             }
             Resolution::FullScreen(size) => {
-                let mut window = video.window(&title, size.0, size.1);
+                let mut window = video.window(&title, size.0.get(), size.1.get());
                 window.fullscreen();
                 window
             }
             Resolution::Windowed(size) => {
-                let mut window = video.window(&title, size.0, size.1);
+                let mut window = video.window(&title, size.0.get(), size.1.get());
                 window.position_centered();
                 window
             }

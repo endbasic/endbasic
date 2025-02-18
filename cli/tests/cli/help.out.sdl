@@ -12,9 +12,9 @@ Options:
         --version       show version information and exit
 
 CONSOLE-SPEC can be one of the following:
-    graphics[:SPEC]     enables the graphical console and configures it
+    sdl[:SPEC]          enables the graphical console and configures it
                         with the settings in SPEC, which is of the form:
-                        RESOLUTION,TTF_FONT_PATH,FONT_SIZE
+                        resolution=RESOLUTION,font_path=TTF,font_size=SIZE
                         individual components of the SPEC can be omitted
                         RESOLUTION can be one of 'fs' (for full screen),
                         'WIDTHxHEIGHT' or 'WIDTHxHEIGHTfs'

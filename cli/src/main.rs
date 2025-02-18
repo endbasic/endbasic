@@ -25,7 +25,7 @@
 use anyhow::{anyhow, Result};
 use async_channel::Sender;
 use endbasic_core::exec::Signal;
-use endbasic_std::console::Console;
+use endbasic_std::console::{Console, ConsoleSpec};
 use endbasic_std::storage::Storage;
 use getopts::Options;
 use std::cell::RefCell;
@@ -73,9 +73,9 @@ fn help(name: &str, opts: &Options) {
     println!("{}", opts.usage(&brief));
     println!("CONSOLE-SPEC can be one of the following:");
     if cfg!(feature = "sdl") {
-        println!("    graphics[:SPEC]     enables the graphical console and configures it");
+        println!("    sdl[:SPEC]          enables the graphical console and configures it");
         println!("                        with the settings in SPEC, which is of the form:");
-        println!("                        RESOLUTION,TTF_FONT_PATH,FONT_SIZE");
+        println!("                        resolution=RESOLUTION,font_path=TTF,font_size=SIZE");
         println!("                        individual components of the SPEC can be omitted");
         println!("                        RESOLUTION can be one of 'fs' (for full screen),");
         println!("                        'WIDTHxHEIGHT' or 'WIDTHxHEIGHTfs'");
@@ -190,18 +190,18 @@ fn setup_console(
 
     /// Creates the graphical console when SDL support is built in.
     #[cfg(feature = "sdl")]
-    pub fn setup_graphics_console(
+    pub fn setup_sdl_console(
         signals_tx: Sender<Signal>,
-        spec: &str,
+        spec: &mut ConsoleSpec,
     ) -> io::Result<Rc<RefCell<dyn Console>>> {
         endbasic_sdl::setup(spec, signals_tx)
     }
 
     /// Errors out during the creation of the graphical console when SDL support is not compiled in.
     #[cfg(not(feature = "sdl"))]
-    pub fn setup_graphics_console(
+    pub fn setup_sdl_console(
         _signals_tx: Sender<Signal>,
-        _spec: &str,
+        _spec: &mut ConsoleSpec,
     ) -> io::Result<Rc<RefCell<dyn Console>>> {
         // TODO(jmmv): Make this io::ErrorKind::Unsupported when our MSRV allows it.
         Err(io::Error::new(io::ErrorKind::InvalidInput, "SDL support not compiled in"))
@@ -219,22 +219,21 @@ fn setup_console(
         Err(io::Error::new(io::ErrorKind::InvalidInput, "ST7735S support not compiled in"))
     }
 
-    let console: Rc<RefCell<dyn Console>> = match console_spec {
-        None | Some("text") => setup_text_console(signals_tx)?,
-
-        Some("graphics") => setup_graphics_console(signals_tx, "")?,
-        Some("st7735s") => setup_st7735s_console(signals_tx)?,
-        Some(text) if text.starts_with("graphics:") => {
-            setup_graphics_console(signals_tx, &text["graphics:".len()..])?
-        }
-
-        Some(text) => {
+    let mut console_spec = ConsoleSpec::init(console_spec.unwrap_or("text"));
+    let console: Rc<RefCell<dyn Console>> = match console_spec.driver {
+        "sdl" => setup_sdl_console(signals_tx, &mut console_spec)?,
+        "st7735s" => setup_st7735s_console(signals_tx)?,
+        "text" => setup_text_console(signals_tx)?,
+        driver => {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("Invalid console spec {}", text),
+                format!("Unknown console driver {}", driver),
             ))
         }
     };
+    console_spec.finish().map_err(|e| {
+        io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid --console flag: {}", e))
+    })?;
     Ok(console)
 }
 

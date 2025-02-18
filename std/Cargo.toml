@@ -16,6 +16,7 @@ async-channel = "2.2"
 async-trait = "0.1"
 futures-lite = "2.2"
 radix_trie = "0.2"
+thiserror = "1.0"
 time = { version = "0.3", features = ["formatting", "local-offset", "std"] }
 
 [dependencies.endbasic-core]
