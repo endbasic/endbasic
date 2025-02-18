@@ -80,6 +80,9 @@ fn help(name: &str, opts: &Options) {
         println!("                        RESOLUTION can be one of 'fs' (for full screen),");
         println!("                        'WIDTHxHEIGHT' or 'WIDTHxHEIGHTfs'");
     }
+    if cfg!(feature = "rpi") {
+        println!("    st7735s             enables the ST7735S LCD console");
+    }
     println!("    text                enables the text-based console");
     println!();
     println!("Report bugs to: https://github.com/endbasic/endbasic/issues");
