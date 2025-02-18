@@ -16,12 +16,11 @@
 //! Implementation of the EndBASIC console using SDL.
 
 use crate::host::{self, Request, Response};
-use crate::spec::Resolution;
 use async_channel::Sender;
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
 use endbasic_std::console::{
-    remove_control_chars, CharsXY, ClearType, Console, Key, PixelsXY, SizeInPixels,
+    remove_control_chars, CharsXY, ClearType, Console, Key, PixelsXY, Resolution, SizeInPixels,
 };
 use std::io;
 use std::path::PathBuf;
@@ -245,6 +244,7 @@ mod testutils {
     use std::env;
     use std::fs::File;
     use std::io::{self, BufReader, Read};
+    use std::num::NonZeroU32;
     use std::path::PathBuf;
     use std::sync::{Mutex, MutexGuard};
 
@@ -296,7 +296,10 @@ mod testutils {
             let lock = TEST_LOCK.lock().unwrap();
             let signals_chan = async_channel::unbounded();
             let console = SdlConsole::new(
-                Resolution::windowed(800, 600).unwrap(),
+                Resolution::Windowed((
+                    NonZeroU32::new(800).unwrap(),
+                    NonZeroU32::new(600).unwrap(),
+                )),
                 src_path("sdl/src/IBMPlexMono-Regular-6.0.0.ttf"),
                 16,
                 signals_chan.0,

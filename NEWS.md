@@ -19,6 +19,11 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
 
 *   Improved the performance of the core interpreter by more than 2x.
 
+*   Modified the syntax of the `--console` driver.  Graphical mode on the
+    desktop can now be enabled with `--console=sdl` (as opposed to
+    `--console=graphics`) and the optional parameters given to `sdl` are now of
+    the form `key=value` parameters.
+
 ## Changes in version 0.11.1
 
 **Released on 2024-09-14.**

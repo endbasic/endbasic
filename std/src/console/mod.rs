@@ -35,14 +35,16 @@ pub(crate) use format::refill_and_page;
 pub use format::refill_and_print;
 pub mod graphics;
 pub use graphics::GraphicsConsole;
+mod linebuffer;
+pub use linebuffer::LineBuffer;
 mod pager;
 pub(crate) use pager::Pager;
 mod readline;
 pub use readline::{read_line, read_line_secure};
+mod spec;
+pub use spec::{ConsoleSpec, Resolution};
 mod trivial;
 pub use trivial::TrivialConsole;
-mod linebuffer;
-pub use linebuffer::LineBuffer;
 
 /// Decoded key presses as returned by the console.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
