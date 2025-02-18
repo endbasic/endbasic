@@ -1,0 +1,19 @@
+Usage: endbasic [options] [program-file]
+
+Options:
+        --console CONSOLE-SPEC
+                        type and properties of the console to use
+    -h, --help          show command-line usage information and exit
+    -i, --interactive   force interactive mode when running a script
+        --local-drive URI
+                        location of the drive to mount as LOCAL
+        --service-url URL
+                        base URL of the cloud service
+        --version       show version information and exit
+
+CONSOLE-SPEC can be one of the following:
+    st7735s             enables the ST7735S LCD console
+    text                enables the text-based console
+
+Report bugs to: https://github.com/endbasic/endbasic/issues
+EndBASIC home page: https://www.endbasic.dev/

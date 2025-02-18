@@ -203,12 +203,21 @@ fn test_cli_autoexec_is_ignored() {
 #[test]
 fn test_cli_help() {
     fn check_with_args(args: &[&str]) {
-        let exp_stdout = if cfg!(feature = "sdl") {
-            Behavior::File(src_path("cli/tests/cli/help.out.sdl"))
-        } else {
-            Behavior::File(src_path("cli/tests/cli/help.out"))
-        };
-        check(bin_path("endbasic"), args, 0, Behavior::Null, exp_stdout, Behavior::Null);
+        let mut src = String::from("cli/tests/cli/help.out");
+        if cfg!(feature = "rpi") {
+            src.push_str(".rpi");
+        }
+        if cfg!(feature = "sdl") {
+            src.push_str(".sdl");
+        }
+        check(
+            bin_path("endbasic"),
+            args,
+            0,
+            Behavior::Null,
+            Behavior::File(src_path(&src)),
+            Behavior::Null,
+        );
     }
     check_with_args(&["-h"]);
     check_with_args(&["--help"]);
