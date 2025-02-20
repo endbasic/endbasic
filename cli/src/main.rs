@@ -215,7 +215,7 @@ fn setup_console(
         let console = endbasic_st7735s::new_console(
             endbasic_rpi::RppalPins::default(),
             endbasic_rpi::spi_bus_open,
-            signals_tx,
+            endbasic_terminal::TerminalConsole::from_stdio(signals_tx)?,
         )?;
         Ok(Rc::from(RefCell::from(console)))
     }

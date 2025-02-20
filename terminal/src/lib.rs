@@ -28,6 +28,7 @@ use crossterm::event::{self, KeyEventKind};
 use crossterm::tty::IsTty;
 use crossterm::{cursor, style, terminal, QueueableCommand};
 use endbasic_core::exec::Signal;
+use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
     get_env_var_as_u16, read_key_from_stdin, remove_control_chars, CharsXY, ClearType, Console, Key,
 };
@@ -235,6 +236,24 @@ impl TerminalConsole {
 }
 
 #[async_trait(?Send)]
+impl InputOps for TerminalConsole {
+    async fn poll_key(&mut self) -> io::Result<Option<Key>> {
+        match self.on_key_rx.try_recv() {
+            Ok(k) => Ok(Some(k)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Closed) => Ok(Some(Key::Eof)),
+        }
+    }
+
+    async fn read_key(&mut self) -> io::Result<Key> {
+        match self.on_key_rx.recv().await {
+            Ok(k) => Ok(k),
+            Err(_) => Ok(Key::Eof),
+        }
+    }
+}
+
+#[async_trait(?Send)]
 impl Console for TerminalConsole {
     fn clear(&mut self, how: ClearType) -> io::Result<()> {
         let how = match how {
@@ -367,18 +386,11 @@ impl Console for TerminalConsole {
     }
 
     async fn poll_key(&mut self) -> io::Result<Option<Key>> {
-        match self.on_key_rx.try_recv() {
-            Ok(k) => Ok(Some(k)),
-            Err(TryRecvError::Empty) => Ok(None),
-            Err(TryRecvError::Closed) => Ok(Some(Key::Eof)),
-        }
+        (self as &mut dyn InputOps).poll_key().await
     }
 
     async fn read_key(&mut self) -> io::Result<Key> {
-        match self.on_key_rx.recv().await {
-            Ok(k) => Ok(k),
-            Err(_) => Ok(Key::Eof),
-        }
+        (self as &mut dyn InputOps).read_key().await
     }
 
     fn show_cursor(&mut self) -> io::Result<()> {
