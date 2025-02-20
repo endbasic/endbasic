@@ -23,9 +23,8 @@
 
 //! Console driver for the ST7735S LCD.
 
-use async_channel::Sender;
+use async_channel::{Receiver, TryRecvError};
 use async_trait::async_trait;
-use endbasic_core::exec::Signal;
 use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
     CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, SizeInPixels, RGB,
@@ -33,7 +32,6 @@ use endbasic_std::console::{
 use endbasic_std::gfx::lcd::{to_xy_size, BufferedLcd, Font8, Lcd, LcdSize, LcdXY, RGB565Pixel};
 use endbasic_std::gpio::{Pin, PinMode, Pins};
 use endbasic_std::spi::{SpiBus, SpiFactory, SpiMode};
-use endbasic_terminal::TerminalConsole;
 use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -56,18 +54,18 @@ const OUTPUT_PIN_BL: Pin = Pin(24);
 
 /// Input handler for the ST7735S console.
 ///
-/// This relies on the usual terminal console in raw mode to gather keyboard input but also adds
-/// support for the physical buttons that come along with the display.
-struct ST7735SInput {
-    terminal: TerminalConsole,
+/// This driver reads the (limited) physical buttons of the ST7735S device and multiplexes them with
+/// a real keyboard.
+struct ST7735SInput<K> {
+    on_button_rx: Receiver<Key>,
+    keyboard: K,
 }
 
-impl ST7735SInput {
-    fn new<P: Pins + Send + 'static>(
-        pins: Arc<Mutex<P>>,
-        signals_tx: Sender<Signal>,
-    ) -> io::Result<Self> {
-        let (terminal, on_key_tx) = TerminalConsole::from_stdio_with_injector(signals_tx)?;
+impl<K> ST7735SInput<K> {
+    /// Constructs a new input handler that reads button presses through `pins` and multiplexes them
+    /// with `keyboard`.
+    fn new<P: Pins + Send + 'static>(pins: Arc<Mutex<P>>, keyboard: K) -> io::Result<Self> {
+        let (on_button_tx, on_button_rx) = async_channel::unbounded();
 
         {
             let mut pins = pins.lock().unwrap();
@@ -94,7 +92,7 @@ impl ST7735SInput {
                 }
 
                 for key in keys {
-                    if let Err(e) = on_key_tx.send(key).await {
+                    if let Err(e) = on_button_tx.send(key).await {
                         eprintln!("Ignoring button {:?} due to error: {}", key, e);
                     }
                 }
@@ -103,18 +101,30 @@ impl ST7735SInput {
             }
         });
 
-        Ok(Self { terminal })
+        Ok(Self { on_button_rx, keyboard })
     }
 }
 
 #[async_trait(?Send)]
-impl InputOps for ST7735SInput {
+impl<K: InputOps> InputOps for ST7735SInput<K> {
     async fn poll_key(&mut self) -> io::Result<Option<Key>> {
-        self.terminal.poll_key().await
+        match self.on_button_rx.try_recv() {
+            Ok(k) => Ok(Some(k)),
+            Err(TryRecvError::Empty) => self.keyboard.poll_key().await,
+            Err(TryRecvError::Closed) => Ok(Some(Key::Eof)),
+        }
     }
 
     async fn read_key(&mut self) -> io::Result<Key> {
-        self.terminal.read_key().await
+        tokio::select! {
+            result = self.on_button_rx.recv() => {
+                match result {
+                    Ok(k) => Ok(k),
+                    Err(_) => Ok(Key::Eof),
+                }
+            }
+            result = self.keyboard.read_key() => result,
+        }
     }
 }
 
@@ -345,14 +355,14 @@ impl<P: Pins, B: SpiBus> Lcd for ST7735SLcd<P, B> {
 }
 
 /// Console implementation using an ST7735S LCD.
-pub struct ST7735SConsole<P: Pins + Send, B: SpiBus> {
+pub struct ST7735SConsole<P: Pins + Send, B: SpiBus, K> {
     /// The graphical console itself.  We wrap it in a struct to prevent leaking all auxiliary types
     /// outside of this crate.
-    inner: GraphicsConsole<ST7735SInput, BufferedLcd<ST7735SLcd<P, B>, Font8>>,
+    inner: GraphicsConsole<ST7735SInput<K>, BufferedLcd<ST7735SLcd<P, B>, Font8>>,
 }
 
 #[async_trait(?Send)]
-impl<P: Pins + Send, B: SpiBus> Console for ST7735SConsole<P, B> {
+impl<P: Pins + Send, B: SpiBus, K: InputOps> Console for ST7735SConsole<P, B, K> {
     fn clear(&mut self, how: ClearType) -> io::Result<()> {
         self.inner.clear(how)
     }
@@ -451,14 +461,14 @@ impl<P: Pins + Send, B: SpiBus> Console for ST7735SConsole<P, B> {
 }
 
 /// Initializes a new console on a ST7735S LCD.
-pub fn new_console<P: Pins + Send + 'static, B: SpiBus>(
+pub fn new_console<P: Pins + Send + 'static, B: SpiBus, K: InputOps>(
     pins: P,
     new_spi: SpiFactory<B>,
-    signals_tx: Sender<Signal>,
-) -> io::Result<ST7735SConsole<P, B>> {
+    keyboard: K,
+) -> io::Result<ST7735SConsole<P, B, K>> {
     let pins = Arc::from(Mutex::from(pins));
     let lcd = ST7735SLcd::new(pins.clone(), new_spi)?;
-    let input = ST7735SInput::new(pins, signals_tx)?;
+    let input = ST7735SInput::new(pins, keyboard)?;
     let lcd = BufferedLcd::new(lcd, Font8::default());
     let inner = GraphicsConsole::new(input, lcd)?;
     Ok(ST7735SConsole { inner })
