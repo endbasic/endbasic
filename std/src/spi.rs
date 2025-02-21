@@ -18,6 +18,7 @@
 use std::io::{self, Write};
 
 /// Defines the SPI clock polarity and phase.
+#[derive(Debug, PartialEq)]
 pub enum SpiMode {
     /// CPOL 0, CPHA 0
     Mode0 = 0,
