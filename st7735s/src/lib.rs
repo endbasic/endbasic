@@ -128,6 +128,25 @@ impl<K: InputOps> InputOps for ST7735SInput<K> {
     }
 }
 
+/// Writes arbitrary data to the SPI bus.
+///
+/// The input data is chunked to respect the maximum write size accepted by the SPI bus.
+fn lcd_write<B: SpiBus>(spi_bus: &mut B, data: &[u8]) -> io::Result<()> {
+    // TODO(jmmv): Do we really need to chunk the data ourselves, or can we try to write it
+    // all to the bus and then expect the write to return partial results?
+    for chunk in data.chunks(spi_bus.max_size()) {
+        let mut i = 0;
+        loop {
+            let n = spi_bus.write(&chunk[i..])?;
+            if n == chunk.len() - i {
+                break;
+            }
+            i += n;
+        }
+    }
+    Ok(())
+}
+
 /// LCD handler for the ST7735S console.
 struct ST7735SLcd<P: Pins, B> {
     pins: Arc<Mutex<P>>,
@@ -156,35 +175,16 @@ impl<P: Pins, B: SpiBus> ST7735SLcd<P, B> {
         Ok(device)
     }
 
-    /// Writes arbitrary data to the SPI bus.
-    ///
-    /// The input data is chunked to respect the maximum write size accepted by the SPI bus.
-    fn lcd_write(spi_bus: &mut B, data: &[u8]) -> io::Result<()> {
-        // TODO(jmmv): Do we really need to chunk the data ourselves, or can we try to write it
-        // all to the bus and then expect the write to return partial results?
-        for chunk in data.chunks(spi_bus.max_size()) {
-            let mut i = 0;
-            loop {
-                let n = spi_bus.write(&chunk[i..])?;
-                if n == 0 {
-                    break;
-                }
-                i += n;
-            }
-        }
-        Ok(())
-    }
-
     /// Selects the registers to affect by the next data write.
     fn lcd_write_reg(pins: &mut P, spi_bus: &mut B, regs: &[u8]) -> io::Result<()> {
         pins.write(OUTPUT_PIN_DC, false)?;
-        Self::lcd_write(spi_bus, regs)
+        lcd_write(spi_bus, regs)
     }
 
     /// Writes data to the device.  A register should have been selected before.
     fn lcd_write_data(pins: &mut P, spi_bus: &mut B, data: &[u8]) -> io::Result<()> {
         pins.write(OUTPUT_PIN_DC, true)?;
-        Self::lcd_write(spi_bus, data)
+        lcd_write(spi_bus, data)
     }
 
     /// Resets the LCD.
@@ -475,4 +475,56 @@ pub fn new_console<P: Pins + Send + 'static, B: SpiBus, K: InputOps>(
     let lcd = BufferedLcd::new(lcd, Font8::default());
     let inner = GraphicsConsole::new(input, lcd)?;
     Ok(ST7735SConsole { inner })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[derive(Default)]
+    struct MockSpiBus {
+        max_size: usize,
+
+        writes: Vec<Vec<u8>>,
+    }
+
+    impl Write for MockSpiBus {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            let partial = if buf.len() < self.max_size { buf } else { &buf[0..self.max_size] };
+            self.writes.push(partial.to_owned());
+            Ok(partial.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl SpiBus for MockSpiBus {
+        fn max_size(&self) -> usize {
+            self.max_size
+        }
+    }
+
+    #[test]
+    fn test_lcd_write_shorter_than_max_size() {
+        let mut bus = MockSpiBus { max_size: 100, ..Default::default() };
+        lcd_write(&mut bus, &[0, 1, 2, 3, 4]).unwrap();
+        assert_eq!(vec![vec![0, 1, 2, 3, 4]], bus.writes);
+    }
+
+    #[test]
+    fn test_lcd_write_equal_to_max_size() {
+        let mut bus = MockSpiBus { max_size: 3, ..Default::default() };
+        lcd_write(&mut bus, &[0, 1, 2]).unwrap();
+        assert_eq!(vec![vec![0, 1, 2]], bus.writes);
+    }
+
+    #[test]
+    fn test_lcd_write_greater_than_max_size() {
+        let mut bus = MockSpiBus { max_size: 6, ..Default::default() };
+        lcd_write(&mut bus, &[0, 1, 2, 3, 4, 5, 6]).unwrap();
+        assert_eq!(vec![vec![0, 1, 2, 3, 4, 5], vec![6]], bus.writes);
+    }
 }
