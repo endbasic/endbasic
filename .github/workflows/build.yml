@@ -63,7 +63,7 @@ jobs:
         runs-on: windows-latest
         steps:
             - uses: actions/checkout@v4
-            - run: choco install unzip zip
+            - run: choco install --allow-empty-checksums unzip zip
             - run: ./.github/workflows/setup-sdl.ps1
             - run: ./.github/workflows/release.sh windows-x86_64-sdl
               shell: bash

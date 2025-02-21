@@ -81,7 +81,7 @@ jobs:
             TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
             - uses: actions/checkout@v4
-            - run: choco install unzip
+            - run: choco install --allow-empty-checksums unzip
             - run: ./.github/workflows/setup-sdl.ps1
             - run: cargo test --package=endbasic-client -- --include-ignored
             - run: cargo test --package=endbasic-core -- --include-ignored
