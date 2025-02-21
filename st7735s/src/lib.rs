@@ -31,7 +31,7 @@ use endbasic_std::console::{
 };
 use endbasic_std::gfx::lcd::{to_xy_size, BufferedLcd, Font8, Lcd, LcdSize, LcdXY, RGB565Pixel};
 use endbasic_std::gpio::{Pin, PinMode, Pins};
-use endbasic_std::spi::{SpiBus, SpiFactory, SpiMode};
+use endbasic_std::spi::{SpiBus, SpiMode};
 use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -156,7 +156,10 @@ struct ST7735SLcd<P: Pins, B> {
 
 impl<P: Pins, B: SpiBus> ST7735SLcd<P, B> {
     /// Initializes the LCD.
-    pub fn new(pins: Arc<Mutex<P>>, spi_factory: SpiFactory<B>) -> io::Result<Self> {
+    pub fn new<F>(pins: Arc<Mutex<P>>, spi_factory: F) -> io::Result<Self>
+    where
+        F: FnOnce(u8, u8, u32, SpiMode) -> io::Result<B>,
+    {
         {
             let mut pins = pins.lock().unwrap();
             for pin in [OUTPUT_PIN_CS, OUTPUT_PIN_RST, OUTPUT_PIN_DC, OUTPUT_PIN_BL] {
@@ -464,11 +467,17 @@ impl<P: Pins + Send, B: SpiBus, K: InputOps> Console for ST7735SConsole<P, B, K>
 }
 
 /// Initializes a new console on a ST7735S LCD.
-pub fn new_console<P: Pins + Send + 'static, B: SpiBus, K: InputOps>(
+pub fn new_console<P, F, B, K>(
     pins: P,
-    new_spi: SpiFactory<B>,
+    new_spi: F,
     keyboard: K,
-) -> io::Result<ST7735SConsole<P, B, K>> {
+) -> io::Result<ST7735SConsole<P, B, K>>
+where
+    P: Pins + Send + 'static,
+    F: FnOnce(u8, u8, u32, SpiMode) -> io::Result<B>,
+    B: SpiBus,
+    K: InputOps,
+{
     let pins = Arc::from(Mutex::from(pins));
     let lcd = ST7735SLcd::new(pins.clone(), new_spi)?;
     let input = ST7735SInput::new(pins, keyboard)?;
