@@ -15,7 +15,7 @@
 
 //! SPI bus abstractions for EndBASIC.
 
-use std::io::{self, Write};
+use std::io::Write;
 
 /// Defines the SPI clock polarity and phase.
 #[derive(Debug, PartialEq)]
@@ -29,9 +29,6 @@ pub enum SpiMode {
     /// CPOL 1, CPHA 1
     Mode3 = 3,
 }
-
-/// Factory function to open an SPI bus.
-pub type SpiFactory<B> = fn(bus: u8, slave: u8, clock_hz: u32, mode: SpiMode) -> io::Result<B>;
 
 /// A trait abstracting access to an SPI bus.
 pub trait SpiBus: Write {
