@@ -280,6 +280,42 @@ impl Location {
             Some(&self.path)
         }
     }
+
+    /// Sets the file name extension as long as this location corresponds to a file and not a
+    /// directory and does not already have one.
+    ///
+    /// The `extension` must be provided in lowercase.
+    fn set_extension(&mut self, extension: &str) {
+        debug_assert_eq!(extension, extension.to_ascii_lowercase());
+
+        if let Some(name) = self.leaf_name() {
+            if name.is_empty() {
+                return;
+            }
+
+            if name.rfind('.').is_some() {
+                return;
+            }
+
+            // Attempt to determine a sensible extension based on the case of the leaf name,
+            // assuming that an all-uppercase basename wants an all-uppercase extension.  This is
+            // fragile on case-sensitive file systems, but there is not a lot we can do.
+            let mut as_uppercase = true;
+            for ch in name.chars() {
+                if ch.is_ascii_lowercase() {
+                    as_uppercase = false;
+                    break;
+                }
+            }
+
+            self.path.push('.');
+            if as_uppercase {
+                self.path.push_str(&extension.to_ascii_uppercase());
+            } else {
+                self.path.push_str(extension);
+            }
+        }
+    }
 }
 
 impl fmt::Display for Location {
@@ -359,12 +395,35 @@ impl Storage {
         self.factories.contains_key(scheme)
     }
 
-    /// Converts a location, which needn't exist, to its canonical form.
+    /// Converts a `raw_location`, which needn't exist, to its canonical form.
     pub fn make_canonical(&self, raw_location: &str) -> io::Result<String> {
         let mut location = Location::new(raw_location)?;
         if location.drive.is_none() {
             location.drive = Some(self.current.clone());
         }
+        Ok(location.to_string())
+    }
+
+    /// Converts a `raw_location`, which needn't exist but must represent a file (not a directory),
+    /// to its canonical form.
+    ///
+    /// If `extension` is not empty, adds it to the location if it didn't not yet have nay.
+    pub fn make_canonical_with_extension(
+        &self,
+        raw_location: &str,
+        extension: &str,
+    ) -> io::Result<String> {
+        let mut location = Location::new(raw_location)?;
+        if location.drive.is_none() {
+            location.drive = Some(self.current.clone());
+        }
+        if location.leaf_name().is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Missing file name in path '{}'", raw_location),
+            ));
+        }
+        location.set_extension(extension);
         Ok(location.to_string())
     }
 
@@ -687,6 +746,24 @@ mod tests {
         assert_eq!(Some("abc.txt"), Location::new("abc.txt").unwrap().leaf_name());
     }
 
+    #[test]
+    fn test_location_set_extension() {
+        for (exp_location, raw_location, extension) in [
+            ("DRV:/", "drv:", "bas"),
+            ("DRV:/", "drv:/", "bas"),
+            ("foo.bas", "foo", "bas"),
+            ("foo.bas", "foo.bas", "bas"),
+            ("Foo.bas", "Foo", "bas"),
+            ("FOO.BAS", "FOO", "bas"),
+            ("foo.", "foo.", "bas"),
+            ("foo.other", "foo.other", "bas"),
+        ] {
+            let mut location = Location::new(raw_location).unwrap();
+            location.set_extension(extension);
+            assert_eq!(exp_location, location.to_string());
+        }
+    }
+
     /// Convenience helper to obtain the sorted list of mounted drive names in canonical form.
     fn drive_names(storage: &Storage) -> Vec<String> {
         let mut names = storage.drives.keys().map(DriveKey::to_string).collect::<Vec<String>>();
@@ -704,6 +781,8 @@ mod tests {
     fn test_storage_make_canonical_ok() {
         let mut storage = Storage::default();
         storage.mount("some", "memory://").unwrap();
+
+        assert_eq!("MEMORY:/", storage.make_canonical("memory:").unwrap());
 
         assert_eq!("MEMORY:foo.bar", storage.make_canonical("foo.bar").unwrap());
         assert_eq!("MEMORY:/foo.bar", storage.make_canonical("/foo.bar").unwrap());
@@ -723,6 +802,42 @@ mod tests {
         assert_eq!(
             "Invalid drive name 'a\\b'",
             format!("{}", storage.make_canonical("a\\b:c").unwrap_err())
+        );
+    }
+
+    #[test]
+    fn test_storage_make_canonical_with_extension_ok() {
+        let mut storage = Storage::default();
+        storage.mount("some", "memory://").unwrap();
+
+        assert_eq!("MEMORY:foo.bas", storage.make_canonical_with_extension("foo", "bas").unwrap());
+        assert_eq!(
+            "MEMORY:/foo.bar",
+            storage.make_canonical_with_extension("/foo.bar", "bas").unwrap()
+        );
+
+        assert_eq!(
+            "MEMORY:a.bas",
+            storage.make_canonical_with_extension("memory:a", "bas").unwrap()
+        );
+        assert_eq!(
+            "MEMORY:/a.bas",
+            storage.make_canonical_with_extension("memory:/a.bas", "bas").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_storage_make_canonical_with_extension_errors() {
+        let storage = Storage::default();
+
+        assert_eq!(
+            "Missing file name in path 'memory:'",
+            format!("{}", storage.make_canonical_with_extension("memory:", "bas").unwrap_err()),
+        );
+
+        assert_eq!(
+            "Invalid drive name 'a\\b'",
+            format!("{}", storage.make_canonical_with_extension("a\\b:c", "bas").unwrap_err())
         );
     }
 

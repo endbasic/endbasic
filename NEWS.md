@@ -28,6 +28,10 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
     ST7735S LCD, decoupling its implementation from the Linux-specific bits in
     the `endbasic-rpi` crate.
 
+*   Fixed handling of extensions in the `LOAD` and `SAVE` commands such that
+    paths like `LOCAL:` are flagged as invalid due to them not containing a leaf
+    name.  `KILL` was unable to remove these files after creation.
+
 ## Changes in version 0.11.1
 
 **Released on 2024-09-14.**

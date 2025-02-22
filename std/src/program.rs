@@ -26,7 +26,6 @@ use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::io;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::str;
 
@@ -46,6 +45,9 @@ from.";
 
 /// Message to print on the console when receiving a break signal.
 pub const BREAK_MSG: &str = "**** BREAK ****";
+
+/// Default extension to add to file names.
+const DEFAULT_EXTENSION: &str = "bas";
 
 /// Representation of the single program that we can keep in memory.
 #[async_trait(?Send)]
@@ -104,30 +106,6 @@ impl Program for ImmutableProgram {
     fn text(&self) -> String {
         self.text.clone()
     }
-}
-
-/// Adds an extension to `path` if one is not present.
-fn add_extension<S: Into<PathBuf>>(path: S) -> io::Result<String> {
-    let mut path = path.into();
-
-    if let Some(ext) = path.extension() {
-        if ext != "bas" && ext != "BAS" {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid filename extension"));
-        }
-    } else {
-        // Attempt to determine a sensible extension based on the case of the basename, assuming
-        // that an all-uppercase basename wants an all-uppercase extension.  This is fragile on
-        // case-sensitive file systems, but there is not a lot we can do.
-        let mut ext = "BAS";
-        for ch in path.to_string_lossy().chars() {
-            if ch.is_ascii_lowercase() {
-                ext = "bas";
-                break;
-            }
-        }
-        path.set_extension(ext);
-    }
-    Ok(path.to_str().expect("Path came from a String").to_owned())
 }
 
 /// If the `program` is dirty, asks if it's OK to continue on `console` and discard its changes.
@@ -262,8 +240,12 @@ impl Callable for KillCommand {
         debug_assert_eq!(1, scope.nargs());
         let name = scope.pop_string();
 
-        let name = add_extension(name).map_err(|e| scope.io_error(e))?;
-        self.storage.borrow_mut().delete(&name).await.map_err(|e| scope.io_error(e))?;
+        let full_name = self
+            .storage
+            .borrow()
+            .make_canonical_with_extension(&name, DEFAULT_EXTENSION)
+            .map_err(|e| scope.io_error(e))?;
+        self.storage.borrow_mut().delete(&full_name).await.map_err(|e| scope.io_error(e))?;
 
         Ok(())
     }
@@ -406,11 +388,14 @@ impl Callable for LoadCommand {
             .await
             .map_err(|e| scope.io_error(e))?
         {
-            let pathname = add_extension(pathname).map_err(|e| scope.io_error(e))?;
-            let content =
-                self.storage.borrow().get(&pathname).await.map_err(|e| scope.io_error(e))?;
-            let full_name =
-                self.storage.borrow().make_canonical(&pathname).map_err(|e| scope.io_error(e))?;
+            let (full_name, content) = {
+                let storage = self.storage.borrow();
+                let full_name = storage
+                    .make_canonical_with_extension(&pathname, DEFAULT_EXTENSION)
+                    .map_err(|e| scope.io_error(e))?;
+                let content = storage.get(&full_name).await.map_err(|e| scope.io_error(e))?;
+                (full_name, content)
+            };
             self.program.borrow_mut().load(Some(&full_name), &content);
             machine.clear();
         } else {
@@ -602,11 +587,13 @@ impl Callable for SaveCommand {
             scope.pop_string()
         };
 
-        let name = add_extension(name).map_err(|e| scope.io_error(e))?;
-        let full_name =
-            self.storage.borrow().make_canonical(&name).map_err(|e| scope.io_error(e))?;
+        let full_name = self
+            .storage
+            .borrow()
+            .make_canonical_with_extension(&name, DEFAULT_EXTENSION)
+            .map_err(|e| scope.io_error(e))?;
         let content = self.program.borrow().text();
-        self.storage.borrow_mut().put(&name, &content).await.map_err(|e| scope.io_error(e))?;
+        self.storage.borrow_mut().put(&full_name, &content).await.map_err(|e| scope.io_error(e))?;
         self.program.borrow_mut().set_name(&full_name);
 
         self.console
@@ -895,12 +882,10 @@ mod tests {
             .expect_err("1:1: Too many / separators in path 'a/b.bas'")
             .check();
 
-        for p in &["foo.bak", "foo.ba", "foo.basic"] {
-            Tester::default()
-                .run(format!(r#"{} "{}""#, cmd, p))
-                .expect_err("1:1: Invalid filename extension")
-                .check();
-        }
+        Tester::default()
+            .run(format!(r#"{} "drive:""#, cmd))
+            .expect_err("1:1: Missing file name in path 'drive:'")
+            .check();
     }
 
     #[test]
