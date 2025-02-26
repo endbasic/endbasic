@@ -70,7 +70,6 @@ pub async fn try_load_autoexec(
         }
     };
 
-    console.borrow_mut().print("Loading AUTOEXEC.BAS...")?;
     match machine.exec(&mut code.as_bytes()).await {
         Ok(_) => Ok(()),
         Err(e) => {
@@ -290,7 +289,7 @@ mod tests {
         tester
             .run("")
             .expect_var("global_var", 3)
-            .expect_prints(["Loading AUTOEXEC.BAS...", "hello"])
+            .expect_prints(["hello"])
             .expect_file("MEMORY:/AUTOEXEC.BAS", autoexec)
             .check();
     }
@@ -304,10 +303,7 @@ mod tests {
         tester
             .run("after = 5")
             .expect_var("after", 5)
-            .expect_prints([
-                "Loading AUTOEXEC.BAS...",
-                "AUTOEXEC.BAS failed: 2:5: Undefined symbol UNDEF",
-            ])
+            .expect_prints(["AUTOEXEC.BAS failed: 2:5: Undefined symbol UNDEF"])
             .expect_file("MEMORY:/AUTOEXEC.BAS", autoexec)
             .check();
     }
@@ -322,10 +318,7 @@ mod tests {
             .run("after = 5")
             .expect_var("a", 1)
             .expect_var("after", 5)
-            .expect_prints([
-                "Loading AUTOEXEC.BAS...",
-                "AUTOEXEC.BAS failed: 2:7: Number of bits to >> (-1) must be positive",
-            ])
+            .expect_prints(["AUTOEXEC.BAS failed: 2:7: Number of bits to >> (-1) must be positive"])
             .expect_file("MEMORY:/AUTOEXEC.BAS", autoexec)
             .check();
     }
@@ -340,7 +333,6 @@ mod tests {
         tester
             .run("")
             .expect_var("a", 1)
-            .expect_prints(["Loading AUTOEXEC.BAS..."])
             .expect_file("MEMORY:/AUTOEXEC.BAS", "a = 1")
             .expect_file("MEMORY:/autoexec.bas", "a = 2")
             .check();
