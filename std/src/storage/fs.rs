@@ -108,9 +108,9 @@ impl Drive for DirectoryDrive {
 
     async fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
         let path = self.dir.join(name);
-        let output = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
-        let mut writer = io::BufWriter::new(output);
-        writer.write_all(content.as_bytes())
+        let mut output = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
+        output.write_all(content.as_bytes())?;
+        output.sync_all()
     }
 
     fn system_path(&self, name: &str) -> Option<PathBuf> {
