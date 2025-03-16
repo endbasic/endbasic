@@ -2,6 +2,10 @@ Cargo.lock
 config.mk
 target
 
+*.orig
+*.rej
+*~
+
 # Created by setup-sdl.ps1.
 libs
 dlls
