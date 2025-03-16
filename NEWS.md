@@ -30,7 +30,8 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
     
 *   Added support for font selection to the `st7735s` console backend.  Fonts
     can be selected via the new console flag format, using a format like
-    `--console=st7735s:font=5x8`.
+    `--console=st7735s:font=5x8`.  There is support for two fonts now: the
+    previous `5x8` and a new `16x16`.
 
 *   Fixed handling of extensions in the `LOAD` and `SAVE` commands such that
     paths like `LOCAL:` are flagged as invalid due to them not containing a leaf

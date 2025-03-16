@@ -16,7 +16,7 @@
 //! Utilities to implement tests for the `BufferedLcd`.
 
 use crate::console::RGB;
-use crate::gfx::lcd::fonts::FONT_5X8;
+use crate::gfx::lcd::fonts::Font;
 use crate::gfx::lcd::{AsByteSlice, BufferedLcd, Lcd, LcdSize, LcdXY};
 use std::io;
 
@@ -77,6 +77,10 @@ impl Lcd for LcdRecorder {
     }
 }
 
+/// A font with no data.
+const FONT_ZERO: Font =
+    Font { name: "zero", glyph_size: LcdSize { width: 8, height: 8 }, stride: 1, data: &[] };
+
 /// Builder pattern to define and execute `BufferedLcd` tests.
 #[must_use]
 pub(super) struct Tester {
@@ -90,10 +94,16 @@ pub(super) struct Tester {
 impl Tester {
     /// Creates a new tester backed by a mock `LcdRecorder` of the given `size`.
     pub(super) fn new(size: LcdSize) -> Self {
+        Self::with_font(size, &FONT_ZERO)
+    }
+
+    /// Creates a new tester backed by a mock `LcdRecorder` of the given `size` and using the
+    /// font in `font`.
+    pub(super) fn with_font(size: LcdSize, font: &'static Font) -> Self {
         let fb_size = size.width * size.height * 3;
         Self {
             size,
-            buffered: BufferedLcd::new(LcdRecorder::new(size), &FONT_5X8),
+            buffered: BufferedLcd::new(LcdRecorder::new(size), font),
             exp_fb: vec![0; fb_size],
             exp_damage: None,
             exp_ops: vec![],

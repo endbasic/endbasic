@@ -921,5 +921,9 @@ const DATA: &[u8] = &[
 ];
 
 /// Small font for tiny displays.
-pub(crate) const FONT_5X8: Font =
-    Font { name: "5x8", glyph_size: LcdSize { width: WIDTH, height: HEIGHT }, data: DATA };
+pub(crate) const FONT_5X8: Font = Font {
+    name: "5x8",
+    glyph_size: LcdSize { width: WIDTH, height: HEIGHT },
+    stride: 1,
+    data: DATA,
+};

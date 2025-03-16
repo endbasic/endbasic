@@ -19,7 +19,7 @@ use super::testutils::*;
 use super::*;
 use crate::console::graphics::RasterOps;
 use crate::console::{CharsXY, PixelsXY, SizeInPixels};
-use crate::gfx::lcd::fonts::FONT_5X8;
+use crate::gfx::lcd::fonts::{FONT_16X16, FONT_5X8};
 
 #[test]
 fn test_new_does_nothing() {
@@ -296,7 +296,7 @@ fn test_put_pixels_no_sync() {
 
 #[test]
 fn test_write_text_sync() {
-    Tester::new(size(20, 30))
+    Tester::with_font(size(20, 30), &FONT_5X8)
         .op(|l| l.set_draw_color((250, 251, 252)))
         .op(|l| l.write_text(PixelsXY::new(0, 0), "#").unwrap())
         .expect_pixel(xy(2, 0), (250, 251, 252))
@@ -325,7 +325,7 @@ fn test_write_text_sync() {
 
 #[test]
 fn test_write_text_no_sync() {
-    Tester::new(size(20, 30))
+    Tester::with_font(size(20, 30), &FONT_5X8)
         .op(|l| {
             l.set_sync(false);
             l.set_draw_color((250, 251, 252));
@@ -363,7 +363,7 @@ fn test_write_text_no_sync() {
 
 #[test]
 fn test_write_text_clip() {
-    Tester::new(size(20, 30))
+    Tester::with_font(size(20, 30), &FONT_5X8)
         .op(|l| {
             l.set_sync(false);
             l.set_draw_color((250, 251, 252));
@@ -376,6 +376,96 @@ fn test_write_text_clip() {
         .expect_pixel(xy(18, 28), (250, 251, 252))
         .expect_pixel(xy(18, 29), (250, 251, 252))
         .expect_pixel(xy(19, 29), (250, 251, 252))
+        .check();
+}
+
+#[test]
+fn test_write_text_wide_font() {
+    Tester::with_font(size(20, 30), &FONT_16X16)
+        .op(|l| {
+            l.set_sync(false);
+            l.set_draw_color((250, 251, 252));
+            l.write_text(PixelsXY::new(2, 3), "Hi").unwrap()
+        })
+        .expect_damage(xy(5, 5), xy(13, 16))
+        .expect_pixel(xy(5, 5), (250, 251, 252))
+        .expect_pixel(xy(6, 5), (250, 251, 252))
+        .expect_pixel(xy(7, 5), (250, 251, 252))
+        .expect_pixel(xy(11, 5), (250, 251, 252))
+        .expect_pixel(xy(12, 5), (250, 251, 252))
+        .expect_pixel(xy(13, 5), (250, 251, 252))
+        .expect_pixel(xy(5, 6), (250, 251, 252))
+        .expect_pixel(xy(6, 6), (250, 251, 252))
+        .expect_pixel(xy(7, 6), (250, 251, 252))
+        .expect_pixel(xy(11, 6), (250, 251, 252))
+        .expect_pixel(xy(12, 6), (250, 251, 252))
+        .expect_pixel(xy(13, 6), (250, 251, 252))
+        .expect_pixel(xy(5, 7), (250, 251, 252))
+        .expect_pixel(xy(6, 7), (250, 251, 252))
+        .expect_pixel(xy(7, 7), (250, 251, 252))
+        .expect_pixel(xy(11, 7), (250, 251, 252))
+        .expect_pixel(xy(12, 7), (250, 251, 252))
+        .expect_pixel(xy(13, 7), (250, 251, 252))
+        .expect_pixel(xy(5, 8), (250, 251, 252))
+        .expect_pixel(xy(6, 8), (250, 251, 252))
+        .expect_pixel(xy(7, 8), (250, 251, 252))
+        .expect_pixel(xy(11, 8), (250, 251, 252))
+        .expect_pixel(xy(12, 8), (250, 251, 252))
+        .expect_pixel(xy(13, 8), (250, 251, 252))
+        .expect_pixel(xy(5, 9), (250, 251, 252))
+        .expect_pixel(xy(6, 9), (250, 251, 252))
+        .expect_pixel(xy(7, 9), (250, 251, 252))
+        .expect_pixel(xy(11, 9), (250, 251, 252))
+        .expect_pixel(xy(12, 9), (250, 251, 252))
+        .expect_pixel(xy(13, 9), (250, 251, 252))
+        .expect_pixel(xy(5, 10), (250, 251, 252))
+        .expect_pixel(xy(6, 10), (250, 251, 252))
+        .expect_pixel(xy(7, 10), (250, 251, 252))
+        .expect_pixel(xy(8, 10), (250, 251, 252))
+        .expect_pixel(xy(9, 10), (250, 251, 252))
+        .expect_pixel(xy(10, 10), (250, 251, 252))
+        .expect_pixel(xy(11, 10), (250, 251, 252))
+        .expect_pixel(xy(12, 10), (250, 251, 252))
+        .expect_pixel(xy(13, 10), (250, 251, 252))
+        .expect_pixel(xy(5, 11), (250, 251, 252))
+        .expect_pixel(xy(6, 11), (250, 251, 252))
+        .expect_pixel(xy(7, 11), (250, 251, 252))
+        .expect_pixel(xy(8, 11), (250, 251, 252))
+        .expect_pixel(xy(9, 11), (250, 251, 252))
+        .expect_pixel(xy(10, 11), (250, 251, 252))
+        .expect_pixel(xy(11, 11), (250, 251, 252))
+        .expect_pixel(xy(12, 11), (250, 251, 252))
+        .expect_pixel(xy(13, 11), (250, 251, 252))
+        .expect_pixel(xy(5, 12), (250, 251, 252))
+        .expect_pixel(xy(6, 12), (250, 251, 252))
+        .expect_pixel(xy(7, 12), (250, 251, 252))
+        .expect_pixel(xy(11, 12), (250, 251, 252))
+        .expect_pixel(xy(12, 12), (250, 251, 252))
+        .expect_pixel(xy(13, 12), (250, 251, 252))
+        .expect_pixel(xy(5, 13), (250, 251, 252))
+        .expect_pixel(xy(6, 13), (250, 251, 252))
+        .expect_pixel(xy(7, 13), (250, 251, 252))
+        .expect_pixel(xy(11, 13), (250, 251, 252))
+        .expect_pixel(xy(12, 13), (250, 251, 252))
+        .expect_pixel(xy(13, 13), (250, 251, 252))
+        .expect_pixel(xy(5, 14), (250, 251, 252))
+        .expect_pixel(xy(6, 14), (250, 251, 252))
+        .expect_pixel(xy(7, 14), (250, 251, 252))
+        .expect_pixel(xy(11, 14), (250, 251, 252))
+        .expect_pixel(xy(12, 14), (250, 251, 252))
+        .expect_pixel(xy(13, 14), (250, 251, 252))
+        .expect_pixel(xy(5, 15), (250, 251, 252))
+        .expect_pixel(xy(6, 15), (250, 251, 252))
+        .expect_pixel(xy(7, 15), (250, 251, 252))
+        .expect_pixel(xy(11, 15), (250, 251, 252))
+        .expect_pixel(xy(12, 15), (250, 251, 252))
+        .expect_pixel(xy(13, 15), (250, 251, 252))
+        .expect_pixel(xy(5, 16), (250, 251, 252))
+        .expect_pixel(xy(6, 16), (250, 251, 252))
+        .expect_pixel(xy(7, 16), (250, 251, 252))
+        .expect_pixel(xy(11, 16), (250, 251, 252))
+        .expect_pixel(xy(12, 16), (250, 251, 252))
+        .expect_pixel(xy(13, 16), (250, 251, 252))
         .check();
 }
 
