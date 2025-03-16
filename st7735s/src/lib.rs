@@ -29,7 +29,7 @@ use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
     CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, SizeInPixels, RGB,
 };
-use endbasic_std::gfx::lcd::fonts::FONT_5X8;
+use endbasic_std::gfx::lcd::fonts::Font;
 use endbasic_std::gfx::lcd::{to_xy_size, BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel};
 use endbasic_std::gpio::{Pin, PinMode, Pins};
 use endbasic_std::spi::{SpiBus, SpiMode};
@@ -472,6 +472,7 @@ pub fn new_console<P, F, B, K>(
     pins: P,
     new_spi: F,
     keyboard: K,
+    font: &'static Font,
 ) -> io::Result<ST7735SConsole<P, B, K>>
 where
     P: Pins + Send + 'static,
@@ -482,7 +483,7 @@ where
     let pins = Arc::from(Mutex::from(pins));
     let lcd = ST7735SLcd::new(pins.clone(), new_spi)?;
     let input = ST7735SInput::new(pins, keyboard)?;
-    let lcd = BufferedLcd::new(lcd, &FONT_5X8);
+    let lcd = BufferedLcd::new(lcd, font);
     let inner = GraphicsConsole::new(input, lcd)?;
     Ok(ST7735SConsole { inner })
 }
