@@ -29,7 +29,7 @@ use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
     CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, SizeInPixels, RGB,
 };
-use endbasic_std::gfx::lcd::{to_xy_size, BufferedLcd, Font8, Lcd, LcdSize, LcdXY, RGB565Pixel};
+use endbasic_std::gfx::lcd::{to_xy_size, BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel, FONT_5X8};
 use endbasic_std::gpio::{Pin, PinMode, Pins};
 use endbasic_std::spi::{SpiBus, SpiMode};
 use std::io;
@@ -364,7 +364,7 @@ impl<P: Pins, B: SpiBus> Lcd for ST7735SLcd<P, B> {
 pub struct ST7735SConsole<P: Pins + Send, B: SpiBus, K> {
     /// The graphical console itself.  We wrap it in a struct to prevent leaking all auxiliary types
     /// outside of this crate.
-    inner: GraphicsConsole<ST7735SInput<K>, BufferedLcd<ST7735SLcd<P, B>, Font8>>,
+    inner: GraphicsConsole<ST7735SInput<K>, BufferedLcd<ST7735SLcd<P, B>>>,
 }
 
 #[async_trait(?Send)]
@@ -481,7 +481,7 @@ where
     let pins = Arc::from(Mutex::from(pins));
     let lcd = ST7735SLcd::new(pins.clone(), new_spi)?;
     let input = ST7735SInput::new(pins, keyboard)?;
-    let lcd = BufferedLcd::new(lcd, Font8::default());
+    let lcd = BufferedLcd::new(lcd, &FONT_5X8);
     let inner = GraphicsConsole::new(input, lcd)?;
     Ok(ST7735SConsole { inner })
 }

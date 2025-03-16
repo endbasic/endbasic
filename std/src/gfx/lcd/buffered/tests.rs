@@ -19,7 +19,7 @@ use super::testutils::*;
 use super::*;
 use crate::console::graphics::RasterOps;
 use crate::console::{CharsXY, PixelsXY, SizeInPixels};
-use crate::gfx::lcd::Font8;
+use crate::gfx::lcd::FONT_5X8;
 
 #[test]
 fn test_new_does_nothing() {
@@ -28,7 +28,7 @@ fn test_new_does_nothing() {
 
 #[test]
 fn test_clip_xy() {
-    let lcd = BufferedLcd::new(LcdRecorder::new(size(100, 200)), Font8::default());
+    let lcd = BufferedLcd::new(LcdRecorder::new(size(100, 200)), &FONT_5X8);
 
     assert_eq!(Some(xy(0, 0)), lcd.clip_xy(PixelsXY::new(0, 0)));
     assert_eq!(Some(xy(10, 20)), lcd.clip_xy(PixelsXY::new(10, 20)));
@@ -42,7 +42,7 @@ fn test_clip_xy() {
 
 #[test]
 fn test_clamp_xy() {
-    let lcd = BufferedLcd::new(LcdRecorder::new(size(100, 200)), Font8::default());
+    let lcd = BufferedLcd::new(LcdRecorder::new(size(100, 200)), &FONT_5X8);
 
     assert_eq!(xy(0, 0), lcd.clamp_xy(PixelsXY::new(0, 0)));
     assert_eq!(xy(10, 20), lcd.clamp_xy(PixelsXY::new(10, 20)));
@@ -56,7 +56,7 @@ fn test_clamp_xy() {
 
 #[test]
 fn test_clip_x2y2() {
-    let lcd = BufferedLcd::new(LcdRecorder::new(size(100, 200)), Font8::default());
+    let lcd = BufferedLcd::new(LcdRecorder::new(size(100, 200)), &FONT_5X8);
 
     assert_eq!(Some(xy(9, 19)), lcd.clip_x2y2(PixelsXY::new(0, 0), SizeInPixels::new(10, 20)));
     assert_eq!(Some(xy(19, 39)), lcd.clip_x2y2(PixelsXY::new(10, 20), SizeInPixels::new(10, 20)));
@@ -80,7 +80,7 @@ fn test_clip_x2y2() {
 
 #[test]
 fn test_fb_addr() {
-    let lcd = BufferedLcd::new(LcdRecorder::new(size(100, 200)), Font8::default());
+    let lcd = BufferedLcd::new(LcdRecorder::new(size(100, 200)), &FONT_5X8);
 
     assert_eq!(0, lcd.fb_addr(0, 0));
     assert_eq!(3, lcd.fb_addr(1, 0));
@@ -195,7 +195,7 @@ fn test_force_present_canvas_damage() {
 
 #[test]
 fn test_get_info() {
-    let lcd = BufferedLcd::new(LcdRecorder::new(size(100, 200)), Font8::default());
+    let lcd = BufferedLcd::new(LcdRecorder::new(size(100, 200)), &FONT_5X8);
     let info = lcd.get_info();
     assert_eq!(info.size_pixels, SizeInPixels::new(100, 200));
     assert_eq!(info.glyph_size, SizeInPixels::new(5, 8));

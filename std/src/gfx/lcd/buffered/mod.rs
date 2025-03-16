@@ -33,9 +33,9 @@ mod testutils;
 /// primitives are flushed right away to the device; otherwise, they are applied to memory only
 /// until an explicit sync is requested.  The framebuffer is also used to implement all pixel data
 /// reading.
-pub struct BufferedLcd<L: Lcd, F: Font> {
+pub struct BufferedLcd<L: Lcd> {
     lcd: L,
-    font: F,
+    font: &'static Font,
 
     fb: Vec<u8>,
     stride: usize,
@@ -49,13 +49,12 @@ pub struct BufferedLcd<L: Lcd, F: Font> {
     row_buffer: Vec<u8>,
 }
 
-impl<L, F> BufferedLcd<L, F>
+impl<L> BufferedLcd<L>
 where
     L: Lcd,
-    F: Font,
 {
     /// Creates a new buffered LCD backed by `lcd`.
-    pub fn new(lcd: L, font: F) -> Self {
+    pub fn new(lcd: L, font: &'static Font) -> Self {
         let (size, stride) = lcd.info();
 
         let fb = {
@@ -63,10 +62,9 @@ where
             vec![0; pixels * stride]
         };
 
-        let glyph_size = font.size();
         let size_chars = CharsXY::new(
-            u16::try_from(size.width / glyph_size.width).expect("Must fit"),
-            u16::try_from(size.height / glyph_size.height).expect("Must fit"),
+            u16::try_from(size.width / font.glyph_size.width).expect("Must fit"),
+            u16::try_from(size.height / font.glyph_size.height).expect("Must fit"),
         );
 
         let draw_color = lcd.encode((255, 255, 255));
@@ -89,7 +87,7 @@ where
     /// Executes mutations on the buffered LCD via `ops` while ensuring that syncing is disabled.
     fn without_sync<O>(&mut self, ops: O) -> io::Result<()>
     where
-        O: Fn(&mut BufferedLcd<L, F>) -> io::Result<()>,
+        O: Fn(&mut BufferedLcd<L>) -> io::Result<()>,
     {
         if self.sync {
             let old_sync = self.sync;
@@ -329,10 +327,9 @@ where
     }
 }
 
-impl<L, F> Drop for BufferedLcd<L, F>
+impl<L> Drop for BufferedLcd<L>
 where
     L: Lcd,
-    F: Font,
 {
     fn drop(&mut self) {
         self.set_draw_color((0, 0, 0));
@@ -340,17 +337,16 @@ where
     }
 }
 
-impl<L, F> RasterOps for BufferedLcd<L, F>
+impl<L> RasterOps for BufferedLcd<L>
 where
     L: Lcd,
-    F: Font,
 {
     type ID = (Vec<u8>, SizeInPixels);
 
     fn get_info(&self) -> RasterInfo {
         RasterInfo {
             size_pixels: self.size_pixels.into(),
-            glyph_size: self.font.size().into(),
+            glyph_size: self.font.glyph_size.into(),
             size_chars: self.size_chars,
         }
     }
@@ -456,10 +452,10 @@ where
             let mut pos = x1y1;
             for ch in text.chars() {
                 let glyph = self2.font.glyph(ch);
-                debug_assert_eq!(self2.font.size().height, glyph.len());
+                debug_assert_eq!(self2.font.glyph_size.height, glyph.len());
                 for (j, row) in glyph.iter().enumerate() {
                     let mut mask = 0x80;
-                    for i in 0..self2.font.size().width {
+                    for i in 0..self2.font.glyph_size.width {
                         let bit = row & mask;
                         if bit != 0 {
                             let x = pos.x + i;
@@ -479,7 +475,7 @@ where
                     }
                 }
 
-                pos.x += self2.font.size().width;
+                pos.x += self2.font.glyph_size.width;
             }
             Ok(())
         })
