@@ -52,7 +52,8 @@
 
 //! Small font for tiny displays.
 
-use crate::gfx::lcd::{Font, LcdSize};
+use crate::gfx::lcd::fonts::Font;
+use crate::gfx::lcd::LcdSize;
 
 /// Width of the font glyphs in pixels.
 const WIDTH: usize = 5;

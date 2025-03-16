@@ -18,7 +18,8 @@
 use crate::console::drawing;
 use crate::console::graphics::{RasterInfo, RasterOps};
 use crate::console::{CharsXY, PixelsXY, SizeInPixels, RGB};
-use crate::gfx::lcd::{to_xy_size, AsByteSlice, Font, Lcd, LcdSize, LcdXY};
+use crate::gfx::lcd::fonts::Font;
+use crate::gfx::lcd::{to_xy_size, AsByteSlice, Lcd, LcdSize, LcdXY};
 use std::convert::TryFrom;
 use std::io;
 
