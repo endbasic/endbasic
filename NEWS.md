@@ -27,6 +27,10 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
 *   Added a new `endbasic-st7735s` crate to assimilate the driver for the
     ST7735S LCD, decoupling its implementation from the Linux-specific bits in
     the `endbasic-rpi` crate.
+    
+*   Added support for font selection to the `st7735s` console backend.  Fonts
+    can be selected via the new console flag format, using a format like
+    `--console=st7735s:font=5x8`.
 
 *   Fixed handling of extensions in the `LOAD` and `SAVE` commands such that
     paths like `LOCAL:` are flagged as invalid due to them not containing a leaf

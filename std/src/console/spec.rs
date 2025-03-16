@@ -21,9 +21,10 @@ use std::io;
 use std::num::NonZeroU32;
 use std::str::FromStr;
 
+/// An error while parsing a console specification.
 #[derive(Debug, thiserror::Error)]
 #[error("{}", .0)]
-pub struct ParseError(String);
+pub struct ParseError(pub String);
 
 impl From<ParseError> for io::Error {
     fn from(value: ParseError) -> Self {
@@ -154,7 +155,9 @@ impl<'a> ConsoleSpec<'a> {
         self.flags.remove(flag)
     }
 
-    fn take_keyed_flag_str(&mut self, key: &str) -> Option<&str> {
+    /// Queries the value of the keyed `flag` from the specification, which may or may not be
+    /// present.  The value is returned as a raw string.
+    pub fn take_keyed_flag_str(&mut self, key: &str) -> Option<&str> {
         self.keyed_flags.remove(key)
     }
 
