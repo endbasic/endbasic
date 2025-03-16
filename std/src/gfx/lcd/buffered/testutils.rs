@@ -16,7 +16,8 @@
 //! Utilities to implement tests for the `BufferedLcd`.
 
 use crate::console::RGB;
-use crate::gfx::lcd::{AsByteSlice, BufferedLcd, Lcd, LcdSize, LcdXY, FONT_5X8};
+use crate::gfx::lcd::fonts::FONT_5X8;
+use crate::gfx::lcd::{AsByteSlice, BufferedLcd, Lcd, LcdSize, LcdXY};
 use std::io;
 
 /// Data for one pixel encoded as RGB888.

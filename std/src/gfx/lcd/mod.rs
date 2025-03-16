@@ -20,10 +20,9 @@ use std::convert::TryFrom;
 use std::io;
 
 mod buffered;
-mod font8;
+pub mod fonts;
 
 pub use buffered::BufferedLcd;
-pub use font8::FONT_5X8;
 
 /// Trait to convert a pixel to a sequence of bytes.
 pub trait AsByteSlice {
@@ -38,33 +37,6 @@ pub struct RGB565Pixel(pub [u8; 2]);
 impl AsByteSlice for RGB565Pixel {
     fn as_slice(&self) -> &[u8] {
         &self.0
-    }
-}
-
-/// Representation of a font.
-pub struct Font {
-    /// The size of a single glyph, in pixels.
-    pub glyph_size: LcdSize,
-
-    /// The bitmap data for the font.
-    pub data: &'static [u8],
-}
-
-impl Font {
-    /// Returns the raw font data for `ch`.
-    ///
-    /// Each entry in the array corresponds to a row of pixels and is a bitmask indicating which
-    /// pixels to turn on.
-    fn glyph(&self, mut ch: char) -> &'static [u8] {
-        if !(' '..='~').contains(&ch) {
-            // TODO(jmmv): Would be nicer to draw an empty box, much like how unknown Unicode
-            // characters are typically displayed.
-            ch = '?';
-        }
-        let height = self.glyph_size.height;
-        let offset = ((ch as usize) - (' ' as usize)) * height;
-        debug_assert!(offset < (self.data.len() + height));
-        &self.data[offset..offset + height]
     }
 }
 
@@ -185,27 +157,5 @@ mod tests {
             (LcdXY { x: 10, y: 20 }, LcdSize { width: 5, height: 7 }),
             to_xy_size(xy(10, 20), xy(14, 26))
         );
-    }
-
-    #[test]
-    fn test_font_glyph_printable() {
-        let font = &FONT_5X8;
-
-        let offset = (usize::from(b'a') - usize::from(b' ')) * 8;
-        let expected = &font.data[offset..offset + 8];
-
-        let data = font.glyph('a');
-        assert_eq!(expected, data);
-    }
-
-    #[test]
-    fn test_font_glyph_non_printable() {
-        let font = &FONT_5X8;
-
-        let offset = (usize::from(b'?') - usize::from(b' ')) * 8;
-        let expected = &font.data[offset..offset + 8];
-
-        let data = font.glyph(char::from(30));
-        assert_eq!(expected, data);
     }
 }

@@ -29,7 +29,8 @@ use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
     CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, SizeInPixels, RGB,
 };
-use endbasic_std::gfx::lcd::{to_xy_size, BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel, FONT_5X8};
+use endbasic_std::gfx::lcd::fonts::FONT_5X8;
+use endbasic_std::gfx::lcd::{to_xy_size, BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel};
 use endbasic_std::gpio::{Pin, PinMode, Pins};
 use endbasic_std::spi::{SpiBus, SpiMode};
 use std::io;
