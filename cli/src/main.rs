@@ -212,10 +212,13 @@ fn setup_console(
 
     #[cfg(feature = "rpi")]
     fn setup_st7735s_console(signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
+        use endbasic_std::gfx::lcd::fonts::FONT_5X8;
+
         let console = endbasic_st7735s::new_console(
             endbasic_rpi::RppalPins::default(),
             endbasic_rpi::spi_bus_open,
             endbasic_terminal::TerminalConsole::from_stdio(signals_tx)?,
+            &FONT_5X8,
         )?;
         Ok(Rc::from(RefCell::from(console)))
     }
