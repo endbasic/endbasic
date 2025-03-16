@@ -21,13 +21,19 @@ use std::collections::HashMap;
 mod font_5x8;
 pub(crate) use font_5x8::FONT_5X8;
 
+mod font_16x16;
+pub(crate) use font_16x16::FONT_16X16;
+
 /// Representation of a font.
 pub struct Font {
     /// The name of the font.
-    name: &'static str,
+    pub name: &'static str,
 
     /// The size of a single glyph, in pixels.
     pub glyph_size: LcdSize,
+
+    /// The number of bytes in every glyph row.
+    pub stride: usize,
 
     /// The bitmap data for the font.
     pub data: &'static [u8],
@@ -44,7 +50,7 @@ impl Font {
             // characters are typically displayed.
             ch = '?';
         }
-        let height = self.glyph_size.height;
+        let height = self.glyph_size.height * self.stride;
         let offset = ((ch as usize) - (' ' as usize)) * height;
         debug_assert!(offset < (self.data.len() + height));
         &self.data[offset..offset + height]
@@ -58,6 +64,7 @@ pub type Fonts = HashMap<&'static str, &'static Font>;
 pub fn all_fonts() -> Fonts {
     let mut fonts = Fonts::default();
     fonts.insert(FONT_5X8.name, &FONT_5X8);
+    fonts.insert(FONT_16X16.name, &FONT_16X16);
     fonts
 }
 

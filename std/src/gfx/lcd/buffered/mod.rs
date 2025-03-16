@@ -326,6 +326,37 @@ where
 
         Ok(())
     }
+
+    /// Writes a single character `ch` at `pos`.
+    fn write_char(&mut self, pos: LcdXY, ch: char) -> io::Result<()> {
+        let glyph = self.font.glyph(ch);
+        for j in 0..self.font.glyph_size.height {
+            for k in 0..self.font.stride {
+                let row = glyph[j * self.font.stride + k];
+                let mut mask = 0x80;
+                for i in 0..self.font.glyph_size.width {
+                    let bit = row & mask;
+                    if bit != 0 {
+                        let x = pos.x + i + k * 8;
+                        if x >= self.size_pixels.width {
+                            continue;
+                        }
+
+                        let y = pos.y + j;
+                        if y >= self.size_pixels.height {
+                            continue;
+                        }
+
+                        let xy = LcdXY { x, y };
+                        // TODO(jmmv): This is very inefficent on a pixel basis.
+                        self.fill(xy, xy)?;
+                    }
+                    mask >>= 1;
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<L> Drop for BufferedLcd<L>
@@ -452,30 +483,7 @@ where
         self.without_sync(|self2| {
             let mut pos = x1y1;
             for ch in text.chars() {
-                let glyph = self2.font.glyph(ch);
-                debug_assert_eq!(self2.font.glyph_size.height, glyph.len());
-                for (j, row) in glyph.iter().enumerate() {
-                    let mut mask = 0x80;
-                    for i in 0..self2.font.glyph_size.width {
-                        let bit = row & mask;
-                        if bit != 0 {
-                            let x = pos.x + i;
-                            if x >= self2.size_pixels.width {
-                                continue;
-                            }
-
-                            let y = pos.y + j;
-                            if y >= self2.size_pixels.height {
-                                continue;
-                            }
-
-                            let xy = LcdXY { x, y };
-                            self2.fill(xy, xy)?;
-                        }
-                        mask >>= 1;
-                    }
-                }
-
+                self2.write_char(pos, ch)?;
                 pos.x += self2.font.glyph_size.width;
             }
             Ok(())
