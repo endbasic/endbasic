@@ -18,7 +18,9 @@ CONSOLE-SPEC can be one of the following:
                         individual components of the SPEC can be omitted
                         RESOLUTION can be one of 'fs' (for full screen),
                         'WIDTHxHEIGHT' or 'WIDTHxHEIGHTfs'
-    st7735s             enables the ST7735S LCD console
+    st7735s[:SPEC]      enables the ST7735S LCD console and configures it
+                        with the settings in SPEC, which is of the form:
+                        font=NAME
     text                enables the text-based console
 
 Report bugs to: https://github.com/endbasic/endbasic/issues

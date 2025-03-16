@@ -42,7 +42,7 @@ pub(crate) use pager::Pager;
 mod readline;
 pub use readline::{read_line, read_line_secure};
 mod spec;
-pub use spec::{ConsoleSpec, Resolution};
+pub use spec::{ConsoleSpec, ParseError, Resolution};
 mod trivial;
 pub use trivial::TrivialConsole;
 

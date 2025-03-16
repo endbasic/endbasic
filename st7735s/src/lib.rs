@@ -27,9 +27,10 @@ use async_channel::{Receiver, TryRecvError};
 use async_trait::async_trait;
 use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
-    CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, SizeInPixels, RGB,
+    CharsXY, ClearType, Console, ConsoleSpec, GraphicsConsole, Key, ParseError, PixelsXY,
+    SizeInPixels, RGB,
 };
-use endbasic_std::gfx::lcd::fonts::Font;
+use endbasic_std::gfx::lcd::fonts::Fonts;
 use endbasic_std::gfx::lcd::{to_xy_size, BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel};
 use endbasic_std::gpio::{Pin, PinMode, Pins};
 use endbasic_std::spi::{SpiBus, SpiMode};
@@ -472,7 +473,8 @@ pub fn new_console<P, F, B, K>(
     pins: P,
     new_spi: F,
     keyboard: K,
-    font: &'static Font,
+    spec: &mut ConsoleSpec,
+    fonts: &Fonts,
 ) -> io::Result<ST7735SConsole<P, B, K>>
 where
     P: Pins + Send + 'static,
@@ -480,6 +482,21 @@ where
     B: SpiBus,
     K: InputOps,
 {
+    let font_name = spec.take_keyed_flag_str("font").unwrap_or("5x8");
+    let font = match fonts.get(font_name) {
+        Some(font) => font,
+        None => {
+            let mut valid = fonts.keys().copied().collect::<Vec<&'static str>>();
+            valid.sort();
+            return Err(ParseError(format!(
+                "Unknown font: {}; valid names are: {}",
+                font_name,
+                valid.join(", ")
+            ))
+            .into());
+        }
+    };
+
     let pins = Arc::from(Mutex::from(pins));
     let lcd = ST7735SLcd::new(pins.clone(), new_spi)?;
     let input = ST7735SInput::new(pins, keyboard)?;

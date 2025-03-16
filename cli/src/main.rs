@@ -81,7 +81,9 @@ fn help(name: &str, opts: &Options) {
         println!("                        'WIDTHxHEIGHT' or 'WIDTHxHEIGHTfs'");
     }
     if cfg!(feature = "rpi") {
-        println!("    st7735s             enables the ST7735S LCD console");
+        println!("    st7735s[:SPEC]      enables the ST7735S LCD console and configures it");
+        println!("                        with the settings in SPEC, which is of the form:");
+        println!("                        font=NAME");
     }
     println!("    text                enables the text-based console");
     println!();
@@ -211,14 +213,16 @@ fn setup_console(
     }
 
     #[cfg(feature = "rpi")]
-    fn setup_st7735s_console(signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
-        use endbasic_std::gfx::lcd::fonts::FONT_5X8;
-
+    fn setup_st7735s_console(
+        signals_tx: Sender<Signal>,
+        spec: &mut ConsoleSpec,
+    ) -> io::Result<Rc<RefCell<dyn Console>>> {
         let console = endbasic_st7735s::new_console(
             endbasic_rpi::RppalPins::default(),
             endbasic_rpi::spi_bus_open,
             endbasic_terminal::TerminalConsole::from_stdio(signals_tx)?,
-            &FONT_5X8,
+            spec,
+            &endbasic_std::gfx::lcd::fonts::all_fonts(),
         )?;
         Ok(Rc::from(RefCell::from(console)))
     }
@@ -226,6 +230,7 @@ fn setup_console(
     #[cfg(not(feature = "rpi"))]
     pub fn setup_st7735s_console(
         _signals_tx: Sender<Signal>,
+        _spec: &mut ConsoleSpec,
     ) -> io::Result<Rc<RefCell<dyn Console>>> {
         Err(io::Error::new(io::ErrorKind::InvalidInput, "ST7735S support not compiled in"))
     }
@@ -233,7 +238,7 @@ fn setup_console(
     let mut console_spec = ConsoleSpec::init(console_spec.unwrap_or("text"));
     let console: Rc<RefCell<dyn Console>> = match console_spec.driver {
         "sdl" => setup_sdl_console(signals_tx, &mut console_spec)?,
-        "st7735s" => setup_st7735s_console(signals_tx)?,
+        "st7735s" => setup_st7735s_console(signals_tx, &mut console_spec)?,
         "text" => setup_text_console(signals_tx)?,
         driver => {
             return Err(io::Error::new(

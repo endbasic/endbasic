@@ -16,12 +16,16 @@
 //! Support for bitmap fonts directly rendered onto an LCD.
 
 use crate::gfx::lcd::LcdSize;
+use std::collections::HashMap;
 
 mod font_5x8;
-pub use font_5x8::FONT_5X8;
+pub(crate) use font_5x8::FONT_5X8;
 
 /// Representation of a font.
 pub struct Font {
+    /// The name of the font.
+    name: &'static str,
+
     /// The size of a single glyph, in pixels.
     pub glyph_size: LcdSize,
 
@@ -45,6 +49,16 @@ impl Font {
         debug_assert!(offset < (self.data.len() + height));
         &self.data[offset..offset + height]
     }
+}
+
+/// Registry of all available fonts.
+pub type Fonts = HashMap<&'static str, &'static Font>;
+
+/// Obtains a mapping of all available fonts.
+pub fn all_fonts() -> Fonts {
+    let mut fonts = Fonts::default();
+    fonts.insert(FONT_5X8.name, &FONT_5X8);
+    fonts
 }
 
 #[cfg(test)]
