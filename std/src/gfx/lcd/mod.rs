@@ -23,7 +23,7 @@ mod buffered;
 mod font8;
 
 pub use buffered::BufferedLcd;
-pub use font8::Font8;
+pub use font8::FONT_5X8;
 
 /// Trait to convert a pixel to a sequence of bytes.
 pub trait AsByteSlice {
@@ -42,15 +42,30 @@ impl AsByteSlice for RGB565Pixel {
 }
 
 /// Representation of a font.
-pub trait Font {
-    /// Returns the size of a glyph, in pixels.
-    fn size(&self) -> LcdSize;
+pub struct Font {
+    /// The size of a single glyph, in pixels.
+    pub glyph_size: LcdSize,
 
-    /// Returns the pixel data for the given `ch`.
+    /// The bitmap data for the font.
+    pub data: &'static [u8],
+}
+
+impl Font {
+    /// Returns the raw font data for `ch`.
     ///
-    /// The returned slice contains one byte per row, and each row indicates which pixels need to be
-    /// drawn from left to right.  Only the first `WIDTH` bits in every row contain valid data.
-    fn glyph(&self, ch: char) -> &'static [u8];
+    /// Each entry in the array corresponds to a row of pixels and is a bitmask indicating which
+    /// pixels to turn on.
+    fn glyph(&self, mut ch: char) -> &'static [u8] {
+        if !(' '..='~').contains(&ch) {
+            // TODO(jmmv): Would be nicer to draw an empty box, much like how unknown Unicode
+            // characters are typically displayed.
+            ch = '?';
+        }
+        let height = self.glyph_size.height;
+        let offset = ((ch as usize) - (' ' as usize)) * height;
+        debug_assert!(offset < (self.data.len() + height));
+        &self.data[offset..offset + height]
+    }
 }
 
 /// Primitives that an LCD must define.
@@ -170,5 +185,27 @@ mod tests {
             (LcdXY { x: 10, y: 20 }, LcdSize { width: 5, height: 7 }),
             to_xy_size(xy(10, 20), xy(14, 26))
         );
+    }
+
+    #[test]
+    fn test_font_glyph_printable() {
+        let font = &FONT_5X8;
+
+        let offset = (usize::from(b'a') - usize::from(b' ')) * 8;
+        let expected = &font.data[offset..offset + 8];
+
+        let data = font.glyph('a');
+        assert_eq!(expected, data);
+    }
+
+    #[test]
+    fn test_font_glyph_non_printable() {
+        let font = &FONT_5X8;
+
+        let offset = (usize::from(b'?') - usize::from(b' ')) * 8;
+        let expected = &font.data[offset..offset + 8];
+
+        let data = font.glyph(char::from(30));
+        assert_eq!(expected, data);
     }
 }

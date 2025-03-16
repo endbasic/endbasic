@@ -16,7 +16,7 @@
 //! Utilities to implement tests for the `BufferedLcd`.
 
 use crate::console::RGB;
-use crate::gfx::lcd::{AsByteSlice, BufferedLcd, Font8, Lcd, LcdSize, LcdXY};
+use crate::gfx::lcd::{AsByteSlice, BufferedLcd, Lcd, LcdSize, LcdXY, FONT_5X8};
 use std::io;
 
 /// Data for one pixel encoded as RGB888.
@@ -80,7 +80,7 @@ impl Lcd for LcdRecorder {
 #[must_use]
 pub(super) struct Tester {
     size: LcdSize,
-    buffered: BufferedLcd<LcdRecorder, Font8>,
+    buffered: BufferedLcd<LcdRecorder>,
     exp_fb: Vec<u8>,
     exp_damage: Option<(LcdXY, LcdXY)>,
     exp_ops: Vec<String>,
@@ -92,7 +92,7 @@ impl Tester {
         let fb_size = size.width * size.height * 3;
         Self {
             size,
-            buffered: BufferedLcd::new(LcdRecorder::new(size), Font8::default()),
+            buffered: BufferedLcd::new(LcdRecorder::new(size), &FONT_5X8),
             exp_fb: vec![0; fb_size],
             exp_damage: None,
             exp_ops: vec![],
@@ -102,7 +102,7 @@ impl Tester {
     /// Executes an operation on the backing `LcdRecorder`.
     pub(super) fn op<F>(mut self, op: F) -> Self
     where
-        F: Fn(&mut BufferedLcd<LcdRecorder, Font8>),
+        F: Fn(&mut BufferedLcd<LcdRecorder>),
     {
         op(&mut self.buffered);
         self
