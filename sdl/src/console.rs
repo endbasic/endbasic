@@ -43,13 +43,16 @@ pub(crate) struct SdlConsole {
 impl SdlConsole {
     /// Initializes a new SDL console.
     ///
-    /// The console is sized to `resolution` pixels.  Also loads the desired font from
-    /// `font_path` at `font_size` and uses it to calculate the size of the console in characters.
+    /// The console is sized to `resolution` pixels and its default colors are set to
+    /// `default_fg_color` and `default_bg_color`.  Also loads the desired font from `font_path` at
+    /// `font_size` and uses it to calculate the size of the console in characters.
     ///
     /// There can only be one active `SdlConsole` at any given time given that this initializes and
     /// owns the SDL context.
     pub(crate) fn new(
         resolution: Resolution,
+        default_fg_color: Option<u8>,
+        default_bg_color: Option<u8>,
         font_path: PathBuf,
         font_size: u16,
         signals_tx: Sender<Signal>,
@@ -60,6 +63,8 @@ impl SdlConsole {
         let handle = thread::spawn(move || {
             host::run(
                 resolution,
+                default_fg_color,
+                default_bg_color,
                 font_path,
                 font_size,
                 request_rx,
@@ -300,6 +305,8 @@ mod testutils {
                     NonZeroU32::new(800).unwrap(),
                     NonZeroU32::new(600).unwrap(),
                 )),
+                None,
+                None,
                 src_path("sdl/src/IBMPlexMono-Regular-6.0.0.ttf"),
                 16,
                 signals_chan.0,

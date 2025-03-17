@@ -591,8 +591,12 @@ impl InputOps for NoopInputOps {
     }
 }
 
+/// Runs the main graphics loop.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run(
     resolution: Resolution,
+    default_fg_color: Option<u8>,
+    default_bg_color: Option<u8>,
     font_path: PathBuf,
     font_size: u16,
     request_rx: Receiver<Request>,
@@ -612,8 +616,8 @@ pub(crate) fn run(
     let mut ctx = SharedContext(Rc::from(RefCell::from(ctx)));
 
     let input = NoopInputOps {};
-    let mut console =
-        GraphicsConsole::new(input, ctx.clone()).expect("Console initialization must succeed");
+    let mut console = GraphicsConsole::new(input, ctx.clone(), default_fg_color, default_bg_color)
+        .expect("Console initialization must succeed");
 
     response_tx.send(Response::Empty(Ok(()))).expect("Channel must be alive");
 

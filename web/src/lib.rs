@@ -226,7 +226,7 @@ impl WebTerminal {
             Err(e) => log_and_panic!("Console initialization failed: {}", e),
         };
         let input_ops = WebInputOps(input);
-        let console = GraphicsConsole::new(input_ops, raster_ops).unwrap();
+        let console = GraphicsConsole::new(input_ops, raster_ops, None, None).unwrap();
 
         Self { yielder, console, on_screen_keyboard, service_url, signals_chan }
     }

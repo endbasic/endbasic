@@ -82,6 +82,9 @@ pub fn setup(
         Resolution::Windowed((width, height))
     });
 
+    let default_fg_color = spec.take_keyed_flag::<u8>("fg_color")?;
+    let default_bg_color = spec.take_keyed_flag::<u8>("bg_color")?;
+
     let font_path = spec.take_keyed_flag::<PathBuf>("font_path")?;
 
     let font_size = spec.take_keyed_flag("font_size")?.unwrap_or(DEFAULT_FONT_SIZE);
@@ -89,13 +92,25 @@ pub fn setup(
     let console = match font_path {
         None => {
             let default_font = TempFont::default_font()?;
-            console::SdlConsole::new(resolution, default_font.path(), font_size, signals_tx)?
+            console::SdlConsole::new(
+                resolution,
+                default_fg_color,
+                default_bg_color,
+                default_font.path(),
+                font_size,
+                signals_tx,
+            )?
             // The console has been created at this point, so it should be safe to drop
             // default_font and clean up the on-disk file backing it up.
         }
-        Some(font_path) => {
-            console::SdlConsole::new(resolution, font_path.to_owned(), font_size, signals_tx)?
-        }
+        Some(font_path) => console::SdlConsole::new(
+            resolution,
+            default_fg_color,
+            default_bg_color,
+            font_path.to_owned(),
+            font_size,
+            signals_tx,
+        )?,
     };
     Ok(Rc::from(RefCell::from(console)))
 }

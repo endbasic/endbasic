@@ -37,6 +37,11 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
     paths like `LOCAL:` are flagged as invalid due to them not containing a leaf
     name.  `KILL` was unable to remove these files after creation.
 
+*   Issue #181: Added new settings to the `sdl` and `st7735s` console drivers to
+    specify the default foreground and background colors.  This is not yet
+    usable in the web interface because there is no way to configure how it
+    starts up yet.
+
 ## Changes in version 0.11.1
 
 **Released on 2024-09-14.**
