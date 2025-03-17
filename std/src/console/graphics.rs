@@ -306,7 +306,8 @@ where
     bg_color: RGB,
 
     /// State of the console right before entering the "alternate" console.
-    alt_backup: Option<(RO::ID, CharsXY, RGB, RGB)>,
+    #[allow(clippy::type_complexity)]
+    alt_backup: Option<(RO::ID, CharsXY, Option<u8>, Option<u8>, RGB, RGB)>,
 
     /// Whether video syncing is enabled or not.
     sync_enabled: bool,
@@ -537,7 +538,14 @@ where
         }
 
         let pixels = self.raster_ops.read_pixels(PixelsXY::new(0, 0), self.size_pixels)?;
-        self.alt_backup = Some((pixels, self.cursor_pos, self.fg_color, self.bg_color));
+        self.alt_backup = Some((
+            pixels,
+            self.cursor_pos,
+            self.ansi_fg_color,
+            self.ansi_bg_color,
+            self.fg_color,
+            self.bg_color,
+        ));
 
         self.clear(ClearType::All)
     }
@@ -553,21 +561,24 @@ where
     }
 
     fn leave_alt(&mut self) -> io::Result<()> {
-        let (pixels, cursor_pos, fg_color, bg_color) = match self.alt_backup.take() {
-            Some(t) => t,
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Cannot leave alternate screen; not entered",
-                ))
-            }
-        };
+        let (pixels, cursor_pos, ansi_fg_color, ansi_bg_color, fg_color, bg_color) =
+            match self.alt_backup.take() {
+                Some(t) => t,
+                None => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Cannot leave alternate screen; not entered",
+                    ))
+                }
+            };
 
         self.clear_cursor()?;
 
         self.raster_ops.put_pixels(PixelsXY::new(0, 0), &pixels)?;
 
         self.cursor_pos = cursor_pos;
+        self.ansi_fg_color = ansi_fg_color;
+        self.ansi_bg_color = ansi_bg_color;
         self.fg_color = fg_color;
         self.bg_color = bg_color;
         self.draw_cursor()?;
