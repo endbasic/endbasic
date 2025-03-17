@@ -482,6 +482,9 @@ where
     B: SpiBus,
     K: InputOps,
 {
+    let default_fg_color = spec.take_keyed_flag::<u8>("fg_color")?;
+    let default_bg_color = spec.take_keyed_flag::<u8>("bg_color")?;
+
     let font_name = spec.take_keyed_flag_str("font").unwrap_or("5x8");
     let font = match fonts.get(font_name) {
         Some(font) => font,
@@ -501,7 +504,7 @@ where
     let lcd = ST7735SLcd::new(pins.clone(), new_spi)?;
     let input = ST7735SInput::new(pins, keyboard)?;
     let lcd = BufferedLcd::new(lcd, font);
-    let inner = GraphicsConsole::new(input, lcd)?;
+    let inner = GraphicsConsole::new(input, lcd, default_fg_color, default_bg_color)?;
     Ok(ST7735SConsole { inner })
 }
 

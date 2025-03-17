@@ -14,7 +14,8 @@ Options:
 CONSOLE-SPEC can be one of the following:
     sdl[:SPEC]          enables the graphical console and configures it
                         with the settings in SPEC, which is of the form:
-                        resolution=RESOLUTION,font_path=TTF,font_size=SIZE
+                        resolution=RESOLUTION,fg_color=COLOR,bg_color=COLOR,
+                        font_path=TTF,font_size=SIZE
                         individual components of the SPEC can be omitted
                         RESOLUTION can be one of 'fs' (for full screen),
                         'WIDTHxHEIGHT' or 'WIDTHxHEIGHTfs'

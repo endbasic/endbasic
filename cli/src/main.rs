@@ -75,7 +75,8 @@ fn help(name: &str, opts: &Options) {
     if cfg!(feature = "sdl") {
         println!("    sdl[:SPEC]          enables the graphical console and configures it");
         println!("                        with the settings in SPEC, which is of the form:");
-        println!("                        resolution=RESOLUTION,font_path=TTF,font_size=SIZE");
+        println!("                        resolution=RESOLUTION,fg_color=COLOR,bg_color=COLOR,");
+        println!("                        font_path=TTF,font_size=SIZE");
         println!("                        individual components of the SPEC can be omitted");
         println!("                        RESOLUTION can be one of 'fs' (for full screen),");
         println!("                        'WIDTHxHEIGHT' or 'WIDTHxHEIGHTfs'");
@@ -83,7 +84,7 @@ fn help(name: &str, opts: &Options) {
     if cfg!(feature = "rpi") {
         println!("    st7735s[:SPEC]      enables the ST7735S LCD console and configures it");
         println!("                        with the settings in SPEC, which is of the form:");
-        println!("                        font=NAME");
+        println!("                        fg_color=COLOR,bg_color=COLOR,font=NAME");
     }
     println!("    text                enables the text-based console");
     println!();

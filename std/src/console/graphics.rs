@@ -287,6 +287,12 @@ where
     /// contents when the cursor moves.
     cursor_backup: Option<RO::ID>,
 
+    /// Default foreground color to use.
+    default_fg_color: u8,
+
+    /// Default background color to use.
+    default_bg_color: u8,
+
     /// Current foreground color as exposed via `color` and `set_color`.
     ansi_fg_color: Option<u8>,
 
@@ -312,8 +318,16 @@ where
     RO: RasterOps,
 {
     /// Initializes a new graphical console.
-    pub fn new(input_ops: IO, raster_ops: RO) -> io::Result<Self> {
+    pub fn new(
+        input_ops: IO,
+        raster_ops: RO,
+        default_fg_color: Option<u8>,
+        default_bg_color: Option<u8>,
+    ) -> io::Result<Self> {
         let info = raster_ops.get_info();
+
+        let default_fg_color = default_fg_color.unwrap_or(DEFAULT_FG_COLOR);
+        let default_bg_color = default_bg_color.unwrap_or(DEFAULT_BG_COLOR);
 
         let mut console = Self {
             input_ops,
@@ -324,10 +338,12 @@ where
             cursor_pos: CharsXY::default(),
             cursor_visible: true,
             cursor_backup: None,
+            default_fg_color,
+            default_bg_color,
             ansi_bg_color: None,
             ansi_fg_color: None,
-            bg_color: ansi_color_to_rgb(DEFAULT_BG_COLOR),
-            fg_color: ansi_color_to_rgb(DEFAULT_FG_COLOR),
+            bg_color: ansi_color_to_rgb(default_bg_color),
+            fg_color: ansi_color_to_rgb(default_fg_color),
             alt_backup: None,
             sync_enabled: true,
         };
@@ -506,9 +522,9 @@ where
 
     fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
         self.ansi_fg_color = fg;
-        self.fg_color = ansi_color_to_rgb(fg.unwrap_or(DEFAULT_FG_COLOR));
+        self.fg_color = ansi_color_to_rgb(fg.unwrap_or(self.default_fg_color));
         self.ansi_bg_color = bg;
-        self.bg_color = ansi_color_to_rgb(bg.unwrap_or(DEFAULT_BG_COLOR));
+        self.bg_color = ansi_color_to_rgb(bg.unwrap_or(self.default_bg_color));
         Ok(())
     }
 

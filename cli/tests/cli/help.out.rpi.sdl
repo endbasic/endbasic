@@ -14,13 +14,14 @@ Options:
 CONSOLE-SPEC can be one of the following:
     sdl[:SPEC]          enables the graphical console and configures it
                         with the settings in SPEC, which is of the form:
-                        resolution=RESOLUTION,font_path=TTF,font_size=SIZE
+                        resolution=RESOLUTION,fg_color=COLOR,bg_color=COLOR,
+                        font_path=TTF,font_size=SIZE
                         individual components of the SPEC can be omitted
                         RESOLUTION can be one of 'fs' (for full screen),
                         'WIDTHxHEIGHT' or 'WIDTHxHEIGHTfs'
     st7735s[:SPEC]      enables the ST7735S LCD console and configures it
                         with the settings in SPEC, which is of the form:
-                        font=NAME
+                        fg_color=COLOR,bg_color=COLOR,font=NAME
     text                enables the text-based console
 
 Report bugs to: https://github.com/endbasic/endbasic/issues
