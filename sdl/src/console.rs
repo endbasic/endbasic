@@ -38,6 +38,7 @@ pub(crate) struct SdlConsole {
     on_key_rx: Receiver<Key>,
     fg_color: Option<u8>,
     bg_color: Option<u8>,
+    alt_backup: Option<(Option<u8>, Option<u8>)>,
 }
 
 impl SdlConsole {
@@ -84,6 +85,7 @@ impl SdlConsole {
                 on_key_rx,
                 fg_color: None,
                 bg_color: None,
+                alt_backup: None,
             }),
             Response::Empty(Err(e)) => Err(e),
             r => panic!("Unexpected response {:?}", r),
@@ -131,6 +133,15 @@ impl Console for SdlConsole {
     }
 
     fn enter_alt(&mut self) -> io::Result<()> {
+        if self.alt_backup.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Cannot nest alternate screens",
+            ));
+        }
+
+        self.alt_backup = Some((self.fg_color, self.bg_color));
+
         self.call(Request::EnterAlt)
     }
 
@@ -143,7 +154,20 @@ impl Console for SdlConsole {
     }
 
     fn leave_alt(&mut self) -> io::Result<()> {
-        self.call(Request::LeaveAlt)
+        let alt_backup = match self.alt_backup.take() {
+            Some(t) => t,
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Cannot leave alternate screen; not entered",
+                ))
+            }
+        };
+
+        self.call(Request::LeaveAlt)?;
+
+        (self.fg_color, self.bg_color) = alt_backup;
+        Ok(())
     }
 
     fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
@@ -568,6 +592,27 @@ mod tests {
         test.console().leave_alt().unwrap();
 
         test.verify("sdl-leave-alt");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_sdl_console_alt_colors() {
+        let mut test = SdlTest::new();
+
+        test.console().set_color(Some(13), Some(5)).unwrap();
+
+        test.console().enter_alt().unwrap();
+        assert_eq!((Some(13), Some(5)), test.console().color());
+        test.console().print("After entering the alternate console").unwrap();
+
+        test.console().set_color(Some(15), Some(0)).unwrap();
+        assert_eq!((Some(15), Some(0)), test.console().color());
+
+        test.console().leave_alt().unwrap();
+        test.console().print("After leaving the alternate console").unwrap();
+        assert_eq!((Some(13), Some(5)), test.console().color());
+
+        test.verify("sdl-alt-colors");
     }
 
     /// Synthesizes an `Event::KeyDown` event for a single key press.
