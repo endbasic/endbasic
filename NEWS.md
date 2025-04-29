@@ -45,6 +45,10 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
 *   Changed the `KILL` command so that it no longer automatically appends a
     `.BAS` extension to filenames given to it.  This allow deleting files that
     don't have an extension.
+    
+*   Added a new `COPY` command to copy files.  The previous approach of `LOAD`
+    followed by `SAVE` doesn't work for binary files, and we want to support
+    binary files to handle e.g. images.
 
 ## Changes in version 0.11.1
 

@@ -281,6 +281,18 @@ impl Location {
         }
     }
 
+    /// Sets the leaf name of this path.
+    fn set_leaf_name(&mut self, name: &str) {
+        if self.path.starts_with('/') {
+            self.path.clear();
+            self.path.push('/');
+            self.path.push_str(name);
+        } else {
+            self.path.clear();
+            self.path.push_str(name);
+        }
+    }
+
     /// Sets the file name extension as long as this location corresponds to a file and not a
     /// directory and does not already have one.
     ///
@@ -588,16 +600,22 @@ impl Storage {
         }
     }
 
-    /// Loads the contents of the program given by `raw_location`.
-    pub async fn get(&self, raw_location: &str) -> io::Result<Vec<u8>> {
-        let location = Location::new(raw_location)?;
+    /// Loads the contents of the program given by `location`.  `raw_location` is the
+    /// string that the user provided and is used for error reporting.
+    async fn get_location(&self, raw_location: &str, location: &Location) -> io::Result<Vec<u8>> {
         match location.leaf_name() {
-            Some(name) => self.get_drive(&location)?.get(name).await,
+            Some(name) => self.get_drive(location)?.get(name).await,
             None => Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 format!("Missing file name in path '{}'", raw_location),
             )),
         }
+    }
+
+    /// Loads the contents of the program given by `raw_location`.
+    pub async fn get(&self, raw_location: &str) -> io::Result<Vec<u8>> {
+        let location = Location::new(raw_location)?;
+        self.get_location(raw_location, &location).await
     }
 
     /// Gets the ACLs of the file `raw_location`.
@@ -612,16 +630,27 @@ impl Storage {
         }
     }
 
-    /// Saves the in-memory program given by `content` into `raw_location`.
-    pub async fn put(&mut self, raw_location: &str, content: &[u8]) -> io::Result<()> {
-        let location = Location::new(raw_location)?;
+    /// Saves the in-memory program given by `content` into `location`.  `raw_location` is the
+    /// string that the user provided and is used for error reporting.
+    async fn put_location(
+        &mut self,
+        raw_location: &str,
+        location: &Location,
+        content: &[u8],
+    ) -> io::Result<()> {
         match location.leaf_name() {
-            Some(name) => self.get_drive_mut(&location)?.put(name, content).await,
+            Some(name) => self.get_drive_mut(location)?.put(name, content).await,
             None => Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 format!("Missing file name in path '{}'", raw_location),
             )),
         }
+    }
+
+    /// Saves the in-memory program given by `content` into `raw_location`.
+    pub async fn put(&mut self, raw_location: &str, content: &[u8]) -> io::Result<()> {
+        let location = Location::new(raw_location)?;
+        self.put_location(raw_location, &location, content).await
     }
 
     /// Updates the ACLs of the file `raw_location` by extending them with the contents of `add` and
@@ -649,6 +678,28 @@ impl Storage {
             Some(name) => Ok(self.get_drive(&location)?.system_path(name)),
             None => Ok(self.get_drive(&location)?.system_path("")),
         }
+    }
+
+    /// Copies file `src` to `dest`.
+    pub async fn copy(&mut self, raw_src: &str, raw_dest: &str) -> io::Result<()> {
+        let src = Location::new(raw_src)?;
+        let src_name = match src.leaf_name() {
+            Some(name) => name,
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("Missing file name in copy source path '{}'", raw_src),
+                ));
+            }
+        };
+
+        let mut dest = Location::new(raw_dest)?;
+        if dest.leaf_name().is_none() {
+            dest.set_leaf_name(src_name);
+        }
+
+        let content = self.get_location(raw_src, &src).await?;
+        self.put_location(raw_dest, &dest, &content).await
     }
 }
 
@@ -744,6 +795,25 @@ mod tests {
         assert_eq!(Some("abc.txt"), Location::new("a:/abc.txt").unwrap().leaf_name());
         assert_eq!(Some("abc.txt"), Location::new("a:abc.txt").unwrap().leaf_name());
         assert_eq!(Some("abc.txt"), Location::new("abc.txt").unwrap().leaf_name());
+    }
+
+    #[test]
+    fn test_location_set_leaf_name() {
+        let mut location = Location::new("drv:/").unwrap();
+        location.set_leaf_name("foo");
+        assert_eq!("DRV:/foo", format!("{}", location));
+
+        let mut location = Location::new("drv:").unwrap();
+        location.set_leaf_name("foo");
+        assert_eq!("DRV:/foo", format!("{}", location));
+
+        let mut location = Location::new("/bar").unwrap();
+        location.set_leaf_name("foo");
+        assert_eq!("/foo", format!("{}", location));
+
+        let mut location = Location::new("bar").unwrap();
+        location.set_leaf_name("foo");
+        assert_eq!("foo", format!("{}", location));
     }
 
     #[test]
