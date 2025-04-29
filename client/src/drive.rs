@@ -61,18 +61,12 @@ impl Drive for CloudDrive {
         ))
     }
 
-    async fn get(&self, filename: &str) -> io::Result<String> {
+    async fn get(&self, filename: &str) -> io::Result<Vec<u8>> {
         let request = GetFileRequest::default().with_get_content();
         let response =
             self.service.borrow_mut().get_file(&self.username, filename, &request).await?;
         match response.decoded_content()? {
-            Some(content) => match String::from_utf8(content) {
-                Ok(s) => Ok(s),
-                Err(e) => Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Requested file is not valid UTF-8: {}", e),
-                )),
-            },
+            Some(content) => Ok(content),
             None => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Server response is missing the file content".to_string(),
@@ -93,8 +87,8 @@ impl Drive for CloudDrive {
         }
     }
 
-    async fn put(&mut self, filename: &str, content: &str) -> io::Result<()> {
-        let request = PatchFileRequest::default().with_content(content.as_bytes());
+    async fn put(&mut self, filename: &str, content: &[u8]) -> io::Result<()> {
+        let request = PatchFileRequest::default().with_content(content);
         self.service.borrow_mut().patch_file(&self.username, filename, &request).await
     }
 

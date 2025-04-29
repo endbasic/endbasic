@@ -501,7 +501,7 @@ impl Tester {
 
     /// Creates or overwrites a file in the storage medium.
     pub fn write_file(self, name: &str, content: &str) -> Self {
-        block_on(self.storage.borrow_mut().put(name, content)).unwrap();
+        block_on(self.storage.borrow_mut().put(name, content.as_bytes())).unwrap();
         self
     }
 
@@ -748,6 +748,7 @@ impl<'a> Checker<'a> {
                 for name in block_on(storage.enumerate(&root)).unwrap().dirents().keys() {
                     let path = format!("{}{}", root, name);
                     let content = block_on(storage.get(&path)).unwrap();
+                    let content = String::from_utf8(content).unwrap();
                     files.insert(path, content);
                 }
             }

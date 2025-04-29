@@ -70,7 +70,7 @@ pub async fn try_load_autoexec(
         }
     };
 
-    match machine.exec(&mut code.as_bytes()).await {
+    match machine.exec(&mut code.as_slice()).await {
         Ok(_) => Ok(()),
         Err(e) => {
             console.borrow_mut().print(&format!("AUTOEXEC.BAS failed: {}", e))?;
@@ -107,6 +107,14 @@ pub async fn run_from_cloud(
 
     console.borrow_mut().print(&format!("Loading {}...", path))?;
     let content = storage.borrow().get(&path).await?;
+    let content = match String::from_utf8(content) {
+        Ok(text) => text,
+        Err(e) => {
+            let mut console = console.borrow_mut();
+            console.print(&format!("Invalid program to run '{}': {}", path, e))?;
+            return Ok(1);
+        }
+    };
     program.borrow_mut().load(Some(&path), &content);
 
     console.borrow_mut().print("Starting...")?;

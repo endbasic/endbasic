@@ -98,18 +98,18 @@ impl Drive for DirectoryDrive {
         Ok(DriveFiles::new(entries, None, None))
     }
 
-    async fn get(&self, name: &str) -> io::Result<String> {
+    async fn get(&self, name: &str) -> io::Result<Vec<u8>> {
         let path = self.dir.join(name);
         let input = File::open(path)?;
-        let mut content = String::new();
-        io::BufReader::new(input).read_to_string(&mut content)?;
+        let mut content = vec![];
+        io::BufReader::new(input).read_to_end(&mut content)?;
         Ok(content)
     }
 
-    async fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
+    async fn put(&mut self, name: &str, content: &[u8]) -> io::Result<()> {
         let path = self.dir.join(name);
         let mut output = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
-        output.write_all(content.as_bytes())?;
+        output.write_all(content)?;
         output.sync_all()
     }
 

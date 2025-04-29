@@ -24,7 +24,7 @@ use std::str;
 /// A drive that records all data in memory only.
 #[derive(Default)]
 pub struct InMemoryDrive {
-    programs: HashMap<String, (String, HashSet<String>)>,
+    programs: HashMap<String, (Vec<u8>, HashSet<String>)>,
 
     // TODO(jmmv): These fields are currently exposed only to allow testing for the consumers of
     // these details and are not enforced in the drive.  It might be nice to actually implement
@@ -52,7 +52,7 @@ impl Drive for InMemoryDrive {
         Ok(DriveFiles::new(entries, self.fake_disk_quota, self.fake_disk_free))
     }
 
-    async fn get(&self, name: &str) -> io::Result<String> {
+    async fn get(&self, name: &str) -> io::Result<Vec<u8>> {
         match self.programs.get(name) {
             Some((content, _readers)) => Ok(content.to_owned()),
             None => Err(io::Error::new(io::ErrorKind::NotFound, "Entry not found")),
@@ -72,7 +72,7 @@ impl Drive for InMemoryDrive {
         }
     }
 
-    async fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
+    async fn put(&mut self, name: &str, content: &[u8]) -> io::Result<()> {
         if let Some((prev_content, _readers)) = self.programs.get_mut(name) {
             content.clone_into(prev_content);
             return Ok(());

@@ -125,18 +125,18 @@ impl Drive for DemosDrive {
         Ok(DriveFiles::new(entries, disk_quota, disk_free))
     }
 
-    async fn get(&self, name: &str) -> io::Result<String> {
+    async fn get(&self, name: &str) -> io::Result<Vec<u8>> {
         let uc_name = name.to_ascii_uppercase();
         match self.demos.get(&uc_name.as_ref()) {
             Some(value) => {
                 let (_metadata, content) = value;
-                Ok(content.to_string())
+                Ok(content.as_bytes().to_owned())
             }
             None => Err(io::Error::new(io::ErrorKind::NotFound, "Demo not found")),
         }
     }
 
-    async fn put(&mut self, _name: &str, _content: &str) -> io::Result<()> {
+    async fn put(&mut self, _name: &str, _content: &[u8]) -> io::Result<()> {
         Err(io::Error::new(io::ErrorKind::PermissionDenied, "The demos drive is read-only"))
     }
 }

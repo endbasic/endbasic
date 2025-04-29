@@ -394,6 +394,15 @@ impl Callable for LoadCommand {
                     .make_canonical_with_extension(&pathname, DEFAULT_EXTENSION)
                     .map_err(|e| scope.io_error(e))?;
                 let content = storage.get(&full_name).await.map_err(|e| scope.io_error(e))?;
+                let content = match String::from_utf8(content) {
+                    Ok(text) => text,
+                    Err(e) => {
+                        return Err(scope.io_error(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("Invalid file content: {}", e),
+                        )));
+                    }
+                };
                 (full_name, content)
             };
             self.program.borrow_mut().load(Some(&full_name), &content);
@@ -593,7 +602,11 @@ impl Callable for SaveCommand {
             .make_canonical_with_extension(&name, DEFAULT_EXTENSION)
             .map_err(|e| scope.io_error(e))?;
         let content = self.program.borrow().text();
-        self.storage.borrow_mut().put(&full_name, &content).await.map_err(|e| scope.io_error(e))?;
+        self.storage
+            .borrow_mut()
+            .put(&full_name, content.as_bytes())
+            .await
+            .map_err(|e| scope.io_error(e))?;
         self.program.borrow_mut().set_name(&full_name);
 
         self.console

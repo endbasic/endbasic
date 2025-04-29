@@ -150,7 +150,7 @@ pub trait Drive {
     async fn enumerate(&self) -> io::Result<DriveFiles>;
 
     /// Loads the contents of the program given by `name`.
-    async fn get(&self, name: &str) -> io::Result<String>;
+    async fn get(&self, name: &str) -> io::Result<Vec<u8>>;
 
     /// Gets the ACLs of the file `_name`.
     async fn get_acls(&self, _name: &str) -> io::Result<FileAcls> {
@@ -158,7 +158,7 @@ pub trait Drive {
     }
 
     /// Saves the in-memory program given by `content` into `name`.
-    async fn put(&mut self, name: &str, content: &str) -> io::Result<()>;
+    async fn put(&mut self, name: &str, content: &[u8]) -> io::Result<()>;
 
     /// Updates the ACLs of the file `_name` by extending them with the contents of `_add` and
     /// removing the existing entries listed in `_remove`.
@@ -589,7 +589,7 @@ impl Storage {
     }
 
     /// Loads the contents of the program given by `raw_location`.
-    pub async fn get(&self, raw_location: &str) -> io::Result<String> {
+    pub async fn get(&self, raw_location: &str) -> io::Result<Vec<u8>> {
         let location = Location::new(raw_location)?;
         match location.leaf_name() {
             Some(name) => self.get_drive(&location)?.get(name).await,
@@ -613,7 +613,7 @@ impl Storage {
     }
 
     /// Saves the in-memory program given by `content` into `raw_location`.
-    pub async fn put(&mut self, raw_location: &str, content: &str) -> io::Result<()> {
+    pub async fn put(&mut self, raw_location: &str, content: &[u8]) -> io::Result<()> {
         let location = Location::new(raw_location)?;
         match location.leaf_name() {
             Some(name) => self.get_drive_mut(&location)?.put(name, content).await,
