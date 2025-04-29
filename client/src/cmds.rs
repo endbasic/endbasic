@@ -901,7 +901,7 @@ mod tests {
     #[tokio::test]
     async fn test_share_print_no_acls() {
         let mut t = ClientTester::default();
-        t.get_storage().borrow_mut().put("MEMORY:/FOO", "").await.unwrap();
+        t.get_storage().borrow_mut().put("MEMORY:/FOO", b"").await.unwrap();
         t.run(r#"SHARE "MEMORY:/FOO""#)
             .expect_prints(["", "    No ACLs on MEMORY:/FOO", ""])
             .expect_file("MEMORY:/FOO", "")
@@ -914,7 +914,7 @@ mod tests {
         {
             let storage = t.get_storage();
             let mut storage = storage.borrow_mut();
-            storage.put("MEMORY:/FOO", "").await.unwrap();
+            storage.put("MEMORY:/FOO", b"").await.unwrap();
             storage
                 .update_acls(
                     "MEMORY:/FOO",
@@ -933,7 +933,7 @@ mod tests {
     #[tokio::test]
     async fn test_share_make_public() {
         let mut t = ClientTester::default();
-        t.get_storage().borrow_mut().put("MEMORY:/FOO.BAS", "").await.unwrap();
+        t.get_storage().borrow_mut().put("MEMORY:/FOO.BAS", b"").await.unwrap();
         t.get_service().borrow_mut().do_login().await;
         let mut checker = t.run(r#"SHARE "MEMORY:/FOO.BAS", "Public+r""#);
         let output = flatten_output(checker.take_captured_out());
