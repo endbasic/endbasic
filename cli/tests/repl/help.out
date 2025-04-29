@@ -145,6 +145,7 @@ Output from HELP "FILE SYSTEM":
     modify, and save programs.
 
     >> [38;5;14mCD     [39m    Changes the current path.
+    >> [38;5;14mCOPY   [39m    Copies src to dest.
     >> [38;5;14mDIR    [39m    Displays the list of files on the current or given path.
     >> [38;5;14mKILL   [39m    Deletes the given file.
     >> [38;5;14mMOUNT  [39m    Lists the mounted drives or mounts a new drive.
@@ -663,6 +664,17 @@ Output from HELP "COLOR":
     console's default.  The console default does not necessarily match any
     other color specifiable in the 0 to 255 range, as it might be
     transparent.
+
+Output from HELP "COPY":
+
+[38;5;11m    COPY src$, dest$
+[39m
+    Copies src to dest.
+
+    If dest is a path without a name, the target file given in dest will
+    have the same name as the source file in src.
+
+    See the "File system" help topic for information on the path syntax.
 
 Output from HELP "DEG":
 

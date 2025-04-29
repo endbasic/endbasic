@@ -165,6 +165,67 @@ impl Callable for CdCommand {
     }
 }
 
+/// The `COPY` command.
+pub struct CopyCommand {
+    metadata: CallableMetadata,
+    storage: Rc<RefCell<Storage>>,
+}
+
+impl CopyCommand {
+    /// Creates a new `COPY` command that copies a file.
+    pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("COPY")
+                .with_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("src"),
+                                vtype: ExprType::Text,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("dest"),
+                                vtype: ExprType::Text,
+                            },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Copies src to dest.
+If dest is a path without a name, the target file given in dest will have the same name \
+as the source file in src.
+See the \"File system\" help topic for information on the path syntax.",
+                )
+                .build(),
+            storage,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Callable for CopyCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+        debug_assert_eq!(2, scope.nargs());
+        let src = scope.pop_string();
+        let dest = scope.pop_string();
+
+        let mut storage = self.storage.borrow_mut();
+        storage.copy(&src, &dest).await.map_err(|e| scope.io_error(e))?;
+
+        Ok(())
+    }
+}
+
 /// The `DIR` command.
 pub struct DirCommand {
     metadata: CallableMetadata,
@@ -452,6 +513,7 @@ pub fn add_all(
     storage: Rc<RefCell<Storage>>,
 ) {
     machine.add_callable(CdCommand::new(storage.clone()));
+    machine.add_callable(CopyCommand::new(storage.clone()));
     machine.add_callable(DirCommand::new(console.clone(), storage.clone()));
     machine.add_callable(KillCommand::new(storage.clone()));
     machine.add_callable(MountCommand::new(console.clone(), storage.clone()));
@@ -483,6 +545,80 @@ mod tests {
         check_stmt_compilation_err("1:1: CD expected path$", "CD");
         check_stmt_compilation_err("1:1: CD expected path$", "CD 2, 3");
         check_stmt_compilation_err("1:4: expected STRING but found INTEGER", "CD 2");
+    }
+
+    #[test]
+    fn test_copy_ok() {
+        Tester::default()
+            .set_program(Some("foo.bas"), "Leave me alone")
+            .write_file("file1", "the content")
+            .run(r#"COPY "file1", "file2""#)
+            .expect_program(Some("foo.bas"), "Leave me alone")
+            .expect_file("MEMORY:/file1", "the content")
+            .expect_file("MEMORY:/file2", "the content")
+            .check();
+    }
+
+    #[test]
+    fn test_copy_deduce_target_name() {
+        let t = Tester::default();
+        t.get_storage().borrow_mut().mount("other", "memory://").unwrap();
+        t.set_program(Some("foo.bas"), "Leave me alone")
+            .write_file("file1.x", "the content")
+            .run(r#"COPY "file1.x", "OTHER:/""#)
+            .expect_program(Some("foo.bas"), "Leave me alone")
+            .expect_file("MEMORY:/file1.x", "the content")
+            .expect_file("OTHER:/file1.x", "the content")
+            .check();
+    }
+
+    #[test]
+    fn test_copy_errors() {
+        Tester::default()
+            .run(r#"COPY "foo""#)
+            .expect_compilation_err("1:1: COPY expected src$, dest$")
+            .check();
+
+        Tester::default()
+            .run(r#"COPY "memory:/", "foo.bar""#)
+            .expect_err("1:1: Missing file name in copy source path 'memory:/'")
+            .check();
+
+        Tester::default()
+            .run(r#"COPY "missing.txt", "new.txt""#)
+            .expect_err("1:1: Entry not found")
+            .check();
+
+        Tester::default()
+            .write_file("foo", "irrelevant")
+            .run(r#"COPY "foo", "missing:/""#)
+            .expect_err("1:1: Drive 'MISSING' is not mounted")
+            .expect_file("MEMORY:/foo", "irrelevant")
+            .check();
+
+        //Tester::default()
+        //    .run(r#"KILL "a/b.bas""#)
+        //    .expect_err("1:1: Too many / separators in path 'a/b.bas'")
+        //    .check();
+
+        //Tester::default()
+        //    .run(r#"KILL "drive:""#)
+        //    .expect_err("1:1: Missing file name in path 'drive:'")
+        //    .check();
+
+        //Tester::default()
+        //    .run("KILL")
+        //    .expect_compilation_err("1:1: KILL expected filename$")
+        //    .check();
+
+        //check_stmt_err("1:1: Entry not found", r#"KILL "missing-file""#);
+
+        //Tester::default()
+        //    .write_file("no-automatic-extension.bas", "")
+        //    .run(r#"KILL "no-automatic-extension""#)
+        //    .expect_err("1:1: Entry not found")
+        //    .expect_file("MEMORY:/no-automatic-extension.bas", "")
+        //    .check();
     }
 
     #[test]
