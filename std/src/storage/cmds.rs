@@ -165,6 +165,63 @@ impl Callable for CdCommand {
     }
 }
 
+/// The `COPY` command.
+pub struct CopyCommand {
+    metadata: CallableMetadata,
+    storage: Rc<RefCell<Storage>>,
+}
+
+impl CopyCommand {
+    /// Creates a new `COPY` command that copies a file.
+    pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("COPY")
+                .with_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("src"),
+                                vtype: ExprType::Text,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("dest"),
+                                vtype: ExprType::Text,
+                            },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description("Copies src to dest.")
+                .build(),
+            storage,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Callable for CopyCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+        debug_assert_eq!(2, scope.nargs());
+        let src = scope.pop_string();
+        let dest = scope.pop_string();
+
+        let mut storage = self.storage.borrow_mut();
+        let content = storage.get(&src).await.map_err(|e| scope.io_error(e))?;
+        storage.put(&dest, &content).await.map_err(|e| scope.io_error(e))?;
+
+        Ok(())
+    }
+}
+
 /// The `DIR` command.
 pub struct DirCommand {
     metadata: CallableMetadata,
@@ -403,6 +460,7 @@ pub fn add_all(
     storage: Rc<RefCell<Storage>>,
 ) {
     machine.add_callable(CdCommand::new(storage.clone()));
+    machine.add_callable(CopyCommand::new(storage.clone()));
     machine.add_callable(DirCommand::new(console.clone(), storage.clone()));
     machine.add_callable(MountCommand::new(console.clone(), storage.clone()));
     machine.add_callable(PwdCommand::new(console.clone(), storage.clone()));
