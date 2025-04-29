@@ -61,18 +61,12 @@ impl Drive for CloudDrive {
         ))
     }
 
-    async fn get(&self, filename: &str) -> io::Result<String> {
+    async fn get(&self, filename: &str) -> io::Result<Vec<u8>> {
         let request = GetFileRequest::default().with_get_content();
         let response =
             self.service.borrow_mut().get_file(&self.username, filename, &request).await?;
         match response.decoded_content()? {
-            Some(content) => match String::from_utf8(content) {
-                Ok(s) => Ok(s),
-                Err(e) => Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Requested file is not valid UTF-8: {}", e),
-                )),
-            },
+            Some(content) => Ok(content),
             None => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Server response is missing the file content".to_string(),
@@ -93,8 +87,8 @@ impl Drive for CloudDrive {
         }
     }
 
-    async fn put(&mut self, filename: &str, content: &str) -> io::Result<()> {
-        let request = PatchFileRequest::default().with_content(content.as_bytes());
+    async fn put(&mut self, filename: &str, content: &[u8]) -> io::Result<()> {
+        let request = PatchFileRequest::default().with_content(content);
         self.service.borrow_mut().patch_file(&self.username, filename, &request).await
     }
 
@@ -214,7 +208,7 @@ mod tests {
         };
         service.borrow_mut().add_mock_get_file("the-user", "the-filename", request, Ok(response));
         let result = drive.get("the-filename").await.unwrap();
-        assert_eq!("some content", result);
+        assert_eq!("some content".as_bytes(), result);
 
         service.take().verify_all_used();
     }
@@ -235,21 +229,24 @@ mod tests {
         service.take().verify_all_used();
     }
 
+    #[allow(invalid_from_utf8)]
     #[tokio::test]
     async fn test_clouddrive_get_invalid_utf8() {
+        const BAD_UTF8: &[u8] = &[0x00, 0xc3, 0x28];
+        assert!(str::from_utf8(BAD_UTF8).is_err());
+
         let service = Rc::from(RefCell::from(MockService::default()));
         service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), "the-user");
 
         let request = GetFileRequest::default().with_get_content();
         let response = GetFileResponse {
-            content: Some(BASE64_STANDARD.encode([0x00, 0xc3, 0x28])),
+            content: Some(BASE64_STANDARD.encode(BAD_UTF8)),
             ..Default::default()
         };
         service.borrow_mut().add_mock_get_file("the-user", "the-filename", request, Ok(response));
-        let err = drive.get("the-filename").await.unwrap_err();
-        assert_eq!(io::ErrorKind::InvalidData, err.kind());
-        assert!(format!("{}", err).contains("not valid UTF-8"));
+        let result = drive.get("the-filename").await.unwrap();
+        assert_eq!(BAD_UTF8, result);
 
         service.take().verify_all_used();
     }
@@ -296,7 +293,7 @@ mod tests {
 
         let request = PatchFileRequest::default().with_content("some content");
         service.borrow_mut().add_mock_patch_file("the-user", "the-filename", request, Ok(()));
-        drive.put("the-filename", "some content").await.unwrap();
+        drive.put("the-filename", b"some content").await.unwrap();
 
         service.take().verify_all_used();
     }
@@ -309,11 +306,11 @@ mod tests {
 
         let request = PatchFileRequest::default().with_content("some content");
         service.borrow_mut().add_mock_patch_file("the-user", "the-filename", request, Ok(()));
-        drive.put("the-filename", "some content").await.unwrap();
+        drive.put("the-filename", b"some content").await.unwrap();
 
         let request = PatchFileRequest::default().with_content("some other content");
         service.borrow_mut().add_mock_patch_file("the-user", "the-filename", request, Ok(()));
-        drive.put("the-filename", "some other content").await.unwrap();
+        drive.put("the-filename", b"some other content").await.unwrap();
 
         service.take().verify_all_used();
     }

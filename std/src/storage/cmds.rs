@@ -503,7 +503,7 @@ mod tests {
     #[test]
     fn test_dir_other_by_argument() {
         let mut other = InMemoryDrive::default();
-        block_on(other.put("foo.bas", "hello")).unwrap();
+        block_on(other.put("foo.bas", b"hello")).unwrap();
 
         let mut t = Tester::default().write_file("empty.bas", "");
         t.get_storage().borrow_mut().attach("other", "z://", Box::from(other)).unwrap();
@@ -544,7 +544,7 @@ mod tests {
     #[test]
     fn test_dir_other_by_cwd() {
         let mut other = InMemoryDrive::default();
-        block_on(other.put("foo.bas", "hello")).unwrap();
+        block_on(other.put("foo.bas", b"hello")).unwrap();
 
         let mut t = Tester::default().write_file("empty.bas", "");
         t.get_storage().borrow_mut().attach("other", "z://", Box::from(other)).unwrap();

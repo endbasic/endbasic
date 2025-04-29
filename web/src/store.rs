@@ -96,7 +96,7 @@ struct Entry {
     version: u16,
 
     /// The textual content of the program.
-    content: String,
+    content: Vec<u8>,
 
     /// The last modification time of the program, in UTC.
     mtime: OffsetDateTime,
@@ -107,7 +107,7 @@ impl Entry {
     const VERSION: u16 = 1;
 
     /// Constructs a new entry with the given `content` and with a last modification of now.
-    fn new<S: Into<String>>(content: S, mtime: OffsetDateTime) -> Self {
+    fn new<S: Into<Vec<u8>>>(content: S, mtime: OffsetDateTime) -> Self {
         Self { version: Entry::VERSION, content: content.into(), mtime }
     }
 
@@ -281,12 +281,12 @@ impl Drive for WebDrive {
         Ok(DriveFiles::new(entries, None, None))
     }
 
-    async fn get(&self, name: &str) -> io::Result<String> {
+    async fn get(&self, name: &str) -> io::Result<Vec<u8>> {
         let entry = self.get_entry(&Key::for_name(name))?;
         Ok(entry.content)
     }
 
-    async fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
+    async fn put(&mut self, name: &str, content: &[u8]) -> io::Result<()> {
         let key = Key::for_name(name);
 
         // There is no information we care about the old entry so we can replace it all in one go
@@ -415,12 +415,12 @@ mod tests {
     async fn test_webdrive_enumerate() {
         let entry1 = Entry {
             version: Entry::VERSION,
-            content: "first".to_owned(),
+            content: b"first".to_vec(),
             mtime: OffsetDateTime::from_unix_timestamp(1234).unwrap(),
         };
         let entry2 = Entry {
             version: Entry::VERSION,
-            content: "second".to_owned(),
+            content: b"second".to_vec(),
             mtime: OffsetDateTime::from_unix_timestamp(987_654_321).unwrap(),
         };
 
@@ -447,7 +447,7 @@ mod tests {
     async fn test_webdrive_get() {
         let entry = Entry {
             version: Entry::VERSION,
-            content: "second".to_owned(),
+            content: b"second".to_vec(),
             mtime: OffsetDateTime::from_unix_timestamp(1234).unwrap(),
         };
 
@@ -468,7 +468,7 @@ mod tests {
     async fn test_webdrive_put() {
         let entry = Entry {
             version: Entry::VERSION,
-            content: "this is some content".to_owned(),
+            content: b"this is some content".to_vec(),
             mtime: OffsetDateTime::from_unix_timestamp(1_234_567).unwrap(),
         };
 

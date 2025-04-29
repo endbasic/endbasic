@@ -98,18 +98,18 @@ impl Drive for DirectoryDrive {
         Ok(DriveFiles::new(entries, None, None))
     }
 
-    async fn get(&self, name: &str) -> io::Result<String> {
+    async fn get(&self, name: &str) -> io::Result<Vec<u8>> {
         let path = self.dir.join(name);
         let input = File::open(path)?;
-        let mut content = String::new();
-        io::BufReader::new(input).read_to_string(&mut content)?;
+        let mut content = vec![];
+        io::BufReader::new(input).read_to_end(&mut content)?;
         Ok(content)
     }
 
-    async fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
+    async fn put(&mut self, name: &str, content: &[u8]) -> io::Result<()> {
         let path = self.dir.join(name);
         let mut output = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
-        output.write_all(content.as_bytes())?;
+        output.write_all(content)?;
         output.sync_all()
     }
 
@@ -266,7 +266,10 @@ mod tests {
         write_file(&dir.path().join("some file.bas"), &["one line", "two lines"]);
 
         let drive = DirectoryDrive::new(dir.path()).unwrap();
-        assert_eq!("one line\ntwo lines\n", block_on(drive.get("some file.bas")).unwrap());
+        assert_eq!(
+            b"one line\ntwo lines\n",
+            block_on(drive.get("some file.bas")).unwrap().as_slice()
+        );
     }
 
     #[test]
@@ -274,7 +277,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
 
         let mut drive = DirectoryDrive::new(dir.path()).unwrap();
-        block_on(drive.put("some file.bas", "a b c\nd e\n")).unwrap();
+        block_on(drive.put("some file.bas", b"a b c\nd e\n")).unwrap();
         check_file(&dir.path().join("some file.bas"), &["a b c", "d e"]);
     }
 

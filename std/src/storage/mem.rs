@@ -24,7 +24,7 @@ use std::str;
 /// A drive that records all data in memory only.
 #[derive(Default)]
 pub struct InMemoryDrive {
-    programs: HashMap<String, (String, HashSet<String>)>,
+    programs: HashMap<String, (Vec<u8>, HashSet<String>)>,
 
     // TODO(jmmv): These fields are currently exposed only to allow testing for the consumers of
     // these details and are not enforced in the drive.  It might be nice to actually implement
@@ -52,7 +52,7 @@ impl Drive for InMemoryDrive {
         Ok(DriveFiles::new(entries, self.fake_disk_quota, self.fake_disk_free))
     }
 
-    async fn get(&self, name: &str) -> io::Result<String> {
+    async fn get(&self, name: &str) -> io::Result<Vec<u8>> {
         match self.programs.get(name) {
             Some((content, _readers)) => Ok(content.to_owned()),
             None => Err(io::Error::new(io::ErrorKind::NotFound, "Entry not found")),
@@ -72,7 +72,7 @@ impl Drive for InMemoryDrive {
         }
     }
 
-    async fn put(&mut self, name: &str, content: &str) -> io::Result<()> {
+    async fn put(&mut self, name: &str, content: &[u8]) -> io::Result<()> {
         if let Some((prev_content, _readers)) = self.programs.get_mut(name) {
             content.clone_into(prev_content);
             return Ok(());
@@ -130,30 +130,30 @@ mod tests {
     #[tokio::test]
     async fn test_inmemorydrive_put_respects_acls() {
         let mut drive = InMemoryDrive::default();
-        drive.put("untouched", "some content").await.unwrap();
+        drive.put("untouched", b"some content").await.unwrap();
 
-        drive.put("file", "before").await.unwrap();
+        drive.put("file", b"before").await.unwrap();
         drive.update_acls("file", &readers(&["r1"]), &FileAcls::default()).await.unwrap();
 
-        assert_eq!("before", drive.get("file").await.unwrap());
+        assert_eq!(b"before", drive.get("file").await.unwrap().as_slice());
         assert_eq!(readers(&["r1"]), drive.get_acls("file").await.unwrap());
 
-        drive.put("file", "after").await.unwrap();
+        drive.put("file", b"after").await.unwrap();
 
-        assert_eq!("after", drive.get("file").await.unwrap());
+        assert_eq!(b"after", drive.get("file").await.unwrap().as_slice());
         assert_eq!(readers(&["r1"]), drive.get_acls("file").await.unwrap());
     }
 
     #[tokio::test]
     async fn test_inmemorydrive_get_update_acls() {
         let mut drive = InMemoryDrive::default();
-        drive.put("untouched", "some content").await.unwrap();
+        drive.put("untouched", b"some content").await.unwrap();
 
         let err =
             drive.update_acls("file", &readers(&["r0"]), &FileAcls::default()).await.unwrap_err();
         assert_eq!(io::ErrorKind::NotFound, err.kind());
 
-        drive.put("file", "some content").await.unwrap();
+        drive.put("file", b"some content").await.unwrap();
         assert_eq!(FileAcls::default(), drive.get_acls("file").await.unwrap());
 
         // Add some new readers and try to remove a non-existing one.

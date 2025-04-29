@@ -150,7 +150,7 @@ pub trait Drive {
     async fn enumerate(&self) -> io::Result<DriveFiles>;
 
     /// Loads the contents of the program given by `name`.
-    async fn get(&self, name: &str) -> io::Result<String>;
+    async fn get(&self, name: &str) -> io::Result<Vec<u8>>;
 
     /// Gets the ACLs of the file `_name`.
     async fn get_acls(&self, _name: &str) -> io::Result<FileAcls> {
@@ -158,7 +158,7 @@ pub trait Drive {
     }
 
     /// Saves the in-memory program given by `content` into `name`.
-    async fn put(&mut self, name: &str, content: &str) -> io::Result<()>;
+    async fn put(&mut self, name: &str, content: &[u8]) -> io::Result<()>;
 
     /// Updates the ACLs of the file `_name` by extending them with the contents of `_add` and
     /// removing the existing entries listed in `_remove`.
@@ -589,7 +589,7 @@ impl Storage {
     }
 
     /// Loads the contents of the program given by `raw_location`.
-    pub async fn get(&self, raw_location: &str) -> io::Result<String> {
+    pub async fn get(&self, raw_location: &str) -> io::Result<Vec<u8>> {
         let location = Location::new(raw_location)?;
         match location.leaf_name() {
             Some(name) => self.get_drive(&location)?.get(name).await,
@@ -613,7 +613,7 @@ impl Storage {
     }
 
     /// Saves the in-memory program given by `content` into `raw_location`.
-    pub async fn put(&mut self, raw_location: &str, content: &str) -> io::Result<()> {
+    pub async fn put(&mut self, raw_location: &str, content: &[u8]) -> io::Result<()> {
         let location = Location::new(raw_location)?;
         match location.leaf_name() {
             Some(name) => self.get_drive_mut(&location)?.put(name, content).await,
@@ -913,8 +913,8 @@ mod tests {
         storage.mount("c", &format!("file://{}", dir1.display())).unwrap();
         storage.mount("d", &format!("file://{}", dir2.display())).unwrap();
 
-        block_on(storage.put("c:file1.txt", "hi")).unwrap();
-        block_on(storage.put("d:file2.txt", "bye")).unwrap();
+        block_on(storage.put("c:file1.txt", b"hi")).unwrap();
+        block_on(storage.put("d:file2.txt", b"bye")).unwrap();
 
         assert!(dir1.join("file1.txt").exists());
         assert!(!dir1.join("file2.txt").exists());
@@ -1012,8 +1012,8 @@ mod tests {
         let mut storage = Storage::default();
         storage.mount("other", "memory://").unwrap();
 
-        block_on(storage.put("other:/f1", "some text")).unwrap();
-        block_on(storage.put("other:f2", "other text")).unwrap();
+        block_on(storage.put("other:/f1", b"some text")).unwrap();
+        block_on(storage.put("other:f2", b"other text")).unwrap();
         {
             // Ensure that the put operations were routed to the correct objects.
             let memory_drive = storage.drives.get(&DriveKey::new("memory").unwrap()).unwrap();
@@ -1027,8 +1027,8 @@ mod tests {
         assert_eq!(2, block_on(storage.enumerate("other:/")).unwrap().dirents().len());
         assert_eq!(2, block_on(storage.enumerate("other:/")).unwrap().dirents().len());
 
-        assert_eq!("some text", block_on(storage.get("OTHER:f1")).unwrap());
-        assert_eq!("other text", block_on(storage.get("OTHER:/f2")).unwrap());
+        assert_eq!(b"some text", block_on(storage.get("OTHER:f1")).unwrap().as_slice());
+        assert_eq!(b"other text", block_on(storage.get("OTHER:/f2")).unwrap().as_slice());
 
         block_on(storage.delete("other:/f2")).unwrap();
         assert_eq!(0, block_on(storage.enumerate("memory:")).unwrap().dirents().len());
@@ -1043,8 +1043,8 @@ mod tests {
         let mut storage = Storage::default();
         storage.mount("other", "memory://").unwrap();
 
-        block_on(storage.put("/f1", "some text")).unwrap();
-        block_on(storage.put("f2", "other text")).unwrap();
+        block_on(storage.put("/f1", b"some text")).unwrap();
+        block_on(storage.put("f2", b"other text")).unwrap();
         {
             // Ensure that the put operations were routed to the correct objects.
             let memory_drive = storage.drives.get(&DriveKey::new("memory").unwrap()).unwrap();
@@ -1058,8 +1058,8 @@ mod tests {
         assert_eq!(0, block_on(storage.enumerate("other:")).unwrap().dirents().len());
         assert_eq!(0, block_on(storage.enumerate("other:/")).unwrap().dirents().len());
 
-        assert_eq!("some text", block_on(storage.get("f1")).unwrap());
-        assert_eq!("other text", block_on(storage.get("/f2")).unwrap());
+        assert_eq!(b"some text", block_on(storage.get("f1")).unwrap().as_slice());
+        assert_eq!(b"other text", block_on(storage.get("/f2")).unwrap().as_slice());
 
         block_on(storage.delete("/f2")).unwrap();
         assert_eq!(1, block_on(storage.enumerate("")).unwrap().dirents().len());
@@ -1125,15 +1125,15 @@ mod tests {
         let mut storage = Storage::default();
         assert_eq!(
             "Invalid drive name ''",
-            format!("{}", block_on(storage.put(":foo", "")).unwrap_err())
+            format!("{}", block_on(storage.put(":foo", b"")).unwrap_err())
         );
         assert_eq!(
             "Invalid path 'a:b\\c'",
-            format!("{}", block_on(storage.put("a:b\\c", "")).unwrap_err())
+            format!("{}", block_on(storage.put("a:b\\c", b"")).unwrap_err())
         );
         assert_eq!(
             "Missing file name in path 'a:'",
-            format!("{}", block_on(storage.put("a:", "")).unwrap_err())
+            format!("{}", block_on(storage.put("a:", b"")).unwrap_err())
         );
     }
 
