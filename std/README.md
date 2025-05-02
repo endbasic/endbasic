@@ -40,11 +40,11 @@ not intend to be fully compatible with them.  The library currently contains:
 *   Graphics: `GFX_CIRCLE`, `GFX_CIRCLEF`, `GFX_HEIGHT`, `GFX_LINE`,
     `GFX_PIXEL`, `GFX_RECT`, `GFX_RECTF`, `GFX_SYNC`, `GFX_WIDTH`.
 *   Hardware interaction: `GPIO_CLEAR`, `GPIO_READ`, `GPIO_SETUP`, `GPIO_WRITE`.
-*   File system interaction: `CD`, `DIR`, `MOUNT`, `PWD`, `UNMOUNT`.
+*   File system interaction: `CD`, `DIR`, `KILL`, `MOUNT`, `PWD`, `UNMOUNT`.
 *   Interpreter interaction: `CLEAR`, `ERRMSG`, `HELP`.
 *   Numerics: `ATN`, `CINT`, `COS`, `DEG`, `INT`, `MAX`, `MIN`, `PI`, `RAD`,
     `RANDOMIZE`, `RND`, `SIN`, `SQR`, `TAN`.
-*   Program manipulation: `DISASM`, `EDIT`, `KILL`, `LIST`, `LOAD`,`NEW`, `RUN`,
+*   Program manipulation: `DISASM`, `EDIT`, `LIST`, `LOAD`,`NEW`, `RUN`,
     `SAVE`.
 *   Strings and characters: `ASC`, `CHR`, `LEFT`, `LEN`, `LTRIM`, `MID`,
     `RIGHT`, `RTRIM`, `STR`.

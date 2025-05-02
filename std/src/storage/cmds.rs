@@ -221,6 +221,55 @@ impl Callable for DirCommand {
     }
 }
 
+/// The `KILL` command.
+pub struct KillCommand {
+    metadata: CallableMetadata,
+    storage: Rc<RefCell<Storage>>,
+}
+
+impl KillCommand {
+    /// Creates a new `KILL` command that deletes a file from `storage`.
+    pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("KILL")
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("filename"),
+                            vtype: ExprType::Text,
+                        },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Deletes the given file.
+The filename must be a string and must be a valid EndBASIC path.
+See the \"File system\" help topic for information on the path syntax.",
+                )
+                .build(),
+            storage,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Callable for KillCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let name = scope.pop_string();
+
+        self.storage.borrow_mut().delete(&name).await.map_err(|e| scope.io_error(e))?;
+
+        Ok(())
+    }
+}
+
 /// The `MOUNT` command.
 pub struct MountCommand {
     metadata: CallableMetadata,
@@ -404,6 +453,7 @@ pub fn add_all(
 ) {
     machine.add_callable(CdCommand::new(storage.clone()));
     machine.add_callable(DirCommand::new(console.clone(), storage.clone()));
+    machine.add_callable(KillCommand::new(storage.clone()));
     machine.add_callable(MountCommand::new(console.clone(), storage.clone()));
     machine.add_callable(PwdCommand::new(console.clone(), storage.clone()));
     machine.add_callable(UnmountCommand::new(storage));
@@ -646,6 +696,52 @@ mod tests {
     fn test_dir_errors() {
         check_stmt_compilation_err("1:1: DIR expected <> | <path$>", "DIR 2, 3");
         check_stmt_compilation_err("1:5: expected STRING but found INTEGER", "DIR 2");
+    }
+
+    #[test]
+    fn test_kill_ok() {
+        for p in &["foo", "foo.bas"] {
+            Tester::default()
+                .set_program(Some(p), "Leave me alone")
+                .write_file("leave-me-alone.bas", "")
+                .write_file(p, "line 1\n  line 2\n")
+                .run(format!(r#"KILL "{}""#, p))
+                .expect_program(Some(*p), "Leave me alone")
+                .expect_file("MEMORY:/leave-me-alone.bas", "")
+                .check();
+        }
+    }
+
+    #[test]
+    fn test_kill_errors() {
+        Tester::default()
+            .run("KILL 3")
+            .expect_compilation_err("1:6: expected STRING but found INTEGER")
+            .check();
+
+        Tester::default()
+            .run(r#"KILL "a/b.bas""#)
+            .expect_err("1:1: Too many / separators in path 'a/b.bas'")
+            .check();
+
+        Tester::default()
+            .run(r#"KILL "drive:""#)
+            .expect_err("1:1: Missing file name in path 'drive:'")
+            .check();
+
+        Tester::default()
+            .run("KILL")
+            .expect_compilation_err("1:1: KILL expected filename$")
+            .check();
+
+        check_stmt_err("1:1: Entry not found", r#"KILL "missing-file""#);
+
+        Tester::default()
+            .write_file("no-automatic-extension.bas", "")
+            .run(r#"KILL "no-automatic-extension""#)
+            .expect_err("1:1: Entry not found")
+            .expect_file("MEMORY:/no-automatic-extension.bas", "")
+            .check();
     }
 
     #[test]

@@ -193,64 +193,6 @@ impl Callable for DisasmCommand {
     }
 }
 
-/// The `KILL` command.
-// TODO(jmmv): This should be in the storage module because it isn't really tied to the stored
-// program.  However, this currently relies on the automatic addition of extensions to file names,
-// which is logic that should only exist here.  Maybe we should remove that from this command.
-pub struct KillCommand {
-    metadata: CallableMetadata,
-    storage: Rc<RefCell<Storage>>,
-}
-
-impl KillCommand {
-    /// Creates a new `KILL` command that deletes a file from `storage`.
-    pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
-        Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("KILL")
-                .with_syntax(&[(
-                    &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax {
-                            name: Cow::Borrowed("filename"),
-                            vtype: ExprType::Text,
-                        },
-                        ArgSepSyntax::End,
-                    )],
-                    None,
-                )])
-                .with_category(CATEGORY)
-                .with_description(
-                    "Deletes the given program.
-The filename must be a string and must be a valid EndBASIC path.  The .BAS extension is optional \
-but, if present, it must be .BAS.
-See the \"File system\" help topic for information on the path syntax.",
-                )
-                .build(),
-            storage,
-        })
-    }
-}
-
-#[async_trait(?Send)]
-impl Callable for KillCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
-    }
-
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
-        debug_assert_eq!(1, scope.nargs());
-        let name = scope.pop_string();
-
-        let full_name = self
-            .storage
-            .borrow()
-            .make_canonical_with_extension(&name, DEFAULT_EXTENSION)
-            .map_err(|e| scope.io_error(e))?;
-        self.storage.borrow_mut().delete(&full_name).await.map_err(|e| scope.io_error(e))?;
-
-        Ok(())
-    }
-}
-
 /// The `EDIT` command.
 pub struct EditCommand {
     metadata: CallableMetadata,
@@ -628,7 +570,6 @@ pub fn add_all(
 ) {
     machine.add_callable(DisasmCommand::new(console.clone(), program.clone()));
     machine.add_callable(EditCommand::new(console.clone(), program.clone()));
-    machine.add_callable(KillCommand::new(storage.clone()));
     machine.add_callable(ListCommand::new(console.clone(), program.clone()));
     machine.add_callable(LoadCommand::new(console.clone(), storage.clone(), program.clone()));
     machine.add_callable(NewCommand::new(console.clone(), program.clone()));
@@ -646,39 +587,6 @@ mod tests {
         &["n\n", "N\n", "no\n", "NO\n", "false\n", "FALSE\n", "xyz\n", "\n", "1\n"];
 
     const YES_ANSWERS: &[&str] = &["y\n", "yes\n", "Y\n", "YES\n", "true\n", "TRUE\n"];
-
-    #[test]
-    fn test_kill_ok() {
-        for p in &["foo", "foo.bas"] {
-            Tester::default()
-                .set_program(Some("foo.bas"), "Leave me alone")
-                .write_file("bar.bas", "")
-                .write_file("foo.bas", "line 1\n  line 2\n")
-                .run(format!(r#"KILL "{}""#, p))
-                .expect_program(Some("foo.bas"), "Leave me alone")
-                .expect_file("MEMORY:/bar.bas", "")
-                .check();
-        }
-    }
-
-    #[test]
-    fn test_kill_errors() {
-        check_load_save_common_errors("KILL");
-
-        Tester::default()
-            .run("KILL")
-            .expect_compilation_err("1:1: KILL expected filename$")
-            .check();
-
-        check_stmt_err("1:1: Entry not found", r#"KILL "missing-file""#);
-
-        Tester::default()
-            .write_file("mismatched-extension.bat", "")
-            .run(r#"KILL "mismatched-extension""#)
-            .expect_err("1:1: Entry not found")
-            .expect_file("MEMORY:/mismatched-extension.bat", "")
-            .check();
-    }
 
     #[test]
     fn test_disasm_nothing() {

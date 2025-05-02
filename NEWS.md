@@ -42,6 +42,10 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
     usable in the web interface because there is no way to configure how it
     starts up yet.
 
+*   Changed the `KILL` command so that it no longer automatically appends a
+    `.BAS` extension to filenames given to it.  This allow deleting files that
+    don't have an extension.
+
 ## Changes in version 0.11.1
 
 **Released on 2024-09-14.**
