@@ -146,6 +146,7 @@ Output from HELP "FILE SYSTEM":
 
     >> [38;5;14mCD     [39m    Changes the current path.
     >> [38;5;14mDIR    [39m    Displays the list of files on the current or given path.
+    >> [38;5;14mKILL   [39m    Deletes the given file.
     >> [38;5;14mMOUNT  [39m    Lists the mounted drives or mounts a new drive.
     >> [38;5;14mPWD    [39m    Prints the current working location.
     >> [38;5;14mUNMOUNT[39m    Unmounts the given drive.
@@ -267,7 +268,6 @@ Output from HELP "STORED":
 
     >> [38;5;14mDISASM[39m    Disassembles the stored program.
     >> [38;5;14mEDIT  [39m    Interactively edits the stored program.
-    >> [38;5;14mKILL  [39m    Deletes the given program.
     >> [38;5;14mLIST  [39m    Prints the currently-loaded program.
     >> [38;5;14mLOAD  [39m    Loads the given program.
     >> [38;5;14mNEW   [39m    Restores initial machine state and creates a new program.
@@ -851,10 +851,9 @@ Output from HELP "KILL":
 
 [38;5;11m    KILL filename$
 [39m
-    Deletes the given program.
+    Deletes the given file.
 
-    The filename must be a string and must be a valid EndBASIC path.  The
-    .BAS extension is optional but, if present, it must be .BAS.
+    The filename must be a string and must be a valid EndBASIC path.
 
     See the "File system" help topic for information on the path syntax.
 
