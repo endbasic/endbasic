@@ -19,6 +19,7 @@ use crate::*;
 use async_trait::async_trait;
 use bytes::Buf;
 use endbasic_std::console::remove_control_chars;
+use endbasic_std::storage::FileAcls;
 use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest::StatusCode;
@@ -248,26 +249,54 @@ impl Service for CloudService {
         }
     }
 
-    async fn get_file(
-        &mut self,
-        username: &str,
-        filename: &str,
-        request: &GetFileRequest,
-    ) -> io::Result<GetFileResponse> {
+    async fn get_file(&mut self, username: &str, filename: &str) -> io::Result<Vec<u8>> {
         let mut builder = self
             .client
             .get(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
-            .headers(self.default_headers())
-            .query(&request);
+            .headers(self.default_headers());
         if let Some(auth_data) = self.auth_data.borrow().as_ref() {
             builder = builder.bearer_auth(auth_data.access_token.as_str());
         }
         let response = builder.send().await.map_err(reqwest_error_to_io_error)?;
         match response.status() {
             StatusCode::OK => {
+                Ok(response.bytes().await.map_err(reqwest_error_to_io_error)?.to_vec())
+            }
+            _ => Err(http_response_to_io_error(response).await),
+        }
+    }
+
+    async fn get_file_acls(&mut self, username: &str, filename: &str) -> io::Result<FileAcls> {
+        let mut headers = self.default_headers();
+        headers.insert("X-EndBASIC-GetContent", "false".parse().unwrap());
+        headers.insert("X-EndBASIC-GetReaders", "true".parse().unwrap());
+        let mut builder = self
+            .client
+            .get(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
+            .headers(headers);
+        if let Some(auth_data) = self.auth_data.borrow().as_ref() {
+            builder = builder.bearer_auth(auth_data.access_token.as_str());
+        }
+        let response = builder.send().await.map_err(reqwest_error_to_io_error)?;
+        match response.status() {
+            StatusCode::OK => {
+                let mut readers = vec![];
+                for h in response.headers().get_all("X-EndBASIC-Reader") {
+                    match h.to_str() {
+                        Ok(value) => readers.push(value.to_owned()),
+                        Err(e) => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                format!("Server returned invalid reader ACL: {}", e),
+                            ))
+                        }
+                    }
+                }
+
                 let bytes = response.bytes().await.map_err(reqwest_error_to_io_error)?;
-                let response: GetFileResponse = serde_json::from_reader(bytes.reader())?;
-                Ok(response)
+                debug_assert!(bytes.is_empty(), "Did not expect server to return content");
+
+                Ok(FileAcls::default().with_readers(readers))
             }
             _ => Err(http_response_to_io_error(response).await),
         }
@@ -480,8 +509,7 @@ mod tests {
             assert!(disk_free.files() >= needed_files, "Not enough space for test run");
 
             for (filename, _content) in &filenames_and_contents {
-                let request = GetFileRequest::default().with_get_content();
-                let err = service.get_file(&username, filename, &request).await.unwrap_err();
+                let err = service.get_file(&username, filename).await.unwrap_err();
                 assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
             }
 
@@ -505,9 +533,7 @@ mod tests {
         let request = PatchFileRequest::default().with_content(content);
         service.patch_file(&username, filename, &request).await.unwrap();
 
-        let request = GetFileRequest::default().with_get_content();
-        let response = service.get_file(&username, filename, &request).await.unwrap();
-        assert_eq!(content, response.decoded_content().unwrap().unwrap());
+        assert_eq!(content, service.get_file(&username, filename).await.unwrap());
     }
 
     #[test]
@@ -553,8 +579,7 @@ mod tests {
             let mut service = context.service();
             let (filename, _content) = context.random_file();
 
-            let request = GetFileRequest::default().with_get_content();
-            let err = service.get_file(&username, &filename, &request).await.unwrap_err();
+            let err = service.get_file(&username, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
         }
         run(&mut TestContext::new_from_env());
@@ -599,8 +624,7 @@ mod tests {
 
             // Read username1's file as username2 before it is shared.
             context.do_login(2).await;
-            let request = GetFileRequest::default().with_get_content();
-            let err = service.get_file(&username1, &filename, &request).await.unwrap_err();
+            let err = service.get_file(&username1, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
 
             // Share username1's file with username2.
@@ -610,9 +634,8 @@ mod tests {
 
             // Read username1's file as username2 again, now that it is shared.
             context.do_login(2).await;
-            let request = GetFileRequest::default().with_get_content();
-            let response = service.get_file(&username1, &filename, &request).await.unwrap();
-            assert_eq!(content.as_bytes(), response.decoded_content().unwrap().unwrap());
+            let response = service.get_file(&username1, &filename).await.unwrap();
+            assert_eq!(content.as_bytes(), response);
         }
         run(&mut TestContext::new_from_env());
     }
@@ -635,8 +658,7 @@ mod tests {
 
             // Read username1's file as a guest before it is shared.
             context.do_logout().await;
-            let request = GetFileRequest::default().with_get_content();
-            let err = service.get_file(&username1, &filename, &request).await.unwrap_err();
+            let err = service.get_file(&username1, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
 
             // Share username1's file with the public.
@@ -646,9 +668,8 @@ mod tests {
 
             // Read username1's file as a guest again, now that it is shared.
             context.do_logout().await;
-            let request = GetFileRequest::default().with_get_content();
-            let response = service.get_file(&username1, &filename, &request).await.unwrap();
-            assert_eq!(content.as_bytes(), response.decoded_content().unwrap().unwrap());
+            let response = service.get_file(&username1, &filename).await.unwrap();
+            assert_eq!(content.as_bytes(), response);
         }
         run(&mut TestContext::new_from_env());
     }
@@ -667,8 +688,7 @@ mod tests {
 
             service.delete_file(&username, &filename).await.unwrap();
 
-            let request = GetFileRequest::default().with_get_content();
-            let err = service.get_file(&username, &filename, &request).await.unwrap_err();
+            let err = service.get_file(&username, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
             assert!(format!("{}", err).contains("(server code: 404"));
         }

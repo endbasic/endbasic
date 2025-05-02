@@ -16,11 +16,10 @@
 //! Test utilities for the cloud service.
 
 use crate::{
-    add_all, AccessToken, GetFileRequest, GetFileResponse, GetFilesResponse, LoginResponse,
-    PatchFileRequest, Service, SignupRequest,
+    add_all, AccessToken, GetFilesResponse, LoginResponse, PatchFileRequest, Service, SignupRequest,
 };
 use async_trait::async_trait;
-use endbasic_std::storage::Storage;
+use endbasic_std::storage::{FileAcls, Storage};
 use endbasic_std::testutils::*;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -36,7 +35,8 @@ pub struct MockService {
     mock_signup: VecDeque<(SignupRequest, io::Result<()>)>,
     mock_login: VecDeque<((String, String), io::Result<LoginResponse>)>,
     mock_get_files: VecDeque<(String, io::Result<GetFilesResponse>)>,
-    mock_get_file: VecDeque<((String, String, GetFileRequest), io::Result<GetFileResponse>)>,
+    mock_get_file: VecDeque<((String, String), io::Result<Vec<u8>>)>,
+    mock_get_file_acls: VecDeque<((String, String), io::Result<FileAcls>)>,
     mock_patch_file: VecDeque<((String, String, PatchFileRequest), io::Result<()>)>,
     mock_delete_file: VecDeque<((String, String), io::Result<()>)>,
 }
@@ -86,17 +86,29 @@ impl MockService {
     }
 
     /// Records the behavior of an upcoming "get file" operation for the `username`/`filename`
-    /// pair with a request that looks like `exp_request` and that returns `result`.
+    /// pair that returns `result`.
     #[cfg(test)]
-    pub(crate) fn add_mock_get_file(
+    pub(crate) fn add_mock_get_file<B: Into<Vec<u8>>>(
         &mut self,
         username: &str,
         filename: &str,
-        exp_request: GetFileRequest,
-        result: io::Result<GetFileResponse>,
+        result: io::Result<B>,
     ) {
-        let exp_request = (username.to_owned(), filename.to_owned(), exp_request);
-        self.mock_get_file.push_back((exp_request, result));
+        let exp_request = (username.to_owned(), filename.to_owned());
+        self.mock_get_file.push_back((exp_request, result.map(|b| b.into())));
+    }
+
+    /// Records the behavior of an upcoming "get file ACLs" operation for the `username`/`filename`
+    /// pair that returns `result`.
+    #[cfg(test)]
+    pub(crate) fn add_mock_get_file_acls(
+        &mut self,
+        username: &str,
+        filename: &str,
+        result: io::Result<FileAcls>,
+    ) {
+        let exp_request = (username.to_owned(), filename.to_owned());
+        self.mock_get_file_acls.push_back((exp_request, result));
     }
 
     /// Records the behavior of an upcoming "patch file" operation for the `username`/`filename`
@@ -181,18 +193,21 @@ impl Service for MockService {
         mock.1
     }
 
-    async fn get_file(
-        &mut self,
-        username: &str,
-        filename: &str,
-        request: &GetFileRequest,
-    ) -> io::Result<GetFileResponse> {
+    async fn get_file(&mut self, username: &str, filename: &str) -> io::Result<Vec<u8>> {
         self.access_token.as_ref().expect("login not called yet");
 
         let mock = self.mock_get_file.pop_front().expect("No mock requests available");
         assert_eq!(&mock.0 .0, username);
         assert_eq!(&mock.0 .1, filename);
-        assert_eq!(&mock.0 .2, request);
+        mock.1
+    }
+
+    async fn get_file_acls(&mut self, username: &str, filename: &str) -> io::Result<FileAcls> {
+        self.access_token.as_ref().expect("login not called yet");
+
+        let mock = self.mock_get_file_acls.pop_front().expect("No mock requests available");
+        assert_eq!(&mock.0 .0, username);
+        assert_eq!(&mock.0 .1, filename);
         mock.1
     }
 

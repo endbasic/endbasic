@@ -62,29 +62,11 @@ impl Drive for CloudDrive {
     }
 
     async fn get(&self, filename: &str) -> io::Result<Vec<u8>> {
-        let request = GetFileRequest::default().with_get_content();
-        let response =
-            self.service.borrow_mut().get_file(&self.username, filename, &request).await?;
-        match response.decoded_content()? {
-            Some(content) => Ok(content),
-            None => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Server response is missing the file content".to_string(),
-            )),
-        }
+        self.service.borrow_mut().get_file(&self.username, filename).await
     }
 
     async fn get_acls(&self, filename: &str) -> io::Result<FileAcls> {
-        let request = GetFileRequest::default().with_get_readers();
-        let response =
-            self.service.borrow_mut().get_file(&self.username, filename, &request).await?;
-        match response.readers {
-            Some(readers) => Ok(FileAcls::default().with_readers(readers)),
-            None => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Server response is missing the readers list".to_string(),
-            )),
-        }
+        self.service.borrow_mut().get_file_acls(&self.username, filename).await
     }
 
     async fn put(&mut self, filename: &str, content: &[u8]) -> io::Result<()> {
@@ -201,12 +183,11 @@ mod tests {
         service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), "the-user");
 
-        let request = GetFileRequest::default().with_get_content();
-        let response = GetFileResponse {
-            content: Some(BASE64_STANDARD.encode("some content")),
-            ..Default::default()
-        };
-        service.borrow_mut().add_mock_get_file("the-user", "the-filename", request, Ok(response));
+        service.borrow_mut().add_mock_get_file(
+            "the-user",
+            "the-filename",
+            Ok(b"some content".to_owned()),
+        );
         let result = drive.get("the-filename").await.unwrap();
         assert_eq!("some content".as_bytes(), result);
 
@@ -219,12 +200,9 @@ mod tests {
         service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), "the-user");
 
-        let request = GetFileRequest::default().with_get_content();
-        let response = GetFileResponse::default();
-        service.borrow_mut().add_mock_get_file("the-user", "the-filename", request, Ok(response));
-        let err = drive.get("the-filename").await.unwrap_err();
-        assert_eq!(io::ErrorKind::InvalidData, err.kind());
-        assert!(format!("{}", err).contains("missing the file content"));
+        service.borrow_mut().add_mock_get_file("the-user", "the-filename", Ok(""));
+        let result = drive.get("the-filename").await.unwrap();
+        assert_eq!("".as_bytes(), result);
 
         service.take().verify_all_used();
     }
@@ -239,12 +217,7 @@ mod tests {
         service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), "the-user");
 
-        let request = GetFileRequest::default().with_get_content();
-        let response = GetFileResponse {
-            content: Some(BASE64_STANDARD.encode(BAD_UTF8)),
-            ..Default::default()
-        };
-        service.borrow_mut().add_mock_get_file("the-user", "the-filename", request, Ok(response));
+        service.borrow_mut().add_mock_get_file("the-user", "the-filename", Ok(BAD_UTF8));
         let result = drive.get("the-filename").await.unwrap();
         assert_eq!(BAD_UTF8, result);
 
@@ -257,12 +230,8 @@ mod tests {
         service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), "the-user");
 
-        let request = GetFileRequest::default().with_get_readers();
-        let response = GetFileResponse {
-            readers: Some(vec!["r1".to_owned(), "r2".to_owned()]),
-            ..Default::default()
-        };
-        service.borrow_mut().add_mock_get_file("the-user", "the-filename", request, Ok(response));
+        let response = FileAcls { readers: vec!["r1".to_owned(), "r2".to_owned()] };
+        service.borrow_mut().add_mock_get_file_acls("the-user", "the-filename", Ok(response));
         let result = drive.get_acls("the-filename").await.unwrap();
         assert_eq!(FileAcls::default().with_readers(["r1".to_owned(), "r2".to_owned()]), result);
 
@@ -275,12 +244,13 @@ mod tests {
         service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), "the-user");
 
-        let request = GetFileRequest::default().with_get_readers();
-        let response = GetFileResponse::default();
-        service.borrow_mut().add_mock_get_file("the-user", "the-filename", request, Ok(response));
-        let err = drive.get_acls("the-filename").await.unwrap_err();
-        assert_eq!(io::ErrorKind::InvalidData, err.kind());
-        assert!(format!("{}", err).contains("missing the readers list"));
+        service.borrow_mut().add_mock_get_file_acls(
+            "the-user",
+            "the-filename",
+            Ok(FileAcls::default()),
+        );
+        let result = drive.get_acls("the-filename").await.unwrap();
+        assert_eq!(FileAcls::default(), result);
 
         service.take().verify_all_used();
     }

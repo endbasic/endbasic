@@ -24,7 +24,7 @@
 
 use async_trait::async_trait;
 use base64::prelude::*;
-use endbasic_std::storage::DiskSpace;
+use endbasic_std::storage::{DiskSpace, FileAcls};
 use serde::{Deserialize, Serialize};
 use std::io;
 
@@ -112,54 +112,6 @@ pub struct GetFilesResponse {
     disk_free: Option<SerdeDiskSpace>,
 }
 
-/// Representation of a file query.
-#[derive(Debug, Default, Eq, PartialEq, Serialize)]
-#[cfg_attr(test, derive(Deserialize))]
-pub struct GetFileRequest {
-    get_content: bool,
-    get_readers: bool,
-}
-
-impl GetFileRequest {
-    /// Requests the file's content from the server.
-    fn with_get_content(mut self) -> Self {
-        self.get_content = true;
-        self
-    }
-
-    /// Requests the file's readers from the server.
-    fn with_get_readers(mut self) -> Self {
-        self.get_readers = true;
-        self
-    }
-}
-
-/// Representation of the response to a file query.
-#[derive(Default, Deserialize)]
-#[cfg_attr(test, derive(Debug, PartialEq, Serialize))]
-pub struct GetFileResponse {
-    /// Base64-encoded file content.
-    content: Option<String>,
-
-    readers: Option<Vec<String>>,
-}
-
-impl GetFileResponse {
-    /// Processes the content of the response, ensuring it is valid base64.
-    fn decoded_content(&self) -> io::Result<Option<Vec<u8>>> {
-        match self.content.as_ref() {
-            Some(content) => match BASE64_STANDARD.decode(content) {
-                Ok(content) => Ok(Some(content)),
-                Err(e) => Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("File content is not properly base64-encoded: {}", e),
-                )),
-            },
-            None => Ok(None),
-        }
-    }
-}
-
 /// Representation of an atomic file update.
 #[derive(Debug, Default, Eq, PartialEq, Serialize)]
 #[cfg_attr(test, derive(Deserialize))]
@@ -228,14 +180,13 @@ pub trait Service {
     /// previously-acquired `access_token`.
     async fn get_files(&mut self, username: &str) -> io::Result<GetFilesResponse>;
 
-    /// Sends a request to the server to obtain the metadata and/or the contents of `filename` owned
-    /// by `username` as specified in `request` with a previously-acquired `access_token`.
-    async fn get_file(
-        &mut self,
-        username: &str,
-        filename: &str,
-        request: &GetFileRequest,
-    ) -> io::Result<GetFileResponse>;
+    /// Sends a request to the server to obtain the contents of `filename` owned by `username` with a
+    /// previously-acquired `access_token`.
+    async fn get_file(&mut self, username: &str, filename: &str) -> io::Result<Vec<u8>>;
+
+    /// Sends a request to the server to obtain the ACLs of `filename` owned by `username` with a
+    /// previously-acquired `access_token`.
+    async fn get_file_acls(&mut self, username: &str, filename: &str) -> io::Result<FileAcls>;
 
     /// Sends a request to the server to update the metadata and/or the contents of `filename` owned
     /// by `username` as specified in `request` with a previously-acquired `access_token`.
