@@ -340,8 +340,23 @@ impl RasterOps for Context {
 
     fn read_pixels(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<Self::ID> {
         let rect = rect_origin_size(xy, size);
-        let data =
-            self.canvas.read_pixels(rect, self.pixel_format).map_err(string_error_to_io_error)?;
+        let data = match self.canvas.read_pixels(rect, self.pixel_format) {
+            Ok(data) => data,
+            Err(e) if e == "Can't read outside the current viewport" => {
+                // The SDL read pixels operation intersects the requested rect with the viewport.
+                // However, SDL2-compat does not like it when the two don't intersect at all.
+                // Fake the response so that our SDL2 code remains compatible with SDL2-compat.
+                vec![
+                    0;
+                    usize::from(size.width)
+                        * usize::from(size.height)
+                        * self.pixel_format.byte_size_per_pixel()
+                ]
+            }
+            Err(e) => {
+                return Err(string_error_to_io_error(e));
+            }
+        };
         Ok((data, size))
     }
 
