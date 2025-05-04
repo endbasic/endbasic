@@ -821,6 +821,45 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
+    fn test_sdl_console_draw_zero_sized_shapes() {
+        let mut test = SdlTest::new();
+        let console = test.console();
+
+        fn xy(x: i16, y: i16) -> PixelsXY {
+            PixelsXY { x, y }
+        }
+
+        console.set_color(Some(15), None).unwrap();
+        console.draw_line(xy(10, 10), xy(10, 10)).unwrap();
+        console.draw_rect(xy(20, 10), xy(20, 10)).unwrap();
+        console.draw_rect_filled(xy(30, 10), xy(30, 10)).unwrap();
+        console.draw_circle(xy(40, 40), 0).unwrap();
+        console.draw_circle_filled(xy(50, 50), 0).unwrap();
+
+        test.verify("sdl-empty");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_sdl_console_draw_one_sized_rectangles() {
+        let mut test = SdlTest::new();
+        let console = test.console();
+
+        fn xy(x: i16, y: i16) -> PixelsXY {
+            PixelsXY { x, y }
+        }
+
+        console.set_color(Some(15), None).unwrap();
+        console.draw_rect(xy(10, 10), xy(10, 15)).unwrap();
+        console.draw_rect(xy(20, 20), xy(25, 20)).unwrap();
+        console.draw_rect_filled(xy(30, 30), xy(30, 35)).unwrap();
+        console.draw_rect_filled(xy(40, 40), xy(45, 40)).unwrap();
+
+        test.verify("sdl-draw-one-sized-rectangles");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_show_cursor() {
         let mut test = SdlTest::new();
 

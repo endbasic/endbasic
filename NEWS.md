@@ -49,6 +49,9 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
 *   Added a new `COPY` command to copy files.  The previous approach of `LOAD`
     followed by `SAVE` doesn't work for binary files, and we want to support
     binary files to handle e.g. images.
+    
+*   Fixed the rendering of zero-sized rectangles in the SDL console so that
+    debug builds don't crash and so that the behavior matches the web console.
 
 ## Changes in version 0.11.1
 
