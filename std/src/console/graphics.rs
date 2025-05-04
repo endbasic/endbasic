@@ -150,7 +150,7 @@ impl ClampedMul<SizeInPixels, PixelsXY> for CharsXY {
 }
 
 /// Given two points, calculates the origin and size of the rectangle they define.
-fn rect_points(x1y1: PixelsXY, x2y2: PixelsXY) -> (PixelsXY, SizeInPixels) {
+fn rect_points(x1y1: PixelsXY, x2y2: PixelsXY) -> Option<(PixelsXY, SizeInPixels)> {
     let (x1, x2) = if x1y1.x < x2y2.x { (x1y1.x, x2y2.x) } else { (x2y2.x, x1y1.x) };
     let (y1, y2) = if x1y1.y < x2y2.y { (x1y1.y, x2y2.y) } else { (x2y2.y, x1y1.y) };
 
@@ -173,7 +173,11 @@ fn rect_points(x1y1: PixelsXY, x2y2: PixelsXY) -> (PixelsXY, SizeInPixels) {
     }
     .clamped_into();
 
-    (PixelsXY::new(x1, y1), SizeInPixels::new(width, height))
+    if width == 0 || height == 0 {
+        None
+    } else {
+        Some((PixelsXY::new(x1, y1), SizeInPixels::new(width, height)))
+    }
 }
 
 /// Container for configuration information of the backing surface.
@@ -688,16 +692,20 @@ where
     }
 
     fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        let (xy, size) = rect_points(x1y1, x2y2);
         self.raster_ops.set_draw_color(self.fg_color);
-        self.raster_ops.draw_rect(xy, size)?;
+        match rect_points(x1y1, x2y2) {
+            Some((xy, size)) => self.raster_ops.draw_rect(xy, size)?,
+            None => self.raster_ops.draw_line(x1y1, x2y2)?,
+        }
         self.present_canvas()
     }
 
     fn draw_rect_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        let (xy, size) = rect_points(x1y1, x2y2);
         self.raster_ops.set_draw_color(self.fg_color);
-        self.raster_ops.draw_rect_filled(xy, size)?;
+        match rect_points(x1y1, x2y2) {
+            Some((xy, size)) => self.raster_ops.draw_rect_filled(xy, size)?,
+            None => self.raster_ops.draw_line(x1y1, x2y2)?,
+        }
         self.present_canvas()
     }
 
@@ -824,40 +832,47 @@ mod tests {
     }
 
     #[test]
-    fn test_rect_points() {
+    fn test_rect_points_ok() {
         assert_eq!(
-            (PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200)),
+            Some((PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200))),
             rect_points(PixelsXY { x: 10, y: 20 }, PixelsXY { x: 110, y: 220 })
         );
         assert_eq!(
-            (PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200)),
+            Some((PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200))),
             rect_points(PixelsXY { x: 110, y: 20 }, PixelsXY { x: 10, y: 220 })
         );
         assert_eq!(
-            (PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200)),
+            Some((PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200))),
             rect_points(PixelsXY { x: 10, y: 220 }, PixelsXY { x: 110, y: 20 })
         );
         assert_eq!(
-            (PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200)),
+            Some((PixelsXY { x: 10, y: 20 }, SizeInPixels::new(100, 200))),
             rect_points(PixelsXY { x: 110, y: 220 }, PixelsXY { x: 10, y: 20 })
         );
 
         assert_eq!(
-            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(31005, 32010)),
+            Some((PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(31005, 32010))),
             rect_points(PixelsXY { x: 5, y: -32000 }, PixelsXY { x: -31000, y: 10 })
         );
         assert_eq!(
-            (PixelsXY { x: 10, y: 5 }, SizeInPixels::new(30990, 31995)),
+            Some((PixelsXY { x: 10, y: 5 }, SizeInPixels::new(30990, 31995))),
             rect_points(PixelsXY { x: 31000, y: 5 }, PixelsXY { x: 10, y: 32000 })
         );
 
         assert_eq!(
-            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(62000, 64000)),
+            Some((PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(62000, 64000))),
             rect_points(PixelsXY { x: -31000, y: -32000 }, PixelsXY { x: 31000, y: 32000 })
         );
         assert_eq!(
-            (PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(62000, 64000)),
+            Some((PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(62000, 64000))),
             rect_points(PixelsXY { x: 31000, y: 32000 }, PixelsXY { x: -31000, y: -32000 })
         );
+    }
+
+    #[test]
+    fn test_rect_points_zeroes() {
+        assert_eq!(None, rect_points(PixelsXY { x: 10, y: 10 }, PixelsXY { x: 10, y: 10 }));
+        assert_eq!(None, rect_points(PixelsXY { x: 10, y: 10 }, PixelsXY { x: 10, y: 20 }));
+        assert_eq!(None, rect_points(PixelsXY { x: 10, y: 10 }, PixelsXY { x: 20, y: 10 }));
     }
 }
