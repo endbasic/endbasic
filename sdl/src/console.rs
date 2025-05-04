@@ -385,12 +385,8 @@ mod testutils {
                 panic!("Golden data regenerated; flip REGEN_BMPS back to false");
             }
 
-            let golden = {
-                let input = BufReader::new(File::open(golden_bmp_gz).unwrap());
-                let mut decoder = GzDecoder::new(input);
-                let mut buffer = vec![];
-                decoder.read_to_end(&mut buffer).unwrap();
-                let mut rwops = RWops::from_bytes(buffer.as_slice()).unwrap();
+            let actual = {
+                let mut rwops = RWops::from_file(actual_bmp, "r").unwrap();
                 Surface::load_bmp_rw(&mut rwops)
                     .unwrap()
                     .into_canvas()
@@ -399,8 +395,12 @@ mod testutils {
                     .unwrap()
             };
 
-            let actual = {
-                let mut rwops = RWops::from_file(actual_bmp, "r").unwrap();
+            let golden = {
+                let input = BufReader::new(File::open(golden_bmp_gz).unwrap());
+                let mut decoder = GzDecoder::new(input);
+                let mut buffer = vec![];
+                decoder.read_to_end(&mut buffer).unwrap();
+                let mut rwops = RWops::from_bytes(buffer.as_slice()).unwrap();
                 Surface::load_bmp_rw(&mut rwops)
                     .unwrap()
                     .into_canvas()
