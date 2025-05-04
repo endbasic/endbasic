@@ -48,7 +48,7 @@ version = "0.11.99" # ENDBASIC-VERSION
 path = "../std"
 
 [dependencies.web-sys]
-version = "0.3"
+version = "0.3.77"
 features = [
     "CanvasRenderingContext2d",
     "ContextAttributes2d",
