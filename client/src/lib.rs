@@ -23,7 +23,6 @@
 #![warn(unsafe_code)]
 
 use async_trait::async_trait;
-use base64::prelude::*;
 use endbasic_std::storage::{DiskSpace, FileAcls};
 use serde::{Deserialize, Serialize};
 use std::io;
@@ -112,39 +111,6 @@ pub struct GetFilesResponse {
     disk_free: Option<SerdeDiskSpace>,
 }
 
-/// Representation of an atomic file update.
-#[derive(Debug, Default, Eq, PartialEq, Serialize)]
-#[cfg_attr(test, derive(Deserialize))]
-pub struct PatchFileRequest {
-    /// Base64-encoded file content.
-    content: Option<String>,
-
-    add_readers: Option<Vec<String>>,
-    remove_readers: Option<Vec<String>>,
-}
-
-impl PatchFileRequest {
-    /// Updates the file's content with `content`.  The content is automatically base64-encoded.
-    fn with_content<C: AsRef<[u8]>>(mut self, content: C) -> Self {
-        self.content = Some(BASE64_STANDARD.encode(content));
-        self
-    }
-
-    /// Adds `readers` to the file's reader ACLs.
-    #[cfg(test)]
-    fn with_add_readers<R: Into<Vec<String>>>(mut self, readers: R) -> Self {
-        self.add_readers = Some(readers.into());
-        self
-    }
-
-    /// Removes `readers` from the file's reader ACLs.
-    #[cfg(test)]
-    fn with_remove_readers<R: Into<Vec<String>>>(mut self, readers: R) -> Self {
-        self.remove_readers = Some(readers.into());
-        self
-    }
-}
-
 /// Representation of a signup request.
 #[derive(Debug, Default, Eq, PartialEq, Serialize)]
 #[cfg_attr(test, derive(Deserialize))]
@@ -188,13 +154,23 @@ pub trait Service {
     /// previously-acquired `access_token`.
     async fn get_file_acls(&mut self, username: &str, filename: &str) -> io::Result<FileAcls>;
 
-    /// Sends a request to the server to update the metadata and/or the contents of `filename` owned
-    /// by `username` as specified in `request` with a previously-acquired `access_token`.
-    async fn patch_file(
+    /// Sends a request to the server to update the contents of `filename` owned by `username` as
+    /// specified in `content` with a previously-acquired `access_token`.
+    async fn patch_file_content(
         &mut self,
         username: &str,
         filename: &str,
-        request: &PatchFileRequest,
+        content: Vec<u8>,
+    ) -> io::Result<()>;
+
+    /// Sends a request to the server to update the ACLs of `filename` owned by `username` as
+    /// specified in `add` and `remove` with a previously-acquired `access_token`.
+    async fn patch_file_acls(
+        &mut self,
+        username: &str,
+        filename: &str,
+        add: &FileAcls,
+        remove: &FileAcls,
     ) -> io::Result<()>;
 
     /// Sends a request to the server to delete `filename` owned by `username` with a

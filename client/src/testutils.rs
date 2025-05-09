@@ -15,9 +15,7 @@
 
 //! Test utilities for the cloud service.
 
-use crate::{
-    add_all, AccessToken, GetFilesResponse, LoginResponse, PatchFileRequest, Service, SignupRequest,
-};
+use crate::{add_all, AccessToken, GetFilesResponse, LoginResponse, Service, SignupRequest};
 use async_trait::async_trait;
 use endbasic_std::storage::{FileAcls, Storage};
 use endbasic_std::testutils::*;
@@ -37,7 +35,8 @@ pub struct MockService {
     mock_get_files: VecDeque<(String, io::Result<GetFilesResponse>)>,
     mock_get_file: VecDeque<((String, String), io::Result<Vec<u8>>)>,
     mock_get_file_acls: VecDeque<((String, String), io::Result<FileAcls>)>,
-    mock_patch_file: VecDeque<((String, String, PatchFileRequest), io::Result<()>)>,
+    mock_patch_file_content: VecDeque<((String, String, Vec<u8>), io::Result<()>)>,
+    mock_patch_file_acls: VecDeque<((String, String, FileAcls, FileAcls), io::Result<()>)>,
     mock_delete_file: VecDeque<((String, String), io::Result<()>)>,
 }
 
@@ -111,18 +110,40 @@ impl MockService {
         self.mock_get_file_acls.push_back((exp_request, result));
     }
 
-    /// Records the behavior of an upcoming "patch file" operation for the `username`/`filename`
-    /// pair with a request that looks like `exp_request` and that returns `result`.
+    /// Records the behavior of an upcoming "patch file content" operation for the
+    /// `username`/`filename` pair with `exp_content` and that returns `result`.
     #[cfg(test)]
-    pub(crate) fn add_mock_patch_file(
+    pub(crate) fn add_mock_patch_file_content<B: Into<Vec<u8>>>(
         &mut self,
         username: &str,
         filename: &str,
-        exp_request: PatchFileRequest,
+        exp_content: B,
         result: io::Result<()>,
     ) {
-        let exp_request = (username.to_owned(), filename.to_owned(), exp_request);
-        self.mock_patch_file.push_back((exp_request, result));
+        let exp_request = (username.to_owned(), filename.to_owned(), exp_content.into());
+        self.mock_patch_file_content.push_back((exp_request, result));
+    }
+
+    /// Records the behavior of an upcoming "patch file ACLS" operation for the
+    /// `username`/`filename` pair with `exp_add` and `exp_remove` and that returns `result`.
+    #[cfg(test)]
+    pub(crate) fn add_mock_patch_file_acls<S: Into<String>, V: Into<Vec<S>>>(
+        &mut self,
+        username: &str,
+        filename: &str,
+        exp_add: V,
+        exp_remove: V,
+        result: io::Result<()>,
+    ) {
+        let exp_add = FileAcls {
+            readers: exp_add.into().into_iter().map(|v| v.into()).collect::<Vec<String>>(),
+        };
+        let exp_remove = FileAcls {
+            readers: exp_remove.into().into_iter().map(|v| v.into()).collect::<Vec<String>>(),
+        };
+        let exp_request =
+            (username.to_owned(), filename.to_owned(), exp_add.into(), exp_remove.into());
+        self.mock_patch_file_acls.push_back((exp_request, result));
     }
 
     /// Records the behavior of an upcoming "delete file" operation for the `username`/`filename`
@@ -144,7 +165,9 @@ impl MockService {
         assert!(self.mock_login.is_empty(), "Mock requests not fully consumed");
         assert!(self.mock_get_files.is_empty(), "Mock requests not fully consumed");
         assert!(self.mock_get_file.is_empty(), "Mock requests not fully consumed");
-        assert!(self.mock_patch_file.is_empty(), "Mock requests not fully consumed");
+        assert!(self.mock_get_file_acls.is_empty(), "Mock requests not fully consumed");
+        assert!(self.mock_patch_file_content.is_empty(), "Mock requests not fully consumed");
+        assert!(self.mock_patch_file_acls.is_empty(), "Mock requests not fully consumed");
         assert!(self.mock_delete_file.is_empty(), "Mock requests not fully consumed");
     }
 }
@@ -211,18 +234,35 @@ impl Service for MockService {
         mock.1
     }
 
-    async fn patch_file(
+    async fn patch_file_content(
         &mut self,
         username: &str,
         filename: &str,
-        request: &PatchFileRequest,
+        content: Vec<u8>,
     ) -> io::Result<()> {
         self.access_token.as_ref().expect("login not called yet");
 
-        let mock = self.mock_patch_file.pop_front().expect("No mock requests available");
+        let mock = self.mock_patch_file_content.pop_front().expect("No mock requests available");
         assert_eq!(&mock.0 .0, username);
         assert_eq!(&mock.0 .1, filename);
-        assert_eq!(&mock.0 .2, request);
+        assert_eq!(&mock.0 .2, &content);
+        mock.1
+    }
+
+    async fn patch_file_acls(
+        &mut self,
+        username: &str,
+        filename: &str,
+        add: &FileAcls,
+        remove: &FileAcls,
+    ) -> io::Result<()> {
+        self.access_token.as_ref().expect("login not called yet");
+
+        let mock = self.mock_patch_file_acls.pop_front().expect("No mock requests available");
+        assert_eq!(&mock.0 .0, username);
+        assert_eq!(&mock.0 .1, filename);
+        assert_eq!(&mock.0 .2, add);
+        assert_eq!(&mock.0 .3, remove);
         mock.1
     }
 

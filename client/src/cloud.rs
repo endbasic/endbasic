@@ -17,6 +17,7 @@
 
 use crate::*;
 use async_trait::async_trait;
+use base64::prelude::*;
 use bytes::Buf;
 use endbasic_std::console::remove_control_chars;
 use endbasic_std::storage::FileAcls;
@@ -302,11 +303,11 @@ impl Service for CloudService {
         }
     }
 
-    async fn patch_file(
+    async fn patch_file_content(
         &mut self,
         username: &str,
         filename: &str,
-        request: &PatchFileRequest,
+        content: Vec<u8>,
     ) -> io::Result<()> {
         let auth_data = self.auth_data.borrow();
 
@@ -314,8 +315,44 @@ impl Service for CloudService {
             .client
             .patch(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
             .headers(self.default_headers())
-            .header("Content-Type", "application/json")
-            .body(serde_json::to_vec(&request)?)
+            .header("Content-Type", "application/octet-stream")
+            .header("X-EndBASIC-PatchContent", "true")
+            .body(content)
+            .bearer_auth(Self::require_auth_data(auth_data.as_ref())?.access_token.as_str())
+            .send()
+            .await
+            .map_err(reqwest_error_to_io_error)?;
+        match response.status() {
+            StatusCode::OK | StatusCode::CREATED => Ok(()),
+            _ => Err(http_response_to_io_error(response).await),
+        }
+    }
+
+    async fn patch_file_acls(
+        &mut self,
+        username: &str,
+        filename: &str,
+        add: &FileAcls,
+        remove: &FileAcls,
+    ) -> io::Result<()> {
+        let auth_data = self.auth_data.borrow();
+
+        let mut builder = self
+            .client
+            .patch(self.make_url(&format!("api/users/{}/files/{}", username, filename)))
+            .headers(self.default_headers())
+            .header("Content-Type", "application/octet-stream")
+            // Ensure we have at least one header to go through the header-based request handler.
+            .header("X-EndBASIC-PatchContent", "false");
+
+        for reader in add.readers() {
+            builder = builder.header("X-EndBASIC-AddReader", reader);
+        }
+        for reader in remove.readers() {
+            builder = builder.header("X-EndBASIC-RemoveReader", reader);
+        }
+
+        let response = builder
             .bearer_auth(Self::require_auth_data(auth_data.as_ref())?.access_token.as_str())
             .send()
             .await
@@ -403,11 +440,11 @@ mod testutils {
 
         /// Generates a random filename and its content for testing, and makes sure the file gets
         /// deleted during cleanup in case the test didn't do it on its own.
-        pub(crate) fn random_file(&mut self) -> (String, String) {
+        pub(crate) fn random_file(&mut self) -> (String, Vec<u8>) {
             let filename = format!("file-{}", rand::random::<u64>());
             let content = format!("Test content for {}", filename);
             self.files_to_delete.push(filename.clone());
-            (filename, content)
+            (filename, content.into_bytes())
         }
     }
 
@@ -492,7 +529,7 @@ mod tests {
             for _ in 0..5 {
                 let (filename, content) = context.random_file();
 
-                needed_bytes += content.as_bytes().len() as u64;
+                needed_bytes += content.len() as u64;
                 needed_files += 1;
                 filenames_and_contents.push((filename, content));
             }
@@ -514,8 +551,7 @@ mod tests {
             }
 
             for (filename, content) in &filenames_and_contents {
-                let request = PatchFileRequest::default().with_content(content.as_bytes());
-                service.patch_file(&username, filename, &request).await.unwrap();
+                service.patch_file_content(&username, filename, content.clone()).await.unwrap();
             }
 
             let response = service.get_files(&username).await.unwrap();
@@ -526,13 +562,16 @@ mod tests {
         run(&mut TestContext::new_from_env());
     }
 
-    async fn do_get_and_patch_file_test(context: &mut TestContext, filename: &str, content: &[u8]) {
+    async fn do_get_and_patch_file_test<B: Into<Vec<u8>>>(
+        context: &mut TestContext,
+        filename: &str,
+        content: B,
+    ) {
         let username = context.do_login(1).await;
         let mut service = context.service();
 
-        let request = PatchFileRequest::default().with_content(content);
-        service.patch_file(&username, filename, &request).await.unwrap();
-
+        let content = content.into();
+        service.patch_file_content(&username, filename, content.clone()).await.unwrap();
         assert_eq!(content, service.get_file(&username, filename).await.unwrap());
     }
 
@@ -542,7 +581,7 @@ mod tests {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
             let (filename, content) = context.random_file();
-            do_get_and_patch_file_test(context, &filename, content.as_bytes()).await;
+            do_get_and_patch_file_test(context, &filename, content).await;
         }
         run(&mut TestContext::new_from_env());
     }
@@ -565,7 +604,7 @@ mod tests {
         async fn run(context: &mut TestContext) {
             let (filename, _content) = context.random_file();
             let content = "안녕하세요";
-            do_get_and_patch_file_test(context, &filename, content.as_bytes()).await;
+            do_get_and_patch_file_test(context, &filename, content).await;
         }
         run(&mut TestContext::new_from_env());
     }
@@ -597,8 +636,10 @@ mod tests {
             let (filename, _content) = context.random_file();
 
             context.do_logout().await;
-            let request = PatchFileRequest::default().with_content("foo");
-            let err = service.patch_file(&username, &filename, &request).await.unwrap_err();
+            let err = service
+                .patch_file_content(&username, &filename, b"foo".to_vec())
+                .await
+                .unwrap_err();
             assert_eq!(io::ErrorKind::PermissionDenied, err.kind(), "{}", err);
             assert!(format!("{}", err).contains("Not logged in"));
         }
@@ -618,9 +659,8 @@ mod tests {
             let username2 = context.get_username(2);
 
             // Share username1's file with username2.
-            let request = PatchFileRequest::default().with_content(content.clone());
             context.do_login(1).await;
-            service.patch_file(&username1, &filename, &request).await.unwrap();
+            service.patch_file_content(&username1, &filename, content.clone()).await.unwrap();
 
             // Read username1's file as username2 before it is shared.
             context.do_login(2).await;
@@ -629,13 +669,20 @@ mod tests {
 
             // Share username1's file with username2.
             context.do_login(1).await;
-            let request = PatchFileRequest::default().with_add_readers([username2]);
-            service.patch_file(&username1, &filename, &request).await.unwrap();
+            service
+                .patch_file_acls(
+                    &username1,
+                    &filename,
+                    &FileAcls::default().with_readers([username2]),
+                    &FileAcls::default(),
+                )
+                .await
+                .unwrap();
 
             // Read username1's file as username2 again, now that it is shared.
             context.do_login(2).await;
             let response = service.get_file(&username1, &filename).await.unwrap();
-            assert_eq!(content.as_bytes(), response);
+            assert_eq!(content, response);
         }
         run(&mut TestContext::new_from_env());
     }
@@ -652,9 +699,8 @@ mod tests {
             let username1 = context.get_username(1);
 
             // Share username1's file with the public.
-            let request = PatchFileRequest::default().with_content(content.clone());
             context.do_login(1).await;
-            service.patch_file(&username1, &filename, &request).await.unwrap();
+            service.patch_file_content(&username1, &filename, content.clone()).await.unwrap();
 
             // Read username1's file as a guest before it is shared.
             context.do_logout().await;
@@ -663,13 +709,20 @@ mod tests {
 
             // Share username1's file with the public.
             context.do_login(1).await;
-            let request = PatchFileRequest::default().with_add_readers(["public".to_owned()]);
-            service.patch_file(&username1, &filename, &request).await.unwrap();
+            service
+                .patch_file_acls(
+                    &username1,
+                    &filename,
+                    &FileAcls::default().with_readers(["public".to_owned()]),
+                    &FileAcls::default(),
+                )
+                .await
+                .unwrap();
 
             // Read username1's file as a guest again, now that it is shared.
             context.do_logout().await;
             let response = service.get_file(&username1, &filename).await.unwrap();
-            assert_eq!(content.as_bytes(), response);
+            assert_eq!(content, response);
         }
         run(&mut TestContext::new_from_env());
     }
@@ -683,8 +736,7 @@ mod tests {
             let mut service = context.service();
             let (filename, content) = context.random_file();
 
-            let request = PatchFileRequest::default().with_content(content);
-            service.patch_file(&username, &filename, &request).await.unwrap();
+            service.patch_file_content(&username, &filename, content).await.unwrap();
 
             service.delete_file(&username, &filename).await.unwrap();
 
