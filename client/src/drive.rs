@@ -70,8 +70,10 @@ impl Drive for CloudDrive {
     }
 
     async fn put(&mut self, filename: &str, content: &[u8]) -> io::Result<()> {
-        let request = PatchFileRequest::default().with_content(content);
-        self.service.borrow_mut().patch_file(&self.username, filename, &request).await
+        self.service
+            .borrow_mut()
+            .patch_file_content(&self.username, filename, content.to_vec())
+            .await
     }
 
     async fn update_acls(
@@ -80,19 +82,7 @@ impl Drive for CloudDrive {
         add: &FileAcls,
         remove: &FileAcls,
     ) -> io::Result<()> {
-        let mut request = PatchFileRequest::default();
-
-        let add = add.readers();
-        if !add.is_empty() {
-            request.add_readers = Some(add.to_vec());
-        }
-
-        let remove = remove.readers();
-        if !remove.is_empty() {
-            request.remove_readers = Some(remove.to_vec());
-        }
-
-        self.service.borrow_mut().patch_file(&self.username, filename, &request).await
+        self.service.borrow_mut().patch_file_acls(&self.username, filename, add, remove).await
     }
 }
 
@@ -261,8 +251,12 @@ mod tests {
         service.borrow_mut().do_login().await;
         let mut drive = CloudDrive::new(service.clone(), "the-user");
 
-        let request = PatchFileRequest::default().with_content("some content");
-        service.borrow_mut().add_mock_patch_file("the-user", "the-filename", request, Ok(()));
+        service.borrow_mut().add_mock_patch_file_content(
+            "the-user",
+            "the-filename",
+            "some content",
+            Ok(()),
+        );
         drive.put("the-filename", b"some content").await.unwrap();
 
         service.take().verify_all_used();
@@ -274,12 +268,20 @@ mod tests {
         service.borrow_mut().do_login().await;
         let mut drive = CloudDrive::new(service.clone(), "the-user");
 
-        let request = PatchFileRequest::default().with_content("some content");
-        service.borrow_mut().add_mock_patch_file("the-user", "the-filename", request, Ok(()));
+        service.borrow_mut().add_mock_patch_file_content(
+            "the-user",
+            "the-filename",
+            "some content",
+            Ok(()),
+        );
         drive.put("the-filename", b"some content").await.unwrap();
 
-        let request = PatchFileRequest::default().with_content("some other content");
-        service.borrow_mut().add_mock_patch_file("the-user", "the-filename", request, Ok(()));
+        service.borrow_mut().add_mock_patch_file_content(
+            "the-user",
+            "the-filename",
+            "some other content",
+            Ok(()),
+        );
         drive.put("the-filename", b"some other content").await.unwrap();
 
         service.take().verify_all_used();
@@ -291,10 +293,13 @@ mod tests {
         service.borrow_mut().do_login().await;
         let mut drive = CloudDrive::new(service.clone(), "the-user");
 
-        let request = PatchFileRequest::default()
-            .with_add_readers(["r1".to_owned(), "r2".to_owned()])
-            .with_remove_readers(["r2".to_owned(), "r3".to_owned()]);
-        service.borrow_mut().add_mock_patch_file("the-user", "the-filename", request, Ok(()));
+        service.borrow_mut().add_mock_patch_file_acls(
+            "the-user",
+            "the-filename",
+            ["r1".to_owned(), "r2".to_owned()],
+            ["r2".to_owned(), "r3".to_owned()],
+            Ok(()),
+        );
         drive
             .update_acls(
                 "the-filename",
