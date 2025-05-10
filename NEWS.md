@@ -53,6 +53,8 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
 *   Fixed the rendering of zero-sized rectangles in the SDL console so that
     debug builds don't crash and so that the behavior matches the web console.
 
+*   Issue #275: Added a release build for ARM v6.
+
 ## Changes in version 0.11.1
 
 **Released on 2024-09-14.**
