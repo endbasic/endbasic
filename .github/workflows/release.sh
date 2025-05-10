@@ -68,6 +68,25 @@ main() {
 
     local target=
     case "${name}" in
+        linux-armv6-rpi)
+            # Add the RPI toolchain in order to use the Rpi toolchain
+            # See https://github.com/mdirkse/rust_armv6
+            git  clone --depth=1 https://github.com/raspberrypi/tools.git "rpi_tools"
+            # Remove most of the repo we just downloaded as we only need a small amount
+            rm -fr "rpi_tools/.git" \
+                   "rpi_tools/arm-bcm2708/arm-bcm2708-linux-gnueabi" \
+                   "rpi_tools/arm-bcm2708/arm-bcm2708hardfp-linux-gnueabi" \
+                   "rpi_tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian" \
+                   "rpi_tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian-x64"
+            # TODO(jmmv): Should figure out how to cross-compile with the native TLS library
+            # instead of doing this hack.
+            sed -i s,native-tls,rustls-tls,g client/Cargo.toml
+            # TODO(jmmv): Should enable --features=sdl but need to figure out how to cross-build
+            # for it.
+            ( cd cli && cargo build --target arm-unknown-linux-gnueabihf   --config target.arm-unknown-linux-gnueabihf.linker=\"$(realpath ../rpi_tools/arm-bcm2708/arm-rpi-4.9.3-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc)\" --release --features=rpi )
+            cp ./target/arm-unknown-linux-gnueabihf/release/endbasic "${distname}"
+            ;;
+            
         linux-armv7-rpi)
             [ ! -f .cargo/config ] || err "Won't override existing .cargo/config"
             cp .cargo/config.rpi .cargo/config
