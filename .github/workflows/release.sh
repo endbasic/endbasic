@@ -68,9 +68,11 @@ main() {
 
     local target=
     case "${name}" in
-        linux-armv7-rpi)
+        linux-arm-rpi|linux-armv7-rpi)
+            local arch="$(echo "${name}" | cut -d - -f 2)"
+
             [ ! -f .cargo/config ] || err "Won't override existing .cargo/config"
-            cp .cargo/config.rpi .cargo/config
+            cp ".cargo/config.${arch}" .cargo/config
             # TODO(jmmv): Should figure out how to cross-compile with the native TLS library
             # instead of doing this hack.
             sed -i s,native-tls,rustls-tls,g client/Cargo.toml
@@ -79,7 +81,7 @@ main() {
             ( cd cli && cargo build --release --features=rpi )
             rm -f .cargo/config
 
-            cp ./target/armv7-unknown-linux-gnueabihf/release/endbasic "${distname}"
+            cp "./target/${arch}-unknown-linux-gnueabihf/release/endbasic" "${distname}"
             ;;
 
         macos*)
