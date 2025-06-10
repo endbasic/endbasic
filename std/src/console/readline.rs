@@ -321,10 +321,7 @@ pub async fn read_line(
 /// suppress echo.
 pub async fn read_line_secure(console: &mut dyn Console, prompt: &str) -> io::Result<String> {
     if !console.is_interactive() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            "Cannot read secure strings from a raw console".to_owned(),
-        ));
+        return Err(io::Error::other("Cannot read secure strings from a raw console".to_owned()));
     }
     read_line_interactive(console, prompt, "", None, false).await
 }

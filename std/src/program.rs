@@ -87,7 +87,7 @@ impl Program for ImmutableProgram {
     }
 
     async fn edit(&mut self, _console: &mut dyn Console) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "Editing not supported"))
+        Err(io::Error::other("Editing not supported"))
     }
 
     fn load(&mut self, name: Option<&str>, text: &str) {

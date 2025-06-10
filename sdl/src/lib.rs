@@ -48,7 +48,7 @@ const DEFAULT_FONT_SIZE: u16 = 16;
 
 /// Converts a flat string error message to an `io::Error`.
 fn string_error_to_io_error(e: String) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, e)
+    io::Error::other(e)
 }
 
 /// Context to maintain a font on disk temporarily.

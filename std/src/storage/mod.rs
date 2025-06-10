@@ -34,7 +34,7 @@ pub use mem::*;
 pub(crate) fn time_format_error_to_io_error(e: Format) -> io::Error {
     match e {
         Format::StdIo(e) => e,
-        e => io::Error::new(io::ErrorKind::Other, format!("{}", e)),
+        e => io::Error::other(format!("{}", e)),
     }
 }
 
@@ -154,7 +154,7 @@ pub trait Drive {
 
     /// Gets the ACLs of the file `_name`.
     async fn get_acls(&self, _name: &str) -> io::Result<FileAcls> {
-        Err(io::Error::new(io::ErrorKind::Other, "Operation not supported by drive"))
+        Err(io::Error::other("Operation not supported by drive"))
     }
 
     /// Saves the in-memory program given by `content` into `name`.
@@ -168,7 +168,7 @@ pub trait Drive {
         _add: &FileAcls,
         _remove: &FileAcls,
     ) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "Operation not supported by drive"))
+        Err(io::Error::other("Operation not supported by drive"))
     }
 
     /// Gets the system-addressable path of the file `_name`, if any.

@@ -26,23 +26,23 @@ pub(crate) struct NoopPins {}
 
 impl Pins for NoopPins {
     fn setup(&mut self, _pin: Pin, _mode: PinMode) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "GPIO backend not compiled in"))
+        Err(io::Error::other("GPIO backend not compiled in"))
     }
 
     fn clear(&mut self, _pin: Pin) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "GPIO backend not compiled in"))
+        Err(io::Error::other("GPIO backend not compiled in"))
     }
 
     fn clear_all(&mut self) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "GPIO backend not compiled in"))
+        Err(io::Error::other("GPIO backend not compiled in"))
     }
 
     fn read(&mut self, _pin: Pin) -> io::Result<bool> {
-        Err(io::Error::new(io::ErrorKind::Other, "GPIO backend not compiled in"))
+        Err(io::Error::other("GPIO backend not compiled in"))
     }
 
     fn write(&mut self, _pin: Pin, _v: bool) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "GPIO backend not compiled in"))
+        Err(io::Error::other("GPIO backend not compiled in"))
     }
 }
 

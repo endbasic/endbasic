@@ -248,7 +248,7 @@ pub trait Console {
 
     /// Queries the size of the graphical console.
     fn size_pixels(&self) -> io::Result<SizeInPixels> {
-        Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
+        Err(io::Error::other("No graphics support in this console"))
     }
 
     /// Writes the text into the console at the position of the cursor.
@@ -257,32 +257,32 @@ pub trait Console {
 
     /// Draws the outline of a circle at `_center` with `_radius` using the current drawing color.
     fn draw_circle(&mut self, _center: PixelsXY, _radius: u16) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
+        Err(io::Error::other("No graphics support in this console"))
     }
 
     /// Draws a filled circle at `_center` with `_radius` using the current drawing color.
     fn draw_circle_filled(&mut self, _center: PixelsXY, _radius: u16) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
+        Err(io::Error::other("No graphics support in this console"))
     }
 
     /// Draws a line from `_x1y1` to `_x2y2` using the current drawing color.
     fn draw_line(&mut self, _x1y1: PixelsXY, _x2y2: PixelsXY) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
+        Err(io::Error::other("No graphics support in this console"))
     }
 
     /// Draws a single pixel at `_xy` using the current drawing color.
     fn draw_pixel(&mut self, _xy: PixelsXY) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
+        Err(io::Error::other("No graphics support in this console"))
     }
 
     /// Draws the outline of a rectangle from `_x1y1` to `_x2y2` using the current drawing color.
     fn draw_rect(&mut self, _x1y1: PixelsXY, _x2y2: PixelsXY) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
+        Err(io::Error::other("No graphics support in this console"))
     }
 
     /// Draws a filled rectangle from `_x1y1` to `_x2y2` using the current drawing color.
     fn draw_rect_filled(&mut self, _x1y1: PixelsXY, _x2y2: PixelsXY) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "No graphics support in this console"))
+        Err(io::Error::other("No graphics support in this console"))
     }
 
     /// Causes any buffered output to be synced.

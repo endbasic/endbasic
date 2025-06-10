@@ -158,10 +158,7 @@ impl Callable for RaisefFunction {
             "argument" => Err(Error::SyntaxError(pos, "Bad argument".to_owned())),
             "eval" => Err(Error::EvalError(pos, "Some eval error".to_owned())),
             "internal" => Err(Error::InternalError(pos, "Some internal error".to_owned())),
-            "io" => Err(Error::IoError(
-                pos,
-                io::Error::new(io::ErrorKind::Other, "Some I/O error".to_owned()),
-            )),
+            "io" => Err(Error::IoError(pos, io::Error::other("Some I/O error".to_owned()))),
             _ => panic!("Invalid arguments"),
         }
     }
@@ -201,10 +198,7 @@ impl Callable for RaiseCommand {
             "argument" => Err(Error::SyntaxError(pos, "Bad argument".to_owned())),
             "eval" => Err(Error::EvalError(pos, "Some eval error".to_owned())),
             "internal" => Err(Error::InternalError(pos, "Some internal error".to_owned())),
-            "io" => Err(Error::IoError(
-                pos,
-                io::Error::new(io::ErrorKind::Other, "Some I/O error".to_owned()),
-            )),
+            "io" => Err(Error::IoError(pos, io::Error::other("Some I/O error".to_owned()))),
             _ => panic!("Invalid arguments"),
         }
     }

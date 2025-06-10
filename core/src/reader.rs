@@ -160,10 +160,7 @@ impl Iterator for CharReader<'_> {
             }
             Pending::Error(e) => match e.take() {
                 Some(e) => Some(Err(e)),
-                None => Some(Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "Invalid state; error already consumed",
-                ))),
+                None => Some(Err(io::Error::other("Invalid state; error already consumed"))),
             },
         }
     }
