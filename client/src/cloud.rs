@@ -78,7 +78,7 @@ async fn http_response_to_io_error(response: Response) -> io::Error {
 
 /// Converts a `reqwest::Error` to an `io::Error`.
 fn reqwest_error_to_io_error(e: reqwest::Error) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, format!("{}", e))
+    io::Error::other(format!("{}", e))
 }
 
 /// Container for authentication data to track after login.

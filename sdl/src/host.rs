@@ -58,7 +58,7 @@ const LOOP_DELAY_MS: u64 = 1;
 
 /// Converts a `fmt::Error` to an `io::Error`.
 fn fmt_error_to_io_error(e: fmt::Error) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, e)
+    io::Error::other(e)
 }
 
 /// Converts a `TextureValueError` to an `io::Error`.

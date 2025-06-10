@@ -151,12 +151,12 @@ impl WebDrive {
     fn fixup_names(&mut self) -> io::Result<()> {
         let n = match self.storage.length() {
             Ok(n) => n,
-            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", e))),
+            Err(e) => return Err(io::Error::other(format!("{:?}", e))),
         };
         for i in 0..n {
             let key = match self.storage.key(i) {
                 Ok(Some(key)) => key,
-                Ok(None) => return Err(io::Error::new(io::ErrorKind::Other, "Entry vanished")),
+                Ok(None) => return Err(io::Error::other("Entry vanished")),
                 Err(e) => {
                     return Err(io::Error::new(
                         io::ErrorKind::Other,
@@ -258,12 +258,12 @@ impl Drive for WebDrive {
 
         let n = match self.storage.length() {
             Ok(n) => n,
-            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", e))),
+            Err(e) => return Err(io::Error::other(format!("{:?}", e))),
         };
         for i in 0..n {
             let key = match self.storage.key(i) {
                 Ok(Some(key)) => key,
-                Ok(None) => return Err(io::Error::new(io::ErrorKind::Other, "Entry vanished")),
+                Ok(None) => return Err(io::Error::other("Entry vanished")),
                 Err(e) => {
                     return Err(io::Error::new(
                         io::ErrorKind::Other,

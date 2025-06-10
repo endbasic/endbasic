@@ -265,7 +265,7 @@ impl Console for MockConsole {
     fn size_pixels(&self) -> io::Result<SizeInPixels> {
         match self.size_pixels {
             Some(size) => Ok(size),
-            None => Err(io::Error::new(io::ErrorKind::Other, "Graphical console size not yet set")),
+            None => Err(io::Error::other("Graphical console size not yet set")),
         }
     }
 

@@ -41,9 +41,9 @@ const DEFAULT_FONT_SIZE: u16 = 16;
 /// Converts a `JsValue` error to an `io::Error`.
 pub(crate) fn js_value_to_io_error(e: JsValue) -> io::Error {
     if let Some(str) = e.as_string() {
-        return io::Error::new(io::ErrorKind::Other, str);
+        return io::Error::other(str);
     }
-    io::Error::new(io::ErrorKind::Other, "Unknown error")
+    io::Error::other("Unknown error")
 }
 
 /// Returns the 2D rendering context for a given `canvas` element.

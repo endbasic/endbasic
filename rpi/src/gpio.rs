@@ -39,7 +39,7 @@ pub(crate) fn gpio_error_to_io_error(e: gpio::Error) -> io::Error {
         gpio::Error::PinNotAvailable(pin) => {
             io::Error::new(io::ErrorKind::InvalidInput, format!("Unknown pin number {}", pin))
         }
-        e => io::Error::new(io::ErrorKind::Other, e.to_string()),
+        e => io::Error::other(e.to_string()),
     }
 }
 
