@@ -1,15 +1,18 @@
 Usage: endbasic [options] [program-file]
 
 Options:
+    -h, --help          show command-line usage information and exit
+        --version       show version information and exit
         --console CONSOLE-SPEC
                         type and properties of the console to use
-    -h, --help          show command-line usage information and exit
     -i, --interactive   force interactive mode when running a script
         --local-drive URI
                         location of the drive to mount as LOCAL
         --service-url URL
                         base URL of the cloud service
-        --version       show version information and exit
+
+Arguments:
+    [program-file]      script to execute without entering interactive mode
 
 CONSOLE-SPEC can be one of the following:
     sdl[:SPEC]          enables the graphical console and configures it

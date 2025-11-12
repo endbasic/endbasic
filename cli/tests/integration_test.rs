@@ -297,7 +297,7 @@ fn test_cli_program_name_uses_arg0() {
         Behavior::Null,
         Behavior::Null,
         Behavior::Literal(
-            "Usage error: Too many arguments\nType custom-name --help for more information\n"
+            "Usage error: Too many arguments\nType `custom-name --help` for more information\n"
                 .to_owned(),
         ),
     );
@@ -312,7 +312,7 @@ fn test_cli_too_many_args() {
         Behavior::Null,
         Behavior::Null,
         Behavior::Literal(
-            "Usage error: Too many arguments\nType endbasic --help for more information\n"
+            "Usage error: Too many arguments\nType `endbasic --help` for more information\n"
                 .to_owned(),
         ),
     );
@@ -327,7 +327,7 @@ fn test_cli_unknown_option() {
         Behavior::Null,
         Behavior::Null,
         Behavior::Literal(
-            "Usage error: Unrecognized option: 'Z'\nType endbasic --help for more information\n"
+            "Usage error: Unrecognized option: 'Z'\nType `endbasic --help` for more information\n"
                 .to_owned(),
         ),
     );
