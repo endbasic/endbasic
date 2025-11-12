@@ -27,13 +27,11 @@ use async_channel::Sender;
 use endbasic_core::exec::Signal;
 use endbasic_std::console::{Console, ConsoleSpec};
 use endbasic_std::storage::Storage;
-use getopts::Options;
+use getoptsargs::prelude::*;
 use std::cell::RefCell;
-use std::env;
 use std::fs::File;
 use std::io;
 use std::path::Path;
-use std::process;
 use std::rc::Rc;
 
 /// Errors caused by the user when invoking this binary (invalid options or arguments).
@@ -50,53 +48,28 @@ impl UsageError {
     }
 }
 
-/// Consumes and returns the program name from `env::Args`.
-///
-/// If the program name cannot be obtained, return `default_name` instead.
-fn program_name(mut args: env::Args, default_name: &'static str) -> (String, env::Args) {
-    let name = match args.next() {
-        Some(arg0) => match Path::new(&arg0).file_stem() {
-            Some(basename) => match basename.to_str() {
-                Some(s) => s.to_owned(),
-                None => default_name.to_owned(),
-            },
-            None => default_name.to_owned(),
-        },
-        None => default_name.to_owned(),
-    };
-    (name, args)
-}
-
-/// Prints usage information for program `name` with `opts` following the GNU Standards format.
-fn help(name: &str, opts: &Options) {
-    let brief = format!("Usage: {} [options] [program-file]", name);
-    println!("{}", opts.usage(&brief));
-    println!("CONSOLE-SPEC can be one of the following:");
+/// Prints extra usage information into `o`.
+fn app_extra_help(o: &mut dyn io::Write) -> io::Result<()> {
+    writeln!(o, "CONSOLE-SPEC can be one of the following:")?;
     if cfg!(feature = "sdl") {
-        println!("    sdl[:SPEC]          enables the graphical console and configures it");
-        println!("                        with the settings in SPEC, which is of the form:");
-        println!("                        resolution=RESOLUTION,fg_color=COLOR,bg_color=COLOR,");
-        println!("                        font_path=TTF,font_size=SIZE");
-        println!("                        individual components of the SPEC can be omitted");
-        println!("                        RESOLUTION can be one of 'fs' (for full screen),");
-        println!("                        'WIDTHxHEIGHT' or 'WIDTHxHEIGHTfs'");
+        writeln!(o, "    sdl[:SPEC]          enables the graphical console and configures it")?;
+        writeln!(o, "                        with the settings in SPEC, which is of the form:")?;
+        writeln!(
+            o,
+            "                        resolution=RESOLUTION,fg_color=COLOR,bg_color=COLOR,"
+        )?;
+        writeln!(o, "                        font_path=TTF,font_size=SIZE")?;
+        writeln!(o, "                        individual components of the SPEC can be omitted")?;
+        writeln!(o, "                        RESOLUTION can be one of 'fs' (for full screen),")?;
+        writeln!(o, "                        'WIDTHxHEIGHT' or 'WIDTHxHEIGHTfs'")?;
     }
     if cfg!(feature = "rpi") {
-        println!("    st7735s[:SPEC]      enables the ST7735S LCD console and configures it");
-        println!("                        with the settings in SPEC, which is of the form:");
-        println!("                        fg_color=COLOR,bg_color=COLOR,font=NAME");
+        writeln!(o, "    st7735s[:SPEC]      enables the ST7735S LCD console and configures it")?;
+        writeln!(o, "                        with the settings in SPEC, which is of the form:")?;
+        writeln!(o, "                        fg_color=COLOR,bg_color=COLOR,font=NAME")?;
     }
-    println!("    text                enables the text-based console");
-    println!();
-    println!("Report bugs to: https://github.com/endbasic/endbasic/issues");
-    println!("EndBASIC home page: https://www.endbasic.dev/");
-}
-
-/// Prints version information following the GNU Standards format.
-fn version() {
-    println!("EndBASIC {}", env!("CARGO_PKG_VERSION"));
-    println!("Copyright 2020-2025 Julio Merino");
-    println!("License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>");
+    writeln!(o, "    text                enables the text-based console")?;
+    Ok(())
 }
 
 /// Creates a new EndBASIC machine builder based on the features enabled in this crate.
@@ -344,36 +317,28 @@ async fn run_interactive(
     }
 }
 
-/// Version of `main` that returns errors to the caller for reporting.
-async fn safe_main(name: &str, args: env::Args) -> Result<i32> {
-    let args: Vec<String> = args.collect();
+fn app_build(builder: Builder) -> Builder {
+    builder
+        .copyright("Copyright 2020-2025 Julio Merino")
+        .license(License::Apache2)
+        .homepage("https://www.endbasic.dev/")
+        .bugs("https://github.com/endbasic/endbasic/issues")
+        .optopt("", "console", "type and properties of the console to use", "CONSOLE-SPEC")
+        .optflag("i", "interactive", "force interactive mode when running a script")
+        .optopt("", "local-drive", "location of the drive to mount as LOCAL", "URI")
+        .optopt("", "service-url", "base URL of the cloud service", "URL")
+        .trailarg("program-file", 0, 1, "script to execute without entering interactive mode")
+        .extra_help(app_extra_help)
+}
 
-    let mut opts = Options::new();
-    opts.optopt("", "console", "type and properties of the console to use", "CONSOLE-SPEC");
-    opts.optflag("h", "help", "show command-line usage information and exit");
-    opts.optflag("i", "interactive", "force interactive mode when running a script");
-    opts.optopt("", "local-drive", "location of the drive to mount as LOCAL", "URI");
-    opts.optopt("", "service-url", "base URL of the cloud service", "URL");
-    opts.optflag("", "version", "show version information and exit");
-    let matches = opts.parse(args)?;
-
-    if matches.opt_present("help") {
-        help(name, &opts);
-        return Ok(0);
-    }
-
-    if matches.opt_present("version") {
-        version();
-        return Ok(0);
-    }
-
+async fn app_main(matches: Matches) -> Result<i32> {
     let console_spec = matches.opt_str("console");
 
     let service_url = matches
         .opt_str("service-url")
         .unwrap_or_else(|| endbasic_client::PROD_API_ADDRESS.to_owned());
 
-    match matches.free.as_slice() {
+    match matches.arg_trail() {
         [] => {
             let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
             Ok(run_repl_loop(console_spec.as_deref(), &local_drive, &service_url).await?)
@@ -391,27 +356,4 @@ async fn safe_main(name: &str, args: env::Args) -> Result<i32> {
     }
 }
 
-#[tokio::main]
-async fn main() {
-    let (name, args) = program_name(env::args(), "endbasic");
-    let exit_code = match safe_main(&name, args).await {
-        Ok(code) => code,
-        Err(e) => {
-            if let Some(e) = e.downcast_ref::<UsageError>() {
-                eprintln!("Usage error: {}", e);
-                eprintln!("Type {} --help for more information", name);
-                2
-            } else if let Some(e) = e.downcast_ref::<getopts::Fail>() {
-                eprintln!("Usage error: {}", e);
-                eprintln!("Type {} --help for more information", name);
-                2
-            } else {
-                eprintln!("{}: {}", name, e);
-                1
-            }
-        }
-    };
-    // There should not be any interesting destructors left behind when calling this, or else they
-    // will not run.
-    process::exit(exit_code);
-}
+tokio_app!("EndBASIC", app_build, app_main);

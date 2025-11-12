@@ -21,7 +21,7 @@ rpi = ["endbasic-rpi", "endbasic-st7735s"]
 anyhow = "1.0"
 async-channel = "2.2"
 dirs = "5.0"
-getopts = "0.2"
+getoptsargs = "0.1"
 thiserror = "1.0"
 
 [dependencies.endbasic-client]
