@@ -44,7 +44,7 @@ impl LineBuffer {
     }
 
     /// Gets and iterator over buffer chars.
-    pub fn chars(&self) -> Chars {
+    pub fn chars(&self) -> Chars<'_> {
         self.line.chars()
     }
 

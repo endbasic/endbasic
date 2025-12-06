@@ -576,7 +576,7 @@ impl Callable for PrintCommand {
                     }
                     ArgSep::Long => {
                         text += " ";
-                        while text.len() % 14 != 0 {
+                        while !text.len().is_multiple_of(14) {
                             text += " ";
                         }
                     }

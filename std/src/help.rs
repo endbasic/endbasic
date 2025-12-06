@@ -395,7 +395,7 @@ impl Topics {
     }
 
     /// Returns an iterator over all the topics.
-    fn values(&self) -> radix_trie::iter::Values<String, Box<dyn Topic>> {
+    fn values(&self) -> radix_trie::iter::Values<'_, String, Box<dyn Topic>> {
         self.0.values()
     }
 }
