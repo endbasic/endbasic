@@ -507,7 +507,7 @@ impl Tester {
 
     /// Runs `script` in the configured machine and returns a `Checker` object to validate
     /// expectations about the execution.
-    pub fn run<S: Into<String>>(&mut self, script: S) -> Checker {
+    pub fn run<S: Into<String>>(&mut self, script: S) -> Checker<'_> {
         let result = block_on(self.machine.exec(&mut script.into().as_bytes()));
         Checker::new(self, result)
     }
@@ -520,7 +520,7 @@ impl Tester {
     ///
     /// This is useful when compared to `run` because `Machine::exec` compiles the script as one
     /// unit and thus compilation errors may prevent validating other operations later on.
-    pub fn run_n(&mut self, scripts: &[&str]) -> Checker {
+    pub fn run_n(&mut self, scripts: &[&str]) -> Checker<'_> {
         let mut result = Ok(StopReason::Eof);
         for script in scripts {
             result = block_on(self.machine.exec(&mut script.as_bytes()));

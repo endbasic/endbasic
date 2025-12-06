@@ -1968,7 +1968,7 @@ impl Iterator for StatementIter<'_> {
 }
 
 /// Extracts all statements from the input stream.
-pub(crate) fn parse(input: &mut dyn io::Read) -> StatementIter {
+pub(crate) fn parse(input: &mut dyn io::Read) -> StatementIter<'_> {
     StatementIter { parser: Parser::from(input) }
 }
 
