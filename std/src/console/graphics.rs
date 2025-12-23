@@ -121,10 +121,7 @@ impl ClampedMul<u16, u16> for u16 {
 
 impl ClampedMul<u16, i32> for u16 {
     fn clamped_mul(self, rhs: u16) -> i32 {
-        match i32::from(self).checked_mul(i32::from(rhs)) {
-            Some(v) => v,
-            None => i32::MAX,
-        }
+        i32::from(self).checked_mul(i32::from(rhs)).unwrap_or(i32::MAX)
     }
 }
 
