@@ -319,7 +319,7 @@ async fn run_interactive(
 
 fn app_build(builder: Builder) -> Builder {
     builder
-        .copyright("Copyright 2020-2025 Julio Merino")
+        .copyright("Copyright 2020-2026 Julio Merino")
         .license(License::Apache2)
         .homepage("https://www.endbasic.dev/")
         .bugs("https://github.com/endbasic/endbasic/issues")
