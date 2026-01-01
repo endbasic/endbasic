@@ -2452,6 +2452,39 @@ mod tests {
     }
 
     #[test]
+    fn test_exit_for() {
+        do_ok_test(
+            r#"
+            FOR i = 1 to 10
+                IF i = 5 THEN EXIT FOR
+                OUT i
+            NEXT
+            "#,
+            &[],
+            &["1", "2", "3", "4"],
+        );
+    }
+
+    #[test]
+    fn test_exit_do_and_exit_for() {
+        do_ok_test(
+            r#"
+            FOR i = 1 to 10
+                j = 5
+                DO WHILE j > 0
+                    IF j = 2 THEN EXIT DO
+                    IF i = 4 THEN EXIT FOR
+                    OUT i; j
+                    j = j - 1
+                LOOP
+            NEXT
+            "#,
+            &[],
+            &["1 5", "1 4", "1 3", "2 5", "2 4", "2 3", "3 5", "3 4", "3 3"],
+        );
+    }
+
+    #[test]
     fn test_expr_load_not_assigned() {
         do_error_test(
             r#"

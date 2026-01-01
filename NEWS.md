@@ -52,6 +52,8 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
     
 *   Fixed the rendering of zero-sized rectangles in the SDL console so that
     debug builds don't crash and so that the behavior matches the web console.
+    
+*   Added support for `EXIT FOR`.
 
 ## Changes in version 0.11.1
 

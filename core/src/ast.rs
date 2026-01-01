@@ -607,9 +607,9 @@ pub struct EndSpan {
     pub code: Option<Expr>,
 }
 
-/// Components of an `EXIT DO` statement.
+/// Components of an `EXIT` statement.
 #[derive(Debug, Eq, PartialEq)]
-pub struct ExitDoSpan {
+pub struct ExitSpan {
     /// Position of the statement.
     pub pos: LineCol,
 }
@@ -807,7 +807,10 @@ pub enum Statement {
     End(EndSpan),
 
     /// Represents an `EXIT DO` statement.
-    ExitDo(ExitDoSpan),
+    ExitDo(ExitSpan),
+
+    /// Represents an `EXIT FOR` statement.
+    ExitFor(ExitSpan),
 
     /// Represents a `FOR` statement.
     For(ForSpan),

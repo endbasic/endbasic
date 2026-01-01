@@ -669,10 +669,16 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parses an `EXIT DO` statement.
-    fn parse_exit_do(&mut self, pos: LineCol) -> Result<Statement> {
-        self.expect_and_consume(Token::Do, "Expecting DO after EXIT")?;
-        Ok(Statement::ExitDo(ExitDoSpan { pos }))
+    /// Parses an `EXIT` statement.
+    fn parse_exit(&mut self, pos: LineCol) -> Result<Statement> {
+        let peeked = self.lexer.peek()?;
+        let stmt = match peeked.token {
+            Token::Do => Statement::ExitDo(ExitSpan { pos }),
+            Token::For => Statement::ExitFor(ExitSpan { pos }),
+            _ => return Err(Error::Bad(peeked.pos, "Expecting DO or FOR after EXIT".to_owned())),
+        };
+        self.lexer.consume_peeked();
+        Ok(stmt)
     }
 
     /// Parses a variable list of comma-separated expressions.  The caller must have consumed the
@@ -1785,7 +1791,7 @@ impl<'a> Parser<'a> {
             Token::Data => Ok(Some(self.parse_data()?)),
             Token::End => Ok(Some(self.parse_end(token_span.pos)?)),
             Token::Eof | Token::Eol => Ok(None),
-            Token::Exit => Ok(Some(self.parse_exit_do(token_span.pos)?)),
+            Token::Exit => Ok(Some(self.parse_exit(token_span.pos)?)),
             Token::Gosub => Ok(Some(self.parse_gosub()?)),
             Token::Goto => Ok(Some(self.parse_goto()?)),
             Token::On => Ok(Some(self.parse_on()?)),
@@ -1832,7 +1838,7 @@ impl<'a> Parser<'a> {
             Token::End => Ok(Some(self.parse_end(token_span.pos)?)),
             Token::Eof => return Ok(None),
             Token::Eol => Ok(None),
-            Token::Exit => Ok(Some(self.parse_exit_do(token_span.pos)?)),
+            Token::Exit => Ok(Some(self.parse_exit(token_span.pos)?)),
             Token::If => {
                 let result = self.parse_if(token_span.pos);
                 if result.is_err() {
@@ -2749,13 +2755,18 @@ mod tests {
 
     #[test]
     fn test_exit_do() {
-        do_ok_test("  EXIT DO", &[Statement::ExitDo(ExitDoSpan { pos: lc(1, 3) })]);
+        do_ok_test("  EXIT DO", &[Statement::ExitDo(ExitSpan { pos: lc(1, 3) })]);
     }
 
     #[test]
-    fn test_exit_do_errors() {
-        do_error_test("EXIT", "1:5: Expecting DO after EXIT");
-        do_error_test("EXIT 5", "1:6: Expecting DO after EXIT");
+    fn test_exit_for() {
+        do_ok_test("  EXIT FOR", &[Statement::ExitFor(ExitSpan { pos: lc(1, 3) })]);
+    }
+
+    #[test]
+    fn test_exit_errors() {
+        do_error_test("EXIT", "1:5: Expecting DO or FOR after EXIT");
+        do_error_test("EXIT 5", "1:6: Expecting DO or FOR after EXIT");
     }
 
     /// Wrapper around `do_ok_test` to parse an expression.  Given that expressions alone are not
@@ -3833,9 +3844,9 @@ mod tests {
 
     #[test]
     fn test_if_uniline_allowed_exit() {
-        do_if_uniline_allowed_test("EXIT DO", Statement::ExitDo(ExitDoSpan { pos: lc(1, 11) }));
+        do_if_uniline_allowed_test("EXIT DO", Statement::ExitDo(ExitSpan { pos: lc(1, 11) }));
 
-        do_error_test("IF 1 THEN EXIT", "1:15: Expecting DO after EXIT");
+        do_error_test("IF 1 THEN EXIT", "1:15: Expecting DO or FOR after EXIT");
     }
 
     #[test]

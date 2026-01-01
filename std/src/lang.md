@@ -222,6 +222,8 @@ You can optionally specify a positive or negative `STEP` to change how the itera
         PRINT a
     NEXT
 
+`FOR` loops can be exited an any point via the `EXIT FOR` statement.
+
 # Jumps
 
 GOTO, GOSUB, END, and labels

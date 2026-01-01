@@ -45,7 +45,8 @@ currently supports:
 *   `IF ... THEN ... [ELSE ...]` uniline statements.
 *   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` multiline
     statements.
-*   `FOR x = ... TO ... [STEP ...]` / `NEXT` loops.
+*   `FOR x = ... TO ... [STEP ...]` / `NEXT` loops with optional `EXIT FOR`
+    early terminations.
 *   `GOSUB line` / `GOSUB @label` / `RETURN` for procedure execution.
 *   `GOTO line` / `GOTO @label` statements and `@label` annotations.
 *   `SELECT CASE` / `CASE ...` / `CASE IS ...` / `CASE ... TO ...` /
