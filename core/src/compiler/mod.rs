@@ -59,8 +59,8 @@ pub enum Error {
     #[error("{0}: I/O error during compilation: {1}")]
     IoError(LineCol, io::Error),
 
-    #[error("{0}: EXIT DO outside of DO loop")]
-    MisplacedExitDo(LineCol),
+    #[error("{0}: EXIT {1} outside of {1} loop")]
+    MisplacedExit(LineCol, &'static str),
 
     #[error("{0}: {1} requires a boolean condition")]
     NotABooleanCondition(LineCol, String),
@@ -257,8 +257,8 @@ struct Fixup {
 }
 
 impl Fixup {
-    /// Constructs a `Fixup` for an `EXIT DO` instruction.
-    fn from_exit_do(target: String, span: ExitDoSpan) -> Self {
+    /// Constructs a `Fixup` for an `EXIT` instruction.
+    fn from_exit(target: String, span: ExitSpan) -> Self {
         Self { target, target_pos: span.pos, ftype: FixupType::Goto }
     }
 
@@ -290,6 +290,13 @@ struct Compiler {
     /// the second component indicates their nesting.  Every time the second component reaches zero,
     /// the first component has to be incremented.
     exit_do_level: (usize, usize),
+
+    /// Current nesting of `FOR` loops, needed to assign targets for `EXIT FOR` statements.
+    ///
+    /// The first component of this pair indicates which block of `EXIT FOR`s we are dealing with and
+    /// the second component indicates their nesting.  Every time the second component reaches zero,
+    /// the first component has to be incremented.
+    exit_for_level: (usize, usize),
 
     /// Current number of `SELECT` statements, needed to assign internal variable names.
     selects: usize,
@@ -325,14 +332,15 @@ impl Compiler {
         pc
     }
 
-    /// Generates a fake label for the end of a `DO` loop based on the current nesting `level`.
+    /// Generates a fake label for the end of a scope based on the current nesting `level` and the
+    /// `name` of the loop.
     ///
-    /// This is a little hack to reuse the same machinery that handles `GOTO`s to handle early exits
-    /// in `DO` loops.  We can do this because we know that users cannot specify custom labels that
+    /// This is a little hack to reuse the same machinery that handles `GOTO`s to handle early
+    /// `EXIT`s.  We can do this because we know that users cannot specify custom labels that
     /// start with a digit and all user-provided labels that do start with a digit are also fully
     /// numeric.
-    fn do_label(level: (usize, usize)) -> String {
-        format!("0do{}_{}", level.0, level.1)
+    fn exit_label(name: &'static str, level: (usize, usize)) -> String {
+        format!("0{}{}_{}", name, level.0, level.1)
     }
 
     /// Generates the name of the symbol that holds the return value of the function `name`.
@@ -561,7 +569,8 @@ impl Compiler {
             }
         }
 
-        let existing = self.labels.insert(Compiler::do_label(self.exit_do_level), end_pc + 1);
+        let existing =
+            self.labels.insert(Compiler::exit_label("do", self.exit_do_level), end_pc + 1);
         assert!(existing.is_none(), "Auto-generated label must be unique");
         self.exit_do_level.1 -= 1;
         if self.exit_do_level.1 == 0 {
@@ -578,6 +587,8 @@ impl Compiler {
                 || span.iter.ref_type().unwrap() == ExprType::Double
                 || span.iter.ref_type().unwrap() == ExprType::Integer
         );
+
+        self.exit_for_level.1 += 1;
 
         if span.iter_double && span.iter.ref_type().is_none() {
             let key = SymbolKey::from(span.iter.name());
@@ -613,9 +624,17 @@ impl Compiler {
 
         self.compile_assignment(span.iter.clone(), span.iter_pos, span.next)?;
 
-        self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
+        let end_pc = self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
 
         self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.next_pc);
+
+        let existing =
+            self.labels.insert(Compiler::exit_label("for", self.exit_for_level), end_pc + 1);
+        assert!(existing.is_none(), "Auto-generated label must be unique");
+        self.exit_for_level.1 -= 1;
+        if self.exit_for_level.1 == 0 {
+            self.exit_for_level.0 += 1;
+        }
 
         Ok(())
     }
@@ -912,12 +931,23 @@ impl Compiler {
 
             Statement::ExitDo(span) => {
                 if self.exit_do_level.1 == 0 {
-                    return Err(Error::MisplacedExitDo(span.pos));
+                    return Err(Error::MisplacedExit(span.pos, "DO"));
                 }
                 let exit_do_pc = self.emit(Instruction::Nop);
                 self.fixups.insert(
                     exit_do_pc,
-                    Fixup::from_exit_do(Compiler::do_label(self.exit_do_level), span),
+                    Fixup::from_exit(Compiler::exit_label("do", self.exit_do_level), span),
+                );
+            }
+
+            Statement::ExitFor(span) => {
+                if self.exit_for_level.1 == 0 {
+                    return Err(Error::MisplacedExit(span.pos, "FOR"));
+                }
+                let exit_for_pc = self.emit(Instruction::Nop);
+                self.fixups.insert(
+                    exit_for_pc,
+                    Fixup::from_exit(Compiler::exit_label("for", self.exit_for_level), span),
                 );
             }
 
@@ -1929,6 +1959,102 @@ mod tests {
             .parse("WHILE TRUE: EXIT DO: WEND")
             .compile()
             .expect_err("1:13: EXIT DO outside of DO loop")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_exit_for_infinite_simple() {
+        Tester::default()
+            .parse("FOR i = 1 to 10\nEXIT FOR\nNEXT")
+            .compile()
+            .expect_instr(0, Instruction::PushInteger(1, lc(1, 9)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(2, Instruction::LoadInteger(SymbolKey::from("i"), lc(1, 5)))
+            .expect_instr(3, Instruction::PushInteger(10, lc(1, 14)))
+            .expect_instr(4, Instruction::LessEqualIntegers(lc(1, 11)))
+            .expect_instr(5, Instruction::JumpIfNotTrue(12))
+            .expect_instr(6, Instruction::Jump(JumpISpan { addr: 12 }))
+            .expect_instr(7, Instruction::LoadInteger(SymbolKey::from("i"), lc(1, 5)))
+            .expect_instr(8, Instruction::PushInteger(1, lc(1, 16)))
+            .expect_instr(9, Instruction::AddIntegers(lc(1, 11)))
+            .expect_instr(10, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(11, Instruction::Jump(JumpISpan { addr: 2 }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_exit_for_nested() {
+        Tester::default()
+            .parse("FOR i = 1 to 10\nFOR j = 2 to 20\nEXIT FOR\nNEXT\nEXIT FOR\nNEXT")
+            .compile()
+            .expect_instr(0, Instruction::PushInteger(1, lc(1, 9)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(2, Instruction::LoadInteger(SymbolKey::from("i"), lc(1, 5)))
+            .expect_instr(3, Instruction::PushInteger(10, lc(1, 14)))
+            .expect_instr(4, Instruction::LessEqualIntegers(lc(1, 11)))
+            .expect_instr(5, Instruction::JumpIfNotTrue(24))
+            // Begin nested for loop.
+            .expect_instr(6, Instruction::PushInteger(2, lc(2, 9)))
+            .expect_instr(7, Instruction::Assign(SymbolKey::from("j")))
+            .expect_instr(8, Instruction::LoadInteger(SymbolKey::from("j"), lc(2, 5)))
+            .expect_instr(9, Instruction::PushInteger(20, lc(2, 14)))
+            .expect_instr(10, Instruction::LessEqualIntegers(lc(2, 11)))
+            .expect_instr(11, Instruction::JumpIfNotTrue(18))
+            .expect_instr(12, Instruction::Jump(JumpISpan { addr: 18 })) // Exit for.
+            .expect_instr(13, Instruction::LoadInteger(SymbolKey::from("j"), lc(2, 5)))
+            .expect_instr(14, Instruction::PushInteger(1, lc(2, 16)))
+            .expect_instr(15, Instruction::AddIntegers(lc(2, 11)))
+            .expect_instr(16, Instruction::Assign(SymbolKey::from("j")))
+            .expect_instr(17, Instruction::Jump(JumpISpan { addr: 8 }))
+            // Begin nested for loop.
+            .expect_instr(18, Instruction::Jump(JumpISpan { addr: 24 })) // Exit for.
+            .expect_instr(19, Instruction::LoadInteger(SymbolKey::from("i"), lc(1, 5)))
+            .expect_instr(20, Instruction::PushInteger(1, lc(1, 16)))
+            .expect_instr(21, Instruction::AddIntegers(lc(1, 11)))
+            .expect_instr(22, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(23, Instruction::Jump(JumpISpan { addr: 2 }))
+            .check();
+    }
+
+    #[test]
+    fn test_compile_exit_for_outside_of_loop() {
+        Tester::default()
+            .parse("EXIT FOR")
+            .compile()
+            .expect_err("1:1: EXIT FOR outside of FOR loop")
+            .check();
+
+        Tester::default()
+            .parse("WHILE TRUE: EXIT FOR: WEND")
+            .compile()
+            .expect_err("1:13: EXIT FOR outside of FOR loop")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_exit_do_and_exit_for() {
+        Tester::default()
+            .parse("DO\nFOR i = 1 to 10\nDO\nEXIT DO\nLOOP\nEXIT FOR\nNEXT\nLOOP")
+            .compile()
+            // Begin nested for loop.
+            .expect_instr(0, Instruction::PushInteger(1, lc(2, 9)))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(2, Instruction::LoadInteger(SymbolKey::from("i"), lc(2, 5)))
+            .expect_instr(3, Instruction::PushInteger(10, lc(2, 14)))
+            .expect_instr(4, Instruction::LessEqualIntegers(lc(2, 11)))
+            .expect_instr(5, Instruction::JumpIfNotTrue(14))
+            .expect_instr(6, Instruction::Jump(JumpISpan { addr: 8 })) // Exit do.
+            // Begin nested do loop.
+            .expect_instr(7, Instruction::Jump(JumpISpan { addr: 6 }))
+            // End nested do loop.
+            .expect_instr(8, Instruction::Jump(JumpISpan { addr: 14 })) // Exit for.
+            .expect_instr(9, Instruction::LoadInteger(SymbolKey::from("i"), lc(2, 5)))
+            .expect_instr(10, Instruction::PushInteger(1, lc(2, 16)))
+            .expect_instr(11, Instruction::AddIntegers(lc(2, 11)))
+            .expect_instr(12, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(13, Instruction::Jump(JumpISpan { addr: 2 }))
+            // End nested for loop.
+            .expect_instr(14, Instruction::Jump(JumpISpan { addr: 0 }))
             .check();
     }
 

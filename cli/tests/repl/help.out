@@ -375,6 +375,8 @@ Output from HELP "FOR":
             PRINT a
         NEXT
 
+    `FOR` loops can be exited an any point via the `EXIT FOR` statement.
+
 Output from HELP "FUNCTIONS":
 
 [38;5;11m    User-defined functions
