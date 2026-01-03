@@ -812,6 +812,12 @@ pub enum Statement {
     /// Represents an `EXIT FOR` statement.
     ExitFor(ExitSpan),
 
+    /// Represents an `EXIT FUNCTION` statement.
+    ExitFunction(ExitSpan),
+
+    /// Represents an `EXIT SUB` statement.
+    ExitSub(ExitSpan),
+
     /// Represents a `FOR` statement.
     For(ForSpan),
 

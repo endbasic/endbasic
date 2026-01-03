@@ -397,6 +397,9 @@ Output from HELP "FUNCTIONS":
     Global variables can be defined via the `DIM SHARED` keyword.  See the
     "Variables" help topic for details.
 
+    Functions can be returned from at any point via the `EXIT FUNCTION`
+    statement.
+
 Output from HELP "IF":
 
 [38;5;11m    Multiline and uniline IF statements
@@ -521,6 +524,9 @@ Output from HELP "SUBROUTINES":
 
     Global variables can be defined via the `DIM SHARED` keyword.  See the
     "Variables" help topic for details.
+
+    Subroutines can be returned from at any point via the `EXIT SUB`
+    statement.
 
 Output from HELP "STYLE":
 

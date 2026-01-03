@@ -3490,6 +3490,21 @@ mod tests {
     }
 
     #[test]
+    fn test_user_functions_early_exit() {
+        let code = r#"
+            FUNCTION maybe_exit(i%)
+                maybe_exit = 1
+                IF i > 2 THEN EXIT FUNCTION
+                maybe_exit = 2
+            END FUNCTION
+            FOR i = 0 to 5
+                OUT maybe_exit(i)
+            NEXT
+        "#;
+        do_ok_test(code, &[], &["2", "2", "2", "1", "1", "1"]);
+    }
+
+    #[test]
     fn test_user_subs_recursion() {
         let code = r#"
             DIM SHARED counter
@@ -3537,5 +3552,20 @@ mod tests {
             foo 3, 4
         "#;
         do_error_test(code, &[], &[], "5:13: FOO expected n%");
+    }
+
+    #[test]
+    fn test_user_subs_early_exit() {
+        let code = r#"
+            SUB maybe_exit(i%)
+                OUT 1
+                IF i > 2 THEN EXIT SUB
+                OUT 2
+            END SUB
+            FOR i = 0 to 5
+                maybe_exit(i)
+            NEXT
+        "#;
+        do_ok_test(code, &[], &["1", "2", "1", "2", "1", "2", "1", "1", "1"]);
     }
 }
