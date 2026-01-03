@@ -335,6 +335,16 @@ impl Compiler {
         pc
     }
 
+    /// Generates a fake label for the epilogue a callable based on its `name`.
+    ///
+    /// This is a little hack to reuse the same machinery that handles `GOTO`s to handle early
+    /// `EXIT`s.  We can do this because we know that users cannot specify custom labels that
+    /// start with a digit and all user-provided labels that do start with a digit are also fully
+    /// numeric.
+    fn exit_label_for_callable(name: &SymbolKey) -> String {
+        format!("0{}", name)
+    }
+
     /// Generates a fake label for the end of a scope based on the current nesting `level` and the
     /// `name` of the loop.
     ///
@@ -342,7 +352,7 @@ impl Compiler {
     /// `EXIT`s.  We can do this because we know that users cannot specify custom labels that
     /// start with a digit and all user-provided labels that do start with a digit are also fully
     /// numeric.
-    fn exit_label(name: &'static str, level: (usize, usize)) -> String {
+    fn exit_label_for_loop(name: &'static str, level: (usize, usize)) -> String {
         format!("0{}{}_{}", name, level.0, level.1)
     }
 
@@ -573,7 +583,7 @@ impl Compiler {
         }
 
         let existing =
-            self.labels.insert(Compiler::exit_label("do", self.exit_do_level), end_pc + 1);
+            self.labels.insert(Compiler::exit_label_for_loop("do", self.exit_do_level), end_pc + 1);
         assert!(existing.is_none(), "Auto-generated label must be unique");
         self.exit_do_level.1 -= 1;
         if self.exit_do_level.1 == 0 {
@@ -631,8 +641,9 @@ impl Compiler {
 
         self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.next_pc);
 
-        let existing =
-            self.labels.insert(Compiler::exit_label("for", self.exit_for_level), end_pc + 1);
+        let existing = self
+            .labels
+            .insert(Compiler::exit_label_for_loop("for", self.exit_for_level), end_pc + 1);
         assert!(existing.is_none(), "Auto-generated label must be unique");
         self.exit_for_level.1 -= 1;
         if self.exit_for_level.1 == 0 {
@@ -939,7 +950,7 @@ impl Compiler {
                 let exit_do_pc = self.emit(Instruction::Nop);
                 self.fixups.insert(
                     exit_do_pc,
-                    Fixup::from_exit(Compiler::exit_label("do", self.exit_do_level), span),
+                    Fixup::from_exit(Compiler::exit_label_for_loop("do", self.exit_do_level), span),
                 );
             }
 
@@ -950,8 +961,37 @@ impl Compiler {
                 let exit_for_pc = self.emit(Instruction::Nop);
                 self.fixups.insert(
                     exit_for_pc,
-                    Fixup::from_exit(Compiler::exit_label("for", self.exit_for_level), span),
+                    Fixup::from_exit(
+                        Compiler::exit_label_for_loop("for", self.exit_for_level),
+                        span,
+                    ),
                 );
+            }
+
+            Statement::ExitFunction(span) => {
+                let Some(current_callable) = self.current_callable.as_ref() else {
+                    return Err(Error::MisplacedExit(span.pos, "FUNCTION"));
+                };
+                if !current_callable.1 {
+                    return Err(Error::MisplacedExit(span.pos, "FUNCTION"));
+                }
+
+                let exit_label = Compiler::exit_label_for_callable(&current_callable.0);
+                let exit_function_pc = self.emit(Instruction::Nop);
+                self.fixups.insert(exit_function_pc, Fixup::from_exit(exit_label, span));
+            }
+
+            Statement::ExitSub(span) => {
+                let Some(current_callable) = self.current_callable.as_ref() else {
+                    return Err(Error::MisplacedExit(span.pos, "SUB"));
+                };
+                if current_callable.1 {
+                    return Err(Error::MisplacedExit(span.pos, "SUB"));
+                }
+
+                let exit_label = Compiler::exit_label_for_callable(&current_callable.0);
+                let exit_sub_pc = self.emit(Instruction::Nop);
+                self.fixups.insert(exit_sub_pc, Fixup::from_exit(exit_label, span));
             }
 
             Statement::For(span) => {
@@ -1052,11 +1092,15 @@ impl Compiler {
                         ExprType::Integer => Instruction::LoadInteger,
                         ExprType::Text => Instruction::LoadString,
                     };
-                    self.emit(load_inst(return_value.clone(), span.end_pos));
+                    let epilogue_pc = self.emit(load_inst(return_value.clone(), span.end_pos));
 
                     self.emit(Instruction::LeaveScope);
                     self.symtable.leave_scope();
                     self.emit(Instruction::Return(span.end_pos));
+
+                    let existing =
+                        self.labels.insert(Compiler::exit_label_for_callable(&key), epilogue_pc);
+                    assert!(existing.is_none(), "Auto-generated label must be unique");
 
                     functions.insert(key, pc);
                 }
@@ -1076,9 +1120,13 @@ impl Compiler {
                     self.compile_many(span.body)?;
                     self.current_callable = None;
 
-                    self.emit(Instruction::LeaveScope);
+                    let epilogue_pc = self.emit(Instruction::LeaveScope);
                     self.symtable.leave_scope();
                     self.emit(Instruction::Return(span.end_pos));
+
+                    let existing =
+                        self.labels.insert(Compiler::exit_label_for_callable(&key), epilogue_pc);
+                    assert!(existing.is_none(), "Auto-generated label must be unique");
 
                     subs.insert(key, pc);
                 }
@@ -2241,6 +2289,60 @@ mod tests {
     }
 
     #[test]
+    fn test_compile_function_early_exit() {
+        Tester::default()
+            .parse("FUNCTION foo: a = 3: EXIT FUNCTION: a = 4: END FUNCTION")
+            .compile()
+            .expect_instr(0, Instruction::Jump(JumpISpan { addr: 11 }))
+            .expect_instr(1, Instruction::EnterScope)
+            .expect_instr(
+                2,
+                Instruction::Dim(DimISpan {
+                    name: SymbolKey::from("0return_foo"),
+                    shared: false,
+                    vtype: ExprType::Integer,
+                }),
+            )
+            .expect_instr(3, Instruction::PushInteger(3, lc(1, 19)))
+            .expect_instr(4, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(5, Instruction::Jump(JumpISpan { addr: 8 }))
+            .expect_instr(6, Instruction::PushInteger(4, lc(1, 41)))
+            .expect_instr(7, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(8, Instruction::LoadInteger(SymbolKey::from("0return_foo"), lc(1, 44)))
+            .expect_instr(9, Instruction::LeaveScope)
+            .expect_instr(10, Instruction::Return(lc(1, 44)))
+            .expect_symtable(
+                SymbolKey::from("foo"),
+                SymbolPrototype::Callable(
+                    CallableMetadataBuilder::new("USER DEFINED FUNCTION")
+                        .with_syntax(&[(&[], None)])
+                        .with_category("User defined")
+                        .with_description("User defined function")
+                        .build(),
+                ),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_function_misplaced_exit() {
+        Tester::default()
+            .parse("FUNCTION a: END FUNCTION: EXIT FUNCTION")
+            .compile()
+            .expect_err("1:27: EXIT FUNCTION outside of FUNCTION")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_function_mismatched_exit() {
+        Tester::default()
+            .parse("FUNCTION a: EXIT SUB: END FUNCTION")
+            .compile()
+            .expect_err("1:13: EXIT SUB outside of SUB")
+            .check();
+    }
+
+    #[test]
     fn test_compile_function_redefined_was_variable() {
         Tester::default()
             .parse("a = 1: FUNCTION a: END FUNCTION")
@@ -2264,6 +2366,51 @@ mod tests {
             .parse("SUB a: END SUB: FUNCTION A: END FUNCTION")
             .compile()
             .expect_err("1:26: Cannot define already-defined symbol A")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_sub_early_exit() {
+        Tester::default()
+            .parse("SUB foo: a = 3: EXIT SUB: a = 4: END SUB")
+            .compile()
+            .expect_instr(0, Instruction::Jump(JumpISpan { addr: 9 }))
+            .expect_instr(1, Instruction::EnterScope)
+            .expect_instr(2, Instruction::PushInteger(3, lc(1, 14)))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(4, Instruction::Jump(JumpISpan { addr: 7 }))
+            .expect_instr(5, Instruction::PushInteger(4, lc(1, 31)))
+            .expect_instr(6, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(7, Instruction::LeaveScope)
+            .expect_instr(8, Instruction::Return(lc(1, 34)))
+            .expect_symtable(
+                SymbolKey::from("foo"),
+                SymbolPrototype::Callable(
+                    CallableMetadataBuilder::new("USER DEFINED SUB")
+                        .with_syntax(&[(&[], None)])
+                        .with_category("User defined")
+                        .with_description("User defined sub")
+                        .build(),
+                ),
+            )
+            .check();
+    }
+
+    #[test]
+    fn test_compile_sub_misplaced_exit() {
+        Tester::default()
+            .parse("SUB a: END SUB: EXIT SUB")
+            .compile()
+            .expect_err("1:17: EXIT SUB outside of SUB")
+            .check();
+    }
+
+    #[test]
+    fn test_compile_sub_mismatched_exit() {
+        Tester::default()
+            .parse("SUB a: EXIT FUNCTION: END SUB")
+            .compile()
+            .expect_err("1:8: EXIT FUNCTION outside of FUNCTION")
             .check();
     }
 

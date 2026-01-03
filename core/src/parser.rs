@@ -675,7 +675,14 @@ impl<'a> Parser<'a> {
         let stmt = match peeked.token {
             Token::Do => Statement::ExitDo(ExitSpan { pos }),
             Token::For => Statement::ExitFor(ExitSpan { pos }),
-            _ => return Err(Error::Bad(peeked.pos, "Expecting DO or FOR after EXIT".to_owned())),
+            Token::Function => Statement::ExitFunction(ExitSpan { pos }),
+            Token::Sub => Statement::ExitSub(ExitSpan { pos }),
+            _ => {
+                return Err(Error::Bad(
+                    peeked.pos,
+                    "Expecting DO, FOR, FUNCTION or SUB after EXIT".to_owned(),
+                ))
+            }
         };
         self.lexer.consume_peeked();
         Ok(stmt)
@@ -1393,7 +1400,6 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-                // TODO(jmmv): Handle `EXIT FUNCTION` or `EXIT SUB`.
                 _ => match self.parse_one_safe()? {
                     Some(stmt) => body.push(stmt),
                     None => {
@@ -2764,9 +2770,19 @@ mod tests {
     }
 
     #[test]
+    fn test_exit_function() {
+        do_ok_test("  EXIT FUNCTION", &[Statement::ExitFunction(ExitSpan { pos: lc(1, 3) })]);
+    }
+
+    #[test]
+    fn test_exit_sub() {
+        do_ok_test("  EXIT SUB", &[Statement::ExitSub(ExitSpan { pos: lc(1, 3) })]);
+    }
+
+    #[test]
     fn test_exit_errors() {
-        do_error_test("EXIT", "1:5: Expecting DO or FOR after EXIT");
-        do_error_test("EXIT 5", "1:6: Expecting DO or FOR after EXIT");
+        do_error_test("EXIT", "1:5: Expecting DO, FOR, FUNCTION or SUB after EXIT");
+        do_error_test("EXIT 5", "1:6: Expecting DO, FOR, FUNCTION or SUB after EXIT");
     }
 
     /// Wrapper around `do_ok_test` to parse an expression.  Given that expressions alone are not
@@ -3846,7 +3862,7 @@ mod tests {
     fn test_if_uniline_allowed_exit() {
         do_if_uniline_allowed_test("EXIT DO", Statement::ExitDo(ExitSpan { pos: lc(1, 11) }));
 
-        do_error_test("IF 1 THEN EXIT", "1:15: Expecting DO or FOR after EXIT");
+        do_error_test("IF 1 THEN EXIT", "1:15: Expecting DO, FOR, FUNCTION or SUB after EXIT");
     }
 
     #[test]

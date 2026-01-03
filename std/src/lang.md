@@ -287,6 +287,8 @@ To define a function, use the `FUNCTION` keyword followed by an arbitrary list o
 
 Global variables can be defined via the `DIM SHARED` keyword.  See the "Variables" help topic for details.
 
+Functions can be returned from at any point via the `EXIT FUNCTION` statement.
+
 # Subroutines
 
 User-defined subroutines
@@ -301,3 +303,5 @@ To define a subroutine (also known as procedure or command), use the `SUB` keywo
     my_command FALSE, 8  ' Prints 1.1.
 
 Global variables can be defined via the `DIM SHARED` keyword.  See the "Variables" help topic for details.
+
+Subroutines can be returned from at any point via the `EXIT SUB` statement.

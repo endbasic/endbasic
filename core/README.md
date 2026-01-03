@@ -41,7 +41,7 @@ currently supports:
 *   `DO` / `LOOP` statements with optional `UNTIL` / `WHILE` pre- and
     post-guards and optional `EXIT DO` early terminations.
 *   `DIM SHARED` for global variables.
-*   `FUNCTION name` / `END FUNCTION`.
+*   `FUNCTION name` / `EXIT FUNCTION` / `END FUNCTION`.
 *   `IF ... THEN ... [ELSE ...]` uniline statements.
 *   `IF ... THEN` / `ELSEIF ... THEN` / `ELSE` / `END IF` multiline
     statements.
@@ -51,7 +51,7 @@ currently supports:
 *   `GOTO line` / `GOTO @label` statements and `@label` annotations.
 *   `SELECT CASE` / `CASE ...` / `CASE IS ...` / `CASE ... TO ...` /
     `END SELECT` statements.
-*   `SUB name` / `END SUB`.
+*   `SUB name` / `EXIT SUB` / `END SUB`.
 *   `WHILE ...` / `WEND` loops.
 *   Error handling via `ON ERROR GOTO` and `ON ERROR RESUME NEXT`.
 *   UTF-8 everywhere (I think).
