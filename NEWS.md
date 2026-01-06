@@ -55,6 +55,8 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
     
 *   Added support for `EXIT FUNCTION`, `EXIT FOR`, and `EXIT SUB`.
 
+*   Fixed crashes when using the SDL 3 compatibility bindings for SDL 2.
+
 ## Changes in version 0.11.1
 
 **Released on 2024-09-14.**
