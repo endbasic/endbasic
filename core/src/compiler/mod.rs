@@ -317,7 +317,10 @@ struct Compiler {
     symtable: SymbolsTable,
 
     /// Name of the function being compiled, needed to set the return value in assignment operators.
-    current_function: Option<SymbolKey>,
+    ///
+    /// The boolean indicates whether this callable has a return value or not and is used to
+    /// differentiate between functions and subroutines.
+    current_callable: Option<(SymbolKey, bool)>,
 
     /// Callables to be compiled.
     callable_spans: Vec<CallableSpan>,
@@ -432,9 +435,9 @@ impl Compiler {
         let mut key = SymbolKey::from(&vref.name());
         let etype = self.compile_expr(expr, false)?;
 
-        if let Some(current_function) = self.current_function.as_ref() {
-            if &key == current_function {
-                key = Compiler::return_key(current_function);
+        if let Some(current_callable) = self.current_callable.as_ref() {
+            if key == current_callable.0 {
+                key = Compiler::return_key(&current_callable.0);
             }
         }
 
@@ -1038,9 +1041,10 @@ impl Compiler {
                         self.symtable.insert(key, SymbolPrototype::Variable(ptype));
                     }
 
-                    self.current_function = Some(key.clone());
+                    debug_assert!(self.current_callable.is_none(), "Callables cannot be nested");
+                    self.current_callable = Some((key.clone(), true));
                     self.compile_many(span.body)?;
-                    self.current_function = None;
+                    self.current_callable = None;
 
                     let load_inst = match return_type {
                         ExprType::Boolean => Instruction::LoadBoolean,
@@ -1067,7 +1071,10 @@ impl Compiler {
                         self.symtable.insert(key, SymbolPrototype::Variable(ptype));
                     }
 
+                    debug_assert!(self.current_callable.is_none(), "Callables cannot be nested");
+                    self.current_callable = Some((key.clone(), false));
                     self.compile_many(span.body)?;
+                    self.current_callable = None;
 
                     self.emit(Instruction::LeaveScope);
                     self.symtable.leave_scope();
