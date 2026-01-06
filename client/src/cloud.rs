@@ -384,27 +384,167 @@ impl Service for CloudService {
 #[cfg(test)]
 mod testutils {
     use super::*;
+    use std::collections::HashMap;
     use std::env;
 
+    /// Wraps a `Service` to auto-delete created files.
+    pub struct AutoDeletingService<S: Service> {
+        /// The wrapped service.
+        service: S,
+
+        /// Current credentials a (username, password) pair.
+        current_user: Option<(String, String)>,
+
+        /// List of files to delete as a mapping of filename to the credentials required for deletion.
+        files_to_delete: HashMap<String, (String, String)>,
+    }
+
+    impl<S: Service> AutoDeletingService<S> {
+        /// Creates a new auto-deleting service that wraps `service`.
+        pub fn new(service: S) -> Self {
+            Self { service, current_user: None, files_to_delete: HashMap::default() }
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl<S: Service> Service for AutoDeletingService<S> {
+        async fn signup(&mut self, request: &SignupRequest) -> io::Result<()> {
+            self.service.signup(request).await
+        }
+
+        async fn login(&mut self, username: &str, password: &str) -> io::Result<LoginResponse> {
+            let result = self.service.login(username, password).await;
+            if result.is_ok() {
+                self.current_user = Some((username.to_owned(), password.to_owned()));
+            }
+            result
+        }
+
+        async fn logout(&mut self) -> io::Result<()> {
+            let result = self.service.logout().await;
+            if result.is_ok() {
+                self.current_user = None;
+            }
+            result
+        }
+
+        fn is_logged_in(&self) -> bool {
+            self.service.is_logged_in()
+        }
+
+        fn logged_in_username(&self) -> Option<String> {
+            self.service.logged_in_username()
+        }
+
+        async fn get_files(&mut self, username: &str) -> io::Result<GetFilesResponse> {
+            self.service.get_files(username).await
+        }
+
+        async fn get_file(&mut self, username: &str, filename: &str) -> io::Result<Vec<u8>> {
+            self.service.get_file(username, filename).await
+        }
+
+        async fn get_file_acls(&mut self, username: &str, filename: &str) -> io::Result<FileAcls> {
+            self.service.get_file_acls(username, filename).await
+        }
+
+        async fn patch_file_content(
+            &mut self,
+            username: &str,
+            filename: &str,
+            content: Vec<u8>,
+        ) -> io::Result<()> {
+            let result = self.service.patch_file_content(username, filename, content).await;
+            if result.is_ok() {
+                self.files_to_delete
+                    .insert(filename.to_owned(), self.current_user.clone().unwrap());
+            }
+            result
+        }
+
+        async fn patch_file_acls(
+            &mut self,
+            username: &str,
+            filename: &str,
+            add: &FileAcls,
+            remove: &FileAcls,
+        ) -> io::Result<()> {
+            self.service.patch_file_acls(username, filename, add, remove).await
+        }
+
+        async fn delete_file(&mut self, username: &str, filename: &str) -> io::Result<()> {
+            let result = self.service.delete_file(username, filename).await;
+            if result.is_ok() {
+                self.files_to_delete.remove(filename);
+            }
+            result
+        }
+    }
+
+    impl<S: Service> Drop for AutoDeletingService<S> {
+        fn drop(&mut self) {
+            #[tokio::main]
+            #[allow(clippy::single_match)]
+            async fn cleanup<S: Service>(service: &mut AutoDeletingService<S>) {
+                if let Some((username, _password)) = service.current_user.as_ref() {
+                    service
+                        .service
+                        .logout()
+                        .await
+                        .map_err(|e| {
+                            format!("Failed to log out for {} during cleanup: {}", username, e)
+                        })
+                        .unwrap();
+                }
+
+                for (filename, (username, password)) in service.files_to_delete.iter() {
+                    service
+                        .service
+                        .login(username, password)
+                        .await
+                        .map_err(|e| {
+                            format!("Failed to log in for {} during cleanup: {}", username, e)
+                        })
+                        .unwrap();
+
+                    service
+                        .service
+                        .delete_file(username, filename)
+                        .await
+                        .map_err(|e| {
+                            format!("Failed to delete file {} during cleanup: {}", filename, e)
+                        })
+                        .unwrap();
+
+                    service
+                        .service
+                        .logout()
+                        .await
+                        .map_err(|e| {
+                            format!("Failed to log out for {} during cleanup: {}", username, e)
+                        })
+                        .unwrap();
+                }
+            }
+            cleanup(self);
+        }
+    }
+
     /// Creates a new service that talks to the configured API service for testing.
-    pub(crate) fn new_service_from_env() -> CloudService {
+    pub(crate) fn new_service_from_env() -> AutoDeletingService<CloudService> {
         let service_api = env::var("SERVICE_URL").expect("Expected env config not found");
-        CloudService::new(&service_api).unwrap()
+        AutoDeletingService::new(CloudService::new(&service_api).unwrap())
     }
 
     /// Holds state for a test and allows for automatic cleanup of shared resources.
     pub(crate) struct TestContext {
-        pub(super) service: CloudService,
-
-        // State required to automatically clean up files on `drop`.
-        username: Option<String>,
-        files_to_delete: Vec<String>,
+        pub(super) service: AutoDeletingService<CloudService>,
     }
 
     impl TestContext {
         /// Creates a new test context that talks to the configured API service.
         pub(crate) fn new_from_env() -> Self {
-            TestContext { service: new_service_from_env(), username: None, files_to_delete: vec![] }
+            TestContext { service: new_service_from_env() }
         }
 
         /// Returns the username of the selected test account.
@@ -422,14 +562,12 @@ mod testutils {
             let password = env::var(format!("TEST_ACCOUNT_{}_PASSWORD", i))
                 .expect("Expected env config not found");
             let _response = self.service.login(&username, &password).await.unwrap();
-            self.username = Some(username.clone());
             username
         }
 
         /// Clears the authentication token to represent a log out.
         pub(crate) async fn do_logout(&mut self) {
             self.service.logout().await.unwrap();
-            self.username = None;
         }
 
         /// Generates a random filename and its content for testing, and makes sure the file gets
@@ -437,39 +575,7 @@ mod testutils {
         pub(crate) fn random_file(&mut self) -> (String, Vec<u8>) {
             let filename = format!("file-{}", rand::random::<u64>());
             let content = format!("Test content for {}", filename);
-            self.files_to_delete.push(filename.clone());
             (filename, content.into_bytes())
-        }
-    }
-
-    impl Drop for TestContext {
-        fn drop(&mut self) {
-            #[tokio::main]
-            #[allow(clippy::single_match)]
-            async fn cleanup(context: &mut TestContext) {
-                match context.username.as_ref() {
-                    Some(username) => {
-                        for filename in context.files_to_delete.iter() {
-                            if let Err(e) = context.service.delete_file(username, filename).await {
-                                eprintln!(
-                                    "Failed to delete file {} during cleanup: {}",
-                                    filename, e
-                                );
-                            }
-                        }
-
-                        if let Err(e) = context.service.logout().await {
-                            eprintln!("Failed to log out for {} during cleanup: {}", username, e);
-                        }
-                    }
-                    _ => {
-                        // Nothing to do: if we have a file in context.files_to_delete, it might be
-                        // because we generated its name before authenticating or logging in, but
-                        // in that case, we can't have created the file.
-                    }
-                }
-            }
-            cleanup(self);
         }
     }
 }
@@ -498,15 +604,19 @@ mod tests {
         run(&mut TestContext::new_from_env());
     }
 
-    #[tokio::test]
+    #[test]
     #[ignore = "Requires environment configuration and is expensive"]
-    async fn test_login_bad_password() {
-        let username = env::var("TEST_ACCOUNT_1_USERNAME").expect("Expected env config not found");
-        let password = "this is an invalid password for the test account";
+    fn test_login_bad_password() {
+        #[tokio::main]
+        async fn run(context: &mut TestContext) {
+            let username =
+                env::var("TEST_ACCOUNT_1_USERNAME").expect("Expected env config not found");
+            let password = "this is an invalid password for the test account";
 
-        let mut service = new_service_from_env();
-        let err = service.login(&username, &password).await.unwrap_err();
-        assert_eq!(io::ErrorKind::PermissionDenied, err.kind());
+            let err = context.service.login(&username, &password).await.unwrap_err();
+            assert_eq!(io::ErrorKind::PermissionDenied, err.kind());
+        }
+        run(&mut TestContext::new_from_env());
     }
 
     #[test]
