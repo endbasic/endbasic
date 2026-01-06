@@ -59,7 +59,7 @@ pub enum Error {
     #[error("{0}: I/O error during compilation: {1}")]
     IoError(LineCol, io::Error),
 
-    #[error("{0}: EXIT {1} outside of {1} loop")]
+    #[error("{0}: EXIT {1} outside of {1}")]
     MisplacedExit(LineCol, &'static str),
 
     #[error("{0}: {1} requires a boolean condition")]
@@ -1952,13 +1952,13 @@ mod tests {
         Tester::default()
             .parse("EXIT DO")
             .compile()
-            .expect_err("1:1: EXIT DO outside of DO loop")
+            .expect_err("1:1: EXIT DO outside of DO")
             .check();
 
         Tester::default()
             .parse("WHILE TRUE: EXIT DO: WEND")
             .compile()
-            .expect_err("1:13: EXIT DO outside of DO loop")
+            .expect_err("1:13: EXIT DO outside of DO")
             .check();
     }
 
@@ -2021,13 +2021,13 @@ mod tests {
         Tester::default()
             .parse("EXIT FOR")
             .compile()
-            .expect_err("1:1: EXIT FOR outside of FOR loop")
+            .expect_err("1:1: EXIT FOR outside of FOR")
             .check();
 
         Tester::default()
             .parse("WHILE TRUE: EXIT FOR: WEND")
             .compile()
-            .expect_err("1:13: EXIT FOR outside of FOR loop")
+            .expect_err("1:13: EXIT FOR outside of FOR")
             .check();
     }
 
