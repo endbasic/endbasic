@@ -88,7 +88,6 @@ struct AuthData {
 }
 
 /// An implementation of the EndBASIC service client that talks to a remote server.
-#[cfg_attr(test, derive(Clone))]
 pub struct CloudService {
     api_address: Url,
     client: reqwest::Client,
@@ -395,7 +394,7 @@ mod testutils {
 
     /// Holds state for a test and allows for automatic cleanup of shared resources.
     pub(crate) struct TestContext {
-        service: CloudService,
+        pub(super) service: CloudService,
 
         // State required to automatically clean up files on `drop`.
         username: Option<String>,
@@ -406,11 +405,6 @@ mod testutils {
         /// Creates a new test context that talks to the configured API service.
         pub(crate) fn new_from_env() -> Self {
             TestContext { service: new_service_from_env(), username: None, files_to_delete: vec![] }
-        }
-
-        /// Returns the service client in this context.
-        pub(crate) fn service(&self) -> CloudService {
-            self.service.clone()
         }
 
         /// Returns the username of the selected test account.
@@ -521,7 +515,6 @@ mod tests {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
             let username = context.do_login(1).await;
-            let mut service = context.service();
 
             let mut needed_bytes = 0;
             let mut needed_files = 0;
@@ -534,7 +527,7 @@ mod tests {
                 filenames_and_contents.push((filename, content));
             }
 
-            let response = service.get_files(&username).await.unwrap();
+            let response = context.service.get_files(&username).await.unwrap();
             for (filename, _content) in &filenames_and_contents {
                 assert!(!response.files.iter().any(|x| &x.filename == filename));
             }
@@ -546,15 +539,19 @@ mod tests {
             assert!(disk_free.files() >= needed_files, "Not enough space for test run");
 
             for (filename, _content) in &filenames_and_contents {
-                let err = service.get_file(&username, filename).await.unwrap_err();
+                let err = context.service.get_file(&username, filename).await.unwrap_err();
                 assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
             }
 
             for (filename, content) in &filenames_and_contents {
-                service.patch_file_content(&username, filename, content.clone()).await.unwrap();
+                context
+                    .service
+                    .patch_file_content(&username, filename, content.clone())
+                    .await
+                    .unwrap();
             }
 
-            let response = service.get_files(&username).await.unwrap();
+            let response = context.service.get_files(&username).await.unwrap();
             for (filename, _content) in &filenames_and_contents {
                 assert!(response.files.iter().any(|x| &x.filename == filename));
             }
@@ -568,11 +565,10 @@ mod tests {
         content: B,
     ) {
         let username = context.do_login(1).await;
-        let mut service = context.service();
 
         let content = content.into();
-        service.patch_file_content(&username, filename, content.clone()).await.unwrap();
-        assert_eq!(content, service.get_file(&username, filename).await.unwrap());
+        context.service.patch_file_content(&username, filename, content.clone()).await.unwrap();
+        assert_eq!(content, context.service.get_file(&username, filename).await.unwrap());
     }
 
     #[test]
@@ -615,10 +611,9 @@ mod tests {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
             let username = context.do_login(1).await;
-            let mut service = context.service();
             let (filename, _content) = context.random_file();
 
-            let err = service.get_file(&username, &filename).await.unwrap_err();
+            let err = context.service.get_file(&username, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
         }
         run(&mut TestContext::new_from_env());
@@ -629,14 +624,14 @@ mod tests {
     fn test_patch_file_without_login() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
-            let mut service = context.service();
             let username = context.get_username(1);
 
             context.do_login(1).await;
             let (filename, _content) = context.random_file();
 
             context.do_logout().await;
-            let err = service
+            let err = context
+                .service
                 .patch_file_content(&username, &filename, b"foo".to_vec())
                 .await
                 .unwrap_err();
@@ -651,8 +646,6 @@ mod tests {
     fn test_acls_private() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
-            let mut service = context.service();
-
             let (filename, content) = context.random_file();
 
             let username1 = context.get_username(1);
@@ -660,16 +653,21 @@ mod tests {
 
             // Share username1's file with username2.
             context.do_login(1).await;
-            service.patch_file_content(&username1, &filename, content.clone()).await.unwrap();
+            context
+                .service
+                .patch_file_content(&username1, &filename, content.clone())
+                .await
+                .unwrap();
 
             // Read username1's file as username2 before it is shared.
             context.do_login(2).await;
-            let err = service.get_file(&username1, &filename).await.unwrap_err();
+            let err = context.service.get_file(&username1, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
 
             // Share username1's file with username2.
             context.do_login(1).await;
-            service
+            context
+                .service
                 .patch_file_acls(
                     &username1,
                     &filename,
@@ -681,7 +679,7 @@ mod tests {
 
             // Read username1's file as username2 again, now that it is shared.
             context.do_login(2).await;
-            let response = service.get_file(&username1, &filename).await.unwrap();
+            let response = context.service.get_file(&username1, &filename).await.unwrap();
             assert_eq!(content, response);
         }
         run(&mut TestContext::new_from_env());
@@ -692,24 +690,27 @@ mod tests {
     fn test_acls_public() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
-            let mut service = context.service();
-
             let (filename, content) = context.random_file();
 
             let username1 = context.get_username(1);
 
             // Share username1's file with the public.
             context.do_login(1).await;
-            service.patch_file_content(&username1, &filename, content.clone()).await.unwrap();
+            context
+                .service
+                .patch_file_content(&username1, &filename, content.clone())
+                .await
+                .unwrap();
 
             // Read username1's file as a guest before it is shared.
             context.do_logout().await;
-            let err = service.get_file(&username1, &filename).await.unwrap_err();
+            let err = context.service.get_file(&username1, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
 
             // Share username1's file with the public.
             context.do_login(1).await;
-            service
+            context
+                .service
                 .patch_file_acls(
                     &username1,
                     &filename,
@@ -721,7 +722,7 @@ mod tests {
 
             // Read username1's file as a guest again, now that it is shared.
             context.do_logout().await;
-            let response = service.get_file(&username1, &filename).await.unwrap();
+            let response = context.service.get_file(&username1, &filename).await.unwrap();
             assert_eq!(content, response);
         }
         run(&mut TestContext::new_from_env());
@@ -733,14 +734,13 @@ mod tests {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
             let username = context.do_login(1).await;
-            let mut service = context.service();
             let (filename, content) = context.random_file();
 
-            service.patch_file_content(&username, &filename, content).await.unwrap();
+            context.service.patch_file_content(&username, &filename, content).await.unwrap();
 
-            service.delete_file(&username, &filename).await.unwrap();
+            context.service.delete_file(&username, &filename).await.unwrap();
 
-            let err = service.get_file(&username, &filename).await.unwrap_err();
+            let err = context.service.get_file(&username, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
             assert!(format!("{}", err).contains("(server code: 404"));
         }
@@ -753,10 +753,9 @@ mod tests {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
             let username = context.do_login(1).await;
-            let mut service = context.service();
             let (filename, _content) = context.random_file();
 
-            let err = service.delete_file(&username, &filename).await.unwrap_err();
+            let err = context.service.delete_file(&username, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::NotFound, err.kind(), "{}", err);
             assert!(format!("{}", err).contains("(server code: 404"));
         }
@@ -768,14 +767,13 @@ mod tests {
     fn test_delete_file_without_login() {
         #[tokio::main]
         async fn run(context: &mut TestContext) {
-            let mut service = context.service();
             let username = context.get_username(1);
 
             context.do_login(1).await;
             let (filename, _content) = context.random_file();
 
             context.do_logout().await;
-            let err = service.delete_file(&username, &filename).await.unwrap_err();
+            let err = context.service.delete_file(&username, &filename).await.unwrap_err();
             assert_eq!(io::ErrorKind::PermissionDenied, err.kind(), "{}", err);
             assert!(format!("{}", err).contains("Not logged in"));
         }
