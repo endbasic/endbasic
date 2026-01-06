@@ -325,7 +325,7 @@ impl ClientTester {
     }
 
     /// See the wrapped `Tester::run` function for details.
-    pub(crate) fn run<S: Into<String>>(&mut self, script: S) -> ClientChecker {
+    pub(crate) fn run<S: Into<String>>(&mut self, script: S) -> ClientChecker<'_> {
         let checker = self.tester.run(script);
         ClientChecker { checker, service: self.service.clone(), exp_access_token: None }
     }
