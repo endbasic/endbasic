@@ -18,7 +18,7 @@
 use crate::string_error_to_io_error;
 use endbasic_std::console::{CharsXY, SizeInPixels};
 use once_cell::sync::Lazy;
-use sdl2::ttf::{Font, FontError, InitError, Sdl2TtfContext};
+use sdl2::ttf::{Font, FontError, Sdl2TtfContext};
 use std::convert::TryFrom;
 use std::io;
 use std::path::Path;
@@ -27,17 +27,7 @@ use std::path::Path;
 /// fonts seems to be incredibly hard because of how we hide the `SdlConsole` implementation behind
 /// the `Console` trait.  It might be possible to do this in a better way, but for now, keeping the
 /// context global works well and is simple enough.
-static TTF_CONTEXT: Lazy<Result<Sdl2TtfContext, InitError>> = Lazy::new(sdl2::ttf::init);
-
-/// Converts an `InitError` to an `io::Error`.
-fn init_error_to_io_error(e: &'static InitError) -> io::Error {
-    match e {
-        InitError::AlreadyInitializedError => {
-            panic!("Initialization from once_cell should happen only once")
-        }
-        InitError::InitializationError(e) => io::Error::new(e.kind(), format!("{}", e)),
-    }
-}
+static TTF_CONTEXT: Lazy<Result<Sdl2TtfContext, String>> = Lazy::new(sdl2::ttf::init);
 
 /// Converts a `FontError` to an `io::Error`.
 pub(crate) fn font_error_to_io_error(e: FontError) -> io::Error {
@@ -58,7 +48,7 @@ impl<'a> MonospacedFont<'a> {
     /// Loads the font from the file `path` with `point_size`.  If the loaded font is not
     /// monospaced, returns an error.
     pub(crate) fn load(path: &Path, point_size: u16) -> io::Result<MonospacedFont<'a>> {
-        let ttf_context = TTF_CONTEXT.as_ref().map_err(init_error_to_io_error)?;
+        let ttf_context = TTF_CONTEXT.as_ref().map_err(|s| io::Error::other(s.to_string()))?;
 
         let font = ttf_context.load_font(path, point_size).map_err(string_error_to_io_error)?;
 
