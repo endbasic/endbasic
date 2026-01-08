@@ -29,7 +29,7 @@ use std::io;
 mod args;
 pub use args::*;
 mod exprs;
-use exprs::{compile_expr, compile_expr_as_type, compile_expr_in_command};
+use exprs::{compile_expr, compile_expr_as_type};
 
 /// Compilation errors.
 #[derive(Debug, thiserror::Error)]
@@ -423,7 +423,7 @@ impl Compiler {
             return Err(Error::IncompatibleTypeAnnotationInReference(span.vref_pos, span.vref));
         }
 
-        let etype = self.compile_expr(span.expr, false)?;
+        let etype = self.compile_expr(span.expr)?;
         let etype = self.maybe_cast(atype, etype);
         if etype != atype {
             return Err(Error::IncompatibleTypesInAssignment(span.vref_pos, etype, atype));
@@ -443,7 +443,7 @@ impl Compiler {
     /// instructions to ensure consistent handling of the symbols table.
     fn compile_assignment(&mut self, vref: VarRef, vref_pos: LineCol, expr: Expr) -> Result<()> {
         let mut key = SymbolKey::from(&vref.name());
-        let etype = self.compile_expr(expr, false)?;
+        let etype = self.compile_expr(expr)?;
 
         if let Some(current_callable) = self.current_callable.as_ref() {
             if key == current_callable.0 {
@@ -626,7 +626,7 @@ impl Compiler {
         self.compile_assignment(span.iter.clone(), span.iter_pos, span.start)?;
 
         let start_pc = self.next_pc;
-        let end_etype = self.compile_expr(span.end, false)?;
+        let end_etype = self.compile_expr(span.end)?;
         match end_etype {
             ExprType::Boolean => (),
             _ => panic!("Synthesized end condition for FOR must yield a boolean"),
@@ -813,18 +813,8 @@ impl Compiler {
 
     /// Compiles the evaluation of an expression, appends its instructions to the
     /// compilation context, and returns the type of the compiled expression.
-    ///
-    /// `allow_varrefs` should be true for top-level expression compilations within
-    /// function arguments.  In that specific case, we must leave bare variable
-    /// references unevaluated because we don't know if the function wants to take
-    /// the reference or the value.
-    fn compile_expr(&mut self, expr: Expr, allow_varrefs: bool) -> Result<ExprType> {
-        let result = if allow_varrefs {
-            compile_expr_in_command(&mut self.instrs, &mut self.symtable, expr)
-        } else {
-            compile_expr(&mut self.instrs, &self.symtable, expr, false)
-        };
-        match result {
+    fn compile_expr(&mut self, expr: Expr) -> Result<ExprType> {
+        match compile_expr(&mut self.instrs, &self.symtable, expr, false) {
             Ok(result) => {
                 self.next_pc = self.instrs.len();
                 Ok(result)
@@ -845,7 +835,7 @@ impl Compiler {
     /// expression is invalid or if it does not evaluate to a boolean.
     fn compile_expr_guard<S: Into<String>>(&mut self, guard: Expr, errmsg: S) -> Result<()> {
         let pos = guard.start_pos();
-        match self.compile_expr(guard, false)? {
+        match self.compile_expr(guard)? {
             ExprType::Boolean => Ok(()),
             _ => Err(Error::NotABooleanCondition(pos, errmsg.into())),
         }

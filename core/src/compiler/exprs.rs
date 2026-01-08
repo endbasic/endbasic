@@ -370,47 +370,6 @@ fn compile_expr_symbol(
     Ok(vtype)
 }
 
-/// Compiles the load of a symbol in the context of a command argument.
-fn compile_expr_symbol_ref(
-    instrs: &mut Vec<Instruction>,
-    symtable: &mut SymbolsTable,
-    span: SymbolSpan,
-) -> Result<ExprType> {
-    let key = SymbolKey::from(span.vref.name());
-    match symtable.get(&key) {
-        None => {
-            let vtype = span.vref.ref_type().unwrap_or(ExprType::Integer);
-
-            if !span.vref.accepts(vtype) {
-                return Err(Error::IncompatibleTypeAnnotationInReference(span.pos, span.vref));
-            }
-
-            symtable.insert(key.clone(), SymbolPrototype::Variable(vtype));
-            instrs.push(Instruction::LoadRef(key, vtype, span.pos));
-            Ok(vtype)
-        }
-
-        Some(SymbolPrototype::Array(vtype, _)) | Some(SymbolPrototype::Variable(vtype)) => {
-            let vtype = *vtype;
-
-            if !span.vref.accepts(vtype) {
-                return Err(Error::IncompatibleTypeAnnotationInReference(span.pos, span.vref));
-            }
-
-            instrs.push(Instruction::LoadRef(key, vtype, span.pos));
-            Ok(vtype)
-        }
-
-        Some(SymbolPrototype::Callable(md)) => {
-            if !span.vref.accepts_callable(md.return_type()) {
-                return Err(Error::IncompatibleTypeAnnotationInReference(span.pos, span.vref));
-            }
-
-            Err(Error::NotArrayOrFunction(span.pos, key))
-        }
-    }
-}
-
 /// Compiles an array access.
 fn compile_array_ref(
     instrs: &mut Vec<Instruction>,
@@ -690,23 +649,6 @@ pub(super) fn compile_expr(
                 None => Err(Error::UndefinedSymbol(span.vref_pos, key)),
             }
         }
-    }
-}
-
-/// Compiles the evaluation of an expression, appends its instructions to `instrs`, and returns
-/// the type of the compiled expression.
-///
-/// This function should be used only when compiling the arguments to a builtin command, because
-/// in that context, we need mutable access to the `symtable`in order to define output variables
-/// (if any).
-pub(super) fn compile_expr_in_command(
-    instrs: &mut Vec<Instruction>,
-    symtable: &mut SymbolsTable,
-    expr: Expr,
-) -> Result<ExprType> {
-    match expr {
-        Expr::Symbol(span) => compile_expr_symbol_ref(instrs, symtable, span),
-        expr => compile_expr(instrs, symtable, expr, false),
     }
 }
 
