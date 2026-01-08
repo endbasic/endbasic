@@ -1270,12 +1270,12 @@ impl Machine {
                     context.pc += 1;
                 }
 
-                Instruction::BuiltinCall(name, bref_pos, nargs) => {
+                Instruction::BuiltinCall(span) => {
                     return Ok(InternalStopReason::Upcall(UpcallData {
-                        name: name.clone(),
+                        name: span.name.clone(),
                         return_type: None,
-                        pos: *bref_pos,
-                        nargs: *nargs,
+                        pos: span.name_pos,
+                        nargs: span.nargs,
                     }));
                 }
 
@@ -1292,12 +1292,12 @@ impl Machine {
                     context.pc += 1;
                 }
 
-                Instruction::FunctionCall(name, return_type, pos, nargs) => {
+                Instruction::FunctionCall(span) => {
                     return Ok(InternalStopReason::Upcall(UpcallData {
-                        name: name.clone(),
-                        return_type: Some(*return_type),
-                        pos: *pos,
-                        nargs: *nargs,
+                        name: span.name.clone(),
+                        return_type: Some(span.return_type),
+                        pos: span.name_pos,
+                        nargs: span.nargs,
                     }));
                 }
 
