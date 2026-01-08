@@ -878,7 +878,11 @@ impl Compiler {
                     span.args,
                 )?;
                 self.next_pc = self.instrs.len();
-                self.emit(Instruction::BuiltinCall(key, span.vref_pos, nargs));
+                self.emit(Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: key,
+                    name_pos: span.vref_pos,
+                    nargs,
+                }));
             }
 
             Statement::Callable(span) => {
@@ -1125,14 +1129,14 @@ impl Compiler {
 
         for instr in &mut self.instrs {
             match instr {
-                Instruction::BuiltinCall(key, _, _) => {
-                    if let Some(addr) = subs.get(key) {
+                Instruction::BuiltinCall(span) => {
+                    if let Some(addr) = subs.get(&span.name) {
                         *instr = Instruction::Call(JumpISpan { addr: *addr });
                     }
                 }
 
-                Instruction::FunctionCall(key, _, _, _) => {
-                    if let Some(addr) = functions.get(key) {
+                Instruction::FunctionCall(span) => {
+                    if let Some(addr) = functions.get(&span.name) {
                         *instr = Instruction::Call(JumpISpan { addr: *addr });
                     }
                 }
@@ -1348,6 +1352,7 @@ mod testutils {
 mod tests {
     use super::testutils::*;
     use super::*;
+    use crate::bytecode::{BuiltinCallISpan, DimArrayISpan};
     use crate::syms::CallableMetadataBuilder;
     use std::borrow::Cow;
 
@@ -1556,7 +1561,14 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("CMD"))
             .parse("CMD")
             .compile()
-            .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 1), 0))
+            .expect_instr(
+                0,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("CMD"),
+                    name_pos: lc(1, 1),
+                    nargs: 0,
+                }),
+            )
             .check();
     }
 
@@ -1579,7 +1591,14 @@ mod tests {
             .expect_instr(1, Instruction::JumpIfNotTrue(5))
             .expect_instr(2, Instruction::PushInteger(2, lc(1, 22)))
             .expect_instr(3, Instruction::PushInteger(1, lc(1, 19)))
-            .expect_instr(4, Instruction::BuiltinCall(SymbolKey::from("CMD"), lc(1, 15), 2))
+            .expect_instr(
+                4,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("CMD"),
+                    name_pos: lc(1, 15),
+                    nargs: 2,
+                }),
+            )
             .check();
     }
 
@@ -1843,7 +1862,14 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("FOO"))
             .parse("DO\nFOO\nLOOP")
             .compile()
-            .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
+            .expect_instr(
+                0,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("FOO"),
+                    name_pos: lc(2, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(1, Instruction::Jump(JumpISpan { addr: 0 }))
             .check();
     }
@@ -1856,7 +1882,14 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::PushBoolean(true, lc(1, 10)))
             .expect_instr(1, Instruction::JumpIfNotTrue(4))
-            .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
+            .expect_instr(
+                2,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("FOO"),
+                    name_pos: lc(2, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
             .check();
     }
@@ -1867,7 +1900,14 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("FOO"))
             .parse("DO\nFOO\nLOOP WHILE TRUE")
             .compile()
-            .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
+            .expect_instr(
+                0,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("FOO"),
+                    name_pos: lc(2, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(1, Instruction::PushBoolean(true, lc(3, 12)))
             .expect_instr(2, Instruction::JumpIfTrue(0))
             .check();
@@ -2448,7 +2488,14 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("FOO"))
             .parse("@sub\nFOO\nRETURN\nGOSUB @sub")
             .compile()
-            .expect_instr(0, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
+            .expect_instr(
+                0,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("FOO"),
+                    name_pos: lc(2, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(1, Instruction::Return(lc(3, 1)))
             .expect_instr(2, Instruction::Call(JumpISpan { addr: 0 }))
             .check();
@@ -2471,7 +2518,14 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::PushBoolean(false, lc(1, 4)))
             .expect_instr(1, Instruction::JumpIfNotTrue(3))
-            .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(1, 16), 0))
+            .expect_instr(
+                2,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("FOO"),
+                    name_pos: lc(1, 16),
+                    nargs: 0,
+                }),
+            )
             .check();
     }
 
@@ -2485,15 +2539,36 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::PushBoolean(false, lc(1, 4)))
             .expect_instr(1, Instruction::JumpIfNotTrue(4))
-            .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
+            .expect_instr(
+                2,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("FOO"),
+                    name_pos: lc(2, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 11 }))
             .expect_instr(4, Instruction::PushBoolean(true, lc(3, 8)))
             .expect_instr(5, Instruction::JumpIfNotTrue(8))
-            .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("BAR"), lc(4, 1), 0))
+            .expect_instr(
+                6,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("BAR"),
+                    name_pos: lc(4, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 11 }))
             .expect_instr(8, Instruction::PushBoolean(true, lc(5, 1)))
             .expect_instr(9, Instruction::JumpIfNotTrue(11))
-            .expect_instr(10, Instruction::BuiltinCall(SymbolKey::from("BAZ"), lc(6, 1), 0))
+            .expect_instr(
+                10,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("BAZ"),
+                    name_pos: lc(6, 1),
+                    nargs: 0,
+                }),
+            )
             .check();
     }
 
@@ -2550,7 +2625,14 @@ mod tests {
             n += 1;
         }
         t.expect_instr(n, Instruction::JumpIfNotTrue(n + 2))
-            .expect_instr(n + 1, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
+            .expect_instr(
+                n + 1,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("FOO"),
+                    name_pos: lc(3, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(
                 n + 2,
                 Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(4, 1) }),
@@ -2694,7 +2776,14 @@ mod tests {
             .expect_instr(3, Instruction::PushInteger(7, lc(2, 6)))
             .expect_instr(4, Instruction::EqualIntegers(lc(2, 6)))
             .expect_instr(5, Instruction::JumpIfNotTrue(7))
-            .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
+            .expect_instr(
+                6,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("FOO"),
+                    name_pos: lc(3, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(
                 7,
                 Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(4, 1) }),
@@ -2728,7 +2817,14 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
             .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
-            .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
+            .expect_instr(
+                2,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("FOO"),
+                    name_pos: lc(3, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(
                 3,
                 Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(4, 1) }),
@@ -2749,13 +2845,27 @@ mod tests {
             .expect_instr(3, Instruction::PushInteger(7, lc(2, 6)))
             .expect_instr(4, Instruction::EqualIntegers(lc(2, 6)))
             .expect_instr(5, Instruction::JumpIfNotTrue(8))
-            .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
+            .expect_instr(
+                6,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("FOO"),
+                    name_pos: lc(3, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 13 }))
             .expect_instr(8, Instruction::LoadInteger(SymbolKey::from("0select1"), lc(4, 12)))
             .expect_instr(9, Instruction::PushInteger(8, lc(4, 12)))
             .expect_instr(10, Instruction::NotEqualIntegers(lc(4, 12)))
             .expect_instr(11, Instruction::JumpIfNotTrue(13))
-            .expect_instr(12, Instruction::BuiltinCall(SymbolKey::from("BAR"), lc(5, 1), 0))
+            .expect_instr(
+                12,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("BAR"),
+                    name_pos: lc(5, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(
                 13,
                 Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(6, 1) }),
@@ -2776,9 +2886,23 @@ mod tests {
             .expect_instr(3, Instruction::PushInteger(7, lc(2, 6)))
             .expect_instr(4, Instruction::EqualIntegers(lc(2, 6)))
             .expect_instr(5, Instruction::JumpIfNotTrue(8))
-            .expect_instr(6, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(3, 1), 0))
+            .expect_instr(
+                6,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("FOO"),
+                    name_pos: lc(3, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(7, Instruction::Jump(JumpISpan { addr: 9 }))
-            .expect_instr(8, Instruction::BuiltinCall(SymbolKey::from("BAR"), lc(5, 1), 0))
+            .expect_instr(
+                8,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("BAR"),
+                    name_pos: lc(5, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(
                 9,
                 Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(6, 1) }),
@@ -2820,7 +2944,14 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::PushBoolean(true, lc(1, 7)))
             .expect_instr(1, Instruction::JumpIfNotTrue(4))
-            .expect_instr(2, Instruction::BuiltinCall(SymbolKey::from("FOO"), lc(2, 1), 0))
+            .expect_instr(
+                2,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("FOO"),
+                    name_pos: lc(2, 1),
+                    nargs: 0,
+                }),
+            )
             .expect_instr(3, Instruction::Jump(JumpISpan { addr: 0 }))
             .check();
     }

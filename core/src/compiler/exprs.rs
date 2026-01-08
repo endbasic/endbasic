@@ -360,7 +360,15 @@ fn compile_expr_symbol(
 
             let nargs = compile_function_args(md, instrs, symtable, span.pos, vec![])?;
             debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
-            (Instruction::FunctionCall(key, etype, span.pos, 0), etype)
+            (
+                Instruction::FunctionCall(FunctionCallISpan {
+                    name: key,
+                    name_pos: span.pos,
+                    return_type: etype,
+                    nargs: 0,
+                }),
+                etype,
+            )
         }
     };
     if !span.vref.accepts(vtype) {
@@ -638,7 +646,12 @@ pub(super) fn compile_expr(
 
                     let span_pos = span.vref_pos;
                     let nargs = compile_function_args(md, instrs, symtable, span_pos, span.args)?;
-                    instrs.push(Instruction::FunctionCall(key, vtype, span_pos, nargs));
+                    instrs.push(Instruction::FunctionCall(FunctionCallISpan {
+                        name: key,
+                        name_pos: span_pos,
+                        return_type: vtype,
+                        nargs,
+                    }));
                     Ok(vtype)
                 }
 
@@ -686,6 +699,7 @@ pub(super) fn compile_expr_as_type(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bytecode::{BuiltinCallISpan, FunctionCallISpan};
     use crate::compiler::{
         testutils::*, ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax,
         RequiredValueSyntax, SingularArgSyntax,
@@ -728,7 +742,12 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::FunctionCall(SymbolKey::from("f"), ExprType::Integer, lc(1, 5), 0),
+                Instruction::FunctionCall(FunctionCallISpan {
+                    name: SymbolKey::from("f"),
+                    name_pos: lc(1, 5),
+                    return_type: ExprType::Integer,
+                    nargs: 0,
+                }),
             )
             .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
             .check();
@@ -869,7 +888,14 @@ mod tests {
                 0,
                 Instruction::LoadRef(SymbolKey::from("a"), ExprType::Integer, lc(1, 3)),
             )
-            .expect_instr(1, Instruction::BuiltinCall(SymbolKey::from("C"), lc(1, 1), 1))
+            .expect_instr(
+                1,
+                Instruction::BuiltinCall(BuiltinCallISpan {
+                    name: SymbolKey::from("C"),
+                    name_pos: lc(1, 1),
+                    nargs: 1,
+                }),
+            )
             .check();
     }
 
@@ -1194,7 +1220,12 @@ mod tests {
             .expect_instr(6, Instruction::PushInteger(3, lc(1, 9)))
             .expect_instr(
                 7,
-                Instruction::FunctionCall(SymbolKey::from("FOO"), ExprType::Integer, lc(1, 5), 3),
+                Instruction::FunctionCall(FunctionCallISpan {
+                    name: SymbolKey::from("FOO"),
+                    name_pos: lc(1, 5),
+                    return_type: ExprType::Integer,
+                    nargs: 3,
+                }),
             )
             .expect_instr(8, Instruction::Assign(SymbolKey::from("i")))
             .check();

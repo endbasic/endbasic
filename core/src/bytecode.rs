@@ -22,6 +22,23 @@ use crate::syms::SymbolKey;
 /// Convenience type to represent a program address.
 pub type Address = usize;
 
+/// Components of a builtin command call.
+#[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
+pub struct BuiltinCallISpan {
+    /// Name of the builtin to call.
+    pub name: SymbolKey,
+
+    /// Position of the name.
+    pub name_pos: LineCol,
+
+    /// Number of arguments on the stack for the call.
+    ///
+    /// The arguments in the stack are interspersed with the separators used to separate them from
+    /// each other because those separators have meaning.
+    pub nargs: usize,
+}
+
 /// Components of a variable definition.
 #[derive(Debug, PartialEq)]
 #[cfg_attr(test, derive(Clone))]
@@ -57,6 +74,23 @@ pub struct DimArrayISpan {
 
     /// Position of the subtype.
     pub subtype_pos: LineCol,
+}
+
+/// Components of a builtin function call.
+#[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
+pub struct FunctionCallISpan {
+    /// Name of the builtin to call.
+    pub name: SymbolKey,
+
+    /// Position of the name.
+    pub name_pos: LineCol,
+
+    /// Return type of the function.
+    pub return_type: ExprType,
+
+    /// Number of arguments on the stack for the call.
+    pub nargs: usize,
 }
 
 /// Components of an unconditional jump instruction.
@@ -248,16 +282,13 @@ pub enum Instruction {
     Assign(SymbolKey),
 
     /// Represents a call to a builtin command such as `PRINT` with the given number of arguments.
-    ///
-    /// The arguments in the stack are interspersed with the separators used to separate them from.
-    /// each other, because those separators have meaning.
-    BuiltinCall(SymbolKey, LineCol, usize),
+    BuiltinCall(BuiltinCallISpan),
 
     /// Represents an unconditional call to a location that will return.
     Call(JumpISpan),
 
     /// Represents a call to the given function with the given number of arguments.
-    FunctionCall(SymbolKey, ExprType, LineCol, usize),
+    FunctionCall(FunctionCallISpan),
 
     /// Represents a variable definition.
     Dim(DimISpan),
@@ -402,20 +433,20 @@ impl Instruction {
 
             Instruction::Assign(key) => ("SETV", Some(key.to_string())),
 
-            Instruction::BuiltinCall(key, _pos, nargs) => {
-                ("CALLB", Some(format!("{}, {}", key, nargs)))
+            Instruction::BuiltinCall(span) => {
+                ("CALLB", Some(format!("{}, {}", span.name, span.nargs)))
             }
 
             Instruction::Call(span) => ("CALLA", Some(format!("{:04x}", span.addr))),
 
-            Instruction::FunctionCall(key, etype, _pos, nargs) => {
-                let opcode = match etype {
+            Instruction::FunctionCall(span) => {
+                let opcode = match span.return_type {
                     ExprType::Boolean => "CALLF?",
                     ExprType::Double => "CALLF#",
                     ExprType::Integer => "CALLF%",
                     ExprType::Text => "CALLF$",
                 };
-                (opcode, Some(format!("{}, {}", key, nargs)))
+                (opcode, Some(format!("{}, {}", span.name, span.nargs)))
             }
 
             Instruction::Dim(span) => {
@@ -551,9 +582,9 @@ impl Instruction {
             Instruction::ArrayAssignment(_, pos, _) => Some(*pos),
             Instruction::ArrayLoad(_, pos, _) => Some(*pos),
             Instruction::Assign(_) => None,
-            Instruction::BuiltinCall(_, pos, _) => Some(*pos),
+            Instruction::BuiltinCall(span) => Some(span.name_pos),
             Instruction::Call(_) => None,
-            Instruction::FunctionCall(_, _, pos, _) => Some(*pos),
+            Instruction::FunctionCall(span) => Some(span.name_pos),
             Instruction::Dim(_) => None,
             Instruction::DimArray(span) => Some(span.name_pos),
             Instruction::End(_) => None,
@@ -634,7 +665,7 @@ impl Instruction {
             | Instruction::PowerIntegers(_)
             | Instruction::NegateInteger(_)
             | Instruction::ConcatStrings(_)
-            | Instruction::FunctionCall(_, _, _, _)
+            | Instruction::FunctionCall(_)
             | Instruction::DoubleToInteger
             | Instruction::IntegerToDouble
             | Instruction::LoadBoolean(_, _)
@@ -651,7 +682,7 @@ impl Instruction {
 
             Instruction::ArrayAssignment(_, _, _)
             | Instruction::Assign(_)
-            | Instruction::BuiltinCall(_, _, _)
+            | Instruction::BuiltinCall(_)
             | Instruction::Call(_)
             | Instruction::Dim(_)
             | Instruction::DimArray(_)
