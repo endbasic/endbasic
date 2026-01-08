@@ -1419,18 +1419,6 @@ impl Machine {
                 }
 
                 Instruction::LoadRef(key, etype, pos) => {
-                    let sym = self.symbols.load(key);
-                    if let Some(Symbol::Callable(f)) = sym {
-                        if f.metadata().is_argless() {
-                            return Ok(InternalStopReason::Upcall(UpcallData {
-                                name: key.clone(),
-                                return_type: Some(*etype),
-                                pos: *pos,
-                                nargs: 0,
-                            }));
-                        }
-                    };
-
                     context.value_stack.push_varref(key.clone(), *etype, *pos);
                     context.pc += 1;
                 }
