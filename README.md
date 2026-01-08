@@ -1,4 +1,4 @@
-# The EndBASIC programming language
+# The EndBASIC programming language  
 
 ![Test](https://github.com/endbasic/endbasic/actions/workflows/test.yml/badge.svg?branch=master)
 ![Build release](https://github.com/endbasic/endbasic/actions/workflows/build.yml/badge.svg?branch=master)
