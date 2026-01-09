@@ -242,39 +242,33 @@ impl SymbolsTable {
     }
 }
 
-/// Indicates the type of fixup required at the address.
-enum FixupType {
-    Gosub,
-    Goto,
-    OnError,
-}
-
 /// Describes a location in the code needs fixing up after all addresses have been laid out.
-struct Fixup {
-    target: String,
-    target_pos: LineCol,
-    ftype: FixupType,
+#[allow(clippy::enum_variant_names)]
+enum Fixup {
+    CallAddr(String, LineCol),
+    GotoAddr(String, LineCol),
+    OnErrorGotoAddr(String, LineCol),
 }
 
 impl Fixup {
     /// Constructs a `Fixup` for an `EXIT` instruction.
     fn from_exit(target: String, span: ExitSpan) -> Self {
-        Self { target, target_pos: span.pos, ftype: FixupType::Goto }
+        Self::GotoAddr(target, span.pos)
     }
 
     /// Constructs a `Fixup` for a `GOSUB` instruction.
     fn from_gosub(span: GotoSpan) -> Self {
-        Self { target: span.target, target_pos: span.target_pos, ftype: FixupType::Gosub }
+        Self::CallAddr(span.target, span.target_pos)
     }
 
     /// Constructs a `Fixup` for a `GOTO` instruction.
     fn from_goto(span: GotoSpan) -> Self {
-        Self { target: span.target, target_pos: span.target_pos, ftype: FixupType::Goto }
+        Self::GotoAddr(span.target, span.target_pos)
     }
 
     /// Constructs a `Fixup` for a `ON ERROR GOTO` instruction.
     fn from_on_error(span: GotoSpan) -> Self {
-        Self { target: span.target, target_pos: span.target_pos, ftype: FixupType::OnError }
+        Self::OnErrorGotoAddr(span.target, span.target_pos)
     }
 }
 
@@ -1150,6 +1144,18 @@ impl Compiler {
         Ok(())
     }
 
+    /// Gets the address of a label.
+    fn get_label_addr(
+        labels: &HashMap<String, Address>,
+        label: String,
+        pos: LineCol,
+    ) -> Result<usize> {
+        match labels.get(&label) {
+            Some(addr) => Ok(*addr),
+            None => Err(Error::UnknownLabel(pos, label.to_owned())),
+        }
+    }
+
     /// Finishes compilation and returns the image representing the compiled program.
     #[allow(clippy::wrong_self_convention)]
     fn to_image(mut self) -> Result<(Image, SymbolsTable)> {
@@ -1158,20 +1164,28 @@ impl Compiler {
         }
 
         for (pc, fixup) in self.fixups {
-            let addr = match self.labels.get(&fixup.target) {
-                Some(addr) => *addr,
-                None => {
-                    return Err(Error::UnknownLabel(fixup.target_pos, fixup.target));
+            let new_instr = match fixup {
+                Fixup::CallAddr(label, pos) => {
+                    let addr = Self::get_label_addr(&self.labels, label, pos)?;
+                    Instruction::Call(JumpISpan { addr })
+                }
+
+                Fixup::GotoAddr(label, pos) => {
+                    let addr = Self::get_label_addr(&self.labels, label, pos)?;
+                    Instruction::Jump(JumpISpan { addr })
+                }
+
+                Fixup::OnErrorGotoAddr(label, pos) => {
+                    let addr = Self::get_label_addr(&self.labels, label, pos)?;
+                    Instruction::SetErrorHandler(ErrorHandlerISpan::Jump(addr))
                 }
             };
-
-            match fixup.ftype {
-                FixupType::Gosub => self.instrs[pc] = Instruction::Call(JumpISpan { addr }),
-                FixupType::Goto => self.instrs[pc] = Instruction::Jump(JumpISpan { addr }),
-                FixupType::OnError => {
-                    self.instrs[pc] = Instruction::SetErrorHandler(ErrorHandlerISpan::Jump(addr))
-                }
-            }
+            debug_assert_eq!(
+                std::mem::discriminant(&Instruction::Nop),
+                std::mem::discriminant(&self.instrs[pc]),
+                "Fixup target address must contain a Nop instruction",
+            );
+            self.instrs[pc] = new_instr;
         }
         let image = Image { instrs: self.instrs, data: self.data };
         Ok((image, self.symtable))
