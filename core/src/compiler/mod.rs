@@ -273,6 +273,24 @@ impl SymbolsTable {
         keys.extend(self.scopes.last().unwrap().keys());
         keys
     }
+
+    /// Calculates the list of upcalls in this symbols table in the order in which they were
+    /// assigned indexes.
+    fn upcalls(&self) -> Vec<SymbolKey> {
+        let mut builtins = self
+            .globals
+            .iter()
+            .filter_map(|(key, proto)| {
+                if let SymbolPrototype::BuiltinCallable(_md, upcall_index) = proto {
+                    Some((upcall_index, key))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<(&usize, &SymbolKey)>>();
+        builtins.sort_by_key(|(upcall_index, _key)| *upcall_index);
+        builtins.into_iter().map(|(_upcall_index, key)| key.clone()).collect()
+    }
 }
 
 /// Describes a location in the code needs fixing up after all addresses have been laid out.
@@ -1221,7 +1239,9 @@ impl Compiler {
             );
             self.instrs[pc] = new_instr;
         }
-        let image = Image { instrs: self.instrs, data: self.data };
+
+        let image =
+            Image { upcalls: self.symtable.upcalls(), instrs: self.instrs, data: self.data };
         Ok((image, self.symtable))
     }
 }
@@ -1259,6 +1279,7 @@ mod testutils {
     pub(crate) struct Tester {
         source: String,
         symtable: SymbolsTable,
+        exp_upcalls: Vec<SymbolKey>,
     }
 
     impl Tester {
@@ -1278,7 +1299,8 @@ mod testutils {
         pub(crate) fn define_callable(mut self, builder: CallableMetadataBuilder) -> Self {
             let md = builder.test_build();
             let key = SymbolKey::from(md.name());
-            self.symtable.insert_builtin_callable(key, md);
+            self.symtable.insert_builtin_callable(key.clone(), md);
+            self.exp_upcalls.push(key);
             self
         }
 
@@ -1296,6 +1318,7 @@ mod testutils {
                 result: compile_aux(&mut self.source.as_bytes(), self.symtable),
                 exp_error: None,
                 ignore_instrs: false,
+                exp_upcalls: self.exp_upcalls,
                 exp_instrs: vec![],
                 exp_data: vec![],
                 exp_symtable: HashMap::default(),
@@ -1309,6 +1332,7 @@ mod testutils {
         result: Result<(Image, SymbolsTable)>,
         exp_error: Option<String>,
         ignore_instrs: bool,
+        exp_upcalls: Vec<SymbolKey>,
         exp_instrs: Vec<Instruction>,
         exp_data: Vec<Option<Value>>,
         exp_symtable: HashMap<SymbolKey, SymbolPrototype>,
@@ -1363,6 +1387,8 @@ mod testutils {
                 return;
             }
             let (image, symtable) = self.result.unwrap();
+
+            assert_eq!(self.exp_upcalls, symtable.upcalls());
 
             if self.ignore_instrs {
                 assert!(
