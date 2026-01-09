@@ -117,6 +117,9 @@ enum SymbolPrototype {
     /// Information about an array.  The integer indicates the number of dimensions in the array.
     Array(ExprType, usize),
 
+    /// Information about a callable that's a builtin and requires an upcall to execute.
+    BuiltinCallable(CallableMetadata),
+
     /// Information about a callable.
     Callable(CallableMetadata),
 
@@ -161,7 +164,7 @@ impl From<&Symbols> for SymbolsTable {
     fn from(syms: &Symbols) -> Self {
         let mut globals = HashMap::default();
         for (name, callable) in syms.callables() {
-            let proto = SymbolPrototype::Callable(callable.metadata().clone());
+            let proto = SymbolPrototype::BuiltinCallable(callable.metadata().clone());
             globals.insert(name.clone(), proto);
         }
 
@@ -243,7 +246,6 @@ impl SymbolsTable {
 }
 
 /// Describes a location in the code needs fixing up after all addresses have been laid out.
-#[allow(clippy::enum_variant_names)]
 #[cfg_attr(test, derive(Debug, PartialEq))]
 enum Fixup {
     CallAddr(String, LineCol),
@@ -845,12 +847,19 @@ impl Compiler {
 
             Statement::Call(span) => {
                 let key = SymbolKey::from(&span.vref.name());
-                let md = match self.symtable.get(&key) {
+                let (md, is_builtin) = match self.symtable.get(&key) {
+                    Some(SymbolPrototype::BuiltinCallable(md)) => {
+                        if md.is_function() {
+                            return Err(Error::NotACommand(span.vref_pos, span.vref));
+                        }
+                        (md.clone(), true)
+                    }
+
                     Some(SymbolPrototype::Callable(md)) => {
                         if md.is_function() {
                             return Err(Error::NotACommand(span.vref_pos, span.vref));
                         }
-                        md.clone()
+                        (md.clone(), false)
                     }
 
                     Some(_) => {
@@ -869,7 +878,7 @@ impl Compiler {
                     name_pos,
                     span.args,
                 )?;
-                if md.is_builtin() {
+                if is_builtin {
                     self.emit(Instruction::BuiltinCall(BuiltinCallISpan {
                         name: key,
                         name_pos: span.vref_pos,
@@ -1238,7 +1247,7 @@ mod testutils {
         pub(crate) fn define_callable(mut self, builder: CallableMetadataBuilder) -> Self {
             let md = builder.test_build();
             let key = SymbolKey::from(md.name());
-            self.symtable.insert(key, SymbolPrototype::Callable(md));
+            self.symtable.insert(key, SymbolPrototype::BuiltinCallable(md));
             self
         }
 

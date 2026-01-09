@@ -672,11 +672,6 @@ impl CallableMetadata {
         self.syntaxes.is_empty() || (self.syntaxes.len() == 1 && self.syntaxes[0].is_empty())
     }
 
-    /// Returns true if this callable is a builtin requiring an upcall during execution.
-    pub fn is_builtin(&self) -> bool {
-        self.category != "User defined"
-    }
-
     /// Returns true if this callable is a function (not a command).
     pub fn is_function(&self) -> bool {
         self.return_type.is_some()
