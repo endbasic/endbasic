@@ -15,17 +15,34 @@
 
 //! Functions to convert expressions into bytecode.
 
-use super::{Error, ExprType, Result, SymbolPrototype, SymbolsTable};
+use super::{Error, ExprType, Fixup, Result, SymbolPrototype, SymbolsTable};
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::compiler::compile_function_args;
 use crate::parser::argspans_to_exprs;
 use crate::reader::LineCol;
 use crate::syms::SymbolKey;
+use std::collections::HashMap;
+
+/// Adjusts `src` fixups by -1 if `adjust` is true else leaves them as is, and then merges the
+/// results into `dest`.
+fn merge_fixups(dest: &mut HashMap<Address, Fixup>, src: HashMap<Address, Fixup>, adjust: bool) {
+    let expected_size = dest.len() + src.len();
+    if !adjust {
+        dest.extend(src);
+    } else {
+        for (pc, fixup) in src {
+            let previous = dest.insert(pc - 1, fixup);
+            debug_assert!(previous.is_none());
+        }
+    }
+    debug_assert_eq!(dest.len(), expected_size);
+}
 
 /// Compiles the indices used to address an array.
 pub(super) fn compile_array_indices(
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     exp_nargs: usize,
     args: Vec<Expr>,
@@ -37,7 +54,7 @@ pub(super) fn compile_array_indices(
 
     for arg in args.into_iter().rev() {
         let arg_pos = arg.start_pos();
-        match compile_expr(instrs, symtable, arg, false)? {
+        match compile_expr(instrs, fixups, symtable, arg, false)? {
             ExprType::Integer => (),
             ExprType::Double => {
                 instrs.push(Instruction::DoubleToInteger);
@@ -54,10 +71,11 @@ pub(super) fn compile_array_indices(
 /// Compiles a logical or bitwise unary operator and appends its instructions to `instrs`.
 fn compile_not_op(
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     span: UnaryOpSpan,
 ) -> Result<ExprType> {
-    let expr_type = compile_expr(instrs, symtable, span.expr, false)?;
+    let expr_type = compile_expr(instrs, fixups, symtable, span.expr, false)?;
     match expr_type {
         ExprType::Boolean => {
             instrs.push(Instruction::LogicalNot(span.pos));
@@ -74,10 +92,11 @@ fn compile_not_op(
 /// Compiles a negate operator and appends its instructions to `instrs`.
 fn compile_neg_op(
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     span: UnaryOpSpan,
 ) -> Result<ExprType> {
-    let expr_type = compile_expr(instrs, symtable, span.expr, false)?;
+    let expr_type = compile_expr(instrs, fixups, symtable, span.expr, false)?;
     match expr_type {
         ExprType::Double => {
             instrs.push(Instruction::NegateDouble(span.pos));
@@ -94,14 +113,15 @@ fn compile_neg_op(
 /// Compiles a logical binary operator and appends its instructions to `instrs`.
 fn compile_logical_binary_op<F1: Fn(LineCol) -> Instruction, F2: Fn(LineCol) -> Instruction>(
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     logical_make_inst: F1,
     bitwise_make_inst: F2,
     span: BinaryOpSpan,
     op_name: &'static str,
 ) -> Result<ExprType> {
-    let lhs_type = compile_expr(instrs, symtable, span.lhs, false)?;
-    let rhs_type = compile_expr(instrs, symtable, span.rhs, false)?;
+    let lhs_type = compile_expr(instrs, fixups, symtable, span.lhs, false)?;
+    let rhs_type = compile_expr(instrs, fixups, symtable, span.rhs, false)?;
     match (lhs_type, rhs_type) {
         (ExprType::Boolean, ExprType::Boolean) => {
             instrs.push(logical_make_inst(span.pos));
@@ -124,6 +144,7 @@ fn compile_equality_binary_op<
     F4: Fn(LineCol) -> Instruction,
 >(
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     boolean_make_inst: F1,
     double_make_inst: F2,
@@ -132,12 +153,13 @@ fn compile_equality_binary_op<
     span: BinaryOpSpan,
     op_name: &'static str,
 ) -> Result<ExprType> {
-    let lhs_type = compile_expr(instrs, symtable, span.lhs, false)?;
+    let lhs_type = compile_expr(instrs, fixups, symtable, span.lhs, false)?;
     let pc = instrs.len();
     instrs.push(Instruction::Nop);
 
     let mut keep_nop = false;
-    let rhs_type = compile_expr(instrs, symtable, span.rhs, false)?;
+    let mut extra_fixups = HashMap::default();
+    let rhs_type = compile_expr(instrs, &mut extra_fixups, symtable, span.rhs, false)?;
     let result = match (lhs_type, rhs_type) {
         (lhs_type, rhs_type) if lhs_type == rhs_type => lhs_type,
 
@@ -161,6 +183,7 @@ fn compile_equality_binary_op<
         let nop = instrs.remove(pc);
         debug_assert_eq!(std::mem::discriminant(&Instruction::Nop), std::mem::discriminant(&nop));
     }
+    merge_fixups(fixups, extra_fixups, !keep_nop);
 
     match result {
         ExprType::Boolean => instrs.push(boolean_make_inst(span.pos)),
@@ -179,6 +202,7 @@ fn compile_relational_binary_op<
     F3: Fn(LineCol) -> Instruction,
 >(
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     double_make_inst: F1,
     integer_make_inst: F2,
@@ -186,12 +210,13 @@ fn compile_relational_binary_op<
     span: BinaryOpSpan,
     op_name: &'static str,
 ) -> Result<ExprType> {
-    let lhs_type = compile_expr(instrs, symtable, span.lhs, false)?;
+    let lhs_type = compile_expr(instrs, fixups, symtable, span.lhs, false)?;
     let pc = instrs.len();
     instrs.push(Instruction::Nop);
 
     let mut keep_nop = false;
-    let rhs_type = compile_expr(instrs, symtable, span.rhs, false)?;
+    let mut extra_fixups = HashMap::default();
+    let rhs_type = compile_expr(instrs, &mut extra_fixups, symtable, span.rhs, false)?;
     let result = match (lhs_type, rhs_type) {
         // Boolean is explicitly excluded here.
         (ExprType::Double, ExprType::Double) => ExprType::Double,
@@ -218,6 +243,7 @@ fn compile_relational_binary_op<
         let nop = instrs.remove(pc);
         debug_assert_eq!(std::mem::discriminant(&Instruction::Nop), std::mem::discriminant(&nop));
     }
+    merge_fixups(fixups, extra_fixups, !keep_nop);
 
     match result {
         ExprType::Boolean => unreachable!("Filtered out above"),
@@ -232,12 +258,13 @@ fn compile_relational_binary_op<
 /// Compiles a binary shift operator and appends its instructions to `instrs`.
 fn compile_shift_binary_op<F: Fn(LineCol) -> Instruction>(
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     make_inst: F,
     span: BinaryOpSpan,
     op_name: &'static str,
 ) -> Result<ExprType> {
-    let lhs_type = compile_expr(instrs, symtable, span.lhs, false)?;
+    let lhs_type = compile_expr(instrs, fixups, symtable, span.lhs, false)?;
     match lhs_type {
         ExprType::Integer => (),
         _ => {
@@ -245,7 +272,7 @@ fn compile_shift_binary_op<F: Fn(LineCol) -> Instruction>(
         }
     };
 
-    let rhs_type = compile_expr(instrs, symtable, span.rhs, false)?;
+    let rhs_type = compile_expr(instrs, fixups, symtable, span.rhs, false)?;
     match rhs_type {
         ExprType::Integer => (),
         _ => {
@@ -262,18 +289,20 @@ fn compile_shift_binary_op<F: Fn(LineCol) -> Instruction>(
 /// Compiles a binary operator and appends its instructions to `instrs`.
 fn compile_arithmetic_binary_op<F1: Fn(LineCol) -> Instruction, F2: Fn(LineCol) -> Instruction>(
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     double_make_inst: F1,
     integer_make_inst: F2,
     span: BinaryOpSpan,
     op_name: &'static str,
 ) -> Result<ExprType> {
-    let lhs_type = compile_expr(instrs, symtable, span.lhs, false)?;
+    let lhs_type = compile_expr(instrs, fixups, symtable, span.lhs, false)?;
     let pc = instrs.len();
     instrs.push(Instruction::Nop);
 
     let mut keep_nop = false;
-    let rhs_type = compile_expr(instrs, symtable, span.rhs, false)?;
+    let mut extra_fixups = HashMap::default();
+    let rhs_type = compile_expr(instrs, &mut extra_fixups, symtable, span.rhs, false)?;
     let result = match (lhs_type, rhs_type) {
         (ExprType::Double, ExprType::Double) => ExprType::Double,
         (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
@@ -299,6 +328,7 @@ fn compile_arithmetic_binary_op<F1: Fn(LineCol) -> Instruction, F2: Fn(LineCol) 
         let nop = instrs.remove(pc);
         debug_assert_eq!(std::mem::discriminant(&Instruction::Nop), std::mem::discriminant(&nop));
     }
+    merge_fixups(fixups, extra_fixups, !keep_nop);
 
     match result {
         ExprType::Boolean => unreachable!("Filtered out above"),
@@ -316,6 +346,7 @@ fn compile_arithmetic_binary_op<F1: Fn(LineCol) -> Instruction, F2: Fn(LineCol) 
 /// Compiles the load of a symbol in the context of an expression.
 fn compile_expr_symbol(
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     span: SymbolSpan,
     allow_varrefs: bool,
@@ -358,17 +389,20 @@ fn compile_expr_symbol(
                 return Err(Error::CallableSyntaxError(span.pos, md.clone()));
             }
 
-            let nargs = compile_function_args(md, instrs, symtable, span.pos, vec![])?;
+            let nargs = compile_function_args(md, instrs, fixups, symtable, span.pos, vec![])?;
             debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
-            (
+            let instr = if md.is_builtin() {
                 Instruction::FunctionCall(FunctionCallISpan {
                     name: key,
                     name_pos: span.pos,
                     return_type: etype,
                     nargs: 0,
-                }),
-                etype,
-            )
+                })
+            } else {
+                fixups.insert(instrs.len(), Fixup::Call(key, span.pos));
+                Instruction::Nop
+            };
+            (instr, etype)
         }
     };
     if !span.vref.accepts(vtype) {
@@ -381,6 +415,7 @@ fn compile_expr_symbol(
 /// Compiles an array access.
 fn compile_array_ref(
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     span: CallSpan,
     key: SymbolKey,
@@ -389,7 +424,7 @@ fn compile_array_ref(
 ) -> Result<ExprType> {
     let exprs = argspans_to_exprs(span.args);
     let nargs = exprs.len();
-    compile_array_indices(instrs, symtable, dimensions, exprs, span.vref_pos)?;
+    compile_array_indices(instrs, fixups, symtable, dimensions, exprs, span.vref_pos)?;
 
     if !span.vref.accepts(vtype) {
         return Err(Error::IncompatibleTypeAnnotationInReference(span.vref_pos, span.vref));
@@ -406,6 +441,7 @@ fn compile_array_ref(
 /// don't know if the function wants to take the reference or the value.
 pub(super) fn compile_expr(
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     expr: Expr,
     allow_varrefs: bool,
@@ -431,10 +467,11 @@ pub(super) fn compile_expr(
             Ok(ExprType::Text)
         }
 
-        Expr::Symbol(span) => compile_expr_symbol(instrs, symtable, span, allow_varrefs),
+        Expr::Symbol(span) => compile_expr_symbol(instrs, fixups, symtable, span, allow_varrefs),
 
         Expr::And(span) => compile_logical_binary_op(
             instrs,
+            fixups,
             symtable,
             Instruction::LogicalAnd,
             Instruction::BitwiseAnd,
@@ -444,6 +481,7 @@ pub(super) fn compile_expr(
 
         Expr::Or(span) => compile_logical_binary_op(
             instrs,
+            fixups,
             symtable,
             Instruction::LogicalOr,
             Instruction::BitwiseOr,
@@ -453,6 +491,7 @@ pub(super) fn compile_expr(
 
         Expr::Xor(span) => compile_logical_binary_op(
             instrs,
+            fixups,
             symtable,
             Instruction::LogicalXor,
             Instruction::BitwiseXor,
@@ -460,18 +499,30 @@ pub(super) fn compile_expr(
             "XOR",
         ),
 
-        Expr::Not(span) => compile_not_op(instrs, symtable, *span),
+        Expr::Not(span) => compile_not_op(instrs, fixups, symtable, *span),
 
         Expr::ShiftLeft(span) => {
-            let result =
-                compile_shift_binary_op(instrs, symtable, Instruction::ShiftLeft, *span, "<<")?;
+            let result = compile_shift_binary_op(
+                instrs,
+                fixups,
+                symtable,
+                Instruction::ShiftLeft,
+                *span,
+                "<<",
+            )?;
             debug_assert_eq!(ExprType::Integer, result);
             Ok(result)
         }
 
         Expr::ShiftRight(span) => {
-            let result =
-                compile_shift_binary_op(instrs, symtable, Instruction::ShiftRight, *span, ">>")?;
+            let result = compile_shift_binary_op(
+                instrs,
+                fixups,
+                symtable,
+                Instruction::ShiftRight,
+                *span,
+                ">>",
+            )?;
             debug_assert_eq!(ExprType::Integer, result);
             Ok(result)
         }
@@ -479,6 +530,7 @@ pub(super) fn compile_expr(
         Expr::Equal(span) => {
             let result = compile_equality_binary_op(
                 instrs,
+                fixups,
                 symtable,
                 Instruction::EqualBooleans,
                 Instruction::EqualDoubles,
@@ -494,6 +546,7 @@ pub(super) fn compile_expr(
         Expr::NotEqual(span) => {
             let result = compile_equality_binary_op(
                 instrs,
+                fixups,
                 symtable,
                 Instruction::NotEqualBooleans,
                 Instruction::NotEqualDoubles,
@@ -509,6 +562,7 @@ pub(super) fn compile_expr(
         Expr::Less(span) => {
             let result = compile_relational_binary_op(
                 instrs,
+                fixups,
                 symtable,
                 Instruction::LessDoubles,
                 Instruction::LessIntegers,
@@ -523,6 +577,7 @@ pub(super) fn compile_expr(
         Expr::LessEqual(span) => {
             let result = compile_relational_binary_op(
                 instrs,
+                fixups,
                 symtable,
                 Instruction::LessEqualDoubles,
                 Instruction::LessEqualIntegers,
@@ -537,6 +592,7 @@ pub(super) fn compile_expr(
         Expr::Greater(span) => {
             let result = compile_relational_binary_op(
                 instrs,
+                fixups,
                 symtable,
                 Instruction::GreaterDoubles,
                 Instruction::GreaterIntegers,
@@ -551,6 +607,7 @@ pub(super) fn compile_expr(
         Expr::GreaterEqual(span) => {
             let result = compile_relational_binary_op(
                 instrs,
+                fixups,
                 symtable,
                 Instruction::GreaterEqualDoubles,
                 Instruction::GreaterEqualIntegers,
@@ -564,6 +621,7 @@ pub(super) fn compile_expr(
 
         Expr::Add(span) => Ok(compile_arithmetic_binary_op(
             instrs,
+            fixups,
             symtable,
             Instruction::AddDoubles,
             Instruction::AddIntegers,
@@ -573,6 +631,7 @@ pub(super) fn compile_expr(
 
         Expr::Subtract(span) => Ok(compile_arithmetic_binary_op(
             instrs,
+            fixups,
             symtable,
             Instruction::SubtractDoubles,
             Instruction::SubtractIntegers,
@@ -582,6 +641,7 @@ pub(super) fn compile_expr(
 
         Expr::Multiply(span) => Ok(compile_arithmetic_binary_op(
             instrs,
+            fixups,
             symtable,
             Instruction::MultiplyDoubles,
             Instruction::MultiplyIntegers,
@@ -591,6 +651,7 @@ pub(super) fn compile_expr(
 
         Expr::Divide(span) => Ok(compile_arithmetic_binary_op(
             instrs,
+            fixups,
             symtable,
             Instruction::DivideDoubles,
             Instruction::DivideIntegers,
@@ -600,6 +661,7 @@ pub(super) fn compile_expr(
 
         Expr::Modulo(span) => Ok(compile_arithmetic_binary_op(
             instrs,
+            fixups,
             symtable,
             Instruction::ModuloDoubles,
             Instruction::ModuloIntegers,
@@ -609,6 +671,7 @@ pub(super) fn compile_expr(
 
         Expr::Power(span) => Ok(compile_arithmetic_binary_op(
             instrs,
+            fixups,
             symtable,
             Instruction::PowerDoubles,
             Instruction::PowerIntegers,
@@ -616,13 +679,13 @@ pub(super) fn compile_expr(
             "^",
         )?),
 
-        Expr::Negate(span) => Ok(compile_neg_op(instrs, symtable, *span)?),
+        Expr::Negate(span) => Ok(compile_neg_op(instrs, fixups, symtable, *span)?),
 
         Expr::Call(span) => {
             let key = SymbolKey::from(span.vref.name());
             match symtable.get(&key) {
                 Some(SymbolPrototype::Array(vtype, dims)) => {
-                    compile_array_ref(instrs, symtable, span, key, *vtype, *dims)
+                    compile_array_ref(instrs, fixups, symtable, span, key, *vtype, *dims)
                 }
 
                 Some(SymbolPrototype::Callable(md)) => {
@@ -645,13 +708,19 @@ pub(super) fn compile_expr(
                     }
 
                     let span_pos = span.vref_pos;
-                    let nargs = compile_function_args(md, instrs, symtable, span_pos, span.args)?;
-                    instrs.push(Instruction::FunctionCall(FunctionCallISpan {
-                        name: key,
-                        name_pos: span_pos,
-                        return_type: vtype,
-                        nargs,
-                    }));
+                    let nargs =
+                        compile_function_args(md, instrs, fixups, symtable, span_pos, span.args)?;
+                    if md.is_builtin() {
+                        instrs.push(Instruction::FunctionCall(FunctionCallISpan {
+                            name: key,
+                            name_pos: span_pos,
+                            return_type: vtype,
+                            nargs,
+                        }));
+                    } else {
+                        instrs.push(Instruction::Nop);
+                        fixups.insert(instrs.len() - 1, Fixup::Call(key, span_pos));
+                    }
                     Ok(vtype)
                 }
 
@@ -669,12 +738,13 @@ pub(super) fn compile_expr(
 /// possible.
 pub(super) fn compile_expr_as_type(
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     expr: Expr,
     target: ExprType,
 ) -> Result<()> {
     let epos = expr.start_pos();
-    let etype = compile_expr(instrs, symtable, expr, false)?;
+    let etype = compile_expr(instrs, fixups, symtable, expr, false)?;
     if etype == ExprType::Double && target.is_numerical() {
         if target == ExprType::Integer {
             instrs.push(Instruction::DoubleToInteger);

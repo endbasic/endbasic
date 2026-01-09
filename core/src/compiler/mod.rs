@@ -244,8 +244,10 @@ impl SymbolsTable {
 
 /// Describes a location in the code needs fixing up after all addresses have been laid out.
 #[allow(clippy::enum_variant_names)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 enum Fixup {
     CallAddr(String, LineCol),
+    Call(SymbolKey, LineCol),
     GotoAddr(String, LineCol),
     OnErrorGotoAddr(String, LineCol),
 }
@@ -385,7 +387,14 @@ impl Compiler {
         name_pos: LineCol,
     ) -> Result<()> {
         let mut instrs = vec![];
-        match exprs::compile_array_indices(&mut instrs, &self.symtable, exp_nargs, args, name_pos) {
+        match exprs::compile_array_indices(
+            &mut instrs,
+            &mut self.fixups,
+            &self.symtable,
+            exp_nargs,
+            args,
+            name_pos,
+        ) {
             Ok(result) => {
                 self.instrs.append(&mut instrs);
                 Ok(result)
@@ -492,9 +501,7 @@ impl Compiler {
         }
 
         let mut builder = CallableMetadataBuilder::new_dynamic(span.name.name().to_owned())
-            .with_dynamic_syntax(vec![(syntax, None)])
-            .with_category("User defined")
-            .with_description("User defined symbol.");
+            .with_dynamic_syntax(vec![(syntax, None)]);
         if let Some(ctype) = span.name.ref_type() {
             builder = builder.with_return_type(ctype);
         }
@@ -802,7 +809,7 @@ impl Compiler {
     /// Compiles the evaluation of an expression, appends its instructions to the
     /// compilation context, and returns the type of the compiled expression.
     fn compile_expr(&mut self, expr: Expr) -> Result<ExprType> {
-        match compile_expr(&mut self.instrs, &self.symtable, expr, false) {
+        match compile_expr(&mut self.instrs, &mut self.fixups, &self.symtable, expr, false) {
             Ok(result) => Ok(result),
             Err(e) => Err(e),
         }
@@ -811,7 +818,7 @@ impl Compiler {
     /// Compiles the evaluation of an expression with casts to a target type, appends its
     /// instructions to the compilation context, and returns the type of the compiled expression.
     fn compile_expr_as_type(&mut self, expr: Expr, target: ExprType) -> Result<()> {
-        compile_expr_as_type(&mut self.instrs, &self.symtable, expr, target)?;
+        compile_expr_as_type(&mut self.instrs, &mut self.fixups, &self.symtable, expr, target)?;
         Ok(())
     }
 
@@ -857,15 +864,21 @@ impl Compiler {
                 let nargs = compile_command_args(
                     &md,
                     &mut self.instrs,
+                    &mut self.fixups,
                     &mut self.symtable,
                     name_pos,
                     span.args,
                 )?;
-                self.emit(Instruction::BuiltinCall(BuiltinCallISpan {
-                    name: key,
-                    name_pos: span.vref_pos,
-                    nargs,
-                }));
+                if md.is_builtin() {
+                    self.emit(Instruction::BuiltinCall(BuiltinCallISpan {
+                        name: key,
+                        name_pos: span.vref_pos,
+                        nargs,
+                    }));
+                } else {
+                    let call_pc = self.emit(Instruction::Nop);
+                    self.fixups.insert(call_pc, Fixup::Call(key, span.vref_pos));
+                }
             }
 
             Statement::Callable(span) => {
@@ -1027,11 +1040,16 @@ impl Compiler {
 
     /// Compiles all callables discovered during the first phase and fixes up all call sites to
     /// point to the compiled code.
-    fn compile_callables(&mut self) -> Result<()> {
+    ///
+    /// Returns a mapping of function and subroutine names to start addresses.
+    fn compile_callables(&mut self) -> Result<HashMap<SymbolKey, usize>> {
+        if self.callable_spans.is_empty() {
+            return Ok(HashMap::default());
+        }
+
         let end = self.emit(Instruction::Nop);
 
-        let mut functions = HashMap::with_capacity(self.callable_spans.len());
-        let mut subs = HashMap::with_capacity(self.callable_spans.len());
+        let mut callables = HashMap::with_capacity(self.callable_spans.len());
         let callable_spans = std::mem::take(&mut self.callable_spans);
         for span in callable_spans {
             let pc = self.instrs.len();
@@ -1079,7 +1097,7 @@ impl Compiler {
                         self.labels.insert(Compiler::exit_label_for_callable(&key), epilogue_pc);
                     assert!(existing.is_none(), "Auto-generated label must be unique");
 
-                    functions.insert(key, pc);
+                    callables.insert(key, pc);
                 }
                 None => {
                     self.emit(Instruction::EnterScope);
@@ -1105,32 +1123,14 @@ impl Compiler {
                         self.labels.insert(Compiler::exit_label_for_callable(&key), epilogue_pc);
                     assert!(existing.is_none(), "Auto-generated label must be unique");
 
-                    subs.insert(key, pc);
+                    callables.insert(key, pc);
                 }
-            }
-        }
-
-        for instr in &mut self.instrs {
-            match instr {
-                Instruction::BuiltinCall(span) => {
-                    if let Some(addr) = subs.get(&span.name) {
-                        *instr = Instruction::Call(JumpISpan { addr: *addr });
-                    }
-                }
-
-                Instruction::FunctionCall(span) => {
-                    if let Some(addr) = functions.get(&span.name) {
-                        *instr = Instruction::Call(JumpISpan { addr: *addr });
-                    }
-                }
-
-                _ => (),
             }
         }
 
         self.instrs[end] = Instruction::Jump(JumpISpan { addr: self.instrs.len() });
 
-        Ok(())
+        Ok(callables)
     }
 
     /// Gets the address of a label.
@@ -1148,15 +1148,20 @@ impl Compiler {
     /// Finishes compilation and returns the image representing the compiled program.
     #[allow(clippy::wrong_self_convention)]
     fn to_image(mut self) -> Result<(Image, SymbolsTable)> {
-        if !self.callable_spans.is_empty() {
-            self.compile_callables()?;
-        }
+        let callables = self.compile_callables()?;
 
         for (pc, fixup) in self.fixups {
             let new_instr = match fixup {
                 Fixup::CallAddr(label, pos) => {
                     let addr = Self::get_label_addr(&self.labels, label, pos)?;
                     Instruction::Call(JumpISpan { addr })
+                }
+
+                Fixup::Call(name, pos) => {
+                    let Some(addr) = callables.get(&name) else {
+                        return Err(Error::UndefinedSymbol(pos, name));
+                    };
+                    Instruction::Call(JumpISpan { addr: *addr })
                 }
 
                 Fixup::GotoAddr(label, pos) => {
@@ -2276,10 +2281,8 @@ mod tests {
             .expect_symtable(
                 SymbolKey::from("foo"),
                 SymbolPrototype::Callable(
-                    CallableMetadataBuilder::new("USER DEFINED FUNCTION")
+                    CallableMetadataBuilder::new_dynamic("USER DEFINED FUNCTION")
                         .with_syntax(&[(&[], None)])
-                        .with_category("User defined")
-                        .with_description("User defined function")
                         .build(),
                 ),
             )
@@ -2311,10 +2314,8 @@ mod tests {
             .expect_symtable(
                 SymbolKey::from("foo"),
                 SymbolPrototype::Callable(
-                    CallableMetadataBuilder::new("USER DEFINED FUNCTION")
+                    CallableMetadataBuilder::new_dynamic("USER DEFINED FUNCTION")
                         .with_syntax(&[(&[], None)])
-                        .with_category("User defined")
-                        .with_description("User defined function")
                         .build(),
                 ),
             )
@@ -2347,10 +2348,8 @@ mod tests {
             .expect_symtable(
                 SymbolKey::from("foo"),
                 SymbolPrototype::Callable(
-                    CallableMetadataBuilder::new("USER DEFINED FUNCTION")
+                    CallableMetadataBuilder::new_dynamic("USER DEFINED FUNCTION")
                         .with_syntax(&[(&[], None)])
-                        .with_category("User defined")
-                        .with_description("User defined function")
                         .build(),
                 ),
             )
@@ -2419,10 +2418,8 @@ mod tests {
             .expect_symtable(
                 SymbolKey::from("foo"),
                 SymbolPrototype::Callable(
-                    CallableMetadataBuilder::new("USER DEFINED SUB")
+                    CallableMetadataBuilder::new_dynamic("USER DEFINED SUB")
                         .with_syntax(&[(&[], None)])
-                        .with_category("User defined")
-                        .with_description("User defined sub")
                         .build(),
                 ),
             )

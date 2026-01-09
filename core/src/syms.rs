@@ -512,13 +512,13 @@ impl CallableMetadataBuilder {
     ///
     /// This is the same as `new` but using a dynamically-allocated name, which is necessary for
     /// user-defined symbols.
-    pub fn new_dynamic(name: String) -> Self {
+    pub fn new_dynamic<S: Into<String>>(name: S) -> Self {
         Self {
-            name: Cow::Owned(name.to_ascii_uppercase()),
+            name: Cow::Owned(name.into().to_ascii_uppercase()),
             return_type: None,
             syntaxes: vec![],
-            category: None,
-            description: None,
+            category: Some("User defined"),
+            description: Some("User defined symbol."),
         }
     }
 
@@ -670,6 +670,11 @@ impl CallableMetadata {
     /// Returns true if this is a callable that takes no arguments.
     pub fn is_argless(&self) -> bool {
         self.syntaxes.is_empty() || (self.syntaxes.len() == 1 && self.syntaxes[0].is_empty())
+    }
+
+    /// Returns true if this callable is a builtin requiring an upcall during execution.
+    pub fn is_builtin(&self) -> bool {
+        self.category != "User defined"
     }
 
     /// Returns true if this callable is a function (not a command).

@@ -18,12 +18,13 @@
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::compiler::exprs::{compile_expr, compile_expr_as_type};
-use crate::compiler::{Error, ExprType, Result, SymbolPrototype, SymbolsTable};
+use crate::compiler::{Error, ExprType, Fixup, Result, SymbolPrototype, SymbolsTable};
 use crate::exec::ValueTag;
 use crate::reader::LineCol;
 use crate::syms::CallableMetadata;
 use crate::syms::SymbolKey;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ops::RangeInclusive;
 
 /// Details to compile a required scalar parameter.
@@ -489,6 +490,7 @@ fn compile_syn_argsep(
 fn compile_args(
     md: &CallableMetadata,
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     pos: LineCol,
     args: Vec<ArgSpan>,
@@ -525,7 +527,7 @@ fn compile_args(
                     match syn.type_syn {
                         RepeatedTypeSyntax::AnyValue => {
                             debug_assert!(need_tags);
-                            let etype = compile_expr(instrs, symtable, expr, false)?;
+                            let etype = compile_expr(instrs, fixups, symtable, expr, false)?;
                             instrs
                                 .push(Instruction::PushInteger(ValueTag::from(etype) as i32, pos));
                             nargs += 2;
@@ -548,7 +550,7 @@ fn compile_args(
                         }
 
                         RepeatedTypeSyntax::TypedValue(vtype) => {
-                            compile_expr_as_type(instrs, symtable, expr, vtype)?;
+                            compile_expr_as_type(instrs, fixups, symtable, expr, vtype)?;
                             if need_tags {
                                 instrs.push(Instruction::PushInteger(
                                     ValueTag::from(vtype) as i32,
@@ -596,7 +598,7 @@ fn compile_args(
             SingularArgSyntax::RequiredValue(details, sep) => {
                 match span.expr {
                     Some(expr) => {
-                        compile_expr_as_type(instrs, symtable, expr, details.vtype)?;
+                        compile_expr_as_type(instrs, fixups, symtable, expr, details.vtype)?;
                         nargs += 1;
                     }
                     None => return Err(Error::CallableSyntaxError(pos, md.clone())),
@@ -625,7 +627,7 @@ fn compile_args(
                 let (tag, pos) = match span.expr {
                     Some(expr) => {
                         let pos = expr.start_pos();
-                        compile_expr_as_type(instrs, symtable, expr, details.vtype)?;
+                        compile_expr_as_type(instrs, fixups, symtable, expr, details.vtype)?;
                         nargs += 1;
                         (details.present_value, pos)
                     }
@@ -640,7 +642,7 @@ fn compile_args(
                 let (tag, pos) = match span.expr {
                     Some(expr) => {
                         let pos = expr.start_pos();
-                        let etype = compile_expr(instrs, symtable, expr, false)?;
+                        let etype = compile_expr(instrs, fixups, symtable, expr, false)?;
                         nargs += 2;
                         (ValueTag::from(etype), pos)
                     }
@@ -681,11 +683,12 @@ fn compile_args(
 pub(super) fn compile_command_args(
     md: &CallableMetadata,
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &mut SymbolsTable,
     pos: LineCol,
     args: Vec<ArgSpan>,
 ) -> Result<usize> {
-    let (nargs, to_insert) = compile_args(md, instrs, symtable, pos, args)?;
+    let (nargs, to_insert) = compile_args(md, instrs, fixups, symtable, pos, args)?;
     for (key, proto) in to_insert {
         if !symtable.contains_key(&key) {
             symtable.insert(key, proto);
@@ -701,11 +704,12 @@ pub(super) fn compile_command_args(
 pub(super) fn compile_function_args(
     md: &CallableMetadata,
     instrs: &mut Vec<Instruction>,
+    fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     pos: LineCol,
     args: Vec<ArgSpan>,
 ) -> Result<usize> {
-    let (nargs, to_insert) = compile_args(md, instrs, symtable, pos, args)?;
+    let (nargs, to_insert) = compile_args(md, instrs, fixups, symtable, pos, args)?;
     debug_assert!(to_insert.is_empty());
     Ok(nargs)
 }
@@ -755,15 +759,24 @@ mod testutils {
                 // Start with one instruction to validate that the args compiler doesn't touch it.
                 Instruction::Nop,
             ];
+            let mut fixups = HashMap::default();
             let md = CallableMetadataBuilder::new("TEST").with_syntaxes(self.syntaxes).test_build();
-            let result =
-                compile_command_args(&md, &mut instrs, &mut self.symtable, lc(1000, 2000), args);
+            let result = compile_command_args(
+                &md,
+                &mut instrs,
+                &mut fixups,
+                &mut self.symtable,
+                lc(1000, 2000),
+                args,
+            );
             Checker {
                 result,
                 instrs,
+                fixups,
                 symtable: self.symtable,
                 exp_result: Ok(0),
                 exp_instrs: vec![Instruction::Nop],
+                exp_fixups: HashMap::default(),
                 exp_vars: HashMap::default(),
             }
         }
@@ -774,9 +787,11 @@ mod testutils {
     pub(super) struct Checker {
         result: Result<usize>,
         instrs: Vec<Instruction>,
+        fixups: HashMap<Address, Fixup>,
         symtable: SymbolsTable,
         exp_result: Result<usize>,
         exp_instrs: Vec<Instruction>,
+        exp_fixups: HashMap<Address, Fixup>,
         exp_vars: HashMap<SymbolKey, ExprType>,
     }
 
@@ -818,6 +833,7 @@ mod testutils {
             }
 
             assert_eq!(self.exp_instrs, self.instrs);
+            assert_eq!(self.exp_fixups, self.fixups);
 
             let mut exp_keys = self.symtable.keys();
             for (key, exp_etype) in &self.exp_vars {
