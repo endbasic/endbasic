@@ -275,9 +275,6 @@ impl Fixup {
 /// Compilation context to accumulate the results of the translation of various translation units.
 #[derive(Default)]
 struct Compiler {
-    /// Address of the next instruction to be emitted.
-    next_pc: Address,
-
     /// Current nesting of `DO` loops, needed to assign targets for `EXIT DO` statements.
     ///
     /// The first component of this pair indicates which block of `EXIT DO`s we are dealing with and
@@ -323,10 +320,8 @@ struct Compiler {
 impl Compiler {
     /// Appends an instruction to the bytecode and returns its address.
     fn emit(&mut self, instr: Instruction) -> Address {
-        let pc = self.next_pc;
         self.instrs.push(instr);
-        self.next_pc += 1;
-        pc
+        self.instrs.len() - 1
     }
 
     /// Generates a fake label for the epilogue a callable based on its `name`.
@@ -392,7 +387,6 @@ impl Compiler {
         let mut instrs = vec![];
         match exprs::compile_array_indices(&mut instrs, &self.symtable, exp_nargs, args, name_pos) {
             Ok(result) => {
-                self.next_pc += instrs.len();
                 self.instrs.append(&mut instrs);
                 Ok(result)
             }
@@ -538,38 +532,38 @@ impl Compiler {
         let end_pc;
         match span.guard {
             DoGuard::Infinite => {
-                let start_pc = self.next_pc;
+                let start_pc = self.instrs.len();
                 self.compile_many(span.body)?;
                 end_pc = self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
             }
 
             DoGuard::PreUntil(guard) => {
-                let start_pc = self.next_pc;
+                let start_pc = self.instrs.len();
                 self.compile_expr_guard(guard, "DO")?;
                 let jump_pc = self.emit(Instruction::Nop);
                 self.compile_many(span.body)?;
                 end_pc = self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
-                self.instrs[jump_pc] = Instruction::JumpIfTrue(self.next_pc);
+                self.instrs[jump_pc] = Instruction::JumpIfTrue(self.instrs.len());
             }
 
             DoGuard::PreWhile(guard) => {
-                let start_pc = self.next_pc;
+                let start_pc = self.instrs.len();
                 self.compile_expr_guard(guard, "DO")?;
                 let jump_pc = self.emit(Instruction::Nop);
                 self.compile_many(span.body)?;
                 end_pc = self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
-                self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.next_pc);
+                self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.instrs.len());
             }
 
             DoGuard::PostUntil(guard) => {
-                let start_pc = self.next_pc;
+                let start_pc = self.instrs.len();
                 self.compile_many(span.body)?;
                 self.compile_expr_guard(guard, "LOOP")?;
                 end_pc = self.emit(Instruction::JumpIfNotTrue(start_pc));
             }
 
             DoGuard::PostWhile(guard) => {
-                let start_pc = self.next_pc;
+                let start_pc = self.instrs.len();
                 self.compile_many(span.body)?;
                 self.compile_expr_guard(guard, "LOOP")?;
                 end_pc = self.emit(Instruction::JumpIfTrue(start_pc));
@@ -613,13 +607,13 @@ impl Compiler {
 
             self.instrs[skip_pc] = Instruction::JumpIfDefined(JumpIfDefinedISpan {
                 var: iter_key,
-                addr: self.next_pc,
+                addr: self.instrs.len(),
             });
         }
 
         self.compile_assignment(span.iter.clone(), span.iter_pos, span.start)?;
 
-        let start_pc = self.next_pc;
+        let start_pc = self.instrs.len();
         let end_etype = self.compile_expr(span.end)?;
         match end_etype {
             ExprType::Boolean => (),
@@ -633,7 +627,7 @@ impl Compiler {
 
         let end_pc = self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
 
-        self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.next_pc);
+        self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.instrs.len());
 
         let existing = self
             .labels
@@ -661,17 +655,17 @@ impl Compiler {
             self.compile_many(branch.body)?;
 
             if next2.is_some() {
-                end_pcs.push(self.next_pc);
+                end_pcs.push(self.instrs.len());
                 self.emit(Instruction::Nop);
             }
 
-            self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.next_pc);
+            self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.instrs.len());
 
             next = next2;
         }
 
         for end_pc in end_pcs {
-            self.instrs[end_pc] = Instruction::Jump(JumpISpan { addr: self.next_pc });
+            self.instrs[end_pc] = Instruction::Jump(JumpISpan { addr: self.instrs.len() });
         }
 
         Ok(())
@@ -768,11 +762,11 @@ impl Compiler {
                     self.compile_many(case.body)?;
 
                     if next2.is_some() {
-                        end_pcs.push(self.next_pc);
+                        end_pcs.push(self.instrs.len());
                         self.emit(Instruction::Nop);
                     }
 
-                    self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.next_pc);
+                    self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.instrs.len());
                 }
             }
 
@@ -780,7 +774,7 @@ impl Compiler {
         }
 
         for end_pc in end_pcs {
-            self.instrs[end_pc] = Instruction::Jump(JumpISpan { addr: self.next_pc });
+            self.instrs[end_pc] = Instruction::Jump(JumpISpan { addr: self.instrs.len() });
         }
 
         let test_key = SymbolKey::from(test_vref.name());
@@ -792,7 +786,7 @@ impl Compiler {
 
     /// Compiles a `WHILE` loop and appends its instructions to the compilation context.
     fn compile_while(&mut self, span: WhileSpan) -> Result<()> {
-        let start_pc = self.next_pc;
+        let start_pc = self.instrs.len();
         self.compile_expr_guard(span.expr, "WHILE")?;
         let jump_pc = self.emit(Instruction::Nop);
 
@@ -800,7 +794,7 @@ impl Compiler {
 
         self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
 
-        self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.next_pc);
+        self.instrs[jump_pc] = Instruction::JumpIfNotTrue(self.instrs.len());
 
         Ok(())
     }
@@ -809,10 +803,7 @@ impl Compiler {
     /// compilation context, and returns the type of the compiled expression.
     fn compile_expr(&mut self, expr: Expr) -> Result<ExprType> {
         match compile_expr(&mut self.instrs, &self.symtable, expr, false) {
-            Ok(result) => {
-                self.next_pc = self.instrs.len();
-                Ok(result)
-            }
+            Ok(result) => Ok(result),
             Err(e) => Err(e),
         }
     }
@@ -821,7 +812,6 @@ impl Compiler {
     /// instructions to the compilation context, and returns the type of the compiled expression.
     fn compile_expr_as_type(&mut self, expr: Expr, target: ExprType) -> Result<()> {
         compile_expr_as_type(&mut self.instrs, &self.symtable, expr, target)?;
-        self.next_pc = self.instrs.len();
         Ok(())
     }
 
@@ -871,7 +861,6 @@ impl Compiler {
                     name_pos,
                     span.args,
                 )?;
-                self.next_pc = self.instrs.len();
                 self.emit(Instruction::BuiltinCall(BuiltinCallISpan {
                     name: key,
                     name_pos: span.vref_pos,
@@ -1001,7 +990,7 @@ impl Compiler {
             }
 
             Statement::Label(span) => {
-                if self.labels.insert(span.name.clone(), self.next_pc).is_some() {
+                if self.labels.insert(span.name.clone(), self.instrs.len()).is_some() {
                     return Err(Error::DuplicateLabel(span.name_pos, span.name));
                 }
             }
@@ -1045,7 +1034,7 @@ impl Compiler {
         let mut subs = HashMap::with_capacity(self.callable_spans.len());
         let callable_spans = std::mem::take(&mut self.callable_spans);
         for span in callable_spans {
-            let pc = self.next_pc;
+            let pc = self.instrs.len();
 
             let key = SymbolKey::from(span.name.name());
             let return_value = Compiler::return_key(&key);
@@ -1139,7 +1128,7 @@ impl Compiler {
             }
         }
 
-        self.instrs[end] = Instruction::Jump(JumpISpan { addr: self.next_pc });
+        self.instrs[end] = Instruction::Jump(JumpISpan { addr: self.instrs.len() });
 
         Ok(())
     }
