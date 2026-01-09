@@ -196,6 +196,7 @@ fn compile_equality_binary_op<
 }
 
 /// Compiles a relational binary operator and appends its instructions to `instrs`.
+#[allow(clippy::too_many_arguments)]
 fn compile_relational_binary_op<
     F1: Fn(LineCol) -> Instruction,
     F2: Fn(LineCol) -> Instruction,
@@ -377,6 +378,31 @@ fn compile_expr_symbol(
             }
         }
 
+        Some(SymbolPrototype::BuiltinCallable(md)) => {
+            let etype = match md.return_type() {
+                Some(etype) => etype,
+                None => {
+                    return Err(Error::NotArrayOrFunction(span.pos, key));
+                }
+            };
+
+            if !md.is_argless() {
+                return Err(Error::CallableSyntaxError(span.pos, md.clone()));
+            }
+
+            let nargs = compile_function_args(md, instrs, fixups, symtable, span.pos, vec![])?;
+            debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
+            (
+                Instruction::FunctionCall(FunctionCallISpan {
+                    name: key,
+                    name_pos: span.pos,
+                    return_type: etype,
+                    nargs: 0,
+                }),
+                etype,
+            )
+        }
+
         Some(SymbolPrototype::Callable(md)) => {
             let etype = match md.return_type() {
                 Some(etype) => etype,
@@ -391,18 +417,8 @@ fn compile_expr_symbol(
 
             let nargs = compile_function_args(md, instrs, fixups, symtable, span.pos, vec![])?;
             debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
-            let instr = if md.is_builtin() {
-                Instruction::FunctionCall(FunctionCallISpan {
-                    name: key,
-                    name_pos: span.pos,
-                    return_type: etype,
-                    nargs: 0,
-                })
-            } else {
-                fixups.insert(instrs.len(), Fixup::Call(key, span.pos));
-                Instruction::Nop
-            };
-            (instr, etype)
+            fixups.insert(instrs.len(), Fixup::Call(key, span.pos));
+            (Instruction::Nop, etype)
         }
     };
     if !span.vref.accepts(vtype) {
@@ -688,7 +704,7 @@ pub(super) fn compile_expr(
                     compile_array_ref(instrs, fixups, symtable, span, key, *vtype, *dims)
                 }
 
-                Some(SymbolPrototype::Callable(md)) => {
+                Some(SymbolPrototype::BuiltinCallable(md)) => {
                     if !span.vref.accepts_callable(md.return_type()) {
                         return Err(Error::IncompatibleTypeAnnotationInReference(
                             span.vref_pos,
@@ -710,17 +726,38 @@ pub(super) fn compile_expr(
                     let span_pos = span.vref_pos;
                     let nargs =
                         compile_function_args(md, instrs, fixups, symtable, span_pos, span.args)?;
-                    if md.is_builtin() {
-                        instrs.push(Instruction::FunctionCall(FunctionCallISpan {
-                            name: key,
-                            name_pos: span_pos,
-                            return_type: vtype,
-                            nargs,
-                        }));
-                    } else {
-                        instrs.push(Instruction::Nop);
-                        fixups.insert(instrs.len() - 1, Fixup::Call(key, span_pos));
+                    instrs.push(Instruction::FunctionCall(FunctionCallISpan {
+                        name: key,
+                        name_pos: span_pos,
+                        return_type: vtype,
+                        nargs,
+                    }));
+                    Ok(vtype)
+                }
+
+                Some(SymbolPrototype::Callable(md)) => {
+                    if !span.vref.accepts_callable(md.return_type()) {
+                        return Err(Error::IncompatibleTypeAnnotationInReference(
+                            span.vref_pos,
+                            span.vref,
+                        ));
                     }
+
+                    let vtype = match md.return_type() {
+                        Some(vtype) => vtype,
+                        None => {
+                            return Err(Error::NotArrayOrFunction(span.vref_pos, key));
+                        }
+                    };
+
+                    if md.is_argless() {
+                        return Err(Error::CallableSyntaxError(span.vref_pos, md.clone()));
+                    }
+
+                    let span_pos = span.vref_pos;
+                    compile_function_args(md, instrs, fixups, symtable, span_pos, span.args)?;
+                    instrs.push(Instruction::Nop);
+                    fixups.insert(instrs.len() - 1, Fixup::Call(key, span_pos));
                     Ok(vtype)
                 }
 
