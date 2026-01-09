@@ -32,6 +32,9 @@ pub struct BuiltinCallISpan {
     /// Position of the name.
     pub name_pos: LineCol,
 
+    /// Runtime index to execute this call.
+    pub upcall_index: usize,
+
     /// Number of arguments on the stack for the call.
     ///
     /// The arguments in the stack are interspersed with the separators used to separate them from
@@ -85,6 +88,9 @@ pub struct FunctionCallISpan {
 
     /// Position of the name.
     pub name_pos: LineCol,
+
+    /// Runtime index to execute this call.
+    pub upcall_index: usize,
 
     /// Return type of the function.
     pub return_type: ExprType,
@@ -434,7 +440,7 @@ impl Instruction {
             Instruction::Assign(key) => ("SETV", Some(key.to_string())),
 
             Instruction::BuiltinCall(span) => {
-                ("CALLB", Some(format!("{}, {}", span.name, span.nargs)))
+                ("CALLB", Some(format!("{} ({}), {}", span.upcall_index, span.name, span.nargs)))
             }
 
             Instruction::Call(span) => ("CALLA", Some(format!("{:04x}", span.addr))),
@@ -446,7 +452,7 @@ impl Instruction {
                     ExprType::Integer => "CALLF%",
                     ExprType::Text => "CALLF$",
                 };
-                (opcode, Some(format!("{}, {}", span.name, span.nargs)))
+                (opcode, Some(format!("{} ({}), {}", span.upcall_index, span.name, span.nargs)))
             }
 
             Instruction::Dim(span) => {
