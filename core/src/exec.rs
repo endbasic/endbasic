@@ -88,6 +88,9 @@ pub enum Signal {
 /// Request to exit the VM execution loop to execute a native command or function.
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct UpcallData {
+    /// Index of the upcall to execute.
+    index: usize,
+
     /// Name of the callable to execute.
     name: SymbolKey,
 
@@ -687,22 +690,16 @@ impl Machine {
     async fn builtin_call(
         &mut self,
         context: &mut Context,
-        name: &SymbolKey,
+        callable: Rc<dyn Callable>,
         bref_pos: LineCol,
         nargs: usize,
     ) -> Result<()> {
-        let b = match self.symbols.load(name) {
-            Some(Symbol::Callable(b)) => b,
-            _ => panic!("Command existence and type checking happen at compile time"),
-        };
-
-        let metadata = b.metadata();
+        let metadata = callable.metadata();
         debug_assert!(!metadata.is_function());
 
         let scope = Scope::new(&mut context.value_stack, nargs, bref_pos);
 
-        let b = b.clone();
-        b.exec(scope, self).await
+        callable.exec(scope, self).await
     }
 
     /// Handles an array definition.  The array must not yet exist, and the name may not overlap
@@ -956,27 +953,22 @@ impl Machine {
     async fn function_call(
         &mut self,
         context: &mut Context,
+        callable: Rc<dyn Callable>,
         name: &SymbolKey,
         return_type: ExprType,
         fref_pos: LineCol,
         nargs: usize,
     ) -> Result<()> {
-        match self.symbols.load(name) {
-            Some(Symbol::Callable(f)) => {
-                if !f.metadata().is_function() {
-                    return Err(Error::EvalError(
-                        fref_pos,
-                        format!("{} is not an array nor a function", f.metadata().name()),
-                    ));
-                }
-                let f = f.clone();
-                if f.metadata().is_argless() {
-                    self.argless_function_call(context, name, return_type, fref_pos, f).await
-                } else {
-                    self.do_function_call(context, return_type, fref_pos, nargs, f).await
-                }
-            }
-            _ => unreachable!("Function existence and type checking has been done at compile time"),
+        if !callable.metadata().is_function() {
+            return Err(Error::EvalError(
+                fref_pos,
+                format!("{} is not an array nor a function", callable.metadata().name()),
+            ));
+        }
+        if callable.metadata().is_argless() {
+            self.argless_function_call(context, name, return_type, fref_pos, callable).await
+        } else {
+            self.do_function_call(context, return_type, fref_pos, nargs, callable).await
         }
     }
 
@@ -1272,6 +1264,7 @@ impl Machine {
 
                 Instruction::BuiltinCall(span) => {
                     return Ok(InternalStopReason::Upcall(UpcallData {
+                        index: span.upcall_index,
                         name: span.name.clone(),
                         return_type: None,
                         pos: span.name_pos,
@@ -1294,6 +1287,7 @@ impl Machine {
 
                 Instruction::FunctionCall(span) => {
                     return Ok(InternalStopReason::Upcall(UpcallData {
+                        index: span.upcall_index,
                         name: span.name.clone(),
                         return_type: Some(span.return_type),
                         pos: span.name_pos,
@@ -1515,7 +1509,11 @@ impl Machine {
     /// Executes the instructions given in `instr`.
     ///
     /// This is a helper to `exec`, which prepares the machine with the program's data upfront.
-    async fn exec_with_data(&mut self, instrs: &[Instruction]) -> Result<StopReason> {
+    async fn exec_with_data(
+        &mut self,
+        upcalls: &[Rc<dyn Callable>],
+        instrs: &[Instruction],
+    ) -> Result<StopReason> {
         let mut context = Context::default();
         while context.pc < instrs.len() {
             match self.exec_until_stop(&mut context, instrs) {
@@ -1526,11 +1524,14 @@ impl Machine {
                 }
 
                 Ok(InternalStopReason::Upcall(data)) => {
+                    let upcall = upcalls[data.index].clone();
+
                     let result;
                     if let Some(return_type) = data.return_type {
                         result = self
                             .function_call(
                                 &mut context,
+                                upcall,
                                 &data.name,
                                 return_type,
                                 data.pos,
@@ -1539,7 +1540,7 @@ impl Machine {
                             .await;
                     } else {
                         result =
-                            self.builtin_call(&mut context, &data.name, data.pos, data.nargs).await;
+                            self.builtin_call(&mut context, upcall, data.pos, data.nargs).await;
                     }
                     match result {
                         Ok(()) => context.pc += 1,
@@ -1568,9 +1569,18 @@ impl Machine {
     pub async fn exec(&mut self, input: &mut dyn io::Read) -> Result<StopReason> {
         let image = compiler::compile(input, &self.symbols)?;
 
+        let upcalls = image
+            .upcalls
+            .iter()
+            .map(|key| match self.symbols.load(key) {
+                Some(Symbol::Callable(c)) => c.clone(),
+                _ => panic!("Builtin existence and type checking happen at compile time"),
+            })
+            .collect::<Vec<Rc<dyn Callable>>>();
+
         assert!(self.data.is_empty());
         self.data = image.data;
-        let result = self.exec_with_data(&image.instrs).await;
+        let result = self.exec_with_data(&upcalls, &image.instrs).await;
         self.data.clear();
         result
     }

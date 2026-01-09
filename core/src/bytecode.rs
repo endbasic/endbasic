@@ -708,6 +708,9 @@ impl Instruction {
 /// Representation of a compiled program.
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct Image {
+    /// List of builtin upcalls in the order in which they were assigned indexes.
+    pub upcalls: Vec<SymbolKey>,
+
     /// Collection of instructions in the program.
     ///
     /// The indices of this vector correspond to the program counter.
