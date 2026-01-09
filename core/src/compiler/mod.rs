@@ -118,7 +118,8 @@ enum SymbolPrototype {
     Array(ExprType, usize),
 
     /// Information about a callable that's a builtin and requires an upcall to execute.
-    BuiltinCallable(CallableMetadata),
+    /// The integer indicates the runtime upcall index of the callable.
+    BuiltinCallable(CallableMetadata, usize),
 
     /// Information about a callable.
     Callable(CallableMetadata),
@@ -162,11 +163,24 @@ impl From<HashMap<SymbolKey, SymbolPrototype>> for SymbolsTable {
 
 impl From<&Symbols> for SymbolsTable {
     fn from(syms: &Symbols) -> Self {
-        let mut globals = HashMap::default();
-        for (name, callable) in syms.callables() {
-            let proto = SymbolPrototype::BuiltinCallable(callable.metadata().clone());
-            globals.insert(name.clone(), proto);
-        }
+        let globals = {
+            let mut globals = HashMap::default();
+
+            let callables = syms.callables();
+            let mut names = callables.keys().copied().collect::<Vec<&SymbolKey>>();
+            // This is only necessary for testing really... but may also remove some confusion
+            // when inspecting the bytecode because it helps keep upcall indexes stable across
+            // different compilations.
+            names.sort();
+
+            for (i, name) in names.into_iter().enumerate() {
+                let callable = callables.get(&name).unwrap();
+                let proto = SymbolPrototype::BuiltinCallable(callable.metadata().clone(), i);
+                globals.insert(name.clone(), proto);
+            }
+
+            globals
+        };
 
         let mut scope = HashMap::default();
         for (name, symbol) in syms.locals() {
@@ -219,6 +233,22 @@ impl SymbolsTable {
     fn insert(&mut self, key: SymbolKey, proto: SymbolPrototype) {
         debug_assert!(!self.globals.contains_key(&key), "Cannot redefine a symbol");
         let previous = self.scopes.last_mut().unwrap().insert(key, proto);
+        debug_assert!(previous.is_none(), "Cannot redefine a symbol");
+    }
+
+    /// Inserts the builtin callable described by `md` and assigns an upcall index.
+    /// The symbol must not yet exist.
+    #[cfg(test)]
+    fn insert_builtin_callable(&mut self, key: SymbolKey, md: CallableMetadata) {
+        let next_upcall_index = self
+            .globals
+            .values()
+            .filter(|proto| matches!(proto, SymbolPrototype::BuiltinCallable(..)))
+            .count();
+
+        debug_assert!(!self.globals.contains_key(&key), "Cannot redefine a symbol");
+        let proto = SymbolPrototype::BuiltinCallable(md, next_upcall_index);
+        let previous = self.globals.insert(key, proto);
         debug_assert!(previous.is_none(), "Cannot redefine a symbol");
     }
 
@@ -847,19 +877,19 @@ impl Compiler {
 
             Statement::Call(span) => {
                 let key = SymbolKey::from(&span.vref.name());
-                let (md, is_builtin) = match self.symtable.get(&key) {
-                    Some(SymbolPrototype::BuiltinCallable(md)) => {
+                let (md, upcall_index) = match self.symtable.get(&key) {
+                    Some(SymbolPrototype::BuiltinCallable(md, upcall_index)) => {
                         if md.is_function() {
                             return Err(Error::NotACommand(span.vref_pos, span.vref));
                         }
-                        (md.clone(), true)
+                        (md.clone(), Some(*upcall_index))
                     }
 
                     Some(SymbolPrototype::Callable(md)) => {
                         if md.is_function() {
                             return Err(Error::NotACommand(span.vref_pos, span.vref));
                         }
-                        (md.clone(), false)
+                        (md.clone(), None)
                     }
 
                     Some(_) => {
@@ -878,10 +908,11 @@ impl Compiler {
                     name_pos,
                     span.args,
                 )?;
-                if is_builtin {
+                if let Some(upcall_index) = upcall_index {
                     self.emit(Instruction::BuiltinCall(BuiltinCallISpan {
                         name: key,
                         name_pos: span.vref_pos,
+                        upcall_index,
                         nargs,
                     }));
                 } else {
@@ -1247,7 +1278,7 @@ mod testutils {
         pub(crate) fn define_callable(mut self, builder: CallableMetadataBuilder) -> Self {
             let md = builder.test_build();
             let key = SymbolKey::from(md.name());
-            self.symtable.insert(key, SymbolPrototype::BuiltinCallable(md));
+            self.symtable.insert_builtin_callable(key, md);
             self
         }
 
@@ -1583,6 +1614,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("CMD"),
                     name_pos: lc(1, 1),
+                    upcall_index: 0,
                     nargs: 0,
                 }),
             )
@@ -1613,6 +1645,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("CMD"),
                     name_pos: lc(1, 15),
+                    upcall_index: 0,
                     nargs: 2,
                 }),
             )
@@ -1884,6 +1917,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("FOO"),
                     name_pos: lc(2, 1),
+                    upcall_index: 0,
                     nargs: 0,
                 }),
             )
@@ -1904,6 +1938,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("FOO"),
                     name_pos: lc(2, 1),
+                    upcall_index: 0,
                     nargs: 0,
                 }),
             )
@@ -1922,6 +1957,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("FOO"),
                     name_pos: lc(2, 1),
+                    upcall_index: 0,
                     nargs: 0,
                 }),
             )
@@ -2502,6 +2538,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("FOO"),
                     name_pos: lc(2, 1),
+                    upcall_index: 0,
                     nargs: 0,
                 }),
             )
@@ -2532,6 +2569,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("FOO"),
                     name_pos: lc(1, 16),
+                    upcall_index: 0,
                     nargs: 0,
                 }),
             )
@@ -2553,6 +2591,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("FOO"),
                     name_pos: lc(2, 1),
+                    upcall_index: 0,
                     nargs: 0,
                 }),
             )
@@ -2564,6 +2603,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("BAR"),
                     name_pos: lc(4, 1),
+                    upcall_index: 1,
                     nargs: 0,
                 }),
             )
@@ -2575,6 +2615,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("BAZ"),
                     name_pos: lc(6, 1),
+                    upcall_index: 2,
                     nargs: 0,
                 }),
             )
@@ -2639,6 +2680,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("FOO"),
                     name_pos: lc(3, 1),
+                    upcall_index: 0,
                     nargs: 0,
                 }),
             )
@@ -2790,6 +2832,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("FOO"),
                     name_pos: lc(3, 1),
+                    upcall_index: 0,
                     nargs: 0,
                 }),
             )
@@ -2831,6 +2874,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("FOO"),
                     name_pos: lc(3, 1),
+                    upcall_index: 0,
                     nargs: 0,
                 }),
             )
@@ -2859,6 +2903,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("FOO"),
                     name_pos: lc(3, 1),
+                    upcall_index: 0,
                     nargs: 0,
                 }),
             )
@@ -2872,6 +2917,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("BAR"),
                     name_pos: lc(5, 1),
+                    upcall_index: 1,
                     nargs: 0,
                 }),
             )
@@ -2900,6 +2946,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("FOO"),
                     name_pos: lc(3, 1),
+                    upcall_index: 0,
                     nargs: 0,
                 }),
             )
@@ -2909,6 +2956,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("BAR"),
                     name_pos: lc(5, 1),
+                    upcall_index: 1,
                     nargs: 0,
                 }),
             )
@@ -2958,6 +3006,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("FOO"),
                     name_pos: lc(2, 1),
+                    upcall_index: 0,
                     nargs: 0,
                 }),
             )

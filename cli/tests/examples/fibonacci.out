@@ -7,7 +7,7 @@ took 177 steps to calculate
 0004    PUSH%       1                           # 32:28
 0005    PUSH$       "fibonacci of 10 is:"       # 32:7
 0006    PUSH%       4                           # 32:7
-0007    CALLB       PRINT, 5                    # 32:1
+0007    CALLB       48 (PRINT), 5               # 32:1
 0008    PUSH$       "steps to calculate"        # 33:22
 0009    PUSH%       4                           # 33:22
 000a    PUSH%       1                           # 33:20
@@ -16,7 +16,7 @@ took 177 steps to calculate
 000d    PUSH%       1                           # 33:13
 000e    PUSH$       "took"                      # 33:7
 000f    PUSH%       4                           # 33:7
-0010    CALLB       PRINT, 8                    # 33:1
+0010    CALLB       48 (PRINT), 8               # 33:1
 0011    JMP         0037
 0012    ENTER
 0013    DIMV%       0RETURN_FIBONACCI

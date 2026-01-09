@@ -378,7 +378,7 @@ fn compile_expr_symbol(
             }
         }
 
-        Some(SymbolPrototype::BuiltinCallable(md)) => {
+        Some(SymbolPrototype::BuiltinCallable(md, upcall_index)) => {
             let etype = match md.return_type() {
                 Some(etype) => etype,
                 None => {
@@ -396,6 +396,7 @@ fn compile_expr_symbol(
                 Instruction::FunctionCall(FunctionCallISpan {
                     name: key,
                     name_pos: span.pos,
+                    upcall_index: *upcall_index,
                     return_type: etype,
                     nargs: 0,
                 }),
@@ -704,7 +705,7 @@ pub(super) fn compile_expr(
                     compile_array_ref(instrs, fixups, symtable, span, key, *vtype, *dims)
                 }
 
-                Some(SymbolPrototype::BuiltinCallable(md)) => {
+                Some(SymbolPrototype::BuiltinCallable(md, upcall_index)) => {
                     if !span.vref.accepts_callable(md.return_type()) {
                         return Err(Error::IncompatibleTypeAnnotationInReference(
                             span.vref_pos,
@@ -729,6 +730,7 @@ pub(super) fn compile_expr(
                     instrs.push(Instruction::FunctionCall(FunctionCallISpan {
                         name: key,
                         name_pos: span_pos,
+                        upcall_index: *upcall_index,
                         return_type: vtype,
                         nargs,
                     }));
@@ -852,6 +854,7 @@ mod tests {
                 Instruction::FunctionCall(FunctionCallISpan {
                     name: SymbolKey::from("f"),
                     name_pos: lc(1, 5),
+                    upcall_index: 0,
                     return_type: ExprType::Integer,
                     nargs: 0,
                 }),
@@ -1000,6 +1003,7 @@ mod tests {
                 Instruction::BuiltinCall(BuiltinCallISpan {
                     name: SymbolKey::from("C"),
                     name_pos: lc(1, 1),
+                    upcall_index: 0,
                     nargs: 1,
                 }),
             )
@@ -1330,6 +1334,7 @@ mod tests {
                 Instruction::FunctionCall(FunctionCallISpan {
                     name: SymbolKey::from("FOO"),
                     name_pos: lc(1, 5),
+                    upcall_index: 0,
                     return_type: ExprType::Integer,
                     nargs: 3,
                 }),

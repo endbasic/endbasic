@@ -3,7 +3,7 @@ Hello,First-Name Last-Name!
 0001    PUSH%       1                           # 16:25
 0002    PUSH$       "What's your name"          # 16:7
 0003    PUSH%       1                           # 16:7
-0004    CALLB       INPUT, 4                    # 16:1
+0004    CALLB       30 (INPUT), 4               # 16:1
 0005    LOAD$       NAME                        # 17:17
 0006    PUSH$       "!"                         # 17:25
 0007    CONCAT$                                 # 17:23
@@ -11,5 +11,5 @@ Hello,First-Name Last-Name!
 0009    PUSH%       1                           # 17:15
 000a    PUSH$       "Hello,"                    # 17:7
 000b    PUSH%       4                           # 17:7
-000c    CALLB       PRINT, 5                    # 17:1
+000c    CALLB       48 (PRINT), 5               # 17:1
 
