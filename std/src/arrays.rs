@@ -231,7 +231,7 @@ mod tests {
         Tester::default()
             .run(format!("DIM x(2): result = {}()", func))
             .expect_compilation_err(format!(
-                "1:20: {} expected <array> | <array, dimension%>",
+                "1:20: {} expected (array) | (array, dimension%)",
                 func
             ))
             .check();
@@ -239,7 +239,7 @@ mod tests {
         Tester::default()
             .run(format!("DIM x(2): result = {}(x, 1, 2)", func))
             .expect_compilation_err(format!(
-                "1:20: {} expected <array> | <array, dimension%>",
+                "1:20: {} expected (array) | (array, dimension%)",
                 func
             ))
             .check();

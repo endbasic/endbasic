@@ -630,23 +630,30 @@ impl CallableMetadata {
     }
 
     /// Gets the callable's syntax specification.
-    pub fn syntax(&self) -> String {
-        fn format_one(cs: &CallableSyntax) -> String {
-            let mut syntax = cs.describe();
-            if syntax.is_empty() {
-                syntax.push_str("no arguments");
+    ///
+    /// If the callable takes no arguments at all, this returns None to force the caller into
+    /// deciding how to format it.
+    pub fn syntax(&self) -> Option<String> {
+        fn format_one(cs: &CallableSyntax, left_sep: &str, right_sep: &str) -> String {
+            let description = cs.describe();
+            if description.is_empty() {
+                "<no arguments>".to_owned()
+            } else {
+                format!("{}{}{}", left_sep, description, right_sep)
             }
-            syntax
         }
 
+        let (left_sep, right_sep) = if self.is_function() { ("(", ")") } else { ("", "") };
         match self.syntaxes.as_slice() {
             [] => panic!("Callables without syntaxes are not allowed at construction time"),
-            [one] => format_one(one),
-            many => many
-                .iter()
-                .map(|syn| format!("<{}>", syn.describe()))
-                .collect::<Vec<String>>()
-                .join(" | "),
+            [one] if one.is_empty() => None,
+            [one] => Some(format_one(one, left_sep, right_sep)),
+            many => Some(
+                many.iter()
+                    .map(|syn| format_one(syn, left_sep, right_sep))
+                    .collect::<Vec<String>>()
+                    .join(" | "),
+            ),
         }
     }
 
@@ -667,9 +674,9 @@ impl CallableMetadata {
         self.description.lines()
     }
 
-    /// Returns true if this is a callable that takes no arguments.
+    /// Returns true if this is a callable that may take no arguments.
     pub fn is_argless(&self) -> bool {
-        self.syntaxes.is_empty() || (self.syntaxes.len() == 1 && self.syntaxes[0].is_empty())
+        self.syntaxes.iter().filter(|syn| syn.is_empty()).count() > 0
     }
 
     /// Returns true if this callable is a function (not a command).

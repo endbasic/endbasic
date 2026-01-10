@@ -996,7 +996,7 @@ mod tests {
 
         Tester::default()
             .run("SAVE 2, 3")
-            .expect_compilation_err("1:1: SAVE expected <> | <filename$>")
+            .expect_compilation_err("1:1: SAVE expected <no arguments> | filename$")
             .check();
     }
 }

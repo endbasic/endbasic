@@ -720,13 +720,12 @@ pub(super) fn compile_expr(
                         }
                     };
 
-                    if md.is_argless() {
-                        return Err(Error::CallableSyntaxError(span.vref_pos, md.clone()));
-                    }
-
                     let span_pos = span.vref_pos;
                     let nargs =
                         compile_function_args(md, instrs, fixups, symtable, span_pos, span.args)?;
+                    if md.is_argless() && nargs == 0 {
+                        return Err(Error::CallableSyntaxError(span.vref_pos, md.clone()));
+                    }
                     instrs.push(Instruction::FunctionCall(FunctionCallISpan {
                         name: key,
                         name_pos: span_pos,
@@ -752,12 +751,12 @@ pub(super) fn compile_expr(
                         }
                     };
 
-                    if md.is_argless() {
+                    let span_pos = span.vref_pos;
+                    let nargs =
+                        compile_function_args(md, instrs, fixups, symtable, span_pos, span.args)?;
+                    if md.is_argless() && nargs == 0 {
                         return Err(Error::CallableSyntaxError(span.vref_pos, md.clone()));
                     }
-
-                    let span_pos = span.vref_pos;
-                    compile_function_args(md, instrs, fixups, symtable, span_pos, span.args)?;
                     instrs.push(Instruction::Nop);
                     fixups.insert(instrs.len() - 1, Fixup::Call(key, span_pos));
                     Ok(vtype)
@@ -864,6 +863,55 @@ mod tests {
     }
 
     #[test]
+    fn test_compile_expr_argless_and_not_argless_ok() {
+        Tester::default()
+            .define_callable(
+                CallableMetadataBuilder::new("F").with_return_type(ExprType::Integer).with_syntax(
+                    &[
+                        (&[], None),
+                        (
+                            &[SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("i"),
+                                    vtype: ExprType::Integer,
+                                },
+                                ArgSepSyntax::End,
+                            )],
+                            None,
+                        ),
+                    ],
+                ),
+            )
+            .parse("i = f")
+            .parse("j = f(3)")
+            .compile()
+            .expect_instr(
+                0,
+                Instruction::FunctionCall(FunctionCallISpan {
+                    name: SymbolKey::from("f"),
+                    name_pos: lc(1, 5),
+                    upcall_index: 0,
+                    return_type: ExprType::Integer,
+                    nargs: 0,
+                }),
+            )
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(2, Instruction::PushInteger(3, lc(2, 7)))
+            .expect_instr(
+                3,
+                Instruction::FunctionCall(FunctionCallISpan {
+                    name: SymbolKey::from("f"),
+                    name_pos: lc(2, 5),
+                    upcall_index: 0,
+                    return_type: ExprType::Integer,
+                    nargs: 1,
+                }),
+            )
+            .expect_instr(4, Instruction::Assign(SymbolKey::from("j")))
+            .check();
+    }
+
+    #[test]
     fn test_compile_expr_argless_call_not_argless() {
         Tester::default()
             .define_callable(
@@ -882,7 +930,7 @@ mod tests {
             )
             .parse("i = f")
             .compile()
-            .expect_err("1:5: F expected i%")
+            .expect_err("1:5: F expected (i%)")
             .check();
     }
 

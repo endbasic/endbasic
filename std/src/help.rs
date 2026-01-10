@@ -87,43 +87,26 @@ impl Topic for CallableTopic {
     }
 
     async fn describe(&self, pager: &mut Pager<'_>) -> io::Result<()> {
+        let syntax = match self.metadata.syntax() {
+            None => "".to_owned(),
+            Some(s) => format!(" {}", s),
+        };
+
         pager.print("").await?;
         let previous = pager.color();
         pager.set_color(Some(TITLE_COLOR), previous.1)?;
         match self.metadata.return_type() {
             None => {
-                if self.metadata.is_argless() {
-                    refill_and_page(pager, [self.metadata.name()], "    ").await?;
-                } else {
-                    refill_and_page(
-                        pager,
-                        [&format!("{} {}", self.metadata.name(), self.metadata.syntax())],
-                        "    ",
-                    )
+                refill_and_page(pager, [&format!("{} {}", self.metadata.name(), syntax)], "    ")
                     .await?;
-                }
             }
             Some(return_type) => {
-                if self.metadata.is_argless() {
-                    refill_and_page(
-                        pager,
-                        [&format!("{}{}", self.metadata.name(), return_type.annotation(),)],
-                        "    ",
-                    )
-                    .await?;
-                } else {
-                    refill_and_page(
-                        pager,
-                        [&format!(
-                            "{}{}({})",
-                            self.metadata.name(),
-                            return_type.annotation(),
-                            self.metadata.syntax(),
-                        )],
-                        "    ",
-                    )
-                    .await?;
-                }
+                refill_and_page(
+                    pager,
+                    [&format!("{}{} {}", self.metadata.name(), return_type.annotation(), syntax,)],
+                    "    ",
+                )
+                .await?;
             }
         }
         pager.set_color(previous.0, previous.1)?;
@@ -132,6 +115,7 @@ impl Topic for CallableTopic {
             refill_and_page(pager, self.metadata.description(), "    ").await?;
         }
         pager.print("").await?;
+
         Ok(())
     }
 }
@@ -820,7 +804,7 @@ This is the first and only topic with just one line.
             .expect_prints([""])
             .expect_output([
                 CapturedOut::SetColor(Some(TITLE_COLOR), Some(26)),
-                CapturedOut::Print("    EMPTY$(sample$)".to_owned()),
+                CapturedOut::Print("    EMPTY$ (sample$)".to_owned()),
                 CapturedOut::SetColor(Some(30), Some(26)),
             ])
             .expect_prints([
@@ -873,7 +857,7 @@ This is the first and only topic with just one line.
     fn test_help_prefix_search() {
         fn exp_output(name: &str, is_function: bool) -> Vec<CapturedOut> {
             let spec = if is_function {
-                format!("    {}(sample$)", name)
+                format!("    {} (sample$)", name)
             } else {
                 format!("    {} sample$", name)
             };
@@ -938,7 +922,7 @@ This is the first and only topic with just one line.
         t.run(r#"HELP foo"#).expect_compilation_err("1:6: Undefined symbol FOO").check();
 
         t.run(r#"HELP "foo", 3"#)
-            .expect_compilation_err("1:1: HELP expected <> | <topic$>")
+            .expect_compilation_err("1:1: HELP expected <no arguments> | topic$")
             .check();
         t.run(r#"HELP 3"#).expect_compilation_err("1:6: expected STRING but found INTEGER").check();
 

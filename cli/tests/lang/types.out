@@ -24,7 +24,7 @@ ERROR: 1:30: Incompatible type annotation in a2# reference
 ERROR: 1:7: Incompatible type annotation in LEN$ reference
 >>> Invalid type access
 ERROR: 1:14: I is not an array nor a function
-ERROR: 1:7: LEN expected expr$
+ERROR: 1:7: LEN expected (expr$)
 ERROR: 1:7: PRINT is not an array nor a function
 >>> Argless function calls
  3.141592653589793

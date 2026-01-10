@@ -515,8 +515,14 @@ mod tests {
 
     #[test]
     fn test_gpio_clear_errors() {
-        check_stmt_compilation_err("1:1: GPIO_CLEAR expected <> | <pin%>", r#"GPIO_CLEAR 1,"#);
-        check_stmt_compilation_err("1:1: GPIO_CLEAR expected <> | <pin%>", r#"GPIO_CLEAR 1, 2"#);
+        check_stmt_compilation_err(
+            "1:1: GPIO_CLEAR expected <no arguments> | pin%",
+            r#"GPIO_CLEAR 1,"#,
+        );
+        check_stmt_compilation_err(
+            "1:1: GPIO_CLEAR expected <no arguments> | pin%",
+            r#"GPIO_CLEAR 1, 2"#,
+        );
 
         check_pin_validation("1:12: ", "1:12: ", r#"GPIO_CLEAR _PIN_"#);
     }
@@ -535,8 +541,8 @@ mod tests {
 
     #[test]
     fn test_gpio_read_errors() {
-        check_expr_compilation_error("1:10: GPIO_READ expected pin%", r#"GPIO_READ()"#);
-        check_expr_compilation_error("1:10: GPIO_READ expected pin%", r#"GPIO_READ(1, 2)"#);
+        check_expr_compilation_error("1:10: GPIO_READ expected (pin%)", r#"GPIO_READ()"#);
+        check_expr_compilation_error("1:10: GPIO_READ expected (pin%)", r#"GPIO_READ(1, 2)"#);
 
         check_pin_validation("1:15: ", "1:15: ", r#"v = GPIO_READ(_PIN_)"#);
     }

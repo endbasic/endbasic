@@ -830,7 +830,7 @@ mod tests {
 
     #[test]
     fn test_dir_errors() {
-        check_stmt_compilation_err("1:1: DIR expected <> | <path$>", "DIR 2, 3");
+        check_stmt_compilation_err("1:1: DIR expected <no arguments> | path$", "DIR 2, 3");
         check_stmt_compilation_err("1:5: expected STRING but found INTEGER", "DIR 2");
     }
 
@@ -923,9 +923,12 @@ mod tests {
 
     #[test]
     fn test_mount_errors() {
-        check_stmt_compilation_err("1:1: MOUNT expected <> | <target$ AS drive_name$>", "MOUNT 1");
         check_stmt_compilation_err(
-            "1:1: MOUNT expected <> | <target$ AS drive_name$>",
+            "1:1: MOUNT expected <no arguments> | target$ AS drive_name$",
+            "MOUNT 1",
+        );
+        check_stmt_compilation_err(
+            "1:1: MOUNT expected <no arguments> | target$ AS drive_name$",
             "MOUNT 1, 2, 3",
         );
 

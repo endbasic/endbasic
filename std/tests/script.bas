@@ -16,4 +16,4 @@
 ' A sample program to test the scripting interpreter.
 
 RANDOMIZE 10
-PRINT "The random number is:"; INT(RND() * 100.0)
+PRINT "The random number is:"; INT(RND * 100.0)

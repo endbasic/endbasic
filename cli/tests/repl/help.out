@@ -663,7 +663,7 @@ Output from HELP "CLS":
 
 Output from HELP "COLOR":
 
-[38;5;11m    COLOR <> | <fg%> | <[fg%], [bg%]>
+[38;5;11m    COLOR <no arguments> | fg% | [fg%], [bg%]
 [39m
     Sets the foreground and background colors.
 
@@ -696,7 +696,7 @@ Output from HELP "DEG":
 
 Output from HELP "DIR":
 
-[38;5;11m    DIR <> | <path$>
+[38;5;11m    DIR <no arguments> | path$
 [39m
     Displays the list of files on the current or given path.
 
@@ -771,7 +771,7 @@ Output from HELP "GFX_RECTF":
 
 Output from HELP "GFX_SYNC":
 
-[38;5;11m    GFX_SYNC <> | <enabled?>
+[38;5;11m    GFX_SYNC <no arguments> | enabled?
 [39m
     Controls the video syncing flag and/or forces a sync.
 
@@ -799,7 +799,7 @@ Output from HELP "GFX_SYNC":
 
 Output from HELP "GPIO_CLEAR":
 
-[38;5;11m    GPIO_CLEAR <> | <pin%>
+[38;5;11m    GPIO_CLEAR <no arguments> | pin%
 [39m
     Resets the GPIO chip or a specific pin.
 
@@ -838,7 +838,7 @@ Output from HELP "GPIO_WRITE":
 
 Output from HELP "HELP":
 
-[38;5;11m    HELP <> | <topic$>
+[38;5;11m    HELP <no arguments> | topic$
 [39m
     Prints interactive help.
 
@@ -855,7 +855,7 @@ Output from HELP "HELP":
 
 Output from HELP "INPUT":
 
-[38;5;11m    INPUT <vref> | <[prompt$] <,|;> vref>
+[38;5;11m    INPUT vref | [prompt$] <,|;> vref
 [39m
     Obtains user input from the console.
 
@@ -905,7 +905,7 @@ Output from HELP "LOCATE":
 
 Output from HELP "LOGIN":
 
-[38;5;11m    LOGIN <username$> | <username$, password$>
+[38;5;11m    LOGIN username$ | username$, password$
 [39m
     Logs into the user's account.
 
@@ -928,7 +928,7 @@ Output from HELP "LOGOUT":
 
 Output from HELP "MOUNT":
 
-[38;5;11m    MOUNT <> | <target$ AS drive_name$>
+[38;5;11m    MOUNT <no arguments> | target$ AS drive_name$
 [39m
     Lists the mounted drives or mounts a new drive.
 
@@ -998,7 +998,7 @@ Output from HELP "RAD":
 
 Output from HELP "RANDOMIZE":
 
-[38;5;11m    RANDOMIZE <> | <seed%>
+[38;5;11m    RANDOMIZE <no arguments> | seed%
 [39m
     Reinitializes the pseudo-random number generator.
 
@@ -1052,7 +1052,7 @@ Output from HELP "RUN":
 
 Output from HELP "SAVE":
 
-[38;5;11m    SAVE <> | <filename$>
+[38;5;11m    SAVE <no arguments> | filename$
 [39m
     Saves the current program in memory to the given filename.
 
@@ -1116,7 +1116,7 @@ Output from HELP "UNMOUNT":
 
 Output from HELP "ASC":
 
-[38;5;11m    ASC%(char$)
+[38;5;11m    ASC% (char$)
 [39m
     Returns the UTF character code of the input character.
 
@@ -1129,7 +1129,7 @@ Output from HELP "ASC":
 
 Output from HELP "ATN":
 
-[38;5;11m    ATN#(n#)
+[38;5;11m    ATN# (n#)
 [39m
     Computes the arc-tangent of a number.
 
@@ -1138,7 +1138,7 @@ Output from HELP "ATN":
 
 Output from HELP "CHR":
 
-[38;5;11m    CHR$(code%)
+[38;5;11m    CHR$ (code%)
 [39m
     Returns the UTF character that corresponds to the given code.
 
@@ -1146,7 +1146,7 @@ Output from HELP "CHR":
 
 Output from HELP "CINT":
 
-[38;5;11m    CINT%(expr#)
+[38;5;11m    CINT% (expr#)
 [39m
     Casts the given numeric expression to an integer (with rounding).
 
@@ -1156,7 +1156,7 @@ Output from HELP "CINT":
 
 Output from HELP "COS":
 
-[38;5;11m    COS#(angle#)
+[38;5;11m    COS# (angle#)
 [39m
     Computes the cosine of an angle.
 
@@ -1192,7 +1192,7 @@ Output from HELP "GFX_WIDTH":
 
 Output from HELP "GPIO_READ":
 
-[38;5;11m    GPIO_READ?(pin%)
+[38;5;11m    GPIO_READ? (pin%)
 [39m
     Reads the state of a GPIO pin.
 
@@ -1226,7 +1226,7 @@ Output from HELP "INKEY":
 
 Output from HELP "INT%":
 
-[38;5;11m    INT%(expr#)
+[38;5;11m    INT% (expr#)
 [39m
     Casts the given numeric expression to an integer (with truncation).
 
@@ -1238,7 +1238,7 @@ Output from HELP "INT%":
 
 Output from HELP "LBOUND":
 
-[38;5;11m    LBOUND%(<array> | <array, dimension%>)
+[38;5;11m    LBOUND% (array) | (array, dimension%)
 [39m
     Returns the lower bound for the given dimension of the array.
 
@@ -1250,7 +1250,7 @@ Output from HELP "LBOUND":
 
 Output from HELP "LEFT":
 
-[38;5;11m    LEFT$(expr$, n%)
+[38;5;11m    LEFT$ (expr$, n%)
 [39m
     Returns a given number of characters from the left side of a string.
 
@@ -1261,25 +1261,25 @@ Output from HELP "LEFT":
 
 Output from HELP "LEN":
 
-[38;5;11m    LEN%(expr$)
+[38;5;11m    LEN% (expr$)
 [39m
     Returns the length of the string in expr$.
 
 Output from HELP "LTRIM":
 
-[38;5;11m    LTRIM$(expr$)
+[38;5;11m    LTRIM$ (expr$)
 [39m
     Returns a copy of a string with leading whitespace removed.
 
 Output from HELP "MAX":
 
-[38;5;11m    MAX#(expr1#[, .., exprN#])
+[38;5;11m    MAX# (expr1#[, .., exprN#])
 [39m
     Returns the maximum number out of a set of numbers.
 
 Output from HELP "MID":
 
-[38;5;11m    MID$(<expr$, start%> | <expr$, start%, length%>)
+[38;5;11m    MID$ (expr$, start%) | (expr$, start%, length%)
 [39m
     Returns a portion of a string.
 
@@ -1293,7 +1293,7 @@ Output from HELP "MID":
 
 Output from HELP "MIN":
 
-[38;5;11m    MIN#(expr1#[, .., exprN#])
+[38;5;11m    MIN# (expr1#[, .., exprN#])
 [39m
     Returns the minimum number out of a set of numbers.
 
@@ -1305,7 +1305,7 @@ Output from HELP "PI":
 
 Output from HELP "RIGHT":
 
-[38;5;11m    RIGHT$(expr$, n%)
+[38;5;11m    RIGHT$ (expr$, n%)
 [39m
     Returns a given number of characters from the right side of a string.
 
@@ -1316,7 +1316,7 @@ Output from HELP "RIGHT":
 
 Output from HELP "RND":
 
-[38;5;11m    RND#(<> | <n%>)
+[38;5;11m    RND# <no arguments> | (n%)
 [39m
     Returns a random number in the [0..1] range.
 
@@ -1331,7 +1331,7 @@ Output from HELP "RND":
 
 Output from HELP "RTRIM":
 
-[38;5;11m    RTRIM$(expr$)
+[38;5;11m    RTRIM$ (expr$)
 [39m
     Returns a copy of a string with trailing whitespace removed.
 
@@ -1353,7 +1353,7 @@ Output from HELP "SCRROWS":
 
 Output from HELP "SIN":
 
-[38;5;11m    SIN#(angle#)
+[38;5;11m    SIN# (angle#)
 [39m
     Computes the sine of an angle.
 
@@ -1362,13 +1362,13 @@ Output from HELP "SIN":
 
 Output from HELP "SQR":
 
-[38;5;11m    SQR#(num#)
+[38;5;11m    SQR# (num#)
 [39m
     Computes the square root of the given number.
 
 Output from HELP "STR$":
 
-[38;5;11m    STR$(expr)
+[38;5;11m    STR$ (expr)
 [39m
     Formats a scalar value as a string.
 
@@ -1385,7 +1385,7 @@ Output from HELP "STR$":
 
 Output from HELP "TAN":
 
-[38;5;11m    TAN#(angle#)
+[38;5;11m    TAN# (angle#)
 [39m
     Computes the tangent of an angle.
 
@@ -1394,7 +1394,7 @@ Output from HELP "TAN":
 
 Output from HELP "UBOUND":
 
-[38;5;11m    UBOUND%(<array> | <array, dimension%>)
+[38;5;11m    UBOUND% (array) | (array, dimension%)
 [39m
     Returns the upper bound for the given dimension of the array.
 

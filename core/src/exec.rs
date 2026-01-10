@@ -3401,7 +3401,7 @@ mod tests {
             END FUNCTION
             OUT foo(3, 4)
         "#;
-        do_error_test(code, &[], &[], "5:17: FOO expected n%");
+        do_error_test(code, &[], &[], "5:17: FOO expected (n%)");
     }
 
     #[test]

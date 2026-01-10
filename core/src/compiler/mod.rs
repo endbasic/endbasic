@@ -41,7 +41,7 @@ pub enum Error {
     #[error("{0}: Cannot {1} {2} and {3}")]
     BinaryOpTypeError(LineCol, &'static str, ExprType, ExprType),
 
-    #[error("{0}: {} expected {}", .1.name(), .1.syntax())]
+    #[error("{0}: {} expected {}", .1.name(), .1.syntax().as_deref().unwrap_or("no arguments"))]
     CallableSyntaxError(LineCol, CallableMetadata),
 
     #[error("{0}: Duplicate label {1}")]

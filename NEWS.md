@@ -57,6 +57,11 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
 
 *   Fixed crashes when using the SDL 3 compatibility bindings for SDL 2.
 
+*   Removed the ability to call functions that may not take arguments with an
+    empty parameter list of the form `()`, to mimic the behavior of the vast
+    majority of BASIC dialects.  This means that `RND()` is now illegal and
+    that users must call `RND` or `RND(1)`.
+
 ## Changes in version 0.11.1
 
 **Released on 2024-09-14.**

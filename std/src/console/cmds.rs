@@ -716,10 +716,13 @@ mod tests {
     #[test]
     fn test_color_errors() {
         check_stmt_compilation_err(
-            "1:1: COLOR expected <> | <fg%> | <[fg%], [bg%]>",
+            "1:1: COLOR expected <no arguments> | fg% | [fg%], [bg%]",
             "COLOR 1, 2, 3",
         );
-        check_stmt_compilation_err("1:1: COLOR expected <> | <fg%> | <[fg%], [bg%]>", "COLOR 1; 2");
+        check_stmt_compilation_err(
+            "1:1: COLOR expected <no arguments> | fg% | [fg%], [bg%]",
+            "COLOR 1; 2",
+        );
 
         check_stmt_err("1:7: Color out of range", "COLOR 1000, 0");
         check_stmt_err("1:10: Color out of range", "COLOR 0, 1000");
@@ -844,18 +847,12 @@ mod tests {
 
     #[test]
     fn test_input_errors() {
-        check_stmt_compilation_err("1:1: INPUT expected <vref> | <[prompt$] <,|;> vref>", "INPUT");
-        check_stmt_compilation_err(
-            "1:1: INPUT expected <vref> | <[prompt$] <,|;> vref>",
-            "INPUT ; ,",
-        );
-        check_stmt_compilation_err(
-            "1:1: INPUT expected <vref> | <[prompt$] <,|;> vref>",
-            "INPUT ;",
-        );
+        check_stmt_compilation_err("1:1: INPUT expected vref | [prompt$] <,|;> vref", "INPUT");
+        check_stmt_compilation_err("1:1: INPUT expected vref | [prompt$] <,|;> vref", "INPUT ; ,");
+        check_stmt_compilation_err("1:1: INPUT expected vref | [prompt$] <,|;> vref", "INPUT ;");
         check_stmt_compilation_err("1:7: expected STRING but found INTEGER", "INPUT 3 ; a");
         check_stmt_compilation_err(
-            "1:1: INPUT expected <vref> | <[prompt$] <,|;> vref>",
+            "1:1: INPUT expected vref | [prompt$] <,|;> vref",
             "INPUT \"foo\" AS bar",
         );
         check_stmt_err("1:7: Undefined symbol A", "INPUT a + 1 ; b");
