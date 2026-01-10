@@ -66,20 +66,23 @@ impl<'a> MonospacedFont<'a> {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "Font lacks a glyph for 'A'; is it valid?",
-                    ))
+                    ));
                 }
             };
 
             let width = match u16::try_from(metrics.advance) {
                 Ok(0) => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid font width 0"))
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Invalid font width 0",
+                    ));
                 }
                 Ok(width) => width,
                 Err(e) => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!("Invalid font width {}: {}", metrics.advance, e),
-                    ))
+                    ));
                 }
             };
 
@@ -88,14 +91,14 @@ impl<'a> MonospacedFont<'a> {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "Invalid font height 0",
-                    ))
+                    ));
                 }
                 Ok(height) => height,
                 Err(e) => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!("Invalid font height {}: {}", font.height(), e),
-                    ))
+                    ));
                 }
             };
 

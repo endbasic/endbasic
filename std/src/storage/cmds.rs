@@ -16,7 +16,7 @@
 //! File system interaction.
 
 use super::time_format_error_to_io_error;
-use crate::console::{is_narrow, Console, Pager};
+use crate::console::{Console, Pager, is_narrow};
 use crate::storage::Storage;
 use async_trait::async_trait;
 use endbasic_core::ast::{ArgSep, ExprType};

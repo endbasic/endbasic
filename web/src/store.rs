@@ -160,7 +160,7 @@ impl WebDrive {
                 Err(e) => {
                     return Err(io::Error::other(
                         format!("Failed to fetch local storage entry with index {}: {:?}", i, e),
-                    ))
+                    ));
                 }
             };
 
@@ -185,7 +185,7 @@ impl WebDrive {
             Err(e) => {
                 return Err(io::Error::other(
                     format!("Failed to get local storage entry with key {}: {:?}", old, e),
-                ))
+                ));
             }
         };
 
@@ -213,7 +213,7 @@ impl WebDrive {
             Err(e) => {
                 return Err(io::Error::other(
                     format!("Failed to get local storage entry with key {}: {:?}", key, e),
-                ))
+                ));
             }
         };
 
@@ -261,7 +261,7 @@ impl Drive for WebDrive {
                 Err(e) => {
                     return Err(io::Error::other(
                         format!("Failed to fetch local storage entry with index {}: {:?}", i, e),
-                    ))
+                    ));
                 }
             };
 

@@ -15,7 +15,7 @@
 
 //! Generic types to represent and manipulate LCDs.
 
-use crate::console::{SizeInPixels, RGB};
+use crate::console::{RGB, SizeInPixels};
 use std::convert::TryFrom;
 use std::io;
 

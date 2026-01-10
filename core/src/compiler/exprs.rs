@@ -810,8 +810,8 @@ mod tests {
     use super::*;
     use crate::bytecode::{BuiltinCallISpan, FunctionCallISpan};
     use crate::compiler::{
-        testutils::*, ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax,
-        RequiredValueSyntax, SingularArgSyntax,
+        ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax, RequiredValueSyntax,
+        SingularArgSyntax, testutils::*,
     };
     use crate::syms::CallableMetadataBuilder;
     use std::borrow::Cow;

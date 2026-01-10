@@ -18,14 +18,14 @@
 //! All communication with this thread happens via channels to ensure all SDL operations are invoked
 //! from a single thread.
 
-use crate::font::{font_error_to_io_error, MonospacedFont};
+use crate::font::{MonospacedFont, font_error_to_io_error};
 use crate::string_error_to_io_error;
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
 use endbasic_std::console::drawing::{draw_circle, draw_circle_filled};
 use endbasic_std::console::graphics::{ClampedInto, ClampedMul, InputOps, RasterInfo, RasterOps};
 use endbasic_std::console::{
-    CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, Resolution, SizeInPixels, RGB,
+    CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, RGB, Resolution, SizeInPixels,
 };
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};

@@ -15,7 +15,7 @@
 
 //! Test utilities for the cloud service.
 
-use crate::{add_all, AccessToken, GetFilesResponse, LoginResponse, Service, SignupRequest};
+use crate::{AccessToken, GetFilesResponse, LoginResponse, Service, SignupRequest, add_all};
 use async_trait::async_trait;
 use endbasic_std::storage::{FileAcls, Storage};
 use endbasic_std::testutils::*;
@@ -182,8 +182,8 @@ impl Service for MockService {
 
     async fn login(&mut self, username: &str, password: &str) -> io::Result<LoginResponse> {
         let mock = self.mock_login.pop_front().expect("No mock requests available");
-        assert_eq!(&mock.0 .0, username);
-        assert_eq!(&mock.0 .1, password);
+        assert_eq!(&mock.0.0, username);
+        assert_eq!(&mock.0.1, password);
 
         if let Ok(response) = &mock.1 {
             self.access_token = Some(response.access_token.clone());
@@ -217,8 +217,8 @@ impl Service for MockService {
         self.access_token.as_ref().expect("login not called yet");
 
         let mock = self.mock_get_file.pop_front().expect("No mock requests available");
-        assert_eq!(&mock.0 .0, username);
-        assert_eq!(&mock.0 .1, filename);
+        assert_eq!(&mock.0.0, username);
+        assert_eq!(&mock.0.1, filename);
         mock.1
     }
 
@@ -226,8 +226,8 @@ impl Service for MockService {
         self.access_token.as_ref().expect("login not called yet");
 
         let mock = self.mock_get_file_acls.pop_front().expect("No mock requests available");
-        assert_eq!(&mock.0 .0, username);
-        assert_eq!(&mock.0 .1, filename);
+        assert_eq!(&mock.0.0, username);
+        assert_eq!(&mock.0.1, filename);
         mock.1
     }
 
@@ -240,9 +240,9 @@ impl Service for MockService {
         self.access_token.as_ref().expect("login not called yet");
 
         let mock = self.mock_patch_file_content.pop_front().expect("No mock requests available");
-        assert_eq!(&mock.0 .0, username);
-        assert_eq!(&mock.0 .1, filename);
-        assert_eq!(&mock.0 .2, &content);
+        assert_eq!(&mock.0.0, username);
+        assert_eq!(&mock.0.1, filename);
+        assert_eq!(&mock.0.2, &content);
         mock.1
     }
 
@@ -256,10 +256,10 @@ impl Service for MockService {
         self.access_token.as_ref().expect("login not called yet");
 
         let mock = self.mock_patch_file_acls.pop_front().expect("No mock requests available");
-        assert_eq!(&mock.0 .0, username);
-        assert_eq!(&mock.0 .1, filename);
-        assert_eq!(&mock.0 .2, add);
-        assert_eq!(&mock.0 .3, remove);
+        assert_eq!(&mock.0.0, username);
+        assert_eq!(&mock.0.1, filename);
+        assert_eq!(&mock.0.2, add);
+        assert_eq!(&mock.0.3, remove);
         mock.1
     }
 
@@ -267,8 +267,8 @@ impl Service for MockService {
         self.access_token.as_ref().expect("login not called yet");
 
         let mock = self.mock_delete_file.pop_front().expect("No mock requests available");
-        assert_eq!(&mock.0 .0, username);
-        assert_eq!(&mock.0 .1, filename);
+        assert_eq!(&mock.0.0, username);
+        assert_eq!(&mock.0.1, filename);
         mock.1
     }
 }

@@ -21,9 +21,9 @@ use base64::prelude::*;
 use bytes::Buf;
 use endbasic_std::console::remove_control_chars;
 use endbasic_std::storage::FileAcls;
-use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest::StatusCode;
+use reqwest::header::HeaderMap;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -103,7 +103,7 @@ impl CloudService {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!("Invalid base API address: {}", e),
-                ))
+                ));
             }
         };
 
@@ -288,7 +288,7 @@ impl Service for CloudService {
                             return Err(io::Error::new(
                                 io::ErrorKind::InvalidData,
                                 format!("Server returned invalid reader ACL: {}", e),
-                            ))
+                            ));
                         }
                     }
                 }

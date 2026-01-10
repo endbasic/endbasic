@@ -15,14 +15,14 @@
 
 //! Interactive help support.
 
-use crate::console::{refill_and_page, AnsiColor, Console, Pager};
+use crate::console::{AnsiColor, Console, Pager, refill_and_page};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
+use endbasic_core::LineCol;
 use endbasic_core::ast::ExprType;
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Error, Machine, Result, Scope};
 use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder, Symbols};
-use endbasic_core::LineCol;
 use radix_trie::{Trie, TrieCommon};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -293,11 +293,7 @@ fn parse_lang_reference(lang_md: &'static str) -> Vec<(&'static str, &'static st
         let section = &section[title_end + body_start.len()..];
 
         let end = section.find(section_start).unwrap_or_else(|| {
-            if section.ends_with(line_end) {
-                section.len() - line_end.len()
-            } else {
-                section.len()
-            }
+            if section.ends_with(line_end) { section.len() - line_end.len() } else { section.len() }
         });
         let content = &section[..end];
         topics.push((title, content));

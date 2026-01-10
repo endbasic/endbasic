@@ -15,12 +15,12 @@
 
 //! Stored program manipulation.
 
-use crate::console::{read_line, Console, Pager};
+use crate::console::{Console, Pager, read_line};
 use crate::storage::Storage;
 use crate::strings::parse_boolean;
 use async_trait::async_trait;
 use endbasic_core::ast::ExprType;
-use endbasic_core::compiler::{compile, ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
+use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax, compile};
 use endbasic_core::exec::{Machine, Result, Scope, StopReason};
 use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use std::borrow::Cow;

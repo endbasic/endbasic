@@ -16,11 +16,11 @@
 //! Commands that manipulate the machine's state or the program's execution.
 
 use async_trait::async_trait;
+use endbasic_core::LineCol;
 use endbasic_core::ast::ExprType;
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Error, Machine, Result, Scope};
 use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
-use endbasic_core::LineCol;
 use futures_lite::future::{BoxedLocal, FutureExt};
 use std::borrow::Cow;
 use std::rc::Rc;

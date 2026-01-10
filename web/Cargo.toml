@@ -9,7 +9,7 @@ description = "The EndBASIC programming language - web interface"
 homepage = "https://www.endbasic.dev/"
 repository = "https://github.com/endbasic/endbasic"
 readme = "README.md"
-edition = "2018"
+edition = "2024"
 build = "build.rs"
 publish = false
 

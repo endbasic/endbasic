@@ -22,7 +22,7 @@
 #![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
 #![warn(unsafe_code)]
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_channel::Sender;
 use endbasic_core::exec::Signal;
 use endbasic_std::console::{Console, ConsoleSpec};
@@ -218,7 +218,7 @@ fn setup_console(
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("Unknown console driver {}", driver),
-            ))
+            ));
         }
     };
     console_spec.finish().map_err(|e| {

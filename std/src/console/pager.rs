@@ -15,7 +15,7 @@
 
 //! A simple paginator for commands that produce long outputs
 
-use super::{is_narrow, CharsXY, Console, Key};
+use super::{CharsXY, Console, Key, is_narrow};
 use std::io;
 
 /// Message to print on a narrow console when the screen is full.

@@ -16,11 +16,11 @@
 //! GPIO access functions and commands for EndBASIC.
 
 use async_trait::async_trait;
+use endbasic_core::LineCol;
 use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Clearable, Error, Machine, Result, Scope};
 use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder, Symbols};
-use endbasic_core::LineCol;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::io;

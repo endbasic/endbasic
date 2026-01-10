@@ -23,8 +23,8 @@
 #![warn(unsafe_code)]
 
 use endbasic_core::exec::{Machine, StopReason};
-use endbasic_std::console::{self, is_narrow, refill_and_print, Console};
-use endbasic_std::program::{continue_if_modified, Program, BREAK_MSG};
+use endbasic_std::console::{self, Console, is_narrow, refill_and_print};
+use endbasic_std::program::{BREAK_MSG, Program, continue_if_modified};
 use endbasic_std::storage::Storage;
 use std::cell::RefCell;
 use std::io;

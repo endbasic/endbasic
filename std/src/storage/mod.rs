@@ -230,7 +230,7 @@ impl Location {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!("Too many : separators in path '{}'", s),
-                ))
+                ));
             }
         };
 
@@ -466,7 +466,7 @@ impl Storage {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!("Unknown mount scheme '{}'", scheme),
-                ))
+                ));
             }
         };
         self.attach(name, uri, drive)

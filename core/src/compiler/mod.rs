@@ -492,10 +492,10 @@ impl Compiler {
         let mut key = SymbolKey::from(&vref.name());
         let etype = self.compile_expr(expr)?;
 
-        if let Some(current_callable) = self.current_callable.as_ref() {
-            if key == current_callable.0 {
-                key = Compiler::return_key(&current_callable.0);
-            }
+        if let Some(current_callable) = self.current_callable.as_ref()
+            && key == current_callable.0
+        {
+            key = Compiler::return_key(&current_callable.0);
         }
 
         let vtype = match self.symtable.get(&key) {
@@ -516,10 +516,10 @@ impl Compiler {
             return Err(Error::IncompatibleTypesInAssignment(vref_pos, etype, vtype));
         }
 
-        if let Some(ref_type) = vref.ref_type() {
-            if ref_type != vtype {
-                return Err(Error::IncompatibleTypeAnnotationInReference(vref_pos, vref));
-            }
+        if let Some(ref_type) = vref.ref_type()
+            && ref_type != vtype
+        {
+            return Err(Error::IncompatibleTypeAnnotationInReference(vref_pos, vref));
         }
 
         self.emit(Instruction::Assign(key));

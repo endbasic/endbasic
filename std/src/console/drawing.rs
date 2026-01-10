@@ -254,7 +254,7 @@ where
 mod testutils {
     use super::*;
     use crate::console::graphics::RasterInfo;
-    use crate::console::{SizeInPixels, RGB};
+    use crate::console::{RGB, SizeInPixels};
 
     /// Representation of captured raster operations.
     #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
