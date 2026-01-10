@@ -687,19 +687,36 @@ impl Machine {
     }
 
     /// Handles a builtin call.
-    async fn builtin_call(
+    async fn upcall(
         &mut self,
         context: &mut Context,
         callable: Rc<dyn Callable>,
+        return_type: Option<ExprType>,
         bref_pos: LineCol,
         nargs: usize,
     ) -> Result<()> {
         let metadata = callable.metadata();
-        debug_assert!(!metadata.is_function());
-
         let scope = Scope::new(&mut context.value_stack, nargs, bref_pos);
-
-        callable.exec(scope, self).await
+        callable.exec(scope, self).await?;
+        if cfg!(debug_assertions) {
+            if let Some(return_type) = return_type {
+                debug_assert!(
+                    metadata.is_function(),
+                    "Return types are only allowed for functions"
+                );
+                match context.value_stack.top() {
+                    Some((value, _pos)) => {
+                        debug_assert_eq!(
+                            return_type,
+                            value.as_exprtype(),
+                            "Value returned by function is incompatible with its type definition",
+                        )
+                    }
+                    None => unreachable!("Functions must return one value"),
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Handles an array definition.  The array must not yet exist, and the name may not overlap
@@ -897,35 +914,6 @@ impl Machine {
         Ok(subscripts)
     }
 
-    /// Evaluates a function call specified by `fref` and arguments `args` on the function `f`.
-    async fn do_function_call(
-        &mut self,
-        context: &mut Context,
-        return_type: ExprType,
-        fref_pos: LineCol,
-        nargs: usize,
-        f: Rc<dyn Callable>,
-    ) -> Result<()> {
-        let metadata = f.metadata();
-        debug_assert_eq!(return_type, metadata.return_type().unwrap());
-
-        let scope = Scope::new(&mut context.value_stack, nargs, fref_pos);
-        f.exec(scope, self).await?;
-        if cfg!(debug_assertions) {
-            match context.value_stack.top() {
-                Some((value, _pos)) => {
-                    debug_assert_eq!(
-                        return_type,
-                        value.as_exprtype(),
-                        "Value returned by function is incompatible with its type definition",
-                    )
-                }
-                None => unreachable!("Functions must return one value"),
-            }
-        }
-        Ok(())
-    }
-
     /// Handles an array reference.
     fn array_ref(
         &mut self,
@@ -947,55 +935,6 @@ impl Machine {
             Some(_) => unreachable!("Array type checking has been done at compile time"),
             None => Err(Error::EvalError(vref_pos, format!("{} is not defined", key))),
         }
-    }
-
-    /// Handles a function call.
-    async fn function_call(
-        &mut self,
-        context: &mut Context,
-        callable: Rc<dyn Callable>,
-        name: &SymbolKey,
-        return_type: ExprType,
-        fref_pos: LineCol,
-        nargs: usize,
-    ) -> Result<()> {
-        if !callable.metadata().is_function() {
-            return Err(Error::EvalError(
-                fref_pos,
-                format!("{} is not an array nor a function", callable.metadata().name()),
-            ));
-        }
-        if callable.metadata().is_argless() {
-            self.argless_function_call(context, name, return_type, fref_pos, callable).await
-        } else {
-            self.do_function_call(context, return_type, fref_pos, nargs, callable).await
-        }
-    }
-
-    /// Evaluates a call to an argless function.
-    async fn argless_function_call(
-        &mut self,
-        context: &mut Context,
-        fname: &SymbolKey,
-        ftype: ExprType,
-        fpos: LineCol,
-        f: Rc<dyn Callable>,
-    ) -> Result<()> {
-        let scope = Scope::new(&mut context.value_stack, 0, fpos);
-        f.exec(scope, self).await?;
-        if cfg!(debug_assertions) {
-            match context.value_stack.top() {
-                Some((value, _pos)) => {
-                    let fref_checker = VarRef::new(fname.to_string(), Some(ftype));
-                    debug_assert!(
-                        fref_checker.accepts(value.as_exprtype()),
-                        "Value returned by function is incompatible with its type definition",
-                    )
-                }
-                None => unreachable!("Functions must return one value"),
-            }
-        }
-        Ok(())
     }
 
     /// Loads the value of a symbol.
@@ -1526,22 +1465,9 @@ impl Machine {
                 Ok(InternalStopReason::Upcall(data)) => {
                     let upcall = upcalls[data.index].clone();
 
-                    let result;
-                    if let Some(return_type) = data.return_type {
-                        result = self
-                            .function_call(
-                                &mut context,
-                                upcall,
-                                &data.name,
-                                return_type,
-                                data.pos,
-                                data.nargs,
-                            )
-                            .await;
-                    } else {
-                        result =
-                            self.builtin_call(&mut context, upcall, data.pos, data.nargs).await;
-                    }
+                    let result = self
+                        .upcall(&mut context, upcall, data.return_type, data.pos, data.nargs)
+                        .await;
                     match result {
                         Ok(()) => context.pc += 1,
                         Err(e) => self.handle_error(instrs, &mut context, e)?,
