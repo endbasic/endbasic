@@ -393,7 +393,7 @@ fn compile_required_ref(
                     Ok(None)
                 }
 
-                Some(SymbolPrototype::BuiltinCallable(md, _))
+                Some(SymbolPrototype::BuiltinCallable(md))
                 | Some(SymbolPrototype::Callable(md)) => {
                     if !span.vref.accepts_callable(md.return_type()) {
                         return Err(Error::IncompatibleTypeAnnotationInReference(

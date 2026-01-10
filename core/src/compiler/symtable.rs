@@ -15,9 +15,25 @@
 
 use crate::ast::ExprType;
 use crate::syms::{CallableMetadata, Symbol, SymbolKey, Symbols};
+#[cfg(test)]
+use std::collections::hash_map::Keys;
 use std::collections::HashMap;
 #[cfg(test)]
 use std::collections::HashSet;
+use std::hash::Hash;
+
+/// Interface to return the discriminant of an enum for index calculation purposes.
+///
+/// This is not `std::mem::discriminant` because 1. we don't want to have to construct a default
+/// instance just to get the discriminant, and because 2. we may want to collapse multiple types
+/// into the same bucket.
+trait Bucketizer {
+    /// The type being bucketized.
+    type V;
+
+    /// Bucketizes a value and assigns it a "bucket" number.
+    fn bucketize(&self, value: &Self::V) -> u8;
+}
 
 /// Information about a symbol in the symbols table.
 #[derive(Clone)]
@@ -27,7 +43,7 @@ pub(super) enum SymbolPrototype {
 
     /// Information about a callable that's a builtin and requires an upcall to execute.
     /// The integer indicates the runtime upcall index of the callable.
-    BuiltinCallable(CallableMetadata, usize),
+    BuiltinCallable(CallableMetadata),
 
     /// Information about a callable.
     Callable(CallableMetadata),
@@ -35,6 +51,109 @@ pub(super) enum SymbolPrototype {
     /// Information about a variable.
     Variable(ExprType),
 }
+
+/// A bucketizer for `SymbolPrototype`.
+#[derive(Default)]
+struct SymbolPrototypeBucketizer {}
+
+impl SymbolPrototypeBucketizer {
+    const BUCKET_BUILTINS: u8 = 0;
+    const BUCKET_OTHER: u8 = 255;
+}
+
+impl Bucketizer for SymbolPrototypeBucketizer {
+    type V = SymbolPrototype;
+
+    fn bucketize(&self, value: &SymbolPrototype) -> u8 {
+        match value {
+            SymbolPrototype::BuiltinCallable(..) => Self::BUCKET_BUILTINS,
+            _ => Self::BUCKET_OTHER,
+        }
+    }
+}
+
+/// A wrapper over `HashMap` that assigns indexes to newly-inserted entries based on a `Bucketizer`
+/// and then allows retrieving such indexes per key and retrieving the list of keys in insertion
+/// order for a given bucket.
+struct IndexedHashMap<K, V, B> {
+    map: HashMap<K, (V, usize)>,
+    bucketizer: B,
+    counters: HashMap<u8, usize>,
+}
+
+impl<K, V, B: Bucketizer<V = V>> IndexedHashMap<K, V, B> {
+    /// Constructs a new `IndexedHashMap` backed by `bucketizer` to assign indexes.
+    fn new(bucketizer: B) -> Self {
+        Self { map: HashMap::default(), bucketizer, counters: HashMap::default() }
+    }
+
+    /// Increments the counter of the bucket where `value` belongs.
+    fn increment_counts_of(&mut self, value: &V) -> usize {
+        let counter_id = self.bucketizer.bucketize(value);
+        let next_index = *self.counters.entry(counter_id).and_modify(|v| *v += 1).or_insert(1);
+        next_index - 1
+    }
+}
+
+impl<K: Eq + Hash, V, B: Bucketizer<V = V>> IndexedHashMap<K, V, B> {
+    /// Same as `HashMap::contains_key`.
+    fn contains_key(&self, key: &K) -> bool {
+        self.map.contains_key(key)
+    }
+
+    /// Same as `HashMap::get`.
+    fn get(&self, key: &K) -> Option<&V> {
+        self.map.get(key).map(|v| &v.0)
+    }
+
+    /// Same as `HashMap::get` but also returns the index assigned to the key.
+    fn get_with_index(&self, key: &K) -> Option<(&V, usize)> {
+        self.map.get(key).map(|v| (&v.0, v.1))
+    }
+
+    /// Same as `HashMap::insert` but does not return the previous value because this assumes that
+    /// no previous value can exist.
+    fn insert(&mut self, key: K, value: V) {
+        let index = self.increment_counts_of(&value);
+        let previous = self.map.insert(key, (value, index));
+        // We could support updating existing keys, but that would make things more difficult for no
+        // reason because we would need to check if the replacement value matches the bucket of the
+        // previous one and deal with that accordingly.
+        assert!(previous.is_none(), "Updating existing keys is not supported");
+    }
+
+    /// Same as `HashMap::keys`.
+    #[cfg(test)]
+    fn keys(&self) -> Keys<'_, K, (V, usize)> {
+        self.map.keys()
+    }
+
+    /// Same as `HashMap::remove`.
+    fn remove(&mut self, key: &K) -> Option<V> {
+        self.map.remove(key).map(|v| v.0)
+    }
+}
+
+impl<K: Clone + Eq + Hash, V, B: Bucketizer<V = V>> IndexedHashMap<K, V, B> {
+    /// Returns the list of keys, in insertion order, for `bucket`.
+    fn get_ordered_keys(&self, bucket: u8) -> Vec<K> {
+        let mut builtins = self
+            .map
+            .iter()
+            .filter_map(|(key, (proto, index))| {
+                if self.bucketizer.bucketize(proto) == bucket {
+                    Some((index, key))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<(&usize, &K)>>();
+        builtins.sort_by_key(|(index, _key)| *index);
+        builtins.into_iter().map(|(_index, key)| key.clone()).collect()
+    }
+}
+
+type SymbolsMap = IndexedHashMap<SymbolKey, SymbolPrototype, SymbolPrototypeBucketizer>;
 
 /// The symbols table used during compilation.
 ///
@@ -51,28 +170,31 @@ pub(super) enum SymbolPrototype {
 /// always have size of one or two.
 pub(super) struct SymbolsTable {
     /// Map of global symbol names to their definitions.
-    globals: HashMap<SymbolKey, SymbolPrototype>,
+    globals: SymbolsMap,
 
     /// Map of local symbol names to their definitions.
-    scopes: Vec<HashMap<SymbolKey, SymbolPrototype>>,
+    scopes: Vec<SymbolsMap>,
 }
 
 impl Default for SymbolsTable {
     fn default() -> Self {
-        Self { globals: HashMap::default(), scopes: vec![HashMap::default()] }
+        Self {
+            globals: IndexedHashMap::new(SymbolPrototypeBucketizer::default()),
+            scopes: vec![IndexedHashMap::new(SymbolPrototypeBucketizer::default())],
+        }
     }
 }
 
-impl From<HashMap<SymbolKey, SymbolPrototype>> for SymbolsTable {
-    fn from(globals: HashMap<SymbolKey, SymbolPrototype>) -> Self {
-        Self { globals, scopes: vec![HashMap::default()] }
+impl From<SymbolsMap> for SymbolsTable {
+    fn from(globals: SymbolsMap) -> Self {
+        Self { globals, scopes: vec![IndexedHashMap::new(SymbolPrototypeBucketizer::default())] }
     }
 }
 
 impl From<&Symbols> for SymbolsTable {
     fn from(syms: &Symbols) -> Self {
         let globals = {
-            let mut globals = HashMap::default();
+            let mut globals = IndexedHashMap::new(SymbolPrototypeBucketizer::default());
 
             let callables = syms.callables();
             let mut names = callables.keys().copied().collect::<Vec<&SymbolKey>>();
@@ -81,16 +203,16 @@ impl From<&Symbols> for SymbolsTable {
             // different compilations.
             names.sort();
 
-            for (i, name) in names.into_iter().enumerate() {
+            for name in names {
                 let callable = callables.get(&name).unwrap();
-                let proto = SymbolPrototype::BuiltinCallable(callable.metadata().clone(), i);
+                let proto = SymbolPrototype::BuiltinCallable(callable.metadata().clone());
                 globals.insert(name.clone(), proto);
             }
 
             globals
         };
 
-        let mut scope = HashMap::default();
+        let mut scope = IndexedHashMap::new(SymbolPrototypeBucketizer::default());
         for (name, symbol) in syms.locals() {
             let proto = match symbol {
                 Symbol::Array(array) => {
@@ -111,7 +233,7 @@ impl From<&Symbols> for SymbolsTable {
 impl SymbolsTable {
     /// Enters a new scope.
     pub(super) fn enter_scope(&mut self) {
-        self.scopes.push(HashMap::default());
+        self.scopes.push(IndexedHashMap::new(SymbolPrototypeBucketizer::default()));
     }
 
     /// Leaves the current scope.
@@ -136,35 +258,36 @@ impl SymbolsTable {
         self.globals.get(key)
     }
 
+    /// Returns the information for the symbol `key` if it exists, otherwise `None`.
+    pub(super) fn get_with_index(&self, key: &SymbolKey) -> Option<(&SymbolPrototype, usize)> {
+        let proto = self.scopes.last().unwrap().get_with_index(key);
+        if proto.is_some() {
+            return proto;
+        }
+
+        self.globals.get_with_index(key)
+    }
+
     /// Inserts the new information `proto` about symbol `key` into the symbols table.
     /// The symbol must not yet exist.
     pub(super) fn insert(&mut self, key: SymbolKey, proto: SymbolPrototype) {
         debug_assert!(!self.globals.contains_key(&key), "Cannot redefine a symbol");
-        let previous = self.scopes.last_mut().unwrap().insert(key, proto);
-        debug_assert!(previous.is_none(), "Cannot redefine a symbol");
+        self.scopes.last_mut().unwrap().insert(key, proto);
     }
 
     /// Inserts the builtin callable described by `md` and assigns an upcall index.
     /// The symbol must not yet exist.
     #[cfg(test)]
     pub(super) fn insert_builtin_callable(&mut self, key: SymbolKey, md: CallableMetadata) {
-        let next_upcall_index = self
-            .globals
-            .values()
-            .filter(|proto| matches!(proto, SymbolPrototype::BuiltinCallable(..)))
-            .count();
-
         debug_assert!(!self.globals.contains_key(&key), "Cannot redefine a symbol");
-        let proto = SymbolPrototype::BuiltinCallable(md, next_upcall_index);
-        let previous = self.globals.insert(key, proto);
-        debug_assert!(previous.is_none(), "Cannot redefine a symbol");
+        let proto = SymbolPrototype::BuiltinCallable(md);
+        self.globals.insert(key, proto);
     }
 
     /// Inserts the new information `proto` about symbol `key` into the symbols table.
     /// The symbol must not yet exist.
     pub(super) fn insert_global(&mut self, key: SymbolKey, proto: SymbolPrototype) {
-        let previous = self.globals.insert(key, proto);
-        debug_assert!(previous.is_none(), "Cannot redefine a symbol");
+        self.globals.insert(key, proto);
     }
 
     /// Removes information about the symbol `key`.
@@ -185,18 +308,69 @@ impl SymbolsTable {
     /// Calculates the list of upcalls in this symbols table in the order in which they were
     /// assigned indexes.
     pub(super) fn upcalls(&self) -> Vec<SymbolKey> {
-        let mut builtins = self
-            .globals
-            .iter()
-            .filter_map(|(key, proto)| {
-                if let SymbolPrototype::BuiltinCallable(_md, upcall_index) = proto {
-                    Some((upcall_index, key))
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<(&usize, &SymbolKey)>>();
-        builtins.sort_by_key(|(upcall_index, _key)| *upcall_index);
-        builtins.into_iter().map(|(_upcall_index, key)| key.clone()).collect()
+        self.globals.get_ordered_keys(SymbolPrototypeBucketizer::BUCKET_BUILTINS)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A bucketizer for integers that classifies them as even or odd.
+    struct I32Bucketizer {}
+
+    impl I32Bucketizer {
+        const BUCKET_ODD: u8 = 10;
+        const BUCKET_EVEN: u8 = 20;
+    }
+
+    impl Bucketizer for I32Bucketizer {
+        type V = i32;
+
+        fn bucketize(&self, value: &Self::V) -> u8 {
+            if value % 2 == 0 {
+                Self::BUCKET_EVEN
+            } else {
+                Self::BUCKET_ODD
+            }
+        }
+    }
+
+    #[test]
+    fn test_indexed_hash_map_assigns_indexes_by_bucket() {
+        let mut map = IndexedHashMap::new(I32Bucketizer {});
+        map.insert("a", 1);
+        map.insert("b", 2);
+        map.insert("c", 2);
+        map.insert("d", 3);
+        map.insert("e", 3);
+        map.insert("f", 1);
+        map.insert("g", 4);
+
+        assert_eq!((&1, 0), map.get_with_index(&"a").unwrap());
+        assert_eq!((&2, 0), map.get_with_index(&"b").unwrap());
+        assert_eq!((&2, 1), map.get_with_index(&"c").unwrap());
+        assert_eq!((&3, 1), map.get_with_index(&"d").unwrap());
+        assert_eq!((&3, 2), map.get_with_index(&"e").unwrap());
+        assert_eq!((&1, 3), map.get_with_index(&"f").unwrap());
+        assert_eq!((&4, 2), map.get_with_index(&"g").unwrap());
+    }
+
+    #[test]
+    fn test_indexed_hash_map_get_ordered_keys() {
+        let mut map = IndexedHashMap::new(I32Bucketizer {});
+        map.insert("a", 1);
+        map.insert("h", 2);
+        map.insert("d", 2);
+        map.insert("i", 3);
+        map.insert("e", 3);
+        map.insert("z", 1);
+        map.insert("o", 4);
+
+        assert_eq!(["h", "d", "o"], map.get_ordered_keys(I32Bucketizer::BUCKET_EVEN).as_slice());
+        assert_eq!(
+            ["a", "i", "e", "z"],
+            map.get_ordered_keys(I32Bucketizer::BUCKET_ODD).as_slice()
+        );
     }
 }

@@ -713,15 +713,15 @@ impl Compiler {
 
             Statement::Call(span) => {
                 let key = SymbolKey::from(&span.vref.name());
-                let (md, upcall_index) = match self.symtable.get(&key) {
-                    Some(SymbolPrototype::BuiltinCallable(md, upcall_index)) => {
+                let (md, upcall_index) = match self.symtable.get_with_index(&key) {
+                    Some((SymbolPrototype::BuiltinCallable(md), upcall_index)) => {
                         if md.is_function() {
                             return Err(Error::NotACommand(span.vref_pos, span.vref));
                         }
-                        (md.clone(), Some(*upcall_index))
+                        (md.clone(), Some(upcall_index))
                     }
 
-                    Some(SymbolPrototype::Callable(md)) => {
+                    Some((SymbolPrototype::Callable(md), _index)) => {
                         if md.is_function() {
                             return Err(Error::NotACommand(span.vref_pos, span.vref));
                         }

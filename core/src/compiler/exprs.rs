@@ -353,10 +353,10 @@ fn compile_expr_symbol(
     allow_varrefs: bool,
 ) -> Result<ExprType> {
     let key = SymbolKey::from(span.vref.name());
-    let (instr, vtype) = match symtable.get(&key) {
+    let (instr, vtype) = match symtable.get_with_index(&key) {
         None => return Err(Error::UndefinedSymbol(span.pos, key)),
 
-        Some(SymbolPrototype::Array(atype, _dims)) => {
+        Some((SymbolPrototype::Array(atype, _dims), _index)) => {
             if allow_varrefs {
                 (Instruction::LoadRef(key, *atype, span.pos), *atype)
             } else {
@@ -364,7 +364,7 @@ fn compile_expr_symbol(
             }
         }
 
-        Some(SymbolPrototype::Variable(vtype)) => {
+        Some((SymbolPrototype::Variable(vtype), _index)) => {
             if allow_varrefs {
                 (Instruction::LoadRef(key, *vtype, span.pos), *vtype)
             } else {
@@ -378,7 +378,7 @@ fn compile_expr_symbol(
             }
         }
 
-        Some(SymbolPrototype::BuiltinCallable(md, upcall_index)) => {
+        Some((SymbolPrototype::BuiltinCallable(md), upcall_index)) => {
             let etype = match md.return_type() {
                 Some(etype) => etype,
                 None => {
@@ -396,7 +396,7 @@ fn compile_expr_symbol(
                 Instruction::FunctionCall(FunctionCallISpan {
                     name: key,
                     name_pos: span.pos,
-                    upcall_index: *upcall_index,
+                    upcall_index,
                     return_type: etype,
                     nargs: 0,
                 }),
@@ -404,7 +404,7 @@ fn compile_expr_symbol(
             )
         }
 
-        Some(SymbolPrototype::Callable(md)) => {
+        Some((SymbolPrototype::Callable(md), _index)) => {
             let etype = match md.return_type() {
                 Some(etype) => etype,
                 None => {
@@ -700,12 +700,12 @@ pub(super) fn compile_expr(
 
         Expr::Call(span) => {
             let key = SymbolKey::from(span.vref.name());
-            match symtable.get(&key) {
-                Some(SymbolPrototype::Array(vtype, dims)) => {
+            match symtable.get_with_index(&key) {
+                Some((SymbolPrototype::Array(vtype, dims), _index)) => {
                     compile_array_ref(instrs, fixups, symtable, span, key, *vtype, *dims)
                 }
 
-                Some(SymbolPrototype::BuiltinCallable(md, upcall_index)) => {
+                Some((SymbolPrototype::BuiltinCallable(md), upcall_index)) => {
                     if !span.vref.accepts_callable(md.return_type()) {
                         return Err(Error::IncompatibleTypeAnnotationInReference(
                             span.vref_pos,
@@ -729,14 +729,14 @@ pub(super) fn compile_expr(
                     instrs.push(Instruction::FunctionCall(FunctionCallISpan {
                         name: key,
                         name_pos: span_pos,
-                        upcall_index: *upcall_index,
+                        upcall_index,
                         return_type: vtype,
                         nargs,
                     }));
                     Ok(vtype)
                 }
 
-                Some(SymbolPrototype::Callable(md)) => {
+                Some((SymbolPrototype::Callable(md), _index)) => {
                     if !span.vref.accepts_callable(md.return_type()) {
                         return Err(Error::IncompatibleTypeAnnotationInReference(
                             span.vref_pos,
@@ -762,7 +762,7 @@ pub(super) fn compile_expr(
                     Ok(vtype)
                 }
 
-                Some(SymbolPrototype::Variable(_)) => {
+                Some((SymbolPrototype::Variable(_), _index)) => {
                     Err(Error::NotArrayOrFunction(span.vref_pos, key))
                 }
 
