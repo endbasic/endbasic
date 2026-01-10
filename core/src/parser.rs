@@ -364,7 +364,7 @@ impl<'a> Parser<'a> {
                     return Err(Error::Bad(
                         peeked.pos,
                         "Expected comma, semicolon, or end of statement".to_owned(),
-                    ))
+                    ));
                 }
             }
         }
@@ -450,7 +450,7 @@ impl<'a> Parser<'a> {
                             return Err(Error::Bad(
                                 token_span.pos,
                                 "Expected number after -".to_owned(),
-                            ))
+                            ));
                         }
                     }
                 }
@@ -468,7 +468,7 @@ impl<'a> Parser<'a> {
                     return Err(Error::Bad(
                         token_span.pos,
                         format!("Unexpected {} in DATA statement", t),
-                    ))
+                    ));
                 }
             }
 
@@ -486,7 +486,7 @@ impl<'a> Parser<'a> {
                     return Err(Error::Bad(
                         peeked.pos,
                         format!("Expected comma after datum but found {}", t),
-                    ))
+                    ));
                 }
             }
         }
@@ -531,7 +531,7 @@ impl<'a> Parser<'a> {
                 return Err(Error::Bad(
                     token_span.pos,
                     "Expected variable name after DIM".to_owned(),
-                ))
+                ));
             }
         };
         let name = vref_to_unannotated_string(vref, token_span.pos)?;
@@ -614,7 +614,7 @@ impl<'a> Parser<'a> {
                 return Err(Error::Bad(
                     do_pos,
                     "DO loop cannot have pre and post guards at the same time".to_owned(),
-                ))
+                ));
             }
         };
 
@@ -681,7 +681,7 @@ impl<'a> Parser<'a> {
                 return Err(Error::Bad(
                     peeked.pos,
                     "Expecting DO, FOR, FUNCTION or SUB after EXIT".to_owned(),
-                ))
+                ));
             }
         };
         self.lexer.consume_peeked();
@@ -964,17 +964,13 @@ impl<'a> Parser<'a> {
         while let Some(eos) = op_spans.pop() {
             match eos.op {
                 ExprOp::LeftParen => {
-                    return Err(Error::Bad(eos.pos, "Unbalanced parenthesis".to_owned()))
+                    return Err(Error::Bad(eos.pos, "Unbalanced parenthesis".to_owned()));
                 }
                 _ => eos.apply(&mut exprs)?,
             }
         }
 
-        if let Some(expr) = exprs.pop() {
-            Ok(Some(expr))
-        } else {
-            Ok(None)
-        }
+        if let Some(expr) = exprs.pop() { Ok(Some(expr)) } else { Ok(None) }
     }
 
     /// Wrapper over `parse_expr` that requires an expression to be present and returns an error
@@ -1227,14 +1223,14 @@ impl<'a> Parser<'a> {
                     return Err(Error::Bad(
                         token_span.pos,
                         "Iterator name in FOR statement must be a numeric reference".to_owned(),
-                    ))
+                    ));
                 }
             },
             _ => {
                 return Err(Error::Bad(
                     token_span.pos,
                     "No iterator name in FOR statement".to_owned(),
-                ))
+                ));
             }
         };
         let iterator_pos = token_span.pos;
@@ -1261,7 +1257,7 @@ impl<'a> Parser<'a> {
                 return Err(Error::Bad(
                     step.start_pos(),
                     "Infinite FOR loop; STEP cannot be 0".to_owned(),
-                ))
+                ));
             }
         };
 
@@ -1931,7 +1927,7 @@ impl<'a> Parser<'a> {
                 return Err(Error::Bad(
                     token_span.pos,
                     format!("Expected newline but found {}", token_span.token),
-                ))
+                ));
             }
         };
 

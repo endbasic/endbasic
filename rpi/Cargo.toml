@@ -9,7 +9,7 @@ description = "The EndBASIC programming language - Raspberry Pi support"
 homepage = "https://www.endbasic.dev/"
 repository = "https://github.com/endbasic/endbasic"
 readme = "README.md"
-edition = "2018"
+edition = "2024"
 
 [dependencies]
 rppal = "0.17"

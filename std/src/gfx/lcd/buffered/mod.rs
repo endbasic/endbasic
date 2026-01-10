@@ -17,9 +17,9 @@
 
 use crate::console::drawing;
 use crate::console::graphics::{RasterInfo, RasterOps};
-use crate::console::{CharsXY, PixelsXY, SizeInPixels, RGB};
+use crate::console::{CharsXY, PixelsXY, RGB, SizeInPixels};
 use crate::gfx::lcd::fonts::Font;
-use crate::gfx::lcd::{to_xy_size, AsByteSlice, Lcd, LcdSize, LcdXY};
+use crate::gfx::lcd::{AsByteSlice, Lcd, LcdSize, LcdXY, to_xy_size};
 use std::convert::TryFrom;
 use std::io;
 
@@ -115,11 +115,7 @@ where
                 None
             } else {
                 let value = usize::try_from(value).expect("Positive value must fit");
-                if value > max {
-                    None
-                } else {
-                    Some(value)
-                }
+                if value > max { None } else { Some(value) }
             }
         }
 
@@ -138,11 +134,7 @@ where
                 0
             } else {
                 let value = usize::try_from(value).expect("Positive value must fit");
-                if value > max {
-                    max
-                } else {
-                    value
-                }
+                if value > max { max } else { value }
             }
         }
 
@@ -164,11 +156,7 @@ where
                 None
             } else {
                 let value = usize::try_from(value).expect("Positive value must fit");
-                if value > max {
-                    Some(max)
-                } else {
-                    Some(value)
-                }
+                if value > max { Some(max) } else { Some(value) }
             }
         }
 
@@ -399,11 +387,7 @@ where
     }
 
     fn present_canvas(&mut self) -> io::Result<()> {
-        if self.sync {
-            Ok(())
-        } else {
-            self.force_present_canvas()
-        }
+        if self.sync { Ok(()) } else { self.force_present_canvas() }
     }
 
     fn read_pixels(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<Self::ID> {

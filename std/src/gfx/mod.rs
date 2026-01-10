@@ -17,11 +17,11 @@
 
 use crate::console::{Console, PixelsXY};
 use async_trait::async_trait;
+use endbasic_core::LineCol;
 use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Error, Machine, Result, Scope};
 use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
-use endbasic_core::LineCol;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::convert::TryFrom;

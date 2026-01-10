@@ -19,7 +19,7 @@ use super::testutils::*;
 use super::*;
 use crate::console::graphics::RasterOps;
 use crate::console::{CharsXY, PixelsXY, SizeInPixels};
-use crate::gfx::lcd::fonts::{FONT_16X16, FONT_5X8};
+use crate::gfx::lcd::fonts::{FONT_5X8, FONT_16X16};
 
 #[test]
 fn test_new_does_nothing() {

@@ -72,7 +72,7 @@ pub(crate) fn bitwise_shl(lhs: i32, rhs: i32) -> Result<i32> {
     let bits = match u32::try_from(rhs) {
         Ok(n) => n,
         Err(_) => {
-            return Err(Error::new(format!("Number of bits to << ({}) must be positive", rhs)))
+            return Err(Error::new(format!("Number of bits to << ({}) must be positive", rhs)));
         }
     };
 
@@ -87,7 +87,7 @@ pub(crate) fn bitwise_shr(lhs: i32, rhs: i32) -> Result<i32> {
     let bits = match u32::try_from(rhs) {
         Ok(n) => n,
         Err(_) => {
-            return Err(Error::new(format!("Number of bits to >> ({}) must be positive", rhs)))
+            return Err(Error::new(format!("Number of bits to >> ({}) must be positive", rhs)));
         }
     };
 

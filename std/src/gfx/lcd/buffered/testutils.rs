@@ -162,11 +162,16 @@ impl Tester {
                         // Print the difference as a bunch of expect_pixel lines that can be
                         // copy-pasted into the code to re-define golden data.
                         eprintln!(
-                                ".expect_pixel(xy({:3}, {:3}), ({:3}, {:3}, {:3}))  // got ({:3}, {:3}, {:3})",
-                                x, y,
-                                pixel[0], pixel[1], pixel[2],
-                                exp_pixel[0], exp_pixel[1], exp_pixel[2],
-                            );
+                            ".expect_pixel(xy({:3}, {:3}), ({:3}, {:3}, {:3}))  // got ({:3}, {:3}, {:3})",
+                            x,
+                            y,
+                            pixel[0],
+                            pixel[1],
+                            pixel[2],
+                            exp_pixel[0],
+                            exp_pixel[1],
+                            exp_pixel[2],
+                        );
                     }
                 }
             }

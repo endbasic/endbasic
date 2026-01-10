@@ -639,7 +639,7 @@ impl<'a> Lexer<'a> {
                     return Ok(TokenSpan::new(Token::Eof, last_pos, 0));
                 }
                 Some(Ok(ch_span)) if ch_span.ch == '\n' => {
-                    return Ok(TokenSpan::new(Token::Eol, ch_span.pos, 1))
+                    return Ok(TokenSpan::new(Token::Eol, ch_span.pos, 1));
                 }
                 Some(Err(e)) => return Err(e),
                 Some(Ok(_)) => (),

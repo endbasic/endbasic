@@ -1220,7 +1220,8 @@ mod tests {
             "this is a line of text with more than 40 characters\nshort\na\n\nanother line of text with more than 40 characters\n",
             "this is a line of text with more than 40 characters\nshort\na\n\nanother line of text with more than 40 characters\n",
             cb,
-            ob);
+            ob,
+        );
     }
 
     #[test]
@@ -1330,7 +1331,8 @@ mod tests {
             "this is a line of text with more than 40 characters\n\na\nshort\nanother line of text with more than 40 characters\n",
             "this is a line of text with more than 40 characters\n\na\nshort\nanother line of text with more than 40 characters\n",
             cb,
-            ob);
+            ob,
+        );
     }
 
     #[test]

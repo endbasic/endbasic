@@ -20,7 +20,7 @@ use async_channel::Sender;
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
 use endbasic_std::console::{
-    remove_control_chars, CharsXY, ClearType, Console, Key, PixelsXY, Resolution, SizeInPixels,
+    CharsXY, ClearType, Console, Key, PixelsXY, Resolution, SizeInPixels, remove_control_chars,
 };
 use std::io;
 use std::path::PathBuf;
@@ -160,7 +160,7 @@ impl Console for SdlConsole {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "Cannot leave alternate screen; not entered",
-                ))
+                ));
             }
         };
 
@@ -261,9 +261,9 @@ impl Console for SdlConsole {
 mod testutils {
     use super::*;
     use async_channel::{Receiver, TryRecvError};
+    use flate2::Compression;
     use flate2::read::GzDecoder;
     use flate2::write::GzEncoder;
-    use flate2::Compression;
     use futures_lite::future::block_on;
     use once_cell::sync::Lazy;
     use sdl2::event::Event;

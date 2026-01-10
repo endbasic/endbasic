@@ -457,14 +457,14 @@ impl Symbols {
             }
             Some(_) => Err(value::Error::new(format!("Cannot redefine {} as a variable", vref))),
             None => {
-                if let Some(ref_type) = vref.ref_type() {
-                    if !vref.accepts(value.as_exprtype()) {
-                        return Err(value::Error::new(format!(
-                            "Cannot assign value of type {} to variable of type {}",
-                            value.as_exprtype(),
-                            ref_type,
-                        )));
-                    }
+                if let Some(ref_type) = vref.ref_type()
+                    && !vref.accepts(value.as_exprtype())
+                {
+                    return Err(value::Error::new(format!(
+                        "Cannot assign value of type {} to variable of type {}",
+                        value.as_exprtype(),
+                        ref_type,
+                    )));
                 }
                 self.scopes.last_mut().unwrap().insert(key, Symbol::Variable(value));
                 Ok(())
@@ -1119,10 +1119,9 @@ mod tests {
     fn test_symbols_get_mut_undefined() {
         // If modifying this test, update the identical test for get() and get_auto().
         let mut syms = SymbolsBuilder::default().add_var("SOMETHING", Value::Integer(3)).build();
-        assert!(syms
-            .get_mut(&VarRef::new("SOME_THIN", Some(ExprType::Integer)))
-            .unwrap()
-            .is_none());
+        assert!(
+            syms.get_mut(&VarRef::new("SOME_THIN", Some(ExprType::Integer))).unwrap().is_none()
+        );
     }
 
     #[test]

@@ -32,11 +32,7 @@ const CATEGORY: &str = "String and character functions";
 
 /// Formats a boolean `b` for display.
 pub fn format_boolean(b: bool) -> &'static str {
-    if b {
-        "TRUE"
-    } else {
-        "FALSE"
-    }
+    if b { "TRUE" } else { "FALSE" }
 }
 
 /// Parses a string `s` as a boolean.
@@ -53,11 +49,7 @@ pub fn parse_boolean(s: &str) -> std::result::Result<bool, String> {
 
 /// Formats a double `d` for display.
 pub fn format_double(d: f64) -> String {
-    if !d.is_nan() && d.is_sign_negative() {
-        d.to_string()
-    } else {
-        format!(" {}", d)
-    }
+    if !d.is_nan() && d.is_sign_negative() { d.to_string() } else { format!(" {}", d) }
 }
 
 /// Parses a string `s` as a double.
@@ -70,11 +62,7 @@ pub fn parse_double(s: &str) -> std::result::Result<f64, String> {
 
 /// Formats an integer `i` for display.
 pub fn format_integer(i: i32) -> String {
-    if i.is_negative() {
-        i.to_string()
-    } else {
-        format!(" {}", i)
-    }
+    if i.is_negative() { i.to_string() } else { format!(" {}", i) }
 }
 
 /// Parses a string `s` as an integer.

@@ -71,11 +71,7 @@ fn read_golden(path: &Path) -> String {
     let mut golden = vec![];
     f.read_to_end(&mut golden).expect("Failed to read golden data file");
     let raw = String::from_utf8(golden).expect("Golden data file is not valid UTF-8");
-    if cfg!(target_os = "windows") {
-        raw.replace("\r\n", "\n")
-    } else {
-        raw
-    }
+    if cfg!(target_os = "windows") { raw.replace("\r\n", "\n") } else { raw }
 }
 
 /// Runs `bin` with arguments `args` and checks its behavior against expectations.
