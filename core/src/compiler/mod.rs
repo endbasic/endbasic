@@ -19,17 +19,17 @@ use crate::ast::*;
 use crate::bytecode::*;
 use crate::parser;
 use crate::reader::LineCol;
-use crate::syms::{CallableMetadata, CallableMetadataBuilder, Symbol, SymbolKey, Symbols};
+use crate::syms::{CallableMetadata, CallableMetadataBuilder, SymbolKey, Symbols};
 use std::borrow::Cow;
 use std::collections::HashMap;
-#[cfg(test)]
-use std::collections::HashSet;
 use std::io;
 
 mod args;
 pub use args::*;
 mod exprs;
 use exprs::{compile_expr, compile_expr_as_type};
+mod symtable;
+use symtable::{SymbolPrototype, SymbolsTable};
 
 /// Compilation errors.
 #[derive(Debug, thiserror::Error)]
@@ -110,188 +110,6 @@ impl From<parser::Error> for Error {
 
 /// Result for compiler return values.
 pub type Result<T> = std::result::Result<T, Error>;
-
-/// Information about a symbol in the symbols table.
-#[derive(Clone)]
-enum SymbolPrototype {
-    /// Information about an array.  The integer indicates the number of dimensions in the array.
-    Array(ExprType, usize),
-
-    /// Information about a callable that's a builtin and requires an upcall to execute.
-    /// The integer indicates the runtime upcall index of the callable.
-    BuiltinCallable(CallableMetadata, usize),
-
-    /// Information about a callable.
-    Callable(CallableMetadata),
-
-    /// Information about a variable.
-    Variable(ExprType),
-}
-
-/// The symbols table used during compilation.
-///
-/// Symbols are represented as a two-layer map: the globals map contains all symbols that are
-/// visible by all scopes, and the scope contains all symbols that are only visible within a
-/// given scope.
-///
-/// The collection of symbols that is visible at any given point in time is thus the union of
-/// the global symbols and the symbols in the last scope.
-///
-/// There is always at least one scope in the scopes stack: at the program level outside of
-/// functions, variables are not global by default and thus they are kept in their own scope.
-/// But because we do not support nested function definitions, the scopes "stack" should
-/// always have size of one or two.
-struct SymbolsTable {
-    /// Map of global symbol names to their definitions.
-    globals: HashMap<SymbolKey, SymbolPrototype>,
-
-    /// Map of local symbol names to their definitions.
-    scopes: Vec<HashMap<SymbolKey, SymbolPrototype>>,
-}
-
-impl Default for SymbolsTable {
-    fn default() -> Self {
-        Self { globals: HashMap::default(), scopes: vec![HashMap::default()] }
-    }
-}
-
-impl From<HashMap<SymbolKey, SymbolPrototype>> for SymbolsTable {
-    fn from(globals: HashMap<SymbolKey, SymbolPrototype>) -> Self {
-        Self { globals, scopes: vec![HashMap::default()] }
-    }
-}
-
-impl From<&Symbols> for SymbolsTable {
-    fn from(syms: &Symbols) -> Self {
-        let globals = {
-            let mut globals = HashMap::default();
-
-            let callables = syms.callables();
-            let mut names = callables.keys().copied().collect::<Vec<&SymbolKey>>();
-            // This is only necessary for testing really... but may also remove some confusion
-            // when inspecting the bytecode because it helps keep upcall indexes stable across
-            // different compilations.
-            names.sort();
-
-            for (i, name) in names.into_iter().enumerate() {
-                let callable = callables.get(&name).unwrap();
-                let proto = SymbolPrototype::BuiltinCallable(callable.metadata().clone(), i);
-                globals.insert(name.clone(), proto);
-            }
-
-            globals
-        };
-
-        let mut scope = HashMap::default();
-        for (name, symbol) in syms.locals() {
-            let proto = match symbol {
-                Symbol::Array(array) => {
-                    SymbolPrototype::Array(array.subtype(), array.dimensions().len())
-                }
-                Symbol::Callable(_) => {
-                    unreachable!("Callables must only be global");
-                }
-                Symbol::Variable(var) => SymbolPrototype::Variable(var.as_exprtype()),
-            };
-            scope.insert(name.clone(), proto);
-        }
-
-        Self { globals, scopes: vec![scope] }
-    }
-}
-
-impl SymbolsTable {
-    /// Enters a new scope.
-    fn enter_scope(&mut self) {
-        self.scopes.push(HashMap::default());
-    }
-
-    /// Leaves the current scope.
-    fn leave_scope(&mut self) {
-        let last = self.scopes.pop();
-        assert!(last.is_some(), "Must have at least one scope to pop");
-        assert!(!self.scopes.is_empty(), "Cannot pop the global scope");
-    }
-
-    /// Returns true if the symbols table contains `key`.
-    fn contains_key(&mut self, key: &SymbolKey) -> bool {
-        self.scopes.last().unwrap().contains_key(key) || self.globals.contains_key(key)
-    }
-
-    /// Returns the information for the symbol `key` if it exists, otherwise `None`.
-    fn get(&self, key: &SymbolKey) -> Option<&SymbolPrototype> {
-        let proto = self.scopes.last().unwrap().get(key);
-        if proto.is_some() {
-            return proto;
-        }
-
-        self.globals.get(key)
-    }
-
-    /// Inserts the new information `proto` about symbol `key` into the symbols table.
-    /// The symbol must not yet exist.
-    fn insert(&mut self, key: SymbolKey, proto: SymbolPrototype) {
-        debug_assert!(!self.globals.contains_key(&key), "Cannot redefine a symbol");
-        let previous = self.scopes.last_mut().unwrap().insert(key, proto);
-        debug_assert!(previous.is_none(), "Cannot redefine a symbol");
-    }
-
-    /// Inserts the builtin callable described by `md` and assigns an upcall index.
-    /// The symbol must not yet exist.
-    #[cfg(test)]
-    fn insert_builtin_callable(&mut self, key: SymbolKey, md: CallableMetadata) {
-        let next_upcall_index = self
-            .globals
-            .values()
-            .filter(|proto| matches!(proto, SymbolPrototype::BuiltinCallable(..)))
-            .count();
-
-        debug_assert!(!self.globals.contains_key(&key), "Cannot redefine a symbol");
-        let proto = SymbolPrototype::BuiltinCallable(md, next_upcall_index);
-        let previous = self.globals.insert(key, proto);
-        debug_assert!(previous.is_none(), "Cannot redefine a symbol");
-    }
-
-    /// Inserts the new information `proto` about symbol `key` into the symbols table.
-    /// The symbol must not yet exist.
-    fn insert_global(&mut self, key: SymbolKey, proto: SymbolPrototype) {
-        let previous = self.globals.insert(key, proto);
-        debug_assert!(previous.is_none(), "Cannot redefine a symbol");
-    }
-
-    /// Removes information about the symbol `key`.
-    fn remove(&mut self, key: SymbolKey) {
-        let previous = self.scopes.last_mut().unwrap().remove(&key);
-        debug_assert!(previous.is_some(), "Cannot unset a non-existing symbol");
-    }
-
-    /// Returns a view of the keys in the symbols table.
-    #[cfg(test)]
-    fn keys(&self) -> HashSet<&SymbolKey> {
-        let mut keys = HashSet::default();
-        keys.extend(self.globals.keys());
-        keys.extend(self.scopes.last().unwrap().keys());
-        keys
-    }
-
-    /// Calculates the list of upcalls in this symbols table in the order in which they were
-    /// assigned indexes.
-    fn upcalls(&self) -> Vec<SymbolKey> {
-        let mut builtins = self
-            .globals
-            .iter()
-            .filter_map(|(key, proto)| {
-                if let SymbolPrototype::BuiltinCallable(_md, upcall_index) = proto {
-                    Some((upcall_index, key))
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<(&usize, &SymbolKey)>>();
-        builtins.sort_by_key(|(upcall_index, _key)| *upcall_index);
-        builtins.into_iter().map(|(_upcall_index, key)| key.clone()).collect()
-    }
-}
 
 /// Describes a location in the code needs fixing up after all addresses have been laid out.
 #[cfg_attr(test, derive(Debug, PartialEq))]
