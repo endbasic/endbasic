@@ -17,14 +17,14 @@
 
 use crate::*;
 use async_trait::async_trait;
+use endbasic_core::LineCol;
 use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{
     ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax, SingularArgSyntax,
 };
 use endbasic_core::exec::{Error, Machine, Result, Scope};
 use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
-use endbasic_core::LineCol;
-use endbasic_std::console::{is_narrow, read_line, read_line_secure, refill_and_print, Console};
+use endbasic_std::console::{Console, is_narrow, read_line, read_line_secure, refill_and_print};
 use endbasic_std::storage::{FileAcls, Storage};
 use endbasic_std::strings::parse_boolean;
 use std::borrow::Cow;
@@ -216,7 +216,7 @@ impl Callable for LogoutCommand {
             Err(e) => {
                 return Err(
                     scope.io_error(io::Error::new(e.kind(), format!("Cannot log out: {}", e)))
-                )
+                );
             }
         };
 
@@ -320,7 +320,7 @@ impl ShareCommand {
                         "Invalid ACL '{}{}': must be of the form \"username+r\" or \"username-r\"",
                         username, change
                     ),
-                ))
+                ));
             }
         }
         Ok(())

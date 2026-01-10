@@ -22,8 +22,8 @@
 
 //! Square 16x16 font.
 
-use crate::gfx::lcd::fonts::Font;
 use crate::gfx::lcd::LcdSize;
+use crate::gfx::lcd::fonts::Font;
 
 /// Width of the font glyphs in pixels.
 const WIDTH: usize = 16;

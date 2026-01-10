@@ -16,7 +16,7 @@
 //! Trivial stdio-based console implementation for when we have nothing else.
 
 use crate::console::{
-    get_env_var_as_u16, read_key_from_stdin, remove_control_chars, CharsXY, ClearType, Console, Key,
+    CharsXY, ClearType, Console, Key, get_env_var_as_u16, read_key_from_stdin, remove_control_chars,
 };
 use async_trait::async_trait;
 use std::collections::VecDeque;
@@ -41,11 +41,7 @@ pub struct TrivialConsole {
 impl TrivialConsole {
     /// Flushes the console, which has already been written to via `lock`, if syncing is enabled.
     fn maybe_flush(&self, mut lock: StdoutLock<'_>) -> io::Result<()> {
-        if self.sync_enabled {
-            lock.flush()
-        } else {
-            Ok(())
-        }
+        if self.sync_enabled { lock.flush() } else { Ok(()) }
     }
 }
 
@@ -132,11 +128,7 @@ impl Console for TrivialConsole {
     }
 
     fn sync_now(&mut self) -> io::Result<()> {
-        if self.sync_enabled {
-            Ok(())
-        } else {
-            io::stdout().flush()
-        }
+        if self.sync_enabled { Ok(()) } else { io::stdout().flush() }
     }
 
     fn set_sync(&mut self, enabled: bool) -> io::Result<bool> {

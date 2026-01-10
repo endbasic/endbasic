@@ -38,11 +38,7 @@ fn refill(paragraph: &str, width: usize) -> Vec<String> {
             // better to respect the original spacing of the paragraph.
             let spaces = if line.ends_with('.') {
                 let first = word.chars().next().expect("Words cannot be empty");
-                if first == first.to_ascii_uppercase() {
-                    2
-                } else {
-                    1
-                }
+                if first == first.to_ascii_uppercase() { 2 } else { 1 }
             } else {
                 1
             };

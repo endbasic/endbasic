@@ -27,11 +27,11 @@ use async_channel::{Receiver, TryRecvError};
 use async_trait::async_trait;
 use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
-    CharsXY, ClearType, Console, ConsoleSpec, GraphicsConsole, Key, ParseError, PixelsXY,
-    SizeInPixels, RGB,
+    CharsXY, ClearType, Console, ConsoleSpec, GraphicsConsole, Key, ParseError, PixelsXY, RGB,
+    SizeInPixels,
 };
 use endbasic_std::gfx::lcd::fonts::Fonts;
-use endbasic_std::gfx::lcd::{to_xy_size, BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel};
+use endbasic_std::gfx::lcd::{BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel, to_xy_size};
 use endbasic_std::gpio::{Pin, PinMode, Pins};
 use endbasic_std::spi::{SpiBus, SpiMode};
 use std::io;

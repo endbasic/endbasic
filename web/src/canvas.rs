@@ -15,17 +15,17 @@
 
 //! HTML canvas-based console implementation.
 
-use crate::{log_and_panic, Yielder};
+use crate::{Yielder, log_and_panic};
 use async_trait::async_trait;
 use endbasic_std::console::graphics::{RasterInfo, RasterOps};
-use endbasic_std::console::{CharsXY, PixelsXY, SizeInPixels, RGB};
+use endbasic_std::console::{CharsXY, PixelsXY, RGB, SizeInPixels};
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::f64::consts::PI;
 use std::io;
 use std::rc::Rc;
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 use web_sys::ImageData;
 use web_sys::{CanvasRenderingContext2d, ContextAttributes2d};
@@ -67,7 +67,7 @@ fn html_canvas_to_2d_context(canvas: HtmlCanvasElement) -> io::Result<CanvasRend
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "Failed to get 2D context from canvas",
-            ))
+            ));
         }
     };
 
@@ -77,7 +77,7 @@ fn html_canvas_to_2d_context(canvas: HtmlCanvasElement) -> io::Result<CanvasRend
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "Returned 2D context for canvas does not have the correct type",
-            ))
+            ));
         }
     };
 
@@ -121,7 +121,7 @@ impl CanvasRasterOps {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!("Canvas is too wide at {} pixels", canvas.width()),
-                    ))
+                    ));
                 }
             };
             let height = match u16::try_from(canvas.height()) {
@@ -130,7 +130,7 @@ impl CanvasRasterOps {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!("Canvas is too tall at {} pixels", canvas.height()),
-                    ))
+                    ));
                 }
             };
             SizeInPixels::new(width, height)
@@ -155,7 +155,7 @@ impl CanvasRasterOps {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!("Invalid glyph width {}", glyph_size.width),
-                    ))
+                    ));
                 }
             };
             let height = match size_pixels.height.checked_div(glyph_size.height) {
@@ -164,7 +164,7 @@ impl CanvasRasterOps {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!("Invalid glyph height {}", glyph_size.height),
-                    ))
+                    ));
                 }
             };
             CharsXY::new(width, height)

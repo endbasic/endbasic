@@ -26,11 +26,11 @@ use async_channel::{Receiver, Sender, TryRecvError};
 use async_trait::async_trait;
 use crossterm::event::{self, KeyEventKind};
 use crossterm::tty::IsTty;
-use crossterm::{cursor, style, terminal, QueueableCommand};
+use crossterm::{QueueableCommand, cursor, style, terminal};
 use endbasic_core::exec::Signal;
 use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
-    get_env_var_as_u16, read_key_from_stdin, remove_control_chars, CharsXY, ClearType, Console, Key,
+    CharsXY, ClearType, Console, Key, get_env_var_as_u16, read_key_from_stdin, remove_control_chars,
 };
 use std::cmp::Ordering;
 use std::collections::VecDeque;
@@ -227,11 +227,7 @@ impl TerminalConsole {
 
     /// Flushes the console, which has already been written to via `lock`, if syncing is enabled.
     fn maybe_flush(&self, mut lock: StdoutLock<'_>) -> io::Result<()> {
-        if self.sync_enabled {
-            lock.flush()
-        } else {
-            Ok(())
-        }
+        if self.sync_enabled { lock.flush() } else { Ok(()) }
     }
 }
 
@@ -431,11 +427,7 @@ impl Console for TerminalConsole {
     }
 
     fn sync_now(&mut self) -> io::Result<()> {
-        if self.sync_enabled {
-            Ok(())
-        } else {
-            io::stdout().flush()
-        }
+        if self.sync_enabled { Ok(()) } else { io::stdout().flush() }
     }
 
     fn set_sync(&mut self, enabled: bool) -> io::Result<bool> {

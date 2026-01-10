@@ -16,8 +16,8 @@
 //! Support to implement graphical consoles.
 
 use super::{
-    ansi_color_to_rgb, remove_control_chars, AnsiColor, CharsXY, ClearType, Console, Key,
-    LineBuffer, PixelsXY, SizeInPixels, RGB,
+    AnsiColor, CharsXY, ClearType, Console, Key, LineBuffer, PixelsXY, RGB, SizeInPixels,
+    ansi_color_to_rgb, remove_control_chars,
 };
 use async_trait::async_trait;
 use std::convert::TryFrom;
@@ -39,21 +39,13 @@ pub trait ClampedInto<T> {
 
 impl ClampedInto<usize> for i16 {
     fn clamped_into(self) -> usize {
-        if self < 0 {
-            0
-        } else {
-            self as usize
-        }
+        if self < 0 { 0 } else { self as usize }
     }
 }
 
 impl ClampedInto<i16> for u16 {
     fn clamped_into(self) -> i16 {
-        if self > u16::try_from(i16::MAX).unwrap() {
-            i16::MAX
-        } else {
-            self as i16
-        }
+        if self > u16::try_from(i16::MAX).unwrap() { i16::MAX } else { self as i16 }
     }
 }
 
@@ -83,11 +75,7 @@ impl ClampedInto<u16> for i32 {
 
 impl ClampedInto<u16> for u32 {
     fn clamped_into(self) -> u16 {
-        if self > u32::from(u16::MAX) {
-            u16::MAX
-        } else {
-            self as u16
-        }
+        if self > u32::from(u16::MAX) { u16::MAX } else { self as u16 }
     }
 }
 
@@ -100,22 +88,14 @@ pub trait ClampedMul<T, O> {
 impl ClampedMul<u16, i16> for u16 {
     fn clamped_mul(self, rhs: u16) -> i16 {
         let product = u32::from(self) * u32::from(rhs);
-        if product > i16::MAX as u32 {
-            i16::MAX
-        } else {
-            product as i16
-        }
+        if product > i16::MAX as u32 { i16::MAX } else { product as i16 }
     }
 }
 
 impl ClampedMul<u16, u16> for u16 {
     fn clamped_mul(self, rhs: u16) -> u16 {
         let product = u32::from(self) * u32::from(rhs);
-        if product > u16::MAX as u32 {
-            u16::MAX
-        } else {
-            product as u16
-        }
+        if product > u16::MAX as u32 { u16::MAX } else { product as u16 }
     }
 }
 
@@ -225,7 +205,7 @@ pub trait RasterOps {
     /// Moves the rectangular region specified by `x1y1` and `size` to `x2y2`.  The original region
     /// is erased with the current drawing color.
     fn move_pixels(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, size: SizeInPixels)
-        -> io::Result<()>;
+    -> io::Result<()>;
 
     /// Writes `text` starting at `xy` with the current drawing color.
     fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()>;
@@ -358,11 +338,7 @@ where
 
     /// Renders any buffered changes to the backing surface.
     fn present_canvas(&mut self) -> io::Result<()> {
-        if self.sync_enabled {
-            self.raster_ops.present_canvas()
-        } else {
-            Ok(())
-        }
+        if self.sync_enabled { self.raster_ops.present_canvas() } else { Ok(()) }
     }
 
     /// Draws the cursor at the current position and saves the previous contents of the screen so
@@ -569,7 +545,7 @@ where
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "Cannot leave alternate screen; not entered",
-                    ))
+                    ));
                 }
             };
 
@@ -707,11 +683,7 @@ where
     }
 
     fn sync_now(&mut self) -> io::Result<()> {
-        if self.sync_enabled {
-            Ok(())
-        } else {
-            self.raster_ops.present_canvas()
-        }
+        if self.sync_enabled { Ok(()) } else { self.raster_ops.present_canvas() }
     }
 
     fn set_sync(&mut self, enabled: bool) -> io::Result<bool> {

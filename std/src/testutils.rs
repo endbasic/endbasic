@@ -16,7 +16,7 @@
 //! Test utilities for consumers of the EndBASIC interpreter.
 
 use crate::console::{
-    self, remove_control_chars, CharsXY, ClearType, Console, Key, PixelsXY, SizeInPixels,
+    self, CharsXY, ClearType, Console, Key, PixelsXY, SizeInPixels, remove_control_chars,
 };
 use crate::gpio;
 use crate::program::Program;

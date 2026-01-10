@@ -15,11 +15,11 @@
 
 //! Keyboard input tools for the web UI.
 
-use crate::{log_and_panic, Yielder};
+use crate::{Yielder, log_and_panic};
 use async_channel::{self, Receiver, Sender, TryRecvError};
 use async_trait::async_trait;
 use endbasic_core::exec::Signal;
-use endbasic_std::console::{graphics::InputOps, Key};
+use endbasic_std::console::{Key, graphics::InputOps};
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -32,11 +32,7 @@ fn on_input_event_into_key(dom_event: InputEvent) -> Key {
         Some(data) => data.chars().collect::<Vec<char>>(),
         None => vec![],
     };
-    if chars.len() == 1 {
-        Key::Char(chars[0])
-    } else {
-        Key::Unknown
-    }
+    if chars.len() == 1 { Key::Char(chars[0]) } else { Key::Unknown }
 }
 
 /// Converts an HTML keyboard event into our own `Key` representation.
@@ -68,11 +64,7 @@ fn on_key_event_into_key(dom_event: KeyboardEvent) -> Key {
         _ => {
             let printable = !dom_event.alt_key() && !dom_event.ctrl_key() && !dom_event.meta_key();
             let chars = dom_event.key().chars().collect::<Vec<char>>();
-            if printable && chars.len() == 1 {
-                Key::Char(chars[0])
-            } else {
-                Key::Unknown
-            }
+            if printable && chars.len() == 1 { Key::Char(chars[0]) } else { Key::Unknown }
         }
     }
 }
@@ -104,10 +96,10 @@ impl OnScreenKeyboard {
     /// Pushes a new captured `dom_event` keyboard event into the input.
     pub fn inject_keyboard_event(&self, dom_event: KeyboardEvent) {
         let key = on_key_event_into_key(dom_event);
-        if key == Key::Interrupt {
-            if let Err(e) = self.signals_tx.try_send(Signal::Break) {
-                log_and_panic!("Send to unbounded channel must succeed: {}", e);
-            }
+        if key == Key::Interrupt
+            && let Err(e) = self.signals_tx.try_send(Signal::Break)
+        {
+            log_and_panic!("Send to unbounded channel must succeed: {}", e);
         }
 
         self.safe_try_send(key)

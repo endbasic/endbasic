@@ -23,8 +23,8 @@
 #![warn(unsafe_code)]
 
 use async_channel::{Receiver, Sender};
-use endbasic_core::exec::{Error, Result, Signal, YieldNowFn};
 use endbasic_core::LineCol;
+use endbasic_core::exec::{Error, Result, Signal, YieldNowFn};
 use endbasic_std::console::{Console, GraphicsConsole};
 use std::cell::RefCell;
 use std::future::Future;
@@ -34,8 +34,8 @@ use std::rc::Rc;
 use std::time::Duration;
 use time::OffsetDateTime;
 use url::Url;
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 #[cfg(test)]
 use wasm_bindgen_test::wasm_bindgen_test_configure;
 use web_sys::HtmlCanvasElement;
@@ -281,7 +281,7 @@ impl WebTerminal {
         let mut machine = match builder.build() {
             Ok(machine) => machine,
             Err(e) => {
-                return Err(io::Error::other(format!("Machine initialization failed: {}", e)))
+                return Err(io::Error::other(format!("Machine initialization failed: {}", e)));
             }
         };
 

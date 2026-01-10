@@ -24,4 +24,4 @@
 mod gpio;
 pub use gpio::RppalPins;
 mod spi;
-pub use spi::{spi_bus_open, RppalSpiBus};
+pub use spi::{RppalSpiBus, spi_bus_open};
