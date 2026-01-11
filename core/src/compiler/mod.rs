@@ -455,11 +455,11 @@ impl Compiler {
 
     /// Compiles an assignment to an array position.
     fn compile_array_assignment(&mut self, span: ArrayAssignmentSpan) -> Result<()> {
-        let key = SymbolKey::from(span.vref.name());
+        let key = SymbolKey::from(&span.vref.name);
         let (atype, dims) = match self.symtable.get(&key) {
             Some(SymbolPrototype::Array(atype, dims)) => (*atype, *dims),
             Some(_) => {
-                return Err(Error::IndexNonArray(span.vref_pos, span.vref.take_name()));
+                return Err(Error::IndexNonArray(span.vref_pos, span.vref.name));
             }
             None => {
                 return Err(Error::UndefinedSymbol(span.vref_pos, key));
@@ -489,7 +489,7 @@ impl Compiler {
     /// It's important to always use this function instead of manually emitting `Instruction::Assign`
     /// instructions to ensure consistent handling of the symbols table.
     fn compile_assignment(&mut self, vref: VarRef, vref_pos: LineCol, expr: Expr) -> Result<()> {
-        let mut key = SymbolKey::from(&vref.name());
+        let mut key = SymbolKey::from(&vref.name);
         let etype = self.compile_expr(expr)?;
 
         if let Some(current_callable) = self.current_callable.as_ref()
@@ -505,7 +505,7 @@ impl Compiler {
                 // TODO(jmmv): Compile separate Dim instructions for new variables instead of
                 // checking this every time.
                 let key = key.clone();
-                let vtype = vref.ref_type().unwrap_or(etype);
+                let vtype = vref.ref_type.unwrap_or(etype);
                 self.symtable.insert(key, SymbolPrototype::Variable(vtype));
                 vtype
             }
@@ -516,7 +516,7 @@ impl Compiler {
             return Err(Error::IncompatibleTypesInAssignment(vref_pos, etype, vtype));
         }
 
-        if let Some(ref_type) = vref.ref_type()
+        if let Some(ref_type) = vref.ref_type
             && ref_type != vtype
         {
             return Err(Error::IncompatibleTypeAnnotationInReference(vref_pos, vref));
@@ -529,7 +529,7 @@ impl Compiler {
 
     /// Compiles a `FUNCTION` or `SUB` definition.
     fn compile_callable(&mut self, span: CallableSpan) -> Result<()> {
-        let key = SymbolKey::from(span.name.name());
+        let key = SymbolKey::from(&span.name.name);
         if self.symtable.contains_key(&key) {
             return Err(Error::RedefinitionError(span.name_pos, key));
         }
@@ -543,16 +543,16 @@ impl Compiler {
             };
             syntax.push(SingularArgSyntax::RequiredValue(
                 RequiredValueSyntax {
-                    name: Cow::Owned(param.name().to_owned()),
-                    vtype: param.ref_type().unwrap_or(ExprType::Integer),
+                    name: Cow::Owned(param.name.to_owned()),
+                    vtype: param.ref_type.unwrap_or(ExprType::Integer),
                 },
                 sep,
             ));
         }
 
-        let mut builder = CallableMetadataBuilder::new_dynamic(span.name.name().to_owned())
+        let mut builder = CallableMetadataBuilder::new_dynamic(span.name.name.to_owned())
             .with_dynamic_syntax(vec![(syntax, None)]);
-        if let Some(ctype) = span.name.ref_type() {
+        if let Some(ctype) = span.name.ref_type {
             builder = builder.with_return_type(ctype);
         }
         self.symtable.insert_global(key, SymbolPrototype::Callable(builder.build()));
@@ -641,29 +641,28 @@ impl Compiler {
     /// Compiles a `FOR` loop and appends its instructions to the compilation context.
     fn compile_for(&mut self, span: ForSpan) -> Result<()> {
         debug_assert!(
-            span.iter.ref_type().is_none()
-                || span.iter.ref_type().unwrap() == ExprType::Double
-                || span.iter.ref_type().unwrap() == ExprType::Integer
+            span.iter.ref_type.is_none()
+                || span.iter.ref_type.unwrap() == ExprType::Double
+                || span.iter.ref_type.unwrap() == ExprType::Integer
         );
 
         self.exit_for_level.1 += 1;
 
-        if span.iter_double && span.iter.ref_type().is_none() {
-            let key = SymbolKey::from(span.iter.name());
+        if span.iter_double && span.iter.ref_type.is_none() {
+            let key = SymbolKey::from(&span.iter.name);
             let skip_pc = self.emit(Instruction::Nop);
 
-            let iter_key = SymbolKey::from(span.iter.name());
             if self.symtable.get(&key).is_none() {
                 self.emit(Instruction::Dim(DimISpan {
-                    name: key,
+                    name: key.clone(),
                     shared: false,
                     vtype: ExprType::Double,
                 }));
-                self.symtable.insert(iter_key.clone(), SymbolPrototype::Variable(ExprType::Double));
+                self.symtable.insert(key.clone(), SymbolPrototype::Variable(ExprType::Double));
             }
 
             self.instrs[skip_pc] = Instruction::JumpIfDefined(JumpIfDefinedISpan {
-                var: iter_key,
+                var: key,
                 addr: self.instrs.len(),
             });
         }
@@ -834,7 +833,7 @@ impl Compiler {
             self.instrs[end_pc] = Instruction::Jump(JumpISpan { addr: self.instrs.len() });
         }
 
-        let test_key = SymbolKey::from(test_vref.name());
+        let test_key = SymbolKey::from(test_vref.name);
         self.emit(Instruction::Unset(UnsetISpan { name: test_key.clone(), pos: span.end_pos }));
         self.symtable.remove(test_key);
 
@@ -894,7 +893,7 @@ impl Compiler {
             }
 
             Statement::Call(span) => {
-                let key = SymbolKey::from(&span.vref.name());
+                let key = SymbolKey::from(&span.vref.name);
                 let (md, upcall_index) = match self.symtable.get(&key) {
                     Some(SymbolPrototype::BuiltinCallable(md, upcall_index)) => {
                         if md.is_function() {
@@ -1112,9 +1111,9 @@ impl Compiler {
         for span in callable_spans {
             let pc = self.instrs.len();
 
-            let key = SymbolKey::from(span.name.name());
+            let key = SymbolKey::from(span.name.name);
             let return_value = Compiler::return_key(&key);
-            match span.name.ref_type() {
+            match span.name.ref_type {
                 Some(return_type) => {
                     self.emit(Instruction::EnterScope);
                     self.symtable.enter_scope();
@@ -1128,8 +1127,8 @@ impl Compiler {
                         .insert(return_value.clone(), SymbolPrototype::Variable(return_type));
 
                     for param in span.params {
-                        let key = SymbolKey::from(param.name());
-                        let ptype = param.ref_type().unwrap_or(ExprType::Integer);
+                        let key = SymbolKey::from(param.name);
+                        let ptype = param.ref_type.unwrap_or(ExprType::Integer);
                         self.emit(Instruction::Assign(key.clone()));
                         self.symtable.insert(key, SymbolPrototype::Variable(ptype));
                     }
@@ -1162,8 +1161,8 @@ impl Compiler {
                     self.symtable.enter_scope();
 
                     for param in span.params {
-                        let key = SymbolKey::from(param.name());
-                        let ptype = param.ref_type().unwrap_or(ExprType::Integer);
+                        let key = SymbolKey::from(param.name);
+                        let ptype = param.ref_type.unwrap_or(ExprType::Integer);
                         self.emit(Instruction::Assign(key.clone()));
                         self.symtable.insert(key, SymbolPrototype::Variable(ptype));
                     }
