@@ -158,10 +158,10 @@ impl WebDrive {
                 Ok(Some(key)) => key,
                 Ok(None) => return Err(io::Error::other("Entry vanished")),
                 Err(e) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("Failed to fetch local storage entry with index {}: {:?}", i, e),
-                    ))
+                    return Err(io::Error::other(format!(
+                        "Failed to fetch local storage entry with index {}: {:?}",
+                        i, e
+                    )))
                 }
             };
 
@@ -184,25 +184,25 @@ impl WebDrive {
             Ok(Some(content)) => content,
             Ok(None) => return Err(io::Error::new(io::ErrorKind::NotFound, "File not found")),
             Err(e) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Failed to get local storage entry with key {}: {:?}", old, e),
-                ))
+                return Err(io::Error::other(format!(
+                    "Failed to get local storage entry with key {}: {:?}",
+                    old, e
+                )))
             }
         };
 
         if let Err(e) = self.storage.set(new, &raw) {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to put local storage entry with key {}: {:?}", new, e),
-            ));
+            return Err(io::Error::other(format!(
+                "Failed to put local storage entry with key {}: {:?}",
+                new, e
+            )));
         };
 
         if let Err(e) = self.storage.delete(old) {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to put remove storage entry with key {}: {:?}", old, e),
-            ));
+            return Err(io::Error::other(format!(
+                "Failed to put remove storage entry with key {}: {:?}",
+                old, e
+            )));
         };
 
         Ok(())
@@ -215,10 +215,10 @@ impl WebDrive {
             Ok(Some(content)) => content,
             Ok(None) => return Err(io::Error::new(io::ErrorKind::NotFound, "File not found")),
             Err(e) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Failed to get local storage entry with key {}: {:?}", key, e),
-                ))
+                return Err(io::Error::other(format!(
+                    "Failed to get local storage entry with key {}: {:?}",
+                    key, e
+                )))
             }
         };
 
@@ -246,10 +246,10 @@ impl Drive for WebDrive {
 
         match self.storage.delete(key) {
             Ok(()) => Ok(()),
-            Err(e) => Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to put remove storage entry with key {}: {:?}", key, e),
-            )),
+            Err(e) => Err(io::Error::other(format!(
+                "Failed to put remove storage entry with key {}: {:?}",
+                key, e
+            ))),
         }
     }
 
@@ -265,10 +265,10 @@ impl Drive for WebDrive {
                 Ok(Some(key)) => key,
                 Ok(None) => return Err(io::Error::other("Entry vanished")),
                 Err(e) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("Failed to fetch local storage entry with index {}: {:?}", i, e),
-                    ))
+                    return Err(io::Error::other(format!(
+                        "Failed to fetch local storage entry with index {}: {:?}",
+                        i, e
+                    )))
                 }
             };
 
@@ -296,10 +296,10 @@ impl Drive for WebDrive {
         let key = key.serialized();
         match self.storage.set(key, &serde_json::to_string(&entry)?) {
             Ok(()) => Ok(()),
-            Err(e) => Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to put local storage entry with key {}: {:?}", key, e),
-            )),
+            Err(e) => Err(io::Error::other(format!(
+                "Failed to put local storage entry with key {}: {:?}",
+                key, e
+            ))),
         }
     }
 }
