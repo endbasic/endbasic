@@ -834,13 +834,13 @@ mod tests {
             .parse("b = TRUE\nd = 2.3\ni = 5\nt = \"foo\"")
             .compile()
             .expect_instr(0, Instruction::PushBoolean(true, lc(1, 5)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("b")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("b"), 0))
             .expect_instr(2, Instruction::PushDouble(2.3, lc(2, 5)))
-            .expect_instr(3, Instruction::Assign(SymbolKey::from("d")))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("d"), 1))
             .expect_instr(4, Instruction::PushInteger(5, lc(3, 5)))
-            .expect_instr(5, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(5, Instruction::Assign(SymbolKey::from("i"), 2))
             .expect_instr(6, Instruction::PushString("foo".to_owned(), lc(4, 5)))
-            .expect_instr(7, Instruction::Assign(SymbolKey::from("t")))
+            .expect_instr(7, Instruction::Assign(SymbolKey::from("t"), 3))
             .check();
     }
 
@@ -858,7 +858,7 @@ mod tests {
                     index: 0,
                 }),
             )
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("i"), 1))
             .check();
     }
 
@@ -878,7 +878,7 @@ mod tests {
                     nargs: 0,
                 }),
             )
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("i"), 0))
             .check();
     }
 
@@ -915,7 +915,7 @@ mod tests {
                     nargs: 0,
                 }),
             )
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("i"), 0))
             .expect_instr(2, Instruction::PushInteger(3, lc(2, 7)))
             .expect_instr(
                 3,
@@ -927,7 +927,7 @@ mod tests {
                     nargs: 1,
                 }),
             )
-            .expect_instr(4, Instruction::Assign(SymbolKey::from("j")))
+            .expect_instr(4, Instruction::Assign(SymbolKey::from("j"), 1))
             .check();
     }
 
@@ -1148,7 +1148,7 @@ mod tests {
             )
             .expect_instr(6, Instruction::LogicalNot(lc(1, 25)))
             .expect_instr(7, Instruction::LogicalXor(lc(1, 21)))
-            .expect_instr(8, Instruction::Assign(SymbolKey::from("b")))
+            .expect_instr(8, Instruction::Assign(SymbolKey::from("b"), 3))
             .check();
     }
 
@@ -1178,7 +1178,7 @@ mod tests {
                 }),
             )
             .expect_instr(4, Instruction::ShiftLeft(lc(1, 12)))
-            .expect_instr(5, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(5, Instruction::Assign(SymbolKey::from("i"), 2))
             .check();
     }
 
@@ -1217,7 +1217,7 @@ mod tests {
             )
             .expect_instr(1, push_inst(test_value, lc(1, 8 + op_name.len())))
             .expect_instr(2, op_inst(lc(1, 7)))
-            .expect_instr(3, Instruction::Assign(SymbolKey::from("b")))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("b"), 1))
             .check();
     }
 
@@ -1301,7 +1301,7 @@ mod tests {
             .compile()
             .expect_instr(0, PushDouble(60.2, lc(1, 6)))
             .expect_instr(1, NegateDouble(lc(1, 5)))
-            .expect_instr(2, Assign(SymbolKey::from("i")))
+            .expect_instr(2, Assign(SymbolKey::from("i"), 1))
             .check();
 
         do_op_test(LoadInteger, AddIntegers, "+", PushInteger, 10, "10", Integer);
@@ -1316,7 +1316,7 @@ mod tests {
             .compile()
             .expect_instr(0, PushInteger(60, lc(1, 6)))
             .expect_instr(1, NegateInteger(lc(1, 5)))
-            .expect_instr(2, Assign(SymbolKey::from("i")))
+            .expect_instr(2, Assign(SymbolKey::from("i"), 1))
             .check();
 
         do_op_test(LoadString, ConcatStrings, "+", PushString, "foo".to_owned(), "\"foo\"", Text);
@@ -1358,7 +1358,7 @@ mod tests {
                     nargs: 3,
                 }),
             )
-            .expect_instr(6, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(6, Instruction::Assign(SymbolKey::from("i"), 3))
             .check();
     }
 
@@ -1378,7 +1378,7 @@ mod tests {
                     nargs: 1,
                 }),
             )
-            .expect_instr(2, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(2, Instruction::Assign(SymbolKey::from("i"), 1))
             .check();
     }
 
@@ -1409,7 +1409,7 @@ mod tests {
                     nargs: 1,
                 }),
             )
-            .expect_instr(3, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("i"), 1))
             .check();
     }
 
@@ -1500,7 +1500,7 @@ mod tests {
                     nargs: 3,
                 }),
             )
-            .expect_instr(8, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(8, Instruction::Assign(SymbolKey::from("i"), 2))
             .check();
     }
 

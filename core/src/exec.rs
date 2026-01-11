@@ -1185,7 +1185,7 @@ impl Machine {
                     context.pc += 1;
                 }
 
-                Instruction::Assign(key) => {
+                Instruction::Assign(key, _index) => {
                     let (value, _pos) = context.value_stack.pop().unwrap();
                     self.symbols.assign(key, value);
                     context.pc += 1;

@@ -327,7 +327,7 @@ pub enum Instruction {
     ArrayLoad(ArrayIndexISpan),
 
     /// Represents an assignment of a value to a variable.
-    Assign(SymbolKey),
+    Assign(SymbolKey, usize),
 
     /// Represents a call to a builtin command such as `PRINT` with the given number of arguments.
     BuiltinCall(BuiltinCallISpan),
@@ -479,7 +479,7 @@ impl Instruction {
                 ("LOADA", Some(format!("{}, {}", span.name, span.nargs)))
             }
 
-            Instruction::Assign(key) => ("SETV", Some(key.to_string())),
+            Instruction::Assign(key, _index) => ("SETV", Some(key.to_string())),
 
             Instruction::BuiltinCall(span) => {
                 ("CALLB", Some(format!("{} ({}), {}", span.upcall_index, span.name, span.nargs)))
@@ -629,7 +629,7 @@ impl Instruction {
 
             Instruction::ArrayAssignment(span) => Some(span.name_pos),
             Instruction::ArrayLoad(span) => Some(span.name_pos),
-            Instruction::Assign(_) => None,
+            Instruction::Assign(..) => None,
             Instruction::BuiltinCall(span) => Some(span.name_pos),
             Instruction::Call(_) => None,
             Instruction::FunctionCall(span) => Some(span.name_pos),
@@ -729,7 +729,7 @@ impl Instruction {
             | Instruction::LeaveScope => false,
 
             Instruction::ArrayAssignment(..)
-            | Instruction::Assign(_)
+            | Instruction::Assign(..)
             | Instruction::BuiltinCall(_)
             | Instruction::Call(_)
             | Instruction::Dim(_)

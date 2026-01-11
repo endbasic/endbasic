@@ -346,7 +346,7 @@ impl Compiler {
             }
         }
 
-        self.emit(Instruction::Assign(key));
+        self.emit(Instruction::Assign(key, index));
 
         Ok(index)
     }
@@ -971,8 +971,9 @@ impl Compiler {
                     for param in span.params {
                         let key = SymbolKey::from(param.name());
                         let ptype = param.ref_type().unwrap_or(ExprType::Integer);
-                        self.emit(Instruction::Assign(key.clone()));
-                        self.symtable.insert(key, SymbolPrototype::Variable(ptype));
+                        let index =
+                            self.symtable.insert(key.clone(), SymbolPrototype::Variable(ptype));
+                        self.emit(Instruction::Assign(key, index));
                     }
 
                     debug_assert!(self.current_callable.is_none(), "Callables cannot be nested");
@@ -1009,8 +1010,9 @@ impl Compiler {
                     for param in span.params {
                         let key = SymbolKey::from(param.name());
                         let ptype = param.ref_type().unwrap_or(ExprType::Integer);
-                        self.emit(Instruction::Assign(key.clone()));
-                        self.symtable.insert(key, SymbolPrototype::Variable(ptype));
+                        let index =
+                            self.symtable.insert(key.clone(), SymbolPrototype::Variable(ptype));
+                        self.emit(Instruction::Assign(key, index));
                     }
 
                     debug_assert!(self.current_callable.is_none(), "Callables cannot be nested");
@@ -1485,7 +1487,7 @@ mod tests {
             .parse("foo = 5")
             .compile()
             .expect_instr(0, Instruction::PushInteger(5, lc(1, 7)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("foo")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("foo"), 0))
             .check();
     }
 
@@ -1503,7 +1505,7 @@ mod tests {
                     index: 0,
                 }),
             )
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("foo")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("foo"), 1))
             .check();
     }
 
@@ -1513,7 +1515,7 @@ mod tests {
             .parse("foo = 2.3")
             .compile()
             .expect_instr(0, Instruction::PushDouble(2.3, lc(1, 7)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("foo")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("foo"), 0))
             .expect_symtable(SymbolKey::from("foo"), SymbolPrototype::Variable(ExprType::Double))
             .check();
     }
@@ -1525,7 +1527,7 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::PushInteger(2, lc(1, 8)))
             .expect_instr(1, Instruction::IntegerToDouble)
-            .expect_instr(2, Instruction::Assign(SymbolKey::from("foo")))
+            .expect_instr(2, Instruction::Assign(SymbolKey::from("foo"), 0))
             .expect_symtable(SymbolKey::from("foo"), SymbolPrototype::Variable(ExprType::Double))
             .check();
     }
@@ -2082,7 +2084,7 @@ mod tests {
             .parse("FOR i = 1 to 10\nEXIT FOR\nNEXT")
             .compile()
             .expect_instr(0, Instruction::PushInteger(1, lc(1, 9)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("i"), 0))
             .expect_instr(
                 2,
                 Instruction::LoadInteger(LoadISpan {
@@ -2105,7 +2107,7 @@ mod tests {
             )
             .expect_instr(8, Instruction::PushInteger(1, lc(1, 16)))
             .expect_instr(9, Instruction::AddIntegers(lc(1, 11)))
-            .expect_instr(10, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(10, Instruction::Assign(SymbolKey::from("i"), 0))
             .expect_instr(11, Instruction::Jump(JumpISpan { addr: 2 }))
             .check();
     }
@@ -2116,7 +2118,7 @@ mod tests {
             .parse("FOR i = 1 to 10\nFOR j = 2 to 20\nEXIT FOR\nNEXT\nEXIT FOR\nNEXT")
             .compile()
             .expect_instr(0, Instruction::PushInteger(1, lc(1, 9)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("i"), 0))
             .expect_instr(
                 2,
                 Instruction::LoadInteger(LoadISpan {
@@ -2130,7 +2132,7 @@ mod tests {
             .expect_instr(5, Instruction::JumpIfNotTrue(24))
             // Begin nested for loop.
             .expect_instr(6, Instruction::PushInteger(2, lc(2, 9)))
-            .expect_instr(7, Instruction::Assign(SymbolKey::from("j")))
+            .expect_instr(7, Instruction::Assign(SymbolKey::from("j"), 1))
             .expect_instr(
                 8,
                 Instruction::LoadInteger(LoadISpan {
@@ -2153,7 +2155,7 @@ mod tests {
             )
             .expect_instr(14, Instruction::PushInteger(1, lc(2, 16)))
             .expect_instr(15, Instruction::AddIntegers(lc(2, 11)))
-            .expect_instr(16, Instruction::Assign(SymbolKey::from("j")))
+            .expect_instr(16, Instruction::Assign(SymbolKey::from("j"), 1))
             .expect_instr(17, Instruction::Jump(JumpISpan { addr: 8 }))
             // Begin nested for loop.
             .expect_instr(18, Instruction::Jump(JumpISpan { addr: 24 })) // Exit for.
@@ -2167,7 +2169,7 @@ mod tests {
             )
             .expect_instr(20, Instruction::PushInteger(1, lc(1, 16)))
             .expect_instr(21, Instruction::AddIntegers(lc(1, 11)))
-            .expect_instr(22, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(22, Instruction::Assign(SymbolKey::from("i"), 0))
             .expect_instr(23, Instruction::Jump(JumpISpan { addr: 2 }))
             .check();
     }
@@ -2194,7 +2196,7 @@ mod tests {
             .compile()
             // Begin nested for loop.
             .expect_instr(0, Instruction::PushInteger(1, lc(2, 9)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("i"), 0))
             .expect_instr(
                 2,
                 Instruction::LoadInteger(LoadISpan {
@@ -2221,7 +2223,7 @@ mod tests {
             )
             .expect_instr(10, Instruction::PushInteger(1, lc(2, 16)))
             .expect_instr(11, Instruction::AddIntegers(lc(2, 11)))
-            .expect_instr(12, Instruction::Assign(SymbolKey::from("i")))
+            .expect_instr(12, Instruction::Assign(SymbolKey::from("i"), 0))
             .expect_instr(13, Instruction::Jump(JumpISpan { addr: 2 }))
             // End nested for loop.
             .expect_instr(14, Instruction::Jump(JumpISpan { addr: 0 }))
@@ -2234,7 +2236,7 @@ mod tests {
             .parse("FOR iter = 1 TO 5: a = FALSE: NEXT")
             .compile()
             .expect_instr(0, Instruction::PushInteger(1, lc(1, 12)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("iter")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("iter"), 0))
             .expect_instr(
                 2,
                 Instruction::LoadInteger(LoadISpan {
@@ -2247,7 +2249,7 @@ mod tests {
             .expect_instr(4, Instruction::LessEqualIntegers(lc(1, 14)))
             .expect_instr(5, Instruction::JumpIfNotTrue(13))
             .expect_instr(6, Instruction::PushBoolean(false, lc(1, 24)))
-            .expect_instr(7, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(7, Instruction::Assign(SymbolKey::from("a"), 1))
             .expect_instr(
                 8,
                 Instruction::LoadInteger(LoadISpan {
@@ -2258,7 +2260,7 @@ mod tests {
             )
             .expect_instr(9, Instruction::PushInteger(1, lc(1, 18)))
             .expect_instr(10, Instruction::AddIntegers(lc(1, 14)))
-            .expect_instr(11, Instruction::Assign(SymbolKey::from("iter")))
+            .expect_instr(11, Instruction::Assign(SymbolKey::from("iter"), 0))
             .expect_instr(12, Instruction::Jump(JumpISpan { addr: 2 }))
             .check();
     }
@@ -2278,7 +2280,7 @@ mod tests {
                     index: 0,
                 }),
             )
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("iter")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("iter"), 2))
             .expect_instr(
                 2,
                 Instruction::LoadInteger(LoadISpan {
@@ -2298,7 +2300,7 @@ mod tests {
             .expect_instr(4, Instruction::LessEqualIntegers(lc(1, 14)))
             .expect_instr(5, Instruction::JumpIfNotTrue(13))
             .expect_instr(6, Instruction::PushBoolean(false, lc(1, 24)))
-            .expect_instr(7, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(7, Instruction::Assign(SymbolKey::from("a"), 3))
             .expect_instr(
                 8,
                 Instruction::LoadInteger(LoadISpan {
@@ -2309,7 +2311,7 @@ mod tests {
             )
             .expect_instr(9, Instruction::PushInteger(1, lc(1, 18)))
             .expect_instr(10, Instruction::AddIntegers(lc(1, 14)))
-            .expect_instr(11, Instruction::Assign(SymbolKey::from("iter")))
+            .expect_instr(11, Instruction::Assign(SymbolKey::from("iter"), 2))
             .expect_instr(12, Instruction::Jump(JumpISpan { addr: 2 }))
             .check();
     }
@@ -2331,7 +2333,7 @@ mod tests {
             )
             .expect_instr(1, Instruction::PushInteger(1, lc(1, 17)))
             .expect_instr(2, Instruction::AddIntegers(lc(1, 15)))
-            .expect_instr(3, Instruction::Assign(SymbolKey::from("iter")))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("iter"), 2))
             .expect_instr(
                 4,
                 Instruction::LoadInteger(LoadISpan {
@@ -2353,7 +2355,7 @@ mod tests {
             .expect_instr(8, Instruction::LessEqualIntegers(lc(1, 20)))
             .expect_instr(9, Instruction::JumpIfNotTrue(17))
             .expect_instr(10, Instruction::PushBoolean(false, lc(1, 36)))
-            .expect_instr(11, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(11, Instruction::Assign(SymbolKey::from("a"), 3))
             .expect_instr(
                 12,
                 Instruction::LoadInteger(LoadISpan {
@@ -2364,7 +2366,7 @@ mod tests {
             )
             .expect_instr(13, Instruction::PushInteger(1, lc(1, 30)))
             .expect_instr(14, Instruction::AddIntegers(lc(1, 20)))
-            .expect_instr(15, Instruction::Assign(SymbolKey::from("iter")))
+            .expect_instr(15, Instruction::Assign(SymbolKey::from("iter"), 2))
             .expect_instr(16, Instruction::Jump(JumpISpan { addr: 4 }))
             .check();
     }
@@ -2393,7 +2395,7 @@ mod tests {
             )
             .expect_instr(2, Instruction::PushInteger(0, lc(1, 12)))
             .expect_instr(3, Instruction::IntegerToDouble)
-            .expect_instr(4, Instruction::Assign(SymbolKey::from("iter")))
+            .expect_instr(4, Instruction::Assign(SymbolKey::from("iter"), 0))
             .expect_instr(
                 5,
                 Instruction::LoadDouble(LoadISpan {
@@ -2416,7 +2418,7 @@ mod tests {
             )
             .expect_instr(11, Instruction::PushDouble(0.1, lc(1, 24)))
             .expect_instr(12, Instruction::AddDoubles(lc(1, 14)))
-            .expect_instr(13, Instruction::Assign(SymbolKey::from("iter")))
+            .expect_instr(13, Instruction::Assign(SymbolKey::from("iter"), 0))
             .expect_instr(14, Instruction::Jump(JumpISpan { addr: 5 }))
             .check();
     }
@@ -2438,7 +2440,7 @@ mod tests {
                 }),
             )
             .expect_instr(3, Instruction::PushInteger(3, lc(1, 19)))
-            .expect_instr(4, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(4, Instruction::Assign(SymbolKey::from("a"), 1))
             .expect_instr(
                 5,
                 Instruction::LoadInteger(LoadISpan {
@@ -2466,9 +2468,9 @@ mod tests {
             .parse("before = 1: FUNCTION foo: END FUNCTION: after = 2")
             .compile()
             .expect_instr(0, Instruction::PushInteger(1, lc(1, 10)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("before")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("before"), 0))
             .expect_instr(2, Instruction::PushInteger(2, lc(1, 49)))
-            .expect_instr(3, Instruction::Assign(SymbolKey::from("after")))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("after"), 1))
             .expect_instr(4, Instruction::Jump(JumpISpan { addr: 10 }))
             .expect_instr(5, Instruction::EnterScope)
             .expect_instr(
@@ -2518,10 +2520,10 @@ mod tests {
                 }),
             )
             .expect_instr(3, Instruction::PushInteger(3, lc(1, 19)))
-            .expect_instr(4, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(4, Instruction::Assign(SymbolKey::from("a"), 1))
             .expect_instr(5, Instruction::Jump(JumpISpan { addr: 8 }))
             .expect_instr(6, Instruction::PushInteger(4, lc(1, 41)))
-            .expect_instr(7, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(7, Instruction::Assign(SymbolKey::from("a"), 1))
             .expect_instr(
                 8,
                 Instruction::LoadInteger(LoadISpan {
@@ -2596,10 +2598,10 @@ mod tests {
             .expect_instr(0, Instruction::Jump(JumpISpan { addr: 9 }))
             .expect_instr(1, Instruction::EnterScope)
             .expect_instr(2, Instruction::PushInteger(3, lc(1, 14)))
-            .expect_instr(3, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("a"), 0))
             .expect_instr(4, Instruction::Jump(JumpISpan { addr: 7 }))
             .expect_instr(5, Instruction::PushInteger(4, lc(1, 31)))
-            .expect_instr(6, Instruction::Assign(SymbolKey::from("a")))
+            .expect_instr(6, Instruction::Assign(SymbolKey::from("a"), 0))
             .expect_instr(7, Instruction::LeaveScope)
             .expect_instr(8, Instruction::Return(lc(1, 34)))
             .expect_symtable(
@@ -2810,7 +2812,7 @@ mod tests {
             .parse(&format!("SELECT CASE 5\nCASE {}\nFOO\nEND SELECT", guards))
             .compile()
             .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")));
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1"), 0));
         let mut n = 2;
         for instr in exp_expr_instrs {
             t = t.expect_instr(n, instr);
@@ -2994,7 +2996,7 @@ mod tests {
             .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
             .expect_instr(1, Instruction::PushInteger(3, lc(1, 17)))
             .expect_instr(2, Instruction::AddIntegers(lc(1, 15)))
-            .expect_instr(3, Instruction::Assign(SymbolKey::from("0select1")))
+            .expect_instr(3, Instruction::Assign(SymbolKey::from("0select1"), 0))
             .expect_instr(
                 4,
                 Instruction::Unset(UnsetISpan {
@@ -3013,7 +3015,7 @@ mod tests {
             .parse("SELECT CASE 5\nCASE 7\nFOO\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1"), 0))
             .expect_instr(
                 2,
                 Instruction::LoadInteger(LoadISpan {
@@ -3059,7 +3061,7 @@ mod tests {
                     index: 0,
                 }),
             )
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1"), 1))
             .expect_instr(
                 2,
                 Instruction::Unset(UnsetISpan {
@@ -3078,7 +3080,7 @@ mod tests {
             .parse("SELECT CASE 5\nCASE ELSE\nFOO\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1"), 0))
             .expect_instr(
                 2,
                 Instruction::BuiltinCall(BuiltinCallISpan {
@@ -3107,7 +3109,7 @@ mod tests {
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE IS <> 8\nBAR\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1"), 0))
             .expect_instr(
                 2,
                 Instruction::LoadInteger(LoadISpan {
@@ -3168,7 +3170,7 @@ mod tests {
             .parse("SELECT CASE 5\nCASE 7\nFOO\nCASE ELSE\nBAR\nEND SELECT")
             .compile()
             .expect_instr(0, Instruction::PushInteger(5, lc(1, 13)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1"), 0))
             .expect_instr(
                 2,
                 Instruction::LoadInteger(LoadISpan {
@@ -3216,7 +3218,7 @@ mod tests {
             .parse("SELECT CASE 0: END SELECT\nSELECT CASE 0: END SELECT")
             .compile()
             .expect_instr(0, Instruction::PushInteger(0, lc(1, 13)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1")))
+            .expect_instr(1, Instruction::Assign(SymbolKey::from("0select1"), 0))
             .expect_instr(
                 2,
                 Instruction::Unset(UnsetISpan {
@@ -3226,7 +3228,7 @@ mod tests {
                 }),
             )
             .expect_instr(3, Instruction::PushInteger(0, lc(2, 13)))
-            .expect_instr(4, Instruction::Assign(SymbolKey::from("0select2")))
+            .expect_instr(4, Instruction::Assign(SymbolKey::from("0select2"), 1))
             .expect_instr(
                 5,
                 Instruction::Unset(UnsetISpan {
