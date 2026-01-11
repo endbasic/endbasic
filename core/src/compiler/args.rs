@@ -339,7 +339,7 @@ fn compile_required_ref(
 ) -> Result<Option<(SymbolKey, SymbolPrototype)>> {
     match expr {
         Some(Expr::Symbol(span)) => {
-            let key = SymbolKey::from(span.vref.name());
+            let key = SymbolKey::from(&span.vref.name);
             match symtable.get(&key) {
                 None => {
                     if !define_undefined {
@@ -347,7 +347,7 @@ fn compile_required_ref(
                     }
                     debug_assert!(!require_array);
 
-                    let vtype = span.vref.ref_type().unwrap_or(ExprType::Integer);
+                    let vtype = span.vref.ref_type.unwrap_or(ExprType::Integer);
 
                     if !span.vref.accepts(vtype) {
                         return Err(Error::IncompatibleTypeAnnotationInReference(

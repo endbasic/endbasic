@@ -252,34 +252,18 @@ impl fmt::Display for ExprType {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VarRef {
     /// Name of the variable this points to.
-    name: String,
+    pub name: String,
 
     /// Type of the variable this points to, if explicitly specified.
     ///
     /// If `None`, the type of the variable is subject to type inference.
-    ref_type: Option<ExprType>,
+    pub ref_type: Option<ExprType>,
 }
 
 impl VarRef {
     /// Creates a new reference to the variable with `name` and the optional `ref_type` type.
     pub fn new<T: Into<String>>(name: T, ref_type: Option<ExprType>) -> Self {
         Self { name: name.into(), ref_type }
-    }
-
-    /// Returns the name of this reference, without any type annotations.
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Returns the name of this reference, without any type annotations, and consumes the
-    /// reference.
-    pub(crate) fn take_name(self) -> String {
-        self.name
-    }
-
-    /// Returns the type of this reference.
-    pub fn ref_type(&self) -> Option<ExprType> {
-        self.ref_type
     }
 
     /// Returns true if this reference is compatible with the given type.
@@ -299,11 +283,6 @@ impl VarRef {
                 None => false,
             },
         }
-    }
-
-    /// Converts this variable reference to a symbol key.
-    pub(crate) fn as_symbol_key(&self) -> SymbolKey {
-        SymbolKey::from(&self.name)
     }
 }
 
