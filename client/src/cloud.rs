@@ -613,7 +613,7 @@ mod tests {
                 env::var("TEST_ACCOUNT_1_USERNAME").expect("Expected env config not found");
             let password = "this is an invalid password for the test account";
 
-            let err = context.service.login(&username, &password).await.unwrap_err();
+            let err = context.service.login(&username, password).await.unwrap_err();
             assert_eq!(io::ErrorKind::PermissionDenied, err.kind());
         }
         run(&mut TestContext::new_from_env());
