@@ -1,0 +1,36 @@
+[package]
+name = "endbasic-core2"
+version = "0.11.99" # ENDBASIC-VERSION
+license = "Apache-2.0"
+authors = ["Julio Merino <jmmv@endbasic.dev>"]
+categories = ["development-tools", "parser-implementations"]
+keywords = ["basic", "interpreter", "learning", "programming"]
+description = "The EndBASIC programming language - core"
+homepage = "https://www.endbasic.dev/"
+repository = "https://github.com/endbasic/endbasic"
+readme = "README.md"
+edition = "2024"
+publish = false
+
+# DO NOT SUBMIT: Replace with workspace lints.
+[lints.rust]
+anonymous_parameters = "warn"
+bad_style = "warn"
+#missing_docs = "warn"
+unused = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+unused_qualifications = "warn"
+unsafe_code = "warn"
+[lints.clippy]
+await_holding_refcell_ref = "allow"
+collapsible_else_if = "allow"
+
+[dependencies]
+async-trait = "0.1"
+thiserror = "1.0"
+
+[dev-dependencies]
+futures-lite = "2.2"
+tempfile = "3"
+tokio = { version = "1", features = ["full"] }
