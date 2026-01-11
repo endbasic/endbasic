@@ -13,6 +13,9 @@ edition = "2024"
 build = "build.rs"
 publish = false
 
+[lints]
+workspace = true
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 

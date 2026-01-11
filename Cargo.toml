@@ -18,3 +18,17 @@ default-members = [
     "repl",
     "std",
 ]
+
+[workspace.lints.rust]
+anonymous_parameters = "warn"
+bad_style = "warn"
+missing_docs = "warn"
+unused = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+unused_qualifications = "warn"
+unsafe_code = "warn"
+
+[workspace.lints.clippy]
+await_holding_refcell_ref = "allow"
+collapsible_else_if = "allow"
