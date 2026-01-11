@@ -1191,13 +1191,13 @@ impl Machine {
                     context.pc += 1;
                 }
 
-                Instruction::ArrayAssignment(name, vref_pos, nargs) => {
-                    self.assign_array(context, name, *vref_pos, *nargs)?;
+                Instruction::ArrayAssignment(span) => {
+                    self.assign_array(context, &span.name, span.name_pos, span.nargs)?;
                     context.pc += 1;
                 }
 
-                Instruction::ArrayLoad(name, pos, nargs) => {
-                    self.array_ref(context, name, *pos, *nargs)?;
+                Instruction::ArrayLoad(span) => {
+                    self.array_ref(context, &span.name, span.name_pos, span.nargs)?;
                     context.pc += 1;
                 }
 

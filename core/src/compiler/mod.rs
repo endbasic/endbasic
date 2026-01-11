@@ -297,7 +297,11 @@ impl Compiler {
         let nargs = span.subscripts.len();
         self.compile_array_indices(dims, span.subscripts, span.vref_pos)?;
 
-        self.emit(Instruction::ArrayAssignment(key, span.vref_pos, nargs));
+        self.emit(Instruction::ArrayAssignment(ArrayIndexISpan {
+            name: key,
+            name_pos: span.vref_pos,
+            nargs,
+        }));
 
         Ok(())
     }
@@ -1266,7 +1270,14 @@ mod tests {
             .expect_instr(3, Instruction::LoadInteger(SymbolKey::from("i"), lc(1, 12)))
             .expect_instr(4, Instruction::AddIntegers(lc(1, 10)))
             .expect_instr(5, Instruction::PushInteger(3, lc(1, 5)))
-            .expect_instr(6, Instruction::ArrayAssignment(SymbolKey::from("foo"), lc(1, 1), 3))
+            .expect_instr(
+                6,
+                Instruction::ArrayAssignment(ArrayIndexISpan {
+                    name: SymbolKey::from("foo"),
+                    name_pos: lc(1, 1),
+                    nargs: 3,
+                }),
+            )
             .check();
     }
 
@@ -1278,7 +1289,14 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::PushInteger(1, lc(1, 9)))
             .expect_instr(1, Instruction::PushInteger(0, lc(1, 4)))
-            .expect_instr(2, Instruction::ArrayAssignment(SymbolKey::from("a"), lc(1, 1), 1))
+            .expect_instr(
+                2,
+                Instruction::ArrayAssignment(ArrayIndexISpan {
+                    name: SymbolKey::from("a"),
+                    name_pos: lc(1, 1),
+                    nargs: 1,
+                }),
+            )
             .check();
     }
 
@@ -1291,7 +1309,14 @@ mod tests {
             .expect_instr(0, Instruction::PushInteger(1, lc(1, 10)))
             .expect_instr(1, Instruction::PushDouble(1.2, lc(1, 3)))
             .expect_instr(2, Instruction::DoubleToInteger)
-            .expect_instr(3, Instruction::ArrayAssignment(SymbolKey::from("a"), lc(1, 1), 1))
+            .expect_instr(
+                3,
+                Instruction::ArrayAssignment(ArrayIndexISpan {
+                    name: SymbolKey::from("a"),
+                    name_pos: lc(1, 1),
+                    nargs: 1,
+                }),
+            )
             .check();
     }
 
@@ -1325,7 +1350,14 @@ mod tests {
             .expect_instr(0, Instruction::LoadDouble(SymbolKey::from("d"), lc(1, 8)))
             .expect_instr(1, Instruction::DoubleToInteger)
             .expect_instr(2, Instruction::PushInteger(3, lc(1, 3)))
-            .expect_instr(3, Instruction::ArrayAssignment(SymbolKey::from("a"), lc(1, 1), 1))
+            .expect_instr(
+                3,
+                Instruction::ArrayAssignment(ArrayIndexISpan {
+                    name: SymbolKey::from("a"),
+                    name_pos: lc(1, 1),
+                    nargs: 1,
+                }),
+            )
             .check();
     }
 
@@ -1339,7 +1371,14 @@ mod tests {
             .expect_instr(0, Instruction::LoadInteger(SymbolKey::from("i"), lc(1, 8)))
             .expect_instr(1, Instruction::IntegerToDouble)
             .expect_instr(2, Instruction::PushInteger(3, lc(1, 3)))
-            .expect_instr(3, Instruction::ArrayAssignment(SymbolKey::from("a"), lc(1, 1), 1))
+            .expect_instr(
+                3,
+                Instruction::ArrayAssignment(ArrayIndexISpan {
+                    name: SymbolKey::from("a"),
+                    name_pos: lc(1, 1),
+                    nargs: 1,
+                }),
+            )
             .check();
     }
 

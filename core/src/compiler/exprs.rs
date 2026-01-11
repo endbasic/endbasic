@@ -446,7 +446,11 @@ fn compile_array_ref(
     if !span.vref.accepts(vtype) {
         return Err(Error::IncompatibleTypeAnnotationInReference(span.vref_pos, span.vref));
     }
-    instrs.push(Instruction::ArrayLoad(key, span.vref_pos, nargs));
+    instrs.push(Instruction::ArrayLoad(ArrayIndexISpan {
+        name: key,
+        name_pos: span.vref_pos,
+        nargs,
+    }));
     Ok(vtype)
 }
 
@@ -1274,7 +1278,14 @@ mod tests {
             .expect_instr(2, Instruction::AddIntegers(lc(1, 17)))
             .expect_instr(3, Instruction::LoadInteger(SymbolKey::from("j"), lc(1, 12)))
             .expect_instr(4, Instruction::PushInteger(3, lc(1, 9)))
-            .expect_instr(5, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 3))
+            .expect_instr(
+                5,
+                Instruction::ArrayLoad(ArrayIndexISpan {
+                    name: SymbolKey::from("foo"),
+                    name_pos: lc(1, 5),
+                    nargs: 3,
+                }),
+            )
             .expect_instr(6, Instruction::Assign(SymbolKey::from("i")))
             .check();
     }
@@ -1286,7 +1297,14 @@ mod tests {
             .parse("i = FOO%(3)")
             .compile()
             .expect_instr(0, Instruction::PushInteger(3, lc(1, 10)))
-            .expect_instr(1, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 1))
+            .expect_instr(
+                1,
+                Instruction::ArrayLoad(ArrayIndexISpan {
+                    name: SymbolKey::from("foo"),
+                    name_pos: lc(1, 5),
+                    nargs: 1,
+                }),
+            )
             .expect_instr(2, Instruction::Assign(SymbolKey::from("i")))
             .check();
     }
@@ -1309,7 +1327,14 @@ mod tests {
             .compile()
             .expect_instr(0, Instruction::PushDouble(3.8, lc(1, 9)))
             .expect_instr(1, Instruction::DoubleToInteger)
-            .expect_instr(2, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 1))
+            .expect_instr(
+                2,
+                Instruction::ArrayLoad(ArrayIndexISpan {
+                    name: SymbolKey::from("foo"),
+                    name_pos: lc(1, 5),
+                    nargs: 1,
+                }),
+            )
             .expect_instr(3, Instruction::Assign(SymbolKey::from("i")))
             .check();
     }

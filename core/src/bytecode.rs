@@ -22,6 +22,20 @@ use crate::syms::SymbolKey;
 /// Convenience type to represent a program address.
 pub type Address = usize;
 
+/// Components of an array indexing operation.
+#[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
+pub struct ArrayIndexISpan {
+    /// Name of the array to index.
+    pub name: SymbolKey,
+
+    /// Position of the name.
+    pub name_pos: LineCol,
+
+    /// Number of subscripts on the stack to index the array.
+    pub nargs: usize,
+}
+
 /// Components of a builtin command call.
 #[derive(Debug, PartialEq)]
 #[cfg_attr(test, derive(Clone))]
@@ -279,10 +293,10 @@ pub enum Instruction {
     ConcatStrings(LineCol),
 
     /// Represents an assignment to an element of an array with the given number of subscripts.
-    ArrayAssignment(SymbolKey, LineCol, usize),
+    ArrayAssignment(ArrayIndexISpan),
 
     /// Represents a load of an array's element into the stack.
-    ArrayLoad(SymbolKey, LineCol, usize),
+    ArrayLoad(ArrayIndexISpan),
 
     /// Represents an assignment of a value to a variable.
     Assign(SymbolKey),
@@ -429,12 +443,12 @@ impl Instruction {
 
             Instruction::ConcatStrings(_pos) => ("CONCAT$", None),
 
-            Instruction::ArrayAssignment(key, _pos, nargs) => {
-                ("SETA", Some(format!("{}, {}", key, nargs)))
+            Instruction::ArrayAssignment(span) => {
+                ("SETA", Some(format!("{}, {}", span.name, span.nargs)))
             }
 
-            Instruction::ArrayLoad(key, _pos, nargs) => {
-                ("LOADA", Some(format!("{}, {}", key, nargs)))
+            Instruction::ArrayLoad(span) => {
+                ("LOADA", Some(format!("{}, {}", span.name, span.nargs)))
             }
 
             Instruction::Assign(key) => ("SETV", Some(key.to_string())),
@@ -585,8 +599,8 @@ impl Instruction {
 
             Instruction::ConcatStrings(pos) => Some(*pos),
 
-            Instruction::ArrayAssignment(_, pos, _) => Some(*pos),
-            Instruction::ArrayLoad(_, pos, _) => Some(*pos),
+            Instruction::ArrayAssignment(span) => Some(span.name_pos),
+            Instruction::ArrayLoad(span) => Some(span.name_pos),
             Instruction::Assign(_) => None,
             Instruction::BuiltinCall(span) => Some(span.name_pos),
             Instruction::Call(_) => None,
@@ -633,7 +647,7 @@ impl Instruction {
             | Instruction::BitwiseOr(_)
             | Instruction::BitwiseXor(_)
             | Instruction::BitwiseNot(_)
-            | Instruction::ArrayLoad(_, _, _)
+            | Instruction::ArrayLoad(..)
             | Instruction::ShiftLeft(_)
             | Instruction::ShiftRight(_)
             | Instruction::EqualBooleans(_)
@@ -686,7 +700,7 @@ impl Instruction {
             | Instruction::EnterScope
             | Instruction::LeaveScope => false,
 
-            Instruction::ArrayAssignment(_, _, _)
+            Instruction::ArrayAssignment(..)
             | Instruction::Assign(_)
             | Instruction::BuiltinCall(_)
             | Instruction::Call(_)
