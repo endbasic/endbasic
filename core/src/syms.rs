@@ -353,7 +353,7 @@ impl Symbols {
     ///
     /// Returns an error if the type annotation in the symbol reference does not match its type.
     pub fn get(&self, vref: &VarRef) -> value::Result<Option<&Symbol>> {
-        let key = SymbolKey::from(vref.name());
+        let key = SymbolKey::from(&vref.name);
         let symbol = self.load(&key);
         if let Some(symbol) = symbol {
             let stype = symbol.eval_type();
@@ -377,7 +377,7 @@ impl Symbols {
     ///
     /// Returns an error if the type annotation in the symbol reference does not match its type.
     pub fn get_mut(&mut self, vref: &VarRef) -> value::Result<Option<&mut Symbol>> {
-        match self.load_mut(&vref.as_symbol_key()) {
+        match self.load_mut(&SymbolKey::from(&vref.name)) {
             Some(symbol) => {
                 let stype = symbol.eval_type();
                 if !vref.accepts_callable(stype) {
@@ -401,8 +401,8 @@ impl Symbols {
     pub(crate) fn get_var(&self, vref: &VarRef) -> value::Result<&Value> {
         match self.get(vref)? {
             Some(Symbol::Variable(v)) => Ok(v),
-            Some(_) => Err(value::Error::new(format!("{} is not a variable", vref.name()))),
-            None => Err(value::Error::new(format!("Undefined variable {}", vref.name()))),
+            Some(_) => Err(value::Error::new(format!("{} is not a variable", vref.name))),
+            None => Err(value::Error::new(format!("Undefined variable {}", vref.name))),
         }
     }
 
@@ -440,8 +440,8 @@ impl Symbols {
     /// If the variable is already defined, then the type of the new value must be compatible with
     /// the existing variable.  In other words: a variable cannot change types while it's alive.
     pub fn set_var(&mut self, vref: &VarRef, value: Value) -> value::Result<()> {
-        let key = vref.as_symbol_key();
-        let value = value.maybe_cast(vref.ref_type())?;
+        let key = SymbolKey::from(&vref.name);
+        let value = value.maybe_cast(vref.ref_type)?;
         match self.get_mut(vref)? {
             Some(Symbol::Variable(old_value)) => {
                 let value = value.maybe_cast(Some(old_value.as_exprtype()))?;
@@ -457,7 +457,7 @@ impl Symbols {
             }
             Some(_) => Err(value::Error::new(format!("Cannot redefine {} as a variable", vref))),
             None => {
-                if let Some(ref_type) = vref.ref_type()
+                if let Some(ref_type) = vref.ref_type
                     && !vref.accepts(value.as_exprtype())
                 {
                     return Err(value::Error::new(format!(

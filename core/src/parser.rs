@@ -46,10 +46,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// This is only valid for references that have no annotations in them.
 fn vref_to_unannotated_string(vref: VarRef, pos: LineCol) -> Result<String> {
-    if vref.ref_type().is_some() {
+    if vref.ref_type.is_some() {
         return Err(Error::Bad(pos, format!("Type annotation not allowed in {}", vref)));
     }
-    Ok(vref.take_name())
+    Ok(vref.name)
 }
 
 /// Converts a collection of `ArgSpan`s passed to a function or array reference to a collection
@@ -1217,7 +1217,7 @@ impl<'a> Parser<'a> {
     fn parse_for(&mut self, for_pos: LineCol) -> Result<Statement> {
         let token_span = self.lexer.read()?;
         let iterator = match token_span.token {
-            Token::Symbol(iterator) => match iterator.ref_type() {
+            Token::Symbol(iterator) => match iterator.ref_type {
                 None | Some(ExprType::Double) | Some(ExprType::Integer) => iterator,
                 _ => {
                     return Err(Error::Bad(
@@ -1422,8 +1422,8 @@ impl<'a> Parser<'a> {
         let token_span = self.lexer.read()?;
         let name = match token_span.token {
             Token::Symbol(name) => {
-                if name.ref_type().is_none() {
-                    VarRef::new(name.take_name(), Some(ExprType::Integer))
+                if name.ref_type.is_none() {
+                    VarRef::new(name.name, Some(ExprType::Integer))
                 } else {
                     name
                 }
@@ -1450,7 +1450,7 @@ impl<'a> Parser<'a> {
         let token_span = self.lexer.read()?;
         let name = match token_span.token {
             Token::Symbol(name) => {
-                if name.ref_type().is_some() {
+                if name.ref_type.is_some() {
                     return Err(Error::Bad(
                         token_span.pos,
                         "SUBs cannot return a value so type annotations are not allowed".to_owned(),

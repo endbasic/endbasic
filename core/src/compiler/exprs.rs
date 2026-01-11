@@ -352,7 +352,7 @@ fn compile_expr_symbol(
     span: SymbolSpan,
     allow_varrefs: bool,
 ) -> Result<ExprType> {
-    let key = SymbolKey::from(span.vref.name());
+    let key = SymbolKey::from(&span.vref.name);
     let (instr, vtype) = match symtable.get(&key) {
         None => return Err(Error::UndefinedSymbol(span.pos, key)),
 
@@ -699,7 +699,7 @@ pub(super) fn compile_expr(
         Expr::Negate(span) => Ok(compile_neg_op(instrs, fixups, symtable, *span)?),
 
         Expr::Call(span) => {
-            let key = SymbolKey::from(span.vref.name());
+            let key = SymbolKey::from(&span.vref.name);
             match symtable.get(&key) {
                 Some(SymbolPrototype::Array(vtype, dims)) => {
                     compile_array_ref(instrs, fixups, symtable, span, key, *vtype, *dims)
