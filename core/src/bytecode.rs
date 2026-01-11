@@ -164,6 +164,9 @@ pub struct LoadISpan {
 
     /// Position of where this instruction was requested.
     pub pos: LineCol,
+
+    /// Index of `name` on the stack.
+    pub index: usize,
 }
 
 /// Components of a request to unset a variable.

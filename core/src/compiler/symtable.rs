@@ -89,6 +89,12 @@ impl<K, V, B: Bucketizer<V = V>> IndexedHashMap<K, V, B> {
         Self { map: HashMap::default(), bucketizer, counters: HashMap::default() }
     }
 
+    /// Returns the counter of the bucket where `value` belongs.
+    fn counts_of(&self, value: &V) -> usize {
+        let counter_id = self.bucketizer.bucketize(value);
+        self.counters.get(&counter_id).copied().unwrap_or(0)
+    }
+
     /// Increments the counter of the bucket where `value` belongs.
     fn increment_counts_of(&mut self, value: &V) -> usize {
         let counter_id = self.bucketizer.bucketize(value);
@@ -291,6 +297,11 @@ impl SymbolsTable {
     /// The symbol must not yet exist.
     pub(super) fn insert_global(&mut self, key: SymbolKey, proto: SymbolPrototype) -> usize {
         self.globals.insert(key, proto)
+    }
+
+    /// Returns the index of the last element of type `proto` for the current scope.
+    pub(super) fn last_index_of(&self, proto: &SymbolPrototype) -> usize {
+        self.scopes.last().unwrap().counts_of(proto)
     }
 
     /// Removes information about the symbol `key`.

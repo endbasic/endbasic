@@ -328,11 +328,13 @@ impl CallableSyntax {
 /// If the reference does not exist and the syntax allowed undefined symbols, returns the details
 /// for the symbol to insert into the symbols table, which the caller must handle because we do
 /// not have mutable access to the `symtable` here.
+#[allow(clippy::too_many_arguments)]
 fn compile_required_ref(
     instrs: &mut Vec<Instruction>,
     md: &CallableMetadata,
     pos: LineCol,
     symtable: &SymbolsTable,
+    next_index_offset: usize,
     require_array: bool,
     define_undefined: bool,
     expr: Option<Expr>,
@@ -340,7 +342,7 @@ fn compile_required_ref(
     match expr {
         Some(Expr::Symbol(span)) => {
             let key = SymbolKey::from(span.vref.name());
-            match symtable.get(&key) {
+            match symtable.get_with_index(&key) {
                 None => {
                     if !define_undefined {
                         return Err(Error::UndefinedSymbol(span.pos, key));
@@ -355,14 +357,16 @@ fn compile_required_ref(
                         ));
                     }
 
+                    let proto = SymbolPrototype::Variable(vtype);
+                    let next_index = symtable.last_index_of(&proto) + next_index_offset;
                     instrs.push(Instruction::LoadRef(
-                        LoadISpan { name: key.clone(), pos: span.pos },
+                        LoadISpan { name: key.clone(), pos: span.pos, index: next_index },
                         vtype,
                     ));
-                    Ok(Some((key, SymbolPrototype::Variable(vtype))))
+                    Ok(Some((key, proto)))
                 }
 
-                Some(SymbolPrototype::Array(vtype, _)) => {
+                Some((SymbolPrototype::Array(vtype, _), index)) => {
                     let vtype = *vtype;
 
                     if !span.vref.accepts(vtype) {
@@ -376,13 +380,13 @@ fn compile_required_ref(
                     }
 
                     instrs.push(Instruction::LoadRef(
-                        LoadISpan { name: key.clone(), pos: span.pos },
+                        LoadISpan { name: key.clone(), pos: span.pos, index },
                         vtype,
                     ));
                     Ok(None)
                 }
 
-                Some(SymbolPrototype::Variable(vtype)) => {
+                Some((SymbolPrototype::Variable(vtype), index)) => {
                     let vtype = *vtype;
 
                     if !span.vref.accepts(vtype) {
@@ -396,14 +400,14 @@ fn compile_required_ref(
                     }
 
                     instrs.push(Instruction::LoadRef(
-                        LoadISpan { name: key.clone(), pos: span.pos },
+                        LoadISpan { name: key.clone(), pos: span.pos, index },
                         vtype,
                     ));
                     Ok(None)
                 }
 
-                Some(SymbolPrototype::BuiltinCallable(md))
-                | Some(SymbolPrototype::Callable(md)) => {
+                Some((SymbolPrototype::BuiltinCallable(md), _index))
+                | Some((SymbolPrototype::Callable(md), _index)) => {
                     if !span.vref.accepts_callable(md.return_type()) {
                         return Err(Error::IncompatibleTypeAnnotationInReference(
                             span.pos, span.vref,
@@ -549,6 +553,7 @@ fn compile_args(
                                 md,
                                 pos,
                                 symtable,
+                                to_insert.len(),
                                 false,
                                 true,
                                 Some(expr),
@@ -622,6 +627,7 @@ fn compile_args(
                     md,
                     pos,
                     symtable,
+                    0,
                     details.require_array,
                     details.define_undefined,
                     span.expr,
@@ -1202,7 +1208,7 @@ mod compile_tests {
                 sep_pos: lc(1, 5),
             }])
             .exp_instr(Instruction::LoadRef(
-                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2), index: 0 },
                 ExprType::Text,
             ))
             .exp_nargs(1)
@@ -1338,7 +1344,7 @@ mod compile_tests {
                 sep_pos: lc(1, 5),
             }])
             .exp_instr(Instruction::LoadRef(
-                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2), index: 0 },
                 ExprType::Integer,
             ))
             .exp_nargs(1)
@@ -1369,7 +1375,7 @@ mod compile_tests {
                 sep_pos: lc(1, 6),
             }])
             .exp_instr(Instruction::LoadRef(
-                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2), index: 0 },
                 ExprType::Text,
             ))
             .exp_nargs(1)
@@ -1420,11 +1426,11 @@ mod compile_tests {
                 },
             ])
             .exp_instr(Instruction::LoadRef(
-                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2), index: 0 },
                 ExprType::Integer,
             ))
             .exp_instr(Instruction::LoadRef(
-                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2), index: 0 },
                 ExprType::Integer,
             ))
             .exp_nargs(2)
@@ -1456,7 +1462,7 @@ mod compile_tests {
                 sep_pos: lc(1, 5),
             }])
             .exp_instr(Instruction::LoadRef(
-                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2), index: 0 },
                 ExprType::Text,
             ))
             .exp_nargs(1)
@@ -1992,7 +1998,7 @@ mod compile_tests {
                 sep_pos: lc(1, 2),
             }])
             .exp_instr(Instruction::LoadRef(
-                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2), index: 0 },
                 ExprType::Text,
             ))
             .exp_nargs(1)
