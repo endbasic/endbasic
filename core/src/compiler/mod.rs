@@ -390,16 +390,18 @@ impl Compiler {
             return Err(Error::RedefinitionError(span.name_pos, key));
         }
 
+        let index = if span.shared {
+            self.symtable.insert_global(key.clone(), SymbolPrototype::Variable(span.vtype))
+        } else {
+            self.symtable.insert(key.clone(), SymbolPrototype::Variable(span.vtype))
+        };
+
         self.emit(Instruction::Dim(DimISpan {
-            name: key.clone(),
+            name: key,
+            index,
             shared: span.shared,
             vtype: span.vtype,
         }));
-        if span.shared {
-            self.symtable.insert_global(key, SymbolPrototype::Variable(span.vtype));
-        } else {
-            self.symtable.insert(key, SymbolPrototype::Variable(span.vtype));
-        }
 
         Ok(())
     }
@@ -474,18 +476,19 @@ impl Compiler {
             let key = SymbolKey::from(span.iter.name());
             let skip_pc = self.emit(Instruction::Nop);
 
-            let iter_key = SymbolKey::from(span.iter.name());
             if self.symtable.get(&key).is_none() {
+                let index =
+                    self.symtable.insert(key.clone(), SymbolPrototype::Variable(ExprType::Double));
                 self.emit(Instruction::Dim(DimISpan {
-                    name: key,
+                    name: key.clone(),
+                    index,
                     shared: false,
                     vtype: ExprType::Double,
                 }));
-                self.symtable.insert(iter_key.clone(), SymbolPrototype::Variable(ExprType::Double));
             }
 
             self.instrs[skip_pc] = Instruction::JumpIfDefined(JumpIfDefinedISpan {
-                var: iter_key,
+                var: key,
                 addr: self.instrs.len(),
             });
         }
@@ -783,20 +786,22 @@ impl Compiler {
                 for arg in span.dimensions.into_iter().rev() {
                     self.compile_expr_as_type(arg, ExprType::Integer)?;
                 }
+
+                let index = if span.shared {
+                    self.symtable
+                        .insert_global(key.clone(), SymbolPrototype::Array(span.subtype, nargs))
+                } else {
+                    self.symtable.insert(key.clone(), SymbolPrototype::Array(span.subtype, nargs))
+                };
                 self.emit(Instruction::DimArray(DimArrayISpan {
-                    name: key.clone(),
+                    name: key,
                     name_pos: span.name_pos,
+                    index,
                     shared: span.shared,
                     dimensions: nargs,
                     subtype: span.subtype,
                     subtype_pos: span.subtype_pos,
                 }));
-
-                if span.shared {
-                    self.symtable.insert_global(key, SymbolPrototype::Array(span.subtype, nargs));
-                } else {
-                    self.symtable.insert(key, SymbolPrototype::Array(span.subtype, nargs));
-                }
             }
 
             Statement::Do(span) => {
@@ -941,13 +946,15 @@ impl Compiler {
                     self.emit(Instruction::EnterScope);
                     self.symtable.enter_scope();
 
+                    let index = self
+                        .symtable
+                        .insert(return_value.clone(), SymbolPrototype::Variable(return_type));
                     self.emit(Instruction::Dim(DimISpan {
                         name: return_value.clone(),
+                        index,
                         shared: false,
                         vtype: return_type,
                     }));
-                    self.symtable
-                        .insert(return_value.clone(), SymbolPrototype::Variable(return_type));
 
                     for param in span.params {
                         let key = SymbolKey::from(param.name());
@@ -1589,6 +1596,7 @@ mod tests {
                 0,
                 Instruction::Dim(DimISpan {
                     name: SymbolKey::from("var"),
+                    index: 0,
                     shared: false,
                     vtype: ExprType::Boolean,
                 }),
@@ -1601,6 +1609,7 @@ mod tests {
                 0,
                 Instruction::Dim(DimISpan {
                     name: SymbolKey::from("var"),
+                    index: 0,
                     shared: false,
                     vtype: ExprType::Double,
                 }),
@@ -1613,6 +1622,7 @@ mod tests {
                 0,
                 Instruction::Dim(DimISpan {
                     name: SymbolKey::from("var"),
+                    index: 0,
                     shared: false,
                     vtype: ExprType::Integer,
                 }),
@@ -1625,6 +1635,7 @@ mod tests {
                 0,
                 Instruction::Dim(DimISpan {
                     name: SymbolKey::from("var"),
+                    index: 0,
                     shared: false,
                     vtype: ExprType::Text,
                 }),
@@ -1676,6 +1687,7 @@ mod tests {
                 0,
                 Instruction::Dim(DimISpan {
                     name: SymbolKey::from("var"),
+                    index: 0,
                     shared: true,
                     vtype: ExprType::Boolean,
                 }),
@@ -1709,6 +1721,7 @@ mod tests {
                 Instruction::DimArray(DimArrayISpan {
                     name: SymbolKey::from("var"),
                     name_pos: lc(1, 5),
+                    index: 0,
                     shared: false,
                     dimensions: 1,
                     subtype: ExprType::Integer,
@@ -1736,6 +1749,7 @@ mod tests {
                 Instruction::DimArray(DimArrayISpan {
                     name: SymbolKey::from("var"),
                     name_pos: lc(1, 5),
+                    index: 1,
                     shared: false,
                     dimensions: 2,
                     subtype: ExprType::Integer,
@@ -1757,6 +1771,7 @@ mod tests {
                 Instruction::DimArray(DimArrayISpan {
                     name: SymbolKey::from("var"),
                     name_pos: lc(1, 5),
+                    index: 0,
                     shared: false,
                     dimensions: 1,
                     subtype: ExprType::Integer,
@@ -1786,6 +1801,7 @@ mod tests {
                 Instruction::DimArray(DimArrayISpan {
                     name: SymbolKey::from("var"),
                     name_pos: lc(1, 12),
+                    index: 0,
                     shared: true,
                     dimensions: 1,
                     subtype: ExprType::Integer,
@@ -2265,6 +2281,7 @@ mod tests {
                 1,
                 Instruction::Dim(DimISpan {
                     name: SymbolKey::from("iter"),
+                    index: 0,
                     shared: false,
                     vtype: ExprType::Double,
                 }),
@@ -2302,6 +2319,7 @@ mod tests {
                 2,
                 Instruction::Dim(DimISpan {
                     name: SymbolKey::from("0return_foo"),
+                    index: 0,
                     shared: false,
                     vtype: ExprType::Integer,
                 }),
@@ -2343,6 +2361,7 @@ mod tests {
                 6,
                 Instruction::Dim(DimISpan {
                     name: SymbolKey::from("0return_foo"),
+                    index: 0,
                     shared: false,
                     vtype: ExprType::Integer,
                 }),
@@ -2378,6 +2397,7 @@ mod tests {
                 2,
                 Instruction::Dim(DimISpan {
                     name: SymbolKey::from("0return_foo"),
+                    index: 0,
                     shared: false,
                     vtype: ExprType::Integer,
                 }),

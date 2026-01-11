@@ -63,6 +63,9 @@ pub struct DimISpan {
     /// Name of the variable to define.
     pub name: SymbolKey,
 
+    /// Index of `name` on the stack.
+    pub index: usize,
+
     /// Whether the variable is global or not.
     pub shared: bool,
 
@@ -79,6 +82,9 @@ pub struct DimArrayISpan {
 
     /// Position of the name.
     pub name_pos: LineCol,
+
+    /// Index of `name` on the stack.
+    pub index: usize,
 
     /// Whether the array is global or not.
     pub shared: bool,

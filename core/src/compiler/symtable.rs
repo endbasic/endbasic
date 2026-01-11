@@ -58,6 +58,7 @@ struct SymbolPrototypeBucketizer {}
 
 impl SymbolPrototypeBucketizer {
     const BUCKET_BUILTINS: u8 = 0;
+    const BUCKET_STACK: u8 = 1;
     const BUCKET_OTHER: u8 = 255;
 }
 
@@ -67,6 +68,7 @@ impl Bucketizer for SymbolPrototypeBucketizer {
     fn bucketize(&self, value: &SymbolPrototype) -> u8 {
         match value {
             SymbolPrototype::BuiltinCallable(..) => Self::BUCKET_BUILTINS,
+            SymbolPrototype::Array(..) | SymbolPrototype::Variable(..) => Self::BUCKET_STACK,
             _ => Self::BUCKET_OTHER,
         }
     }
@@ -112,14 +114,15 @@ impl<K: Eq + Hash, V, B: Bucketizer<V = V>> IndexedHashMap<K, V, B> {
     }
 
     /// Same as `HashMap::insert` but does not return the previous value because this assumes that
-    /// no previous value can exist.
-    fn insert(&mut self, key: K, value: V) {
+    /// no previous value can exist.  Instead, this returns the assigned index.
+    fn insert(&mut self, key: K, value: V) -> usize {
         let index = self.increment_counts_of(&value);
         let previous = self.map.insert(key, (value, index));
         // We could support updating existing keys, but that would make things more difficult for no
         // reason because we would need to check if the replacement value matches the bucket of the
         // previous one and deal with that accordingly.
         assert!(previous.is_none(), "Updating existing keys is not supported");
+        index
     }
 
     /// Same as `HashMap::keys`.
@@ -270,9 +273,9 @@ impl SymbolsTable {
 
     /// Inserts the new information `proto` about symbol `key` into the symbols table.
     /// The symbol must not yet exist.
-    pub(super) fn insert(&mut self, key: SymbolKey, proto: SymbolPrototype) {
+    pub(super) fn insert(&mut self, key: SymbolKey, proto: SymbolPrototype) -> usize {
         debug_assert!(!self.globals.contains_key(&key), "Cannot redefine a symbol");
-        self.scopes.last_mut().unwrap().insert(key, proto);
+        self.scopes.last_mut().unwrap().insert(key, proto)
     }
 
     /// Inserts the builtin callable described by `md` and assigns an upcall index.
@@ -286,8 +289,8 @@ impl SymbolsTable {
 
     /// Inserts the new information `proto` about symbol `key` into the symbols table.
     /// The symbol must not yet exist.
-    pub(super) fn insert_global(&mut self, key: SymbolKey, proto: SymbolPrototype) {
-        self.globals.insert(key, proto);
+    pub(super) fn insert_global(&mut self, key: SymbolKey, proto: SymbolPrototype) -> usize {
+        self.globals.insert(key, proto)
     }
 
     /// Removes information about the symbol `key`.
