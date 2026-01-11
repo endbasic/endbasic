@@ -1,0 +1,25 @@
+[package]
+name = "endbasic-core2"
+version = "0.11.99" # ENDBASIC-VERSION
+license = "Apache-2.0"
+authors = ["Julio Merino <jmmv@endbasic.dev>"]
+categories = ["development-tools", "parser-implementations"]
+keywords = ["basic", "interpreter", "learning", "programming"]
+description = "The EndBASIC programming language - core"
+homepage = "https://www.endbasic.dev/"
+repository = "https://github.com/endbasic/endbasic"
+readme = "README.md"
+edition = "2024"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait = "0.1"
+thiserror = "1.0"
+
+[dev-dependencies]
+futures-lite = "2.2"
+tempfile = "3"
+tokio = { version = "1", features = ["full"] }
