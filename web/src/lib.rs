@@ -281,10 +281,7 @@ impl WebTerminal {
         let mut machine = match builder.build() {
             Ok(machine) => machine,
             Err(e) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Machine initialization failed: {}", e),
-                ))
+                return Err(io::Error::other(format!("Machine initialization failed: {}", e)))
             }
         };
 

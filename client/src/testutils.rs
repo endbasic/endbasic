@@ -27,6 +27,7 @@ use std::rc::Rc;
 /// Service client implementation that allows specifying expectations on requests and yields the
 /// responses previously recorded into it.
 #[derive(Default)]
+#[allow(clippy::type_complexity)]
 pub struct MockService {
     access_token: Option<AccessToken>,
 
@@ -141,8 +142,7 @@ impl MockService {
         let exp_remove = FileAcls {
             readers: exp_remove.into().into_iter().map(|v| v.into()).collect::<Vec<String>>(),
         };
-        let exp_request =
-            (username.to_owned(), filename.to_owned(), exp_add.into(), exp_remove.into());
+        let exp_request = (username.to_owned(), filename.to_owned(), exp_add, exp_remove);
         self.mock_patch_file_acls.push_back((exp_request, result));
     }
 
@@ -203,10 +203,7 @@ impl Service for MockService {
     }
 
     fn logged_in_username(&self) -> Option<String> {
-        match self.access_token {
-            Some(_) => Some("logged-in-username".to_owned()),
-            None => None,
-        }
+        self.access_token.as_ref().map(|_| "logged-in-username".to_owned())
     }
 
     async fn get_files(&mut self, username: &str) -> io::Result<GetFilesResponse> {
