@@ -1,0 +1,60 @@
+# Source
+
+' No arguments.
+OUT
+
+' Multiple arguments, all present.
+OUT 100, 200, 300
+
+' Multiple arguments, some missing.
+OUT 100, , 300,
+
+' Multiple arguments, different separators.
+OUT 100; 200 AS 300, 400
+
+' Multiple arguments, different types.
+OUT 100, "Foo"
+
+# Disassembly
+
+0000    ENTER 25                                # 0:0
+0001    LOADI R64, 0                            # 2:1
+0002    UPCALL 0, R64                           # 2:1
+0003    LOADI R65, 100                          # 5:5
+0004    LOADI R64, 290                          # 5:1
+0005    LOADI R67, 200                          # 5:10
+0006    LOADI R66, 290                          # 5:1
+0007    LOADI R69, 300                          # 5:15
+0008    LOADI R68, 258                          # 5:1
+0009    UPCALL 0, R64                           # 5:1
+0010    LOADI R65, 100                          # 8:5
+0011    LOADI R64, 290                          # 8:1
+0012    LOADI R66, 32                           # 8:1
+0013    LOADI R68, 300                          # 8:12
+0014    LOADI R67, 290                          # 8:1
+0015    LOADI R69, 0                            # 8:1
+0016    UPCALL 0, R64                           # 8:1
+0017    LOADI R65, 100                          # 11:5
+0018    LOADI R64, 274                          # 11:1
+0019    LOADI R67, 200                          # 11:10
+0020    LOADI R66, 306                          # 11:1
+0021    LOADI R69, 300                          # 11:17
+0022    LOADI R68, 290                          # 11:1
+0023    LOADI R71, 400                          # 11:22
+0024    LOADI R70, 258                          # 11:1
+0025    UPCALL 0, R64                           # 11:1
+0026    LOADI R65, 100                          # 14:5
+0027    LOADI R64, 290                          # 14:1
+0028    LOADI R67, 0                            # 14:10
+0029    LOADI R66, 259                          # 14:1
+0030    UPCALL 0, R64                           # 14:1
+0031    LEAVE                                   # 0:0
+0032    END                                     # 0:0
+
+# Output
+
+(0)
+(100, 0, %) , (200, 1, %) , (300, 2, %)
+(100, 0, %) , (1) , (300, 2, %) , (3)
+(100, 0, %) ; (200, 1, %) AS (300, 2, %) , (400, 3, %)
+(100, 0, %) , ("Foo", 1, $)
