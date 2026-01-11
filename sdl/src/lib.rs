@@ -15,13 +15,6 @@
 
 //! SDL2-based graphics terminal emulator.
 
-// Keep these in sync with other top-level files.
-#![allow(clippy::await_holding_refcell_ref)]
-#![allow(clippy::collapsible_else_if)]
-#![warn(anonymous_parameters, bad_style, missing_docs)]
-#![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
-#![warn(unsafe_code)]
-
 use async_channel::Sender;
 use endbasic_core::exec::Signal;
 use endbasic_std::console::{Console, ConsoleSpec, Resolution};
