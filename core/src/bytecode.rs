@@ -79,6 +79,20 @@ pub struct DimArrayISpan {
     pub subtype_pos: LineCol,
 }
 
+/// Components of a change to the error handler.
+#[derive(Clone, Copy)]
+#[cfg_attr(test, derive(Debug, Eq, PartialEq))]
+pub enum ErrorHandlerISpan {
+    /// Jumps to the included address on error.
+    Jump(Address),
+
+    /// Sets the error handler to the default.
+    None,
+
+    /// Sets the error handler to resume execution at to the next instruction.
+    ResumeNext,
+}
+
 /// Components of a builtin function call.
 #[derive(Debug, PartialEq)]
 #[cfg_attr(test, derive(Clone))]
@@ -114,20 +128,6 @@ pub struct JumpIfDefinedISpan {
 
     /// The address to jump to.
     pub addr: Address,
-}
-
-/// Components of a change to the error handler.
-#[derive(Clone, Copy)]
-#[cfg_attr(test, derive(Debug, Eq, PartialEq))]
-pub enum ErrorHandlerISpan {
-    /// Jumps to the included address on error.
-    Jump(Address),
-
-    /// Sets the error handler to the default.
-    None,
-
-    /// Sets the error handler to resume execution at to the next instruction.
-    ResumeNext,
 }
 
 /// Components of a request to unset a variable.
