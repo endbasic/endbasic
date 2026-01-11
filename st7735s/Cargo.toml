@@ -11,6 +11,9 @@ repository = "https://github.com/endbasic/endbasic"
 readme = "README.md"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
 async-channel = "2.2"
 async-trait = "0.1"

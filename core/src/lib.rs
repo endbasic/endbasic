@@ -15,13 +15,6 @@
 
 //! The EndBASIC language parser and interpreter.
 
-// Keep these in sync with other top-level files.
-#![allow(clippy::await_holding_refcell_ref)]
-#![allow(clippy::collapsible_else_if)]
-#![warn(anonymous_parameters, bad_style, missing_docs)]
-#![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
-#![warn(unsafe_code)]
-
 // TODO(jmmv): Should narrow the exposed interface by 1.0.0.
 pub mod ast;
 pub mod bytecode;
