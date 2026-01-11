@@ -32,6 +32,9 @@ pub struct ArrayIndexISpan {
     /// Position of the name.
     pub name_pos: LineCol,
 
+    /// Index of `name` on the stack.
+    pub index: usize,
+
     /// Number of subscripts on the stack to index the array.
     pub nargs: usize,
 }

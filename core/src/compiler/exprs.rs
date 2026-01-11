@@ -430,12 +430,14 @@ fn compile_expr_symbol(
 }
 
 /// Compiles an array access.
+#[allow(clippy::too_many_arguments)]
 fn compile_array_ref(
     instrs: &mut Vec<Instruction>,
     fixups: &mut HashMap<Address, Fixup>,
     symtable: &SymbolsTable,
     span: CallSpan,
     key: SymbolKey,
+    index: usize,
     vtype: ExprType,
     dimensions: usize,
 ) -> Result<ExprType> {
@@ -449,6 +451,7 @@ fn compile_array_ref(
     instrs.push(Instruction::ArrayLoad(ArrayIndexISpan {
         name: key,
         name_pos: span.vref_pos,
+        index,
         nargs,
     }));
     Ok(vtype)
@@ -705,8 +708,8 @@ pub(super) fn compile_expr(
         Expr::Call(span) => {
             let key = SymbolKey::from(span.vref.name());
             match symtable.get_with_index(&key) {
-                Some((SymbolPrototype::Array(vtype, dims), _index)) => {
-                    compile_array_ref(instrs, fixups, symtable, span, key, *vtype, *dims)
+                Some((SymbolPrototype::Array(vtype, dims), index)) => {
+                    compile_array_ref(instrs, fixups, symtable, span, key, index, *vtype, *dims)
                 }
 
                 Some((SymbolPrototype::BuiltinCallable(md), upcall_index)) => {
@@ -1310,6 +1313,7 @@ mod tests {
                 Instruction::ArrayLoad(ArrayIndexISpan {
                     name: SymbolKey::from("foo"),
                     name_pos: lc(1, 5),
+                    index: 0,
                     nargs: 3,
                 }),
             )
@@ -1329,6 +1333,7 @@ mod tests {
                 Instruction::ArrayLoad(ArrayIndexISpan {
                     name: SymbolKey::from("foo"),
                     name_pos: lc(1, 5),
+                    index: 0,
                     nargs: 1,
                 }),
             )
@@ -1359,6 +1364,7 @@ mod tests {
                 Instruction::ArrayLoad(ArrayIndexISpan {
                     name: SymbolKey::from("foo"),
                     name_pos: lc(1, 5),
+                    index: 0,
                     nargs: 1,
                 }),
             )

@@ -274,8 +274,8 @@ impl Compiler {
     /// Compiles an assignment to an array position.
     fn compile_array_assignment(&mut self, span: ArrayAssignmentSpan) -> Result<()> {
         let key = SymbolKey::from(span.vref.name());
-        let (atype, dims) = match self.symtable.get(&key) {
-            Some(SymbolPrototype::Array(atype, dims)) => (*atype, *dims),
+        let ((atype, dims), index) = match self.symtable.get_with_index(&key) {
+            Some((SymbolPrototype::Array(atype, dims), index)) => ((*atype, *dims), index),
             Some(_) => {
                 return Err(Error::IndexNonArray(span.vref_pos, span.vref.take_name()));
             }
@@ -300,6 +300,7 @@ impl Compiler {
         self.emit(Instruction::ArrayAssignment(ArrayIndexISpan {
             name: key,
             name_pos: span.vref_pos,
+            index,
             nargs,
         }));
 
@@ -1291,6 +1292,7 @@ mod tests {
                 Instruction::ArrayAssignment(ArrayIndexISpan {
                     name: SymbolKey::from("foo"),
                     name_pos: lc(1, 1),
+                    index: 0,
                     nargs: 3,
                 }),
             )
@@ -1310,6 +1312,7 @@ mod tests {
                 Instruction::ArrayAssignment(ArrayIndexISpan {
                     name: SymbolKey::from("a"),
                     name_pos: lc(1, 1),
+                    index: 0,
                     nargs: 1,
                 }),
             )
@@ -1330,6 +1333,7 @@ mod tests {
                 Instruction::ArrayAssignment(ArrayIndexISpan {
                     name: SymbolKey::from("a"),
                     name_pos: lc(1, 1),
+                    index: 0,
                     nargs: 1,
                 }),
             )
@@ -1374,6 +1378,7 @@ mod tests {
                 Instruction::ArrayAssignment(ArrayIndexISpan {
                     name: SymbolKey::from("a"),
                     name_pos: lc(1, 1),
+                    index: 0,
                     nargs: 1,
                 }),
             )
@@ -1398,6 +1403,7 @@ mod tests {
                 Instruction::ArrayAssignment(ArrayIndexISpan {
                     name: SymbolKey::from("a"),
                     name_pos: lc(1, 1),
+                    index: 0,
                     nargs: 1,
                 }),
             )
