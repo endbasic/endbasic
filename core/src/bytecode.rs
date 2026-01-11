@@ -177,6 +177,9 @@ pub struct UnsetISpan {
 
     /// Position of where this instruction was requested.
     pub pos: LineCol,
+
+    /// Index of `name` on the stack.
+    pub index: usize,
 }
 
 /// Representation of all possible instructions in the bytecode.

@@ -110,6 +110,7 @@ impl<K: Eq + Hash, V, B: Bucketizer<V = V>> IndexedHashMap<K, V, B> {
     }
 
     /// Same as `HashMap::get`.
+    #[cfg(test)]
     fn get(&self, key: &K) -> Option<&V> {
         self.map.get(key).map(|v| &v.0)
     }
@@ -258,6 +259,7 @@ impl SymbolsTable {
     }
 
     /// Returns the information for the symbol `key` if it exists, otherwise `None`.
+    #[cfg(test)]
     pub(super) fn get(&self, key: &SymbolKey) -> Option<&SymbolPrototype> {
         let proto = self.scopes.last().unwrap().get(key);
         if proto.is_some() {

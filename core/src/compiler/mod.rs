@@ -311,7 +311,9 @@ impl Compiler {
     ///
     /// It's important to always use this function instead of manually emitting `Instruction::Assign`
     /// instructions to ensure consistent handling of the symbols table.
-    fn compile_assignment(&mut self, vref: VarRef, vref_pos: LineCol, expr: Expr) -> Result<()> {
+    ///
+    /// Returns the index of the assigned variable.
+    fn compile_assignment(&mut self, vref: VarRef, vref_pos: LineCol, expr: Expr) -> Result<usize> {
         let mut key = SymbolKey::from(&vref.name());
         let etype = self.compile_expr(expr)?;
 
@@ -321,16 +323,15 @@ impl Compiler {
             }
         }
 
-        let vtype = match self.symtable.get(&key) {
-            Some(SymbolPrototype::Variable(vtype)) => *vtype,
+        let (vtype, index) = match self.symtable.get_with_index(&key) {
+            Some((SymbolPrototype::Variable(vtype), index)) => (*vtype, index),
             Some(_) => return Err(Error::RedefinitionError(vref_pos, key)),
             None => {
                 // TODO(jmmv): Compile separate Dim instructions for new variables instead of
                 // checking this every time.
                 let key = key.clone();
                 let vtype = vref.ref_type().unwrap_or(etype);
-                self.symtable.insert(key, SymbolPrototype::Variable(vtype));
-                vtype
+                (vtype, self.symtable.insert(key, SymbolPrototype::Variable(vtype)))
             }
         };
 
@@ -347,7 +348,7 @@ impl Compiler {
 
         self.emit(Instruction::Assign(key));
 
-        Ok(())
+        Ok(index)
     }
 
     /// Compiles a `FUNCTION` or `SUB` definition.
@@ -634,7 +635,7 @@ impl Compiler {
 
         self.selects += 1;
         let test_vref = VarRef::new(Compiler::select_test_var_name(self.selects), None);
-        self.compile_assignment(test_vref.clone(), span.expr.start_pos(), span.expr)?;
+        let index = self.compile_assignment(test_vref.clone(), span.expr.start_pos(), span.expr)?;
 
         let mut iter = span.cases.into_iter();
         let mut next = iter.next();
@@ -667,7 +668,11 @@ impl Compiler {
         }
 
         let test_key = SymbolKey::from(test_vref.name());
-        self.emit(Instruction::Unset(UnsetISpan { name: test_key.clone(), pos: span.end_pos }));
+        self.emit(Instruction::Unset(UnsetISpan {
+            name: test_key.clone(),
+            pos: span.end_pos,
+            index,
+        }));
         self.symtable.remove(test_key);
 
         Ok(())
@@ -2823,7 +2828,11 @@ mod tests {
             )
             .expect_instr(
                 n + 2,
-                Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(4, 1) }),
+                Instruction::Unset(UnsetISpan {
+                    name: SymbolKey::from("0select1"),
+                    pos: lc(4, 1),
+                    index: 0,
+                }),
             )
             .check();
     }
@@ -2991,6 +3000,7 @@ mod tests {
                 Instruction::Unset(UnsetISpan {
                     name: SymbolKey::from("0select1"),
                     pos: lc(1, 20),
+                    index: 0,
                 }),
             )
             .check();
@@ -3026,7 +3036,11 @@ mod tests {
             )
             .expect_instr(
                 7,
-                Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(4, 1) }),
+                Instruction::Unset(UnsetISpan {
+                    name: SymbolKey::from("0select1"),
+                    pos: lc(4, 1),
+                    index: 0,
+                }),
             )
             .check();
     }
@@ -3051,6 +3065,7 @@ mod tests {
                 Instruction::Unset(UnsetISpan {
                     name: SymbolKey::from("0select1"),
                     pos: lc(1, 16),
+                    index: 1,
                 }),
             )
             .check();
@@ -3075,7 +3090,11 @@ mod tests {
             )
             .expect_instr(
                 3,
-                Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(4, 1) }),
+                Instruction::Unset(UnsetISpan {
+                    name: SymbolKey::from("0select1"),
+                    pos: lc(4, 1),
+                    index: 0,
+                }),
             )
             .check();
     }
@@ -3132,7 +3151,11 @@ mod tests {
             )
             .expect_instr(
                 13,
-                Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(6, 1) }),
+                Instruction::Unset(UnsetISpan {
+                    name: SymbolKey::from("0select1"),
+                    pos: lc(6, 1),
+                    index: 0,
+                }),
             )
             .check();
     }
@@ -3178,7 +3201,11 @@ mod tests {
             )
             .expect_instr(
                 9,
-                Instruction::Unset(UnsetISpan { name: SymbolKey::from("0select1"), pos: lc(6, 1) }),
+                Instruction::Unset(UnsetISpan {
+                    name: SymbolKey::from("0select1"),
+                    pos: lc(6, 1),
+                    index: 0,
+                }),
             )
             .check();
     }
@@ -3195,6 +3222,7 @@ mod tests {
                 Instruction::Unset(UnsetISpan {
                     name: SymbolKey::from("0select1"),
                     pos: lc(1, 16),
+                    index: 0,
                 }),
             )
             .expect_instr(3, Instruction::PushInteger(0, lc(2, 13)))
@@ -3204,6 +3232,7 @@ mod tests {
                 Instruction::Unset(UnsetISpan {
                     name: SymbolKey::from("0select2"),
                     pos: lc(2, 16),
+                    index: 1,
                 }),
             )
             .check();
