@@ -149,6 +149,9 @@ pub struct JumpIfDefinedISpan {
     /// The variable to check for nonexistence.
     pub var: SymbolKey,
 
+    /// Index of `var` on the stack.
+    pub index: usize,
+
     /// The address to jump to.
     pub addr: Address,
 }

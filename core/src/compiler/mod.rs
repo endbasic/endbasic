@@ -477,19 +477,25 @@ impl Compiler {
             let key = SymbolKey::from(span.iter.name());
             let skip_pc = self.emit(Instruction::Nop);
 
-            if self.symtable.get(&key).is_none() {
-                let index =
-                    self.symtable.insert(key.clone(), SymbolPrototype::Variable(ExprType::Double));
-                self.emit(Instruction::Dim(DimISpan {
-                    name: key.clone(),
-                    index,
-                    shared: false,
-                    vtype: ExprType::Double,
-                }));
-            }
+            let index = match self.symtable.get_with_index(&key) {
+                Some((_, index)) => index,
+                None => {
+                    let index = self
+                        .symtable
+                        .insert(key.clone(), SymbolPrototype::Variable(ExprType::Double));
+                    self.emit(Instruction::Dim(DimISpan {
+                        name: key.clone(),
+                        index,
+                        shared: false,
+                        vtype: ExprType::Double,
+                    }));
+                    index
+                }
+            };
 
             self.instrs[skip_pc] = Instruction::JumpIfDefined(JumpIfDefinedISpan {
                 var: key,
+                index,
                 addr: self.instrs.len(),
             });
         }
@@ -2280,6 +2286,7 @@ mod tests {
                 0,
                 Instruction::JumpIfDefined(JumpIfDefinedISpan {
                     var: SymbolKey::from("iter"),
+                    index: 0,
                     addr: 2,
                 }),
             )
