@@ -1315,44 +1315,44 @@ impl Machine {
                     context.pc += 1;
                 }
 
-                Instruction::LoadBoolean(key, pos) => {
-                    let b = match self.load(key, *pos)? {
+                Instruction::LoadBoolean(span) => {
+                    let b = match self.load(&span.name, span.pos)? {
                         Value::Boolean(b) => b,
                         _ => unreachable!("Types are validated at compilation time"),
                     };
-                    context.value_stack.push_boolean(*b, *pos);
+                    context.value_stack.push_boolean(*b, span.pos);
                     context.pc += 1;
                 }
 
-                Instruction::LoadDouble(key, pos) => {
-                    let d = match self.load(key, *pos)? {
+                Instruction::LoadDouble(span) => {
+                    let d = match self.load(&span.name, span.pos)? {
                         Value::Double(d) => d,
                         _ => unreachable!("Types are validated at compilation time"),
                     };
-                    context.value_stack.push_double(*d, *pos);
+                    context.value_stack.push_double(*d, span.pos);
                     context.pc += 1;
                 }
 
-                Instruction::LoadInteger(key, pos) => {
-                    let i = match self.load(key, *pos)? {
+                Instruction::LoadInteger(span) => {
+                    let i = match self.load(&span.name, span.pos)? {
                         Value::Integer(i) => i,
                         _ => unreachable!("Types are validated at compilation time"),
                     };
-                    context.value_stack.push_integer(*i, *pos);
+                    context.value_stack.push_integer(*i, span.pos);
                     context.pc += 1;
                 }
 
-                Instruction::LoadString(key, pos) => {
-                    let s = match self.load(key, *pos)? {
+                Instruction::LoadString(span) => {
+                    let s = match self.load(&span.name, span.pos)? {
                         Value::Text(s) => s,
                         _ => unreachable!("Types are validated at compilation time"),
                     };
-                    context.value_stack.push_string(s.clone(), *pos);
+                    context.value_stack.push_string(s.clone(), span.pos);
                     context.pc += 1;
                 }
 
-                Instruction::LoadRef(key, etype, pos) => {
-                    context.value_stack.push_varref(key.clone(), *etype, *pos);
+                Instruction::LoadRef(span, etype) => {
+                    context.value_stack.push_varref(span.name.clone(), *etype, span.pos);
                     context.pc += 1;
                 }
 

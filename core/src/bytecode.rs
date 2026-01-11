@@ -144,6 +144,16 @@ pub struct JumpIfDefinedISpan {
     pub addr: Address,
 }
 
+/// Components of a load operation.
+#[cfg_attr(test, derive(Debug, Eq, PartialEq))]
+pub struct LoadISpan {
+    /// Name of the variable to load.
+    pub name: SymbolKey,
+
+    /// Position of where this instruction was requested.
+    pub pos: LineCol,
+}
+
 /// Components of a request to unset a variable.
 #[cfg_attr(test, derive(Debug, Eq, PartialEq))]
 pub struct UnsetISpan {
@@ -345,19 +355,19 @@ pub enum Instruction {
     LeaveScope,
 
     /// Represents a load of a boolean variable's value from main memory into the stack.
-    LoadBoolean(SymbolKey, LineCol),
+    LoadBoolean(LoadISpan),
 
     /// Represents a load of a double variable's value from main memory into the stack.
-    LoadDouble(SymbolKey, LineCol),
+    LoadDouble(LoadISpan),
 
     /// Represents a load of an integer variable's value from main memory into the stack.
-    LoadInteger(SymbolKey, LineCol),
+    LoadInteger(LoadISpan),
 
     /// Represents a load of a string variable's value from main memory into the stack.
-    LoadString(SymbolKey, LineCol),
+    LoadString(LoadISpan),
 
     /// Represents a load of a variable's reference into the stack.
-    LoadRef(SymbolKey, ExprType, LineCol),
+    LoadRef(LoadISpan, ExprType),
 
     /// Represents an instruction that does nothing.
     Nop,
@@ -513,12 +523,12 @@ impl Instruction {
 
             Instruction::LeaveScope => ("LEAVE", None),
 
-            Instruction::LoadBoolean(key, _pos) => ("LOAD?", Some(key.to_string())),
-            Instruction::LoadDouble(key, _pos) => ("LOAD#", Some(key.to_string())),
-            Instruction::LoadInteger(key, _pos) => ("LOAD%", Some(key.to_string())),
-            Instruction::LoadString(key, _pos) => ("LOAD$", Some(key.to_string())),
+            Instruction::LoadBoolean(span) => ("LOAD?", Some(span.name.to_string())),
+            Instruction::LoadDouble(span) => ("LOAD#", Some(span.name.to_string())),
+            Instruction::LoadInteger(span) => ("LOAD%", Some(span.name.to_string())),
+            Instruction::LoadString(span) => ("LOAD$", Some(span.name.to_string())),
 
-            Instruction::LoadRef(key, _etype, _pos) => ("LOADR", Some(key.to_string())),
+            Instruction::LoadRef(span, _etype) => ("LOADR", Some(span.name.to_string())),
 
             Instruction::Nop => ("NOP", None),
 
@@ -616,11 +626,11 @@ impl Instruction {
             Instruction::JumpIfTrue(_) => None,
             Instruction::JumpIfNotTrue(_) => None,
             Instruction::LeaveScope => None,
-            Instruction::LoadBoolean(_, pos) => Some(*pos),
-            Instruction::LoadDouble(_, pos) => Some(*pos),
-            Instruction::LoadInteger(_, pos) => Some(*pos),
-            Instruction::LoadString(_, pos) => Some(*pos),
-            Instruction::LoadRef(_, _, pos) => Some(*pos),
+            Instruction::LoadBoolean(span) => Some(span.pos),
+            Instruction::LoadDouble(span) => Some(span.pos),
+            Instruction::LoadInteger(span) => Some(span.pos),
+            Instruction::LoadString(span) => Some(span.pos),
+            Instruction::LoadRef(span, _) => Some(span.pos),
             Instruction::Nop => None,
             Instruction::PushBoolean(_, pos) => Some(*pos),
             Instruction::PushDouble(_, pos) => Some(*pos),
@@ -688,11 +698,11 @@ impl Instruction {
             | Instruction::FunctionCall(_)
             | Instruction::DoubleToInteger
             | Instruction::IntegerToDouble
-            | Instruction::LoadBoolean(_, _)
-            | Instruction::LoadDouble(_, _)
-            | Instruction::LoadInteger(_, _)
-            | Instruction::LoadString(_, _)
-            | Instruction::LoadRef(_, _, _)
+            | Instruction::LoadBoolean(..)
+            | Instruction::LoadDouble(..)
+            | Instruction::LoadInteger(..)
+            | Instruction::LoadString(..)
+            | Instruction::LoadRef(..)
             | Instruction::PushBoolean(_, _)
             | Instruction::PushDouble(_, _)
             | Instruction::PushInteger(_, _)

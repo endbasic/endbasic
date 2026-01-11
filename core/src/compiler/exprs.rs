@@ -358,7 +358,7 @@ fn compile_expr_symbol(
 
         Some((SymbolPrototype::Array(atype, _dims), _index)) => {
             if allow_varrefs {
-                (Instruction::LoadRef(key, *atype, span.pos), *atype)
+                (Instruction::LoadRef(LoadISpan { name: key, pos: span.pos }, *atype), *atype)
             } else {
                 return Err(Error::NotAVariable(span.pos, span.vref));
             }
@@ -366,7 +366,7 @@ fn compile_expr_symbol(
 
         Some((SymbolPrototype::Variable(vtype), _index)) => {
             if allow_varrefs {
-                (Instruction::LoadRef(key, *vtype, span.pos), *vtype)
+                (Instruction::LoadRef(LoadISpan { name: key, pos: span.pos }, *vtype), *vtype)
             } else {
                 let instr = match vtype {
                     ExprType::Boolean => Instruction::LoadBoolean,
@@ -374,7 +374,7 @@ fn compile_expr_symbol(
                     ExprType::Integer => Instruction::LoadInteger,
                     ExprType::Text => Instruction::LoadString,
                 };
-                (instr(key, span.pos), *vtype)
+                (instr(LoadISpan { name: key, pos: span.pos }), *vtype)
             }
         }
 
@@ -841,7 +841,10 @@ mod tests {
             .define("j", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = j")
             .compile()
-            .expect_instr(0, Instruction::LoadInteger(SymbolKey::from("j"), lc(1, 5)))
+            .expect_instr(
+                0,
+                Instruction::LoadInteger(LoadISpan { name: SymbolKey::from("j"), pos: lc(1, 5) }),
+            )
             .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
             .check();
     }
@@ -1048,7 +1051,10 @@ mod tests {
             .compile()
             .expect_instr(
                 0,
-                Instruction::LoadRef(SymbolKey::from("a"), ExprType::Integer, lc(1, 3)),
+                Instruction::LoadRef(
+                    LoadISpan { name: SymbolKey::from("a"), pos: lc(1, 3) },
+                    ExprType::Integer,
+                ),
             )
             .expect_instr(
                 1,
@@ -1101,11 +1107,20 @@ mod tests {
             .parse("b = true OR x AND y XOR NOT z")
             .compile()
             .expect_instr(0, Instruction::PushBoolean(true, lc(1, 5)))
-            .expect_instr(1, Instruction::LoadBoolean(SymbolKey::from("x"), lc(1, 13)))
+            .expect_instr(
+                1,
+                Instruction::LoadBoolean(LoadISpan { name: SymbolKey::from("x"), pos: lc(1, 13) }),
+            )
             .expect_instr(2, Instruction::LogicalOr(lc(1, 10)))
-            .expect_instr(3, Instruction::LoadBoolean(SymbolKey::from("y"), lc(1, 19)))
+            .expect_instr(
+                3,
+                Instruction::LoadBoolean(LoadISpan { name: SymbolKey::from("y"), pos: lc(1, 19) }),
+            )
             .expect_instr(4, Instruction::LogicalAnd(lc(1, 15)))
-            .expect_instr(5, Instruction::LoadBoolean(SymbolKey::from("z"), lc(1, 29)))
+            .expect_instr(
+                5,
+                Instruction::LoadBoolean(LoadISpan { name: SymbolKey::from("z"), pos: lc(1, 29) }),
+            )
             .expect_instr(6, Instruction::LogicalNot(lc(1, 25)))
             .expect_instr(7, Instruction::LogicalXor(lc(1, 21)))
             .expect_instr(8, Instruction::Assign(SymbolKey::from("b")))
@@ -1119,10 +1134,16 @@ mod tests {
             .define("b", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = a >> 5 << b")
             .compile()
-            .expect_instr(0, Instruction::LoadInteger(SymbolKey::from("a"), lc(1, 5)))
+            .expect_instr(
+                0,
+                Instruction::LoadInteger(LoadISpan { name: SymbolKey::from("a"), pos: lc(1, 5) }),
+            )
             .expect_instr(1, Instruction::PushInteger(5, lc(1, 10)))
             .expect_instr(2, Instruction::ShiftRight(lc(1, 7)))
-            .expect_instr(3, Instruction::LoadInteger(SymbolKey::from("b"), lc(1, 15)))
+            .expect_instr(
+                3,
+                Instruction::LoadInteger(LoadISpan { name: SymbolKey::from("b"), pos: lc(1, 15) }),
+            )
             .expect_instr(4, Instruction::ShiftLeft(lc(1, 12)))
             .expect_instr(5, Instruction::Assign(SymbolKey::from("i")))
             .check();
@@ -1140,7 +1161,7 @@ mod tests {
     /// is the same value as represented in EndBASIC code, and `test_value_type` is the
     /// corresponding type definition.
     fn do_op_test<
-        L: Fn(SymbolKey, LineCol) -> Instruction,
+        L: Fn(LoadISpan) -> Instruction,
         M: Fn(LineCol) -> Instruction,
         P: Fn(V, LineCol) -> Instruction,
         V,
@@ -1157,7 +1178,7 @@ mod tests {
             .define("a", SymbolPrototype::Variable(test_value_type))
             .parse(&format!("b = a {} {}", op_name, test_value_str))
             .compile()
-            .expect_instr(0, load_inst(SymbolKey::from("a"), lc(1, 5)))
+            .expect_instr(0, load_inst(LoadISpan { name: SymbolKey::from("a"), pos: lc(1, 5) }))
             .expect_instr(1, push_inst(test_value, lc(1, 8 + op_name.len())))
             .expect_instr(2, op_inst(lc(1, 7)))
             .expect_instr(3, Instruction::Assign(SymbolKey::from("b")))
@@ -1273,10 +1294,16 @@ mod tests {
             .define("k", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = FOO(3, j, k + 1)")
             .compile()
-            .expect_instr(0, Instruction::LoadInteger(SymbolKey::from("k"), lc(1, 15)))
+            .expect_instr(
+                0,
+                Instruction::LoadInteger(LoadISpan { name: SymbolKey::from("k"), pos: lc(1, 15) }),
+            )
             .expect_instr(1, Instruction::PushInteger(1, lc(1, 19)))
             .expect_instr(2, Instruction::AddIntegers(lc(1, 17)))
-            .expect_instr(3, Instruction::LoadInteger(SymbolKey::from("j"), lc(1, 12)))
+            .expect_instr(
+                3,
+                Instruction::LoadInteger(LoadISpan { name: SymbolKey::from("j"), pos: lc(1, 12) }),
+            )
             .expect_instr(4, Instruction::PushInteger(3, lc(1, 9)))
             .expect_instr(
                 5,
@@ -1395,12 +1422,18 @@ mod tests {
             .define("k", SymbolPrototype::Variable(ExprType::Double))
             .parse("i = FOO(3, j, k + 1)")
             .compile()
-            .expect_instr(0, Instruction::LoadDouble(SymbolKey::from("k"), lc(1, 15)))
+            .expect_instr(
+                0,
+                Instruction::LoadDouble(LoadISpan { name: SymbolKey::from("k"), pos: lc(1, 15) }),
+            )
             .expect_instr(1, Instruction::PushInteger(1, lc(1, 19)))
             .expect_instr(2, Instruction::IntegerToDouble)
             .expect_instr(3, Instruction::AddDoubles(lc(1, 17)))
             .expect_instr(4, Instruction::DoubleToInteger)
-            .expect_instr(5, Instruction::LoadInteger(SymbolKey::from("j"), lc(1, 12)))
+            .expect_instr(
+                5,
+                Instruction::LoadInteger(LoadISpan { name: SymbolKey::from("j"), pos: lc(1, 12) }),
+            )
             .expect_instr(6, Instruction::PushInteger(3, lc(1, 9)))
             .expect_instr(
                 7,

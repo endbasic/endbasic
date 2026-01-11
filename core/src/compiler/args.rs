@@ -355,7 +355,10 @@ fn compile_required_ref(
                         ));
                     }
 
-                    instrs.push(Instruction::LoadRef(key.clone(), vtype, span.pos));
+                    instrs.push(Instruction::LoadRef(
+                        LoadISpan { name: key.clone(), pos: span.pos },
+                        vtype,
+                    ));
                     Ok(Some((key, SymbolPrototype::Variable(vtype))))
                 }
 
@@ -372,7 +375,10 @@ fn compile_required_ref(
                         return Err(Error::NotAReference(span.pos));
                     }
 
-                    instrs.push(Instruction::LoadRef(key, vtype, span.pos));
+                    instrs.push(Instruction::LoadRef(
+                        LoadISpan { name: key.clone(), pos: span.pos },
+                        vtype,
+                    ));
                     Ok(None)
                 }
 
@@ -389,7 +395,10 @@ fn compile_required_ref(
                         return Err(Error::NotAReference(span.pos));
                     }
 
-                    instrs.push(Instruction::LoadRef(key, vtype, span.pos));
+                    instrs.push(Instruction::LoadRef(
+                        LoadISpan { name: key.clone(), pos: span.pos },
+                        vtype,
+                    ));
                     Ok(None)
                 }
 
@@ -1192,7 +1201,10 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Text, lc(1, 2)))
+            .exp_instr(Instruction::LoadRef(
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                ExprType::Text,
+            ))
             .exp_nargs(1)
             .check();
     }
@@ -1325,7 +1337,10 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Integer, lc(1, 2)))
+            .exp_instr(Instruction::LoadRef(
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                ExprType::Integer,
+            ))
             .exp_nargs(1)
             .exp_symbol("foo", ExprType::Integer)
             .check();
@@ -1353,7 +1368,10 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 6),
             }])
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Text, lc(1, 2)))
+            .exp_instr(Instruction::LoadRef(
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                ExprType::Text,
+            ))
             .exp_nargs(1)
             .exp_symbol("foo", ExprType::Text)
             .check();
@@ -1401,8 +1419,14 @@ mod compile_tests {
                     sep_pos: lc(1, 5),
                 },
             ])
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Integer, lc(1, 2)))
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Integer, lc(1, 2)))
+            .exp_instr(Instruction::LoadRef(
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                ExprType::Integer,
+            ))
+            .exp_instr(Instruction::LoadRef(
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                ExprType::Integer,
+            ))
             .exp_nargs(2)
             .exp_symbol("foo", ExprType::Integer)
             .check();
@@ -1431,7 +1455,10 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Text, lc(1, 2)))
+            .exp_instr(Instruction::LoadRef(
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                ExprType::Text,
+            ))
             .exp_nargs(1)
             .check();
     }
@@ -1964,7 +1991,10 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 2),
             }])
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Text, lc(1, 2)))
+            .exp_instr(Instruction::LoadRef(
+                LoadISpan { name: SymbolKey::from("foo"), pos: lc(1, 2) },
+                ExprType::Text,
+            ))
             .exp_nargs(1)
             .check();
     }
