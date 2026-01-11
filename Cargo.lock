@@ -293,6 +293,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "endbasic-core2"
+version = "0.12.99"
+dependencies = [
+ "async-trait",
+ "futures-lite",
+ "tempfile",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "endbasic-repl"
 version = "0.12.99"
 dependencies = [

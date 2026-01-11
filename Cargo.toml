@@ -4,6 +4,7 @@ members = [
     "cli",
     "client",
     "core",
+    "core2",
     "repl",
     "rpi",
     "sdl",
