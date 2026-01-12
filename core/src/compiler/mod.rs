@@ -354,7 +354,7 @@ struct Compiler {
     instrs: Vec<Instruction>,
 
     /// Data discovered so far.
-    data: Vec<Option<Value>>,
+    data: Vec<Option<Expr>>,
 
     /// Symbols table.
     symtable: SymbolsTable,
@@ -1239,10 +1239,25 @@ impl Compiler {
             self.instrs[pc] = new_instr;
         }
 
-        let image =
-            Image { upcalls: self.symtable.upcalls(), instrs: self.instrs, data: self.data };
+        let data = compile_data(self.data);
+
+        let image = Image { upcalls: self.symtable.upcalls(), instrs: self.instrs, data };
         Ok((image, self.symtable))
     }
+}
+
+/// Translates the reduced set of expressions that represent data into values.
+fn compile_data(data: Vec<Option<Expr>>) -> Vec<Option<Value>> {
+    data.into_iter()
+        .map(|expr| match expr {
+            None => None,
+            Some(Expr::Boolean(span)) => Some(Value::Boolean(span.value)),
+            Some(Expr::Double(span)) => Some(Value::Double(span.value)),
+            Some(Expr::Integer(span)) => Some(Value::Integer(span.value)),
+            Some(Expr::Text(span)) => Some(Value::Text(span.value)),
+            _ => unreachable!("Valid data types enforced at parse time"),
+        })
+        .collect()
 }
 
 /// Compiles a collection of statements into an image ready for execution.
