@@ -496,7 +496,7 @@ pub struct CallableSpan {
 #[derive(Debug, PartialEq)]
 pub struct DataSpan {
     /// Collection of optional literal values.
-    pub values: Vec<Option<Value>>,
+    pub values: Vec<Option<Expr>>,
 }
 
 /// Components of a variable definition.

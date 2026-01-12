@@ -436,16 +436,30 @@ impl<'a> Parser<'a> {
 
             let token_span = self.lexer.read()?;
             match token_span.token {
-                Token::Boolean(b) => values.push(Some(Value::Boolean(b))),
-                Token::Double(d) => values.push(Some(Value::Double(d))),
-                Token::Integer(i) => values.push(Some(Value::Integer(i))),
-                Token::Text(t) => values.push(Some(Value::Text(t))),
+                Token::Boolean(b) => {
+                    values.push(Some(Expr::Boolean(BooleanSpan { value: b, pos: token_span.pos })))
+                }
+                Token::Double(d) => {
+                    values.push(Some(Expr::Double(DoubleSpan { value: d, pos: token_span.pos })))
+                }
+                Token::Integer(i) => {
+                    values.push(Some(Expr::Integer(IntegerSpan { value: i, pos: token_span.pos })))
+                }
+                Token::Text(t) => {
+                    values.push(Some(Expr::Text(TextSpan { value: t, pos: token_span.pos })))
+                }
 
                 Token::Minus => {
-                    let token_span = self.lexer.read()?;
-                    match token_span.token {
-                        Token::Double(d) => values.push(Some(Value::Double(-d))),
-                        Token::Integer(i) => values.push(Some(Value::Integer(-i))),
+                    let token_span2 = self.lexer.read()?;
+                    match token_span2.token {
+                        Token::Double(d) => values.push(Some(Expr::Double(DoubleSpan {
+                            value: -d,
+                            pos: token_span.pos,
+                        }))),
+                        Token::Integer(i) => values.push(Some(Expr::Integer(IntegerSpan {
+                            value: -i,
+                            pos: token_span.pos,
+                        }))),
                         _ => {
                             return Err(Error::Bad(
                                 token_span.pos,
@@ -2373,8 +2387,12 @@ mod tests {
         do_ok_test(
             "DATA 1: DATA 2",
             &[
-                Statement::Data(DataSpan { values: vec![Some(Value::Integer(1))] }),
-                Statement::Data(DataSpan { values: vec![Some(Value::Integer(2))] }),
+                Statement::Data(DataSpan {
+                    values: vec![Some(Expr::Integer(IntegerSpan { value: 1, pos: lc(1, 6) }))],
+                }),
+                Statement::Data(DataSpan {
+                    values: vec![Some(Expr::Integer(IntegerSpan { value: 2, pos: lc(1, 14) }))],
+                }),
             ],
         );
 
@@ -2382,10 +2400,10 @@ mod tests {
             "DATA TRUE, -3, 5.1, \"foo\"",
             &[Statement::Data(DataSpan {
                 values: vec![
-                    Some(Value::Boolean(true)),
-                    Some(Value::Integer(-3)),
-                    Some(Value::Double(5.1)),
-                    Some(Value::Text("foo".to_owned())),
+                    Some(Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 6) })),
+                    Some(Expr::Integer(IntegerSpan { value: -3, pos: lc(1, 12) })),
+                    Some(Expr::Double(DoubleSpan { value: 5.1, pos: lc(1, 16) })),
+                    Some(Expr::Text(TextSpan { value: "foo".to_owned(), pos: lc(1, 21) })),
                 ],
             })],
         );
@@ -2395,13 +2413,13 @@ mod tests {
             &[Statement::Data(DataSpan {
                 values: vec![
                     None,
-                    Some(Value::Boolean(true)),
+                    Some(Expr::Boolean(BooleanSpan { value: true, pos: lc(1, 8) })),
                     None,
-                    Some(Value::Integer(3)),
+                    Some(Expr::Integer(IntegerSpan { value: 3, pos: lc(1, 16) })),
                     None,
-                    Some(Value::Double(5.1)),
+                    Some(Expr::Double(DoubleSpan { value: 5.1, pos: lc(1, 21) })),
                     None,
-                    Some(Value::Text("foo".to_owned())),
+                    Some(Expr::Text(TextSpan { value: "foo".to_owned(), pos: lc(1, 28) })),
                     None,
                 ],
             })],
@@ -2410,7 +2428,10 @@ mod tests {
         do_ok_test(
             "DATA -3, -5.1",
             &[Statement::Data(DataSpan {
-                values: vec![Some(Value::Integer(-3)), Some(Value::Double(-5.1))],
+                values: vec![
+                    Some(Expr::Integer(IntegerSpan { value: -3, pos: lc(1, 6) })),
+                    Some(Expr::Double(DoubleSpan { value: -5.1, pos: lc(1, 10) })),
+                ],
             })],
         );
     }
@@ -2421,9 +2442,9 @@ mod tests {
         do_error_test("DATA ;", "1:6: Unexpected ; in DATA statement");
         do_error_test("DATA 5 + 1", "1:8: Expected comma after datum but found +");
         do_error_test("DATA 5 ; 1", "1:8: Expected comma after datum but found ;");
-        do_error_test("DATA -FALSE", "1:7: Expected number after -");
-        do_error_test("DATA -\"abc\"", "1:7: Expected number after -");
-        do_error_test("DATA -foo", "1:7: Expected number after -");
+        do_error_test("DATA -FALSE", "1:6: Expected number after -");
+        do_error_test("DATA -\"abc\"", "1:6: Expected number after -");
+        do_error_test("DATA -foo", "1:6: Expected number after -");
     }
 
     #[test]
