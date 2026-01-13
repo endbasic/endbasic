@@ -327,26 +327,26 @@ impl Stack {
 
     /// Pops the top of the stack as a variable reference.
     #[allow(unused)]
-    fn pop_varref(&mut self) -> (SymbolKey, ExprType) {
-        let (key, etype, _pos) = self.pop_varref_with_pos();
-        (key, etype)
+    fn pop_varref(&mut self) -> (String, ExprType) {
+        let (name, etype, _pos) = self.pop_varref_with_pos();
+        (name, etype)
     }
 
     /// Pops the top of the stack as a variable reference.
     //
     // TODO(jmmv): Remove this variant once the stack values do not carry position
     // information any longer.
-    fn pop_varref_with_pos(&mut self) -> (SymbolKey, ExprType, LineCol) {
+    fn pop_varref_with_pos(&mut self) -> (String, ExprType, LineCol) {
         match self.values.pop() {
-            Some((Value::VarRef(key, etype), pos)) => (key, etype, pos),
+            Some((Value::VarRef(name, etype), pos)) => (name, etype, pos),
             Some((_, _)) => panic!("Type mismatch"),
             _ => panic!("Not enough arguments to pop"),
         }
     }
 
     /// Pushes a variable reference onto the stack.
-    fn push_varref(&mut self, key: SymbolKey, etype: ExprType, pos: LineCol) {
-        self.values.push((Value::VarRef(key, etype), pos));
+    fn push_varref(&mut self, name: String, etype: ExprType, pos: LineCol) {
+        self.values.push((Value::VarRef(name, etype), pos));
     }
 
     /// Peeks into the top of the stack.
@@ -491,16 +491,16 @@ impl<'s> Scope<'s> {
     }
 
     /// Pops the top of the stack as a variable reference.
-    pub fn pop_varref(&mut self) -> (SymbolKey, ExprType) {
-        let (key, etype, _pos) = self.pop_varref_with_pos();
-        (key, etype)
+    pub fn pop_varref(&mut self) -> (String, ExprType) {
+        let (name, etype, _pos) = self.pop_varref_with_pos();
+        (name, etype)
     }
 
     /// Pops the top of the stack as a variable reference.
     //
     // TODO(jmmv): Remove this variant once the stack values do not carry position
     // information any longer.
-    pub fn pop_varref_with_pos(&mut self) -> (SymbolKey, ExprType, LineCol) {
+    pub fn pop_varref_with_pos(&mut self) -> (String, ExprType, LineCol) {
         debug_assert!(self.nargs > 0, "Not enough arguments in scope");
         self.nargs -= 1;
         self.stack.pop_varref_with_pos()
@@ -1413,7 +1413,7 @@ impl Machine {
                 }
 
                 Instruction::LoadRef(key, etype, pos) => {
-                    context.value_stack.push_varref(key.clone(), *etype, *pos);
+                    context.value_stack.push_varref(key.to_string(), *etype, *pos);
                     context.pc += 1;
                 }
 
@@ -1630,9 +1630,9 @@ mod tests {
             (Value::Double(1.2), LineCol { line: 1, col: 2 }),
             (Value::Integer(2), LineCol { line: 1, col: 2 }),
             (Value::Text("foo".to_owned()), LineCol { line: 1, col: 2 }),
-            (Value::VarRef(SymbolKey::from("foo"), ExprType::Integer), LineCol { line: 1, col: 2 }),
+            (Value::VarRef("FOO".to_owned(), ExprType::Integer), LineCol { line: 1, col: 2 }),
         ]);
-        assert_eq!((SymbolKey::from("foo"), ExprType::Integer), stack.pop_varref());
+        assert_eq!(("FOO".to_owned(), ExprType::Integer), stack.pop_varref());
         assert_eq!("foo", stack.pop_string());
         assert_eq!(2, stack.pop_integer());
         assert_eq!(1.2, stack.pop_double());
@@ -1646,13 +1646,10 @@ mod tests {
             (Value::Double(1.2), LineCol { line: 3, col: 4 }),
             (Value::Integer(2), LineCol { line: 5, col: 6 }),
             (Value::Text("foo".to_owned()), LineCol { line: 7, col: 8 }),
-            (
-                Value::VarRef(SymbolKey::from("foo"), ExprType::Integer),
-                LineCol { line: 9, col: 10 },
-            ),
+            (Value::VarRef("FOO".to_owned(), ExprType::Integer), LineCol { line: 9, col: 10 }),
         ]);
         assert_eq!(
-            (SymbolKey::from("foo"), ExprType::Integer, LineCol { line: 9, col: 10 }),
+            ("FOO".to_owned(), ExprType::Integer, LineCol { line: 9, col: 10 }),
             stack.pop_varref_with_pos()
         );
         assert_eq!(("foo".to_owned(), LineCol { line: 7, col: 8 }), stack.pop_string_with_pos());
@@ -1668,14 +1665,14 @@ mod tests {
         stack.push_double(1.2, LineCol { line: 1, col: 2 });
         stack.push_integer(2, LineCol { line: 1, col: 2 });
         stack.push_string("foo".to_owned(), LineCol { line: 1, col: 2 });
-        stack.push_varref(SymbolKey::from("foo"), ExprType::Integer, LineCol { line: 1, col: 2 });
+        stack.push_varref("FOO".to_owned(), ExprType::Integer, LineCol { line: 1, col: 2 });
 
         let exp_values = vec![
             (Value::Boolean(false), LineCol { line: 1, col: 2 }),
             (Value::Double(1.2), LineCol { line: 1, col: 2 }),
             (Value::Integer(2), LineCol { line: 1, col: 2 }),
             (Value::Text("foo".to_owned()), LineCol { line: 1, col: 2 }),
-            (Value::VarRef(SymbolKey::from("foo"), ExprType::Integer), LineCol { line: 1, col: 2 }),
+            (Value::VarRef("FOO".to_owned(), ExprType::Integer), LineCol { line: 1, col: 2 }),
         ];
         assert_eq!(exp_values, stack.values);
     }
@@ -1722,10 +1719,10 @@ mod tests {
             (Value::Double(1.2), LineCol { line: 1, col: 2 }),
             (Value::Integer(2), LineCol { line: 1, col: 2 }),
             (Value::Text("foo".to_owned()), LineCol { line: 1, col: 2 }),
-            (Value::VarRef(SymbolKey::from("foo"), ExprType::Integer), LineCol { line: 1, col: 2 }),
+            (Value::VarRef("FOO".to_owned(), ExprType::Integer), LineCol { line: 1, col: 2 }),
         ]);
         let mut scope = Scope::new(&mut stack, 5, LineCol { line: 50, col: 60 });
-        assert_eq!((SymbolKey::from("foo"), ExprType::Integer), scope.pop_varref());
+        assert_eq!(("FOO".to_owned(), ExprType::Integer), scope.pop_varref());
         assert_eq!("foo", scope.pop_string());
         assert_eq!(2, scope.pop_integer());
         assert_eq!(1.2, scope.pop_double());
@@ -1739,14 +1736,11 @@ mod tests {
             (Value::Double(1.2), LineCol { line: 3, col: 4 }),
             (Value::Integer(2), LineCol { line: 5, col: 6 }),
             (Value::Text("foo".to_owned()), LineCol { line: 7, col: 8 }),
-            (
-                Value::VarRef(SymbolKey::from("foo"), ExprType::Integer),
-                LineCol { line: 9, col: 10 },
-            ),
+            (Value::VarRef("FOO".to_owned(), ExprType::Integer), LineCol { line: 9, col: 10 }),
         ]);
         let mut scope = Scope::new(&mut stack, 5, LineCol { line: 50, col: 60 });
         assert_eq!(
-            (SymbolKey::from("foo"), ExprType::Integer, LineCol { line: 9, col: 10 }),
+            ("FOO".to_owned(), ExprType::Integer, LineCol { line: 9, col: 10 }),
             scope.pop_varref_with_pos()
         );
         assert_eq!(("foo".to_owned(), LineCol { line: 7, col: 8 }), scope.pop_string_with_pos());

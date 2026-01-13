@@ -315,7 +315,7 @@ impl Callable for InCommand {
             ExprType::Text => Value::Text(raw_value.to_string()),
             _ => unreachable!("Unsupported target type"),
         };
-        machine.get_mut_symbols().assign(&vname, value);
+        machine.get_mut_symbols().assign(&SymbolKey::from(vname), value);
         Ok(())
     }
 }
