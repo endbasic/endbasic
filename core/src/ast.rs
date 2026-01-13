@@ -15,7 +15,7 @@
 
 //! Abstract Syntax Tree (AST) for the EndBASIC language.
 
-use crate::{reader::LineCol, syms::SymbolKey};
+use crate::reader::LineCol;
 use std::fmt;
 
 /// Components of a boolean literal expression.
@@ -311,7 +311,7 @@ pub enum Value {
     Text(String), // Should be `String` but would get confusing with the built-in Rust type.
 
     /// A reference to a variable.
-    VarRef(SymbolKey, ExprType),
+    VarRef(String, ExprType),
 }
 
 impl From<bool> for Value {
