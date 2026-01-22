@@ -57,6 +57,8 @@ STILL UNDER DEVELOPMENT; NOT RELEASED YET.
 
 *   Fixed crashes when using the SDL 3 compatibility bindings for SDL 2.
 
+*   Issue #275: Added a release build for ARM v6.
+
 ## Changes in version 0.11.1
 
 **Released on 2024-09-14.**
