@@ -18,6 +18,22 @@ name: Build release
 on: push
 
 jobs:
+    linux-armv6-rpi:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions-rust-lang/setup-rust-toolchain@v1
+              with:
+                  toolchain: stable
+                  target: arm-unknown-linux-gnueabihf
+            - uses: actions/checkout@v4
+            - run: sudo apt update
+            - run: sudo apt install gcc-arm-linux-gnueabihf
+            - run: ./.github/workflows/release.sh linux-armv6-rpi
+            - uses: actions/upload-artifact@v4
+              with:
+                name: endbasic-linux-armv6-rpi
+                path: endbasic-linux-armv6-rpi/*
+                retention-days: 1
     linux-armv7-rpi:
         runs-on: ubuntu-latest
         steps:
