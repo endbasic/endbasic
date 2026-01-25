@@ -1,0 +1,68 @@
+# Source
+
+DIM SHARED b1 AS BOOLEAN
+DIM SHARED d1 AS DOUBLE
+DIM SHARED i1 AS INTEGER
+DIM SHARED s1 AS STRING
+
+DIM SHARED b2 AS BOOLEAN
+DIM SHARED d2 AS DOUBLE
+DIM SHARED i2 AS INTEGER
+DIM SHARED s2 AS STRING
+
+' TODO(jmmv): Test type annotations if we support them.
+DIM SHARED i3
+
+' Print default zero values.
+OUT b1, d1, i1, s1
+
+' Modify the variables and print their new values.
+b1 = TRUE
+d1 = 2.3
+i1 = 5
+s1 = 8
+OUT b1, d1, i1, s1
+
+' DO NOT SUBMIT: Add SUB to print globals vs. locals.
+
+# Disassembly
+
+0000    ENTER 8                                 # 0:0
+0001    LOADI R0, 0                             # 1:12
+0002    LOADI R1, 0                             # 2:12
+0003    LOADI R2, 0                             # 3:12
+0004    ALLOC R3, STRING                        # 4:12
+0005    LOADI R4, 0                             # 6:12
+0006    LOADI R5, 0                             # 7:12
+0007    LOADI R6, 0                             # 8:12
+0008    ALLOC R7, STRING                        # 9:12
+0009    LOADI R8, 0                             # 12:12
+0010    MOVE R65, R0                            # 15:5
+0011    LOADI R64, 288                          # 15:1
+0012    MOVE R67, R1                            # 15:9
+0013    LOADI R66, 289                          # 15:1
+0014    MOVE R69, R2                            # 15:13
+0015    LOADI R68, 290                          # 15:1
+0016    MOVE R71, R3                            # 15:17
+0017    LOADI R70, 259                          # 15:1
+0018    UPCALL 0, R64                           # 15:1
+0019    LOADI R0, 1                             # 18:6
+0020    LOADC R1, 0                             # 19:6
+0021    LOADI R2, 5                             # 20:6
+0022    LOADI R3, 8                             # 21:6
+0023    MOVE R65, R0                            # 22:5
+0024    LOADI R64, 288                          # 22:1
+0025    MOVE R67, R1                            # 22:9
+0026    LOADI R66, 289                          # 22:1
+0027    MOVE R69, R2                            # 22:13
+0028    LOADI R68, 290                          # 22:1
+0029    MOVE R71, R3                            # 22:17
+0030    LOADI R70, 258                          # 22:1
+0031    UPCALL 0, R64                           # 22:1
+0032    LEAVE                                   # 0:0
+0033    END                                     # 0:0
+
+# Output
+
+(false, 0, ?) , (0, 1, #) , (0, 2, %) , ("", 3, $)
+(true, 0, ?) , (2.3, 1, #) , (5, 2, %) , (8, 3, %)

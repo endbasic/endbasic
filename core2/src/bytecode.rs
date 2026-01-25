@@ -20,15 +20,27 @@ use crate::num::{unchecked_u32_as_u8, unchecked_u32_as_u16};
 use std::convert::TryFrom;
 use std::fmt;
 
-/// Error types for bytecode generation.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum MakeError {
-    #[error("{0}: Out of {0} registers")]
-    OutOfRegisters(&'static str),
+#[derive(Debug)]
+pub enum RegisterScope {
+    Global,
+    Local,
+    Temp,
 }
 
-/// Result type for bytecode generation.
-pub(crate) type MakeResult<T> = std::result::Result<T, MakeError>;
+impl fmt::Display for RegisterScope {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Global => write!(f, "global"),
+            Self::Local => write!(f, "local"),
+            Self::Temp => write!(f, "temp"),
+        }
+    }
+}
+
+/// Error types for bytecode generation.
+#[derive(Debug, thiserror::Error)]
+#[error("Out of registers")]
+pub(crate) struct OutOfRegistersError(());
 
 /// Error types for bytecode parsing.
 #[derive(Debug, thiserror::Error)]
@@ -108,21 +120,16 @@ impl Register {
 
     /// Constructs an instance of `Register` to represent the global register `reg`.  Returns an
     /// error if we have run out of global registers.
-    // DO NOT SUBMIT
-    //pub(crate) fn global(reg: u8) -> MakeResult<Self> {
-    //    if reg < Self::MAX_GLOBAL {
-    //        Ok(Self(reg))
-    //    } else {
-    //        Err(MakeError::OutOfRegisters("global"))
-    //    }
-    //}
+    pub(crate) fn global(reg: u8) -> Result<Self, OutOfRegistersError> {
+        if reg < Self::MAX_GLOBAL { Ok(Self(reg)) } else { Err(OutOfRegistersError(())) }
+    }
 
     /// Constructs an instance of `Register` to represent the local register `reg`.  Returns an
     /// error if we have run out of local registers.
-    pub(crate) fn local(reg: u8) -> MakeResult<Self> {
+    pub(crate) fn local(reg: u8) -> Result<Self, OutOfRegistersError> {
         match reg.checked_add(Self::MAX_GLOBAL) {
             Some(num) => Ok(Self(num)),
-            None => Err(MakeError::OutOfRegisters("local")),
+            None => Err(OutOfRegistersError(())),
         }
     }
 
@@ -130,6 +137,16 @@ impl Register {
     /// register is global or not and its logical index.
     pub(crate) fn to_parts(self) -> (bool, u8) {
         if self.0 < Self::MAX_GLOBAL { (true, self.0) } else { (false, self.0 - Self::MAX_GLOBAL) }
+    }
+}
+
+impl RawValue for ExprType {
+    fn from_u32(v: u32) -> Self {
+        unsafe { std::mem::transmute(unchecked_u32_as_u8(v)) }
+    }
+
+    fn to_u32(self) -> u32 {
+        u32::from(self as u8)
     }
 }
 
@@ -254,6 +271,9 @@ pub(crate) enum Opcode {
     /// Returns from a previous `Call`.
     Return,
 
+    /// Allocates an object on the heap.
+    Alloc,
+
     /// Moves (copies) data between two registers.
     Move,
 
@@ -324,6 +344,14 @@ instr!(
 
 #[rustfmt::skip]
 instr!(
+    Opcode::Alloc, "ALLOC",
+    make_alloc, parse_alloc, format_alloc,
+    Register, 0x000000ff, 8,  // Destination register in which to store the heap pointer.
+    ExprType, 0x000000ff, 0,  // Type of the object to allocate.
+);
+
+#[rustfmt::skip]
+instr!(
     Opcode::Move, "MOVE",
     make_move, parse_move, format_move,
     Register, 0x000000ff, 8,  // Destination register.
@@ -388,6 +416,7 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::Jump => format_jump(instr),
         Opcode::Call => format_call(instr),
         Opcode::Return => format_return(instr),
+        Opcode::Alloc => format_alloc(instr),
         Opcode::Move => format_move(instr),
         Opcode::LoadConstant => format_load_constant(instr),
         Opcode::LoadInteger => format_load_integer(instr),
@@ -511,6 +540,13 @@ mod tests {
     test_instr!(test_jump, make_jump, parse_jump, 12345);
     test_instr!(test_call, make_call, parse_call, Register::local(3).unwrap(), 12345);
     test_instr!(test_return, make_return, parse_return);
+    test_instr!(
+        test_alloc,
+        make_alloc,
+        parse_alloc,
+        Register::local(1).unwrap(),
+        ExprType::Integer
+    );
     test_instr!(
         test_move,
         make_move,

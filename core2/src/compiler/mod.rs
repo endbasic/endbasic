@@ -16,7 +16,7 @@
 //! Compiler for the EndBASIC language into bytecode.
 
 use crate::ast::{ArgSep, ArgSpan, CallableSpan, Expr, ExprType, Statement, VarRef};
-use crate::bytecode::{self, Register};
+use crate::bytecode::{self, Register, RegisterScope};
 use crate::callable::Callable;
 use crate::mem::Datum;
 use crate::parser;
@@ -27,6 +27,9 @@ use std::io;
 use std::iter::Iterator;
 use std::rc::Rc;
 
+mod codegen;
+use codegen::{Codegen, Fixup};
+
 mod image;
 pub(crate) use image::{DebugInfo, Image};
 
@@ -35,7 +38,7 @@ use ids::HashMapWithIds;
 
 mod syms;
 pub use syms::SymbolKey;
-use syms::Symtable;
+use syms::{GlobalSymtable, LocalSymtable, TempSymtable};
 
 /// Compilation errors.
 #[derive(Debug, thiserror::Error)]
@@ -60,7 +63,7 @@ pub enum Error {
     OutOfConstants(LineCol),
 
     #[error("{0}: Out of {1} registers")]
-    OutOfRegisters(LineCol, &'static str),
+    OutOfRegisters(LineCol, RegisterScope),
 
     #[error("{0}: Out of upcalls")]
     OutOfUpcalls(LineCol),
@@ -69,12 +72,16 @@ pub enum Error {
     ParseError(LineCol, String),
 
     #[error("{0}: Undefined {2} symbol {1}")]
-    UndefinedSymbol(LineCol, VarRef, &'static str),
+    UndefinedSymbol(LineCol, VarRef, RegisterScope),
 }
 
-fn map_bytecode_make_error(pos: LineCol, e: bytecode::MakeError) -> Error {
-    match e {
-        bytecode::MakeError::OutOfRegisters(scope) => Error::OutOfRegisters(pos, scope),
+impl Error {
+    fn from_syms(value: syms::Error, pos: LineCol) -> Self {
+        match value {
+            syms::Error::AlreadyDefined(vref) => Error::AlreadyDefined(pos, vref),
+            syms::Error::OutOfRegisters(scope) => Error::OutOfRegisters(pos, scope),
+            syms::Error::UndefinedSymbol(vref, scope) => Error::UndefinedSymbol(pos, vref, scope),
+        }
     }
 }
 
@@ -89,39 +96,13 @@ impl From<parser::Error> for Error {
     }
 }
 
-type Address = usize;
-
-enum Fixup {
-    Call(Register, SymbolKey),
-    Enter(u8),
-}
-
 struct Context<'a> {
     upcalls_by_name: &'a HashMap<SymbolKey, Rc<dyn Callable>>,
     upcalls: HashMapWithIds<SymbolKey, Option<ExprType>, u16>,
-    code: Vec<u32>,
-    constants: HashMapWithIds<Datum, ExprType, u16>,
-    symtable: Symtable,
-    fixups: HashMap<Address, Fixup>,
     user_callables: Vec<CallableSpan>,
-    user_callables_addresses: HashMap<SymbolKey, Address>,
-    instr_linecols: Vec<LineCol>,
 }
 
 impl<'a> Context<'a> {
-    fn get_constant(&mut self, constant: Datum, pos: LineCol) -> Result<u16> {
-        match self.constants.get(&constant) {
-            Some((_etype, id)) => Ok(id),
-            None => {
-                let etype = constant.etype();
-                match self.constants.insert(constant, etype) {
-                    Some((_etype, id)) => Ok(id),
-                    None => Err(Error::OutOfConstants(pos)),
-                }
-            }
-        }
-    }
-
     fn get_upcall(&mut self, key: SymbolKey, etype: Option<ExprType>, pos: LineCol) -> Result<u16> {
         // TODO: Validate name and more...
         // DO NOT SUBMIT: No type tracking for return values.
@@ -133,106 +114,99 @@ impl<'a> Context<'a> {
             },
         }
     }
-
-    fn emit(&mut self, op: u32, pos: LineCol) -> Address {
-        self.code.push(op);
-        self.instr_linecols.push(pos);
-        self.code.len() - 1
-    }
-
-    fn to_image(self) -> Image {
-        let mut callables = HashMap::default();
-        for (key, pc) in self.user_callables_addresses {
-            let previous = callables.insert(pc, key);
-            debug_assert!(previous.is_none(), "An address can only start one callable");
-        }
-
-        Image::new(
-            self.code,
-            self.upcalls.keys_to_vec(),
-            self.constants.keys_to_vec(),
-            DebugInfo { instr_linecols: self.instr_linecols, callables },
-        )
-    }
 }
 
-fn compile_expr(context: &mut Context, reg: Register, expr: Expr) -> Result<ExprType> {
+fn compile_expr(
+    codegen: &mut Codegen,
+    symtable: &mut TempSymtable<'_, '_>,
+    reg: Register,
+    expr: Expr,
+) -> Result<ExprType> {
     match expr {
         Expr::Boolean(span) => {
             let value = if span.value { 1 } else { 0 };
-            context.emit(bytecode::make_load_integer(reg, value), span.pos);
+            codegen.emit(bytecode::make_load_integer(reg, value), span.pos);
             Ok(ExprType::Boolean)
         }
 
         Expr::Double(span) => {
-            let index = context.get_constant(Datum::Double(span.value), span.pos)?;
-            context.emit(bytecode::make_load_constant(reg, index), span.pos);
+            let index = codegen.get_constant(Datum::Double(span.value), span.pos)?;
+            codegen.emit(bytecode::make_load_constant(reg, index), span.pos);
             Ok(ExprType::Double)
         }
 
         Expr::Integer(span) => {
             match u16::try_from(span.value) {
                 Ok(i) => {
-                    context.emit(bytecode::make_load_integer(reg, i), span.pos);
+                    codegen.emit(bytecode::make_load_integer(reg, i), span.pos);
                 }
                 Err(_) => {
-                    let index = context.get_constant(Datum::Integer(span.value), span.pos)?;
-                    context.emit(bytecode::make_load_constant(reg, index), span.pos);
+                    let index = codegen.get_constant(Datum::Integer(span.value), span.pos)?;
+                    codegen.emit(bytecode::make_load_constant(reg, index), span.pos);
                 }
             }
             Ok(ExprType::Integer)
         }
 
         Expr::Text(span) => {
-            let index = context.get_constant(Datum::Text(span.value), span.pos)?;
-            context.emit(bytecode::make_load_integer(reg, index), span.pos);
+            let index = codegen.get_constant(Datum::Text(span.value), span.pos)?;
+            codegen.emit(bytecode::make_load_integer(reg, index), span.pos);
             Ok(ExprType::Text)
         }
 
         Expr::Add(span) => {
-            let ltemp = context.symtable.alloc_temp(span.lhs.start_pos())?;
-            let ltype = compile_expr(context, ltemp, span.lhs)?;
+            let mut scope = symtable.temp_scope();
 
-            let rtemp = context.symtable.alloc_temp(span.rhs.start_pos())?;
-            let rtype = compile_expr(context, rtemp, span.rhs)?;
+            let lpos = span.lhs.start_pos();
+            let ltemp = scope.alloc().map_err(|e| Error::from_syms(e, lpos))?;
+            let ltype = compile_expr(codegen, symtable, ltemp, span.lhs)?;
+
+            let rpos = span.rhs.start_pos();
+            let rtemp = scope.alloc().map_err(|e| Error::from_syms(e, rpos))?;
+            let rtype = compile_expr(codegen, symtable, rtemp, span.rhs)?;
 
             let result = match (ltype, rtype) {
                 (ExprType::Integer, ExprType::Integer) => {
-                    context.emit(bytecode::make_add_integer(reg, ltemp, rtemp), span.pos);
+                    codegen.emit(bytecode::make_add_integer(reg, ltemp, rtemp), span.pos);
                     Ok(ExprType::Integer)
                 }
 
                 (ExprType::Text, ExprType::Text) => {
-                    context.emit(bytecode::make_concat(reg, ltemp, rtemp), span.pos);
+                    codegen.emit(bytecode::make_concat(reg, ltemp, rtemp), span.pos);
                     Ok(ExprType::Text)
                 }
 
                 (_, _) => Err(Error::BinaryOpTypeError(span.pos, "+", ltype, rtype)),
             };
 
-            context.symtable.dealloc_temps(2);
             result
         }
 
         Expr::Call(span) => {
             let key = SymbolKey::from(&span.vref.name);
-            let (etype, _args) = match context.symtable.get_user_callable(&key) {
+            let (etype, _args) = match symtable.get_user_callable(&key) {
                 Some((Some(etype), args)) => (*etype, args),
                 Some((None, _args)) => {
                     return Err(Error::NotAFunction(span.vref_pos, span.vref));
                 }
                 None => {
-                    return Err(Error::UndefinedSymbol(span.vref_pos, span.vref, "callable"));
+                    return Err(Error::UndefinedSymbol(
+                        span.vref_pos,
+                        span.vref,
+                        RegisterScope::Global,
+                    ));
                 }
             };
-            let addr = context.emit(bytecode::make_nop(), span.vref_pos);
-            context.fixups.insert(addr, Fixup::Call(reg, key));
+            let addr = codegen.emit(bytecode::make_nop(), span.vref_pos);
+            codegen.add_fixup(addr, Fixup::Call(reg, key));
             Ok(etype)
         }
 
         Expr::Symbol(span) => {
-            let (local, etype) = context.symtable.get_local(&span.vref, span.pos)?;
-            context.emit(bytecode::make_move(reg, local), span.pos);
+            let (local, etype) = symtable
+                .get_local_or_global(&span.vref)
+                .map_err(|e| Error::from_syms(e, span.pos))?;
+            codegen.emit(bytecode::make_move(reg, local), span.pos);
             Ok(etype)
         }
 
@@ -240,18 +214,40 @@ fn compile_expr(context: &mut Context, reg: Register, expr: Expr) -> Result<Expr
     }
 }
 
-fn compile_stmt(context: &mut Context, stmt: Statement) -> Result<()> {
+fn compile_stmt<'a, 'b>(
+    context: &mut Context,
+    symtable: &'a mut LocalSymtable<'b>,
+    codegen: &mut Codegen,
+    stmt: Statement,
+) -> Result<()> {
     match stmt {
         Statement::Assignment(span) => {
-            let local = context.symtable.put_local(&span.vref, span.vref_pos)?;
-            let etype = compile_expr(context, local, span.expr)?;
-            context.symtable.fixup_local_type(&span.vref, etype, span.vref_pos)?;
+            let vref_pos = span.vref_pos;
+            match symtable.get_global(&span.vref) {
+                Ok((reg, _etype)) => {
+                    let etype = compile_expr(codegen, &mut symtable.frozen(), reg, span.expr)?;
+                    symtable.fixup_global_type(&span.vref, etype)
+                }
+                Err(syms::Error::UndefinedSymbol(..)) => {
+                    let reg = symtable
+                        .put_local(&span.vref)
+                        .map_err(|e| Error::from_syms(e, span.vref_pos))?;
+                    let etype = compile_expr(codegen, &mut symtable.frozen(), reg, span.expr)?;
+                    symtable.fixup_local_type(&span.vref, etype)
+                }
+                Err(e) => Err(e),
+            }
+            .map_err(|e| Error::from_syms(e, vref_pos))?
         }
 
         Statement::Call(span) => {
             let key = SymbolKey::from(span.vref.name);
+            let key_pos = span.vref_pos;
 
-            let first_temp = context.symtable.first_temp(span.vref_pos)?;
+            let mut symtable = symtable.frozen();
+            let mut scope = symtable.temp_scope();
+
+            let first_temp = scope.first().map_err(|e| Error::from_syms(e, key_pos))?;
 
             // Arguments are represented as 1 or 2 consecutive registers.
             //
@@ -260,46 +256,61 @@ fn compile_stmt(context: &mut Context, stmt: Statement) -> Result<()> {
             // The second register is only present if there is an argument.
             //
             // The caller must iterate over all tags until it finds `ArgSep::End`.
-            let mut nregs = 0;
+            let nargs = span.args.len();
             for ArgSpan { expr, sep, sep_pos: _ } in span.args {
-                let temp_tag = context.symtable.alloc_temp(span.vref_pos)?;
-                nregs += 1;
+                let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, key_pos))?;
 
                 let tag = match expr {
                     None => bytecode::VarArgTag::Missing(sep),
                     Some(expr) => {
-                        let temp_value = context.symtable.alloc_temp(span.vref_pos)?;
-                        nregs += 1;
-                        let etype = compile_expr(context, temp_value, expr)?;
+                        let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, key_pos))?;
+                        let etype = compile_expr(codegen, &mut symtable, temp_value, expr)?;
                         bytecode::VarArgTag::Immediate(sep, etype)
                     }
                 };
-                context.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), span.vref_pos);
+                codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), span.vref_pos);
             }
-            if nregs == 0 {
-                let temp = context.symtable.alloc_temp(span.vref_pos)?;
-                context.emit(
+            if nargs == 0 {
+                let temp = scope.alloc().map_err(|e| Error::from_syms(e, key_pos))?;
+                codegen.emit(
                     bytecode::make_load_integer(
                         temp,
                         bytecode::VarArgTag::Missing(ArgSep::End).make_u16(),
                     ),
                     span.vref_pos,
                 );
-                nregs += 1;
             }
 
-            context.symtable.dealloc_temps(u8::try_from(nregs).expect("DO NOT SUBMIT"));
+            drop(scope);
             let upcall = context.get_upcall(key, None, span.vref_pos)?;
-            context.emit(bytecode::make_upcall(upcall, first_temp), span.vref_pos);
+            codegen.emit(bytecode::make_upcall(upcall, first_temp), span.vref_pos);
         }
 
         Statement::Callable(span) => {
-            context.symtable.define_user_callable(
-                &span.name,
-                span.params.clone(),
-                span.name_pos,
-            )?;
+            symtable
+                .define_user_callable(&span.name, span.params.clone())
+                .map_err(|e| Error::from_syms(e, span.name_pos))?;
             context.user_callables.push(span);
+        }
+
+        Statement::Dim(span) => {
+            let name_pos = span.name_pos;
+            let vref = match span.vtype {
+                ExprType::Boolean => VarRef::new(span.name, Some(ExprType::Boolean)),
+                ExprType::Double => VarRef::new(span.name, Some(ExprType::Double)),
+                ExprType::Integer => VarRef::new(span.name, Some(ExprType::Integer)),
+                ExprType::Text => VarRef::new(span.name, Some(ExprType::Text)),
+            };
+            let reg =
+                if span.shared { symtable.put_global(&vref) } else { symtable.put_local(&vref) }
+                    .map_err(|e| Error::from_syms(e, name_pos))?;
+            let instr = match span.vtype {
+                ExprType::Boolean => bytecode::make_load_integer(reg, 0),
+                ExprType::Double => bytecode::make_load_integer(reg, 0),
+                ExprType::Integer => bytecode::make_load_integer(reg, 0),
+                ExprType::Text => bytecode::make_alloc(reg, ExprType::Text),
+            };
+            codegen.emit(instr, name_pos);
         }
 
         _ => todo!(),
@@ -307,45 +318,52 @@ fn compile_stmt(context: &mut Context, stmt: Statement) -> Result<()> {
     Ok(())
 }
 
-fn compile_scope<I: Iterator<Item = Statement>>(context: &mut Context, stmts: I) -> Result<()> {
-    let enter = context.emit(bytecode::make_nop(), LineCol { line: 0, col: 0 });
+fn compile_scope<'a, I: Iterator<Item = Statement>>(
+    context: &mut Context,
+    mut symtable: LocalSymtable<'a>,
+    codegen: &mut Codegen,
+    stmts: I,
+) -> Result<()> {
+    let enter = codegen.emit(bytecode::make_nop(), LineCol { line: 0, col: 0 });
     for stmt in stmts {
-        compile_stmt(context, stmt)?;
+        compile_stmt(context, &mut symtable, codegen, stmt)?;
     }
-    context.emit(bytecode::make_leave(), LineCol { line: 0, col: 0 }); // DO NOT SUBMIT
-    let nlocals = context.symtable.frame_size();
-    context.fixups.insert(enter, Fixup::Enter(nlocals));
+    codegen.emit(bytecode::make_leave(), LineCol { line: 0, col: 0 }); // DO NOT SUBMIT
+    let nlocals =
+        symtable.leave_scope().map_err(|e| Error::from_syms(e, LineCol { line: 0, col: 0 }))?;
+    codegen.add_fixup(enter, Fixup::Enter(nlocals));
     Ok(())
 }
 
-fn compile_user_callables(context: &mut Context) -> Result<()> {
-    let mut addresses = HashMap::with_capacity(context.user_callables.len());
-
+fn compile_user_callables(
+    context: &mut Context,
+    symtable: &mut GlobalSymtable,
+    codegen: &mut Codegen,
+) -> Result<()> {
     let user_callables: Vec<CallableSpan> = context.user_callables.drain(..).collect();
     debug_assert!(context.user_callables.is_empty());
 
     for callable in user_callables {
-        let start_pc = context.code.len();
+        let start_pc = codegen.next_pc();
 
-        context.symtable.enter_scope();
+        let mut symtable = symtable.enter_scope();
         if callable.name.ref_type.is_some() {
             // The call protocol expects the return value to be in the _first_ local variable
             // so allocate it early.
-            context.symtable.put_local(&callable.name, callable.name_pos)?;
+            symtable
+                .put_local(&callable.name)
+                .map_err(|e| Error::from_syms(e, callable.name_pos))?;
         }
 
-        compile_scope(context, callable.body.into_iter())?;
+        compile_scope(context, symtable, codegen, callable.body.into_iter())?;
         if let Some(span) = context.user_callables.first() {
             return Err(Error::CannotNestUserCallables(span.name_pos));
         }
 
-        context.symtable.leave_scope();
-
-        context.emit(bytecode::make_return(), LineCol { line: 0, col: 0 }); // DO NOT SUBMIT
-        addresses.insert(SymbolKey::from(callable.name.name), start_pc);
+        codegen.emit(bytecode::make_return(), LineCol { line: 0, col: 0 }); // DO NOT SUBMIT
+        codegen.define_user_callable(SymbolKey::from(callable.name.name), start_pc);
     }
 
-    context.user_callables_addresses = addresses;
     Ok(())
 }
 
@@ -353,36 +371,21 @@ pub fn compile(
     input: &mut dyn io::Read,
     upcalls_by_name: &HashMap<SymbolKey, Rc<dyn Callable>>,
 ) -> Result<Image> {
-    let mut context = Context {
-        upcalls_by_name,
-        upcalls: HashMapWithIds::default(),
-        code: vec![],
-        constants: HashMapWithIds::default(),
-        symtable: Symtable::default(),
-        fixups: HashMap::default(),
-        user_callables: vec![],
-        user_callables_addresses: HashMap::default(),
-        instr_linecols: vec![],
-    };
+    let mut context =
+        Context { upcalls_by_name, upcalls: HashMapWithIds::default(), user_callables: vec![] };
+    let mut codegen = Codegen::default();
 
-    context.symtable.enter_scope();
-    compile_scope(&mut context, parser::parse(input).map(|r| r.expect("DO NOT SUBMIT")))?;
-    context.symtable.leave_scope();
-    context.emit(bytecode::make_end(), LineCol { line: 0, col: 0 }); // DO NOT SUBMIT
+    let mut symtable = GlobalSymtable::default();
 
-    compile_user_callables(&mut context)?;
+    compile_scope(
+        &mut context,
+        symtable.enter_scope(),
+        &mut codegen,
+        parser::parse(input).map(|r| r.expect("DO NOT SUBMIT")),
+    )?;
+    codegen.emit(bytecode::make_end(), LineCol { line: 0, col: 0 }); // DO NOT SUBMIT
 
-    for (addr, fixup) in &context.fixups {
-        let instr = match fixup {
-            Fixup::Call(reg, key) => {
-                let target = context.user_callables_addresses.get(key).expect("Must be present");
-                // DO NOT SUBMIT: Validate int change.
-                bytecode::make_call(*reg, (target - *addr) as u16)
-            }
-            Fixup::Enter(nargs) => bytecode::make_enter(*nargs),
-        };
-        context.code[*addr] = instr;
-    }
+    compile_user_callables(&mut context, &mut symtable, &mut codegen)?;
 
-    Ok(context.to_image())
+    Ok(codegen.build_image(context))
 }

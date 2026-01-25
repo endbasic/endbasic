@@ -22,7 +22,7 @@ OUT text
 
 # Disassembly
 
-0000    ENTER 24                                # 0:0
+0000    ENTER 10                                # 0:0
 0001    LOADI R64, 0                            # 1:10
 0002    LOADI R65, 1                            # 2:10
 0003    MOVE R67, R64                           # 3:5

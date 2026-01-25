@@ -42,6 +42,15 @@ impl Hash for Datum {
 }
 
 impl Datum {
+    pub(crate) fn new(etype: ExprType) -> Self {
+        match etype {
+            ExprType::Boolean => Datum::Boolean(false),
+            ExprType::Double => Datum::Double(0.0),
+            ExprType::Integer => Datum::Integer(0),
+            ExprType::Text => Datum::Text(String::new()),
+        }
+    }
+
     pub(crate) fn etype(&self) -> ExprType {
         match self {
             Self::Boolean(..) => ExprType::Boolean,

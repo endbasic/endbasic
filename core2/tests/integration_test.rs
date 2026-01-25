@@ -443,7 +443,11 @@ mod tests {
     one_test!(test_arithmetic_errors);
     one_test!(test_empty);
     one_test!(test_functions);
+    one_test!(test_globals);
+    one_test!(test_out_of_globals);
     one_test!(test_out_of_locals);
+    one_test!(test_out_of_temps_1);
+    one_test!(test_out_of_temps_2);
     one_test!(test_string_ops);
     one_test!(test_values);
     one_test!(test_varargs_command);

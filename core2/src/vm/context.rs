@@ -160,6 +160,7 @@ impl Context {
                 Opcode::Jump => self.do_jump(instr),
                 Opcode::Call => self.do_call(instr),
                 Opcode::Return => self.do_return(instr),
+                Opcode::Alloc => self.do_alloc(instr, heap),
                 Opcode::Move => self.do_move(instr),
                 Opcode::LoadConstant => self.do_load_constant(instr, &image.constants),
                 Opcode::LoadInteger => self.do_load_integer(instr),
@@ -215,6 +216,14 @@ impl Context {
         self.pc = frame.old_pc + 1;
         self.fp = frame.old_fp;
         self.set_reg(frame.ret_reg, return_value);
+    }
+
+    pub(super) fn do_alloc(&mut self, op: u32, heap: &mut Vec<Datum>) {
+        let (dest, etype) = bytecode::parse_alloc(op);
+        heap.push(Datum::new(etype));
+        let ptr = Pointer::for_heap((heap.len() - 1) as u32);
+        self.set_reg(dest, ptr);
+        self.pc += 1;
     }
 
     pub(super) fn do_move(&mut self, op: u32) {
