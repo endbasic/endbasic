@@ -548,6 +548,8 @@ impl<'a> Parser<'a> {
                 ));
             }
         };
+        // TODO(jmmv): Why do we require unannotated strings?  We could also take one and then
+        // skip the `AS <type>` portion.
         let name = vref_to_unannotated_string(vref, token_span.pos)?;
         let name_pos = token_span.pos;
 
