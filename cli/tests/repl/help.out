@@ -605,7 +605,6 @@ Output from HELP "VARIABLES":
     The following are all equivalent:
 
         DIM foo AS BOOLEAN
-        DIM foo? AS BOOLEAN
         foo? = FALSE
 
     Arrays must be defined with the `DIM` keyword before they can be used.

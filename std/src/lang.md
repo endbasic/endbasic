@@ -58,7 +58,6 @@ Variable identifiers are alphanumeric words that start with a letter or special 
 Variables can be first defined either via an assignment or via the `DIM` keyword, the latter of which sets the variable to its zero value.  The following are all equivalent:
 
     DIM foo AS BOOLEAN
-    DIM foo? AS BOOLEAN
     foo? = FALSE
 
 Arrays must be defined with the `DIM` keyword before they can be used.  The following example defines a matrix and sets the value of a single element within it:
