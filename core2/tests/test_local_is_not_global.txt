@@ -1,0 +1,12 @@
+# Source
+
+SUB print_local
+    local_var = 8
+END SUB
+
+print_local
+OUT local_var
+
+# Compilation errors
+
+6:5: Undefined local symbol local_var

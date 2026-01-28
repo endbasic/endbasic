@@ -20,6 +20,7 @@ mod bytecode;
 mod callable;
 mod compiler;
 mod lexer;
+mod image;
 mod mem;
 mod num;
 mod parser;
@@ -28,10 +29,8 @@ mod vm;
 
 pub use ast::{ArgSep, ExprType};
 pub use bytecode::VarArgTag;
-pub use callable::{
-    CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, Scope,
-};
-pub use compiler::{SymbolKey, compile};
+pub use callable::*;
+pub use compiler::{compile, only_metadata, SymbolKey};
 pub use vm::{StopReason, Vm};
 
 #[cfg(test)]

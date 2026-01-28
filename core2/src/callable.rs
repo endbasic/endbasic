@@ -17,7 +17,7 @@
 
 use crate::ast::ArgSep;
 use crate::ast::ExprType;
-use crate::bytecode::{self, VarArgTag};
+use crate::bytecode::VarArgTag;
 use crate::mem::{Datum, Pointer};
 use async_trait::async_trait;
 use std::borrow::Cow;
@@ -32,7 +32,7 @@ pub enum CallError {
 }
 
 /// Result type for callable execution.
-pub type CallResult<T> = std::result::Result<T, CallError>;
+pub type CallResult<T> = Result<T, CallError>;
 
 /// Details to compile a required scalar parameter.
 #[derive(Clone, Debug)]
@@ -260,7 +260,7 @@ impl CallableSyntax {
     }
 
     /// Computes the range of the expected number of parameters for this syntax.
-    fn expected_nargs(&self) -> RangeInclusive<usize> {
+    pub(crate) fn expected_nargs(&self) -> RangeInclusive<usize> {
         let mut min = self.singular.len();
         let mut max = self.singular.len();
         if let Some(syn) = self.repeated.as_ref() {
@@ -469,17 +469,17 @@ pub struct CallableMetadata {
 
 impl CallableMetadata {
     /// Gets the callable's name, all in uppercase.
-    pub fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         &self.name
     }
 
     /// Gets the callable's return type.
-    pub fn return_type(&self) -> Option<ExprType> {
+    pub(crate) fn return_type(&self) -> Option<ExprType> {
         self.return_type
     }
 
     /// Gets the callable's syntax specification.
-    pub fn syntax(&self) -> String {
+    pub(crate) fn syntax(&self) -> String {
         fn format_one(cs: &CallableSyntax) -> String {
             let mut syntax = cs.describe();
             if syntax.is_empty() {
@@ -506,24 +506,33 @@ impl CallableMetadata {
 
     /// Gets the callable's category as a collection of lines.  The first line is the title of the
     /// category, and any extra lines are additional information for it.
-    pub fn category(&self) -> &'static str {
+    #[allow(unused)]
+    pub(crate) fn category(&self) -> &'static str {
         self.category
     }
 
     /// Gets the callable's textual description as a collection of lines.  The first line is the
     /// summary of the callable's purpose.
-    pub fn description(&self) -> Lines<'static> {
+    #[allow(unused)]
+    pub(crate) fn description(&self) -> Lines<'static> {
         self.description.lines()
     }
 
     /// Returns true if this is a callable that takes no arguments.
-    pub fn is_argless(&self) -> bool {
+    #[allow(unused)]
+    pub(crate) fn is_argless(&self) -> bool {
         self.syntaxes.is_empty() || (self.syntaxes.len() == 1 && self.syntaxes[0].is_empty())
     }
 
     /// Returns true if this callable is a function (not a command).
-    pub fn is_function(&self) -> bool {
+    #[allow(unused)]
+    pub(crate) fn is_function(&self) -> bool {
         self.return_type.is_some()
+    }
+
+    /// Returns true if this callable is user-defined.
+    pub(crate) fn is_user_defined(&self) -> bool {
+        self.category == "User defined"
     }
 }
 
@@ -535,7 +544,7 @@ pub struct Scope<'a> {
 
 impl<'a> Scope<'a> {
     pub fn get_type(&self, arg: u8) -> VarArgTag {
-        bytecode::VarArgTag::parse_u64(self.regs[arg as usize]).unwrap()
+        VarArgTag::parse_u64(self.regs[arg as usize]).unwrap()
     }
 
     pub fn get_boolean(&self, arg: u8) -> bool {

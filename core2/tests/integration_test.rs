@@ -18,8 +18,9 @@
 mod testutils {
     use async_trait::async_trait;
     use endbasic_core2::*;
+    use std::borrow::Cow;
     use std::cell::RefCell;
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
     use std::env;
     use std::ffi::OsStr;
     use std::fs::{self, File};
@@ -45,7 +46,7 @@ mod testutils {
         let dir = target_dir.parent().expect("Failed to get parent directory");
 
         // Sanity-check that we landed in the right location.
-        assert!(dir.join("Cargo.toml").exists());
+        assert!(dir.join("Cargo.lock").exists());
 
         dir.join(name)
     }
@@ -119,7 +120,7 @@ Second line",
     /// Returns the empty string when the two files match.
     fn diff(golden: &Path, generated: &Path) -> io::Result<String> {
         match process::Command::new("diff")
-            .args(&[OsStr::new("-u"), golden.as_os_str(), generated.as_os_str()])
+            .args([OsStr::new("-u"), golden.as_os_str(), generated.as_os_str()])
             .output()
         {
             Ok(result) => {
@@ -169,13 +170,13 @@ Second line",
         let mut f1 = NamedTempFile::new()?;
         let mut f2 = NamedTempFile::new()?;
 
-        write!(f1, "Line 1\n")?;
-        write!(f1, "Line 2\n")?;
+        writeln!(f1, "Line 1")?;
+        writeln!(f1, "Line 2")?;
         f1.flush()?;
         f1.seek(io::SeekFrom::Start(0))?;
 
-        write!(f2, "Line 1\n")?;
-        write!(f2, "Line 2\n")?;
+        writeln!(f2, "Line 1")?;
+        writeln!(f2, "Line 2")?;
         f2.flush()?;
         f2.seek(io::SeekFrom::Start(0))?;
 
@@ -189,13 +190,13 @@ Second line",
         let mut f1 = NamedTempFile::new()?;
         let mut f2 = NamedTempFile::new()?;
 
-        write!(f1, "Line 1\n")?;
-        write!(f1, "Line 2\n")?;
+        writeln!(f1, "Line 1")?;
+        writeln!(f1, "Line 2")?;
         f1.flush()?;
         f1.seek(io::SeekFrom::Start(0))?;
 
-        write!(f2, "Line 1\n")?;
-        write!(f2, "Line2\n")?;
+        writeln!(f2, "Line 1")?;
+        writeln!(f2, "Line2")?;
         f2.flush()?;
         f2.seek(io::SeekFrom::Start(0))?;
 
@@ -214,7 +215,16 @@ Second line",
         pub fn new(output: Rc<RefCell<String>>) -> Rc<Self> {
             Rc::from(Self {
                 metadata: CallableMetadataBuilder::new("OUT")
-                    .with_syntax(&[(&[], None)])
+                    .with_syntax(&[(
+                        &[],
+                        Some(&RepeatedSyntax {
+                            name: Cow::Borrowed("arg"),
+                            type_syn: RepeatedTypeSyntax::AnyValue,
+                            sep: ArgSepSyntax::Exactly(ArgSep::Short),
+                            require_one: false,
+                            allow_missing: false,
+                        }),
+                    )])
                     .with_category("Testing")
                     .with_description("Prints arguments")
                     .build(),
@@ -301,8 +311,9 @@ Second line",
     /// Given a `golden` test definition, executes its source part and writes the corresponding
     /// `generated` file.  The test is expected to pass when both match, but the caller is responsible
     /// for checking this condition.
-    async fn regenerate<W: io::Write>(golden: &Path, generated: &mut W) -> io::Result<()> {
-        let source = read_source(&golden)?;
+    #[allow(clippy::write_with_newline)]
+    async fn regenerate<W: Write>(golden: &Path, generated: &mut W) -> io::Result<()> {
+        let source = read_source(golden)?;
 
         write!(generated, "# Source\n\n")?;
         write!(generated, "{}\n", source)?;
@@ -310,7 +321,7 @@ Second line",
         let console = Rc::from(RefCell::from(String::new()));
         let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::default();
         upcalls_by_name.insert(SymbolKey::from("OUT"), OutCommand::new(console.clone()));
-        let image = compile(&mut source.as_bytes(), &upcalls_by_name);
+        let image = { compile(&mut source.as_bytes(), &only_metadata(&upcalls_by_name)) };
 
         let image = match image {
             Ok(image) => image,
@@ -384,7 +395,7 @@ Second line",
 
     #[test]
     fn test_all_txt_files_registered() -> io::Result<()> {
-        let mut registered: HashSet<String> = HashSet::default();
+        let mut registered = vec![];
         {
             let file = File::open(src_path("core2/tests/integration_test.rs"))?;
             let reader = BufReader::new(file);
@@ -393,18 +404,19 @@ Second line",
 
                 if line.starts_with("    one_test!(") {
                     let name = &line["    one_test!(".len()..line.len() - 2];
-                    registered.insert(format!("{}.txt", name));
+                    registered.push(format!("{}.txt", name));
                 }
             }
         }
 
         // Sanity-check to ensure that the code right above actually discovered what we expect.
-        assert!(registered.contains("test_values.txt"));
+        assert!(registered.iter().any(|s| s == "test_values.txt"));
 
         // Make sure that every txt test case definition in the file system is in the list of
         // tests discovered from code scanning.  We don't have to do the opposite because, if
         // this program registers a txt file that doesn't actually exist, the test itself will
         // fail.
+        let mut found = vec![];
         for entry in fs::read_dir(src_path("core2/tests"))? {
             let entry = entry?;
 
@@ -412,15 +424,17 @@ Second line",
                 continue;
             };
 
+            #[allow(clippy::collapsible_if)]
             if name.starts_with("test_") && name.ends_with(".txt") {
-                if !registered.contains(&name) {
-                    return Err(io::Error::new(
-                        io::ErrorKind::NotFound,
-                        format!("Test case {} is not registered", name),
-                    ));
-                }
+                found.push(name);
             }
         }
+
+        // We want the list of tests below to be sorted, so sort the list of found tests and
+        // use that when comparing against the list of registered tests.
+        found.sort();
+
+        assert_eq!(registered, found);
 
         Ok(())
     }
@@ -444,11 +458,18 @@ mod tests {
     one_test!(test_empty);
     one_test!(test_functions);
     one_test!(test_globals);
+    one_test!(test_gosub);
+    one_test!(test_gosub_nested);
+    one_test!(test_goto);
+    one_test!(test_goto_at_end);
+    one_test!(test_local_is_not_global);
     one_test!(test_out_of_globals);
     one_test!(test_out_of_locals);
     one_test!(test_out_of_temps_1);
     one_test!(test_out_of_temps_2);
+    one_test!(test_return_without_gosub);
     one_test!(test_string_ops);
+    one_test!(test_subs);
     one_test!(test_values);
     one_test!(test_varargs_command);
 }

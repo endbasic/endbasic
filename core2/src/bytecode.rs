@@ -50,7 +50,7 @@ pub(crate) enum ParseError {
 }
 
 /// Result type for bytecode parsing.
-pub(crate) type ParseResult<T> = std::result::Result<T, ParseError>;
+pub(crate) type ParseResult<T> = Result<T, ParseError>;
 
 /// Conversions between a primitive type and a `u32` for insertion into an instruction.
 trait RawValue {
@@ -187,7 +187,7 @@ macro_rules! instr {
 
         pub(crate) fn $format(op: u32) -> String {
             let v1 = $parse(op);
-            format!("{} {}", $name, v1)
+            format!("{:11} {}", $name, v1)
         }
     };
 
@@ -211,7 +211,7 @@ macro_rules! instr {
 
         pub(crate) fn $format(op: u32) -> String {
             let (v1, v2) = $parse(op);
-            format!("{} {}, {}", $name, v1, v2)
+            format!("{:11} {}, {}", $name, v1, v2)
         }
     };
 
@@ -238,7 +238,7 @@ macro_rules! instr {
 
         pub(crate) fn $format(op: u32) -> String {
             let (v1, v2, v3) = $parse(op);
-            format!("{} {}, {}, {}", $name, v1, v2, v3)
+            format!("{:11} {}, {}, {}", $name, v1, v2, v3)
         }
     };
 }
@@ -250,32 +250,29 @@ macro_rules! instr {
 /// need to worry about stable values over time).
 #[repr(u8)]
 pub(crate) enum Opcode {
-    /// The "null" instruction, used by the compiler to pad the code for fixups.
-    Nop,
-
-    /// Allocates local registers (locals and temporaries) when entering a scope.
-    Enter,
-
-    /// Deallocates all registers allocated by a previous `Enter`.
-    Leave,
-
-    /// Requests the execution of an upcall, stopping VM execution.
-    Upcall,
-
-    /// Jumps to an address relative to the PC.
-    Jump,
-
-    /// Calls an address relative to the PC.
-    Call,
-
-    /// Returns from a previous `Call`.
-    Return,
+    /// Adds two integers and stores the result into a third one.
+    AddInteger,
 
     /// Allocates an object on the heap.
     Alloc,
 
-    /// Moves (copies) data between two registers.
-    Move,
+    /// Calls an address relative to the PC.
+    Call,
+
+    /// Concatenates two strings and stores the pointer to the result into a third one.
+    Concat,
+
+    /// Allocates local registers (locals and temporaries) when entering a scope.
+    Enter,
+
+    /// Jumps to a subroutine at an address relative to the PC.
+    Gosub,
+
+    /// Jumps to an address relative to the PC.
+    Jump,
+
+    /// Deallocates all registers allocated by a previous `Enter`.
+    Leave,
 
     /// Loads a constant into a register.
     LoadConstant,
@@ -283,16 +280,56 @@ pub(crate) enum Opcode {
     /// Loads an integer immediate into a register.
     LoadInteger,
 
-    /// Adds two integers and stores the result into a third one.
-    AddInteger,
+    /// Moves (copies) data between two registers.
+    Move,
 
-    /// Concatenates two strings and stores the pointer to the result into a third one.
-    Concat,
+    /// The "null" instruction, used by the compiler to pad the code for fixups.
+    Nop,
+
+    /// Returns from a previous `Call`.
+    Return,
+
+    /// Requests the execution of an upcall, stopping VM execution.
+    Upcall,
 
     /// Terminates execution.
     // KEEP THIS LAST.
     End,
 }
+
+#[rustfmt::skip]
+instr!(
+    Opcode::Alloc, "ALLOC",
+    make_alloc, parse_alloc, format_alloc,
+    Register, 0x000000ff, 8,  // Destination register in which to store the heap pointer.
+    ExprType, 0x000000ff, 0,  // Type of the object to allocate.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::AddInteger, "ADDI",
+    make_add_integer, parse_add_integer, format_add_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::Call, "CALL",
+    make_call, parse_call, format_call,
+    Register, 0x000000ff, 16,  // Destination register for the return value, if any.
+    u16, 0x0000ffff, 0,  // Relative address.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::Concat, "CONCAT",
+    make_concat, parse_concat, format_concat,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
 
 #[rustfmt::skip]
 instr!(
@@ -309,16 +346,9 @@ instr!(
 
 #[rustfmt::skip]
 instr!(
-    Opcode::Leave, "LEAVE",
-    make_leave, parse_leave, format_leave,
-);
-
-#[rustfmt::skip]
-instr!(
-    Opcode::Upcall, "UPCALL",
-    make_upcall, parse_upcall, format_upcall,
-    u16, 0x0000ffff, 8,  // Index of the upcall to execute.
-    Register, 0x000000ff, 0,  // First register with arguments.
+    Opcode::Gosub, "GOSUB",
+    make_gosub, parse_gosub, format_gosub,
+    u16, 0x0000ffff, 0,  // Relative address.
 );
 
 #[rustfmt::skip]
@@ -330,32 +360,8 @@ instr!(
 
 #[rustfmt::skip]
 instr!(
-    Opcode::Call, "CALL",
-    make_call, parse_call, format_call,
-    Register, 0x000000ff, 16,  // Destination register for the return value, if any.
-    u16, 0x0000ffff, 0,  // Relative address.
-);
-
-#[rustfmt::skip]
-instr!(
-    Opcode::Return, "RETURN",
-    make_return, parse_return, format_return,
-);
-
-#[rustfmt::skip]
-instr!(
-    Opcode::Alloc, "ALLOC",
-    make_alloc, parse_alloc, format_alloc,
-    Register, 0x000000ff, 8,  // Destination register in which to store the heap pointer.
-    ExprType, 0x000000ff, 0,  // Type of the object to allocate.
-);
-
-#[rustfmt::skip]
-instr!(
-    Opcode::Move, "MOVE",
-    make_move, parse_move, format_move,
-    Register, 0x000000ff, 8,  // Destination register.
-    Register, 0x000000ff, 0,  // Source register.
+    Opcode::Leave, "LEAVE",
+    make_leave, parse_leave, format_leave,
 );
 
 #[rustfmt::skip]
@@ -376,20 +382,10 @@ instr!(
 
 #[rustfmt::skip]
 instr!(
-    Opcode::AddInteger, "ADDI",
-    make_add_integer, parse_add_integer, format_add_integer,
-    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
-    Register, 0x000000ff, 8,  // Left hand side value.
-    Register, 0x000000ff, 0,  // Right hand side value.
-);
-
-#[rustfmt::skip]
-instr!(
-    Opcode::Concat, "CONCAT",
-    make_concat, parse_concat, format_concat,
-    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
-    Register, 0x000000ff, 8,  // Left hand side value.
-    Register, 0x000000ff, 0,  // Right hand side value.
+    Opcode::Move, "MOVE",
+    make_move, parse_move, format_move,
+    Register, 0x000000ff, 8,  // Destination register.
+    Register, 0x000000ff, 0,  // Source register.
 );
 
 #[rustfmt::skip]
@@ -398,32 +394,25 @@ instr!(
     make_nop, parse_nop, format_nop,
 );
 
-/// Formats an instruction for debugging.
-///
-/// Panics if the instruction is malformed.
-pub(crate) fn format_instr(instr: u32) -> String {
-    let opcode = unsafe {
-        let num = unchecked_u32_as_u8(instr >> 24);
-        debug_assert!(num <= Opcode::End as u8);
-        std::mem::transmute(num)
-    };
+#[rustfmt::skip]
+instr!(
+    Opcode::Return, "RETURN",
+    make_return, parse_return, format_return,
+);
 
-    match opcode {
-        Opcode::Nop => format_nop(instr),
-        Opcode::Enter => format_enter(instr),
-        Opcode::Leave => format_leave(instr),
-        Opcode::Upcall => format_upcall(instr),
-        Opcode::Jump => format_jump(instr),
-        Opcode::Call => format_call(instr),
-        Opcode::Return => format_return(instr),
-        Opcode::Alloc => format_alloc(instr),
-        Opcode::Move => format_move(instr),
-        Opcode::LoadConstant => format_load_constant(instr),
-        Opcode::LoadInteger => format_load_integer(instr),
-        Opcode::AddInteger => format_add_integer(instr),
-        Opcode::Concat => format_concat(instr),
-        Opcode::End => format_end(instr),
-    }
+#[rustfmt::skip]
+instr!(
+    Opcode::Upcall, "UPCALL",
+    make_upcall, parse_upcall, format_upcall,
+    u16, 0x0000ffff, 8,  // Index of the upcall to execute.
+    Register, 0x000000ff, 0,  // First register with arguments.
+);
+
+/// Returns the opcode of an instruction.
+pub(crate) unsafe fn opcode_of(instr: u32) -> Opcode {
+    let num = unchecked_u32_as_u8(instr >> 24);
+    debug_assert!(num <= Opcode::End as u8);
+    std::mem::transmute::<u8, Opcode>(num)
 }
 
 /// Tags used as integer register values to identify the type stored in another register at
@@ -538,6 +527,7 @@ mod tests {
     test_instr!(test_leave, make_leave, parse_leave);
     test_instr!(test_upcall, make_upcall, parse_upcall, 12345, Register::local(3).unwrap());
     test_instr!(test_jump, make_jump, parse_jump, 12345);
+    test_instr!(test_gosub, make_gosub, parse_gosub, 12345);
     test_instr!(test_call, make_call, parse_call, Register::local(3).unwrap(), 12345);
     test_instr!(test_return, make_return, parse_return);
     test_instr!(

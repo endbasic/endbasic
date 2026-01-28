@@ -388,7 +388,7 @@ impl Callable for OutCommand {
                 VarArgTag::Immediate(sep, ExprType::Text) => {
                     reg += 1;
                     let s = scope.get_string(reg);
-                    text.push_str(&s);
+                    text.push_str(s);
                     sep
                 }
                 VarArgTag::Missing(sep) => {
@@ -399,14 +399,12 @@ impl Callable for OutCommand {
             };
             reg += 1;
 
-            match sep {
-                ArgSep::End => {
-                    break;
-                }
-                _ => {
-                    todo!();
-                }
+            if sep == ArgSep::End {
+                break;
             }
+            text.push(' ');
+            text.push_str(&sep.to_string());
+            text.push(' ');
         }
         self.data.borrow_mut().push(text);
         Ok(())

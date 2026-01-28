@@ -22,41 +22,41 @@ OUT text
 
 # Disassembly
 
-0000    ENTER 10                                # 0:0
-0001    LOADI R64, 0                            # 1:10
-0002    LOADI R65, 1                            # 2:10
-0003    MOVE R67, R64                           # 3:5
-0004    LOADI R66, 256                          # 3:1
-0005    UPCALL 0, R66                           # 3:1
-0006    MOVE R67, R65                           # 4:5
-0007    LOADI R66, 256                          # 4:1
-0008    UPCALL 0, R66                           # 4:1
-0009    LOADC R66, 0                            # 6:16
-0010    LOADC R67, 1                            # 7:16
-0011    LOADC R68, 2                            # 8:15
-0012    MOVE R70, R66                           # 9:5
-0013    LOADI R69, 257                          # 9:1
-0014    UPCALL 0, R69                           # 9:1
-0015    MOVE R70, R67                           # 10:5
-0016    LOADI R69, 257                          # 10:1
-0017    UPCALL 0, R69                           # 10:1
-0018    MOVE R70, R68                           # 11:5
-0019    LOADI R69, 257                          # 11:1
-0020    UPCALL 0, R69                           # 11:1
-0021    LOADI R69, 123                          # 13:13
-0022    LOADC R70, 3                            # 14:13
-0023    MOVE R72, R69                           # 15:5
-0024    LOADI R71, 258                          # 15:1
-0025    UPCALL 0, R71                           # 15:1
-0026    MOVE R72, R70                           # 16:5
-0027    LOADI R71, 258                          # 16:1
-0028    UPCALL 0, R71                           # 16:1
-0029    LOADI R71, 4                            # 18:8
-0030    MOVE R73, R71                           # 19:5
-0031    LOADI R72, 259                          # 19:1
-0032    UPCALL 0, R72                           # 19:1
-0033    LEAVE                                   # 0:0
-0034    END                                     # 0:0
+0000:   ENTER       10                  # 0:0
+0001:   LOADI       R64, 0              # 1:10
+0002:   LOADI       R65, 1              # 2:10
+0003:   MOVE        R67, R64            # 3:5
+0004:   LOADI       R66, 256            # 3:5
+0005:   UPCALL      0, R66              # 3:1, OUT
+0006:   MOVE        R67, R65            # 4:5
+0007:   LOADI       R66, 256            # 4:5
+0008:   UPCALL      0, R66              # 4:1, OUT
+0009:   LOADC       R66, 0              # 6:16
+0010:   LOADC       R67, 1              # 7:16
+0011:   LOADC       R68, 2              # 8:15
+0012:   MOVE        R70, R66            # 9:5
+0013:   LOADI       R69, 257            # 9:5
+0014:   UPCALL      0, R69              # 9:1, OUT
+0015:   MOVE        R70, R67            # 10:5
+0016:   LOADI       R69, 257            # 10:5
+0017:   UPCALL      0, R69              # 10:1, OUT
+0018:   MOVE        R70, R68            # 11:5
+0019:   LOADI       R69, 257            # 11:5
+0020:   UPCALL      0, R69              # 11:1, OUT
+0021:   LOADI       R69, 123            # 13:13
+0022:   LOADC       R70, 3              # 14:13
+0023:   MOVE        R72, R69            # 15:5
+0024:   LOADI       R71, 258            # 15:5
+0025:   UPCALL      0, R71              # 15:1, OUT
+0026:   MOVE        R72, R70            # 16:5
+0027:   LOADI       R71, 258            # 16:5
+0028:   UPCALL      0, R71              # 16:1, OUT
+0029:   LOADI       R71, 4              # 18:8
+0030:   MOVE        R73, R71            # 19:5
+0031:   LOADI       R72, 259            # 19:5
+0032:   UPCALL      0, R72              # 19:1, OUT
+0033:   LEAVE                           # 0:0
+0034:   END                             # 0:0
 
 # Output
 

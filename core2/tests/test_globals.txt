@@ -3,66 +3,103 @@
 DIM SHARED b1 AS BOOLEAN
 DIM SHARED d1 AS DOUBLE
 DIM SHARED i1 AS INTEGER
+DIM SHARED i2
 DIM SHARED s1 AS STRING
 
-DIM SHARED b2 AS BOOLEAN
-DIM SHARED d2 AS DOUBLE
-DIM SHARED i2 AS INTEGER
-DIM SHARED s2 AS STRING
-
-' TODO(jmmv): Test type annotations if we support them.
-DIM SHARED i3
-
 ' Print default zero values.
-OUT b1, d1, i1, s1
+OUT b1, d1, i1, i2, s1
 
 ' Modify the variables and print their new values.
 b1 = TRUE
 d1 = 2.3
 i1 = 5
+i2 = 7
 s1 = 8
-OUT b1, d1, i1, s1
+OUT b1, d1, i1, i2, s1
 
-' DO NOT SUBMIT: Add SUB to print globals vs. locals.
+SUB modify_global
+    OUT "Inside before", i1
+    i1 = 3
+    OUT "Inside after", i1
+END SUB
+
+i1 = 2
+OUT "Before", i1
+modify_global
+OUT "After", i1
 
 # Disassembly
 
-0000    ENTER 8                                 # 0:0
-0001    LOADI R0, 0                             # 1:12
-0002    LOADI R1, 0                             # 2:12
-0003    LOADI R2, 0                             # 3:12
-0004    ALLOC R3, STRING                        # 4:12
-0005    LOADI R4, 0                             # 6:12
-0006    LOADI R5, 0                             # 7:12
-0007    LOADI R6, 0                             # 8:12
-0008    ALLOC R7, STRING                        # 9:12
-0009    LOADI R8, 0                             # 12:12
-0010    MOVE R65, R0                            # 15:5
-0011    LOADI R64, 288                          # 15:1
-0012    MOVE R67, R1                            # 15:9
-0013    LOADI R66, 289                          # 15:1
-0014    MOVE R69, R2                            # 15:13
-0015    LOADI R68, 290                          # 15:1
-0016    MOVE R71, R3                            # 15:17
-0017    LOADI R70, 259                          # 15:1
-0018    UPCALL 0, R64                           # 15:1
-0019    LOADI R0, 1                             # 18:6
-0020    LOADC R1, 0                             # 19:6
-0021    LOADI R2, 5                             # 20:6
-0022    LOADI R3, 8                             # 21:6
-0023    MOVE R65, R0                            # 22:5
-0024    LOADI R64, 288                          # 22:1
-0025    MOVE R67, R1                            # 22:9
-0026    LOADI R66, 289                          # 22:1
-0027    MOVE R69, R2                            # 22:13
-0028    LOADI R68, 290                          # 22:1
-0029    MOVE R71, R3                            # 22:17
-0030    LOADI R70, 258                          # 22:1
-0031    UPCALL 0, R64                           # 22:1
-0032    LEAVE                                   # 0:0
-0033    END                                     # 0:0
+0000:   ENTER       10                  # 0:0
+0001:   LOADI       R0, 0               # 1:12
+0002:   LOADI       R1, 0               # 2:12
+0003:   LOADI       R2, 0               # 3:12
+0004:   LOADI       R3, 0               # 4:12
+0005:   ALLOC       R4, STRING          # 5:12
+0006:   MOVE        R65, R0             # 8:5
+0007:   LOADI       R64, 288            # 8:5
+0008:   MOVE        R67, R1             # 8:9
+0009:   LOADI       R66, 289            # 8:9
+0010:   MOVE        R69, R2             # 8:13
+0011:   LOADI       R68, 290            # 8:13
+0012:   MOVE        R71, R3             # 8:17
+0013:   LOADI       R70, 290            # 8:17
+0014:   MOVE        R73, R4             # 8:21
+0015:   LOADI       R72, 259            # 8:21
+0016:   UPCALL      0, R64              # 8:1, OUT
+0017:   LOADI       R0, 1               # 11:6
+0018:   LOADC       R1, 0               # 12:6
+0019:   LOADI       R2, 5               # 13:6
+0020:   LOADI       R3, 7               # 14:6
+0021:   LOADI       R4, 8               # 15:6
+0022:   MOVE        R65, R0             # 16:5
+0023:   LOADI       R64, 288            # 16:5
+0024:   MOVE        R67, R1             # 16:9
+0025:   LOADI       R66, 289            # 16:9
+0026:   MOVE        R69, R2             # 16:13
+0027:   LOADI       R68, 290            # 16:13
+0028:   MOVE        R71, R3             # 16:17
+0029:   LOADI       R70, 290            # 16:17
+0030:   MOVE        R73, R4             # 16:21
+0031:   LOADI       R72, 258            # 16:21
+0032:   UPCALL      0, R64              # 16:1, OUT
+0033:   LOADI       R2, 2               # 24:6
+0034:   LOADI       R65, 1              # 25:5
+0035:   LOADI       R64, 291            # 25:5
+0036:   MOVE        R67, R2             # 25:15
+0037:   LOADI       R66, 258            # 25:15
+0038:   UPCALL      0, R64              # 25:1, OUT
+0039:   LOADI       R64, 0              # 26:1
+0040:   CALL        R64, 8              # 26:1, MODIFY_GLOBAL
+0041:   LOADI       R65, 2              # 27:5
+0042:   LOADI       R64, 291            # 27:5
+0043:   MOVE        R67, R2             # 27:14
+0044:   LOADI       R66, 258            # 27:14
+0045:   UPCALL      0, R64              # 27:1, OUT
+0046:   LEAVE                           # 0:0
+0047:   END                             # 0:0
+
+## MODIFY_GLOBAL 
+0048:   ENTER       4                   # 0:0
+0049:   LOADI       R65, 3              # 19:9
+0050:   LOADI       R64, 291            # 19:9
+0051:   MOVE        R67, R2             # 19:26
+0052:   LOADI       R66, 258            # 19:26
+0053:   UPCALL      0, R64              # 19:5, OUT
+0054:   LOADI       R2, 3               # 20:10
+0055:   LOADI       R65, 4              # 21:9
+0056:   LOADI       R64, 291            # 21:9
+0057:   MOVE        R67, R2             # 21:25
+0058:   LOADI       R66, 258            # 21:25
+0059:   UPCALL      0, R64              # 21:5, OUT
+0060:   LEAVE                           # 0:0
+0061:   RETURN                          # 0:0
 
 # Output
 
-(false, 0, ?) , (0, 1, #) , (0, 2, %) , ("", 3, $)
-(true, 0, ?) , (2.3, 1, #) , (5, 2, %) , (8, 3, %)
+(false, 0, ?) , (0, 1, #) , (0, 2, %) , (0, 3, %) , ("", 4, $)
+(true, 0, ?) , (2.3, 1, #) , (5, 2, %) , (7, 3, %) , (8, 4, %)
+("Before", 0, $) , (2, 1, %)
+("Inside before", 0, $) , (2, 1, %)
+("Inside after", 0, $) , (3, 1, %)
+("After", 0, $) , (3, 1, %)

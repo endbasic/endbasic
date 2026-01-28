@@ -15,8 +15,8 @@
 
 //! Memory representation and related types.
 
+use crate::num::{unchecked_u24_as_usize, U24};
 use crate::ExprType;
-use crate::num::{U24, unchecked_u24_as_usize};
 use std::convert::TryFrom;
 use std::hash::Hash;
 
@@ -86,8 +86,8 @@ impl Pointer {
         raw as u64
     }
 
-    pub(crate) fn resolve<'a, 'b>(
-        &'a self,
+    pub(crate) fn resolve<'b>(
+        &self,
         constants: &'b [Datum],
         heap: &'b [Datum],
     ) -> &'b Datum {

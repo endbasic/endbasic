@@ -15,10 +15,10 @@
 
 //! Virtual processor for EndBASIC execution.
 
-use crate::bytecode::{self, Opcode, Register};
-use crate::compiler::Image;
+use crate::bytecode::{self, Opcode, Register, opcode_of};
+use crate::image::Image;
 use crate::mem::{Datum, Pointer};
-use crate::num::{unchecked_u24_as_usize, unchecked_u32_as_u8};
+use crate::num::unchecked_u24_as_usize;
 
 /// Alias for the type representing a program address.
 type Address = usize;
@@ -38,7 +38,7 @@ pub(super) enum InternalStopReason {
 struct Frame {
     old_pc: Address,
     old_fp: usize,
-    ret_reg: Register,
+    ret_reg: Option<Register>,
 }
 
 /// Execution context for the virtual machine.
@@ -101,12 +101,7 @@ impl Context {
     }
 
     /// Dereferences a pointer.
-    fn deref_ptr<'a, 'b>(
-        &'a self,
-        reg: Register,
-        constants: &'b [Datum],
-        heap: &'b [Datum],
-    ) -> &'b Datum {
+    fn deref_ptr<'b>(&self, reg: Register, constants: &'b [Datum], heap: &'b [Datum]) -> &'b Datum {
         let raw_addr = self.get_reg(reg);
         match Pointer::from(raw_addr) {
             Pointer::Constant(index) => {
@@ -129,7 +124,7 @@ impl Context {
     }
 
     // DO NOT SUBMIT: Revisit API.
-    pub(super) fn get_local_regs<'a>(&'a self, reg: Register) -> &'a [u64] {
+    pub(super) fn get_local_regs(&self, reg: Register) -> &[u64] {
         let (is_global, index) = reg.to_parts();
         assert!(!is_global);
         let index = usize::from(index);
@@ -146,27 +141,24 @@ impl Context {
         while self.stop.is_none() {
             let instr = image.code[self.pc];
 
-            let opcode = unsafe {
-                let opcode: u8 = unchecked_u32_as_u8(instr >> 24);
-                debug_assert!(opcode <= Opcode::End as u8);
-                std::mem::transmute(opcode)
-            };
+            let opcode = unsafe { opcode_of(instr) };
 
             match opcode {
-                Opcode::Nop => self.do_nop(instr),
-                Opcode::Enter => self.do_enter(instr),
-                Opcode::Leave => self.do_leave(instr),
-                Opcode::Upcall => self.do_upcall(instr),
-                Opcode::Jump => self.do_jump(instr),
-                Opcode::Call => self.do_call(instr),
-                Opcode::Return => self.do_return(instr),
-                Opcode::Alloc => self.do_alloc(instr, heap),
-                Opcode::Move => self.do_move(instr),
-                Opcode::LoadConstant => self.do_load_constant(instr, &image.constants),
-                Opcode::LoadInteger => self.do_load_integer(instr),
                 Opcode::AddInteger => self.do_add_integer(instr),
+                Opcode::Alloc => self.do_alloc(instr, heap),
+                Opcode::Call => self.do_call(instr),
                 Opcode::Concat => self.do_concat(instr, &image.constants, heap),
                 Opcode::End => self.do_end(instr),
+                Opcode::Enter => self.do_enter(instr),
+                Opcode::Gosub => self.do_gosub(instr),
+                Opcode::Jump => self.do_jump(instr),
+                Opcode::Leave => self.do_leave(instr),
+                Opcode::LoadConstant => self.do_load_constant(instr, &image.constants),
+                Opcode::LoadInteger => self.do_load_integer(instr),
+                Opcode::Move => self.do_move(instr),
+                Opcode::Nop => self.do_nop(instr),
+                Opcode::Return => self.do_return(instr),
+                Opcode::Upcall => self.do_upcall(instr),
             }
         }
         self.stop.take().expect("The loop above can only exit when there is a stop reason")
@@ -174,84 +166,8 @@ impl Context {
 }
 
 impl Context {
-    pub(super) fn do_nop(&mut self, op: u32) {
-        bytecode::parse_nop(op);
-        self.pc += 1;
-    }
-
-    pub(super) fn do_enter(&mut self, op: u32) {
-        let nlocals = bytecode::parse_enter(op);
-        self.regs.resize(self.regs.len() + usize::from(nlocals), 0);
-        self.pc += 1;
-    }
-
-    pub(super) fn do_leave(&mut self, op: u32) {
-        bytecode::parse_leave(op);
-        //self.regs.truncate(self.regs.len() - usize::from(nlocals));
-        self.pc += 1;
-    }
-
-    pub(super) fn do_upcall(&mut self, op: u32) {
-        let (index, first_reg) = bytecode::parse_upcall(op);
-        self.stop = Some(InternalStopReason::Upcall(index, first_reg));
-        self.pc += 1;
-    }
-
-    pub(super) fn do_jump(&mut self, op: u32) {
-        let offset = bytecode::parse_jump(op);
-        self.pc += Address::from(offset);
-    }
-
-    pub(super) fn do_call(&mut self, op: u32) {
-        let (reg, offset) = bytecode::parse_call(op);
-        self.call_stack.push(Frame { old_pc: self.pc, old_fp: self.fp, ret_reg: reg });
-        self.pc += Address::from(offset);
-        self.fp = self.regs.len();
-    }
-
-    pub(super) fn do_return(&mut self, op: u32) {
-        bytecode::parse_return(op);
-        let return_value = self.get_reg(Register::local(0).unwrap());
-        let frame = self.call_stack.pop().expect("Calls and returns must be balanced");
-        self.pc = frame.old_pc + 1;
-        self.fp = frame.old_fp;
-        self.set_reg(frame.ret_reg, return_value);
-    }
-
-    pub(super) fn do_alloc(&mut self, op: u32, heap: &mut Vec<Datum>) {
-        let (dest, etype) = bytecode::parse_alloc(op);
-        heap.push(Datum::new(etype));
-        let ptr = Pointer::for_heap((heap.len() - 1) as u32);
-        self.set_reg(dest, ptr);
-        self.pc += 1;
-    }
-
-    pub(super) fn do_move(&mut self, op: u32) {
-        let (dest, src) = bytecode::parse_move(op);
-        let value = self.get_reg(src);
-        self.set_reg(dest, value);
-        self.pc += 1;
-    }
-
-    pub(super) fn do_load_constant(&mut self, op: u32, constants: &[Datum]) {
-        let (register, i) = bytecode::parse_load_constant(op);
-        match &constants[usize::from(i)] {
-            Datum::Boolean(_) => unreachable!("Booleans are always immediates"),
-            Datum::Double(d) => self.set_reg(register, d.to_bits()),
-            Datum::Integer(i) => self.set_reg(register, *i as u64),
-            Datum::Text(_) => unreachable!("Strings cannot be loaded into registers"),
-        }
-        self.pc += 1;
-    }
-
-    pub(super) fn do_load_integer(&mut self, op: u32) {
-        let (register, i) = bytecode::parse_load_integer(op);
-        self.set_reg(register, i as u64);
-        self.pc += 1;
-    }
-
-    pub(super) fn do_add_integer(&mut self, op: u32) {
-        let (dest, src1, src2) = bytecode::parse_add_integer(op);
+    pub(super) fn do_add_integer(&mut self, instr: u32) {
+        let (dest, src1, src2) = bytecode::parse_add_integer(instr);
         let lhs = self.get_reg(src1) as i32;
         let rhs = self.get_reg(src2) as i32;
         match lhs.checked_add(rhs) {
@@ -265,8 +181,23 @@ impl Context {
         }
     }
 
-    pub(super) fn do_concat(&mut self, op: u32, constants: &[Datum], heap: &mut Vec<Datum>) {
-        let (dest, src1, src2) = bytecode::parse_concat(op);
+    pub(super) fn do_alloc(&mut self, instr: u32, heap: &mut Vec<Datum>) {
+        let (dest, etype) = bytecode::parse_alloc(instr);
+        heap.push(Datum::new(etype));
+        let ptr = Pointer::for_heap((heap.len() - 1) as u32);
+        self.set_reg(dest, ptr);
+        self.pc += 1;
+    }
+
+    pub(super) fn do_call(&mut self, instr: u32) {
+        let (reg, offset) = bytecode::parse_call(instr);
+        self.call_stack.push(Frame { old_pc: self.pc, old_fp: self.fp, ret_reg: Some(reg) });
+        self.pc += Address::from(offset);
+        self.fp = self.regs.len();
+    }
+
+    pub(super) fn do_concat(&mut self, instr: u32, constants: &[Datum], heap: &mut Vec<Datum>) {
+        let (dest, src1, src2) = bytecode::parse_concat(instr);
         let lhs = self.deref_ptr(src1, constants, heap);
         let rhs = self.deref_ptr(src2, constants, heap);
         let result = match (lhs, rhs) {
@@ -279,8 +210,86 @@ impl Context {
         self.pc += 1;
     }
 
-    pub(super) fn do_end(&mut self, op: u32) {
-        bytecode::parse_end(op);
+    pub(super) fn do_end(&mut self, instr: u32) {
+        bytecode::parse_end(instr);
         self.stop = Some(InternalStopReason::Eof);
+    }
+
+    pub(super) fn do_enter(&mut self, instr: u32) {
+        let nlocals = bytecode::parse_enter(instr);
+        self.regs.resize(self.regs.len() + usize::from(nlocals), 0);
+        self.pc += 1;
+    }
+
+    pub(super) fn do_gosub(&mut self, instr: u32) {
+        let offset = bytecode::parse_gosub(instr);
+        self.call_stack.push(Frame { old_pc: self.pc, old_fp: self.fp, ret_reg: None });
+        self.pc += Address::from(offset);
+    }
+
+    pub(super) fn do_jump(&mut self, instr: u32) {
+        let offset = bytecode::parse_jump(instr);
+        self.pc += Address::from(offset);
+    }
+
+    pub(super) fn do_leave(&mut self, instr: u32) {
+        bytecode::parse_leave(instr);
+        //self.regs.truncate(self.regs.len() - usize::from(nlocals));
+        self.pc += 1;
+    }
+
+    pub(super) fn do_load_constant(&mut self, instr: u32, constants: &[Datum]) {
+        let (register, i) = bytecode::parse_load_constant(instr);
+        match &constants[usize::from(i)] {
+            Datum::Boolean(_) => unreachable!("Booleans are always immediates"),
+            Datum::Double(d) => self.set_reg(register, d.to_bits()),
+            Datum::Integer(i) => self.set_reg(register, *i as u64),
+            Datum::Text(_) => unreachable!("Strings cannot be loaded into registers"),
+        }
+        self.pc += 1;
+    }
+
+    pub(super) fn do_load_integer(&mut self, instr: u32) {
+        let (register, i) = bytecode::parse_load_integer(instr);
+        self.set_reg(register, i as u64);
+        self.pc += 1;
+    }
+
+    pub(super) fn do_move(&mut self, instr: u32) {
+        let (dest, src) = bytecode::parse_move(instr);
+        let value = self.get_reg(src);
+        self.set_reg(dest, value);
+        self.pc += 1;
+    }
+
+    pub(super) fn do_nop(&mut self, instr: u32) {
+        bytecode::parse_nop(instr);
+        self.pc += 1;
+    }
+
+    pub(super) fn do_return(&mut self, instr: u32) {
+        bytecode::parse_return(instr);
+        let frame = match self.call_stack.pop() {
+            Some(frame) => frame,
+            None => {
+                self.set_exception("RETURN without GOSUB or FUNCTION call");
+                return;
+            }
+        };
+        if let Some(ret_reg) = frame.ret_reg {
+            let return_value = self.get_reg(Register::local(0).unwrap());
+            self.pc = frame.old_pc + 1;
+            self.fp = frame.old_fp;
+            self.set_reg(ret_reg, return_value);
+        } else {
+            self.pc = frame.old_pc + 1;
+            self.fp = frame.old_fp;
+        }
+    }
+
+    pub(super) fn do_upcall(&mut self, instr: u32) {
+        let (index, first_reg) = bytecode::parse_upcall(instr);
+        self.stop = Some(InternalStopReason::Upcall(index, first_reg));
+        self.pc += 1;
     }
 }

@@ -14,35 +14,37 @@ OUT "After", a
 
 # Disassembly
 
-0000    ENTER 5                                 # 0:0
-0001    LOADI R64, 10                           # 1:5
-0002    LOADI R66, 0                            # 9:5
-0003    LOADI R65, 291                          # 9:1
-0004    MOVE R68, R64                           # 9:15
-0005    LOADI R67, 258                          # 9:1
-0006    UPCALL 0, R65                           # 9:1
-0007    LOADI R66, 1                            # 10:5
-0008    LOADI R65, 291                          # 10:1
-0009    CALL R68, 10                            # 10:21
-0010    LOADI R67, 258                          # 10:1
-0011    UPCALL 0, R65                           # 10:1
-0012    LOADI R66, 2                            # 11:5
-0013    LOADI R65, 291                          # 11:1
-0014    MOVE R68, R64                           # 11:14
-0015    LOADI R67, 258                          # 11:1
-0016    UPCALL 0, R65                           # 11:1
-0017    LEAVE                                   # 0:0
-0018    END                                     # 0:0
-0019    ENTER 6                                 # 0:0 <= FOO
-0020    LOADI R65, 20                           # 4:9
-0021    LOADI R67, 3                            # 5:9
-0022    LOADI R66, 291                          # 5:5
-0023    MOVE R69, R65                           # 5:19
-0024    LOADI R68, 258                          # 5:5
-0025    UPCALL 0, R66                           # 5:5
-0026    LOADI R64, 30                           # 6:11
-0027    LEAVE                                   # 0:0
-0028    RETURN                                  # 0:0
+0000:   ENTER       5                   # 0:0
+0001:   LOADI       R64, 10             # 1:5
+0002:   LOADI       R66, 0              # 9:5
+0003:   LOADI       R65, 291            # 9:5
+0004:   MOVE        R68, R64            # 9:15
+0005:   LOADI       R67, 258            # 9:15
+0006:   UPCALL      0, R65              # 9:1, OUT
+0007:   LOADI       R66, 1              # 10:5
+0008:   LOADI       R65, 291            # 10:5
+0009:   CALL        R68, 10             # 10:21, FOO
+0010:   LOADI       R67, 258            # 10:21
+0011:   UPCALL      0, R65              # 10:1, OUT
+0012:   LOADI       R66, 2              # 11:5
+0013:   LOADI       R65, 291            # 11:5
+0014:   MOVE        R68, R64            # 11:14
+0015:   LOADI       R67, 258            # 11:14
+0016:   UPCALL      0, R65              # 11:1, OUT
+0017:   LEAVE                           # 0:0
+0018:   END                             # 0:0
+
+## FOO 
+0019:   ENTER       6                   # 0:0
+0020:   LOADI       R65, 20             # 4:9
+0021:   LOADI       R67, 3              # 5:9
+0022:   LOADI       R66, 291            # 5:9
+0023:   MOVE        R69, R65            # 5:19
+0024:   LOADI       R68, 258            # 5:19
+0025:   UPCALL      0, R66              # 5:5, OUT
+0026:   LOADI       R64, 30             # 6:11
+0027:   LEAVE                           # 0:0
+0028:   RETURN                          # 0:0
 
 # Output
 

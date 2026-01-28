@@ -723,10 +723,8 @@ impl<'a> Parser<'a> {
 
                     if let Some(expr) = prev_expr.take() {
                         spans.push(ArgSpan { expr: Some(expr), sep: ArgSep::End, sep_pos: pos });
-                    } else {
-                        if !is_first {
-                            return Err(Error::Bad(pos, "Missing expression".to_owned()));
-                        }
+                    } else if !is_first {
+                        return Err(Error::Bad(pos, "Missing expression".to_owned()));
                     }
 
                     break;
@@ -986,7 +984,11 @@ impl<'a> Parser<'a> {
             }
         }
 
-        if let Some(expr) = exprs.pop() { Ok(Some(expr)) } else { Ok(None) }
+        if let Some(expr) = exprs.pop() {
+            Ok(Some(expr))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Wrapper over `parse_expr` that requires an expression to be present and returns an error

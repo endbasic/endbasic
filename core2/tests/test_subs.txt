@@ -1,0 +1,48 @@
+# Source
+
+a = 10
+
+SUB foo
+    a = 20
+    OUT "Inside", a
+END SUB
+
+OUT "Before", a
+foo
+OUT "After", a
+
+# Disassembly
+
+0000:   ENTER       5                   # 0:0
+0001:   LOADI       R64, 10             # 1:5
+0002:   LOADI       R66, 0              # 8:5
+0003:   LOADI       R65, 291            # 8:5
+0004:   MOVE        R68, R64            # 8:15
+0005:   LOADI       R67, 258            # 8:15
+0006:   UPCALL      0, R65              # 8:1, OUT
+0007:   LOADI       R65, 0              # 9:1
+0008:   CALL        R65, 8              # 9:1, FOO
+0009:   LOADI       R66, 1              # 10:5
+0010:   LOADI       R65, 291            # 10:5
+0011:   MOVE        R68, R64            # 10:14
+0012:   LOADI       R67, 258            # 10:14
+0013:   UPCALL      0, R65              # 10:1, OUT
+0014:   LEAVE                           # 0:0
+0015:   END                             # 0:0
+
+## FOO 
+0016:   ENTER       5                   # 0:0
+0017:   LOADI       R64, 20             # 4:9
+0018:   LOADI       R66, 2              # 5:9
+0019:   LOADI       R65, 291            # 5:9
+0020:   MOVE        R68, R64            # 5:19
+0021:   LOADI       R67, 258            # 5:19
+0022:   UPCALL      0, R65              # 5:5, OUT
+0023:   LEAVE                           # 0:0
+0024:   RETURN                          # 0:0
+
+# Output
+
+("Before", 0, $) , (10, 1, %)
+("Inside", 0, $) , (20, 1, %)
+("After", 0, $) , (10, 1, %)

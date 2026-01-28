@@ -224,11 +224,11 @@ impl TryFrom<u8> for ExprType {
 }
 
 impl ExprType {
-    // DO NOT SUBMIT
     /// Returns true if this expression type is numerical.
-    //pub(crate) fn is_numerical(self) -> bool {
-    //    self == Self::Double || self == Self::Integer
-    //}
+    #[allow(unused)]
+    pub(crate) fn is_numerical(self) -> bool {
+        self == Self::Double || self == Self::Integer
+    }
 
     /// Returns the textual representation of the annotation for this type.
     pub fn annotation(&self) -> char {

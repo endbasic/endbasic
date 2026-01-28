@@ -15,9 +15,10 @@
 
 //! Symbol table for EndBASIC compilation.
 
+use crate::CallableMetadata;
 use crate::ast::{ExprType, VarRef};
 use crate::bytecode::{Register, RegisterScope};
-use crate::compiler::HashMapWithIds;
+use crate::compiler::ids::HashMapWithIds;
 use std::cell::RefCell;
 use std::cmp::max;
 use std::collections::HashMap;
@@ -57,14 +58,18 @@ impl fmt::Display for SymbolKey {
     }
 }
 
-#[derive(Default)]
-pub(crate) struct GlobalSymtable {
+pub(crate) struct GlobalSymtable<'uref, 'ukey, 'umd> {
     globals: HashMapWithIds<SymbolKey, ExprType, u8>,
-    user_callables: HashMap<SymbolKey, (Option<ExprType>, Vec<VarRef>)>,
+    upcalls: &'uref HashMap<&'ukey SymbolKey, &'umd CallableMetadata>,
+    user_callables: HashMap<SymbolKey, CallableMetadata>,
 }
 
-impl GlobalSymtable {
-    pub(crate) fn enter_scope(&mut self) -> LocalSymtable<'_> {
+impl<'uref, 'ukey, 'umd> GlobalSymtable<'uref, 'ukey, 'umd> {
+    pub(crate) fn new(upcalls: &'uref HashMap<&'ukey SymbolKey, &'umd CallableMetadata>) -> Self {
+        Self { globals: HashMapWithIds::default(), upcalls, user_callables: HashMap::default() }
+    }
+
+    pub(crate) fn enter_scope(&mut self) -> LocalSymtable<'uref, 'ukey, 'umd, '_> {
         LocalSymtable::new(self)
     }
 
@@ -111,23 +116,20 @@ impl GlobalSymtable {
     pub(crate) fn define_user_callable(
         &mut self,
         vref: &VarRef,
-        params: Vec<VarRef>,
+        md: CallableMetadata,
     ) -> Result<()> {
         let key = SymbolKey::from(&vref.name);
-        let previous = self.user_callables.insert(key, (vref.ref_type, params));
+        let previous = self.user_callables.insert(key, md);
         if previous.is_none() { Ok(()) } else { Err(Error::AlreadyDefined(vref.clone())) }
     }
 
-    pub(crate) fn get_user_callable(
-        &self,
-        key: &SymbolKey,
-    ) -> Option<&(Option<ExprType>, Vec<VarRef>)> {
-        self.user_callables.get(&key)
+    pub(crate) fn get_callable(&self, key: &SymbolKey) -> Option<&CallableMetadata> {
+        self.user_callables.get(key).or(self.upcalls.get(key).copied())
     }
 }
 
-pub(crate) struct LocalSymtable<'a> {
-    symtable: &'a mut GlobalSymtable,
+pub(crate) struct LocalSymtable<'uref, 'ukey, 'umd, 'a> {
+    symtable: &'a mut GlobalSymtable<'uref, 'ukey, 'umd>,
     locals: HashMapWithIds<SymbolKey, ExprType, u8>,
 
     /// Maximum number of allocated temporary registers in all possible evaluation scopes created
@@ -136,8 +138,8 @@ pub(crate) struct LocalSymtable<'a> {
     count_temps: u8,
 }
 
-impl<'a> LocalSymtable<'a> {
-    fn new(symtable: &'a mut GlobalSymtable) -> Self {
+impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
+    fn new(symtable: &'a mut GlobalSymtable<'uref, 'ukey, 'umd>) -> Self {
         Self { symtable, locals: HashMapWithIds::default(), count_temps: 0 }
     }
 
@@ -151,12 +153,12 @@ impl<'a> LocalSymtable<'a> {
     pub(crate) fn define_user_callable(
         &mut self,
         vref: &VarRef,
-        params: Vec<VarRef>,
+        md: CallableMetadata,
     ) -> Result<()> {
-        self.symtable.define_user_callable(vref, params)
+        self.symtable.define_user_callable(vref, md)
     }
 
-    pub(crate) fn frozen(&mut self) -> TempSymtable<'_, 'a> {
+    pub(crate) fn frozen(&mut self) -> TempSymtable<'uref, 'ukey, 'umd, '_, 'a> {
         TempSymtable::new(self)
     }
 
@@ -191,6 +193,10 @@ impl<'a> LocalSymtable<'a> {
             Err(Error::UndefinedSymbol(..)) => self.get_local(vref),
             Err(e) => Err(e),
         }
+    }
+
+    pub(crate) fn get_callable(&self, key: &SymbolKey) -> Option<&CallableMetadata> {
+        self.symtable.get_callable(key)
     }
 
     pub(crate) fn put_local(&mut self, vref: &VarRef) -> Result<Register> {
@@ -228,8 +234,8 @@ impl<'a> LocalSymtable<'a> {
 /// to forbid mutations to local variables.  We need to be able to pass a `TempSymtable`
 /// across recursive function calls (for expression evaluation), but at the same time we
 /// need each call site to have its own `TempScope` for temporary register cleanup.
-pub(crate) struct TempSymtable<'temp, 'local> {
-    symtable: &'temp mut LocalSymtable<'local>,
+pub(crate) struct TempSymtable<'uref, 'ukey, 'umd, 'temp, 'local> {
+    symtable: &'temp mut LocalSymtable<'uref, 'ukey, 'umd, 'local>,
 
     /// Index of the next temporary register to allocate.
     next_temp: Rc<RefCell<u8>>,
@@ -238,15 +244,15 @@ pub(crate) struct TempSymtable<'temp, 'local> {
     count_temps: Rc<RefCell<u8>>,
 }
 
-impl<'temp, 'local> Drop for TempSymtable<'temp, 'local> {
+impl<'uref, 'ukey, 'umd, 'temp, 'local> Drop for TempSymtable<'uref, 'ukey, 'umd, 'temp, 'local> {
     fn drop(&mut self) {
         debug_assert_eq!(0, *self.next_temp.borrow(), "Unbalanced temp drops");
         self.symtable.count_temps = max(self.symtable.count_temps, *self.count_temps.borrow());
     }
 }
 
-impl<'temp, 'local> TempSymtable<'temp, 'local> {
-    fn new(symtable: &'temp mut LocalSymtable<'local>) -> Self {
+impl<'uref, 'ukey, 'umd, 'temp, 'local> TempSymtable<'uref, 'ukey, 'umd, 'temp, 'local> {
+    fn new(symtable: &'temp mut LocalSymtable<'uref, 'ukey, 'umd, 'local>) -> Self {
         Self {
             symtable,
             next_temp: Rc::from(RefCell::from(0)),
@@ -258,11 +264,8 @@ impl<'temp, 'local> TempSymtable<'temp, 'local> {
         self.symtable.get_local_or_global(vref)
     }
 
-    pub(crate) fn get_user_callable(
-        &self,
-        key: &SymbolKey,
-    ) -> Option<&(Option<ExprType>, Vec<VarRef>)> {
-        self.symtable.symtable.get_user_callable(key)
+    pub(crate) fn get_callable(&self, key: &SymbolKey) -> Option<&CallableMetadata> {
+        self.symtable.get_callable(key)
     }
 
     pub(crate) fn temp_scope(&self) -> TempScope {
@@ -294,7 +297,7 @@ impl Drop for TempScope {
 
 impl TempScope {
     pub(crate) fn first(&mut self) -> Result<Register> {
-        Ok(Register::local(self.nlocals).map_err(|_| Error::OutOfRegisters(RegisterScope::Temp))?)
+        Register::local(self.nlocals).map_err(|_| Error::OutOfRegisters(RegisterScope::Temp))
     }
 
     pub(crate) fn alloc(&mut self) -> Result<Register> {
@@ -333,7 +336,8 @@ mod tests {
 
     #[test]
     fn test_temp_scope() -> Result<()> {
-        let mut global = GlobalSymtable::default();
+        let upcalls = HashMap::default();
+        let mut global = GlobalSymtable::new(&upcalls);
         let mut local = global.enter_scope();
         debug_assert_eq!(Register::local(0).unwrap(), local.put_local(&VarRef::new("foo", None))?);
         {

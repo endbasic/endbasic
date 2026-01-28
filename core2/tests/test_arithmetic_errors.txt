@@ -4,12 +4,12 @@ a = 2147483640 + 20
 
 # Disassembly
 
-0000    ENTER 3                                 # 0:0
-0001    LOADC R65, 0                            # 1:5
-0002    LOADI R66, 20                           # 1:18
-0003    ADDI R64, R65, R66                      # 1:16
-0004    LEAVE                                   # 0:0
-0005    END                                     # 0:0
+0000:   ENTER       3                   # 0:0
+0001:   LOADC       R65, 0              # 1:5
+0002:   LOADI       R66, 20             # 1:18
+0003:   ADDI        R64, R65, R66       # 1:16
+0004:   LEAVE                           # 0:0
+0005:   END                             # 0:0
 
 # Runtime errors
 

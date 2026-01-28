@@ -18,7 +18,8 @@
 use crate::CallResult;
 use crate::bytecode::Register;
 use crate::callable::{Callable, Scope};
-use crate::compiler::{Image, SymbolKey};
+use crate::compiler::SymbolKey;
+use crate::image::Image;
 use crate::mem::Datum;
 use crate::reader::LineCol;
 use std::collections::HashMap;
@@ -59,11 +60,11 @@ pub struct Vm {
     /// Mapping of all available upcall names to their handlers.
     upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>>,
 
-    /// Upcalls used by the loaded image in index order.
-    upcalls: Vec<Rc<dyn Callable>>,
-
     /// Active image for execution.
     image: Option<Image>,
+
+    /// Upcalls used by the loaded image in index order.
+    upcalls: Vec<Rc<dyn Callable>>,
 
     /// Heap memory for dynamic allocations.
     heap: Vec<Datum>,
@@ -79,8 +80,8 @@ impl Vm {
     pub fn new(upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>>) -> Self {
         Self {
             upcalls_by_name,
-            upcalls: vec![],
             image: None,
+            upcalls: vec![],
             heap: vec![],
             context: Context::default(),
             pending_upcall: None,
@@ -88,8 +89,18 @@ impl Vm {
     }
 
     pub fn load(&mut self, image: Image) {
-        self.upcalls = image.map_upcalls(&self.upcalls_by_name);
+        self.upcalls.clear();
+        for key in &image.upcalls {
+            self.upcalls.push(
+                self.upcalls_by_name
+                    .get(key)
+                    .expect("All upcalls exposed during compilation must be present at runtime")
+                    .clone(),
+            );
+        }
+
         self.image = Some(image);
+
         self.heap.clear();
     }
 
@@ -107,11 +118,11 @@ impl Vm {
             return StopReason::Eof;
         };
 
-        if let Some(..) = self.pending_upcall {
+        if self.pending_upcall.is_some() {
             return StopReason::Upcall(UpcallHandler(self));
         };
 
-        match self.context.exec(&image, &mut self.heap) {
+        match self.context.exec(image, &mut self.heap) {
             InternalStopReason::Eof => StopReason::Eof,
             InternalStopReason::Exception(pc, e) => {
                 let pos = image.debug_info.instr_linecols[pc];
@@ -128,7 +139,8 @@ impl Vm {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compiler::{Image, SymbolKey, compile};
+    use crate::compiler::{SymbolKey, compile, only_metadata};
+    use crate::image::Image;
     use crate::testutils::OutCommand;
     use std::cell::RefCell;
     use std::collections::HashMap;
@@ -170,7 +182,8 @@ mod tests {
         let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
         upcalls_by_name.insert(SymbolKey::from("OUT"), OutCommand::new(data.clone()));
 
-        let image = compile(&mut b"OUT 30: OUT 20".as_slice(), &upcalls_by_name).unwrap();
+        let image =
+            compile(&mut b"OUT 30: OUT 20".as_slice(), &only_metadata(&upcalls_by_name)).unwrap();
 
         let mut vm = Vm::new(upcalls_by_name);
         vm.load(image);

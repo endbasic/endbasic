@@ -15,7 +15,9 @@
 
 use crate::ast::ExprType;
 use crate::bytecode::{self, Register};
-use crate::compiler::{Context, DebugInfo, Error, HashMapWithIds, Image, Result, SymbolKey};
+use crate::compiler::ids::HashMapWithIds;
+use crate::compiler::{Error, Result, SymbolKey};
+use crate::image::{DebugInfo, Image};
 use crate::mem::Datum;
 use crate::reader::LineCol;
 use std::collections::HashMap;
@@ -25,6 +27,8 @@ type Address = usize;
 pub(super) enum Fixup {
     Call(Register, SymbolKey),
     Enter(u8),
+    Gosub(SymbolKey),
+    Goto(SymbolKey),
 }
 
 #[derive(Default)]
@@ -33,6 +37,7 @@ pub(super) struct Codegen {
     constants: HashMapWithIds<Datum, ExprType, u16>,
     fixups: HashMap<Address, Fixup>,
     instr_linecols: Vec<LineCol>,
+    labels: HashMap<SymbolKey, Address>,
     user_callables_addresses: HashMap<SymbolKey, Address>,
 }
 
@@ -69,6 +74,10 @@ impl Codegen {
         self.user_callables_addresses.insert(key, address);
     }
 
+    pub(super) fn define_label(&mut self, key: SymbolKey, address: Address) {
+        self.labels.insert(key, address);
+    }
+
     fn apply_fixups(&mut self) {
         for (addr, fixup) in &self.fixups {
             let instr = match fixup {
@@ -78,13 +87,25 @@ impl Codegen {
                     bytecode::make_call(*reg, (target - *addr) as u16)
                 }
                 Fixup::Enter(nargs) => bytecode::make_enter(*nargs),
+                Fixup::Gosub(key) => {
+                    let target = self.labels.get(key).expect("Must be present");
+                    bytecode::make_gosub((*target as i16 - *addr as i16) as u16)
+                }
+                Fixup::Goto(key) => {
+                    let target = self.labels.get(key).expect("Must be present");
+                    // DO NOT SUBMIT: Validate int change.
+                    bytecode::make_jump((*target as i16 - *addr as i16) as u16)
+                }
             };
             self.code[*addr] = instr;
         }
         self.fixups.clear();
     }
 
-    pub(super) fn build_image(mut self, context: Context) -> Image {
+    pub(super) fn build_image(
+        mut self,
+        upcalls: HashMapWithIds<SymbolKey, Option<ExprType>, u16>,
+    ) -> Image {
         self.apply_fixups();
 
         let mut callables = HashMap::default();
@@ -95,7 +116,7 @@ impl Codegen {
 
         Image::new(
             self.code,
-            context.upcalls.keys_to_vec(),
+            upcalls.keys_to_vec(),
             self.constants.keys_to_vec(),
             DebugInfo { instr_linecols: self.instr_linecols, callables },
         )

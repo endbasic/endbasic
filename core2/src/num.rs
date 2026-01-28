@@ -97,6 +97,6 @@ mod tests {
 
     #[test]
     fn test_unchecked_u24_as_usize() {
-        assert_eq!(10 as usize, unsafe { unchecked_u24_as_usize(U24(10)) });
+        assert_eq!(10_usize, unsafe { unchecked_u24_as_usize(U24(10)) });
     }
 }

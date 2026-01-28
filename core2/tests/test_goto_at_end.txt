@@ -1,0 +1,15 @@
+# Source
+
+GOTO @end
+OUT "a"  ' This should be skipped.
+@end:
+
+# Disassembly
+
+0000:   ENTER       2                   # 0:0
+0001:   JUMP        4                   # 1:6
+0002:   LOADI       R65, 0              # 2:5
+0003:   LOADI       R64, 259            # 2:5
+0004:   UPCALL      0, R64              # 2:1, OUT
+0005:   LEAVE                           # 0:0
+0006:   END                             # 0:0

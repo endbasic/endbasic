@@ -38,11 +38,6 @@ where
     I: Copy + std::fmt::Debug + Ord + TryFrom<usize>,
     V: Copy + std::fmt::Debug + PartialEq,
 {
-    /// Returns true if the map already contains `key`.
-    pub(super) fn contains_key(&self, key: &K) -> bool {
-        self.map.contains_key(key)
-    }
-
     /// Gets the value and identifier for a `key`.
     ///
     /// Returns `None` if the key is not present.
@@ -100,7 +95,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_hash_map_with_ids_with_u8_ids() {
+    fn test_hash_map_with_ids_basic_hashmap_api() {
+        let mut map = HashMapWithIds::<&'static str, &'static str, u8>::default();
+
+        assert_eq!(Some((None, 0)), map.insert("first", "v1"));
+        assert_eq!(Some((None, 1)), map.insert("second", "v2"));
+
+        assert_eq!(Some((&"v1", 0)), map.get(&"first"));
+        assert_eq!(Some((&"v2", 1)), map.get(&"second"));
+        assert_eq!(None, map.get(&"third"));
+
+        {
+            let mut_first = map.get_mut(&"first");
+            assert_eq!(Some((&mut "v1", 0)), mut_first);
+            *mut_first.unwrap().0 = "edited";
+        }
+
+        assert_eq!(Some((&"edited", 0)), map.get(&"first"));
+        assert_eq!(Some((&"v2", 1)), map.get(&"second"));
+        assert_eq!(None, map.get(&"third"));
+
+        assert_eq!(2, map.len());
+    }
+
+    #[test]
+    fn test_hash_map_with_ids_use_u8_ids() {
         let mut map = HashMapWithIds::<&'static str, (), u8>::default();
 
         assert_eq!(Some((None, 0)), map.insert("foo", ()));
@@ -113,7 +132,7 @@ mod tests {
     }
 
     #[test]
-    fn test_hash_map_with_ids_with_usize_ids() {
+    fn test_hash_map_with_ids_use_usize_ids() {
         let mut map = HashMapWithIds::<&'static str, (), usize>::default();
 
         assert_eq!(Some((None, 0)), map.insert("foo", ()));
@@ -130,10 +149,8 @@ mod tests {
         let mut map = HashMapWithIds::<u16, (), u8>::default();
 
         for i in 0..(u16::from(u8::MAX) + 1) {
-            assert!(map.insert(u16::from(i), ()).is_some());
+            assert!(map.insert(i, ()).is_some());
         }
         assert!(map.insert(u16::from(u8::MAX) + 1, ()).is_none());
     }
-
-    // DO NOT SUBMIT: Modify or add tests to validate make_value().
 }
