@@ -531,6 +531,9 @@ pub struct DoSpan {
 pub struct EndSpan {
     /// Integer expression to compute the return code.
     pub code: Option<Expr>,
+
+    /// Position of the statement.
+    pub pos: LineCol,
 }
 
 /// Components of an `EXIT` statement.

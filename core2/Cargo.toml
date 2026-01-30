@@ -27,7 +27,6 @@ await_holding_refcell_ref = "allow"
 collapsible_else_if = "allow"
 
 [dependencies]
-async-channel = "2.2"
 async-trait = "0.1"
 thiserror = "1.0"
 

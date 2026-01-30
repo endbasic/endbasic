@@ -664,7 +664,7 @@ impl<'a> Parser<'a> {
 
     /// Parses a potential `END` statement but, if this corresponds to a statement terminator such
     /// as `END IF`, returns the token that followed `END`.
-    fn maybe_parse_end(&mut self) -> Result<std::result::Result<Statement, Token>> {
+    fn maybe_parse_end(&mut self, pos: LineCol) -> Result<std::result::Result<Statement, Token>> {
         match self.lexer.peek()?.token {
             Token::Function => Ok(Err(Token::Function)),
             Token::If => Ok(Err(Token::If)),
@@ -672,14 +672,14 @@ impl<'a> Parser<'a> {
             Token::Sub => Ok(Err(Token::Sub)),
             _ => {
                 let code = self.parse_expr(None)?;
-                Ok(Ok(Statement::End(EndSpan { code })))
+                Ok(Ok(Statement::End(EndSpan { code, pos })))
             }
         }
     }
 
     /// Parses an `END` statement.
     fn parse_end(&mut self, pos: LineCol) -> Result<Statement> {
-        match self.maybe_parse_end()? {
+        match self.maybe_parse_end(pos)? {
             Ok(stmt) => Ok(stmt),
             Err(token) => Err(Error::Bad(pos, format!("END {} without {}", token, token))),
         }
@@ -984,11 +984,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        if let Some(expr) = exprs.pop() {
-            Ok(Some(expr))
-        } else {
-            Ok(None)
-        }
+        if let Some(expr) = exprs.pop() { Ok(Some(expr)) } else { Ok(None) }
     }
 
     /// Wrapper over `parse_expr` that requires an expression to be present and returns an error
@@ -1112,7 +1108,7 @@ impl<'a> Parser<'a> {
 
                 Token::End => {
                     let token_span = self.lexer.consume_peeked();
-                    match self.maybe_parse_end()? {
+                    match self.maybe_parse_end(token_span.pos)? {
                         Ok(stmt) => {
                             branches[i].body.push(stmt);
                         }
@@ -1397,7 +1393,7 @@ impl<'a> Parser<'a> {
 
                 Token::End => {
                     let end_span = self.lexer.consume_peeked();
-                    match self.maybe_parse_end()? {
+                    match self.maybe_parse_end(end_span.pos)? {
                         Ok(stmt) => {
                             body.push(stmt);
                         }
@@ -1694,7 +1690,7 @@ impl<'a> Parser<'a> {
 
                 Token::End => {
                     let end_span = self.lexer.consume_peeked();
-                    match self.maybe_parse_end()? {
+                    match self.maybe_parse_end(end_span.pos)? {
                         Ok(stmt) => {
                             if cases.is_empty() {
                                 return Err(Error::Bad(
@@ -3650,7 +3646,7 @@ mod tests {
                         guard: expr_integer(1, 2, 16),
                         body: vec![
                             make_bare_builtin_call("A", 3, 17),
-                            Statement::End(EndSpan { code: None }),
+                            Statement::End(EndSpan { code: None, pos: lc(4, 17) }),
                             make_bare_builtin_call("B", 5, 17),
                         ],
                     },
@@ -3660,6 +3656,7 @@ mod tests {
                             make_bare_builtin_call("C", 7, 17),
                             Statement::End(EndSpan {
                                 code: Some(Expr::Integer(IntegerSpan { value: 8, pos: lc(8, 21) })),
+                                pos: lc(8, 17),
                             }),
                             make_bare_builtin_call("D", 9, 17),
                         ],
@@ -3668,7 +3665,7 @@ mod tests {
                         guard: expr_integer(3, 10, 20),
                         body: vec![
                             make_bare_builtin_call("E", 11, 17),
-                            Statement::End(EndSpan { code: None }),
+                            Statement::End(EndSpan { code: None, pos: lc(12, 17) }),
                             make_bare_builtin_call("F", 13, 17),
                         ],
                     },
@@ -3681,6 +3678,7 @@ mod tests {
                                     value: 5,
                                     pos: lc(16, 21),
                                 })),
+                                pos: lc(16, 17),
                             }),
                             make_bare_builtin_call("H", 17, 17),
                         ],
@@ -3875,7 +3873,7 @@ mod tests {
     fn test_if_uniline_allowed_end() {
         do_if_uniline_allowed_test(
             "END 8",
-            Statement::End(EndSpan { code: Some(expr_integer(8, 1, 15)) }),
+            Statement::End(EndSpan { code: Some(expr_integer(8, 1, 15)), pos: lc(1, 11) }),
         );
     }
 
@@ -4200,9 +4198,10 @@ mod tests {
                 params: vec![],
                 body: vec![
                     make_bare_builtin_call("A", 3, 21),
-                    Statement::End(EndSpan { code: None }),
+                    Statement::End(EndSpan { code: None, pos: lc(4, 21) }),
                     Statement::End(EndSpan {
                         code: Some(Expr::Integer(IntegerSpan { value: 8, pos: lc(5, 25) })),
+                        pos: lc(5, 21),
                     }),
                     make_bare_builtin_call("B", 6, 21),
                 ],
@@ -4525,7 +4524,7 @@ mod tests {
                         guards: vec![CaseGuardSpan::Is(CaseRelOp::Equal, expr_integer(1, 3, 22))],
                         body: vec![
                             make_bare_builtin_call("A", 4, 21),
-                            Statement::End(EndSpan { code: None }),
+                            Statement::End(EndSpan { code: None, pos: lc(5, 21) }),
                             make_bare_builtin_call("B", 6, 21),
                         ],
                     },
@@ -4535,6 +4534,7 @@ mod tests {
                             make_bare_builtin_call("C", 8, 21),
                             Statement::End(EndSpan {
                                 code: Some(Expr::Integer(IntegerSpan { value: 8, pos: lc(9, 25) })),
+                                pos: lc(9, 21),
                             }),
                             make_bare_builtin_call("D", 10, 21),
                         ],
@@ -4543,7 +4543,7 @@ mod tests {
                         guards: vec![],
                         body: vec![
                             make_bare_builtin_call("E", 12, 21),
-                            Statement::End(EndSpan { code: None }),
+                            Statement::End(EndSpan { code: None, pos: lc(13, 21) }),
                             make_bare_builtin_call("F", 14, 21),
                         ],
                     },
@@ -4705,9 +4705,10 @@ mod tests {
                 params: vec![],
                 body: vec![
                     make_bare_builtin_call("A", 3, 21),
-                    Statement::End(EndSpan { code: None }),
+                    Statement::End(EndSpan { code: None, pos: lc(4, 21) }),
                     Statement::End(EndSpan {
                         code: Some(Expr::Integer(IntegerSpan { value: 8, pos: lc(5, 25) })),
+                        pos: lc(5, 21),
                     }),
                     make_bare_builtin_call("B", 6, 21),
                 ],

@@ -156,11 +156,11 @@ fn compile_stmt(
             ctx.codegen.emit(instr, name_pos);
         }
 
-        Statement::End(_span) => {
+        Statement::End(span) => {
             // DO NOT SUBMIT: This exits immediately without doing the LEAVE that's required
             // for the current scope. Is that OK?
             // DO NOT SUBMIT: Evaluate return code and propagate it.
-            ctx.codegen.emit(bytecode::make_end(), LineCol { line: 0, col: 0 });
+            ctx.codegen.emit(bytecode::make_end(), span.pos);
         }
 
         Statement::Gosub(span) => {
