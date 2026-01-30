@@ -262,6 +262,9 @@ pub(crate) enum Opcode {
     /// Concatenates two strings and stores the pointer to the result into a third one.
     Concat,
 
+    /// Converts a double register to an integer register.
+    DoubleToInteger,
+
     /// Allocates local registers (locals and temporaries) when entering a scope.
     Enter,
 
@@ -270,9 +273,6 @@ pub(crate) enum Opcode {
 
     /// Jumps to an address relative to the PC.
     Jump,
-
-    /// Deallocates all registers allocated by a previous `Enter`.
-    Leave,
 
     /// Loads a constant into a register.
     LoadConstant,
@@ -333,8 +333,16 @@ instr!(
 
 #[rustfmt::skip]
 instr!(
+    Opcode::DoubleToInteger, "DTOI",
+    make_double_to_integer, parse_double_to_integer, format_double_to_integer,
+    Register, 0x000000ff, 0,  // Register with the value to convert.
+);
+
+#[rustfmt::skip]
+instr!(
     Opcode::End, "END",
     make_end, parse_end, format_end,
+    Register, 0x000000ff, 0,  // Register with the return code.
 );
 
 #[rustfmt::skip]
@@ -356,12 +364,6 @@ instr!(
     Opcode::Jump, "JUMP",
     make_jump, parse_jump, format_jump,
     u16, 0x0000ffff, 0,  // Relative address.
-);
-
-#[rustfmt::skip]
-instr!(
-    Opcode::Leave, "LEAVE",
-    make_leave, parse_leave, format_leave,
 );
 
 #[rustfmt::skip]
@@ -522,42 +524,6 @@ mod tests {
         };
     }
 
-    test_instr!(test_nop, make_nop, parse_nop);
-    test_instr!(test_enter, make_enter, parse_enter, 10);
-    test_instr!(test_leave, make_leave, parse_leave);
-    test_instr!(test_upcall, make_upcall, parse_upcall, 12345, Register::local(3).unwrap());
-    test_instr!(test_jump, make_jump, parse_jump, 12345);
-    test_instr!(test_gosub, make_gosub, parse_gosub, 12345);
-    test_instr!(test_call, make_call, parse_call, Register::local(3).unwrap(), 12345);
-    test_instr!(test_return, make_return, parse_return);
-    test_instr!(
-        test_alloc,
-        make_alloc,
-        parse_alloc,
-        Register::local(1).unwrap(),
-        ExprType::Integer
-    );
-    test_instr!(
-        test_move,
-        make_move,
-        parse_move,
-        Register::local(1).unwrap(),
-        Register::local(2).unwrap()
-    );
-    test_instr!(
-        test_load_constant,
-        make_load_constant,
-        parse_load_constant,
-        Register::local(1).unwrap(),
-        12345
-    );
-    test_instr!(
-        test_load_integer,
-        make_load_integer,
-        parse_load_integer,
-        Register::local(1).unwrap(),
-        12345
-    );
     test_instr!(
         test_add_integer,
         make_add_integer,
@@ -566,6 +532,17 @@ mod tests {
         Register::local(2).unwrap(),
         Register::local(3).unwrap()
     );
+
+    test_instr!(
+        test_alloc,
+        make_alloc,
+        parse_alloc,
+        Register::local(1).unwrap(),
+        ExprType::Integer
+    );
+
+    test_instr!(test_call, make_call, parse_call, Register::local(3).unwrap(), 12345);
+
     test_instr!(
         test_concat,
         make_concat,
@@ -574,7 +551,51 @@ mod tests {
         Register::local(2).unwrap(),
         Register::local(3).unwrap()
     );
-    test_instr!(test_end, make_end, parse_end);
+
+    test_instr!(
+        test_double_to_integer,
+        make_double_to_integer,
+        parse_double_to_integer,
+        Register::local(1).unwrap()
+    );
+
+    test_instr!(test_end, make_end, parse_end, Register::local(1).unwrap());
+
+    test_instr!(test_enter, make_enter, parse_enter, 10);
+
+    test_instr!(test_gosub, make_gosub, parse_gosub, 12345);
+
+    test_instr!(test_jump, make_jump, parse_jump, 12345);
+
+    test_instr!(
+        test_load_constant,
+        make_load_constant,
+        parse_load_constant,
+        Register::local(1).unwrap(),
+        12345
+    );
+
+    test_instr!(
+        test_load_integer,
+        make_load_integer,
+        parse_load_integer,
+        Register::local(1).unwrap(),
+        12345
+    );
+
+    test_instr!(
+        test_move,
+        make_move,
+        parse_move,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap()
+    );
+
+    test_instr!(test_nop, make_nop, parse_nop);
+
+    test_instr!(test_return, make_return, parse_return);
+
+    test_instr!(test_upcall, make_upcall, parse_upcall, 12345, Register::local(3).unwrap());
 
     #[test]
     fn test_var_arg_tag_ok() {

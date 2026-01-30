@@ -15,17 +15,18 @@ RETURN
 0001:   LOADI       R65, 0              # 1:5
 0002:   LOADI       R64, 259            # 1:5
 0003:   UPCALL      0, R64              # 1:1, OUT
-0004:   GOSUB       5                   # 2:7
+0004:   GOSUB       6                   # 2:7
 0005:   LOADI       R65, 1              # 3:5
 0006:   LOADI       R64, 259            # 3:5
 0007:   UPCALL      0, R64              # 3:1, OUT
-0008:   END                             # 4:1
-0009:   LOADI       R65, 2              # 7:5
-0010:   LOADI       R64, 259            # 7:5
-0011:   UPCALL      0, R64              # 7:1, OUT
-0012:   RETURN                          # 8:1
-0013:   LEAVE                           # 0:0
-0014:   END                             # 0:0
+0008:   LOADI       R64, 0              # 4:1
+0009:   END         R64                 # 4:1
+0010:   LOADI       R65, 2              # 7:5
+0011:   LOADI       R64, 259            # 7:5
+0012:   UPCALL      0, R64              # 7:1, OUT
+0013:   RETURN                          # 8:1
+0014:   LOADI       R64, 0              # 0:0
+0015:   END         R64                 # 0:0
 
 # Output
 

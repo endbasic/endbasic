@@ -1,0 +1,17 @@
+# Source
+
+i = 3
+END i
+
+# Disassembly
+
+0000:   ENTER       2                   # 0:0
+0001:   LOADI       R64, 3              # 1:5
+0002:   MOVE        R65, R64            # 2:5
+0003:   END         R65                 # 2:1
+0004:   LOADI       R65, 0              # 0:0
+0005:   END         R65                 # 0:0
+
+# Exit code
+
+3

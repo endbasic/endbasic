@@ -19,8 +19,8 @@ OUT "c"
 0008:   LOADI       R65, 2              # 5:5
 0009:   LOADI       R64, 259            # 5:5
 0010:   UPCALL      0, R64              # 5:1, OUT
-0011:   LEAVE                           # 0:0
-0012:   END                             # 0:0
+0011:   LOADI       R64, 0              # 0:0
+0012:   END         R64                 # 0:0
 
 # Output
 

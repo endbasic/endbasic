@@ -15,7 +15,7 @@
 
 //! Entry point to the compilation, handling top-level definitions.
 
-use crate::ast::{ArgSep, CallableSpan, ExprType, Statement, VarRef};
+use crate::ast::{ArgSep, CallableSpan, EndSpan, ExprType, Statement, VarRef};
 use crate::bytecode::{self, RegisterScope};
 use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, SingularArgSyntax};
 use crate::compiler::args::compile_args;
@@ -157,10 +157,28 @@ fn compile_stmt(
         }
 
         Statement::End(span) => {
-            // DO NOT SUBMIT: This exits immediately without doing the LEAVE that's required
-            // for the current scope. Is that OK?
-            // DO NOT SUBMIT: Evaluate return code and propagate it.
-            ctx.codegen.emit(bytecode::make_end(), span.pos);
+            let mut symtable = symtable.frozen();
+            let mut scope = symtable.temp_scope();
+            let reg = scope.alloc().map_err(|e| Error::from_syms(e, span.pos))?;
+            match span.code {
+                Some(expr) => {
+                    let expr_pos = expr.start_pos();
+                    let etype = compile_expr(&mut ctx.codegen, &mut symtable, reg, expr)?;
+                    match etype {
+                        ExprType::Integer => (),
+                        ExprType::Double => {
+                            ctx.codegen.emit(bytecode::make_double_to_integer(reg), span.pos);
+                        }
+                        _ => {
+                            return Err(Error::NotANumber(expr_pos));
+                        }
+                    }
+                }
+                None => {
+                    ctx.codegen.emit(bytecode::make_load_integer(reg, 0), span.pos);
+                }
+            }
+            ctx.codegen.emit(bytecode::make_end(reg), span.pos);
         }
 
         Statement::Gosub(span) => {
@@ -195,7 +213,6 @@ fn compile_scope<I: Iterator<Item = Statement>>(
     for stmt in stmts {
         compile_stmt(ctx, &mut symtable, stmt)?;
     }
-    ctx.codegen.emit(bytecode::make_leave(), LineCol { line: 0, col: 0 }); // DO NOT SUBMIT
     let nlocals =
         symtable.leave_scope().map_err(|e| Error::from_syms(e, LineCol { line: 0, col: 0 }))?;
     ctx.codegen.add_fixup(enter, Fixup::Enter(nlocals));
@@ -248,12 +265,12 @@ pub fn compile(
 
     let mut symtable = GlobalSymtable::new(upcalls);
 
+    let program_end = Statement::End(EndSpan { code: None, pos: LineCol { line: 0, col: 0 } });
     compile_scope(
         &mut ctx,
         symtable.enter_scope(),
-        parser::parse(input).map(|r| r.expect("DO NOT SUBMIT")),
+        parser::parse(input).map(|r| r.expect("DO NOT SUBMIT")).chain([program_end]),
     )?;
-    ctx.codegen.emit(bytecode::make_end(), LineCol { line: 0, col: 0 }); // DO NOT SUBMIT
 
     compile_user_callables(&mut ctx, &mut symtable)?;
 

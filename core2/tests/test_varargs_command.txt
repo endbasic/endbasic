@@ -48,8 +48,8 @@ OUT 100, "Foo"
 0028:   LOADI       R67, 0              # 14:10
 0029:   LOADI       R66, 259            # 14:10
 0030:   UPCALL      0, R64              # 14:1, OUT
-0031:   LEAVE                           # 0:0
-0032:   END                             # 0:0
+0031:   LOADI       R64, 0              # 0:0
+0032:   END         R64                 # 0:0
 
 # Output
 

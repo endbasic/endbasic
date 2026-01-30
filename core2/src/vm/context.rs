@@ -26,7 +26,7 @@ type Address = usize;
 /// Internal representation of a `StopReason` that requires further annotation by the caller.
 pub(super) enum InternalStopReason {
     /// Execution terminated due to an `END` instruction.
-    Eof,
+    End(i32),
 
     /// Execution stopped due to an instruction-level exception.
     Exception(Address, String),
@@ -148,11 +148,11 @@ impl Context {
                 Opcode::Alloc => self.do_alloc(instr, heap),
                 Opcode::Call => self.do_call(instr),
                 Opcode::Concat => self.do_concat(instr, &image.constants, heap),
+                Opcode::DoubleToInteger => self.do_double_to_integer(instr),
                 Opcode::End => self.do_end(instr),
                 Opcode::Enter => self.do_enter(instr),
                 Opcode::Gosub => self.do_gosub(instr),
                 Opcode::Jump => self.do_jump(instr),
-                Opcode::Leave => self.do_leave(instr),
                 Opcode::LoadConstant => self.do_load_constant(instr, &image.constants),
                 Opcode::LoadInteger => self.do_load_integer(instr),
                 Opcode::Move => self.do_move(instr),
@@ -210,9 +210,17 @@ impl Context {
         self.pc += 1;
     }
 
+    pub(super) fn do_double_to_integer(&mut self, instr: u32) {
+        let reg = bytecode::parse_double_to_integer(instr);
+        let dvalue = f64::from_bits(self.get_reg(reg));
+        self.set_reg(reg, dvalue.round() as u64);
+        self.pc += 1;
+    }
+
     pub(super) fn do_end(&mut self, instr: u32) {
-        bytecode::parse_end(instr);
-        self.stop = Some(InternalStopReason::Eof);
+        let reg = bytecode::parse_end(instr);
+        let code = self.get_reg(reg) as i32;
+        self.stop = Some(InternalStopReason::End(code));
     }
 
     pub(super) fn do_enter(&mut self, instr: u32) {
@@ -230,12 +238,6 @@ impl Context {
     pub(super) fn do_jump(&mut self, instr: u32) {
         let offset = bytecode::parse_jump(instr);
         self.pc += Address::from(offset);
-    }
-
-    pub(super) fn do_leave(&mut self, instr: u32) {
-        bytecode::parse_leave(instr);
-        //self.regs.truncate(self.regs.len() - usize::from(nlocals));
-        self.pc += 1;
     }
 
     pub(super) fn do_load_constant(&mut self, instr: u32, constants: &[Datum]) {

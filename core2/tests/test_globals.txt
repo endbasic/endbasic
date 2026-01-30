@@ -76,8 +76,8 @@ OUT "After", i1
 0043:   MOVE        R67, R2             # 27:14
 0044:   LOADI       R66, 258            # 27:14
 0045:   UPCALL      0, R64              # 27:1, OUT
-0046:   LEAVE                           # 0:0
-0047:   END                             # 0:0
+0046:   LOADI       R64, 0              # 0:0
+0047:   END         R64                 # 0:0
 
 ## MODIFY_GLOBAL 
 0048:   ENTER       4                   # 0:0
@@ -92,8 +92,7 @@ OUT "After", i1
 0057:   MOVE        R67, R2             # 21:25
 0058:   LOADI       R66, 258            # 21:25
 0059:   UPCALL      0, R64              # 21:5, OUT
-0060:   LEAVE                           # 0:0
-0061:   RETURN                          # 0:0
+0060:   RETURN                          # 0:0
 
 # Output
 

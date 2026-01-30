@@ -58,6 +58,9 @@ pub enum Error {
     #[error("{0}: Cannot call {1} (not a function)")]
     NotAFunction(LineCol, VarRef),
 
+    #[error("{0}: Expected a number")]
+    NotANumber(LineCol),
+
     #[error("{0}: Out of constants")]
     OutOfConstants(LineCol),
 

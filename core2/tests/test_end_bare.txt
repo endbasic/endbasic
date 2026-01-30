@@ -1,0 +1,11 @@
+# Source
+
+END
+
+# Disassembly
+
+0000:   ENTER       1                   # 0:0
+0001:   LOADI       R64, 0              # 1:1
+0002:   END         R64                 # 1:1
+0003:   LOADI       R64, 0              # 0:0
+0004:   END         R64                 # 0:0

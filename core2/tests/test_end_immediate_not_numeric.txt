@@ -1,0 +1,7 @@
+# Source
+
+END "foo"
+
+# Compilation errors
+
+1:5: Expected a number

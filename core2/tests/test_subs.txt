@@ -27,8 +27,8 @@ OUT "After", a
 0011:   MOVE        R68, R64            # 10:14
 0012:   LOADI       R67, 258            # 10:14
 0013:   UPCALL      0, R65              # 10:1, OUT
-0014:   LEAVE                           # 0:0
-0015:   END                             # 0:0
+0014:   LOADI       R65, 0              # 0:0
+0015:   END         R65                 # 0:0
 
 ## FOO 
 0016:   ENTER       5                   # 0:0
@@ -38,8 +38,7 @@ OUT "After", a
 0020:   MOVE        R68, R64            # 5:19
 0021:   LOADI       R67, 258            # 5:19
 0022:   UPCALL      0, R65              # 5:5, OUT
-0023:   LEAVE                           # 0:0
-0024:   RETURN                          # 0:0
+0023:   RETURN                          # 0:0
 
 # Output
 

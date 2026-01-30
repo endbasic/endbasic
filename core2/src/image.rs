@@ -15,7 +15,7 @@
 
 //! Compiled program representation.
 
-use crate::bytecode::{self, Opcode, opcode_of};
+use crate::bytecode::{self, Opcode, Register, opcode_of};
 use crate::compiler::SymbolKey;
 use crate::mem::Datum;
 use crate::reader::LineCol;
@@ -32,11 +32,11 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::Alloc => bytecode::format_alloc(instr),
         Opcode::Call => bytecode::format_call(instr),
         Opcode::Concat => bytecode::format_concat(instr),
+        Opcode::DoubleToInteger => bytecode::format_double_to_integer(instr),
         Opcode::End => bytecode::format_end(instr),
         Opcode::Enter => bytecode::format_enter(instr),
         Opcode::Gosub => bytecode::format_gosub(instr),
         Opcode::Jump => bytecode::format_jump(instr),
-        Opcode::Leave => bytecode::format_leave(instr),
         Opcode::LoadConstant => bytecode::format_load_constant(instr),
         Opcode::LoadInteger => bytecode::format_load_integer(instr),
         Opcode::Move => bytecode::format_move(instr),
@@ -68,7 +68,12 @@ pub struct Image {
 impl Default for Image {
     fn default() -> Self {
         Self::new(
-            vec![bytecode::make_end()],
+            vec![
+                // The minimum valid program requires an explicit `END` so that the VM knows to
+                // exit.  We can directly reference register 0 because all registers would have
+                // been cleared and accessing them would result in their default values.
+                bytecode::make_end(Register::global(0).expect("Global 0 register be valid")),
+            ],
             vec![],
             vec![],
             DebugInfo {

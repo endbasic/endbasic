@@ -55,8 +55,8 @@ OUT text
 0030:   MOVE        R73, R71            # 19:5
 0031:   LOADI       R72, 259            # 19:5
 0032:   UPCALL      0, R72              # 19:1, OUT
-0033:   LEAVE                           # 0:0
-0034:   END                             # 0:0
+0033:   LOADI       R72, 0              # 0:0
+0034:   END         R72                 # 0:0
 
 # Output
 

@@ -339,25 +339,35 @@ Second line",
 
         let mut vm = Vm::new(upcalls_by_name);
         vm.load(image);
-        let mut error = None;
-        while error.is_none() {
+        let mut stop: Option<Result<i32, String>> = None;
+        while stop.is_none() {
             match vm.exec() {
-                StopReason::Eof => break,
+                StopReason::End(code) => stop = Some(Ok(code)),
                 StopReason::Upcall(handle) => {
                     if let Err(e) = handle.invoke().await {
-                        error = Some(e.to_string());
+                        stop = Some(Err(e.to_string()));
                     }
                 }
                 StopReason::Exception(pos, e) => {
-                    error = Some(format!("{}: {}", pos, e));
+                    stop = Some(Err(format!("{}: {}", pos, e)));
                 }
             }
         }
 
-        if let Some(e) = error {
-            write!(generated, "\n# Runtime errors\n\n")?;
-            write!(generated, "{}", e)?;
-            write!(generated, "\n")?;
+        match stop.expect("The loop can only exit when this is set") {
+            Ok(0) => {
+                // Keep quiet in the common case.
+            }
+            Ok(i) => {
+                write!(generated, "\n# Exit code\n\n")?;
+                write!(generated, "{}", i)?;
+                write!(generated, "\n")?;
+            }
+            Err(e) => {
+                write!(generated, "\n# Runtime errors\n\n")?;
+                write!(generated, "{}", e)?;
+                write!(generated, "\n")?;
+            }
         }
 
         let console = console.borrow();
@@ -456,6 +466,12 @@ mod tests {
 
     one_test!(test_arithmetic_errors);
     one_test!(test_empty);
+    one_test!(test_end_bare);
+    one_test!(test_end_global_variable);
+    one_test!(test_end_immediate_double);
+    one_test!(test_end_immediate_integer);
+    one_test!(test_end_immediate_not_numeric);
+    one_test!(test_end_local_variable);
     one_test!(test_functions);
     one_test!(test_globals);
     one_test!(test_gosub);

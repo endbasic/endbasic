@@ -4,10 +4,10 @@ RETURN
 
 # Disassembly
 
-0000:   ENTER       0                   # 0:0
+0000:   ENTER       1                   # 0:0
 0001:   RETURN                          # 1:1
-0002:   LEAVE                           # 0:0
-0003:   END                             # 0:0
+0002:   LOADI       R64, 0              # 0:0
+0003:   END         R64                 # 0:0
 
 # Runtime errors
 
