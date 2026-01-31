@@ -1,0 +1,8 @@
+# Source
+
+d = 3.4
+d2 = d$
+
+# Compilation errors
+
+2:6: Incompatible type annotation in d$ reference

@@ -1,0 +1,8 @@
+# Source
+
+DIM SHARED d
+d = "foo"
+
+# Compilation errors
+
+2:5: STRING is not a number

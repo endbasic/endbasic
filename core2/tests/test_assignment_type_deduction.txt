@@ -1,0 +1,26 @@
+# Source
+
+a = "foo"
+OUT a
+
+a$ = "bar"
+OUT a
+
+# Disassembly
+
+0000:   ENTER       3                   # 0:0
+0001:   LOADI       R64, 0              # 1:5
+0002:   MOVE        R66, R64            # 2:5
+0003:   LOADI       R65, 259            # 2:5
+0004:   UPCALL      0, R65              # 2:1, OUT
+0005:   LOADI       R64, 1              # 4:6
+0006:   MOVE        R66, R64            # 5:5
+0007:   LOADI       R65, 259            # 5:5
+0008:   UPCALL      0, R65              # 5:1, OUT
+0009:   LOADI       R65, 0              # 0:0
+0010:   END         R65                 # 0:0
+
+# Output
+
+("foo", 0, $)
+("bar", 0, $)

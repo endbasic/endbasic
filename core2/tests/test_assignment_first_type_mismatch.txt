@@ -1,0 +1,7 @@
+# Source
+
+d$ = 3.4
+
+# Compilation errors
+
+1:6: Cannot assign value of type DOUBLE to variable of type STRING

@@ -1,0 +1,37 @@
+# Source
+
+DIM SHARED d AS DOUBLE
+DIM SHARED i1 AS INTEGER
+DIM SHARED i2 AS INTEGER
+
+d = 6
+i1 = 3.2
+i2 = 3.7
+
+OUT d, i1, i2
+
+# Disassembly
+
+0000:   ENTER       6                   # 0:0
+0001:   LOADI       R0, 0               # 1:12
+0002:   LOADI       R1, 0               # 2:12
+0003:   LOADI       R2, 0               # 3:12
+0004:   LOADI       R0, 6               # 5:5
+0005:   ITOD        R0                  # 5:5
+0006:   LOADC       R1, 0               # 6:6
+0007:   DTOI        R1                  # 6:6
+0008:   LOADC       R2, 1               # 7:6
+0009:   DTOI        R2                  # 7:6
+0010:   MOVE        R65, R0             # 9:5
+0011:   LOADI       R64, 289            # 9:5
+0012:   MOVE        R67, R1             # 9:8
+0013:   LOADI       R66, 290            # 9:8
+0014:   MOVE        R69, R2             # 9:12
+0015:   LOADI       R68, 258            # 9:12
+0016:   UPCALL      0, R64              # 9:1, OUT
+0017:   LOADI       R64, 0              # 0:0
+0018:   END         R64                 # 0:0
+
+# Output
+
+(6, 0, #) , (3, 1, %) , (4, 2, %)

@@ -15,10 +15,10 @@
 
 //! Symbol table for EndBASIC compilation.
 
-use crate::CallableMetadata;
 use crate::ast::{ExprType, VarRef};
 use crate::bytecode::{Register, RegisterScope};
 use crate::compiler::ids::HashMapWithIds;
+use crate::{CallableMetadata, bytecode};
 use std::cell::RefCell;
 use std::cmp::max;
 use std::collections::HashMap;
@@ -32,6 +32,9 @@ use std::rc::Rc;
 pub(super) enum Error {
     #[error("Cannot redefine {0}")]
     AlreadyDefined(VarRef),
+
+    #[error("Incompatible type annotation in {0} reference")]
+    IncompatibleTypeAnnotationInReference(VarRef),
 
     #[error("Out of {0} registers")]
     OutOfRegisters(RegisterScope),
@@ -58,6 +61,55 @@ impl fmt::Display for SymbolKey {
     }
 }
 
+/// Gets the register and type of a local or global variable if it already exists.
+fn get_var<MKR>(
+    vref: &VarRef,
+    table: &HashMapWithIds<SymbolKey, ExprType, u8>,
+    make_register: MKR,
+    scope: RegisterScope,
+) -> Result<(Register, ExprType)>
+where
+    MKR: FnOnce(u8) -> std::result::Result<Register, bytecode::OutOfRegistersError>,
+{
+    let key = SymbolKey::from(&vref.name);
+    match table.get(&key) {
+        Some((etype, reg)) => {
+            if !vref.accepts(*etype) {
+                return Err(Error::IncompatibleTypeAnnotationInReference(vref.clone()));
+            }
+
+            let reg = make_register(reg).map_err(|_| Error::OutOfRegisters(scope))?;
+            Ok((reg, *etype))
+        }
+
+        None => Err(Error::UndefinedSymbol(vref.clone(), scope)),
+    }
+}
+
+/// Defines a new local or global variable and assigns a register to it.
+///
+/// Panics if the variable already exists.
+fn put_var<MKR>(
+    key: SymbolKey,
+    vtype: ExprType,
+    table: &mut HashMapWithIds<SymbolKey, ExprType, u8>,
+    make_register: MKR,
+    scope: RegisterScope,
+) -> Result<Register>
+where
+    MKR: FnOnce(u8) -> std::result::Result<Register, bytecode::OutOfRegistersError>,
+{
+    match table.insert(key, vtype) {
+        Some((None, reg)) => Ok(make_register(reg).map_err(|_| Error::OutOfRegisters(scope))?),
+
+        Some((Some(_old_etype), _reg)) => {
+            unreachable!("Cannot redefine variable; caller must check for presence first");
+        }
+
+        None => Err(Error::OutOfRegisters(scope)),
+    }
+}
+
 pub(crate) struct GlobalSymtable<'uref, 'ukey, 'umd> {
     globals: HashMapWithIds<SymbolKey, ExprType, u8>,
     upcalls: &'uref HashMap<&'ukey SymbolKey, &'umd CallableMetadata>,
@@ -74,43 +126,11 @@ impl<'uref, 'ukey, 'umd> GlobalSymtable<'uref, 'ukey, 'umd> {
     }
 
     pub(crate) fn get_global(&self, vref: &VarRef) -> Result<(Register, ExprType)> {
-        let key = SymbolKey::from(&vref.name);
-        // TODO: Verify reference type.
-        match self.globals.get(&key) {
-            Some((etype, reg)) => {
-                let reg = Register::global(reg)
-                    .map_err(|_| Error::OutOfRegisters(RegisterScope::Global))?;
-                Ok((reg, *etype))
-            }
-            None => Err(Error::UndefinedSymbol(vref.clone(), RegisterScope::Global)),
-        }
+        get_var(vref, &self.globals, Register::global, RegisterScope::Global)
     }
 
-    pub(crate) fn put_global(&mut self, vref: &VarRef) -> Result<Register> {
-        let key = SymbolKey::from(&vref.name);
-        let etype = vref.ref_type.unwrap_or(ExprType::Integer);
-        match self.globals.insert(key, etype) {
-            Some((_previous, reg)) => {
-                // DO NOT SUBMIT: Verify etype match.
-                // DO NOT SUBMIT: Verify double insert (redefinition).
-                let reg = Register::global(reg)
-                    .map_err(|_| Error::OutOfRegisters(RegisterScope::Global))?;
-                Ok(reg)
-            }
-            None => Err(Error::OutOfRegisters(RegisterScope::Global)),
-        }
-    }
-
-    pub(crate) fn fixup_global_type(&mut self, vref: &VarRef, new_etype: ExprType) -> Result<()> {
-        let key = SymbolKey::from(&vref.name);
-        // TODO: Verify reference type.
-        match self.globals.get_mut(&key) {
-            Some((etype, _reg)) => {
-                *etype = new_etype;
-                Ok(())
-            }
-            None => Err(Error::UndefinedSymbol(vref.clone(), RegisterScope::Global)),
-        }
+    pub(crate) fn put_global(&mut self, key: SymbolKey, vtype: ExprType) -> Result<Register> {
+        put_var(key, vtype, &mut self.globals, Register::global, RegisterScope::Global)
     }
 
     pub(crate) fn define_user_callable(
@@ -162,35 +182,14 @@ impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
         TempSymtable::new(self)
     }
 
-    pub(crate) fn get_global(&self, vref: &VarRef) -> Result<(Register, ExprType)> {
-        self.symtable.get_global(vref)
-    }
-
-    pub(crate) fn put_global(&mut self, vref: &VarRef) -> Result<Register> {
-        self.symtable.put_global(vref)
-    }
-
-    pub(crate) fn fixup_global_type(&mut self, vref: &VarRef, new_etype: ExprType) -> Result<()> {
-        self.symtable.fixup_global_type(vref, new_etype)
-    }
-
-    fn get_local(&self, vref: &VarRef) -> Result<(Register, ExprType)> {
-        let key = SymbolKey::from(&vref.name);
-        // TODO: Verify reference type.
-        match self.locals.get(&key) {
-            Some((etype, reg)) => {
-                let reg = Register::local(reg)
-                    .map_err(|_| Error::OutOfRegisters(RegisterScope::Local))?;
-                Ok((reg, *etype))
-            }
-            None => Err(Error::UndefinedSymbol(vref.clone(), RegisterScope::Local)),
-        }
+    pub(crate) fn put_global(&mut self, key: SymbolKey, vtype: ExprType) -> Result<Register> {
+        self.symtable.put_global(key, vtype)
     }
 
     pub(crate) fn get_local_or_global(&self, vref: &VarRef) -> Result<(Register, ExprType)> {
-        match self.symtable.get_global(vref) {
-            Ok(global) => Ok(global),
-            Err(Error::UndefinedSymbol(..)) => self.get_local(vref),
+        match get_var(vref, &self.locals, Register::local, RegisterScope::Local) {
+            Ok(local) => Ok(local),
+            Err(Error::UndefinedSymbol(..)) => self.symtable.get_global(vref),
             Err(e) => Err(e),
         }
     }
@@ -199,19 +198,8 @@ impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
         self.symtable.get_callable(key)
     }
 
-    pub(crate) fn put_local(&mut self, vref: &VarRef) -> Result<Register> {
-        let key = SymbolKey::from(&vref.name);
-        let etype = vref.ref_type.unwrap_or(ExprType::Integer);
-        match self.locals.insert(key, etype) {
-            Some((_previous, reg)) => {
-                // DO NOT SUBMIT: Verify etype match.
-                // DO NOT SUBMIT: Verify double insert (redefinition).
-                let reg = Register::local(reg)
-                    .map_err(|_| Error::OutOfRegisters(RegisterScope::Local))?;
-                Ok(reg)
-            }
-            None => Err(Error::OutOfRegisters(RegisterScope::Local)),
-        }
+    pub(crate) fn put_local(&mut self, key: SymbolKey, vtype: ExprType) -> Result<Register> {
+        put_var(key, vtype, &mut self.locals, Register::local, RegisterScope::Local)
     }
 
     pub(crate) fn fixup_local_type(&mut self, vref: &VarRef, new_etype: ExprType) -> Result<()> {
@@ -339,7 +327,10 @@ mod tests {
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(&upcalls);
         let mut local = global.enter_scope();
-        debug_assert_eq!(Register::local(0).unwrap(), local.put_local(&VarRef::new("foo", None))?);
+        debug_assert_eq!(
+            Register::local(0).unwrap(),
+            local.put_local(SymbolKey::from("foo"), ExprType::Integer)?
+        );
         {
             let temp = local.frozen();
             {

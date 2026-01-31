@@ -1,0 +1,21 @@
+# Source
+
+a = 1
+a = 2
+
+OUT a
+
+# Disassembly
+
+0000:   ENTER       3                   # 0:0
+0001:   LOADI       R64, 1              # 1:5
+0002:   LOADI       R64, 2              # 2:5
+0003:   MOVE        R66, R64            # 4:5
+0004:   LOADI       R65, 258            # 4:5
+0005:   UPCALL      0, R65              # 4:1, OUT
+0006:   LOADI       R65, 0              # 0:0
+0007:   END         R65                 # 0:0
+
+# Output
+
+(2, 0, %)

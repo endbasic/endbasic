@@ -14,7 +14,7 @@ b1 = TRUE
 d1 = 2.3
 i1 = 5
 i2 = 7
-s1 = 8
+s1 = "text"
 OUT b1, d1, i1, i2, s1
 
 SUB modify_global
@@ -51,7 +51,7 @@ OUT "After", i1
 0018:   LOADC       R1, 0               # 12:6
 0019:   LOADI       R2, 5               # 13:6
 0020:   LOADI       R3, 7               # 14:6
-0021:   LOADI       R4, 8               # 15:6
+0021:   LOADI       R4, 1               # 15:6
 0022:   MOVE        R65, R0             # 16:5
 0023:   LOADI       R64, 288            # 16:5
 0024:   MOVE        R67, R1             # 16:9
@@ -61,17 +61,17 @@ OUT "After", i1
 0028:   MOVE        R71, R3             # 16:17
 0029:   LOADI       R70, 290            # 16:17
 0030:   MOVE        R73, R4             # 16:21
-0031:   LOADI       R72, 258            # 16:21
+0031:   LOADI       R72, 259            # 16:21
 0032:   UPCALL      0, R64              # 16:1, OUT
 0033:   LOADI       R2, 2               # 24:6
-0034:   LOADI       R65, 1              # 25:5
+0034:   LOADI       R65, 2              # 25:5
 0035:   LOADI       R64, 291            # 25:5
 0036:   MOVE        R67, R2             # 25:15
 0037:   LOADI       R66, 258            # 25:15
 0038:   UPCALL      0, R64              # 25:1, OUT
 0039:   LOADI       R64, 0              # 26:1
 0040:   CALL        R64, 8              # 26:1, MODIFY_GLOBAL
-0041:   LOADI       R65, 2              # 27:5
+0041:   LOADI       R65, 3              # 27:5
 0042:   LOADI       R64, 291            # 27:5
 0043:   MOVE        R67, R2             # 27:14
 0044:   LOADI       R66, 258            # 27:14
@@ -81,13 +81,13 @@ OUT "After", i1
 
 ## MODIFY_GLOBAL 
 0048:   ENTER       4                   # 0:0
-0049:   LOADI       R65, 3              # 19:9
+0049:   LOADI       R65, 4              # 19:9
 0050:   LOADI       R64, 291            # 19:9
 0051:   MOVE        R67, R2             # 19:26
 0052:   LOADI       R66, 258            # 19:26
 0053:   UPCALL      0, R64              # 19:5, OUT
 0054:   LOADI       R2, 3               # 20:10
-0055:   LOADI       R65, 4              # 21:9
+0055:   LOADI       R65, 5              # 21:9
 0056:   LOADI       R64, 291            # 21:9
 0057:   MOVE        R67, R2             # 21:25
 0058:   LOADI       R66, 258            # 21:25
@@ -97,7 +97,7 @@ OUT "After", i1
 # Output
 
 (false, 0, ?) , (0, 1, #) , (0, 2, %) , (0, 3, %) , ("", 4, $)
-(true, 0, ?) , (2.3, 1, #) , (5, 2, %) , (7, 3, %) , (8, 4, %)
+(true, 0, ?) , (2.3, 1, #) , (5, 2, %) , (7, 3, %) , ("text", 4, $)
 ("Before", 0, $) , (2, 1, %)
 ("Inside before", 0, $) , (2, 1, %)
 ("Inside after", 0, $) , (3, 1, %)

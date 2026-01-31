@@ -1,0 +1,8 @@
+# Source
+
+a# = 4.5
+a$ = "foo"
+
+# Compilation errors
+
+2:1: Incompatible type annotation in a$ reference

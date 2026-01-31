@@ -52,6 +52,12 @@ pub enum Error {
     #[error("{0}: Cannot nest FUNCTION or SUB definitions")]
     CannotNestUserCallables(LineCol),
 
+    #[error("{0}: Incompatible type annotation in {1} reference")]
+    IncompatibleTypeAnnotationInReference(LineCol, VarRef),
+
+    #[error("{0}: Cannot assign value of type {1} to variable of type {2}")]
+    IncompatibleTypesInAssignment(LineCol, ExprType, ExprType),
+
     #[error("{0}: I/O error during compilation: {1}")]
     Io(LineCol, io::Error),
 
@@ -85,6 +91,9 @@ impl Error {
     fn from_syms(value: syms::Error, pos: LineCol) -> Self {
         match value {
             syms::Error::AlreadyDefined(vref) => Error::AlreadyDefined(pos, vref),
+            syms::Error::IncompatibleTypeAnnotationInReference(vref) => {
+                Error::IncompatibleTypeAnnotationInReference(pos, vref)
+            }
             syms::Error::OutOfRegisters(scope) => Error::OutOfRegisters(pos, scope),
             syms::Error::UndefinedSymbol(vref, scope) => Error::UndefinedSymbol(pos, vref, scope),
         }

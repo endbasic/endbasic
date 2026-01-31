@@ -9,4 +9,4 @@ OUT local_var
 
 # Compilation errors
 
-6:5: Undefined local symbol local_var
+6:5: Undefined global symbol local_var

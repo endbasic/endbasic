@@ -387,17 +387,18 @@ Second line",
         generated.flush()?;
 
         let diff = diff(&golden, generated.path())?;
-        if env::var("REGEN").as_ref().map(String::as_str) == Ok("true") {
-            {
-                let mut output = File::create(golden)?;
-                generated.as_file_mut().seek(io::SeekFrom::Start(0))?;
-                io::copy(&mut generated, &mut output)?;
-            }
-            panic!("Golden data regenerated; flip REGEN back to false");
-        }
         if !diff.is_empty() {
-            eprintln!("{}", diff);
-            panic!("Test failed; see stderr for details");
+            if env::var("REGEN").as_ref().map(String::as_str) == Ok("true") {
+                {
+                    let mut output = File::create(golden)?;
+                    generated.as_file_mut().seek(io::SeekFrom::Start(0))?;
+                    io::copy(&mut generated, &mut output)?;
+                }
+                panic!("Golden data regenerated; flip REGEN back to false");
+            } else {
+                eprintln!("{}", diff);
+                panic!("Test failed; see stderr for details");
+            }
         }
 
         Ok(())
@@ -466,6 +467,13 @@ mod tests {
 
     one_test!(test_arithmetic_add);
     one_test!(test_arithmetic_errors);
+    one_test!(test_assignment_annotation_mismatch);
+    one_test!(test_assignment_first_annotated);
+    one_test!(test_assignment_first_type_mismatch);
+    one_test!(test_assignment_second_type_mismatch);
+    one_test!(test_assignment_twice);
+    one_test!(test_assignment_type_casting);
+    one_test!(test_assignment_type_deduction);
     one_test!(test_empty);
     one_test!(test_end_bare);
     one_test!(test_end_global_variable);
@@ -474,6 +482,8 @@ mod tests {
     one_test!(test_end_immediate_not_numeric);
     one_test!(test_end_local_variable);
     one_test!(test_functions);
+    one_test!(test_global_assignment_type_casting);
+    one_test!(test_global_assignment_type_mismatch);
     one_test!(test_globals);
     one_test!(test_gosub);
     one_test!(test_gosub_nested);
@@ -489,4 +499,5 @@ mod tests {
     one_test!(test_subs);
     one_test!(test_values);
     one_test!(test_varargs_command);
+    one_test!(test_vref_type_mismatch);
 }
