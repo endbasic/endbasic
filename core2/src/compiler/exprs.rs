@@ -1,5 +1,5 @@
 // EndBASIC
-// Copyright 2024 Julio Merino
+// Copyright 2026 Julio Merino
 //
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not
 // use this file except in compliance with the License.  You may obtain a copy
@@ -15,13 +15,71 @@
 
 //! Functions to convert expressions into bytecode.
 
-use crate::ast::{Expr, ExprType};
+use crate::ast::{BinaryOpSpan, Expr, ExprType};
 use crate::bytecode::{self, Register, RegisterScope};
 use crate::compiler::codegen::{Codegen, Fixup};
 use crate::compiler::syms::{SymbolKey, TempSymtable};
 use crate::compiler::{Error, Result};
 use crate::mem::Datum;
 use std::convert::TryFrom;
+
+fn compile_arithmetic_binary_op(
+    codegen: &mut Codegen,
+    symtable: &mut TempSymtable<'_, '_, '_, '_, '_>,
+    reg: Register,
+    span: BinaryOpSpan,
+    op_name: &'static str,
+) -> Result<ExprType> {
+    let mut scope = symtable.temp_scope();
+
+    let lpos = span.lhs.start_pos();
+    let ltemp = scope.alloc().map_err(|e| Error::from_syms(e, lpos))?;
+    let ltype = compile_expr(codegen, symtable, ltemp, span.lhs)?;
+
+    let rpos = span.rhs.start_pos();
+    let rtemp = scope.alloc().map_err(|e| Error::from_syms(e, rpos))?;
+    let rtype = compile_expr(codegen, symtable, rtemp, span.rhs)?;
+
+    let rtype = match (ltype, rtype) {
+        // Type-compatible operands.
+        (ExprType::Double, ExprType::Double) => ExprType::Double,
+        (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
+        (ExprType::Text, ExprType::Text) if op_name == "+" => ExprType::Text,
+
+        // Operands requiring type promotion.
+        (ExprType::Double, ExprType::Integer) => {
+            codegen.emit(bytecode::make_integer_to_double(rtemp), rpos);
+            ExprType::Double
+        }
+        (ExprType::Integer, ExprType::Double) => {
+            codegen.emit(bytecode::make_integer_to_double(ltemp), lpos);
+            ExprType::Double
+        }
+
+        // Unsupported operand types.
+        _ => {
+            return Err(Error::BinaryOpType(span.pos, "+", ltype, rtype));
+        }
+    };
+
+    match rtype {
+        ExprType::Boolean => unreachable!(),
+
+        ExprType::Double => {
+            codegen.emit(bytecode::make_add_double(reg, ltemp, rtemp), span.pos);
+        }
+
+        ExprType::Integer => {
+            codegen.emit(bytecode::make_add_integer(reg, ltemp, rtemp), span.pos);
+        }
+
+        ExprType::Text => {
+            codegen.emit(bytecode::make_concat(reg, ltemp, rtemp), span.pos);
+        }
+    }
+
+    Ok(rtype)
+}
 
 pub(super) fn compile_expr(
     codegen: &mut Codegen,
@@ -30,31 +88,7 @@ pub(super) fn compile_expr(
     expr: Expr,
 ) -> Result<ExprType> {
     match expr {
-        Expr::Add(span) => {
-            let mut scope = symtable.temp_scope();
-
-            let lpos = span.lhs.start_pos();
-            let ltemp = scope.alloc().map_err(|e| Error::from_syms(e, lpos))?;
-            let ltype = compile_expr(codegen, symtable, ltemp, span.lhs)?;
-
-            let rpos = span.rhs.start_pos();
-            let rtemp = scope.alloc().map_err(|e| Error::from_syms(e, rpos))?;
-            let rtype = compile_expr(codegen, symtable, rtemp, span.rhs)?;
-
-            match (ltype, rtype) {
-                (ExprType::Integer, ExprType::Integer) => {
-                    codegen.emit(bytecode::make_add_integer(reg, ltemp, rtemp), span.pos);
-                    Ok(ExprType::Integer)
-                }
-
-                (ExprType::Text, ExprType::Text) => {
-                    codegen.emit(bytecode::make_concat(reg, ltemp, rtemp), span.pos);
-                    Ok(ExprType::Text)
-                }
-
-                (_, _) => Err(Error::BinaryOpType(span.pos, "+", ltype, rtype)),
-            }
-        }
+        Expr::Add(span) => compile_arithmetic_binary_op(codegen, symtable, reg, *span, "+"),
 
         Expr::Boolean(span) => {
             let value = if span.value { 1 } else { 0 };
@@ -118,5 +152,37 @@ pub(super) fn compile_expr(
         }
 
         _ => todo!(),
+    }
+}
+
+/// Compiles a single expression, expecting it to be of a `target` type.  Applies casts if
+/// possible.
+pub(super) fn compile_expr_as_type(
+    codegen: &mut Codegen,
+    symtable: &mut TempSymtable<'_, '_, '_, '_, '_>,
+    reg: Register,
+    expr: Expr,
+    target: ExprType,
+) -> Result<()> {
+    let epos = expr.start_pos();
+    let etype = compile_expr(codegen, symtable, reg, expr)?;
+    if etype == ExprType::Double && target.is_numerical() {
+        if target == ExprType::Integer {
+            codegen.emit(bytecode::make_double_to_integer(reg), epos);
+        }
+        Ok(())
+    } else if etype == ExprType::Integer && target.is_numerical() {
+        if target == ExprType::Double {
+            codegen.emit(bytecode::make_integer_to_double(reg), epos);
+        }
+        Ok(())
+    } else if etype == target {
+        Ok(())
+    } else {
+        if target.is_numerical() {
+            Err(Error::NotANumber(epos, etype))
+        } else {
+            Err(Error::TypeMismatch(epos, etype, target))
+        }
     }
 }

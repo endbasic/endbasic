@@ -20,7 +20,7 @@ use crate::bytecode::{self, RegisterScope};
 use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, SingularArgSyntax};
 use crate::compiler::args::compile_args;
 use crate::compiler::codegen::{Codegen, Fixup};
-use crate::compiler::exprs::compile_expr;
+use crate::compiler::exprs::{compile_expr, compile_expr_as_type};
 use crate::compiler::ids::HashMapWithIds;
 use crate::compiler::syms::{self, GlobalSymtable, LocalSymtable, SymbolKey};
 use crate::compiler::{Error, Result};
@@ -162,17 +162,13 @@ fn compile_stmt(
             let reg = scope.alloc().map_err(|e| Error::from_syms(e, span.pos))?;
             match span.code {
                 Some(expr) => {
-                    let expr_pos = expr.start_pos();
-                    let etype = compile_expr(&mut ctx.codegen, &mut symtable, reg, expr)?;
-                    match etype {
-                        ExprType::Integer => (),
-                        ExprType::Double => {
-                            ctx.codegen.emit(bytecode::make_double_to_integer(reg), span.pos);
-                        }
-                        _ => {
-                            return Err(Error::NotANumber(expr_pos));
-                        }
-                    }
+                    compile_expr_as_type(
+                        &mut ctx.codegen,
+                        &mut symtable,
+                        reg,
+                        expr,
+                        ExprType::Integer,
+                    )?;
                 }
                 None => {
                     ctx.codegen.emit(bytecode::make_load_integer(reg, 0), span.pos);

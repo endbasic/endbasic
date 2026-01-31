@@ -144,6 +144,7 @@ impl Context {
             let opcode = unsafe { opcode_of(instr) };
 
             match opcode {
+                Opcode::AddDouble => self.do_add_double(instr),
                 Opcode::AddInteger => self.do_add_integer(instr),
                 Opcode::Alloc => self.do_alloc(instr, heap),
                 Opcode::Call => self.do_call(instr),
@@ -152,6 +153,7 @@ impl Context {
                 Opcode::End => self.do_end(instr),
                 Opcode::Enter => self.do_enter(instr),
                 Opcode::Gosub => self.do_gosub(instr),
+                Opcode::IntegerToDouble => self.do_integer_to_double(instr),
                 Opcode::Jump => self.do_jump(instr),
                 Opcode::LoadConstant => self.do_load_constant(instr, &image.constants),
                 Opcode::LoadInteger => self.do_load_integer(instr),
@@ -166,6 +168,14 @@ impl Context {
 }
 
 impl Context {
+    pub(super) fn do_add_double(&mut self, instr: u32) {
+        let (dest, src1, src2) = bytecode::parse_add_double(instr);
+        let lhs = f64::from_bits(self.get_reg(src1));
+        let rhs = f64::from_bits(self.get_reg(src2));
+        self.set_reg(dest, (lhs + rhs).to_bits());
+        self.pc += 1;
+    }
+
     pub(super) fn do_add_integer(&mut self, instr: u32) {
         let (dest, src1, src2) = bytecode::parse_add_integer(instr);
         let lhs = self.get_reg(src1) as i32;
@@ -233,6 +243,13 @@ impl Context {
         let offset = bytecode::parse_gosub(instr);
         self.call_stack.push(Frame { old_pc: self.pc, old_fp: self.fp, ret_reg: None });
         self.pc += Address::from(offset);
+    }
+
+    pub(super) fn do_integer_to_double(&mut self, instr: u32) {
+        let reg = bytecode::parse_integer_to_double(instr);
+        let ivalue = self.get_reg(reg) as i32;
+        self.set_reg(reg, (ivalue as f64).to_bits());
+        self.pc += 1;
     }
 
     pub(super) fn do_jump(&mut self, instr: u32) {

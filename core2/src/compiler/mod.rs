@@ -58,8 +58,8 @@ pub enum Error {
     #[error("{0}: Cannot call {1} (not a function)")]
     NotAFunction(LineCol, VarRef),
 
-    #[error("{0}: Expected a number")]
-    NotANumber(LineCol),
+    #[error("{0}: {1} is not a number")]
+    NotANumber(LineCol, ExprType),
 
     #[error("{0}: Out of constants")]
     OutOfConstants(LineCol),
@@ -72,6 +72,9 @@ pub enum Error {
 
     #[error("{0}: {1}")]
     Parse(LineCol, String),
+
+    #[error("{0}: Expected {2} but found {1}")]
+    TypeMismatch(LineCol, ExprType, ExprType),
 
     #[error("{0}: Undefined {2} symbol {1}")]
     UndefinedSymbol(LineCol, VarRef, RegisterScope),

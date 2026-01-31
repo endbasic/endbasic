@@ -225,7 +225,6 @@ impl TryFrom<u8> for ExprType {
 
 impl ExprType {
     /// Returns true if this expression type is numerical.
-    #[allow(unused)]
     pub(crate) fn is_numerical(self) -> bool {
         self == Self::Double || self == Self::Integer
     }

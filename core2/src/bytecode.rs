@@ -250,6 +250,9 @@ macro_rules! instr {
 /// need to worry about stable values over time).
 #[repr(u8)]
 pub(crate) enum Opcode {
+    /// Adds two doubles and stores the result into a third one.
+    AddDouble,
+
     /// Adds two integers and stores the result into a third one.
     AddInteger,
 
@@ -262,7 +265,7 @@ pub(crate) enum Opcode {
     /// Concatenates two strings and stores the pointer to the result into a third one.
     Concat,
 
-    /// Converts a double register to an integer register.
+    /// Converts the double value in a register to an integer.
     DoubleToInteger,
 
     /// Allocates local registers (locals and temporaries) when entering a scope.
@@ -270,6 +273,9 @@ pub(crate) enum Opcode {
 
     /// Jumps to a subroutine at an address relative to the PC.
     Gosub,
+
+    /// Converts the integer value in a register to a double.
+    IntegerToDouble,
 
     /// Jumps to an address relative to the PC.
     Jump,
@@ -299,10 +305,11 @@ pub(crate) enum Opcode {
 
 #[rustfmt::skip]
 instr!(
-    Opcode::Alloc, "ALLOC",
-    make_alloc, parse_alloc, format_alloc,
-    Register, 0x000000ff, 8,  // Destination register in which to store the heap pointer.
-    ExprType, 0x000000ff, 0,  // Type of the object to allocate.
+    Opcode::AddDouble, "ADDD",
+    make_add_double, parse_add_double, format_add_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
 );
 
 #[rustfmt::skip]
@@ -312,6 +319,14 @@ instr!(
     Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
     Register, 0x000000ff, 8,  // Left hand side value.
     Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::Alloc, "ALLOC",
+    make_alloc, parse_alloc, format_alloc,
+    Register, 0x000000ff, 8,  // Destination register in which to store the heap pointer.
+    ExprType, 0x000000ff, 0,  // Type of the object to allocate.
 );
 
 #[rustfmt::skip]
@@ -357,6 +372,13 @@ instr!(
     Opcode::Gosub, "GOSUB",
     make_gosub, parse_gosub, format_gosub,
     u16, 0x0000ffff, 0,  // Relative address.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::IntegerToDouble, "ITOD",
+    make_integer_to_double, parse_integer_to_double, format_integer_to_double,
+    Register, 0x000000ff, 0,  // Register with the value to convert.
 );
 
 #[rustfmt::skip]
@@ -525,6 +547,15 @@ mod tests {
     }
 
     test_instr!(
+        test_add_double,
+        make_add_double,
+        parse_add_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
         test_add_integer,
         make_add_integer,
         parse_add_integer,
@@ -564,6 +595,13 @@ mod tests {
     test_instr!(test_enter, make_enter, parse_enter, 10);
 
     test_instr!(test_gosub, make_gosub, parse_gosub, 12345);
+
+    test_instr!(
+        test_integer_to_double,
+        make_integer_to_double,
+        parse_integer_to_double,
+        Register::local(1).unwrap()
+    );
 
     test_instr!(test_jump, make_jump, parse_jump, 12345);
 

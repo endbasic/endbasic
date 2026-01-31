@@ -1,0 +1,64 @@
+# Source
+
+double_result = 4.5 + 2.3
+OUT double_result
+
+int_result = 2 + 3
+OUT int_result
+
+string_result = "a" + "b"
+OUT string_result
+
+left_itod_result = 2 + 8.3
+OUT left_itod_result
+
+right_itod_result = 8.3 + 2
+OUT right_itod_result
+
+' TODO(jmmv): Do the same as above but with negative numbers.
+
+# Disassembly
+
+0000:   ENTER       7                   # 0:0
+0001:   LOADC       R65, 0              # 1:17
+0002:   LOADC       R66, 1              # 1:23
+0003:   ADDD        R64, R65, R66       # 1:21
+0004:   MOVE        R66, R64            # 2:5
+0005:   LOADI       R65, 257            # 2:5
+0006:   UPCALL      0, R65              # 2:1, OUT
+0007:   LOADI       R66, 2              # 4:14
+0008:   LOADI       R67, 3              # 4:18
+0009:   ADDI        R65, R66, R67       # 4:16
+0010:   MOVE        R67, R65            # 5:5
+0011:   LOADI       R66, 258            # 5:5
+0012:   UPCALL      0, R66              # 5:1, OUT
+0013:   LOADI       R67, 2              # 7:17
+0014:   LOADI       R68, 3              # 7:23
+0015:   CONCAT      R66, R67, R68       # 7:21
+0016:   MOVE        R68, R66            # 8:5
+0017:   LOADI       R67, 259            # 8:5
+0018:   UPCALL      0, R67              # 8:1, OUT
+0019:   LOADI       R68, 2              # 10:20
+0020:   LOADC       R69, 4              # 10:24
+0021:   ITOD        R68                 # 10:20
+0022:   ADDD        R67, R68, R69       # 10:22
+0023:   MOVE        R69, R67            # 11:5
+0024:   LOADI       R68, 257            # 11:5
+0025:   UPCALL      0, R68              # 11:1, OUT
+0026:   LOADC       R69, 4              # 13:21
+0027:   LOADI       R70, 2              # 13:27
+0028:   ITOD        R70                 # 13:27
+0029:   ADDD        R68, R69, R70       # 13:25
+0030:   MOVE        R70, R68            # 14:5
+0031:   LOADI       R69, 257            # 14:5
+0032:   UPCALL      0, R69              # 14:1, OUT
+0033:   LOADI       R69, 0              # 0:0
+0034:   END         R69                 # 0:0
+
+# Output
+
+(6.8, 0, #)
+(5, 0, %)
+("ab", 0, $)
+(10.3, 0, #)
+(10.3, 0, #)

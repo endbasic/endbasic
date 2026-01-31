@@ -28,6 +28,7 @@ pub(crate) fn format_instr(instr: u32) -> String {
     let opcode = unsafe { opcode_of(instr) };
 
     match opcode {
+        Opcode::AddDouble => bytecode::format_add_double(instr),
         Opcode::AddInteger => bytecode::format_add_integer(instr),
         Opcode::Alloc => bytecode::format_alloc(instr),
         Opcode::Call => bytecode::format_call(instr),
@@ -36,6 +37,7 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::End => bytecode::format_end(instr),
         Opcode::Enter => bytecode::format_enter(instr),
         Opcode::Gosub => bytecode::format_gosub(instr),
+        Opcode::IntegerToDouble => bytecode::format_integer_to_double(instr),
         Opcode::Jump => bytecode::format_jump(instr),
         Opcode::LoadConstant => bytecode::format_load_constant(instr),
         Opcode::LoadInteger => bytecode::format_load_integer(instr),

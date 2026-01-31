@@ -464,6 +464,7 @@ mod tests {
         };
     }
 
+    one_test!(test_arithmetic_add);
     one_test!(test_arithmetic_errors);
     one_test!(test_empty);
     one_test!(test_end_bare);
