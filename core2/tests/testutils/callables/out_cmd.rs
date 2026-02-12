@@ -15,6 +15,7 @@
 
 //! A callable exposed to integration tests.
 
+use super::format_arg;
 use async_trait::async_trait;
 use endbasic_core2::*;
 use std::borrow::Cow;
@@ -36,9 +37,9 @@ impl OutCommand {
                     Some(&RepeatedSyntax {
                         name: Cow::Borrowed("arg"),
                         type_syn: RepeatedTypeSyntax::AnyValue,
-                        sep: ArgSepSyntax::Exactly(ArgSep::Short),
+                        sep: ArgSepSyntax::OneOf(&[ArgSep::As, ArgSep::Long, ArgSep::Short]),
                         require_one: false,
-                        allow_missing: false,
+                        allow_missing: true,
                     }),
                 )])
                 .test_build(),
@@ -61,12 +62,7 @@ impl Callable for OutCommand {
             let sep = match scope.get_type(reg) {
                 VarArgTag::Immediate(sep, etype) => {
                     reg += 1;
-                    let formatted = match etype {
-                        ExprType::Boolean => format!("{}", scope.get_boolean(reg)),
-                        ExprType::Double => format!("{}", scope.get_double(reg)),
-                        ExprType::Integer => format!("{}", scope.get_integer(reg)),
-                        ExprType::Text => scope.get_string(reg).to_string(),
-                    };
+                    let formatted = format_arg(&scope, reg, etype);
                     line.push_str(&format!("{}={}{}", argi, formatted, etype.annotation()));
                     sep
                 }

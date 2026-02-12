@@ -17,8 +17,9 @@
 
 use crate::ast::{BinaryOpSpan, Expr, ExprType};
 use crate::bytecode::{self, Register, RegisterScope};
+use crate::compiler::args::compile_args;
 use crate::compiler::codegen::{Codegen, Fixup};
-use crate::compiler::syms::{SymbolKey, TempSymtable};
+use crate::compiler::syms::{self, SymbolKey, TempSymtable};
 use crate::compiler::{Error, Result};
 use crate::mem::Datum;
 use std::convert::TryFrom;
@@ -100,6 +101,7 @@ pub(super) fn compile_expr(
 
         Expr::Call(span) => {
             let key = SymbolKey::from(&span.vref.name);
+            let key_pos = span.vref_pos;
 
             let Some(md) = symtable.get_callable(&key) else {
                 return Err(Error::UndefinedSymbol(
@@ -113,9 +115,31 @@ pub(super) fn compile_expr(
                 return Err(Error::NotAFunction(span.vref_pos, span.vref));
             };
 
+            if md.is_argless() {
+                return Err(Error::CallableSyntax(span.vref_pos, md.clone()));
+            }
+
             if md.is_user_defined() {
-                let addr = codegen.emit(bytecode::make_nop(), span.vref_pos);
-                codegen.add_fixup(addr, Fixup::Call(reg, key));
+                let (is_global, _index) = reg.to_parts();
+
+                let mut alloc = symtable.temp_scope();
+                let ret_reg = if is_global {
+                    // The call instruction can only carry one register, and this register
+                    // indicates where to store the result and where arguments start.  So,
+                    // if we are going to save the result to a global register, we must
+                    // allocate a temp register first so that argument passing can work.
+                    alloc.alloc().map_err(|e| Error::from_syms(e, key_pos))?
+                } else {
+                    reg
+                };
+                let _first_temp = compile_args(span, md.clone(), symtable, codegen)?;
+
+                let addr = codegen.emit(bytecode::make_nop(), key_pos);
+                codegen.add_fixup(addr, Fixup::Call(ret_reg, key));
+
+                if is_global {
+                    codegen.emit(bytecode::make_move(reg, ret_reg), key_pos);
+                }
             } else {
                 todo!("Function upcalls not implemented yet");
             }
@@ -141,13 +165,38 @@ pub(super) fn compile_expr(
             Ok(ExprType::Integer)
         }
 
-        Expr::Symbol(span) => {
-            let (local, etype) = symtable
-                .get_local_or_global(&span.vref)
-                .map_err(|e| Error::from_syms(e, span.pos))?;
-            codegen.emit(bytecode::make_move(reg, local), span.pos);
-            Ok(etype)
-        }
+        Expr::Symbol(span) => match symtable.get_local_or_global(&span.vref) {
+            Ok((local, etype)) => {
+                codegen.emit(bytecode::make_move(reg, local), span.pos);
+                Ok(etype)
+            }
+
+            Err(syms::Error::UndefinedSymbol(..)) => {
+                let key = SymbolKey::from(&span.vref.name);
+
+                let Some(md) = symtable.get_callable(&key) else {
+                    return Err(Error::UndefinedSymbol(span.pos, span.vref, RegisterScope::Global));
+                };
+
+                let Some(etype) = md.return_type() else {
+                    return Err(Error::NotAFunction(span.pos, span.vref));
+                };
+
+                if !md.is_argless() {
+                    return Err(Error::CallableSyntax(span.pos, md.clone()));
+                }
+
+                if md.is_user_defined() {
+                    let addr = codegen.emit(bytecode::make_nop(), span.pos);
+                    codegen.add_fixup(addr, Fixup::Call(reg, key));
+                } else {
+                    todo!("Function upcalls not implemented yet");
+                }
+                Ok(etype)
+            }
+
+            Err(e) => Err(Error::from_syms(e, span.pos)),
+        },
 
         Expr::Text(span) => {
             let index = codegen.get_constant(Datum::Text(span.value), span.pos)?;

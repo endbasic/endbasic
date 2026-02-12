@@ -31,6 +31,7 @@ macro_rules! one_test {
     };
 }
 
+one_test!(test_args);
 one_test!(test_arithmetic);
 one_test!(test_assignments);
 one_test!(test_empty);
@@ -43,7 +44,6 @@ one_test!(test_out_of_registers);
 one_test!(test_strings);
 one_test!(test_subs);
 one_test!(test_types);
-one_test!(test_varargs);
 
 #[test]
 fn test_all_md_files_registered() -> io::Result<()> {

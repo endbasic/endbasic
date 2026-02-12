@@ -25,6 +25,7 @@ use crate::compiler::ids::HashMapWithIds;
 use crate::compiler::syms::{self, GlobalSymtable, LocalSymtable, SymbolKey};
 use crate::compiler::{Error, Result};
 use crate::image::Image;
+use crate::mem::Datum;
 use crate::reader::LineCol;
 use crate::{Callable, CallableMetadataBuilder, parser};
 use std::borrow::Cow;
@@ -134,7 +135,7 @@ fn compile_stmt(
             };
             let is_user_defined = md.is_user_defined();
 
-            let first_temp = compile_args(span, &mut symtable, &mut ctx.codegen)?;
+            let first_temp = compile_args(span, md.clone(), &mut symtable, &mut ctx.codegen)?;
 
             if is_user_defined {
                 let addr = ctx.codegen.emit(bytecode::make_nop(), key_pos);
@@ -267,10 +268,32 @@ fn compile_user_callables(ctx: &mut Context, symtable: &mut GlobalSymtable) -> R
         let key = SymbolKey::from(callable.name.name);
 
         let mut symtable = symtable.enter_scope();
+
+        // The call protocol expects the return value to be in the first local variable
+        // so allocate it early, and then all arguments follow in order from left to right.
         if let Some(vtype) = callable.name.ref_type {
-            // The call protocol expects the return value to be in the _first_ local variable
-            // so allocate it early.
-            symtable.put_local(key.clone(), vtype).map_err(|e| Error::from_syms(e, key_pos))?;
+            let ret_reg =
+                symtable.put_local(key.clone(), vtype).map_err(|e| Error::from_syms(e, key_pos))?;
+
+            // Set the default value of the function result.  We could instead try to do this
+            // at runtime by clearning the return register... but the problem is that we need
+            // to handle non-primitive types like strings and the runtime doesn't know the type
+            // of the result to properly allocate it.
+            match vtype {
+                ExprType::Boolean | ExprType::Integer => {
+                    ctx.codegen.emit(bytecode::make_load_integer(ret_reg, 0), key_pos);
+                }
+                ExprType::Double | ExprType::Text => {
+                    let index = ctx.codegen.get_constant(Datum::new(vtype), key_pos)?;
+                    ctx.codegen.emit(bytecode::make_load_integer(ret_reg, index), key_pos);
+                }
+            }
+        }
+        for param in callable.params {
+            let key = SymbolKey::from(param.name);
+            symtable
+                .put_local(key.clone(), param.ref_type.unwrap_or(ExprType::Integer))
+                .map_err(|e| Error::from_syms(e, key_pos))?;
         }
 
         compile_scope(ctx, symtable, callable.body.into_iter().map(Ok))?;

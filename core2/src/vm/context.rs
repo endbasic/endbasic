@@ -206,7 +206,9 @@ impl Context {
         let (reg, offset) = bytecode::parse_call(instr);
         self.call_stack.push(Frame { old_pc: self.pc, old_fp: self.fp, ret_reg: Some(reg) });
         self.pc = Address::from(offset);
-        self.fp = self.regs.len();
+        let (is_global, index) = reg.to_parts();
+        debug_assert!(!is_global, "Function results are always stored to a temp register");
+        self.fp += usize::from(index);
     }
 
     /// Implements the `Concat` opcode.

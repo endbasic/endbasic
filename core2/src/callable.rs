@@ -70,13 +70,6 @@ pub struct OptionalValueSyntax {
 
     /// The type of the expected parameter.
     pub vtype: ExprType,
-
-    /// Value to push onto the stack when the parameter is missing.
-    pub missing_value: i32,
-
-    /// Value to push onto the stack when the parameter is present, after which the stack contains
-    /// the parameter value.
-    pub present_value: i32,
 }
 
 /// Specifies the type constraints for a repeated parameter.
@@ -170,7 +163,7 @@ pub enum ArgSepSyntax {
     Exactly(ArgSep),
 
     /// The argument separator may be any of the ones given.
-    OneOf(ArgSep, ArgSep),
+    OneOf(&'static [ArgSep]),
 
     /// The argument separator is the end of the call.
     End,
@@ -192,13 +185,16 @@ impl ArgSepSyntax {
                 }
             }
 
-            ArgSepSyntax::OneOf(sep1, sep2) => {
-                let (text1, _needs_space1) = sep1.describe();
-                let (text2, _needs_space2) = sep2.describe();
-
-                output.push(' ');
-                output.push_str(&format!("<{}|{}>", text1, text2));
-                output.push(' ');
+            ArgSepSyntax::OneOf(seps) => {
+                output.push_str(" <");
+                for (i, sep) in seps.iter().enumerate() {
+                    let (text, _needs_space) = sep.describe();
+                    output.push_str(text);
+                    if i < seps.len() - 1 {
+                        output.push('|');
+                    }
+                }
+                output.push_str("> ");
             }
 
             ArgSepSyntax::End => (),
@@ -235,10 +231,10 @@ pub enum SingularArgSyntax {
 #[derive(Clone, Debug)]
 pub(crate) struct CallableSyntax {
     /// Ordered list of singular arguments that appear before repeated arguments.
-    singular: Cow<'static, [SingularArgSyntax]>,
+    pub(crate) singular: Cow<'static, [SingularArgSyntax]>,
 
     /// Details on the repeated argument allowed after singular arguments, if any.
-    repeated: Option<Cow<'static, RepeatedSyntax>>,
+    pub(crate) repeated: Option<Cow<'static, RepeatedSyntax>>,
 }
 
 impl CallableSyntax {
@@ -262,14 +258,29 @@ impl CallableSyntax {
 
     /// Computes the range of the expected number of parameters for this syntax.
     pub(crate) fn expected_nargs(&self) -> RangeInclusive<usize> {
-        let mut min = self.singular.len();
-        let mut max = self.singular.len();
+        let mut min = 0;
+        let mut max = 0;
+
+        for syn in self.singular.iter() {
+            let may_be_missing = match syn {
+                SingularArgSyntax::RequiredValue(..) => false,
+                SingularArgSyntax::RequiredRef(..) => false,
+                SingularArgSyntax::OptionalValue(..) => true,
+                SingularArgSyntax::AnyValue(details, ..) => details.allow_missing,
+            };
+            if !may_be_missing {
+                min += 1;
+            }
+            max += 1;
+        }
+
         if let Some(syn) = self.repeated.as_ref() {
             if syn.require_one {
                 min += 1;
             }
             max = usize::MAX;
         }
+
         min..=max
     }
 
