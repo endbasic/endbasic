@@ -488,7 +488,7 @@ pub struct CallableMetadata {
 
 impl CallableMetadata {
     /// Gets the callable's name, all in uppercase.
-    pub(crate) fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         &self.name
     }
 
