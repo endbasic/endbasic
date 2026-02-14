@@ -90,7 +90,12 @@ impl Callable for OutCommand {
                     text.push_str("<EMPTY>");
                     sep
                 }
-                VarArgTag::Pointer(_sep) => todo!("Support to load pointers not needed yet"),
+                VarArgTag::Pointer(sep) => {
+                    reg += 1;
+                    let typed_ptr = scope.get_pointer(reg);
+                    text.push_str(&typed_ptr.to_string());
+                    sep
+                }
             };
             reg += 1;
 

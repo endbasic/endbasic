@@ -70,7 +70,12 @@ impl Callable for OutCommand {
                     line.push_str(&format!("{}=()", argi));
                     sep
                 }
-                VarArgTag::Pointer(_sep) => todo!("Support to load pointers not needed yet"),
+                VarArgTag::Pointer(sep) => {
+                    reg += 1;
+                    let typed_ptr = scope.get_pointer(reg);
+                    line.push_str(&format!("{}={}", argi, typed_ptr));
+                    sep
+                }
             };
             argi += 1;
             reg += 1;

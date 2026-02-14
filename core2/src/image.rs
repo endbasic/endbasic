@@ -39,6 +39,7 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::Jump => bytecode::format_jump(instr),
         Opcode::LoadConstant => bytecode::format_load_constant(instr),
         Opcode::LoadInteger => bytecode::format_load_integer(instr),
+        Opcode::LoadRegisterPointer => bytecode::format_load_register_ptr(instr),
         Opcode::Move => bytecode::format_move(instr),
         Opcode::Nop => bytecode::format_nop(instr),
         Opcode::Return => bytecode::format_return(instr),

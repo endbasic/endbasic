@@ -15,15 +15,18 @@
 
 //! Common compilers for callable arguments.
 
-use crate::ast::{ArgSpan, CallSpan};
+use crate::ast::{ArgSpan, CallSpan, Expr, VarRef};
 use crate::bytecode::{self, Register};
 use crate::callable::{CallableMetadata, CallableSyntax};
 use crate::compiler::codegen::Codegen;
 use crate::compiler::exprs::{compile_expr, compile_expr_as_type};
-use crate::compiler::syms::TempSymtable;
+use crate::compiler::syms::{self, TempSymtable};
 use crate::compiler::{Error, Result};
 use crate::reader::LineCol;
-use crate::{ArgSep, ArgSepSyntax, RepeatedTypeSyntax, SingularArgSyntax};
+use crate::{ArgSep, ArgSepSyntax, ExprType, RepeatedTypeSyntax, SingularArgSyntax};
+
+use super::SymbolKey;
+use super::syms::LocalSymtable;
 
 /// Finds the syntax definition that matches the given argument count.
 ///
@@ -96,10 +99,88 @@ fn validate_syn_argsep(
     }
 }
 
+/// Pre-allocates one local variable for a command output argument, setting its to its default
+/// value.
+fn define_new_arg(
+    symtable: &mut LocalSymtable<'_, '_, '_, '_>,
+    vref: &VarRef,
+    pos: LineCol,
+    codegen: &mut Codegen,
+) -> Result<()> {
+    let key = SymbolKey::from(&vref.name);
+    let vtype = vref.ref_type.unwrap_or(ExprType::Integer);
+    let reg = symtable.put_local(key, vtype).map_err(|e| Error::from_syms(e, pos))?;
+    codegen.emit_default(reg, vtype, pos);
+    Ok(())
+}
+
+/// Pre-allocates local variables for command output arguments.
+pub(super) fn define_new_args(
+    span: &CallSpan,
+    md: &CallableMetadata,
+    symtable: &mut LocalSymtable<'_, '_, '_, '_>,
+    codegen: &mut Codegen,
+) -> Result<()> {
+    let syntax = find_syntax(md, span.vref_pos, span.args.len())?;
+
+    let mut arg_iter = span.args.iter();
+
+    for syn in syntax.singular.iter() {
+        match syn {
+            SingularArgSyntax::RequiredValue(_details, _exp_sep) => {
+                arg_iter.next().expect("Args and their syntax must advance in unison");
+            }
+
+            SingularArgSyntax::RequiredRef(details, _exp_sep) => {
+                let ArgSpan { expr, .. } =
+                    arg_iter.next().expect("Args and their syntax must advance in unison");
+
+                if let Some(Expr::Symbol(span)) = expr
+                    && let Err(syms::Error::UndefinedSymbol(..)) =
+                        symtable.get_local_or_global(&span.vref)
+                    && details.define_undefined
+                {
+                    define_new_arg(symtable, &span.vref, span.pos, codegen)?;
+                }
+            }
+
+            SingularArgSyntax::OptionalValue(_details, _exp_sep) => {
+                arg_iter.next();
+            }
+
+            SingularArgSyntax::AnyValue(_details, _exp_sep) => {
+                arg_iter.next();
+            }
+        };
+    }
+
+    if let Some(syn) = syntax.repeated.as_ref()
+        && let RepeatedTypeSyntax::VariableRef = syn.type_syn
+    {
+        for arg in arg_iter {
+            let Some(Expr::Symbol(span)) = &arg.expr else {
+                continue;
+            };
+
+            let Err(syms::Error::UndefinedSymbol(..)) = symtable.get_local_or_global(&span.vref)
+            else {
+                continue;
+            };
+
+            define_new_arg(symtable, &span.vref, span.pos, codegen)?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Compiles the arguments of a callable invocation.
 ///
 /// Returns the first register containing the compiled arguments. Arguments are laid out as
 /// pairs of type tag and value registers, allowing the callable to interpret them at runtime.
+///
+/// The caller *must* invoke `define_new_args` beforehand when compiling arguments for commands.
+/// This separate function is necessary to pre-allocate local variables for any output arguments.
 ///
 /// TODO(jmmv): The `md` metadata is passed by value, not because we want to, but because it's
 /// necessary to appease the borrow checker.  The `md` is obtained from the `symtable` in the caller
@@ -139,17 +220,29 @@ pub(super) fn compile_args(
                 }
             }
 
-            SingularArgSyntax::RequiredRef(_details, exp_sep) => {
+            SingularArgSyntax::RequiredRef(details, exp_sep) => {
                 let ArgSpan { expr, sep, sep_pos } =
                     arg_iter.next().expect("Args and their syntax must advance in unison");
                 let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
 
                 match expr {
                     None => return Err(Error::CallableSyntax(key_pos, md)),
-                    Some(_expr) => {
+                    Some(Expr::Symbol(span)) => {
+                        let (reg, vtype) = match symtable.get_local_or_global(&span.vref) {
+                            Ok((reg, vtype)) => (reg, vtype),
+                            Err(e @ syms::Error::UndefinedSymbol(..)) => {
+                                if !details.define_undefined {
+                                    return Err(Error::from_syms(e, span.pos));
+                                }
+                                unreachable!("Caller must use define_new_args first for commands");
+                            }
+                            Err(e) => return Err(Error::from_syms(e, span.pos)),
+                        };
+                        let temp = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        codegen.emit(bytecode::make_load_register_ptr(temp, vtype, reg), arg_pos);
                         validate_syn_argsep(&md, arg_pos, exp_sep, arg_iter.peek().is_none(), sep)?;
-                        todo!();
                     }
+                    Some(expr) => return Err(Error::CallableSyntax(expr.start_pos(), md)),
                 }
             }
 
@@ -253,7 +346,20 @@ pub(super) fn compile_args(
                     }
 
                     RepeatedTypeSyntax::VariableRef => {
-                        todo!();
+                        let Expr::Symbol(span) = expr else {
+                            return Err(Error::CallableSyntax(arg_pos, md));
+                        };
+
+                        let (reg, vtype) = match symtable.get_local_or_global(&span.vref) {
+                            Ok((reg, vtype)) => (reg, vtype),
+                            Err(syms::Error::UndefinedSymbol(..)) => {
+                                unreachable!("Caller must use define_new_args first for commands");
+                            }
+                            Err(e) => return Err(Error::from_syms(e, span.pos)),
+                        };
+                        let temp = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        codegen.emit(bytecode::make_load_register_ptr(temp, vtype, reg), arg_pos);
+                        bytecode::VarArgTag::Pointer(sep)
                     }
                 },
             };

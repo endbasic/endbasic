@@ -20,6 +20,15 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+mod define_arg_cmd;
+use define_arg_cmd::DefineArgCommand;
+
+mod define_and_change_args_cmd;
+use define_and_change_args_cmd::DefineAndChangeArgsCommand;
+
+mod increment_required_int_cmd;
+use increment_required_int_cmd::IncrementRequiredIntCommand;
+
 mod out_any_value_cmd;
 use out_any_value_cmd::OutAnyValueCommand;
 
@@ -57,7 +66,10 @@ fn format_vararg(scope: &Scope<'_>, i: u8) -> (String, bool, ArgSep) {
             (format!("{}{}", formatted, etype.annotation()), true, sep)
         }
         VarArgTag::Missing(sep) => ("()".to_owned(), false, sep),
-        VarArgTag::Pointer(_sep) => todo!("Support to load pointers not needed yet"),
+        VarArgTag::Pointer(sep) => {
+            let typed_ptr = scope.get_pointer(i + 1);
+            (typed_ptr.to_string(), true, sep)
+        }
     }
 }
 
@@ -67,6 +79,9 @@ pub(super) fn register_all(
     console: Rc<RefCell<String>>,
 ) {
     let cmds = [
+        DefineArgCommand::new() as Rc<dyn Callable>,
+        DefineAndChangeArgsCommand::new() as Rc<dyn Callable>,
+        IncrementRequiredIntCommand::new() as Rc<dyn Callable>,
         OutAnyValueCommand::new(console.clone()) as Rc<dyn Callable>,
         OutAnyValueOptionalCommand::new(console.clone()) as Rc<dyn Callable>,
         OutCommand::new(console.clone()) as Rc<dyn Callable>,

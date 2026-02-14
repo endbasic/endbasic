@@ -130,7 +130,7 @@ impl Context {
         &'a mut self,
         reg: Register,
         constants: &'a [Datum],
-        heap: &'a mut [Datum],
+        heap: &'a mut Vec<Datum>,
     ) -> Scope<'a> {
         let (is_global, index) = reg.to_parts();
         assert!(!is_global);
@@ -162,6 +162,7 @@ impl Context {
                 Opcode::Jump => self.do_jump(instr),
                 Opcode::LoadConstant => self.do_load_constant(instr, &image.constants),
                 Opcode::LoadInteger => self.do_load_integer(instr),
+                Opcode::LoadRegisterPointer => self.do_load_register_ptr(instr),
                 Opcode::Move => self.do_move(instr),
                 Opcode::Nop => self.do_nop(instr),
                 Opcode::Return => self.do_return(instr),
@@ -291,6 +292,14 @@ impl Context {
     pub(super) fn do_load_integer(&mut self, instr: u32) {
         let (register, i) = bytecode::parse_load_integer(instr);
         self.set_reg(register, i as u64);
+        self.pc += 1;
+    }
+
+    /// Implements the `LoadRegisterPointer` opcode.
+    pub(super) fn do_load_register_ptr(&mut self, instr: u32) {
+        let (dest, vtype, src) = bytecode::parse_load_register_ptr(instr);
+        let tagged_ptr = src.to_tagged_ptr(self.fp, vtype);
+        self.set_reg(dest, tagged_ptr);
         self.pc += 1;
     }
 

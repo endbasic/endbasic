@@ -16,7 +16,9 @@
 //! Bytecode for a compiled EndBASIC program.
 
 use crate::ast::{ArgSep, ExprType};
-use crate::num::{unchecked_u32_as_u8, unchecked_u32_as_u16};
+use crate::num::{
+    unchecked_u32_as_u8, unchecked_u32_as_u16, unchecked_u32_as_usize, unchecked_u64_as_u8,
+};
 use std::convert::TryFrom;
 use std::fmt;
 
@@ -145,6 +147,41 @@ impl Register {
     pub(crate) fn to_parts(self) -> (bool, u8) {
         if self.0 < Self::MAX_GLOBAL { (true, self.0) } else { (false, self.0 - Self::MAX_GLOBAL) }
     }
+
+    /// Creates a new tagged pointer for this register.
+    ///
+    /// A tagged pointer carries the type of the value pointed to by the register as well as the
+    /// absolute address of the register in the register bank.  This address is calculated using
+    /// the current value of `fp`.
+    pub(crate) fn to_tagged_ptr(self, fp: usize, vtype: ExprType) -> u64 {
+        let (is_global, index) = self.to_parts();
+        let mut index = usize::from(index);
+        if !is_global {
+            index += fp;
+        }
+
+        let index = u32::try_from(index).expect("Cannot support that many registers");
+        u64::from(vtype as u8) << 32 | u64::from(index)
+    }
+
+    /// Parses a tagged pointer previously created by `to_tagged_ptr`, returning the absolute
+    /// address of the register and the type of the value pointed at.
+    ///
+    /// Panics if the tag is not value.
+    pub(crate) fn parse_tagged_ptr(ptr: u64) -> (usize, ExprType) {
+        let vtype: ExprType = {
+            #[allow(unsafe_code)]
+            unsafe {
+                let v = unchecked_u64_as_u8(ptr >> 32);
+                assert!(v <= ExprType::Text as u8);
+                std::mem::transmute(v)
+            }
+        };
+
+        let index = unchecked_u32_as_usize((ptr & 0xffffffff) as u32);
+
+        (index, vtype)
+    }
 }
 
 impl RawValue for ExprType {
@@ -152,7 +189,7 @@ impl RawValue for ExprType {
         #[allow(unsafe_code)]
         unsafe {
             let v = unchecked_u32_as_u8(v);
-            debug_assert!(v <= ExprType::Text as u8);
+            assert!(v <= ExprType::Text as u8);
             std::mem::transmute(v)
         }
     }
@@ -298,6 +335,9 @@ pub(crate) enum Opcode {
     /// Loads an integer immediate into a register.
     LoadInteger,
 
+    /// Loads a register pointer into a register.
+    LoadRegisterPointer,
+
     /// Moves (copies) data between two registers.
     Move,
 
@@ -414,6 +454,15 @@ instr!(
     make_load_integer, parse_load_integer, format_load_integer,
     Register, 0x000000ff, 16,  // Destination register to load the immediate into.
     u16, 0x0000ffff, 0,  // Immediate value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LoadRegisterPointer, "LOADRP",
+    make_load_register_ptr, parse_load_register_ptr, format_load_register_ptr,
+    Register, 0x000000ff, 16,  // Destination register to load the immediate into.
+    ExprType, 0x000000ff, 8,  // Type of the value pointed to.
+    Register, 0x000000ff, 0,  // Register to load.
 );
 
 #[rustfmt::skip]
@@ -634,6 +683,15 @@ mod tests {
         parse_load_integer,
         Register::local(1).unwrap(),
         12345
+    );
+
+    test_instr!(
+        test_load_register_ptr,
+        make_load_register_ptr,
+        parse_load_register_ptr,
+        Register::local(1).unwrap(),
+        ExprType::Double,
+        Register::local(2).unwrap()
     );
 
     test_instr!(

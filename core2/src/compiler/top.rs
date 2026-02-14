@@ -18,7 +18,7 @@
 use crate::ast::{ArgSep, AssignmentSpan, CallableSpan, EndSpan, ExprType, Statement};
 use crate::bytecode::{self, RegisterScope};
 use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, SingularArgSyntax};
-use crate::compiler::args::compile_args;
+use crate::compiler::args::{compile_args, define_new_args};
 use crate::compiler::codegen::{Codegen, Fixup};
 use crate::compiler::exprs::{compile_expr, compile_expr_as_type};
 use crate::compiler::ids::HashMapWithIds;
@@ -124,8 +124,6 @@ fn compile_stmt(
             let key = SymbolKey::from(&span.vref.name);
             let key_pos = span.vref_pos;
 
-            let mut symtable = symtable.frozen();
-
             let Some(md) = symtable.get_callable(&key) else {
                 return Err(Error::UndefinedSymbol(
                     key_pos,
@@ -134,8 +132,13 @@ fn compile_stmt(
                 ));
             };
             let is_user_defined = md.is_user_defined();
+            let md = md.clone();
 
-            let first_temp = compile_args(span, md.clone(), &mut symtable, &mut ctx.codegen)?;
+            define_new_args(&span, &md, symtable, &mut ctx.codegen)?;
+            let first_temp = {
+                let mut symtable = symtable.frozen();
+                compile_args(span, md, &mut symtable, &mut ctx.codegen)?
+            };
 
             if is_user_defined {
                 let addr = ctx.codegen.emit(bytecode::make_nop(), key_pos);
@@ -184,13 +187,7 @@ fn compile_stmt(
                 symtable.put_local(key, span.vtype)
             }
             .map_err(|e| Error::from_syms(e, name_pos))?;
-            let instr = match span.vtype {
-                ExprType::Boolean => bytecode::make_load_integer(reg, 0),
-                ExprType::Double => bytecode::make_load_integer(reg, 0),
-                ExprType::Integer => bytecode::make_load_integer(reg, 0),
-                ExprType::Text => bytecode::make_alloc(reg, ExprType::Text),
-            };
-            ctx.codegen.emit(instr, name_pos);
+            ctx.codegen.emit_default(reg, span.vtype, name_pos);
         }
 
         Statement::End(span) => {

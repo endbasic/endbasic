@@ -79,6 +79,17 @@ impl Codegen {
         self.code.len() - 1
     }
 
+    /// Emits code to set `reg` to the default value for `vtype`.
+    pub(super) fn emit_default(&mut self, reg: Register, vtype: ExprType, pos: LineCol) {
+        let instr = match vtype {
+            ExprType::Boolean | ExprType::Double | ExprType::Integer => {
+                bytecode::make_load_integer(reg, 0)
+            }
+            ExprType::Text => bytecode::make_alloc(reg, ExprType::Text),
+        };
+        self.emit(instr, pos);
+    }
+
     /// Records a `fixup` that needs to be applied at `addr`.
     pub(super) fn add_fixup(&mut self, addr: usize, fixup: Fixup) {
         let previous = self.fixups.insert(addr, fixup);
