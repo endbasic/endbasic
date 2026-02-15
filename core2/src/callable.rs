@@ -569,39 +569,42 @@ impl CallableMetadata {
 /// Arguments provided to a callable during its execution.
 pub struct Scope<'a> {
     /// Slice of register values containing the callable's arguments.
-    pub(crate) regs: &'a [u64],
+    pub(crate) regs: &'a mut [u64],
 
     /// Reference to the constants pool for resolving constant pointers.
     pub(crate) constants: &'a [Datum],
 
     /// Reference to the heap for resolving heap pointers.
-    pub(crate) heap: &'a [Datum],
+    pub(crate) heap: &'a mut [Datum],
+
+    /// Start of the current frame (where the arguments to the upcall start).
+    pub(crate) fp: usize,
 }
 
 impl<'a> Scope<'a> {
     /// Gets the type tag of the argument at `arg`.
     pub fn get_type(&self, arg: u8) -> VarArgTag {
-        VarArgTag::parse_u64(self.regs[arg as usize]).unwrap()
+        VarArgTag::parse_u64(self.regs[self.fp + (arg as usize)]).unwrap()
     }
 
     /// Gets the boolean value of the argument at `arg`.
     pub fn get_boolean(&self, arg: u8) -> bool {
-        self.regs[arg as usize] != 0
+        self.regs[self.fp + (arg as usize)] != 0
     }
 
     /// Gets the double value of the argument at `arg`.
     pub fn get_double(&self, arg: u8) -> f64 {
-        f64::from_bits(self.regs[arg as usize])
+        f64::from_bits(self.regs[self.fp + (arg as usize)])
     }
 
     /// Gets the integer value of the argument at `arg`.
     pub fn get_integer(&self, arg: u8) -> i32 {
-        self.regs[arg as usize] as i32
+        self.regs[self.fp + (arg as usize)] as i32
     }
 
     /// Gets the string value of the argument at `arg`.
     pub fn get_string(&self, arg: u8) -> &str {
-        let index = self.regs[arg as usize];
+        let index = self.regs[self.fp + (arg as usize)];
         let ptr = Pointer::from(index);
         match ptr.resolve(self.constants, self.heap) {
             Datum::Text(s) => s,

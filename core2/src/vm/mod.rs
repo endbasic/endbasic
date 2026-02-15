@@ -33,13 +33,14 @@ pub struct UpcallHandler<'a>(&'a mut Vm);
 
 impl<'a> UpcallHandler<'a> {
     /// Invokes the pending upcall.
-    pub async fn invoke(mut self) -> CallResult<()> {
-        let vm = &mut self.0;
+    pub async fn invoke(self) -> CallResult<()> {
+        let vm = self.0;
         let (index, first_reg) = vm
             .pending_upcall
             .take()
             .expect("This is only reachable when the VM has a pending upcall");
-        vm.upcalls[usize::from(index)].exec(vm.upcall_scope(first_reg)).await
+        let upcall = vm.upcalls[usize::from(index)].clone();
+        upcall.exec(vm.upcall_scope(first_reg)).await
     }
 }
 
@@ -107,12 +108,12 @@ impl Vm {
     }
 
     /// Constructs a `Scope` for an upcall with arguments starting at `reg`.
-    fn upcall_scope<'a>(&'a self, reg: Register) -> Scope<'a> {
+    fn upcall_scope<'a>(&'a mut self, reg: Register) -> Scope<'a> {
         let constants = match self.image.as_ref() {
             Some(image) => image.constants.as_slice(),
             None => &[],
         };
-        Scope { regs: self.context.get_local_regs(reg), constants, heap: &self.heap }
+        self.context.upcall_scope(reg, constants, &mut self.heap)
     }
 
     /// Starts or resumes execution of the loaded image.

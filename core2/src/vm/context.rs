@@ -15,6 +15,7 @@
 
 //! Virtual processor for EndBASIC execution.
 
+use crate::Scope;
 use crate::bytecode::{self, Opcode, Register, opcode_of};
 use crate::image::Image;
 use crate::mem::{Datum, Pointer};
@@ -124,13 +125,18 @@ impl Context {
         self.stop = Some(InternalStopReason::Exception(self.pc, message.into()));
     }
 
-    /// Gets a view of the local registers starting at `reg`.
-    pub(super) fn get_local_regs(&self, reg: Register) -> &[u64] {
+    /// Constructs a `Scope` for an upcall with arguments starting at `reg`.
+    pub(super) fn upcall_scope<'a>(
+        &'a mut self,
+        reg: Register,
+        constants: &'a [Datum],
+        heap: &'a mut [Datum],
+    ) -> Scope<'a> {
         let (is_global, index) = reg.to_parts();
         assert!(!is_global);
         let index = usize::from(index);
-        let start = self.fp + index;
-        &self.regs[start..]
+
+        Scope { regs: &mut self.regs, constants, heap, fp: self.fp + index }
     }
 
     /// Starts or resumes execution of `image`.
