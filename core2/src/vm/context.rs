@@ -16,10 +16,9 @@
 //! Virtual processor for EndBASIC execution.
 
 use crate::Scope;
-use crate::bytecode::{self, Opcode, Register, opcode_of};
+use crate::bytecode::{self, Opcode, Register, TaggedRegisterRef, opcode_of};
 use crate::image::Image;
-use crate::mem::{Datum, Pointer};
-use crate::num::unchecked_u24_as_usize;
+use crate::mem::{Datum, DatumPtr};
 
 /// Alias for the type representing a program address.
 type Address = usize;
@@ -111,10 +110,7 @@ impl Context {
     /// Dereferences a pointer.
     fn deref_ptr<'b>(&self, reg: Register, constants: &'b [Datum], heap: &'b [Datum]) -> &'b Datum {
         let raw_addr = self.get_reg(reg);
-        match Pointer::from(raw_addr) {
-            Pointer::Constant(index) => &constants[unchecked_u24_as_usize(index)],
-            Pointer::Heap(index) => &heap[unchecked_u24_as_usize(index)],
-        }
+        DatumPtr::from(raw_addr).resolve(constants, heap)
     }
 
     /// Registers that the instruction being processed threw an exception `message`.
@@ -203,7 +199,7 @@ impl Context {
     pub(super) fn do_alloc(&mut self, instr: u32, heap: &mut Vec<Datum>) {
         let (dest, etype) = bytecode::parse_alloc(instr);
         heap.push(Datum::new(etype));
-        let ptr = Pointer::for_heap((heap.len() - 1) as u32);
+        let ptr = DatumPtr::for_heap((heap.len() - 1) as u32);
         self.set_reg(dest, ptr);
         self.pc += 1;
     }
@@ -228,7 +224,7 @@ impl Context {
             _ => unreachable!(),
         };
         heap.push(Datum::Text(result));
-        let ptr = Pointer::for_heap((heap.len() - 1) as u32);
+        let ptr = DatumPtr::for_heap((heap.len() - 1) as u32);
         self.set_reg(dest, ptr);
         self.pc += 1;
     }
@@ -298,8 +294,8 @@ impl Context {
     /// Implements the `LoadRegisterPointer` opcode.
     pub(super) fn do_load_register_ptr(&mut self, instr: u32) {
         let (dest, vtype, src) = bytecode::parse_load_register_ptr(instr);
-        let tagged_ptr = src.to_tagged_ptr(self.fp, vtype);
-        self.set_reg(dest, tagged_ptr);
+        let tagged_ref = TaggedRegisterRef::new(src, self.fp, vtype);
+        self.set_reg(dest, tagged_ref.as_u64());
         self.pc += 1;
     }
 

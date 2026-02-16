@@ -72,8 +72,15 @@ impl Datum {
 }
 
 /// Tagged pointers for constant and heap addresses.
+///
+/// A `DatumPtr` indexes into the constant pool or the heap, where `Datum` values live.
+/// The encoding uses the sign of the lower 32 bits of a `u64`: positive values are
+/// constant pool indices, and negative values (two's complement) are heap indices.
+///
+/// This is distinct from `TaggedRegisterRef`, which points to a register in the register
+/// file rather than to data storage.
 #[derive(Clone, Copy)]
-pub(crate) enum Pointer {
+pub(crate) enum DatumPtr {
     /// A pointer to an entry in the constants pool.
     Constant(U24),
 
@@ -81,18 +88,18 @@ pub(crate) enum Pointer {
     Heap(U24),
 }
 
-impl From<u64> for Pointer {
+impl From<u64> for DatumPtr {
     fn from(value: u64) -> Self {
         let signed_value = value as i32;
         if signed_value < 0 {
-            Self::Heap(U24::try_from((-signed_value - 1) as u32).unwrap())
+            DatumPtr::Heap(U24::try_from((-signed_value - 1) as u32).unwrap())
         } else {
-            Self::Constant(U24::try_from(signed_value as u32).unwrap())
+            DatumPtr::Constant(U24::try_from(signed_value as u32).unwrap())
         }
     }
 }
 
-impl Pointer {
+impl DatumPtr {
     /// Creates a new pointer for a heap `index` and returns its `u64` representation.
     pub(crate) fn for_heap(index: u32) -> u64 {
         let raw = index as i32;
@@ -103,8 +110,8 @@ impl Pointer {
     /// Gets the datum pointed to by this pointer from the `constants` and `heap`.
     pub(crate) fn resolve<'b>(&self, constants: &'b [Datum], heap: &'b [Datum]) -> &'b Datum {
         match self {
-            Self::Constant(index) => &constants[unchecked_u24_as_usize(*index)],
-            Self::Heap(index) => &heap[unchecked_u24_as_usize(*index)],
+            DatumPtr::Constant(index) => &constants[unchecked_u24_as_usize(*index)],
+            DatumPtr::Heap(index) => &heap[unchecked_u24_as_usize(*index)],
         }
     }
 }

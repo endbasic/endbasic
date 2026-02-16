@@ -147,40 +147,58 @@ impl Register {
     pub(crate) fn to_parts(self) -> (bool, u8) {
         if self.0 < Self::MAX_GLOBAL { (true, self.0) } else { (false, self.0 - Self::MAX_GLOBAL) }
     }
+}
 
-    /// Creates a new tagged pointer for this register.
-    ///
-    /// A tagged pointer carries the type of the value pointed to by the register as well as the
-    /// absolute address of the register in the register bank.  This address is calculated using
-    /// the current value of `fp`.
-    pub(crate) fn to_tagged_ptr(self, fp: usize, vtype: ExprType) -> u64 {
-        let (is_global, index) = self.to_parts();
+/// A tagged reference to a variable (register) encoding the register's absolute address
+/// and the type of the value it holds.
+///
+/// The encoding stores the `ExprType` tag in the upper 32 bits and the absolute register
+/// address in the lower 32 bits of a `u64`.
+///
+/// This is distinct from `DatumPtr`, which points to data in the constant pool or heap
+/// rather than to a register in the register file.
+pub(crate) struct TaggedRegisterRef(u64);
+
+impl TaggedRegisterRef {
+    /// Creates a new tagged register reference from a register, frame pointer, and type.
+    pub(crate) fn new(reg: Register, fp: usize, vtype: ExprType) -> Self {
+        let (is_global, index) = reg.to_parts();
         let mut index = usize::from(index);
         if !is_global {
             index += fp;
         }
 
         let index = u32::try_from(index).expect("Cannot support that many registers");
-        u64::from(vtype as u8) << 32 | u64::from(index)
+        Self(u64::from(vtype as u8) << 32 | u64::from(index))
     }
 
-    /// Parses a tagged pointer previously created by `to_tagged_ptr`, returning the absolute
-    /// address of the register and the type of the value pointed at.
+    /// Parses a tagged register reference from a raw `u64`, returning the absolute register
+    /// index and the type of the value it holds.
     ///
-    /// Panics if the tag is not value.
-    pub(crate) fn parse_tagged_ptr(ptr: u64) -> (usize, ExprType) {
+    /// Panics if the type tag is invalid.
+    pub(crate) fn parse(self) -> (usize, ExprType) {
         let vtype: ExprType = {
             #[allow(unsafe_code)]
             unsafe {
-                let v = unchecked_u64_as_u8(ptr >> 32);
+                let v = unchecked_u64_as_u8(self.0 >> 32);
                 assert!(v <= ExprType::Text as u8);
                 std::mem::transmute(v)
             }
         };
 
-        let index = unchecked_u32_as_usize((ptr & 0xffffffff) as u32);
+        let index = unchecked_u32_as_usize((self.0 & 0xffffffff) as u32);
 
         (index, vtype)
+    }
+
+    /// Returns the raw `u64` encoding.
+    pub(crate) fn as_u64(&self) -> u64 {
+        self.0
+    }
+
+    /// Wraps a raw `u64` as a `TaggedRegisterRef`.
+    pub(crate) fn from_u64(v: u64) -> Self {
+        Self(v)
     }
 }
 

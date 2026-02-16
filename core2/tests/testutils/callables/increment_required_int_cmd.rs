@@ -52,7 +52,7 @@ impl Callable for IncrementRequiredIntCommand {
     }
 
     async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
-        let mut typed_ptr = scope.get_mut_pointer(0);
+        let mut typed_ptr = scope.get_mut_ref(0);
         if typed_ptr.vtype != ExprType::Integer {
             // TODO(jmmv): Make this error type more specific and determine the position of the
             // problematic argument via the `DebugInfo` which we should propagate through the

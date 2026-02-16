@@ -17,9 +17,9 @@
 
 use crate::ast::ArgSep;
 use crate::ast::ExprType;
-use crate::bytecode::Register;
+use crate::bytecode::TaggedRegisterRef;
 use crate::bytecode::VarArgTag;
-use crate::mem::{Datum, Pointer};
+use crate::mem::{Datum, DatumPtr};
 use crate::num::unchecked_usize_as_u32;
 use async_trait::async_trait;
 use std::borrow::Cow;
@@ -569,8 +569,43 @@ impl CallableMetadata {
     }
 }
 
-/// Provides some sort of validation when dereferencing register pointers.
-pub struct TypedPointer<'a, 'vm> {
+/// Reads a boolean from the register at `index`, asserting that `vtype` is `Boolean`.
+fn deref_boolean(regs: &[u64], index: usize, vtype: ExprType) -> bool {
+    assert_eq!(ExprType::Boolean, vtype);
+    regs[index] != 0
+}
+
+/// Reads a double from the register at `index`, asserting that `vtype` is `Double`.
+fn deref_double(regs: &[u64], index: usize, vtype: ExprType) -> f64 {
+    assert_eq!(ExprType::Double, vtype);
+    f64::from_bits(regs[index])
+}
+
+/// Reads an integer from the register at `index`, asserting that `vtype` is `Integer`.
+fn deref_integer(regs: &[u64], index: usize, vtype: ExprType) -> i32 {
+    assert_eq!(ExprType::Integer, vtype);
+    regs[index] as i32
+}
+
+/// Reads a string from the register at `index`, asserting that `vtype` is `Text`.
+fn deref_string<'a>(
+    regs: &[u64],
+    index: usize,
+    vtype: ExprType,
+    constants: &'a [Datum],
+    heap: &'a [Datum],
+) -> &'a str {
+    assert_eq!(ExprType::Text, vtype);
+    let ptr = DatumPtr::from(regs[index]);
+    match ptr.resolve(constants, heap) {
+        Datum::Text(s) => s,
+        _ => panic!("Mismatched constant type"),
+    }
+}
+
+/// An immutable reference to a variable (register) in the register file, carrying
+/// its type for runtime validation of dereference operations.
+pub struct RegisterRef<'a, 'vm> {
     /// The scope through which to access the register.
     scope: &'a Scope<'vm>,
 
@@ -581,44 +616,37 @@ pub struct TypedPointer<'a, 'vm> {
     pub vtype: ExprType,
 }
 
-impl<'a, 'vm> TypedPointer<'a, 'vm> {
-    /// Dereferences a pointer to a boolean.
+impl<'a, 'vm> RegisterRef<'a, 'vm> {
+    /// Dereferences this register reference as a boolean.
     pub fn deref_boolean(&self) -> bool {
-        assert_eq!(ExprType::Boolean, self.vtype);
-        self.scope.regs[self.index] != 0
+        deref_boolean(self.scope.regs, self.index, self.vtype)
     }
 
-    /// Dereferences a pointer to a double.
+    /// Dereferences this register reference as a double.
     pub fn deref_double(&self) -> f64 {
-        assert_eq!(ExprType::Double, self.vtype);
-        f64::from_bits(self.scope.regs[self.index])
+        deref_double(self.scope.regs, self.index, self.vtype)
     }
 
-    /// Dereferences a pointer to an integer.
+    /// Dereferences this register reference as an integer.
     pub fn deref_integer(&self) -> i32 {
-        assert_eq!(ExprType::Integer, self.vtype);
-        self.scope.regs[self.index] as i32
+        deref_integer(self.scope.regs, self.index, self.vtype)
     }
 
-    /// Dereferences a pointer to a string.
+    /// Dereferences this register reference as a string.
     pub fn deref_string(&self) -> &str {
-        assert_eq!(ExprType::Text, self.vtype);
-        let ptr = Pointer::from(self.scope.regs[self.index]);
-        match ptr.resolve(self.scope.constants, self.scope.heap) {
-            Datum::Text(s) => s,
-            _ => panic!("Mismatched constant type"),
-        }
+        deref_string(self.scope.regs, self.index, self.vtype, self.scope.constants, self.scope.heap)
     }
 }
 
-impl<'a, 'vm> fmt::Display for TypedPointer<'a, 'vm> {
+impl<'a, 'vm> fmt::Display for RegisterRef<'a, 'vm> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "&[R{}]{}", self.index, self.vtype)
     }
 }
 
-/// Provides some sort of validation when dereferencing register pointers.
-pub struct TypedMutPointer<'a, 'vm> {
+/// A mutable reference to a variable (register) in the register file, carrying
+/// its type for runtime validation of dereference and set operations.
+pub struct RegisterRefMut<'a, 'vm> {
     /// The scope through which to access the register.
     scope: &'a mut Scope<'vm>,
 
@@ -629,63 +657,55 @@ pub struct TypedMutPointer<'a, 'vm> {
     pub vtype: ExprType,
 }
 
-impl<'a, 'vm> TypedMutPointer<'a, 'vm> {
-    /// Dereferences a pointer to a boolean.
+impl<'a, 'vm> RegisterRefMut<'a, 'vm> {
+    /// Dereferences this register reference as a boolean.
     pub fn deref_boolean(&self) -> bool {
-        assert_eq!(ExprType::Boolean, self.vtype);
-        self.scope.regs[self.index] != 0
+        deref_boolean(self.scope.regs, self.index, self.vtype)
     }
 
-    /// Dereferences a pointer to a double.
+    /// Dereferences this register reference as a double.
     pub fn deref_double(&self) -> f64 {
-        assert_eq!(ExprType::Double, self.vtype);
-        f64::from_bits(self.scope.regs[self.index])
+        deref_double(self.scope.regs, self.index, self.vtype)
     }
 
-    /// Dereferences a pointer to an integer.
+    /// Dereferences this register reference as an integer.
     pub fn deref_integer(&self) -> i32 {
-        assert_eq!(ExprType::Integer, self.vtype);
-        self.scope.regs[self.index] as i32
+        deref_integer(self.scope.regs, self.index, self.vtype)
     }
 
-    /// Dereferences a pointer to a string.
+    /// Dereferences this register reference as a string.
     pub fn deref_string(&self) -> &str {
-        assert_eq!(ExprType::Text, self.vtype);
-        let ptr = Pointer::from(self.scope.regs[self.index]);
-        match ptr.resolve(self.scope.constants, self.scope.heap) {
-            Datum::Text(s) => s,
-            _ => panic!("Mismatched constant type"),
-        }
+        deref_string(self.scope.regs, self.index, self.vtype, self.scope.constants, self.scope.heap)
     }
 
-    /// Sets a boolean via a pointer.
+    /// Sets a boolean via this register reference.
     pub fn set_boolean(&mut self, b: bool) {
         assert_eq!(ExprType::Boolean, self.vtype);
         self.scope.regs[self.index] = if b { 1 } else { 0 };
     }
 
-    /// Sets a double via a pointer.
+    /// Sets a double via this register reference.
     pub fn set_double(&mut self, d: f64) {
         assert_eq!(ExprType::Double, self.vtype);
         self.scope.regs[self.index] = d.to_bits();
     }
 
-    /// Sets an integer via a pointer.
+    /// Sets an integer via this register reference.
     pub fn set_integer(&mut self, i: i32) {
         assert_eq!(ExprType::Integer, self.vtype);
         self.scope.regs[self.index] = i as u64;
     }
 
-    /// Sets a string via a pointer.
+    /// Sets a string via this register reference.
     pub fn set_string<S: Into<String>>(&mut self, s: S) {
         assert_eq!(ExprType::Text, self.vtype);
         let index = self.scope.heap.len();
         self.scope.heap.push(Datum::Text(s.into()));
-        self.scope.regs[self.index] = Pointer::for_heap(unchecked_usize_as_u32(index));
+        self.scope.regs[self.index] = DatumPtr::for_heap(unchecked_usize_as_u32(index));
     }
 }
 
-impl<'a, 'vm> fmt::Display for TypedMutPointer<'a, 'vm> {
+impl<'a, 'vm> fmt::Display for RegisterRefMut<'a, 'vm> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "&[R{}]{}", self.index, self.vtype)
     }
@@ -727,24 +747,24 @@ impl<'a> Scope<'a> {
         self.regs[self.fp + (arg as usize)] as i32
     }
 
-    /// Gets the pointer value of the argument at `arg`.
-    pub fn get_pointer(&self, arg: u8) -> TypedPointer<'_, 'a> {
+    /// Gets an immutable register reference from the argument at `arg`.
+    pub fn get_ref(&self, arg: u8) -> RegisterRef<'_, 'a> {
         let tagged_ptr = self.regs[self.fp + (arg as usize)];
-        let (index, vtype) = Register::parse_tagged_ptr(tagged_ptr);
-        TypedPointer { scope: self, index, vtype }
+        let (index, vtype) = TaggedRegisterRef::from_u64(tagged_ptr).parse();
+        RegisterRef { scope: self, index, vtype }
     }
 
-    /// Gets the mutable pointer value of the argument at `arg`.
-    pub fn get_mut_pointer(&mut self, arg: u8) -> TypedMutPointer<'_, 'a> {
+    /// Gets a mutable register reference from the argument at `arg`.
+    pub fn get_mut_ref(&mut self, arg: u8) -> RegisterRefMut<'_, 'a> {
         let tagged_ptr = self.regs[self.fp + (arg as usize)];
-        let (index, vtype) = Register::parse_tagged_ptr(tagged_ptr);
-        TypedMutPointer { scope: self, index, vtype }
+        let (index, vtype) = TaggedRegisterRef::from_u64(tagged_ptr).parse();
+        RegisterRefMut { scope: self, index, vtype }
     }
 
     /// Gets the string value of the argument at `arg`.
     pub fn get_string(&self, arg: u8) -> &str {
         let index = self.regs[self.fp + (arg as usize)];
-        let ptr = Pointer::from(index);
+        let ptr = DatumPtr::from(index);
         match ptr.resolve(self.constants, self.heap) {
             Datum::Text(s) => s,
             _ => panic!("Mismatched constant type"),

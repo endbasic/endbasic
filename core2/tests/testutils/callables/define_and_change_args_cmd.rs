@@ -59,7 +59,7 @@ impl Callable for DefineAndChangeArgsCommand {
             };
             i += 1;
 
-            let mut typed_ptr = scope.get_mut_pointer(i);
+            let mut typed_ptr = scope.get_mut_ref(i);
             match typed_ptr.vtype {
                 ExprType::Boolean => {
                     let b = typed_ptr.deref_boolean();

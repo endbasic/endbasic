@@ -72,7 +72,7 @@ impl Callable for OutCommand {
                 }
                 VarArgTag::Pointer(sep) => {
                     reg += 1;
-                    let typed_ptr = scope.get_pointer(reg);
+                    let typed_ptr = scope.get_ref(reg);
                     line.push_str(&format!("{}={}", argi, typed_ptr));
                     sep
                 }

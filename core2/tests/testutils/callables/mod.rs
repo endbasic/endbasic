@@ -67,7 +67,7 @@ fn format_vararg(scope: &Scope<'_>, i: u8) -> (String, bool, ArgSep) {
         }
         VarArgTag::Missing(sep) => ("()".to_owned(), false, sep),
         VarArgTag::Pointer(sep) => {
-            let typed_ptr = scope.get_pointer(i + 1);
+            let typed_ptr = scope.get_ref(i + 1);
             (typed_ptr.to_string(), true, sep)
         }
     }
