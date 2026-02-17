@@ -17,11 +17,11 @@
 //! Entry point to the compilation, handling top-level definitions.
 
 use crate::ast::{ArgSep, AssignmentSpan, CallableSpan, EndSpan, ExprType, Statement};
-use crate::bytecode::{self, RegisterScope};
+use crate::bytecode::{self, PackedArrayType, RegisterScope};
 use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, SingularArgSyntax};
 use crate::compiler::args::{compile_args, define_new_args};
 use crate::compiler::codegen::{Codegen, Fixup};
-use crate::compiler::exprs::{compile_expr, compile_expr_as_type};
+use crate::compiler::exprs::{compile_expr, compile_expr_as_type, compile_integer_exprs};
 use crate::compiler::syms::{self, GlobalSymtable, LocalSymtable, SymbolKey};
 use crate::compiler::{Error, Result};
 use crate::image::Image;
@@ -56,7 +56,13 @@ fn compile_assignment(
     let vref_pos = span.vref_pos;
 
     let (reg, etype) = match symtable.get_local_or_global(&span.vref) {
-        Ok((reg, etype)) => (reg, Some(etype)),
+        Ok((reg, etype)) => {
+            let key = SymbolKey::from(&span.vref.name);
+            if symtable.is_array(&key) {
+                return Err(Error::ArrayUsedAsScalar(vref_pos, span.vref));
+            }
+            (reg, Some(etype))
+        }
 
         Err(syms::Error::UndefinedSymbol(..)) => {
             let key = SymbolKey::from(span.vref.name.clone());
@@ -97,6 +103,44 @@ fn compile_stmt(
     stmt: Statement,
 ) -> Result<()> {
     match stmt {
+        Statement::ArrayAssignment(span) => {
+            let key = SymbolKey::from(&span.vref.name);
+            let key_pos = span.vref_pos;
+
+            let Some((arr_reg, info)) = symtable.get_array(&key) else {
+                return Err(Error::NotAnArray(key_pos, span.vref));
+            };
+
+            if span.subscripts.len() != info.ndims {
+                return Err(Error::WrongNumberOfSubscripts(
+                    key_pos,
+                    info.ndims,
+                    span.subscripts.len(),
+                ));
+            }
+
+            let mut symtable = symtable.frozen();
+            let mut outer_scope = symtable.temp_scope();
+
+            let val_reg = outer_scope.alloc().map_err(|e| Error::from_syms(e, key_pos))?;
+            compile_expr_as_type(
+                &mut ctx.codegen,
+                &mut symtable,
+                val_reg,
+                span.expr,
+                info.subtype,
+            )?;
+
+            let first_sub_reg = compile_integer_exprs(
+                &mut ctx.codegen,
+                &mut symtable,
+                &mut outer_scope,
+                key_pos,
+                span.subscripts.into_iter(),
+            )?;
+            ctx.codegen.emit(bytecode::make_store_array(arr_reg, val_reg, first_sub_reg), key_pos);
+        }
+
         Statement::Assignment(span) => {
             compile_assignment(&mut ctx.codegen, symtable, span)?;
         }
@@ -169,6 +213,34 @@ fn compile_stmt(
             }
             .map_err(|e| Error::from_syms(e, name_pos))?;
             ctx.codegen.emit_default(reg, span.vtype, name_pos);
+        }
+
+        Statement::DimArray(span) => {
+            let key = SymbolKey::from(span.name);
+            let name_pos = span.name_pos;
+            let ndims = span.dimensions.len();
+
+            let info = syms::ArrayInfo { subtype: span.subtype, ndims };
+            let reg = if span.shared {
+                symtable.put_global_array(key, info)
+            } else {
+                symtable.put_local_array(key, info)
+            }
+            .map_err(|e| Error::from_syms(e, name_pos))?;
+
+            let mut symtable = symtable.frozen();
+            let mut outer_scope = symtable.temp_scope();
+
+            let first_dim_reg = compile_integer_exprs(
+                &mut ctx.codegen,
+                &mut symtable,
+                &mut outer_scope,
+                name_pos,
+                span.dimensions.into_iter(),
+            )?;
+            let packed = PackedArrayType::new(span.subtype, ndims)
+                .map_err(|_| Error::TooManyArrayDimensions(span.name_pos, ndims))?;
+            ctx.codegen.emit(bytecode::make_alloc_array(reg, packed, first_dim_reg), name_pos);
         }
 
         Statement::End(span) => {

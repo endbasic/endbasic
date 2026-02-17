@@ -44,6 +44,10 @@ pub enum Error {
     #[error("{0}: Cannot redefine {1}")]
     AlreadyDefined(LineCol, VarRef),
 
+    /// Array name used without subscripts (as a scalar).
+    #[error("{0}: {1} is an array and requires subscripts")]
+    ArrayUsedAsScalar(LineCol, VarRef),
+
     /// Type mismatch in a binary operation.
     #[error("{0}: Cannot {1} {2} and {3}")]
     BinaryOpType(LineCol, &'static str, ExprType, ExprType),
@@ -72,6 +76,10 @@ pub enum Error {
     #[error("{0}: Cannot call {1} (not a function)")]
     NotAFunction(LineCol, VarRef),
 
+    /// Attempt to index something that is not an array.
+    #[error("{0}: {1} is not an array")]
+    NotAnArray(LineCol, VarRef),
+
     /// Expected a numeric type but got something else.
     #[error("{0}: {1} is not a number")]
     NotANumber(LineCol, ExprType),
@@ -96,6 +104,10 @@ pub enum Error {
     #[error("{0}: Jump/call target is {1} which is too far")]
     TargetTooFar(LineCol, usize),
 
+    /// An array has too many dimensions.
+    #[error("{0}: Array cannot have {1} dimensions")]
+    TooManyArrayDimensions(LineCol, usize),
+
     /// Type mismatch where a specific type was expected.
     #[error("{0}: Expected {2} but found {1}")]
     TypeMismatch(LineCol, ExprType, ExprType),
@@ -103,6 +115,10 @@ pub enum Error {
     /// Reference to an undefined symbol.
     #[error("{0}: Undefined {2} symbol {1}")]
     UndefinedSymbol(LineCol, VarRef, RegisterScope),
+
+    /// Wrong number of subscripts for an array access.
+    #[error("{0}: Array requires {1} subscripts but got {2}")]
+    WrongNumberOfSubscripts(LineCol, usize, usize),
 }
 
 impl Error {

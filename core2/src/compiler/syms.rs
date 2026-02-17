@@ -27,6 +27,16 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::rc::Rc;
 
+/// Information about an array tracked in the symbol table.
+#[derive(Clone, Debug)]
+pub(super) struct ArrayInfo {
+    /// Element type of the array.
+    pub(super) subtype: ExprType,
+
+    /// Number of dimensions.
+    pub(super) ndims: usize,
+}
+
 /// Errors related to symbols handling.
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)] // The error messages and names are good enough.
@@ -121,6 +131,9 @@ pub(crate) struct GlobalSymtable<'uref, 'ukey, 'umd> {
     /// Map of global variable names to their types and assigned registers.
     globals: HashMapWithIds<SymbolKey, ExprType, u8>,
 
+    /// Map of global array names to their array info.
+    global_arrays: HashMap<SymbolKey, ArrayInfo>,
+
     /// Reference to the built-in callable metadata provided by the runtime.
     upcalls: &'uref HashMap<&'ukey SymbolKey, &'umd CallableMetadata>,
 
@@ -131,7 +144,12 @@ pub(crate) struct GlobalSymtable<'uref, 'ukey, 'umd> {
 impl<'uref, 'ukey, 'umd> GlobalSymtable<'uref, 'ukey, 'umd> {
     /// Creates a new global symbol table that knows about the given `upcalls`.
     pub(crate) fn new(upcalls: &'uref HashMap<&'ukey SymbolKey, &'umd CallableMetadata>) -> Self {
-        Self { globals: HashMapWithIds::default(), upcalls, user_callables: HashMap::default() }
+        Self {
+            globals: HashMapWithIds::default(),
+            global_arrays: HashMap::default(),
+            upcalls,
+            user_callables: HashMap::default(),
+        }
     }
 
     /// Enters a new local scope.
@@ -147,6 +165,30 @@ impl<'uref, 'ukey, 'umd> GlobalSymtable<'uref, 'ukey, 'umd> {
     /// Creates a new global variable `key` of `vtype`.
     pub(crate) fn put_global(&mut self, key: SymbolKey, vtype: ExprType) -> Result<Register> {
         put_var(key, vtype, &mut self.globals, Register::global, RegisterScope::Global)
+    }
+
+    /// Creates a new global array `key` with `info` and assigns a register to it.
+    pub(crate) fn put_global_array(&mut self, key: SymbolKey, info: ArrayInfo) -> Result<Register> {
+        let reg = put_var(
+            key.clone(),
+            info.subtype,
+            &mut self.globals,
+            Register::global,
+            RegisterScope::Global,
+        )?;
+        self.global_arrays.insert(key, info);
+        Ok(reg)
+    }
+
+    /// Gets a global array by its `key`.
+    fn get_global_array(&self, key: &SymbolKey) -> Option<(Register, ArrayInfo)> {
+        if let Some(info) = self.global_arrays.get(key)
+            && let Some((_etype, reg)) = self.globals.get(key)
+        {
+            let reg = Register::global(reg).expect("Must be valid");
+            return Some((reg, info.clone()));
+        }
+        None
     }
 
     /// Defines a new user-defined `vref` callable with `md` metadata.
@@ -177,6 +219,9 @@ pub(crate) struct LocalSymtable<'uref, 'ukey, 'umd, 'a> {
     /// Map of local variable names to their types and assigned registers.
     locals: HashMapWithIds<SymbolKey, ExprType, u8>,
 
+    /// Map of local array names to their array info.
+    local_arrays: HashMap<SymbolKey, ArrayInfo>,
+
     /// Maximum number of allocated temporary registers in all possible evaluation scopes created
     /// by this local symtable.  This is used to determine the size of the scope for register
     /// allocation purposes at runtime.
@@ -186,7 +231,12 @@ pub(crate) struct LocalSymtable<'uref, 'ukey, 'umd, 'a> {
 impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
     /// Creates a new local symbol table within the context of a global `symtable`.
     fn new(symtable: &'a mut GlobalSymtable<'uref, 'ukey, 'umd>) -> Self {
-        Self { symtable, locals: HashMapWithIds::default(), count_temps: 0 }
+        Self {
+            symtable,
+            locals: HashMapWithIds::default(),
+            local_arrays: HashMap::default(),
+            count_temps: 0,
+        }
     }
 
     /// Consumes the local scope and returns the number of local variables defined, which includes
@@ -250,6 +300,40 @@ impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
             None => Err(Error::UndefinedSymbol(vref.clone(), RegisterScope::Local)),
         }
     }
+
+    /// Creates a new local array `key` with `info` and assigns a register to it.
+    pub(crate) fn put_local_array(&mut self, key: SymbolKey, info: ArrayInfo) -> Result<Register> {
+        let reg = put_var(
+            key.clone(),
+            info.subtype,
+            &mut self.locals,
+            Register::local,
+            RegisterScope::Local,
+        )?;
+        self.local_arrays.insert(key, info);
+        Ok(reg)
+    }
+
+    /// Creates a new global array `key` with `info` via the parent global symbol table.
+    pub(crate) fn put_global_array(&mut self, key: SymbolKey, info: ArrayInfo) -> Result<Register> {
+        self.symtable.put_global_array(key, info)
+    }
+
+    /// Gets an array by its `key`, looking in local arrays first, then global.
+    pub(crate) fn get_array(&self, key: &SymbolKey) -> Option<(Register, ArrayInfo)> {
+        if let Some(info) = self.local_arrays.get(key)
+            && let Some((_etype, reg)) = self.locals.get(key)
+        {
+            let reg = Register::local(reg).expect("Must be valid");
+            return Some((reg, info.clone()));
+        }
+        self.symtable.get_global_array(key)
+    }
+
+    /// Returns `true` if `key` refers to an array (local or global).
+    pub(crate) fn is_array(&self, key: &SymbolKey) -> bool {
+        self.local_arrays.contains_key(key) || self.symtable.global_arrays.contains_key(key)
+    }
 }
 
 /// A read-only view into a `SymTable` that allows allocating temporary registers.
@@ -295,6 +379,16 @@ impl<'uref, 'ukey, 'umd, 'temp, 'local> TempSymtable<'uref, 'ukey, 'umd, 'temp, 
     /// Gets a callable by its name `key`.
     pub(crate) fn get_callable(&self, key: &SymbolKey) -> Option<&CallableMetadata> {
         self.symtable.get_callable(key)
+    }
+
+    /// Gets an array by its `key`, looking in local arrays first, then global.
+    pub(crate) fn get_array(&self, key: &SymbolKey) -> Option<(Register, ArrayInfo)> {
+        self.symtable.get_array(key)
+    }
+
+    /// Returns `true` if `key` refers to an array (local or global).
+    pub(crate) fn is_array(&self, key: &SymbolKey) -> bool {
+        self.symtable.is_array(key)
     }
 
     /// Enters a new temporary scope.

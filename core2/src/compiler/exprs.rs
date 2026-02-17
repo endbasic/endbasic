@@ -20,10 +20,69 @@ use crate::ast::{BinaryOpSpan, Expr, ExprType};
 use crate::bytecode::{self, Register, RegisterScope};
 use crate::compiler::args::compile_args;
 use crate::compiler::codegen::{Codegen, Fixup};
-use crate::compiler::syms::{self, SymbolKey, TempSymtable};
+use crate::compiler::syms::{self, SymbolKey, TempScope, TempSymtable};
 use crate::compiler::{Error, Result};
 use crate::mem::Datum;
 use std::convert::TryFrom;
+
+/// Checks that a variable reference does not refer to an array being used without subscripts.
+fn check_not_array(
+    symtable: &TempSymtable<'_, '_, '_, '_, '_>,
+    vref: &crate::ast::VarRef,
+    pos: crate::reader::LineCol,
+) -> Result<()> {
+    let key = SymbolKey::from(&vref.name);
+    if symtable.is_array(&key) {
+        return Err(Error::ArrayUsedAsScalar(pos, vref.clone()));
+    }
+    Ok(())
+}
+
+/// Compiles `exprs` into consecutive integer registers allocated from `scope` and returns the
+/// first register.  The caller must guarantee that `exprs` is non-empty.
+pub(super) fn compile_integer_exprs(
+    codegen: &mut Codegen,
+    symtable: &mut TempSymtable<'_, '_, '_, '_, '_>,
+    scope: &mut TempScope,
+    pos: crate::reader::LineCol,
+    exprs: impl Iterator<Item = Expr>,
+) -> Result<Register> {
+    let mut first_reg = None;
+    for expr in exprs {
+        let reg = scope.alloc().map_err(|e| Error::from_syms(e, pos))?;
+        if first_reg.is_none() {
+            first_reg = Some(reg);
+        }
+        compile_expr_as_type(codegen, symtable, reg, expr, ExprType::Integer)?;
+    }
+    Ok(first_reg.expect("Must have at least one expression"))
+}
+
+/// Compiles an array element access expression into `reg`.
+fn compile_array_access(
+    codegen: &mut Codegen,
+    symtable: &mut TempSymtable<'_, '_, '_, '_, '_>,
+    reg: Register,
+    key_pos: crate::reader::LineCol,
+    arr_reg: Register,
+    info: &syms::ArrayInfo,
+    args: Vec<crate::ast::ArgSpan>,
+) -> Result<ExprType> {
+    if args.len() != info.ndims {
+        return Err(Error::WrongNumberOfSubscripts(key_pos, info.ndims, args.len()));
+    }
+
+    let mut outer_scope = symtable.temp_scope();
+    let first_sub_reg = compile_integer_exprs(
+        codegen,
+        symtable,
+        &mut outer_scope,
+        key_pos,
+        args.into_iter().map(|a| a.expr.expect("Array subscripts must have expressions")),
+    )?;
+    codegen.emit(bytecode::make_load_array(reg, arr_reg, first_sub_reg), key_pos);
+    Ok(info.subtype)
+}
 
 /// Compiles an arithmetic binary operation `span` that returns its value into `reg`.
 fn compile_arithmetic_binary_op(
@@ -105,6 +164,12 @@ pub(super) fn compile_expr(
             let key_pos = span.vref_pos;
 
             let Some(md) = symtable.get_callable(&key) else {
+                if let Some((arr_reg, info)) = symtable.get_array(&key) {
+                    return compile_array_access(
+                        codegen, symtable, reg, key_pos, arr_reg, &info, span.args,
+                    );
+                }
+
                 return Err(Error::UndefinedSymbol(
                     span.vref_pos,
                     span.vref,
@@ -186,6 +251,7 @@ pub(super) fn compile_expr(
 
         Expr::Symbol(span) => match symtable.get_local_or_global(&span.vref) {
             Ok((local, etype)) => {
+                check_not_array(symtable, &span.vref, span.pos)?;
                 codegen.emit(bytecode::make_move(reg, local), span.pos);
                 Ok(etype)
             }
