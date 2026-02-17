@@ -21,6 +21,9 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+mod concat_fn;
+use concat_fn::ConcatFunction;
+
 mod define_arg_cmd;
 use define_arg_cmd::DefineArgCommand;
 
@@ -29,6 +32,12 @@ use define_and_change_args_cmd::DefineAndChangeArgsCommand;
 
 mod increment_required_int_cmd;
 use increment_required_int_cmd::IncrementRequiredIntCommand;
+
+mod is_positive_fn;
+use is_positive_fn::IsPositiveFunction;
+
+mod meaning_of_life_fn;
+use meaning_of_life_fn::MeaningOfLifeFunction;
 
 mod out_any_value_cmd;
 use out_any_value_cmd::OutAnyValueCommand;
@@ -47,6 +56,12 @@ use out_positional_cmd::OutPositionalCommand;
 
 mod out_required_value_cmd;
 use out_required_value_cmd::OutRequiredValueCommand;
+
+mod sum_doubles_fn;
+use sum_doubles_fn::SumDoublesFunction;
+
+mod sum_integers_fn;
+use sum_integers_fn::SumIntegersFunction;
 
 /// Formats the given argument `i` in `scope` as a string depending on its `etype`.
 fn format_arg(scope: &Scope<'_>, i: u8, etype: ExprType) -> String {
@@ -80,15 +95,20 @@ pub(super) fn register_all(
     console: Rc<RefCell<String>>,
 ) {
     let cmds = [
-        DefineArgCommand::new() as Rc<dyn Callable>,
+        ConcatFunction::new() as Rc<dyn Callable>,
         DefineAndChangeArgsCommand::new() as Rc<dyn Callable>,
+        DefineArgCommand::new() as Rc<dyn Callable>,
         IncrementRequiredIntCommand::new() as Rc<dyn Callable>,
+        IsPositiveFunction::new() as Rc<dyn Callable>,
+        MeaningOfLifeFunction::new() as Rc<dyn Callable>,
         OutAnyValueCommand::new(console.clone()) as Rc<dyn Callable>,
         OutAnyValueOptionalCommand::new(console.clone()) as Rc<dyn Callable>,
         OutCommand::new(console.clone()) as Rc<dyn Callable>,
         OutOptionalCommand::new(console.clone()) as Rc<dyn Callable>,
         OutPositionalCommand::new(console.clone()) as Rc<dyn Callable>,
         OutRequiredValueCommand::new(console) as Rc<dyn Callable>,
+        SumDoublesFunction::new() as Rc<dyn Callable>,
+        SumIntegersFunction::new() as Rc<dyn Callable>,
     ];
     for cmd in cmds {
         upcalls_by_name.insert(SymbolKey::from(cmd.metadata().name()), cmd);
