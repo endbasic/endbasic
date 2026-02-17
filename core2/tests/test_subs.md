@@ -207,3 +207,31 @@ OUT local_var
 ```plain
 6:5: Undefined global symbol local_var
 ```
+
+# Test: Calling a command as a function with arguments
+
+## Source
+
+```basic
+x = OUT(1)
+```
+
+## Compilation errors
+
+```plain
+1:5: Cannot call OUT (not a function)
+```
+
+# Test: Using a command as an argless function
+
+## Source
+
+```basic
+x = OUT
+```
+
+## Compilation errors
+
+```plain
+1:5: Cannot call OUT (not a function)
+```

@@ -64,6 +64,9 @@ pub(super) struct Codegen {
 
     /// Map of user callable names to their target addresses.
     user_callables_addresses: HashMap<SymbolKey, Address>,
+
+    /// Map of built-in callable names to their return types and assigned upcall IDs.
+    upcalls: HashMapWithIds<SymbolKey, Option<ExprType>, u16>,
 }
 
 impl Codegen {
@@ -153,11 +156,24 @@ impl Codegen {
         Ok(())
     }
 
+    /// Gets the existing upcall ID for the given `key` or creates a new one.
+    pub(super) fn get_upcall(
+        &mut self,
+        key: SymbolKey,
+        etype: Option<ExprType>,
+        pos: LineCol,
+    ) -> Result<u16> {
+        match self.upcalls.get(&key) {
+            Some((_etype, id)) => Ok(id),
+            None => match self.upcalls.insert(key, etype) {
+                Some((_etype, id)) => Ok(id),
+                None => Err(Error::OutOfUpcalls(pos)),
+            },
+        }
+    }
+
     /// Consumes the code generator and builds a ready-to-use `Image`.
-    pub(super) fn build_image(
-        mut self,
-        upcalls: HashMapWithIds<SymbolKey, Option<ExprType>, u16>,
-    ) -> Result<Image> {
+    pub(super) fn build_image(mut self) -> Result<Image> {
         self.apply_fixups()?;
 
         let mut callables = HashMap::default();
@@ -168,7 +184,7 @@ impl Codegen {
 
         Ok(Image::new(
             self.code,
-            upcalls.keys_to_vec(),
+            self.upcalls.keys_to_vec(),
             self.constants.keys_to_vec(),
             DebugInfo { instr_linecols: self.instr_linecols, callables },
         ))

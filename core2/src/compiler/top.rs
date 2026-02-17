@@ -21,7 +21,6 @@ use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, Singu
 use crate::compiler::args::{compile_args, define_new_args};
 use crate::compiler::codegen::{Codegen, Fixup};
 use crate::compiler::exprs::{compile_expr, compile_expr_as_type};
-use crate::compiler::ids::HashMapWithIds;
 use crate::compiler::syms::{self, GlobalSymtable, LocalSymtable, SymbolKey};
 use crate::compiler::{Error, Result};
 use crate::image::Image;
@@ -43,27 +42,8 @@ struct Context {
     /// The code generator accumulating bytecode instructions.
     codegen: Codegen,
 
-    /// Map of built-in callable names to their return types and assigned upcall IDs.
-    upcalls: HashMapWithIds<SymbolKey, Option<ExprType>, u16>,
-
     /// Collection of user-defined callable definitions to be compiled after the main scope.
     user_callables: Vec<CallableSpan>,
-}
-
-impl Context {
-    /// Gets the existing upcall ID for the given `key` or creates a new one.
-    fn get_upcall(&mut self, key: SymbolKey, etype: Option<ExprType>, pos: LineCol) -> Result<u16> {
-        if etype.is_some() {
-            todo!("Function upcalls not implemented yet");
-        }
-        match self.upcalls.get(&key) {
-            Some((_etype, id)) => Ok(id),
-            None => match self.upcalls.insert(key, etype) {
-                Some((_etype, id)) => Ok(id),
-                None => Err(Error::OutOfUpcalls(pos)),
-            },
-        }
-    }
 }
 
 /// Compiles an assignment statement `span` into the `codegen` block.
@@ -144,7 +124,7 @@ fn compile_stmt(
                 let addr = ctx.codegen.emit(bytecode::make_nop(), key_pos);
                 ctx.codegen.add_fixup(addr, Fixup::Call(first_temp, key));
             } else {
-                let upcall = ctx.get_upcall(key, None, key_pos)?;
+                let upcall = ctx.codegen.get_upcall(key, None, key_pos)?;
                 ctx.codegen.emit(bytecode::make_upcall(upcall, first_temp), key_pos);
             }
         }
@@ -332,5 +312,5 @@ pub fn compile(
 
     compile_user_callables(&mut ctx, &mut symtable)?;
 
-    ctx.codegen.build_image(ctx.upcalls)
+    ctx.codegen.build_image()
 }

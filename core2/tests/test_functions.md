@@ -503,3 +503,288 @@ OUT s
 0=0%
 0=bar$
 ```
+
+# Test: Upcall with repeated arguments and return of type double
+
+## Source
+
+```basic
+OUT SUM_DOUBLES(3.4, 2, 7.1)
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       8                   # 0:0
+0001:   LOADC       R67, 0              # 1:17
+0002:   LOADI       R66, 289            # 1:17
+0003:   LOADI       R69, 2              # 1:22
+0004:   LOADI       R68, 290            # 1:22
+0005:   LOADC       R71, 1              # 1:25
+0006:   LOADI       R70, 257            # 1:25
+0007:   UPCALL      0, R65              # 1:5, SUM_DOUBLES
+0008:   LOADI       R64, 257            # 1:5
+0009:   UPCALL      1, R64              # 1:1, OUT
+0010:   LOADI       R64, 0              # 0:0
+0011:   END         R64                 # 0:0
+```
+
+## Output
+
+```plain
+0=12.5#
+```
+
+# Test: Upcall returning integer
+
+## Source
+
+```basic
+OUT SUM_INTEGERS(3, 2, 7)
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       8                   # 0:0
+0001:   LOADI       R67, 3              # 1:18
+0002:   LOADI       R66, 290            # 1:18
+0003:   LOADI       R69, 2              # 1:21
+0004:   LOADI       R68, 290            # 1:21
+0005:   LOADI       R71, 7              # 1:24
+0006:   LOADI       R70, 258            # 1:24
+0007:   UPCALL      0, R65              # 1:5, SUM_INTEGERS
+0008:   LOADI       R64, 258            # 1:5
+0009:   UPCALL      1, R64              # 1:1, OUT
+0010:   LOADI       R64, 0              # 0:0
+0011:   END         R64                 # 0:0
+```
+
+## Output
+
+```plain
+0=12%
+```
+
+# Test: Upcall returning string
+
+## Source
+
+```basic
+OUT CONCAT$("hello", " ", "world")
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       8                   # 0:0
+0001:   LOADI       R67, 0              # 1:13
+0002:   LOADI       R66, 291            # 1:13
+0003:   LOADI       R69, 1              # 1:22
+0004:   LOADI       R68, 291            # 1:22
+0005:   LOADI       R71, 2              # 1:27
+0006:   LOADI       R70, 259            # 1:27
+0007:   UPCALL      0, R65              # 1:5, CONCAT
+0008:   LOADI       R64, 259            # 1:5
+0009:   UPCALL      1, R64              # 1:1, OUT
+0010:   LOADI       R64, 0              # 0:0
+0011:   END         R64                 # 0:0
+```
+
+## Output
+
+```plain
+0=hello world$
+```
+
+# Test: Upcall returning boolean
+
+## Source
+
+```basic
+OUT IS_POSITIVE?(42)
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       3                   # 0:0
+0001:   LOADI       R66, 42             # 1:18
+0002:   UPCALL      0, R65              # 1:5, IS_POSITIVE
+0003:   LOADI       R64, 256            # 1:5
+0004:   UPCALL      1, R64              # 1:1, OUT
+0005:   LOADI       R64, 0              # 0:0
+0006:   END         R64                 # 0:0
+```
+
+## Output
+
+```plain
+0=true?
+```
+
+# Test: Argless upcall
+
+## Source
+
+```basic
+OUT MEANING_OF_LIFE
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       2                   # 0:0
+0001:   UPCALL      0, R65              # 1:5, MEANING_OF_LIFE
+0002:   LOADI       R64, 258            # 1:5
+0003:   UPCALL      1, R64              # 1:1, OUT
+0004:   LOADI       R64, 0              # 0:0
+0005:   END         R64                 # 0:0
+```
+
+## Output
+
+```plain
+0=42%
+```
+
+# Test: Function upcall result assigned to global
+
+## Source
+
+```basic
+DIM SHARED x AS DOUBLE
+x = SUM_DOUBLES(1.5, 2.5)
+OUT x
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       5                   # 0:0
+0001:   LOADI       R0, 0               # 1:12
+0002:   LOADC       R66, 0              # 2:17
+0003:   LOADI       R65, 289            # 2:17
+0004:   LOADC       R68, 1              # 2:22
+0005:   LOADI       R67, 257            # 2:22
+0006:   UPCALL      0, R64              # 2:5, SUM_DOUBLES
+0007:   MOVE        R0, R64             # 2:5
+0008:   MOVE        R65, R0             # 3:5
+0009:   LOADI       R64, 257            # 3:5
+0010:   UPCALL      1, R64              # 3:1, OUT
+0011:   LOADI       R64, 0              # 0:0
+0012:   END         R64                 # 0:0
+```
+
+## Output
+
+```plain
+0=4#
+```
+
+# Test: Argless upcall result assigned to global
+
+## Source
+
+```basic
+DIM SHARED x
+x = MEANING_OF_LIFE
+OUT x
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       2                   # 0:0
+0001:   LOADI       R0, 0               # 1:12
+0002:   UPCALL      0, R64              # 2:5, MEANING_OF_LIFE
+0003:   MOVE        R0, R64             # 2:5
+0004:   MOVE        R65, R0             # 3:5
+0005:   LOADI       R64, 258            # 3:5
+0006:   UPCALL      1, R64              # 3:1, OUT
+0007:   LOADI       R64, 0              # 0:0
+0008:   END         R64                 # 0:0
+```
+
+## Output
+
+```plain
+0=42%
+```
+
+# Test: Function upcall in expression
+
+## Source
+
+```basic
+OUT SUM_DOUBLES(1.0, 2.0) + SUM_DOUBLES(3.0, 4.0)
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       8                   # 0:0
+0001:   LOADC       R68, 0              # 1:17
+0002:   LOADI       R67, 289            # 1:17
+0003:   LOADC       R70, 1              # 1:22
+0004:   LOADI       R69, 257            # 1:22
+0005:   UPCALL      0, R66              # 1:5, SUM_DOUBLES
+0006:   LOADC       R69, 2              # 1:41
+0007:   LOADI       R68, 289            # 1:41
+0008:   LOADC       R71, 3              # 1:46
+0009:   LOADI       R70, 257            # 1:46
+0010:   UPCALL      0, R67              # 1:29, SUM_DOUBLES
+0011:   ADDD        R65, R66, R67       # 1:27
+0012:   LOADI       R64, 257            # 1:5
+0013:   UPCALL      1, R64              # 1:1, OUT
+0014:   LOADI       R64, 0              # 0:0
+0015:   END         R64                 # 0:0
+```
+
+## Output
+
+```plain
+0=10#
+```
+
+# Test: Error: calling an argless function upcall with arguments
+
+## Source
+
+```basic
+OUT MEANING_OF_LIFE(1)
+```
+
+## Compilation errors
+
+```plain
+1:5: MEANING_OF_LIFE expected no arguments
+```
+
+# Test: Error: calling an argless function upcall with empty parens
+
+## Source
+
+```basic
+OUT MEANING_OF_LIFE()
+```
+
+## Compilation errors
+
+```plain
+1:5: MEANING_OF_LIFE expected no arguments
+```
+
+# Test: Error: using a function upcall that requires arguments without arguments
+
+## Source
+
+```basic
+x = SUM_DOUBLES
+```
+
+## Compilation errors
+
+```plain
+1:5: SUM_DOUBLES expected [arg1, .., argN]
+```

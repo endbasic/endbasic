@@ -770,6 +770,28 @@ impl<'a> Scope<'a> {
             _ => panic!("Mismatched constant type"),
         }
     }
+
+    /// Sets the return value of the function to `b`.
+    pub fn return_boolean(self, b: bool) {
+        self.regs[self.fp] = if b { 1 } else { 0 };
+    }
+
+    /// Sets the return value of the function to `d`.
+    pub fn return_double(self, d: f64) {
+        self.regs[self.fp] = d.to_bits();
+    }
+
+    /// Sets the return value of the function to `i`.
+    pub fn return_integer(self, i: i32) {
+        self.regs[self.fp] = i as u64;
+    }
+
+    /// Sets the return value of the function to `s`.
+    pub fn return_string<S: Into<String>>(self, s: S) {
+        let index = self.heap.len();
+        self.heap.push(Datum::Text(s.into()));
+        self.regs[self.fp] = DatumPtr::for_heap(unchecked_usize_as_u32(index));
+    }
 }
 
 /// A trait to define a callable that is executed by a `Machine`.

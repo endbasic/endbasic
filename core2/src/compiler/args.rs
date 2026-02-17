@@ -28,6 +28,45 @@ use crate::{ArgSep, ArgSepSyntax, ExprType, RepeatedTypeSyntax, SingularArgSynta
 use super::SymbolKey;
 use super::syms::LocalSymtable;
 
+/// Returns true if `sep` is valid for a function call (only `Long` and `End` are allowed because
+/// the parser only produces comma separators for function arguments).
+fn is_function_sep(sep: &ArgSepSyntax) -> bool {
+    match sep {
+        ArgSepSyntax::Exactly(ArgSep::Long) | ArgSepSyntax::End => true,
+        ArgSepSyntax::OneOf(seps) => seps.iter().all(|s| *s == ArgSep::Long),
+        _ => false,
+    }
+}
+
+/// Checks that the syntax of a callable that returns a value only uses separators that can appear
+/// in a function call (i.e. the comma separator).  The parser only produces `ArgSep::Long` for
+/// function arguments, so any other separator in the metadata would be dead/untestable.
+fn debug_assert_function_seps(md: &CallableMetadata, syntax: &CallableSyntax) {
+    if md.return_type().is_none() {
+        return;
+    }
+    for syn in syntax.singular.iter() {
+        let sep = match syn {
+            SingularArgSyntax::RequiredValue(_, sep) => sep,
+            SingularArgSyntax::RequiredRef(_, sep) => sep,
+            SingularArgSyntax::OptionalValue(_, sep) => sep,
+            SingularArgSyntax::AnyValue(_, sep) => sep,
+        };
+        debug_assert!(
+            is_function_sep(sep),
+            "Function {} has a non-comma separator in its singular args syntax",
+            md.name()
+        );
+    }
+    if let Some(repeated) = syntax.repeated.as_ref() {
+        debug_assert!(
+            is_function_sep(&repeated.sep),
+            "Function {} has a non-comma separator in its repeated args syntax",
+            md.name()
+        );
+    }
+}
+
 /// Finds the syntax definition that matches the given argument count.
 ///
 /// Returns an error if no syntax matches, and panics if multiple syntaxes match (which would
@@ -38,6 +77,9 @@ fn find_syntax(md: &CallableMetadata, pos: LineCol, nargs: usize) -> Result<&Cal
     match syntax {
         Some(syntax) => {
             debug_assert!(matches.next().is_none(), "Ambiguous syntax definitions");
+            if cfg!(debug_assertions) {
+                debug_assert_function_seps(md, syntax);
+            }
             Ok(syntax)
         }
         None => Err(Error::CallableSyntax(pos, md.clone())),
