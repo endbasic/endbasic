@@ -235,3 +235,35 @@ x = OUT
 ```plain
 1:5: Cannot call OUT (not a function)
 ```
+
+# Test: Sub name conflicts with existing global variable
+
+## Source
+
+```basic
+DIM SHARED g AS INTEGER
+SUB g
+END SUB
+```
+
+## Compilation errors
+
+```plain
+2:5: Cannot redefine g
+```
+
+# Test: Sub name conflicts with existing global array
+
+## Source
+
+```basic
+DIM SHARED g(3) AS INTEGER
+SUB g
+END SUB
+```
+
+## Compilation errors
+
+```plain
+2:5: Cannot redefine g
+```

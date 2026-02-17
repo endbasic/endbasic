@@ -208,3 +208,49 @@ OUT i1, i2
 ```plain
 0=3% , 1=4%
 ```
+
+# Test: Assignment to name of a built-in callable
+
+## Source
+
+```basic
+out = 5
+```
+
+## Compilation errors
+
+```plain
+1:1: Cannot redefine out
+```
+
+# Test: Assignment to name of a user-defined sub
+
+## Source
+
+```basic
+SUB foo
+END SUB
+foo = 5
+```
+
+## Compilation errors
+
+```plain
+3:1: Cannot redefine foo
+```
+
+# Test: Assignment to name of a user-defined function
+
+## Source
+
+```basic
+FUNCTION bar%
+END FUNCTION
+bar = 5
+```
+
+## Compilation errors
+
+```plain
+3:1: Cannot redefine bar
+```

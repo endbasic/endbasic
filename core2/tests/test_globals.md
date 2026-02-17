@@ -293,3 +293,18 @@ d = "foo"
 ```plain
 2:5: STRING is not a number
 ```
+
+# Test: Redefine existing shared variable with DIM SHARED
+
+## Source
+
+```basic
+DIM SHARED x AS INTEGER
+DIM SHARED x AS INTEGER
+```
+
+## Compilation errors
+
+```plain
+2:12: Cannot redefine x
+```
