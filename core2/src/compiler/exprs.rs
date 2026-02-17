@@ -120,30 +120,31 @@ pub(super) fn compile_expr(
                 return Err(Error::CallableSyntax(span.vref_pos, md.clone()));
             }
 
-            if md.is_user_defined() {
-                let (is_global, _index) = reg.to_parts();
+            let is_user_defined = md.is_user_defined();
+            let (is_global, _index) = reg.to_parts();
+            let mut alloc = symtable.temp_scope();
+            let ret_reg = if is_global {
+                // The call instruction can only carry one register, and this register
+                // indicates where to store the result and where arguments start.  So,
+                // if we are going to save the result to a global register, we must
+                // allocate a temp register first so that argument passing can work.
+                alloc.alloc().map_err(|e| Error::from_syms(e, key_pos))?
+            } else {
+                reg
+            };
+            compile_args(span, md.clone(), symtable, codegen)?;
 
-                let mut alloc = symtable.temp_scope();
-                let ret_reg = if is_global {
-                    // The call instruction can only carry one register, and this register
-                    // indicates where to store the result and where arguments start.  So,
-                    // if we are going to save the result to a global register, we must
-                    // allocate a temp register first so that argument passing can work.
-                    alloc.alloc().map_err(|e| Error::from_syms(e, key_pos))?
-                } else {
-                    reg
-                };
-                let _first_temp = compile_args(span, md.clone(), symtable, codegen)?;
-
+            if is_user_defined {
                 let addr = codegen.emit(bytecode::make_nop(), key_pos);
                 codegen.add_fixup(addr, Fixup::Call(ret_reg, key));
-
-                if is_global {
-                    codegen.emit(bytecode::make_move(reg, ret_reg), key_pos);
-                }
             } else {
-                todo!("Function upcalls not implemented yet");
+                let upcall = codegen.get_upcall(key, Some(etype), key_pos)?;
+                codegen.emit(bytecode::make_upcall(upcall, ret_reg), key_pos);
             }
+            if is_global {
+                codegen.emit(bytecode::make_move(reg, ret_reg), key_pos);
+            }
+
             Ok(etype)
         }
 
@@ -191,7 +192,16 @@ pub(super) fn compile_expr(
                     let addr = codegen.emit(bytecode::make_nop(), span.pos);
                     codegen.add_fixup(addr, Fixup::Call(reg, key));
                 } else {
-                    todo!("Function upcalls not implemented yet");
+                    let upcall = codegen.get_upcall(key, Some(etype), span.pos)?;
+                    let (is_global, _) = reg.to_parts();
+                    if is_global {
+                        let mut scope = symtable.temp_scope();
+                        let temp = scope.alloc().map_err(|e| Error::from_syms(e, span.pos))?;
+                        codegen.emit(bytecode::make_upcall(upcall, temp), span.pos);
+                        codegen.emit(bytecode::make_move(reg, temp), span.pos);
+                    } else {
+                        codegen.emit(bytecode::make_upcall(upcall, reg), span.pos);
+                    }
                 }
                 Ok(etype)
             }
