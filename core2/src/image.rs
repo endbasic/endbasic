@@ -30,6 +30,7 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::AddDouble => bytecode::format_add_double(instr),
         Opcode::AddInteger => bytecode::format_add_integer(instr),
         Opcode::Alloc => bytecode::format_alloc(instr),
+        Opcode::AllocArray => bytecode::format_alloc_array(instr),
         Opcode::Call => bytecode::format_call(instr),
         Opcode::Concat => bytecode::format_concat(instr),
         Opcode::DoubleToInteger => bytecode::format_double_to_integer(instr),
@@ -38,6 +39,7 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::Gosub => bytecode::format_gosub(instr),
         Opcode::IntegerToDouble => bytecode::format_integer_to_double(instr),
         Opcode::Jump => bytecode::format_jump(instr),
+        Opcode::LoadArray => bytecode::format_load_array(instr),
         Opcode::LoadConstant => bytecode::format_load_constant(instr),
         Opcode::LoadInteger => bytecode::format_load_integer(instr),
         Opcode::LoadRegisterPointer => bytecode::format_load_register_ptr(instr),
@@ -46,6 +48,7 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::NegateInteger => bytecode::format_negate_integer(instr),
         Opcode::Nop => bytecode::format_nop(instr),
         Opcode::Return => bytecode::format_return(instr),
+        Opcode::StoreArray => bytecode::format_store_array(instr),
         Opcode::Upcall => bytecode::format_upcall(instr),
     }
 }

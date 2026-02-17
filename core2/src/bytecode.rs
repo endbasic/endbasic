@@ -51,6 +51,11 @@ impl fmt::Display for RegisterScope {
 #[error("Out of registers")]
 pub(crate) struct OutOfRegistersError(());
 
+/// Error to indicate that an array has too many dimensions.
+#[derive(Debug, thiserror::Error)]
+#[error("Too many dimensions")]
+pub(crate) struct TooManyArrayDimensionsError(());
+
 /// Error types for bytecode parsing.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ParseError {
@@ -203,6 +208,53 @@ impl TaggedRegisterRef {
     }
 }
 
+/// A packed representation of an array's element type and number of dimensions.
+///
+/// The encoding stores the `ExprType` in the upper 4 bits and the dimension count in the
+/// lower 4 bits of a single `u8`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct PackedArrayType(u8);
+
+impl PackedArrayType {
+    /// Creates a new packed array type from a subtype and dimension count.
+    pub(crate) fn new(
+        subtype: ExprType,
+        ndims: usize,
+    ) -> Result<Self, TooManyArrayDimensionsError> {
+        if ndims > 15 {
+            return Err(TooManyArrayDimensionsError(()));
+        }
+        let ndims = ndims as u8;
+        Ok(Self(((subtype as u8) << 4) | (ndims & 0x0f)))
+    }
+
+    /// Returns the element type.
+    pub(crate) fn subtype(self) -> ExprType {
+        ExprType::from_u32(u32::from(self.0 >> 4))
+    }
+
+    /// Returns the number of dimensions.
+    pub(crate) fn ndims(self) -> u8 {
+        self.0 & 0x0f
+    }
+}
+
+impl fmt::Display for PackedArrayType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{}]{}", self.ndims(), self.subtype().annotation())
+    }
+}
+
+impl RawValue for PackedArrayType {
+    fn from_u32(v: u32) -> Self {
+        Self(unchecked_u32_as_u8(v))
+    }
+
+    fn to_u32(self) -> u32 {
+        u32::from(self.0)
+    }
+}
+
 impl RawValue for ExprType {
     fn from_u32(v: u32) -> Self {
         #[allow(unsafe_code)]
@@ -327,6 +379,9 @@ pub(crate) enum Opcode {
     /// Allocates an object on the heap.
     Alloc,
 
+    /// Allocates a multidimensional array on the heap.
+    AllocArray,
+
     /// Calls an address relative to the PC.
     Call,
 
@@ -347,6 +402,9 @@ pub(crate) enum Opcode {
 
     /// Jumps to an address relative to the PC.
     Jump,
+
+    /// Loads an element from an array.
+    LoadArray,
 
     /// Loads a constant into a register.
     LoadConstant,
@@ -371,6 +429,9 @@ pub(crate) enum Opcode {
 
     /// Returns from a previous `Call`.
     Return,
+
+    /// Stores a value into an array element.
+    StoreArray,
 
     /// Requests the execution of an upcall, stopping VM execution.
     Upcall,
@@ -404,6 +465,15 @@ instr!(
     make_alloc, parse_alloc, format_alloc,
     Register, 0x000000ff, 8,  // Destination register in which to store the heap pointer.
     ExprType, 0x000000ff, 0,  // Type of the object to allocate.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::AllocArray, "ALLOCA",
+    make_alloc_array, parse_alloc_array, format_alloc_array,
+    Register, 0x000000ff, 16,  // Destination register to store the array pointer.
+    PackedArrayType, 0x000000ff, 8,  // Packed element type and dimension count.
+    Register, 0x000000ff, 0,  // First register containing dimension sizes.
 );
 
 #[rustfmt::skip]
@@ -467,6 +537,15 @@ instr!(
 
 #[rustfmt::skip]
 instr!(
+    Opcode::LoadArray, "LOADA",
+    make_load_array, parse_load_array, format_load_array,
+    Register, 0x000000ff, 16,  // Destination register for the loaded value.
+    Register, 0x000000ff, 8,  // Register containing the array pointer.
+    Register, 0x000000ff, 0,  // First register containing subscript values.
+);
+
+#[rustfmt::skip]
+instr!(
     Opcode::LoadConstant, "LOADC",
     make_load_constant, parse_load_constant, format_load_constant,
     Register, 0x000000ff, 16,  // Destination register to load the constant into.
@@ -522,6 +601,15 @@ instr!(
 instr!(
     Opcode::Return, "RETURN",
     make_return, parse_return, format_return,
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::StoreArray, "STOREA",
+    make_store_array, parse_store_array, format_store_array,
+    Register, 0x000000ff, 16,  // Register containing the array pointer.
+    Register, 0x000000ff, 8,  // Register containing the value to store.
+    Register, 0x000000ff, 0,  // First register containing subscript values.
 );
 
 #[rustfmt::skip]
@@ -675,6 +763,15 @@ mod tests {
         ExprType::Integer
     );
 
+    test_instr!(
+        test_alloc_array,
+        make_alloc_array,
+        parse_alloc_array,
+        Register::local(1).unwrap(),
+        PackedArrayType::new(ExprType::Integer, 3).unwrap(),
+        Register::local(2).unwrap()
+    );
+
     test_instr!(test_call, make_call, parse_call, Register::local(3).unwrap(), 12345);
 
     test_instr!(
@@ -707,6 +804,15 @@ mod tests {
     );
 
     test_instr!(test_jump, make_jump, parse_jump, 12345);
+
+    test_instr!(
+        test_load_array,
+        make_load_array,
+        parse_load_array,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
 
     test_instr!(
         test_load_constant,
@@ -759,7 +865,35 @@ mod tests {
 
     test_instr!(test_return, make_return, parse_return);
 
+    test_instr!(
+        test_store_array,
+        make_store_array,
+        parse_store_array,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
     test_instr!(test_upcall, make_upcall, parse_upcall, 12345, Register::local(3).unwrap());
+
+    #[test]
+    fn test_packed_array_type_round_trip() {
+        for subtype in [ExprType::Boolean, ExprType::Double, ExprType::Integer, ExprType::Text] {
+            for ndims in [1, 2, 5, 15] {
+                let packed = PackedArrayType::new(subtype, ndims).unwrap();
+                assert_eq!(subtype, packed.subtype());
+                assert_eq!(ndims, usize::from(packed.ndims()));
+            }
+        }
+    }
+
+    #[test]
+    fn test_packed_array_type_display() {
+        let p = PackedArrayType::new(ExprType::Integer, 2).unwrap();
+        assert_eq!("[2]%", format!("{}", p));
+        let p = PackedArrayType::new(ExprType::Text, 1).unwrap();
+        assert_eq!("[1]$", format!("{}", p));
+    }
 
     #[test]
     fn test_var_arg_tag_ok() {

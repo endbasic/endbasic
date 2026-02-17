@@ -16,10 +16,12 @@
 
 //! Virtual processor for EndBASIC execution.
 
+use crate::ExprType;
 use crate::Scope;
 use crate::bytecode::{self, Opcode, Register, TaggedRegisterRef, opcode_of};
 use crate::image::Image;
-use crate::mem::{Datum, DatumPtr};
+use crate::mem::{ArrayData, Datum, DatumPtr};
+use crate::num::unchecked_usize_as_u8;
 
 /// Alias for the type representing a program address.
 type Address = usize;
@@ -114,6 +116,40 @@ impl Context {
         DatumPtr::from(raw_addr).resolve(constants, heap)
     }
 
+    /// Resolves array subscripts and computes the flat index for `arr_reg` with subscripts read
+    /// from registers starting at `first_sub_reg`.
+    ///
+    /// Returns `Some((heap_idx, flat_idx))` on success, or `None` if an exception was set.
+    fn resolve_array_index(
+        &mut self,
+        arr_reg: Register,
+        first_sub_reg: Register,
+        heap: &[Datum],
+    ) -> Option<(usize, usize)> {
+        let arr_ptr = DatumPtr::from(self.get_reg(arr_reg));
+        let heap_idx = arr_ptr.heap_index();
+        let array = match &heap[heap_idx] {
+            Datum::Array(a) => a,
+            _ => unreachable!("Register must point to an array"),
+        };
+
+        let ndims = array.dimensions.len();
+        let (_, first_idx) = first_sub_reg.to_parts();
+        let mut subscripts = Vec::with_capacity(ndims);
+        for i in 0..unchecked_usize_as_u8(ndims) {
+            let sub_reg = Register::local(first_idx + i).unwrap();
+            subscripts.push(self.get_reg(sub_reg) as i32);
+        }
+
+        match array.flat_index(&subscripts) {
+            Ok(flat_idx) => Some((heap_idx, flat_idx)),
+            Err(e) => {
+                self.set_exception(e);
+                None
+            }
+        }
+    }
+
     /// Registers that the instruction being processed threw an exception `message`.
     ///
     /// It's the responsibility of the execution loop to check for the presence of exceptions and
@@ -149,6 +185,7 @@ impl Context {
                 Opcode::AddDouble => self.do_add_double(instr),
                 Opcode::AddInteger => self.do_add_integer(instr),
                 Opcode::Alloc => self.do_alloc(instr, heap),
+                Opcode::AllocArray => self.do_alloc_array(instr, heap),
                 Opcode::Call => self.do_call(instr),
                 Opcode::Concat => self.do_concat(instr, &image.constants, heap),
                 Opcode::DoubleToInteger => self.do_double_to_integer(instr),
@@ -157,6 +194,7 @@ impl Context {
                 Opcode::Gosub => self.do_gosub(instr),
                 Opcode::IntegerToDouble => self.do_integer_to_double(instr),
                 Opcode::Jump => self.do_jump(instr),
+                Opcode::LoadArray => self.do_load_array(instr, heap),
                 Opcode::LoadConstant => self.do_load_constant(instr, &image.constants),
                 Opcode::LoadInteger => self.do_load_integer(instr),
                 Opcode::LoadRegisterPointer => self.do_load_register_ptr(instr),
@@ -165,6 +203,7 @@ impl Context {
                 Opcode::NegateInteger => self.do_negate_integer(instr),
                 Opcode::Nop => self.do_nop(instr),
                 Opcode::Return => self.do_return(instr),
+                Opcode::StoreArray => self.do_store_array(instr, heap),
                 Opcode::Upcall => self.do_upcall(instr),
             }
         }
@@ -202,6 +241,48 @@ impl Context {
     pub(super) fn do_alloc(&mut self, instr: u32, heap: &mut Vec<Datum>) {
         let (dest, etype) = bytecode::parse_alloc(instr);
         heap.push(Datum::new(etype));
+        let ptr = DatumPtr::for_heap((heap.len() - 1) as u32);
+        self.set_reg(dest, ptr);
+        self.pc += 1;
+    }
+
+    /// Implements the `AllocArray` opcode.
+    pub(super) fn do_alloc_array(&mut self, instr: u32, heap: &mut Vec<Datum>) {
+        let (dest, packed, first_dim_reg) = bytecode::parse_alloc_array(instr);
+        let subtype = packed.subtype();
+        let ndims = usize::from(packed.ndims());
+
+        let (_, first_idx) = first_dim_reg.to_parts();
+        let mut dimensions = Vec::with_capacity(ndims);
+        let mut total: usize = 1;
+        for i in 0..ndims {
+            let dim_reg = Register::local(first_idx + i as u8).unwrap();
+            let dim = match usize::try_from(self.get_reg(dim_reg) as i32) {
+                Ok(0) | Err(_) => {
+                    self.set_exception(format!("Dimension {} must be positive", i));
+                    return;
+                }
+                Ok(n) => n,
+            };
+            dimensions.push(dim);
+            total *= dim;
+        }
+
+        let values = match subtype {
+            ExprType::Boolean | ExprType::Double | ExprType::Integer => {
+                vec![0; total]
+            }
+            ExprType::Text => {
+                let mut values = Vec::with_capacity(total);
+                for _ in 0..total {
+                    heap.push(Datum::Text(String::new()));
+                    values.push(DatumPtr::for_heap((heap.len() - 1) as u32));
+                }
+                values
+            }
+        };
+        let array = ArrayData { dimensions, values };
+        heap.push(Datum::Array(array));
         let ptr = DatumPtr::for_heap((heap.len() - 1) as u32);
         self.set_reg(dest, ptr);
         self.pc += 1;
@@ -275,10 +356,25 @@ impl Context {
         self.pc = Address::from(offset);
     }
 
+    /// Implements the `LoadArray` opcode.
+    pub(super) fn do_load_array(&mut self, instr: u32, heap: &[Datum]) {
+        let (dest, arr_reg, first_sub_reg) = bytecode::parse_load_array(instr);
+
+        if let Some((heap_idx, flat_idx)) = self.resolve_array_index(arr_reg, first_sub_reg, heap) {
+            let array = match &heap[heap_idx] {
+                Datum::Array(a) => a,
+                _ => unreachable!("Register must point to an array"),
+            };
+            self.set_reg(dest, array.values[flat_idx]);
+            self.pc += 1;
+        }
+    }
+
     /// Implements the `LoadConstant` opcode.
     pub(super) fn do_load_constant(&mut self, instr: u32, constants: &[Datum]) {
         let (register, i) = bytecode::parse_load_constant(instr);
         match &constants[usize::from(i)] {
+            Datum::Array(_) => unreachable!("Arrays cannot be constants"),
             Datum::Boolean(_) => unreachable!("Booleans are always immediates"),
             Datum::Double(d) => self.set_reg(register, d.to_bits()),
             Datum::Integer(i) => self.set_reg(register, *i as u64),
@@ -357,6 +453,21 @@ impl Context {
         } else {
             self.pc = frame.old_pc + 1;
             self.fp = frame.old_fp;
+        }
+    }
+
+    /// Implements the `StoreArray` opcode.
+    pub(super) fn do_store_array(&mut self, instr: u32, heap: &mut [Datum]) {
+        let (arr_reg, val_reg, first_sub_reg) = bytecode::parse_store_array(instr);
+
+        let value = self.get_reg(val_reg);
+        if let Some((heap_idx, flat_idx)) = self.resolve_array_index(arr_reg, first_sub_reg, heap) {
+            let array = match &mut heap[heap_idx] {
+                Datum::Array(a) => a,
+                _ => unreachable!("Register must point to an array"),
+            };
+            array.values[flat_idx] = value;
+            self.pc += 1;
         }
     }
 
