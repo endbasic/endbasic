@@ -832,3 +832,93 @@ DIM bad(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 2
 ```plain
 1:5: Out of temp registers
 ```
+
+# Test: DIM of name of a built-in callable
+
+## Source
+
+```basic
+DIM out(3) AS INTEGER
+```
+
+## Compilation errors
+
+```plain
+1:5: Cannot redefine out
+```
+
+# Test: DIM of name of a user-defined sub
+
+## Source
+
+```basic
+SUB foo
+END SUB
+DIM foo(3) AS INTEGER
+```
+
+## Compilation errors
+
+```plain
+3:5: Cannot redefine foo
+```
+
+# Test: Redefine existing array with DIM
+
+## Source
+
+```basic
+DIM a(3) AS INTEGER
+DIM a(3) AS INTEGER
+```
+
+## Compilation errors
+
+```plain
+2:5: Cannot redefine a
+```
+
+# Test: Redefine existing variable as array with DIM
+
+## Source
+
+```basic
+a = 5
+DIM a(3) AS INTEGER
+```
+
+## Compilation errors
+
+```plain
+2:5: Cannot redefine a
+```
+
+# Test: Redefine existing shared array with DIM SHARED
+
+## Source
+
+```basic
+DIM SHARED a(3) AS INTEGER
+DIM SHARED a(3) AS INTEGER
+```
+
+## Compilation errors
+
+```plain
+2:12: Cannot redefine a
+```
+
+# Test: Redefine existing array as scalar with DIM
+
+## Source
+
+```basic
+DIM a(3) AS INTEGER
+DIM a AS INTEGER
+```
+
+## Compilation errors
+
+```plain
+2:5: Cannot redefine a
+```

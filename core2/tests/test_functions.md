@@ -788,3 +788,35 @@ x = SUM_DOUBLES
 ```plain
 1:5: SUM_DOUBLES expected [arg1, .., argN]
 ```
+
+# Test: Function name conflicts with existing global variable
+
+## Source
+
+```basic
+DIM SHARED g AS INTEGER
+FUNCTION g%
+END FUNCTION
+```
+
+## Compilation errors
+
+```plain
+2:10: Cannot redefine g%
+```
+
+# Test: Function name conflicts with existing global array
+
+## Source
+
+```basic
+DIM SHARED g(3) AS INTEGER
+FUNCTION g%
+END FUNCTION
+```
+
+## Compilation errors
+
+```plain
+2:10: Cannot redefine g%
+```

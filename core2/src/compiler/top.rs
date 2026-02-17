@@ -16,7 +16,7 @@
 
 //! Entry point to the compilation, handling top-level definitions.
 
-use crate::ast::{ArgSep, AssignmentSpan, CallableSpan, EndSpan, ExprType, Statement};
+use crate::ast::{ArgSep, AssignmentSpan, CallableSpan, EndSpan, ExprType, Statement, VarRef};
 use crate::bytecode::{self, PackedArrayType, RegisterScope};
 use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, SingularArgSyntax};
 use crate::compiler::args::{compile_args, define_new_args};
@@ -64,6 +64,12 @@ fn compile_assignment(
 
         Err(syms::Error::UndefinedSymbol(..)) => {
             let key = SymbolKey::from(span.vref.name.clone());
+            if symtable.get_callable(&key).is_some() {
+                return Err(Error::from_syms(
+                    syms::Error::AlreadyDefined(span.vref.clone()),
+                    span.vref_pos,
+                ));
+            }
             let reg = symtable
                 .put_local(
                     key,
@@ -210,11 +216,31 @@ fn compile_stmt(
         }
 
         Statement::Dim(span) => {
-            let key = SymbolKey::from(span.name);
             let name_pos = span.name_pos;
+            let key = SymbolKey::from(&span.name);
+
+            if symtable.get_callable(&key).is_some() {
+                return Err(Error::from_syms(
+                    syms::Error::AlreadyDefined(VarRef::new(&span.name, None)),
+                    name_pos,
+                ));
+            }
+
             let reg = if span.shared {
+                if symtable.contains_global(&key) {
+                    return Err(Error::from_syms(
+                        syms::Error::AlreadyDefined(VarRef::new(&span.name, None)),
+                        name_pos,
+                    ));
+                }
                 symtable.put_global(key, SymbolPrototype::Scalar(span.vtype))
             } else {
+                if symtable.contains_local(&key) {
+                    return Err(Error::from_syms(
+                        syms::Error::AlreadyDefined(VarRef::new(&span.name, None)),
+                        name_pos,
+                    ));
+                }
                 symtable.put_local(key, SymbolPrototype::Scalar(span.vtype))
             }
             .map_err(|e| Error::from_syms(e, name_pos))?;
@@ -222,14 +248,33 @@ fn compile_stmt(
         }
 
         Statement::DimArray(span) => {
-            let key = SymbolKey::from(span.name);
             let name_pos = span.name_pos;
+            let key = SymbolKey::from(&span.name);
             let ndims = span.dimensions.len();
+
+            if symtable.get_callable(&key).is_some() {
+                return Err(Error::from_syms(
+                    syms::Error::AlreadyDefined(VarRef::new(&span.name, None)),
+                    name_pos,
+                ));
+            }
 
             let info = syms::ArrayInfo { subtype: span.subtype, ndims };
             let reg = if span.shared {
+                if symtable.contains_global(&key) {
+                    return Err(Error::from_syms(
+                        syms::Error::AlreadyDefined(VarRef::new(&span.name, None)),
+                        name_pos,
+                    ));
+                }
                 symtable.put_global(key, SymbolPrototype::Array(info))
             } else {
+                if symtable.contains_local(&key) {
+                    return Err(Error::from_syms(
+                        syms::Error::AlreadyDefined(VarRef::new(&span.name, None)),
+                        name_pos,
+                    ));
+                }
                 symtable.put_local(key, SymbolPrototype::Array(info))
             }
             .map_err(|e| Error::from_syms(e, name_pos))?;

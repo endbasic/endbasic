@@ -43,6 +43,7 @@ one_test!(test_functions);
 one_test!(test_globals);
 one_test!(test_gosub);
 one_test!(test_goto);
+one_test!(test_locals);
 one_test!(test_out_of_registers);
 one_test!(test_strings);
 one_test!(test_subs);

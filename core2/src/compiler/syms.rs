@@ -182,6 +182,11 @@ impl<'uref, 'ukey, 'umd> GlobalSymtable<'uref, 'ukey, 'umd> {
         put_var(key, proto, &mut self.globals, Register::global, RegisterScope::Global)
     }
 
+    /// Returns true if a global variable `key` is already defined.
+    pub(crate) fn contains_global(&self, key: &SymbolKey) -> bool {
+        self.globals.get(key).is_some()
+    }
+
     /// Defines a new user-defined `vref` callable with `md` metadata.
     pub(crate) fn define_user_callable(
         &mut self,
@@ -189,6 +194,9 @@ impl<'uref, 'ukey, 'umd> GlobalSymtable<'uref, 'ukey, 'umd> {
         md: CallableMetadata,
     ) -> Result<()> {
         let key = SymbolKey::from(&vref.name);
+        if self.globals.get(&key).is_some() {
+            return Err(Error::AlreadyDefined(vref.clone()));
+        }
         let previous = self.user_callables.insert(key, md);
         if previous.is_none() { Ok(()) } else { Err(Error::AlreadyDefined(vref.clone())) }
     }
@@ -271,6 +279,16 @@ impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
     /// Creates a new local symbol `key` with `proto`.
     pub(crate) fn put_local(&mut self, key: SymbolKey, proto: SymbolPrototype) -> Result<Register> {
         put_var(key, proto, &mut self.locals, Register::local, RegisterScope::Local)
+    }
+
+    /// Returns true if a local variable `key` is already defined.
+    pub(crate) fn contains_local(&self, key: &SymbolKey) -> bool {
+        self.locals.get(key).is_some()
+    }
+
+    /// Returns true if a global variable `key` is already defined.
+    pub(crate) fn contains_global(&self, key: &SymbolKey) -> bool {
+        self.symtable.contains_global(key)
     }
 
     /// Changes the type of an existing local variable `vref` to `new_etype`.
