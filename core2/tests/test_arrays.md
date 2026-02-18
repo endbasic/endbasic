@@ -311,6 +311,21 @@ OUT a%(1)
 0=0%
 ```
 
+# Test: Array reference with bad annotation
+
+## Source
+
+```basic
+DIM a(3) AS INTEGER
+OUT a#(1)
+```
+
+## Compilation errors
+
+```plain
+2:5: Incompatible type annotation in a# reference
+```
+
 # Test: Array reference index is double and needs demotion
 
 ## Source

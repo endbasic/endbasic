@@ -22,7 +22,7 @@ use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, Singu
 use crate::compiler::args::{compile_args, define_new_args};
 use crate::compiler::codegen::{Codegen, Fixup};
 use crate::compiler::exprs::{compile_expr, compile_expr_as_type, compile_integer_exprs};
-use crate::compiler::syms::{self, GlobalSymtable, LocalSymtable, SymbolKey};
+use crate::compiler::syms::{self, GlobalSymtable, LocalSymtable, SymbolKey, SymbolPrototype};
 use crate::compiler::{Error, Result};
 use crate::image::Image;
 use crate::mem::Datum;
@@ -56,18 +56,19 @@ fn compile_assignment(
     let vref_pos = span.vref_pos;
 
     let (reg, etype) = match symtable.get_local_or_global(&span.vref) {
-        Ok((reg, etype)) => {
-            let key = SymbolKey::from(&span.vref.name);
-            if symtable.is_array(&key) {
-                return Err(Error::ArrayUsedAsScalar(vref_pos, span.vref));
-            }
-            (reg, Some(etype))
+        Ok((_, SymbolPrototype::Array(_))) => {
+            return Err(Error::ArrayUsedAsScalar(vref_pos, span.vref));
         }
+
+        Ok((reg, SymbolPrototype::Scalar(etype))) => (reg, Some(etype)),
 
         Err(syms::Error::UndefinedSymbol(..)) => {
             let key = SymbolKey::from(span.vref.name.clone());
             let reg = symtable
-                .put_local(key, span.vref.ref_type.unwrap_or(ExprType::Integer))
+                .put_local(
+                    key,
+                    SymbolPrototype::Scalar(span.vref.ref_type.unwrap_or(ExprType::Integer)),
+                )
                 .map_err(|e| Error::from_syms(e, span.vref_pos))?;
             match span.vref.ref_type {
                 Some(etype) => (reg, Some(etype)),
@@ -104,11 +105,16 @@ fn compile_stmt(
 ) -> Result<()> {
     match stmt {
         Statement::ArrayAssignment(span) => {
-            let key = SymbolKey::from(&span.vref.name);
             let key_pos = span.vref_pos;
 
-            let Some((arr_reg, info)) = symtable.get_array(&key) else {
-                return Err(Error::NotAnArray(key_pos, span.vref));
+            let (arr_reg, info) = match symtable.get_local_or_global(&span.vref) {
+                Ok((reg, SymbolPrototype::Array(info))) => (reg, info),
+
+                Ok((_, SymbolPrototype::Scalar(_))) | Err(syms::Error::UndefinedSymbol(..)) => {
+                    return Err(Error::NotAnArray(key_pos, span.vref));
+                }
+
+                Err(e) => return Err(Error::from_syms(e, key_pos)),
             };
 
             if span.subscripts.len() != info.ndims {
@@ -207,9 +213,9 @@ fn compile_stmt(
             let key = SymbolKey::from(span.name);
             let name_pos = span.name_pos;
             let reg = if span.shared {
-                symtable.put_global(key, span.vtype)
+                symtable.put_global(key, SymbolPrototype::Scalar(span.vtype))
             } else {
-                symtable.put_local(key, span.vtype)
+                symtable.put_local(key, SymbolPrototype::Scalar(span.vtype))
             }
             .map_err(|e| Error::from_syms(e, name_pos))?;
             ctx.codegen.emit_default(reg, span.vtype, name_pos);
@@ -222,9 +228,9 @@ fn compile_stmt(
 
             let info = syms::ArrayInfo { subtype: span.subtype, ndims };
             let reg = if span.shared {
-                symtable.put_global_array(key, info)
+                symtable.put_global(key, SymbolPrototype::Array(info))
             } else {
-                symtable.put_local_array(key, info)
+                symtable.put_local(key, SymbolPrototype::Array(info))
             }
             .map_err(|e| Error::from_syms(e, name_pos))?;
 
@@ -322,8 +328,9 @@ fn compile_user_callables(ctx: &mut Context, symtable: &mut GlobalSymtable) -> R
         // The call protocol expects the return value to be in the first local variable
         // so allocate it early, and then all arguments follow in order from left to right.
         if let Some(vtype) = callable.name.ref_type {
-            let ret_reg =
-                symtable.put_local(key.clone(), vtype).map_err(|e| Error::from_syms(e, key_pos))?;
+            let ret_reg = symtable
+                .put_local(key.clone(), SymbolPrototype::Scalar(vtype))
+                .map_err(|e| Error::from_syms(e, key_pos))?;
 
             // Set the default value of the function result.  We could instead try to do this
             // at runtime by clearning the return register... but the problem is that we need
@@ -342,7 +349,10 @@ fn compile_user_callables(ctx: &mut Context, symtable: &mut GlobalSymtable) -> R
         for param in callable.params {
             let key = SymbolKey::from(param.name);
             symtable
-                .put_local(key.clone(), param.ref_type.unwrap_or(ExprType::Integer))
+                .put_local(
+                    key.clone(),
+                    SymbolPrototype::Scalar(param.ref_type.unwrap_or(ExprType::Integer)),
+                )
                 .map_err(|e| Error::from_syms(e, key_pos))?;
         }
 

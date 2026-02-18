@@ -28,13 +28,23 @@ use std::fmt;
 use std::rc::Rc;
 
 /// Information about an array tracked in the symbol table.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct ArrayInfo {
     /// Element type of the array.
     pub(super) subtype: ExprType,
 
     /// Number of dimensions.
     pub(super) ndims: usize,
+}
+
+/// Prototype for a variable-like symbol (scalar or array).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum SymbolPrototype {
+    /// An array with the given element type and number of dimensions.
+    Array(ArrayInfo),
+
+    /// A scalar variable of the given type.
+    Scalar(ExprType),
 }
 
 /// Errors related to symbols handling.
@@ -75,49 +85,58 @@ impl fmt::Display for SymbolKey {
     }
 }
 
-/// Gets the register and type of a local or global variable if it already exists.
+/// Gets the register and prototype of a local or global variable if it already exists.
 fn get_var<MKR>(
     vref: &VarRef,
-    table: &HashMapWithIds<SymbolKey, ExprType, u8>,
+    table: &HashMapWithIds<SymbolKey, SymbolPrototype, u8>,
     make_register: MKR,
     scope: RegisterScope,
-) -> Result<(Register, ExprType)>
+) -> Result<(Register, SymbolPrototype)>
 where
     MKR: FnOnce(u8) -> std::result::Result<Register, bytecode::OutOfRegistersError>,
 {
     let key = SymbolKey::from(&vref.name);
     match table.get(&key) {
-        Some((etype, reg)) => {
+        Some((SymbolPrototype::Array(info), reg)) => {
+            if !vref.accepts(info.subtype) {
+                return Err(Error::IncompatibleTypeAnnotationInReference(vref.clone()));
+            }
+
+            let reg = make_register(reg).map_err(|_| Error::OutOfRegisters(scope))?;
+            Ok((reg, SymbolPrototype::Array(*info)))
+        }
+
+        Some((SymbolPrototype::Scalar(etype), reg)) => {
             if !vref.accepts(*etype) {
                 return Err(Error::IncompatibleTypeAnnotationInReference(vref.clone()));
             }
 
             let reg = make_register(reg).map_err(|_| Error::OutOfRegisters(scope))?;
-            Ok((reg, *etype))
+            Ok((reg, SymbolPrototype::Scalar(*etype)))
         }
 
         None => Err(Error::UndefinedSymbol(vref.clone(), scope)),
     }
 }
 
-/// Defines a new local or global variable and assigns a register to it.
+/// Defines a new local or global variable (or array) and assigns a register to it.
 ///
-/// Panics if the variable already exists.
+/// Panics if the symbol already exists.
 fn put_var<MKR>(
     key: SymbolKey,
-    vtype: ExprType,
-    table: &mut HashMapWithIds<SymbolKey, ExprType, u8>,
+    proto: SymbolPrototype,
+    table: &mut HashMapWithIds<SymbolKey, SymbolPrototype, u8>,
     make_register: MKR,
     scope: RegisterScope,
 ) -> Result<Register>
 where
     MKR: FnOnce(u8) -> std::result::Result<Register, bytecode::OutOfRegistersError>,
 {
-    match table.insert(key, vtype) {
+    match table.insert(key, proto) {
         Some((None, reg)) => Ok(make_register(reg).map_err(|_| Error::OutOfRegisters(scope))?),
 
-        Some((Some(_old_etype), _reg)) => {
-            unreachable!("Cannot redefine variable; caller must check for presence first");
+        Some((Some(_old_proto), _reg)) => {
+            unreachable!("Cannot redefine symbol; caller must check for presence first");
         }
 
         None => Err(Error::OutOfRegisters(scope)),
@@ -128,11 +147,8 @@ where
 ///
 /// Globals are variables and callables that are visible from any scope.
 pub(crate) struct GlobalSymtable<'uref, 'ukey, 'umd> {
-    /// Map of global variable names to their types and assigned registers.
-    globals: HashMapWithIds<SymbolKey, ExprType, u8>,
-
-    /// Map of global array names to their array info.
-    global_arrays: HashMap<SymbolKey, ArrayInfo>,
+    /// Map of global variable names to their prototypes and assigned registers.
+    globals: HashMapWithIds<SymbolKey, SymbolPrototype, u8>,
 
     /// Reference to the built-in callable metadata provided by the runtime.
     upcalls: &'uref HashMap<&'ukey SymbolKey, &'umd CallableMetadata>,
@@ -144,12 +160,7 @@ pub(crate) struct GlobalSymtable<'uref, 'ukey, 'umd> {
 impl<'uref, 'ukey, 'umd> GlobalSymtable<'uref, 'ukey, 'umd> {
     /// Creates a new global symbol table that knows about the given `upcalls`.
     pub(crate) fn new(upcalls: &'uref HashMap<&'ukey SymbolKey, &'umd CallableMetadata>) -> Self {
-        Self {
-            globals: HashMapWithIds::default(),
-            global_arrays: HashMap::default(),
-            upcalls,
-            user_callables: HashMap::default(),
-        }
+        Self { globals: HashMapWithIds::default(), upcalls, user_callables: HashMap::default() }
     }
 
     /// Enters a new local scope.
@@ -157,38 +168,18 @@ impl<'uref, 'ukey, 'umd> GlobalSymtable<'uref, 'ukey, 'umd> {
         LocalSymtable::new(self)
     }
 
-    /// Gets a global variable by its `vref`.
-    pub(crate) fn get_global(&self, vref: &VarRef) -> Result<(Register, ExprType)> {
+    /// Gets a global symbol by its `vref`, returning its register and prototype.
+    pub(crate) fn get_global(&self, vref: &VarRef) -> Result<(Register, SymbolPrototype)> {
         get_var(vref, &self.globals, Register::global, RegisterScope::Global)
     }
 
-    /// Creates a new global variable `key` of `vtype`.
-    pub(crate) fn put_global(&mut self, key: SymbolKey, vtype: ExprType) -> Result<Register> {
-        put_var(key, vtype, &mut self.globals, Register::global, RegisterScope::Global)
-    }
-
-    /// Creates a new global array `key` with `info` and assigns a register to it.
-    pub(crate) fn put_global_array(&mut self, key: SymbolKey, info: ArrayInfo) -> Result<Register> {
-        let reg = put_var(
-            key.clone(),
-            info.subtype,
-            &mut self.globals,
-            Register::global,
-            RegisterScope::Global,
-        )?;
-        self.global_arrays.insert(key, info);
-        Ok(reg)
-    }
-
-    /// Gets a global array by its `key`.
-    fn get_global_array(&self, key: &SymbolKey) -> Option<(Register, ArrayInfo)> {
-        if let Some(info) = self.global_arrays.get(key)
-            && let Some((_etype, reg)) = self.globals.get(key)
-        {
-            let reg = Register::global(reg).expect("Must be valid");
-            return Some((reg, info.clone()));
-        }
-        None
+    /// Creates a new global symbol `key` with `proto`.
+    pub(crate) fn put_global(
+        &mut self,
+        key: SymbolKey,
+        proto: SymbolPrototype,
+    ) -> Result<Register> {
+        put_var(key, proto, &mut self.globals, Register::global, RegisterScope::Global)
     }
 
     /// Defines a new user-defined `vref` callable with `md` metadata.
@@ -216,11 +207,8 @@ pub(crate) struct LocalSymtable<'uref, 'ukey, 'umd, 'a> {
     /// Reference to the parent global symbol table.
     symtable: &'a mut GlobalSymtable<'uref, 'ukey, 'umd>,
 
-    /// Map of local variable names to their types and assigned registers.
-    locals: HashMapWithIds<SymbolKey, ExprType, u8>,
-
-    /// Map of local array names to their array info.
-    local_arrays: HashMap<SymbolKey, ArrayInfo>,
+    /// Map of local variable names to their prototypes and assigned registers.
+    locals: HashMapWithIds<SymbolKey, SymbolPrototype, u8>,
 
     /// Maximum number of allocated temporary registers in all possible evaluation scopes created
     /// by this local symtable.  This is used to determine the size of the scope for register
@@ -231,12 +219,7 @@ pub(crate) struct LocalSymtable<'uref, 'ukey, 'umd, 'a> {
 impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
     /// Creates a new local symbol table within the context of a global `symtable`.
     fn new(symtable: &'a mut GlobalSymtable<'uref, 'ukey, 'umd>) -> Self {
-        Self {
-            symtable,
-            locals: HashMapWithIds::default(),
-            local_arrays: HashMap::default(),
-            count_temps: 0,
-        }
+        Self { symtable, locals: HashMapWithIds::default(), count_temps: 0 }
     }
 
     /// Consumes the local scope and returns the number of local variables defined, which includes
@@ -262,13 +245,17 @@ impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
         TempSymtable::new(self)
     }
 
-    /// Creates a new global variable `key` of `vtype`.
-    pub(crate) fn put_global(&mut self, key: SymbolKey, vtype: ExprType) -> Result<Register> {
-        self.symtable.put_global(key, vtype)
+    /// Creates a new global symbol `key` with `proto` via the parent global symbol table.
+    pub(crate) fn put_global(
+        &mut self,
+        key: SymbolKey,
+        proto: SymbolPrototype,
+    ) -> Result<Register> {
+        self.symtable.put_global(key, proto)
     }
 
-    /// Gets a variable by its `vref`, looking for it in the local and global scopes.
-    pub(crate) fn get_local_or_global(&self, vref: &VarRef) -> Result<(Register, ExprType)> {
+    /// Gets a symbol by its `vref`, looking for it in the local and global scopes.
+    pub(crate) fn get_local_or_global(&self, vref: &VarRef) -> Result<(Register, SymbolPrototype)> {
         match get_var(vref, &self.locals, Register::local, RegisterScope::Local) {
             Ok(local) => Ok(local),
             Err(Error::UndefinedSymbol(..)) => self.symtable.get_global(vref),
@@ -281,9 +268,9 @@ impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
         self.symtable.get_callable(key)
     }
 
-    /// Creates a new local variable `key` of `vtype`.
-    pub(crate) fn put_local(&mut self, key: SymbolKey, vtype: ExprType) -> Result<Register> {
-        put_var(key, vtype, &mut self.locals, Register::local, RegisterScope::Local)
+    /// Creates a new local symbol `key` with `proto`.
+    pub(crate) fn put_local(&mut self, key: SymbolKey, proto: SymbolPrototype) -> Result<Register> {
+        put_var(key, proto, &mut self.locals, Register::local, RegisterScope::Local)
     }
 
     /// Changes the type of an existing local variable `vref` to `new_etype`.
@@ -293,46 +280,15 @@ impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
         let key = SymbolKey::from(&vref.name);
         // TODO: Verify reference type.
         match self.locals.get_mut(&key) {
-            Some((etype, _reg)) => {
+            Some((SymbolPrototype::Array(_), _)) | None => {
+                Err(Error::UndefinedSymbol(vref.clone(), RegisterScope::Local))
+            }
+
+            Some((SymbolPrototype::Scalar(etype), _reg)) => {
                 *etype = new_etype;
                 Ok(())
             }
-            None => Err(Error::UndefinedSymbol(vref.clone(), RegisterScope::Local)),
         }
-    }
-
-    /// Creates a new local array `key` with `info` and assigns a register to it.
-    pub(crate) fn put_local_array(&mut self, key: SymbolKey, info: ArrayInfo) -> Result<Register> {
-        let reg = put_var(
-            key.clone(),
-            info.subtype,
-            &mut self.locals,
-            Register::local,
-            RegisterScope::Local,
-        )?;
-        self.local_arrays.insert(key, info);
-        Ok(reg)
-    }
-
-    /// Creates a new global array `key` with `info` via the parent global symbol table.
-    pub(crate) fn put_global_array(&mut self, key: SymbolKey, info: ArrayInfo) -> Result<Register> {
-        self.symtable.put_global_array(key, info)
-    }
-
-    /// Gets an array by its `key`, looking in local arrays first, then global.
-    pub(crate) fn get_array(&self, key: &SymbolKey) -> Option<(Register, ArrayInfo)> {
-        if let Some(info) = self.local_arrays.get(key)
-            && let Some((_etype, reg)) = self.locals.get(key)
-        {
-            let reg = Register::local(reg).expect("Must be valid");
-            return Some((reg, info.clone()));
-        }
-        self.symtable.get_global_array(key)
-    }
-
-    /// Returns `true` if `key` refers to an array (local or global).
-    pub(crate) fn is_array(&self, key: &SymbolKey) -> bool {
-        self.local_arrays.contains_key(key) || self.symtable.global_arrays.contains_key(key)
     }
 }
 
@@ -371,24 +327,14 @@ impl<'uref, 'ukey, 'umd, 'temp, 'local> TempSymtable<'uref, 'ukey, 'umd, 'temp, 
         }
     }
 
-    /// Gets a variable by its `vref`, looking for it in the local and global scopes.
-    pub(crate) fn get_local_or_global(&self, vref: &VarRef) -> Result<(Register, ExprType)> {
+    /// Gets a symbol by its `vref`, looking for it in the local and global scopes.
+    pub(crate) fn get_local_or_global(&self, vref: &VarRef) -> Result<(Register, SymbolPrototype)> {
         self.symtable.get_local_or_global(vref)
     }
 
     /// Gets a callable by its name `key`.
     pub(crate) fn get_callable(&self, key: &SymbolKey) -> Option<&CallableMetadata> {
         self.symtable.get_callable(key)
-    }
-
-    /// Gets an array by its `key`, looking in local arrays first, then global.
-    pub(crate) fn get_array(&self, key: &SymbolKey) -> Option<(Register, ArrayInfo)> {
-        self.symtable.get_array(key)
-    }
-
-    /// Returns `true` if `key` refers to an array (local or global).
-    pub(crate) fn is_array(&self, key: &SymbolKey) -> bool {
-        self.symtable.is_array(key)
     }
 
     /// Enters a new temporary scope.
@@ -485,21 +431,23 @@ mod tests {
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(&upcalls);
 
-        let reg = global.put_global(SymbolKey::from("x"), ExprType::Integer)?;
+        let reg =
+            global.put_global(SymbolKey::from("x"), SymbolPrototype::Scalar(ExprType::Integer))?;
         assert_eq!(Register::global(0).unwrap(), reg);
 
-        let reg = global.put_global(SymbolKey::from("y"), ExprType::Text)?;
+        let reg =
+            global.put_global(SymbolKey::from("y"), SymbolPrototype::Scalar(ExprType::Text))?;
         assert_eq!(Register::global(1).unwrap(), reg);
 
         // Lookup with untyped ref succeeds.
-        let (reg, etype) = global.get_global(&VarRef::new("x", None))?;
+        let (reg, proto) = global.get_global(&VarRef::new("x", None))?;
         assert_eq!(Register::global(0).unwrap(), reg);
-        assert_eq!(ExprType::Integer, etype);
+        assert_eq!(SymbolPrototype::Scalar(ExprType::Integer), proto);
 
         // Lookup with matching typed ref succeeds.
-        let (reg, etype) = global.get_global(&VarRef::new("y", Some(ExprType::Text)))?;
+        let (reg, proto) = global.get_global(&VarRef::new("y", Some(ExprType::Text)))?;
         assert_eq!(Register::global(1).unwrap(), reg);
-        assert_eq!(ExprType::Text, etype);
+        assert_eq!(SymbolPrototype::Scalar(ExprType::Text), proto);
 
         Ok(())
     }
@@ -508,11 +456,11 @@ mod tests {
     fn test_global_get_case_insensitive() -> Result<()> {
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(&upcalls);
-        global.put_global(SymbolKey::from("MyVar"), ExprType::Double)?;
+        global.put_global(SymbolKey::from("MyVar"), SymbolPrototype::Scalar(ExprType::Double))?;
 
-        let (reg, etype) = global.get_global(&VarRef::new("myvar", None))?;
+        let (reg, proto) = global.get_global(&VarRef::new("myvar", None))?;
         assert_eq!(Register::global(0).unwrap(), reg);
-        assert_eq!(ExprType::Double, etype);
+        assert_eq!(SymbolPrototype::Scalar(ExprType::Double), proto);
 
         let (reg2, _) = global.get_global(&VarRef::new("MYVAR", None))?;
         assert_eq!(reg, reg2);
@@ -523,7 +471,9 @@ mod tests {
     fn test_global_get_incompatible_type() {
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(&upcalls);
-        global.put_global(SymbolKey::from("x"), ExprType::Integer).unwrap();
+        global
+            .put_global(SymbolKey::from("x"), SymbolPrototype::Scalar(ExprType::Integer))
+            .unwrap();
 
         let err = global.get_global(&VarRef::new("x", Some(ExprType::Text))).unwrap_err();
         assert_eq!("Incompatible type annotation in x$ reference", err.to_string());
@@ -544,15 +494,17 @@ mod tests {
         let mut global = GlobalSymtable::new(&upcalls);
         let mut local = global.enter_scope();
 
-        let reg = local.put_local(SymbolKey::from("a"), ExprType::Boolean)?;
+        let reg =
+            local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Boolean))?;
         assert_eq!(Register::local(0).unwrap(), reg);
 
-        let reg = local.put_local(SymbolKey::from("b"), ExprType::Double)?;
+        let reg =
+            local.put_local(SymbolKey::from("b"), SymbolPrototype::Scalar(ExprType::Double))?;
         assert_eq!(Register::local(1).unwrap(), reg);
 
-        let (reg, etype) = local.get_local_or_global(&VarRef::new("a", None))?;
+        let (reg, proto) = local.get_local_or_global(&VarRef::new("a", None))?;
         assert_eq!(Register::local(0).unwrap(), reg);
-        assert_eq!(ExprType::Boolean, etype);
+        assert_eq!(SymbolPrototype::Scalar(ExprType::Boolean), proto);
 
         Ok(())
     }
@@ -561,14 +513,14 @@ mod tests {
     fn test_local_shadows_global() -> Result<()> {
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(&upcalls);
-        global.put_global(SymbolKey::from("x"), ExprType::Integer)?;
+        global.put_global(SymbolKey::from("x"), SymbolPrototype::Scalar(ExprType::Integer))?;
 
         let mut local = global.enter_scope();
-        local.put_local(SymbolKey::from("x"), ExprType::Text)?;
+        local.put_local(SymbolKey::from("x"), SymbolPrototype::Scalar(ExprType::Text))?;
 
-        let (reg, etype) = local.get_local_or_global(&VarRef::new("x", None))?;
+        let (reg, proto) = local.get_local_or_global(&VarRef::new("x", None))?;
         assert_eq!(Register::local(0).unwrap(), reg);
-        assert_eq!(ExprType::Text, etype);
+        assert_eq!(SymbolPrototype::Scalar(ExprType::Text), proto);
 
         Ok(())
     }
@@ -577,12 +529,12 @@ mod tests {
     fn test_local_falls_through_to_global() -> Result<()> {
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(&upcalls);
-        global.put_global(SymbolKey::from("g"), ExprType::Integer)?;
+        global.put_global(SymbolKey::from("g"), SymbolPrototype::Scalar(ExprType::Integer))?;
 
         let local = global.enter_scope();
-        let (reg, etype) = local.get_local_or_global(&VarRef::new("g", None))?;
+        let (reg, proto) = local.get_local_or_global(&VarRef::new("g", None))?;
         assert_eq!(Register::global(0).unwrap(), reg);
-        assert_eq!(ExprType::Integer, etype);
+        assert_eq!(SymbolPrototype::Scalar(ExprType::Integer), proto);
 
         Ok(())
     }
@@ -603,13 +555,14 @@ mod tests {
         let mut global = GlobalSymtable::new(&upcalls);
         let mut local = global.enter_scope();
 
-        let reg = local.put_global(SymbolKey::from("g"), ExprType::Integer)?;
+        let reg =
+            local.put_global(SymbolKey::from("g"), SymbolPrototype::Scalar(ExprType::Integer))?;
         assert_eq!(Register::global(0).unwrap(), reg);
 
         // Should be visible from the local scope via fallthrough.
-        let (reg, etype) = local.get_local_or_global(&VarRef::new("g", None))?;
+        let (reg, proto) = local.get_local_or_global(&VarRef::new("g", None))?;
         assert_eq!(Register::global(0).unwrap(), reg);
-        assert_eq!(ExprType::Integer, etype);
+        assert_eq!(SymbolPrototype::Scalar(ExprType::Integer), proto);
 
         Ok(())
     }
@@ -620,11 +573,11 @@ mod tests {
         let mut global = GlobalSymtable::new(&upcalls);
         let mut local = global.enter_scope();
 
-        local.put_local(SymbolKey::from("x"), ExprType::Integer)?;
+        local.put_local(SymbolKey::from("x"), SymbolPrototype::Scalar(ExprType::Integer))?;
         local.fixup_local_type(&VarRef::new("x", None), ExprType::Double)?;
 
-        let (_, etype) = local.get_local_or_global(&VarRef::new("x", None))?;
-        assert_eq!(ExprType::Double, etype);
+        let (_, proto) = local.get_local_or_global(&VarRef::new("x", None))?;
+        assert_eq!(SymbolPrototype::Scalar(ExprType::Double), proto);
 
         Ok(())
     }
@@ -645,8 +598,8 @@ mod tests {
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(&upcalls);
         let mut local = global.enter_scope();
-        local.put_local(SymbolKey::from("a"), ExprType::Integer)?;
-        local.put_local(SymbolKey::from("b"), ExprType::Integer)?;
+        local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
+        local.put_local(SymbolKey::from("b"), SymbolPrototype::Scalar(ExprType::Integer))?;
         assert_eq!(2, local.leave_scope()?);
         Ok(())
     }
@@ -656,7 +609,7 @@ mod tests {
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(&upcalls);
         let mut local = global.enter_scope();
-        local.put_local(SymbolKey::from("a"), ExprType::Integer)?;
+        local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
         {
             let temp = local.frozen();
             let mut scope = temp.temp_scope();
@@ -765,8 +718,8 @@ mod tests {
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(&upcalls);
         let mut local = global.enter_scope();
-        local.put_local(SymbolKey::from("a"), ExprType::Integer)?;
-        local.put_local(SymbolKey::from("b"), ExprType::Integer)?;
+        local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
+        local.put_local(SymbolKey::from("b"), SymbolPrototype::Scalar(ExprType::Integer))?;
         {
             let temp = local.frozen();
             let mut scope = temp.temp_scope();
@@ -795,7 +748,7 @@ mod tests {
         let mut local = global.enter_scope();
         assert_eq!(
             Register::local(0).unwrap(),
-            local.put_local(SymbolKey::from("foo"), ExprType::Integer)?
+            local.put_local(SymbolKey::from("foo"), SymbolPrototype::Scalar(ExprType::Integer))?
         );
         {
             let temp = local.frozen();
@@ -831,20 +784,20 @@ mod tests {
     fn test_temp_scope_lookup_vars() -> Result<()> {
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(&upcalls);
-        global.put_global(SymbolKey::from("g"), ExprType::Integer)?;
+        global.put_global(SymbolKey::from("g"), SymbolPrototype::Scalar(ExprType::Integer))?;
         let mut local = global.enter_scope();
-        local.put_local(SymbolKey::from("l"), ExprType::Text)?;
+        local.put_local(SymbolKey::from("l"), SymbolPrototype::Scalar(ExprType::Text))?;
 
         {
             let temp = local.frozen();
 
-            let (reg, etype) = temp.get_local_or_global(&VarRef::new("l", None))?;
+            let (reg, proto) = temp.get_local_or_global(&VarRef::new("l", None))?;
             assert_eq!(Register::local(0).unwrap(), reg);
-            assert_eq!(ExprType::Text, etype);
+            assert_eq!(SymbolPrototype::Scalar(ExprType::Text), proto);
 
-            let (reg, etype) = temp.get_local_or_global(&VarRef::new("g", None))?;
+            let (reg, proto) = temp.get_local_or_global(&VarRef::new("g", None))?;
             assert_eq!(Register::global(0).unwrap(), reg);
-            assert_eq!(ExprType::Integer, etype);
+            assert_eq!(SymbolPrototype::Scalar(ExprType::Integer), proto);
         }
 
         Ok(())
@@ -874,7 +827,7 @@ mod tests {
 
         {
             let mut local = global.enter_scope();
-            local.put_local(SymbolKey::from("x"), ExprType::Integer)?;
+            local.put_local(SymbolKey::from("x"), SymbolPrototype::Scalar(ExprType::Integer))?;
             assert_eq!(1, local.leave_scope()?);
         }
 
@@ -884,10 +837,52 @@ mod tests {
             let err = local.get_local_or_global(&VarRef::new("x", None)).unwrap_err();
             assert_eq!("Undefined global symbol x", err.to_string());
 
-            let reg = local.put_local(SymbolKey::from("y"), ExprType::Double)?;
+            let reg =
+                local.put_local(SymbolKey::from("y"), SymbolPrototype::Scalar(ExprType::Double))?;
             assert_eq!(Register::local(0).unwrap(), reg);
             assert_eq!(1, local.leave_scope()?);
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_global_put_and_get_array() -> Result<()> {
+        let upcalls = HashMap::default();
+        let mut global = GlobalSymtable::new(&upcalls);
+
+        let reg = global.put_global(
+            SymbolKey::from("arr"),
+            SymbolPrototype::Array(ArrayInfo { subtype: ExprType::Integer, ndims: 2 }),
+        )?;
+        assert_eq!(Register::global(0).unwrap(), reg);
+
+        let (got_reg, proto) = global.get_global(&VarRef::new("arr", None)).unwrap();
+        assert_eq!(Register::global(0).unwrap(), got_reg);
+        let SymbolPrototype::Array(info) = proto else { panic!("Expected Array prototype") };
+        assert_eq!(ExprType::Integer, info.subtype);
+        assert_eq!(2, info.ndims);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_local_put_and_get_array() -> Result<()> {
+        let upcalls = HashMap::default();
+        let mut global = GlobalSymtable::new(&upcalls);
+        let mut local = global.enter_scope();
+
+        let reg = local.put_local(
+            SymbolKey::from("arr"),
+            SymbolPrototype::Array(ArrayInfo { subtype: ExprType::Double, ndims: 1 }),
+        )?;
+        assert_eq!(Register::local(0).unwrap(), reg);
+
+        let (got_reg, proto) = local.get_local_or_global(&VarRef::new("arr", None)).unwrap();
+        assert_eq!(Register::local(0).unwrap(), got_reg);
+        let SymbolPrototype::Array(info) = proto else { panic!("Expected Array prototype") };
+        assert_eq!(ExprType::Double, info.subtype);
+        assert_eq!(1, info.ndims);
 
         Ok(())
     }
