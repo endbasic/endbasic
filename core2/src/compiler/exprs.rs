@@ -20,23 +20,10 @@ use crate::ast::{BinaryOpSpan, Expr, ExprType};
 use crate::bytecode::{self, Register, RegisterScope};
 use crate::compiler::args::compile_args;
 use crate::compiler::codegen::{Codegen, Fixup};
-use crate::compiler::syms::{self, SymbolKey, TempScope, TempSymtable};
+use crate::compiler::syms::{self, SymbolKey, SymbolPrototype, TempScope, TempSymtable};
 use crate::compiler::{Error, Result};
 use crate::mem::Datum;
 use std::convert::TryFrom;
-
-/// Checks that a variable reference does not refer to an array being used without subscripts.
-fn check_not_array(
-    symtable: &TempSymtable<'_, '_, '_, '_, '_>,
-    vref: &crate::ast::VarRef,
-    pos: crate::reader::LineCol,
-) -> Result<()> {
-    let key = SymbolKey::from(&vref.name);
-    if symtable.is_array(&key) {
-        return Err(Error::ArrayUsedAsScalar(pos, vref.clone()));
-    }
-    Ok(())
-}
 
 /// Compiles `exprs` into consecutive integer registers allocated from `scope` and returns the
 /// first register.  The caller must guarantee that `exprs` is non-empty.
@@ -164,17 +151,21 @@ pub(super) fn compile_expr(
             let key_pos = span.vref_pos;
 
             let Some(md) = symtable.get_callable(&key) else {
-                if let Some((arr_reg, info)) = symtable.get_array(&key) {
-                    return compile_array_access(
-                        codegen, symtable, reg, key_pos, arr_reg, &info, span.args,
-                    );
+                match symtable.get_local_or_global(&span.vref) {
+                    Ok((arr_reg, SymbolPrototype::Array(info))) => {
+                        return compile_array_access(
+                            codegen, symtable, reg, key_pos, arr_reg, &info, span.args,
+                        );
+                    }
+                    Err(syms::Error::UndefinedSymbol(..)) | Ok((_, SymbolPrototype::Scalar(_))) => {
+                        return Err(Error::UndefinedSymbol(
+                            span.vref_pos,
+                            span.vref,
+                            RegisterScope::Global,
+                        ));
+                    }
+                    Err(e) => return Err(Error::from_syms(e, key_pos)),
                 }
-
-                return Err(Error::UndefinedSymbol(
-                    span.vref_pos,
-                    span.vref,
-                    RegisterScope::Global,
-                ));
             };
 
             let Some(etype) = md.return_type() else {
@@ -250,10 +241,13 @@ pub(super) fn compile_expr(
         }
 
         Expr::Symbol(span) => match symtable.get_local_or_global(&span.vref) {
-            Ok((local, etype)) => {
-                check_not_array(symtable, &span.vref, span.pos)?;
+            Ok((local, SymbolPrototype::Scalar(etype))) => {
                 codegen.emit(bytecode::make_move(reg, local), span.pos);
                 Ok(etype)
+            }
+
+            Ok((_, SymbolPrototype::Array(_))) => {
+                Err(Error::ArrayUsedAsScalar(span.pos, span.vref))
             }
 
             Err(syms::Error::UndefinedSymbol(..)) => {

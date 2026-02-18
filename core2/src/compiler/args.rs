@@ -21,7 +21,7 @@ use crate::bytecode::{self, Register};
 use crate::callable::{CallableMetadata, CallableSyntax};
 use crate::compiler::codegen::Codegen;
 use crate::compiler::exprs::{compile_expr, compile_expr_as_type};
-use crate::compiler::syms::{self, TempSymtable};
+use crate::compiler::syms::{self, SymbolPrototype, TempSymtable};
 use crate::compiler::{Error, Result};
 use crate::reader::LineCol;
 use crate::{ArgSep, ArgSepSyntax, ExprType, RepeatedTypeSyntax, SingularArgSyntax};
@@ -152,7 +152,9 @@ fn define_new_arg(
 ) -> Result<()> {
     let key = SymbolKey::from(&vref.name);
     let vtype = vref.ref_type.unwrap_or(ExprType::Integer);
-    let reg = symtable.put_local(key, vtype).map_err(|e| Error::from_syms(e, pos))?;
+    let reg = symtable
+        .put_local(key, SymbolPrototype::Scalar(vtype))
+        .map_err(|e| Error::from_syms(e, pos))?;
     codegen.emit_default(reg, vtype, pos);
     Ok(())
 }
@@ -272,7 +274,10 @@ pub(super) fn compile_args(
                     None => return Err(Error::CallableSyntax(key_pos, md)),
                     Some(Expr::Symbol(span)) => {
                         let (reg, vtype) = match symtable.get_local_or_global(&span.vref) {
-                            Ok((reg, vtype)) => (reg, vtype),
+                            Ok((reg, SymbolPrototype::Scalar(vtype))) => (reg, vtype),
+                            Ok((_, SymbolPrototype::Array(_))) => {
+                                return Err(Error::CallableSyntax(span.pos, md));
+                            }
                             Err(e @ syms::Error::UndefinedSymbol(..)) => {
                                 if !details.define_undefined {
                                     return Err(Error::from_syms(e, span.pos));
@@ -394,7 +399,10 @@ pub(super) fn compile_args(
                         };
 
                         let (reg, vtype) = match symtable.get_local_or_global(&span.vref) {
-                            Ok((reg, vtype)) => (reg, vtype),
+                            Ok((reg, SymbolPrototype::Scalar(vtype))) => (reg, vtype),
+                            Ok((_, SymbolPrototype::Array(_))) => {
+                                return Err(Error::CallableSyntax(arg_pos, md));
+                            }
                             Err(syms::Error::UndefinedSymbol(..)) => {
                                 unreachable!("Caller must use define_new_args first for commands");
                             }
