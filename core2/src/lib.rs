@@ -31,8 +31,11 @@ mod vm;
 pub use ast::{ArgSep, ExprType};
 pub use bytecode::VarArgTag;
 pub use callable::*;
-pub use compiler::{SymbolKey, compile, only_metadata};
-pub use vm::{StopReason, Vm};
+pub use compiler::{
+    GlobalDef, GlobalDefKind, SymbolKey, compile, compile_with_globals, only_metadata,
+};
+pub use mem::ConstantDatum;
+pub use vm::{GetGlobalError, GetGlobalResult, StopReason, Vm};
 
 #[cfg(test)]
 mod testutils;

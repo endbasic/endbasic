@@ -35,7 +35,7 @@ mod syms;
 pub use syms::SymbolKey;
 
 mod top;
-pub use top::{compile, only_metadata};
+pub use top::{GlobalDef, GlobalDefKind, compile, compile_with_globals, only_metadata};
 
 /// Errors that can occur during compilation.
 #[derive(Debug, thiserror::Error)]

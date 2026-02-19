@@ -56,14 +56,14 @@ impl ArrayData {
     }
 }
 
-/// A compile-time constant value stored in the constant pool.
+/// A typed scalar value, used both in the compile-time constant pool and as a
+/// return value when inspecting global variables after execution.
 ///
-/// Only scalar types that can be hashed are included here.  Arrays are never constants.
+/// Only scalar types that can be hashed are included here.  Arrays are never
+/// stored as `ConstantDatum`.
 #[derive(Clone, Debug)]
-pub(crate) enum ConstantDatum {
-    /// A boolean value.  Not currently produced by the compiler (booleans are always
-    /// immediate integers), but included for completeness and future use.
-    #[allow(dead_code)]
+pub enum ConstantDatum {
+    /// A boolean value.
     Boolean(bool),
 
     /// A double-precision floating-point value.

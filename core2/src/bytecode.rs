@@ -403,6 +403,9 @@ pub(crate) enum Opcode {
     /// Jumps to an address relative to the PC.
     Jump,
 
+    /// Deallocates the registers allocated by the preamble ENTER, unwinding to the FP.
+    Leave,
+
     /// Loads an element from an array.
     LoadArray,
 
@@ -533,6 +536,12 @@ instr!(
     Opcode::Jump, "JUMP",
     make_jump, parse_jump, format_jump,
     u16, 0x0000ffff, 0,  // Target address.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::Leave, "LEAVE",
+    make_leave, parse_leave, format_leave,
 );
 
 #[rustfmt::skip]
@@ -804,6 +813,8 @@ mod tests {
     );
 
     test_instr!(test_jump, make_jump, parse_jump, 12345);
+
+    test_instr!(test_leave, make_leave, parse_leave);
 
     test_instr!(
         test_load_array,

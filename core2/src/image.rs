@@ -16,6 +16,7 @@
 
 //! Compiled program representation.
 
+use crate::ast::ExprType;
 use crate::bytecode::{self, Opcode, Register, opcode_of};
 use crate::compiler::SymbolKey;
 use crate::mem::ConstantDatum;
@@ -39,6 +40,7 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::Gosub => bytecode::format_gosub(instr),
         Opcode::IntegerToDouble => bytecode::format_integer_to_double(instr),
         Opcode::Jump => bytecode::format_jump(instr),
+        Opcode::Leave => bytecode::format_leave(instr),
         Opcode::LoadArray => bytecode::format_load_array(instr),
         Opcode::LoadConstant => bytecode::format_load_constant(instr),
         Opcode::LoadInteger => bytecode::format_load_integer(instr),
@@ -53,6 +55,18 @@ pub(crate) fn format_instr(instr: u32) -> String {
     }
 }
 
+/// Information about a global variable tracked for post-execution querying.
+pub(crate) struct GlobalVarInfo {
+    /// Global register index (0 to `Register::MAX_GLOBAL - 1`).
+    pub(crate) reg: u8,
+
+    /// Element type (for arrays, the element type; for scalars, the scalar type).
+    pub(crate) subtype: ExprType,
+
+    /// Number of dimensions: 0 for scalars, >=1 for arrays.
+    pub(crate) ndims: usize,
+}
+
 /// Debugging information for a compiled program.
 #[derive(Default)]
 pub struct DebugInfo {
@@ -62,6 +76,12 @@ pub struct DebugInfo {
     /// Maps instruction addresses to the names of user-defined callables that start at those
     /// addresses.
     pub(crate) callables: HashMap<usize, SymbolKey>,
+
+    /// Maps global variable names to their register assignments and type information.
+    ///
+    /// This includes both host-pre-defined globals (from `compile_with_globals`) and
+    /// globals declared via `DIM SHARED` in the user's program.
+    pub(crate) global_vars: HashMap<SymbolKey, GlobalVarInfo>,
 }
 
 /// Representation of a compiled EndBASIC program.
@@ -98,6 +118,7 @@ impl Default for Image {
             DebugInfo {
                 instr_linecols: vec![LineCol { line: 0, col: 0 }],
                 callables: HashMap::default(),
+                global_vars: HashMap::default(),
             },
         )
     }
