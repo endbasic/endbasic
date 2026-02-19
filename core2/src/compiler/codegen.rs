@@ -20,7 +20,7 @@ use crate::ast::ExprType;
 use crate::bytecode::{self, Register};
 use crate::compiler::ids::HashMapWithIds;
 use crate::compiler::{Error, Result, SymbolKey};
-use crate::image::{DebugInfo, GlobalVarInfo, Image};
+use crate::image::{DebugInfo, GlobalVarInfo, Image, InstrMetadata};
 use crate::mem::ConstantDatum;
 use crate::reader::LineCol;
 use std::collections::HashMap;
@@ -57,8 +57,8 @@ pub(super) struct Codegen {
     /// Collection of fixups to apply after code generation.
     fixups: HashMap<Address, Fixup>,
 
-    /// Line/column information for every instruction in `code`.
-    instr_linecols: Vec<LineCol>,
+    /// Per-instruction metadata for every instruction in `code`.
+    instrs: Vec<InstrMetadata>,
 
     /// Map of label names to their target addresses.
     labels: HashMap<SymbolKey, Address>,
@@ -79,8 +79,17 @@ impl Codegen {
     /// Appends a new instruction `op` generated at `pos` to the code and returns its address.
     pub(super) fn emit(&mut self, op: u32, pos: LineCol) -> Address {
         self.code.push(op);
-        self.instr_linecols.push(pos);
+        self.instrs.push(InstrMetadata { linecol: pos, arg_linecols: vec![] });
         self.code.len() - 1
+    }
+
+    /// Attaches argument source locations to the instruction at `addr`.
+    ///
+    /// `arg_linecols` has one entry per register slot in the argument area, in the same order
+    /// that `compile_args` allocates them.  This should be called after emitting a UPCALL or
+    /// CALL instruction.
+    pub(super) fn set_arg_linecols(&mut self, addr: Address, arg_linecols: Vec<LineCol>) {
+        self.instrs[addr].arg_linecols = arg_linecols;
     }
 
     /// Emits code to set `reg` to the default value for `vtype`.
@@ -135,7 +144,7 @@ impl Codegen {
     /// Applies all registered fixups to the generated code.
     fn apply_fixups(&mut self) -> Result<()> {
         for (addr, fixup) in self.fixups.drain() {
-            let pos = self.instr_linecols[addr];
+            let pos = self.instrs[addr].linecol;
             let instr = match fixup {
                 Fixup::Call(reg, key) => {
                     let target = self.user_callables_addresses.get(&key).expect("Must be present");
@@ -190,7 +199,7 @@ impl Codegen {
             self.code,
             self.upcalls.keys_to_vec(),
             self.constants.keys_to_vec(),
-            DebugInfo { instr_linecols: self.instr_linecols, callables, global_vars },
+            DebugInfo { instrs: self.instrs, callables, global_vars },
         ))
     }
 }

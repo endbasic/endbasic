@@ -59,12 +59,12 @@ impl<'a> UpcallHandler<'a> {
     /// Invokes the pending upcall.
     pub async fn invoke(self) -> CallResult<()> {
         let vm = self.0;
-        let (index, first_reg) = vm
+        let (index, first_reg, upcall_pc) = vm
             .pending_upcall
             .take()
             .expect("This is only reachable when the VM has a pending upcall");
         let upcall = vm.upcalls[usize::from(index)].clone();
-        upcall.exec(vm.upcall_scope(first_reg)).await
+        upcall.exec(vm.upcall_scope(first_reg, upcall_pc)).await
     }
 }
 
@@ -98,7 +98,10 @@ pub struct Vm {
     context: Context,
 
     /// Details about the pending upcall that has to be handled by the caller.
-    pending_upcall: Option<(u16, Register)>,
+    ///
+    /// The tuple contains the upcall index, the first argument register, and the PC of the
+    /// UPCALL instruction (for arg position lookup in `DebugInfo`).
+    pending_upcall: Option<(u16, Register, usize)>,
 }
 
 impl Vm {
@@ -132,12 +135,23 @@ impl Vm {
     }
 
     /// Constructs a `Scope` for an upcall with arguments starting at `reg`.
-    fn upcall_scope<'a>(&'a mut self, reg: Register) -> Scope<'a> {
-        let constants = match self.image.as_ref() {
-            Some(image) => image.constants.as_slice(),
-            None => &[],
+    ///
+    /// `upcall_pc` is the address of the UPCALL instruction in the image, used to look up
+    /// per-argument source locations from `DebugInfo`.
+    fn upcall_scope<'a>(&'a mut self, reg: Register, upcall_pc: usize) -> Scope<'a> {
+        let (constants, arg_linecols) = match self.image.as_ref() {
+            Some(image) => (
+                image.constants.as_slice(),
+                image
+                    .debug_info
+                    .instrs
+                    .get(upcall_pc)
+                    .map(|m| m.arg_linecols.as_slice())
+                    .unwrap_or(&[]),
+            ),
+            None => (&[][..], &[][..]),
         };
-        self.context.upcall_scope(reg, constants, &mut self.heap)
+        self.context.upcall_scope(reg, constants, &mut self.heap, arg_linecols)
     }
 
     /// Returns the value of the global scalar variable `name` as a `ConstantDatum`.
@@ -226,11 +240,11 @@ impl Vm {
         match self.context.exec(image, &mut self.heap) {
             InternalStopReason::End(code) => StopReason::End(code),
             InternalStopReason::Exception(pc, e) => {
-                let pos = image.debug_info.instr_linecols[pc];
+                let pos = image.debug_info.instrs[pc].linecol;
                 StopReason::Exception(pos, e)
             }
-            InternalStopReason::Upcall(index, first_reg) => {
-                self.pending_upcall = Some((index, first_reg));
+            InternalStopReason::Upcall(index, first_reg, upcall_pc) => {
+                self.pending_upcall = Some((index, first_reg, upcall_pc));
                 StopReason::Upcall(UpcallHandler(self))
             }
         }
@@ -240,12 +254,83 @@ impl Vm {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::{ArgSep, ExprType};
+    use crate::callable::{
+        ArgSepSyntax, CallResult, CallableMetadata, CallableMetadataBuilder, RequiredValueSyntax,
+        SingularArgSyntax,
+    };
     use crate::compiler::{SymbolKey, compile, only_metadata};
     use crate::image::Image;
+    use crate::reader::LineCol;
     use crate::testutils::OutCommand;
+    use async_trait::async_trait;
+    use std::borrow::Cow;
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::rc::Rc;
+
+    /// A test callable that captures the source positions of argument register slots.
+    ///
+    /// On each invocation, records the result of `scope.get_pos(n)` for `0..nargs` into
+    /// `positions`.
+    struct PosCapture {
+        metadata: CallableMetadata,
+        nargs: u8,
+        positions: Rc<RefCell<Vec<LineCol>>>,
+    }
+
+    impl PosCapture {
+        /// Creates a new `PosCapture` callable named `POS_CAPTURE` that expects
+        /// `nargs` required integer arguments separated by commas.
+        fn new(nargs: u8, positions: Rc<RefCell<Vec<LineCol>>>) -> Rc<Self> {
+            let singular: Vec<SingularArgSyntax> = (0..nargs)
+                .map(|i| {
+                    let sep = if i == nargs - 1 {
+                        ArgSepSyntax::End
+                    } else {
+                        ArgSepSyntax::Exactly(ArgSep::Long)
+                    };
+                    SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("arg"),
+                            vtype: ExprType::Integer,
+                        },
+                        sep,
+                    )
+                })
+                .collect();
+            let md = CallableMetadataBuilder::new("POS_CAPTURE")
+                .with_dynamic_syntax(vec![(singular, None)])
+                .test_build();
+            Rc::from(Self { metadata: md, nargs, positions })
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl Callable for PosCapture {
+        fn metadata(&self) -> &CallableMetadata {
+            &self.metadata
+        }
+
+        async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+            let mut positions = self.positions.borrow_mut();
+            for i in 0..self.nargs {
+                positions.push(scope.get_pos(i));
+            }
+            Ok(())
+        }
+    }
+
+    /// Runs the VM to completion, invoking every upcall as it is encountered.
+    async fn run_to_end(vm: &mut Vm) {
+        loop {
+            match vm.exec() {
+                StopReason::End(_) => break,
+                StopReason::Exception(_, msg) => panic!("Unexpected exception: {}", msg),
+                StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
+            }
+        }
+    }
 
     #[test]
     fn test_exec_without_load_is_eof() {
@@ -334,5 +419,81 @@ mod tests {
             StopReason::End(3) => (),
             _ => panic!("Unexpected stop reason"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_scope_get_pos_no_args() {
+        let positions: Rc<RefCell<Vec<LineCol>>> = Rc::default();
+        let cmd = PosCapture::new(0, positions.clone());
+        let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
+        upcalls_by_name.insert(SymbolKey::from("POS_CAPTURE"), cmd);
+
+        let image =
+            compile(&mut b"POS_CAPTURE".as_slice(), &only_metadata(&upcalls_by_name)).unwrap();
+        let mut vm = Vm::new(upcalls_by_name);
+        vm.load(image);
+        run_to_end(&mut vm).await;
+
+        let pos = positions.borrow();
+        assert_eq!(&[] as &[LineCol], pos.as_slice());
+    }
+
+    #[tokio::test]
+    async fn test_scope_get_pos_single_arg() {
+        let positions: Rc<RefCell<Vec<LineCol>>> = Rc::default();
+        let cmd = PosCapture::new(1, positions.clone());
+        let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
+        upcalls_by_name.insert(SymbolKey::from("POS_CAPTURE"), cmd);
+
+        let image =
+            compile(&mut b"POS_CAPTURE 42".as_slice(), &only_metadata(&upcalls_by_name)).unwrap();
+        let mut vm = Vm::new(upcalls_by_name);
+        vm.load(image);
+        run_to_end(&mut vm).await;
+
+        let pos = positions.borrow();
+        assert_eq!(&[LineCol { line: 1, col: 13 }], pos.as_slice());
+    }
+
+    #[tokio::test]
+    async fn test_scope_get_pos_multiple_args() {
+        let positions: Rc<RefCell<Vec<LineCol>>> = Rc::default();
+        let cmd = PosCapture::new(3, positions.clone());
+        let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
+        upcalls_by_name.insert(SymbolKey::from("POS_CAPTURE"), cmd);
+
+        let image =
+            compile(&mut b"POS_CAPTURE 1, 2, 3".as_slice(), &only_metadata(&upcalls_by_name))
+                .unwrap();
+        let mut vm = Vm::new(upcalls_by_name);
+        vm.load(image);
+        run_to_end(&mut vm).await;
+
+        let pos = positions.borrow();
+        assert_eq!(
+            &[
+                LineCol { line: 1, col: 13 },
+                LineCol { line: 1, col: 16 },
+                LineCol { line: 1, col: 19 }
+            ],
+            pos.as_slice()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_scope_get_pos_expression_arg() {
+        let positions: Rc<RefCell<Vec<LineCol>>> = Rc::default();
+        let cmd = PosCapture::new(1, positions.clone());
+        let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
+        upcalls_by_name.insert(SymbolKey::from("POS_CAPTURE"), cmd);
+
+        let image = compile(&mut b"POS_CAPTURE 1 + 2".as_slice(), &only_metadata(&upcalls_by_name))
+            .unwrap();
+        let mut vm = Vm::new(upcalls_by_name);
+        vm.load(image);
+        run_to_end(&mut vm).await;
+
+        let pos = positions.borrow();
+        assert_eq!(&[LineCol { line: 1, col: 13 }], pos.as_slice());
     }
 }

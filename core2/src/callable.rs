@@ -22,6 +22,7 @@ use crate::bytecode::TaggedRegisterRef;
 use crate::bytecode::VarArgTag;
 use crate::mem::{ConstantDatum, DatumPtr, HeapDatum};
 use crate::num::unchecked_usize_as_u32;
+use crate::reader::LineCol;
 use async_trait::async_trait;
 use std::borrow::Cow;
 use std::fmt;
@@ -722,9 +723,23 @@ pub struct Scope<'a> {
 
     /// Start of the current frame (where the arguments to the upcall start).
     pub(crate) fp: usize,
+
+    /// Source locations of the call arguments, one per register slot in the argument area.
+    ///
+    /// Indexed in the same order as the argument registers: `arg_linecols[N]` is the source
+    /// position of the expression that was compiled into register slot `N`.  May be shorter
+    /// than the actual argument register count if debug information is unavailable.
+    pub(crate) arg_linecols: &'a [LineCol],
 }
 
 impl<'a> Scope<'a> {
+    /// Returns the source position of the argument at `arg`, or `None` if unavailable.
+    ///
+    /// `arg` is the register-slot index of the argument, matching the `N` in `scope.get_*(N)`.
+    pub fn get_pos(&self, arg: u8) -> LineCol {
+        self.arg_linecols[usize::from(arg)]
+    }
+
     /// Gets the type tag of the argument at `arg`.
     pub fn get_type(&self, arg: u8) -> VarArgTag {
         VarArgTag::parse_u64(self.regs[self.fp + (arg as usize)]).unwrap()

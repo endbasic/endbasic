@@ -173,17 +173,19 @@ fn compile_stmt(
             let md = md.clone();
 
             define_new_args(&span, &md, symtable, &mut ctx.codegen)?;
-            let first_temp = {
+            let (first_temp, arg_linecols) = {
                 let mut symtable = symtable.frozen();
                 compile_args(span, md, &mut symtable, &mut ctx.codegen)?
             };
 
             if is_user_defined {
                 let addr = ctx.codegen.emit(bytecode::make_nop(), key_pos);
+                ctx.codegen.set_arg_linecols(addr, arg_linecols);
                 ctx.codegen.add_fixup(addr, Fixup::Call(first_temp, key));
             } else {
                 let upcall = ctx.codegen.get_upcall(key, None, key_pos)?;
-                ctx.codegen.emit(bytecode::make_upcall(upcall, first_temp), key_pos);
+                let addr = ctx.codegen.emit(bytecode::make_upcall(upcall, first_temp), key_pos);
+                ctx.codegen.set_arg_linecols(addr, arg_linecols);
             }
         }
 

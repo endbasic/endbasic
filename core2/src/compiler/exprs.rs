@@ -188,14 +188,16 @@ pub(super) fn compile_expr(
             } else {
                 reg
             };
-            compile_args(span, md.clone(), symtable, codegen)?;
+            let (_first_temp, arg_linecols) = compile_args(span, md.clone(), symtable, codegen)?;
 
             if is_user_defined {
                 let addr = codegen.emit(bytecode::make_nop(), key_pos);
+                codegen.set_arg_linecols(addr, arg_linecols);
                 codegen.add_fixup(addr, Fixup::Call(ret_reg, key));
             } else {
                 let upcall = codegen.get_upcall(key, Some(etype), key_pos)?;
-                codegen.emit(bytecode::make_upcall(upcall, ret_reg), key_pos);
+                let addr = codegen.emit(bytecode::make_upcall(upcall, ret_reg), key_pos);
+                codegen.set_arg_linecols(addr, arg_linecols);
             }
             if is_global {
                 codegen.emit(bytecode::make_move(reg, ret_reg), key_pos);
