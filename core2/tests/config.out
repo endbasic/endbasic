@@ -1,0 +1,10 @@
+foo_value% = 123
+result_total% = 579
+status$ = "Processing complete"
+defined_within% = 42
+optional_flag? = false
+unknown is not declared
+results%(0) = 10
+results%(1) = 20
+results%(2) = 30
+foo_value%(0): error: 'foo_value' is a scalar variable; use get_global to access it

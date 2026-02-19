@@ -17,17 +17,40 @@
 //! Virtual machine for EndBASIC execution.
 
 use crate::CallResult;
+use crate::ast::ExprType;
 use crate::bytecode::Register;
 use crate::callable::{Callable, Scope};
 use crate::compiler::SymbolKey;
 use crate::image::Image;
-use crate::mem::HeapDatum;
+use crate::mem::{ConstantDatum, DatumPtr, HeapDatum};
 use crate::reader::LineCol;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 mod context;
 use context::{Context, InternalStopReason};
+
+/// Error returned when a global variable access encounters a type or shape mismatch.
+///
+/// This is distinct from a missing variable, which is represented by `None` in the
+/// return value of `get_global` and `get_global_array`.
+#[derive(Debug, thiserror::Error)]
+pub enum GetGlobalError {
+    /// The variable exists but is an array; use `get_global_array` instead.
+    #[error("'{0}' is an array variable; use get_global_array to access it")]
+    IsArray(String),
+
+    /// The variable exists but is a scalar; use `get_global` instead.
+    #[error("'{0}' is a scalar variable; use get_global to access it")]
+    IsScalar(String),
+
+    /// The array subscripts are out of bounds or invalid.
+    #[error("{0}")]
+    SubscriptOutOfBounds(String),
+}
+
+/// Result type for global variable access operations.
+pub type GetGlobalResult<T> = Result<T, GetGlobalError>;
 
 /// Opaque handle to invoke a pending upcall.
 pub struct UpcallHandler<'a>(&'a mut Vm);
@@ -115,6 +138,76 @@ impl Vm {
             None => &[],
         };
         self.context.upcall_scope(reg, constants, &mut self.heap)
+    }
+
+    /// Returns the value of the global scalar variable `name` as a `ConstantDatum`.
+    ///
+    /// Returns `Ok(None)` if the variable is not defined (no image is loaded or the
+    /// variable was not declared).  Returns `Err` if the variable exists but is an
+    /// array; in that case, use `get_global_array` instead.
+    pub fn get_global(&self, name: &str) -> GetGlobalResult<Option<ConstantDatum>> {
+        let key = SymbolKey::from(name);
+        let Some(image) = self.image.as_ref() else {
+            return Ok(None);
+        };
+        let Some(info) = image.debug_info.global_vars.get(&key) else {
+            return Ok(None);
+        };
+        if info.ndims != 0 {
+            return Err(GetGlobalError::IsArray(name.to_owned()));
+        }
+        let raw = self.context.get_global_reg_raw(info.reg);
+        let datum = match info.subtype {
+            ExprType::Boolean => ConstantDatum::Boolean(raw != 0),
+            ExprType::Double => ConstantDatum::Double(f64::from_bits(raw)),
+            ExprType::Integer => ConstantDatum::Integer(raw as i32),
+            ExprType::Text => {
+                let ptr = DatumPtr::from(raw);
+                ConstantDatum::Text(ptr.resolve_string(&image.constants, &self.heap).to_owned())
+            }
+        };
+        Ok(Some(datum))
+    }
+
+    /// Returns the value of an element in the global array variable `name` at the given
+    /// `subscripts` as a `ConstantDatum`.
+    ///
+    /// Returns `Ok(None)` if the variable is not defined (no image is loaded or the
+    /// variable was not declared).  Returns `Err` if the variable exists but is a scalar
+    /// (use `get_global` instead), or if the subscripts are out of bounds.
+    pub fn get_global_array(
+        &self,
+        name: &str,
+        subscripts: &[i32],
+    ) -> GetGlobalResult<Option<ConstantDatum>> {
+        let key = SymbolKey::from(name);
+        let Some(image) = self.image.as_ref() else {
+            return Ok(None);
+        };
+        let Some(info) = image.debug_info.global_vars.get(&key) else {
+            return Ok(None);
+        };
+        if info.ndims == 0 {
+            return Err(GetGlobalError::IsScalar(name.to_owned()));
+        }
+        let raw = self.context.get_global_reg_raw(info.reg);
+        let ptr = DatumPtr::from(raw);
+        let heap_idx = ptr.heap_index();
+        let HeapDatum::Array(a) = &self.heap[heap_idx] else {
+            panic!("Array variable does not point to an array on the heap");
+        };
+        let flat_idx = a.flat_index(subscripts).map_err(GetGlobalError::SubscriptOutOfBounds)?;
+        let v = a.values[flat_idx];
+        let datum = match info.subtype {
+            ExprType::Boolean => ConstantDatum::Boolean(v != 0),
+            ExprType::Double => ConstantDatum::Double(f64::from_bits(v)),
+            ExprType::Integer => ConstantDatum::Integer(v as i32),
+            ExprType::Text => {
+                let ptr = DatumPtr::from(v);
+                ConstantDatum::Text(ptr.resolve_string(&image.constants, &self.heap).to_owned())
+            }
+        };
+        Ok(Some(datum))
     }
 
     /// Starts or resumes execution of the loaded image.

@@ -84,6 +84,11 @@ where
         self.map.len()
     }
 
+    /// Iterates over all entries, yielding `(key, value, id)` tuples in arbitrary order.
+    pub(super) fn iter(&self) -> impl Iterator<Item = (&K, &V, I)> + '_ {
+        self.map.iter().map(|(k, (v, i))| (k, v, *i))
+    }
+
     /// Returns the keys in insertion order.
     pub(super) fn keys_to_vec(self) -> Vec<K> {
         let mut reverse = self.map.into_iter().collect::<Vec<(K, (V, I))>>();

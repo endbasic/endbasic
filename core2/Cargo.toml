@@ -23,3 +23,8 @@ thiserror = "1.0"
 futures-lite = "2.2"
 tempfile = "3"
 tokio = { version = "1", features = ["full"] }
+
+[[example]]
+name = "core2-config"
+path = "examples/config.rs"
+harness = false

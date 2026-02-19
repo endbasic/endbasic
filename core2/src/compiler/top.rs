@@ -17,18 +17,19 @@
 //! Entry point to the compilation, handling top-level definitions.
 
 use crate::ast::{ArgSep, AssignmentSpan, CallableSpan, EndSpan, ExprType, Statement, VarRef};
-use crate::bytecode::{self, PackedArrayType, RegisterScope};
+use crate::bytecode::{self, PackedArrayType, Register, RegisterScope};
 use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, SingularArgSyntax};
 use crate::compiler::args::{compile_args, define_new_args};
 use crate::compiler::codegen::{Codegen, Fixup};
 use crate::compiler::exprs::{compile_expr, compile_expr_as_type, compile_integer_exprs};
 use crate::compiler::syms::{self, GlobalSymtable, LocalSymtable, SymbolKey, SymbolPrototype};
 use crate::compiler::{Error, Result};
-use crate::image::Image;
+use crate::image::{GlobalVarInfo, Image};
 use crate::mem::ConstantDatum;
 use crate::reader::LineCol;
 use crate::{Callable, CallableMetadataBuilder, parser};
 use std::borrow::Cow;
+use std::cmp::max;
 use std::collections::HashMap;
 use std::io;
 use std::iter::Iterator;
@@ -425,6 +426,141 @@ pub fn only_metadata(
     upcalls
 }
 
+/// Descriptor for a single global variable to be pre-defined before compilation.
+pub struct GlobalDef {
+    /// Name of the variable (case-insensitive, as in EndBASIC).
+    pub name: String,
+
+    /// Kind and type information for the variable.
+    pub kind: GlobalDefKind,
+}
+
+/// Kind of a pre-defined global variable.
+pub enum GlobalDefKind {
+    /// A scalar (non-array) variable with the given element type.
+    ///
+    /// The variable is initialized to its default value: `0` for numeric types and an empty
+    /// string for `Text`.
+    Scalar(ExprType),
+
+    /// A multidimensional array with the given element type and fixed dimension sizes.
+    ///
+    /// Each dimension size must be positive and must fit in a `u16`.
+    Array {
+        /// Element type of the array.
+        subtype: ExprType,
+
+        /// Size of each dimension, in order from outermost to innermost.
+        dimensions: Vec<usize>,
+    },
+}
+
+/// Prepares global variables injected from outside of the compiled program.
+///
+/// Pre-defined scalar globals are initialized to their default values (0 for numeric types,
+/// empty string for text).  Pre-defined array globals are allocated with all elements set to
+/// their default values.  The compiled program may read or write any of these globals.
+///
+/// After execution, use `Vm::get_global*` methods to query the values of these globals (and
+/// any globals declared via `DIM SHARED` in the program itself).
+fn prepare_globals(
+    ctx: &mut Context,
+    symtable: &mut GlobalSymtable,
+    global_defs: &[GlobalDef],
+) -> Result<()> {
+    let preamble_pos = LineCol { line: 0, col: 0 };
+
+    // Register all global defs in the symbol table and collect array globals for the preamble.
+    let mut max_ndims: u8 = 0;
+    let mut array_globals: Vec<(Register, &GlobalDef)> = vec![];
+    for def in global_defs {
+        let key = SymbolKey::from(&def.name);
+        match &def.kind {
+            GlobalDefKind::Array { subtype, dimensions } => {
+                let ndims =
+                    u8::try_from(dimensions.len()).expect("Array must have at most 255 dimensions");
+                let info = syms::ArrayInfo { subtype: *subtype, ndims: usize::from(ndims) };
+                let reg = symtable
+                    .put_global(key, SymbolPrototype::Array(info))
+                    .map_err(|e| Error::from_syms(e, preamble_pos))?;
+                max_ndims = max(max_ndims, ndims);
+                array_globals.push((reg, def));
+            }
+
+            GlobalDefKind::Scalar(etype) => {
+                let reg = symtable
+                    .put_global(key, SymbolPrototype::Scalar(*etype))
+                    .map_err(|e| Error::from_syms(e, preamble_pos))?;
+                ctx.codegen.emit_default(reg, *etype, preamble_pos);
+            }
+        }
+    }
+
+    // Emit the array initialization preamble, but only if any arrays were defined.
+    //
+    // We use a short-lived `ENTER/LEAVE` scope to borrow local registers for the dimension
+    // temporaries without permanently consuming global register slots.
+    if array_globals.is_empty() {
+        return Ok(());
+    }
+    ctx.codegen.emit(bytecode::make_enter(max_ndims), preamble_pos);
+    for (reg, def) in array_globals {
+        let GlobalDefKind::Array { subtype, dimensions } = &def.kind else {
+            unreachable!("array_globals only contains array defs per the loop above")
+        };
+
+        let ndims = u8::try_from(dimensions.len()).unwrap();
+        for (i, &dim) in dimensions.iter().enumerate() {
+            let dim_u16 =
+                u16::try_from(dim).expect("Array dimension must fit in u16 for LOADI instruction");
+            let local_reg =
+                Register::local(u8::try_from(i).unwrap()).expect("Dimension index fits in u8");
+            ctx.codegen.emit(bytecode::make_load_integer(local_reg, dim_u16), preamble_pos);
+        }
+
+        let first_dim_reg = Register::local(0).expect("Local register 0 is always valid");
+        let packed = PackedArrayType::new(*subtype, usize::from(ndims))
+            .map_err(|_| Error::TooManyArrayDimensions(preamble_pos, usize::from(ndims)))?;
+        ctx.codegen.emit(bytecode::make_alloc_array(reg, packed, first_dim_reg), preamble_pos);
+    }
+    ctx.codegen.emit(bytecode::make_leave(), preamble_pos);
+
+    Ok(())
+}
+
+/// Compiles the `input` into an `Image` that can be executed by the VM, with `global_defs`
+/// pre-defined as global variables visible to the compiled program.
+///
+/// `upcalls` contains the metadata of all built-in callables that the compiled code can use.
+pub fn compile_with_globals(
+    input: &mut dyn io::Read,
+    upcalls: &HashMap<&SymbolKey, &CallableMetadata>,
+    global_defs: &[GlobalDef],
+) -> Result<Image> {
+    let mut ctx = Context::default();
+
+    let mut symtable = GlobalSymtable::new(upcalls);
+
+    prepare_globals(&mut ctx, &mut symtable, global_defs)?;
+
+    let program_end = Statement::End(EndSpan { code: None, pos: LineCol { line: 0, col: 0 } });
+    compile_scope(&mut ctx, symtable.enter_scope(), parser::parse(input).chain([Ok(program_end)]))?;
+
+    compile_user_callables(&mut ctx, &mut symtable)?;
+
+    let global_vars = symtable
+        .iter_globals()
+        .map(|(key, proto, reg)| {
+            let (subtype, ndims) = match proto {
+                SymbolPrototype::Array(info) => (info.subtype, info.ndims),
+                SymbolPrototype::Scalar(etype) => (etype, 0),
+            };
+            (key.clone(), GlobalVarInfo { reg, subtype, ndims })
+        })
+        .collect();
+    ctx.codegen.build_image(global_vars)
+}
+
 /// Compiles the `input` into an `Image` that can be executed by the VM.
 ///
 /// `upcalls` contains the metadata of all built-in callables that the compiled code can use.
@@ -432,14 +568,5 @@ pub fn compile(
     input: &mut dyn io::Read,
     upcalls: &HashMap<&SymbolKey, &CallableMetadata>,
 ) -> Result<Image> {
-    let mut ctx = Context::default();
-
-    let mut symtable = GlobalSymtable::new(upcalls);
-
-    let program_end = Statement::End(EndSpan { code: None, pos: LineCol { line: 0, col: 0 } });
-    compile_scope(&mut ctx, symtable.enter_scope(), parser::parse(input).chain([Ok(program_end)]))?;
-
-    compile_user_callables(&mut ctx, &mut symtable)?;
-
-    ctx.codegen.build_image()
+    compile_with_globals(input, upcalls, &[])
 }

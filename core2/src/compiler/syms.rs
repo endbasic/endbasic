@@ -187,6 +187,13 @@ impl<'uref, 'ukey, 'umd> GlobalSymtable<'uref, 'ukey, 'umd> {
         self.globals.get(key).is_some()
     }
 
+    /// Iterates over all global variables, yielding `(key, prototype, register_index)` tuples.
+    pub(crate) fn iter_globals(
+        &self,
+    ) -> impl Iterator<Item = (&SymbolKey, SymbolPrototype, u8)> + '_ {
+        self.globals.iter().map(|(k, v, i)| (k, *v, i))
+    }
+
     /// Defines a new user-defined `vref` callable with `md` metadata.
     pub(crate) fn define_user_callable(
         &mut self,

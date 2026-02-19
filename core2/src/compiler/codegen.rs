@@ -20,7 +20,7 @@ use crate::ast::ExprType;
 use crate::bytecode::{self, Register};
 use crate::compiler::ids::HashMapWithIds;
 use crate::compiler::{Error, Result, SymbolKey};
-use crate::image::{DebugInfo, Image};
+use crate::image::{DebugInfo, GlobalVarInfo, Image};
 use crate::mem::ConstantDatum;
 use crate::reader::LineCol;
 use std::collections::HashMap;
@@ -174,7 +174,10 @@ impl Codegen {
     }
 
     /// Consumes the code generator and builds a ready-to-use `Image`.
-    pub(super) fn build_image(mut self) -> Result<Image> {
+    pub(super) fn build_image(
+        mut self,
+        global_vars: HashMap<SymbolKey, GlobalVarInfo>,
+    ) -> Result<Image> {
         self.apply_fixups()?;
 
         let mut callables = HashMap::default();
@@ -187,7 +190,7 @@ impl Codegen {
             self.code,
             self.upcalls.keys_to_vec(),
             self.constants.keys_to_vec(),
-            DebugInfo { instr_linecols: self.instr_linecols, callables },
+            DebugInfo { instr_linecols: self.instr_linecols, callables, global_vars },
         ))
     }
 }

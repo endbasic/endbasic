@@ -121,6 +121,13 @@ impl Context {
         DatumPtr::from(raw_addr).resolve_string(constants, heap)
     }
 
+    /// Returns the raw `u64` value stored in global register `index`.
+    ///
+    /// Used by the VM's `get_global_*` methods to read global variable values after execution.
+    pub(super) fn get_global_reg_raw(&self, index: u8) -> u64 {
+        self.regs[usize::from(index)]
+    }
+
     /// Resolves array subscripts and computes the flat index for `arr_reg` with subscripts read
     /// from registers starting at `first_sub_reg`.
     ///
@@ -199,6 +206,7 @@ impl Context {
                 Opcode::Gosub => self.do_gosub(instr),
                 Opcode::IntegerToDouble => self.do_integer_to_double(instr),
                 Opcode::Jump => self.do_jump(instr),
+                Opcode::Leave => self.do_leave(instr),
                 Opcode::LoadArray => self.do_load_array(instr, heap),
                 Opcode::LoadConstant => self.do_load_constant(instr, &image.constants),
                 Opcode::LoadInteger => self.do_load_integer(instr),
@@ -362,6 +370,13 @@ impl Context {
     pub(super) fn do_jump(&mut self, instr: u32) {
         let offset = bytecode::parse_jump(instr);
         self.pc = Address::from(offset);
+    }
+
+    /// Implements the `Leave` opcode.
+    pub(super) fn do_leave(&mut self, instr: u32) {
+        bytecode::parse_leave(instr);
+        self.regs.truncate(self.fp);
+        self.pc += 1;
     }
 
     /// Implements the `LoadArray` opcode.
