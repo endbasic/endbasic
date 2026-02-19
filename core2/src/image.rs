@@ -67,11 +67,23 @@ pub(crate) struct GlobalVarInfo {
     pub(crate) ndims: usize,
 }
 
+/// Per-instruction metadata stored in `DebugInfo`.
+pub(crate) struct InstrMetadata {
+    /// Source location that generated this instruction.
+    pub(crate) linecol: LineCol,
+
+    /// Source locations of the call arguments, if this is a UPCALL instruction.
+    ///
+    /// Each entry corresponds to one register slot in the argument area, in the same order
+    /// that `compile_args` allocates them.  Empty for all other instruction types.
+    pub(crate) arg_linecols: Vec<LineCol>,
+}
+
 /// Debugging information for a compiled program.
 #[derive(Default)]
 pub struct DebugInfo {
-    /// Maps each instruction index to its source location (line and column).
-    pub(crate) instr_linecols: Vec<LineCol>,
+    /// Per-instruction metadata, one entry per instruction in the image's code.
+    pub(crate) instrs: Vec<InstrMetadata>,
 
     /// Maps instruction addresses to the names of user-defined callables that start at those
     /// addresses.
@@ -116,7 +128,10 @@ impl Default for Image {
             vec![],
             vec![],
             DebugInfo {
-                instr_linecols: vec![LineCol { line: 0, col: 0 }],
+                instrs: vec![InstrMetadata {
+                    linecol: LineCol { line: 0, col: 0 },
+                    arg_linecols: vec![],
+                }],
                 callables: HashMap::default(),
                 global_vars: HashMap::default(),
             },
@@ -132,7 +147,7 @@ impl Image {
         debug_info: DebugInfo,
     ) -> Self {
         debug_assert!(!code.is_empty(), "Compiler must ensure the image is not empty");
-        debug_assert_eq!(code.len(), debug_info.instr_linecols.len());
+        debug_assert_eq!(code.len(), debug_info.instrs.len());
         Self { code, upcalls, constants, debug_info, _internal: () }
     }
 
@@ -140,13 +155,10 @@ impl Image {
     pub fn disasm(&self) -> Vec<String> {
         let mut lines = Vec::with_capacity(self.code.len());
 
-        for ((i, instr), pos) in self
-            .code
-            .iter()
-            .copied()
-            .enumerate()
-            .zip(self.debug_info.instr_linecols.iter().copied())
+        for ((i, instr), meta) in
+            self.code.iter().copied().enumerate().zip(self.debug_info.instrs.iter())
         {
+            let pos = meta.linecol;
             if let Some(key) = self.debug_info.callables.get(&i) {
                 lines.push("".to_owned());
                 lines.push(format!("-- {} ", key));

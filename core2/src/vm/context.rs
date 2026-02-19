@@ -22,6 +22,7 @@ use crate::bytecode::{self, Opcode, Register, TaggedRegisterRef, opcode_of};
 use crate::image::Image;
 use crate::mem::{ArrayData, ConstantDatum, DatumPtr, HeapDatum};
 use crate::num::unchecked_usize_as_u8;
+use crate::reader::LineCol;
 
 /// Alias for the type representing a program address.
 type Address = usize;
@@ -35,7 +36,9 @@ pub(super) enum InternalStopReason {
     Exception(Address, String),
 
     /// Execution stopped due to an upcall that requires service from the caller.
-    Upcall(u16, Register),
+    ///
+    /// The fields are: upcall index, first argument register, and the PC of the UPCALL instruction.
+    Upcall(u16, Register, Address),
 }
 
 /// Represents a call frame in the stack.
@@ -176,12 +179,13 @@ impl Context {
         reg: Register,
         constants: &'a [ConstantDatum],
         heap: &'a mut Vec<HeapDatum>,
+        arg_linecols: &'a [LineCol],
     ) -> Scope<'a> {
         let (is_global, index) = reg.to_parts();
         assert!(!is_global);
         let index = usize::from(index);
 
-        Scope { regs: &mut self.regs, constants, heap, fp: self.fp + index }
+        Scope { regs: &mut self.regs, constants, heap, fp: self.fp + index, arg_linecols }
     }
 
     /// Starts or resumes execution of `image`.
@@ -496,7 +500,8 @@ impl Context {
     /// Implements the `Upcall` opcode.
     pub(super) fn do_upcall(&mut self, instr: u32) {
         let (index, first_reg) = bytecode::parse_upcall(instr);
-        self.stop = Some(InternalStopReason::Upcall(index, first_reg));
+        let upcall_pc = self.pc;
         self.pc += 1;
+        self.stop = Some(InternalStopReason::Upcall(index, first_reg, upcall_pc));
     }
 }

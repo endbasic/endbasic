@@ -238,12 +238,17 @@ pub(super) fn compile_args(
     md: CallableMetadata,
     symtable: &mut TempSymtable<'_, '_, '_, '_, '_>,
     codegen: &mut Codegen,
-) -> Result<Register> {
+) -> Result<(Register, Vec<LineCol>)> {
     let key_pos = span.vref_pos;
 
     let syntax = find_syntax(&md, key_pos, span.args.len())?;
 
     let mut scope = symtable.temp_scope();
+
+    // Collects the source position for each register slot allocated below, in allocation order.
+    // This is used to populate the UPCALL instruction's arg_linecols metadata so that callables
+    // can query the source position of any argument via `Scope::get_pos`.
+    let mut arg_linecols: Vec<LineCol> = Vec::new();
 
     let input_nargs = span.args.len();
     let mut arg_iter = span.args.into_iter().peekable();
@@ -259,6 +264,7 @@ pub(super) fn compile_args(
                     None => return Err(Error::CallableSyntax(key_pos, md)),
                     Some(expr) => {
                         let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        arg_linecols.push(arg_pos);
                         compile_expr_as_type(codegen, symtable, temp_value, expr, details.vtype)?;
                         validate_syn_argsep(&md, arg_pos, exp_sep, arg_iter.peek().is_none(), sep)?;
                     }
@@ -287,6 +293,7 @@ pub(super) fn compile_args(
                             Err(e) => return Err(Error::from_syms(e, span.pos)),
                         };
                         let temp = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        arg_linecols.push(arg_pos);
                         codegen.emit(bytecode::make_load_register_ptr(temp, vtype, reg), arg_pos);
                         validate_syn_argsep(&md, arg_pos, exp_sep, arg_iter.peek().is_none(), sep)?;
                     }
@@ -306,10 +313,12 @@ pub(super) fn compile_args(
                 let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
 
                 let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                arg_linecols.push(arg_pos);
                 let tag = match expr {
                     None => bytecode::VarArgTag::Missing(sep),
                     Some(expr) => {
                         let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        arg_linecols.push(arg_pos);
                         compile_expr_as_type(codegen, symtable, temp_value, expr, details.vtype)?;
                         bytecode::VarArgTag::Immediate(sep, details.vtype)
                     }
@@ -335,10 +344,12 @@ pub(super) fn compile_args(
                 let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
 
                 let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                arg_linecols.push(arg_pos);
                 let tag = match expr {
                     None => bytecode::VarArgTag::Missing(sep),
                     Some(expr) => {
                         let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        arg_linecols.push(arg_pos);
                         let etype = compile_expr(codegen, symtable, temp_value, expr)?;
                         bytecode::VarArgTag::Immediate(sep, etype)
                     }
@@ -371,6 +382,7 @@ pub(super) fn compile_args(
 
             let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
             let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+            arg_linecols.push(arg_pos);
 
             let tag = match expr {
                 None => {
@@ -383,12 +395,14 @@ pub(super) fn compile_args(
                 Some(expr) => match syn.type_syn {
                     RepeatedTypeSyntax::AnyValue => {
                         let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        arg_linecols.push(arg_pos);
                         let etype = compile_expr(codegen, symtable, temp_value, expr)?;
                         bytecode::VarArgTag::Immediate(sep, etype)
                     }
 
                     RepeatedTypeSyntax::TypedValue(vtype) => {
                         let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        arg_linecols.push(arg_pos);
                         compile_expr_as_type(codegen, symtable, temp_value, expr, vtype)?;
                         bytecode::VarArgTag::Immediate(sep, vtype)
                     }
@@ -409,6 +423,7 @@ pub(super) fn compile_args(
                             Err(e) => return Err(Error::from_syms(e, span.pos)),
                         };
                         let temp = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        arg_linecols.push(arg_pos);
                         codegen.emit(bytecode::make_load_register_ptr(temp, vtype, reg), arg_pos);
                         bytecode::VarArgTag::Pointer(sep)
                     }
@@ -423,5 +438,6 @@ pub(super) fn compile_args(
         return Err(Error::CallableSyntax(key_pos, md));
     }
 
-    scope.first().map_err(|e| Error::from_syms(e, key_pos))
+    let first_reg = scope.first().map_err(|e| Error::from_syms(e, key_pos))?;
+    Ok((first_reg, arg_linecols))
 }
