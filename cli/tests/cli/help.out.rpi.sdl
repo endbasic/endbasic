@@ -5,6 +5,8 @@ Options:
         --version       show version information and exit
         --console CONSOLE-SPEC
                         type and properties of the console to use
+        --gpio-pins GPIO-PINS-SPEC
+                        GPIO pins backend to use
     -i, --interactive   force interactive mode when running a script
         --local-drive URI
                         location of the drive to mount as LOCAL
@@ -26,6 +28,11 @@ CONSOLE-SPEC can be one of the following:
                         with the settings in SPEC, which is of the form:
                         fg_color=COLOR,bg_color=COLOR,font=NAME
     text                enables the text-based console
+
+GPIO-PINS-SPEC can be one of the following:
+    mock                mock backend for testing
+    noop                dummy backend that always returns errors
+    rppal               uses the Raspberry Pi GPIO hardware
 
 Report bugs to: https://github.com/endbasic/endbasic/issues
 EndBASIC home page: https://www.endbasic.dev/

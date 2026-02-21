@@ -17,6 +17,7 @@
 
 use endbasic_std::gpio::{Pin, PinMode, Pins};
 use rppal::gpio;
+use std::any::Any;
 use std::collections::HashMap;
 use std::io;
 
@@ -54,6 +55,14 @@ impl RppalPins {
 }
 
 impl Pins for RppalPins {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn setup(&mut self, pin: Pin, mode: PinMode) -> io::Result<()> {
         self.clear(pin)?;
         let chip = self.get_chip()?;

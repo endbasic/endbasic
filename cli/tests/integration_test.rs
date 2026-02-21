@@ -360,7 +360,12 @@ fn test_example_fibonacci() {
 fn test_example_gpio() {
     check(
         bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/examples/gpio.bas")],
+        &[
+            "--gpio-pins=mock",
+            "--local-drive=memory://",
+            "--interactive",
+            &src_str("cli/tests/examples/gpio.bas"),
+        ],
         0,
         Behavior::File(src_path("cli/tests/examples/gpio.in")),
         Behavior::File(src_path("cli/tests/examples/gpio.out")),

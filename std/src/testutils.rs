@@ -396,11 +396,9 @@ impl Default for Tester {
         let console = Rc::from(RefCell::from(MockConsole::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
 
-        // Default to the pins set that always returns errors.  We could have implemented a set of
-        // fake pins here to track GPIO state changes in a nicer way, similar to how we track all
-        // other machine state... but the GPIO module already implements its own mocking feature.
-        // The mocking feature is necessary for integration testing in any case, so we just use that
-        // everywhere instead of having yet another implementation in this module.
+        // Default to the no-op pins that always return errors.  GPIO unit tests use MockPins
+        // directly via `make_mock_machine` to validate operation; this Tester wiring is only used
+        // for the error-path tests that go through the real (NoopPins) backend.
         let gpio_pins = Rc::from(RefCell::from(gpio::NoopPins::default()));
 
         let mut builder = crate::MachineBuilder::default()
