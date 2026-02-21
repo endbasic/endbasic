@@ -274,13 +274,7 @@ impl Symbols {
     pub fn clear(&mut self) {
         fn filter(key: &SymbolKey, symbol: &mut Symbol) -> bool {
             let is_internal = key.0.starts_with(|c: char| c.is_ascii_digit());
-
-            // TODO(jmmv): Preserving symbols that start with __ is a hack that was added to support
-            // the already-existing GPIO tests when RUN was changed to issue a CLEAR upfront.  This
-            // is undocumented behavior and we should find a nicer way to do this.
-            let is_gpio_hack = key.0.starts_with("__");
-
-            is_internal || is_gpio_hack || !symbol.user_defined()
+            is_internal || !symbol.user_defined()
         }
 
         self.globals.retain(filter);
@@ -832,26 +826,26 @@ mod tests {
             .add_callable(OutCommand::new(Rc::from(RefCell::from(vec![]))))
             .add_callable(SumFunction::new())
             .add_var("SOMEVAR", Value::Boolean(true))
-            .add_var("__SYSTEM_VAR", Value::Integer(42))
+            .add_var("__OLD_STYLE_PRIVATE_VAR", Value::Integer(42))
             .add_global_var("GLOBAL_VAR", Value::Integer(43))
-            .add_global_var("__GLOBAL_SYSTEM_VAR", Value::Integer(44))
+            .add_global_var("__GLOBAL_OLD_STYLE_PRIVATE_VAR", Value::Integer(44))
             .build();
 
         assert!(syms.get(&VarRef::new("SOMEARRAY", None)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("OUT", None)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SUM", None)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SOMEVAR", None)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("__SYSTEM_VAR", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("__OLD_STYLE_PRIVATE_VAR", None)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("GLOBAL_VAR", None)).unwrap().is_some());
-        assert!(syms.get(&VarRef::new("__GLOBAL_SYSTEM_VAR", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("__GLOBAL_OLD_STYLE_PRIVATE_VAR", None)).unwrap().is_some());
         syms.clear();
         assert!(syms.get(&VarRef::new("SOMEARRAY", None)).unwrap().is_none());
         assert!(syms.get(&VarRef::new("OUT", None)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SUM", None)).unwrap().is_some());
         assert!(syms.get(&VarRef::new("SOMEVAR", None)).unwrap().is_none());
-        assert!(syms.get(&VarRef::new("__SYSTEM_VAR", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("__OLD_STYLE_PRIVATE_VAR", None)).unwrap().is_none());
         assert!(syms.get(&VarRef::new("GLOBAL_VAR", None)).unwrap().is_none());
-        assert!(syms.get(&VarRef::new("__GLOBAL_SYSTEM_VAR", None)).unwrap().is_some());
+        assert!(syms.get(&VarRef::new("__GLOBAL_OLD_STYLE_PRIVATE_VAR", None)).unwrap().is_none());
     }
 
     #[test]

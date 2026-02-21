@@ -19,6 +19,7 @@ use anyhow::{Result, anyhow};
 use async_channel::Sender;
 use endbasic_core::exec::Signal;
 use endbasic_std::console::{Console, ConsoleSpec};
+use endbasic_std::gpio;
 use endbasic_std::storage::Storage;
 use getoptsargs::prelude::*;
 use std::cell::RefCell;
@@ -62,31 +63,49 @@ fn app_extra_help(o: &mut dyn io::Write) -> io::Result<()> {
         writeln!(o, "                        fg_color=COLOR,bg_color=COLOR,font=NAME")?;
     }
     writeln!(o, "    text                enables the text-based console")?;
+    writeln!(o)?;
+    writeln!(o, "GPIO-PINS-SPEC can be one of the following:")?;
+    writeln!(o, "    mock                mock backend for testing")?;
+    writeln!(o, "    noop                dummy backend that always returns errors")?;
+    if cfg!(feature = "rpi") {
+        writeln!(o, "    rppal               uses the Raspberry Pi GPIO hardware")?;
+    }
     Ok(())
 }
 
+/// Creates the rppal GPIO backend when the rpi feature is compiled in.
+#[cfg(feature = "rpi")]
+fn setup_gpio_pins_rppal() -> Result<Rc<RefCell<dyn gpio::Pins>>> {
+    Ok(Rc::new(RefCell::new(endbasic_rpi::RppalPins::default())))
+}
+
+/// Errors out for rppal when the rpi feature is not compiled in.
+#[cfg(not(feature = "rpi"))]
+fn setup_gpio_pins_rppal() -> Result<Rc<RefCell<dyn gpio::Pins>>> {
+    Err(UsageError::new("--gpio-pins=rppal requires the rpi feature to be compiled in").into())
+}
+
+/// Parses the `--gpio-pins` flag value and constructs the pins backend.
+fn setup_gpio_pins(spec: Option<&str>) -> Result<Rc<RefCell<dyn gpio::Pins>>> {
+    let spec = if cfg!(feature = "rpi") { spec.unwrap_or("rppal") } else { spec.unwrap_or("noop") };
+    match spec {
+        "mock" => Ok(Rc::new(RefCell::new(gpio::MockPins::default()))),
+        "noop" => Ok(Rc::new(RefCell::new(gpio::NoopPins::default()))),
+        "rppal" => setup_gpio_pins_rppal(),
+        other => Err(UsageError::new(format!("Unknown --gpio-pins backend: {}", other)).into()),
+    }
+}
+
 /// Creates a new EndBASIC machine builder based on the features enabled in this crate.
-fn new_machine_builder(console_spec: Option<&str>) -> io::Result<endbasic_std::MachineBuilder> {
-    /// Obtains the default set of pins for a Raspberry Pi.
-    #[cfg(feature = "rpi")]
-    fn add_gpio_pins(builder: endbasic_std::MachineBuilder) -> endbasic_std::MachineBuilder {
-        // TODO(jmmv): If st7735s is in use, this basically creates a secondary set of pins.
-        // Which... should work OK, but then the user can interfere with the display in ways that
-        // should not be allowed, probably.
-        builder.with_gpio_pins(Rc::from(RefCell::from(endbasic_rpi::RppalPins::default())))
-    }
-
-    /// Obtains the default set of pins for a platform without GPIO support.
-    #[cfg(not(feature = "rpi"))]
-    fn add_gpio_pins(builder: endbasic_std::MachineBuilder) -> endbasic_std::MachineBuilder {
-        builder
-    }
-
+fn new_machine_builder(
+    console_spec: Option<&str>,
+    gpio_pins_spec: Option<&str>,
+) -> Result<endbasic_std::MachineBuilder> {
     let signals_chan = async_channel::unbounded();
     let mut builder = endbasic_std::MachineBuilder::default();
     builder = builder.with_console(setup_console(console_spec, signals_chan.0.clone())?);
     builder = builder.with_signals_chan(signals_chan);
-    builder = add_gpio_pins(builder);
+    builder = builder.with_gpio_pins(setup_gpio_pins(gpio_pins_spec)?);
     Ok(builder)
 }
 
@@ -242,10 +261,11 @@ pub fn setup_storage(storage: &mut Storage, local_drive_spec: &str) -> io::Resul
 /// `service_url` is the base URL of the cloud service.
 async fn run_repl_loop(
     console_spec: Option<&str>,
+    gpio_pins_spec: Option<&str>,
     local_drive_spec: &str,
     service_url: &str,
 ) -> Result<i32> {
-    let mut builder = make_interactive(new_machine_builder(console_spec)?);
+    let mut builder = make_interactive(new_machine_builder(console_spec, gpio_pins_spec)?);
 
     let console = builder.get_console();
     let program = builder.get_program();
@@ -260,8 +280,13 @@ async fn run_repl_loop(
 }
 
 /// Executes the `path` program in a fresh machine.
-async fn run_script<P: AsRef<Path>>(path: P, console_spec: Option<&str>) -> Result<i32> {
-    let mut machine = new_machine_builder(console_spec)?.build()?;
+async fn run_script<P: AsRef<Path>>(
+    path: P,
+    console_spec: Option<&str>,
+    gpio_pins_spec: Option<&str>,
+) -> Result<i32> {
+    let builder = new_machine_builder(console_spec, gpio_pins_spec)?;
+    let mut machine = builder.build()?;
     let mut input = File::open(path)?;
     Ok(machine.exec(&mut input).await?.as_exit_code())
 }
@@ -277,10 +302,11 @@ async fn run_script<P: AsRef<Path>>(path: P, console_spec: Option<&str>) -> Resu
 async fn run_interactive(
     path: &str,
     console_spec: Option<&str>,
+    gpio_pins_spec: Option<&str>,
     local_drive_spec: &str,
     service_url: &str,
 ) -> Result<i32> {
-    let mut builder = make_interactive(new_machine_builder(console_spec)?);
+    let mut builder = make_interactive(new_machine_builder(console_spec, gpio_pins_spec)?);
 
     let console = builder.get_console();
     let program = builder.get_program();
@@ -317,6 +343,7 @@ fn app_build(builder: Builder) -> Builder {
         .homepage("https://www.endbasic.dev/")
         .bugs("https://github.com/endbasic/endbasic/issues")
         .optopt("", "console", "type and properties of the console to use", "CONSOLE-SPEC")
+        .optopt("", "gpio-pins", "GPIO pins backend to use", "GPIO-PINS-SPEC")
         .optflag("i", "interactive", "force interactive mode when running a script")
         .optopt("", "local-drive", "location of the drive to mount as LOCAL", "URI")
         .optopt("", "service-url", "base URL of the cloud service", "URL")
@@ -327,6 +354,8 @@ fn app_build(builder: Builder) -> Builder {
 async fn app_main(matches: Matches) -> Result<i32> {
     let console_spec = matches.opt_str("console");
 
+    let gpio_pins_spec = matches.opt_str("gpio-pins");
+
     let service_url = matches
         .opt_str("service-url")
         .unwrap_or_else(|| endbasic_client::PROD_API_ADDRESS.to_owned());
@@ -334,15 +363,27 @@ async fn app_main(matches: Matches) -> Result<i32> {
     match matches.arg_trail() {
         [] => {
             let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
-            Ok(run_repl_loop(console_spec.as_deref(), &local_drive, &service_url).await?)
+            Ok(run_repl_loop(
+                console_spec.as_deref(),
+                gpio_pins_spec.as_deref(),
+                &local_drive,
+                &service_url,
+            )
+            .await?)
         }
         [file] => {
             if matches.opt_present("interactive") {
                 let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
-                Ok(run_interactive(file, console_spec.as_deref(), &local_drive, &service_url)
-                    .await?)
+                Ok(run_interactive(
+                    file,
+                    console_spec.as_deref(),
+                    gpio_pins_spec.as_deref(),
+                    &local_drive,
+                    &service_url,
+                )
+                .await?)
             } else {
-                Ok(run_script(file, console_spec.as_deref()).await?)
+                Ok(run_script(file, console_spec.as_deref(), gpio_pins_spec.as_deref()).await?)
             }
         }
         [_, ..] => Err(UsageError::new("Too many arguments").into()),

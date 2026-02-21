@@ -17,17 +17,13 @@
 
 LOAD "DEMOS:/GPIO.BAS"
 
-DIM __GPIO_MOCK_DATA(20) AS INTEGER
-__GPIO_MOCK_DATA(3) = 811 ' Return high for pin 8 (button).
-__GPIO_MOCK_DATA(4) = 811 ' Return high for pin 8 (button).
-__GPIO_MOCK_DATA(5) = 810 ' Return low for pin 8 (button).
-__GPIO_MOCK_LAST = 0
+GPIO_MOCK_INJECT 8, TRUE
+GPIO_MOCK_INJECT 8, TRUE
+GPIO_MOCK_INJECT 8, FALSE
 
 RUN
 
 PRINT "Dumping GPIO trace..."
-FOR i = 0 TO __GPIO_MOCK_LAST - 1
-    PRINT "__GPIO_MOCK_DATA", i, __GPIO_MOCK_DATA(i)
-NEXT
+PRINT GPIO_MOCK_TRACE$
 
 DISASM

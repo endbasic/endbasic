@@ -21,13 +21,14 @@ use endbasic_core::ast::{ArgSep, ExprType};
 use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
 use endbasic_core::exec::{Clearable, Error, Machine, Result, Scope};
 use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder, Symbols};
+use std::any::Any;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
 
 mod fakes;
-pub(crate) use fakes::{MockPins, NoopPins};
+pub use fakes::{MockPins, NoopPins};
 
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "Hardware interface
@@ -83,6 +84,12 @@ impl PinMode {
 
 /// Generic abstraction over a GPIO chip to back all EndBASIC commands.
 pub trait Pins {
+    /// Returns `self` as `&dyn Any` to allow downcasting to a concrete type.
+    fn as_any(&self) -> &dyn Any;
+
+    /// Returns `self` as `&mut dyn Any` to allow downcasting to a concrete type.
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+
     /// Configures the `pin` as either input or output (per `mode`).
     ///
     /// This lazily initialies the GPIO chip as well on the first pin setup.
@@ -116,11 +123,8 @@ impl PinsClearable {
 }
 
 impl Clearable for PinsClearable {
-    fn reset_state(&self, syms: &mut Symbols) {
-        let _ = match MockPins::try_new(syms) {
-            Some(mut pins) => pins.clear_all(),
-            None => self.pins.borrow_mut().clear_all(),
-        };
+    fn reset_state(&self, _syms: &mut Symbols) {
+        let _ = self.pins.borrow_mut().clear_all();
     }
 }
 
@@ -177,7 +181,7 @@ impl Callable for GpioSetupCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(2, scope.nargs());
         let pin = {
             let (i, pos) = scope.pop_integer_with_pos();
@@ -188,10 +192,7 @@ impl Callable for GpioSetupCommand {
             PinMode::parse(&t, pos)?
         };
 
-        match MockPins::try_new(machine.get_mut_symbols()) {
-            Some(mut pins) => pins.setup(pin, mode).map_err(|e| scope.io_error(e))?,
-            None => self.pins.borrow_mut().setup(pin, mode).map_err(|e| scope.io_error(e))?,
-        };
+        self.pins.borrow_mut().setup(pin, mode).map_err(|e| scope.io_error(e))?;
         Ok(())
     }
 }
@@ -239,12 +240,9 @@ impl Callable for GpioClearCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         if scope.nargs() == 0 {
-            match MockPins::try_new(machine.get_mut_symbols()) {
-                Some(mut pins) => pins.clear_all().map_err(|e| scope.io_error(e))?,
-                None => self.pins.borrow_mut().clear_all().map_err(|e| scope.io_error(e))?,
-            };
+            self.pins.borrow_mut().clear_all().map_err(|e| scope.io_error(e))?;
         } else {
             debug_assert_eq!(1, scope.nargs());
             let pin = {
@@ -252,10 +250,7 @@ impl Callable for GpioClearCommand {
                 Pin::from_i32(i, pos)?
             };
 
-            match MockPins::try_new(machine.get_mut_symbols()) {
-                Some(mut pins) => pins.clear(pin).map_err(|e| scope.io_error(e))?,
-                None => self.pins.borrow_mut().clear(pin).map_err(|e| scope.io_error(e))?,
-            };
+            self.pins.borrow_mut().clear(pin).map_err(|e| scope.io_error(e))?;
         }
 
         Ok(())
@@ -301,17 +296,14 @@ impl Callable for GpioReadFunction {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(1, scope.nargs());
         let pin = {
             let (i, pos) = scope.pop_integer_with_pos();
             Pin::from_i32(i, pos)?
         };
 
-        let value = match MockPins::try_new(machine.get_mut_symbols()) {
-            Some(mut pins) => pins.read(pin).map_err(|e| scope.io_error(e))?,
-            None => self.pins.borrow_mut().read(pin).map_err(|e| scope.io_error(e))?,
-        };
+        let value = self.pins.borrow_mut().read(pin).map_err(|e| scope.io_error(e))?;
         scope.return_boolean(value)
     }
 }
@@ -363,7 +355,7 @@ impl Callable for GpioWriteCommand {
         &self.metadata
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
         debug_assert_eq!(2, scope.nargs());
         let pin = {
             let (i, pos) = scope.pop_integer_with_pos();
@@ -371,16 +363,126 @@ impl Callable for GpioWriteCommand {
         };
         let value = scope.pop_boolean();
 
-        match MockPins::try_new(machine.get_mut_symbols()) {
-            Some(mut pins) => pins.write(pin, value).map_err(|e| scope.io_error(e))?,
-            None => self.pins.borrow_mut().write(pin, value).map_err(|e| scope.io_error(e))?,
-        };
+        self.pins.borrow_mut().write(pin, value).map_err(|e| scope.io_error(e))?;
         Ok(())
+    }
+}
+
+/// The `GPIO_MOCK_INJECT` command.
+pub struct GpioMockInjectCommand {
+    metadata: CallableMetadata,
+    pins: Rc<RefCell<dyn Pins>>,
+}
+
+impl GpioMockInjectCommand {
+    /// Creates a new instance of the command.
+    pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GPIO_MOCK_INJECT")
+                .with_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("pin"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("high"),
+                                vtype: ExprType::Boolean,
+                            },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Pre-seeds a GPIO_READ result for testing.
+This command is only available when EndBASIC is started with --gpio-pins=mock.  It pre-seeds \
+the next GPIO_READ call for the given pin% to return the given high? value.",
+                )
+                .build(),
+            pins,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Callable for GpioMockInjectCommand {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+        debug_assert_eq!(2, scope.nargs());
+        let pin = {
+            let (i, pos) = scope.pop_integer_with_pos();
+            Pin::from_i32(i, pos)?
+        };
+        let high = scope.pop_boolean();
+
+        self.pins
+            .borrow_mut()
+            .as_any_mut()
+            .downcast_mut::<MockPins>()
+            .expect("Only registered for mock backend")
+            .inject_read(pin, high);
+        Ok(())
+    }
+}
+
+/// The `GPIO_MOCK_TRACE` function.
+pub struct GpioMockTraceFunction {
+    metadata: CallableMetadata,
+    pins: Rc<RefCell<dyn Pins>>,
+}
+
+impl GpioMockTraceFunction {
+    /// Creates a new instance of the function.
+    pub fn new(pins: Rc<RefCell<dyn Pins>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GPIO_MOCK_TRACE")
+                .with_return_type(ExprType::Text)
+                .with_syntax(&[(&[], None)])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns the GPIO operation trace for testing.
+This function is only available when EndBASIC is started with --gpio-pins=mock.  It returns a \
+space-separated list of integers representing the ordered record of all GPIO operations \
+performed since the last reset.",
+                )
+                .build(),
+            pins,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Callable for GpioMockTraceFunction {
+    fn metadata(&self) -> &CallableMetadata {
+        &self.metadata
+    }
+
+    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+        debug_assert_eq!(0, scope.nargs());
+        let pins = self.pins.borrow();
+        let mock =
+            pins.as_any().downcast_ref::<MockPins>().expect("Only registered for mock backend");
+        let result = mock.trace().iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" ");
+        scope.return_string(result)
     }
 }
 
 /// Adds all symbols provided by this module to the given `machine`.
 pub fn add_all(machine: &mut Machine, pins: Rc<RefCell<dyn Pins>>) {
+    if pins.borrow().as_any().downcast_ref::<MockPins>().is_some() {
+        machine.add_callable(GpioMockInjectCommand::new(pins.clone()));
+        machine.add_callable(GpioMockTraceFunction::new(pins.clone()));
+    }
+
     machine.add_clearable(PinsClearable::new(pins.clone()));
     machine.add_callable(GpioClearCommand::new(pins.clone()));
     machine.add_callable(GpioReadFunction::new(pins.clone()));
@@ -392,7 +494,7 @@ pub fn add_all(machine: &mut Machine, pins: Rc<RefCell<dyn Pins>>) {
 mod tests {
     use super::*;
     use crate::testutils::*;
-    use endbasic_core::ast::Value;
+    use futures_lite::future::block_on;
 
     /// Common checks for pin number validation.
     ///
@@ -414,48 +516,29 @@ mod tests {
         );
     }
 
-    /// Does a GPIO test using the mocking feature, running the commands in `code` and expecting
-    /// that the `__GPIO_MOCK_DATA` array contains `trace` after completion.
-    ///
-    /// Sets all `vars` before evaluating the expression so that the expression can contain variable
-    /// references.
-    fn do_mock_test_with_vars<S: Into<String>, VS: Into<Vec<(&'static str, Value)>>>(
-        code: S,
-        trace: &[i32],
-        vars: VS,
-    ) {
-        let code = code.into();
-        let vars = vars.into();
-
-        let mut exp_data = vec![Value::Integer(0); 50];
-        for (i, d) in trace.iter().enumerate() {
-            exp_data[i] = Value::Integer(*d);
+    /// Creates a machine backed by `MockPins` pre-seeded with `reads` and returns both the machine
+    /// and a handle to inspect the trace afterwards.
+    fn make_mock_machine(reads: &[(u8, bool)]) -> (Machine, Rc<RefCell<MockPins>>) {
+        let mock_pins = Rc::new(RefCell::new(MockPins::default()));
+        for &(pin, high) in reads {
+            mock_pins.borrow_mut().inject_read(Pin(pin), high);
         }
-
-        let mut t = Tester::default();
-        for var in vars.as_slice() {
-            t = t.set_var(var.0, var.1.clone());
-        }
-
-        let mut c = t
-            .run(format!(r#"DIM __GPIO_MOCK_DATA(50) AS INTEGER: __GPIO_MOCK_LAST = 0: {}"#, code));
-        for var in vars.into_iter() {
-            c = c.expect_var(var.0, var.1.clone());
-        }
-        c.expect_var("__GPIO_MOCK_LAST", Value::Integer(trace.len() as i32))
-            .expect_array_simple("__GPIO_MOCK_DATA", ExprType::Integer, exp_data)
-            .check();
+        let pins: Rc<RefCell<dyn Pins>> = mock_pins.clone();
+        let machine = crate::MachineBuilder::default().with_gpio_pins(pins).build().unwrap();
+        (machine, mock_pins)
     }
 
-    /// Does a GPIO test using the mocking feature, running the commands in `code` and expecting
-    /// that the `__GPIO_MOCK_DATA` array contains `trace` after completion.
-    fn do_mock_test<S: Into<String>>(code: S, trace: &[i32]) {
-        do_mock_test_with_vars(code, trace, [])
+    /// Runs `code` in a machine backed by MockPins pre-seeded with `reads` and asserts that the
+    /// resulting trace equals `expected_trace`.
+    fn do_mock_test(code: &str, reads: &[(u8, bool)], expected_trace: &[i32]) {
+        let (mut machine, mock_pins) = make_mock_machine(reads);
+        let _ = block_on(machine.exec(&mut code.as_bytes())).unwrap();
+        assert_eq!(expected_trace, mock_pins.borrow().trace());
     }
 
     /// Tests that all GPIO operations delegate to the real pins implementation, which defaults to
-    /// the no-op backend when using the tester.  All other tests in this file use the mocking
-    /// features to validate operation.
+    /// the no-op backend when using the tester.  All other tests in this file use MockPins via
+    /// `make_mock_machine` to validate operation.
     #[test]
     fn test_real_backend() {
         check_stmt_err("1:1: GPIO backend not compiled in", "GPIO_SETUP 0, \"IN\"");
@@ -468,26 +551,26 @@ mod tests {
     #[test]
     fn test_gpio_setup_ok() {
         for mode in &["in", "IN"] {
-            do_mock_test(format!(r#"GPIO_SETUP 5, "{}""#, mode), &[501]);
-            do_mock_test(format!(r#"GPIO_SETUP 5.2, "{}""#, mode), &[501]);
+            do_mock_test(&format!(r#"GPIO_SETUP 5, "{}""#, mode), &[], &[501]);
+            do_mock_test(&format!(r#"GPIO_SETUP 5.2, "{}""#, mode), &[], &[501]);
         }
         for mode in &["in-pull-down", "IN-PULL-DOWN"] {
-            do_mock_test(format!(r#"GPIO_SETUP 6, "{}""#, mode), &[602]);
-            do_mock_test(format!(r#"GPIO_SETUP 6.2, "{}""#, mode), &[602]);
+            do_mock_test(&format!(r#"GPIO_SETUP 6, "{}""#, mode), &[], &[602]);
+            do_mock_test(&format!(r#"GPIO_SETUP 6.2, "{}""#, mode), &[], &[602]);
         }
         for mode in &["in-pull-up", "IN-PULL-UP"] {
-            do_mock_test(format!(r#"GPIO_SETUP 7, "{}""#, mode), &[703]);
-            do_mock_test(format!(r#"GPIO_SETUP 7.2, "{}""#, mode), &[703]);
+            do_mock_test(&format!(r#"GPIO_SETUP 7, "{}""#, mode), &[], &[703]);
+            do_mock_test(&format!(r#"GPIO_SETUP 7.2, "{}""#, mode), &[], &[703]);
         }
         for mode in &["out", "OUT"] {
-            do_mock_test(format!(r#"GPIO_SETUP 8, "{}""#, mode), &[804]);
-            do_mock_test(format!(r#"GPIO_SETUP 8.2, "{}""#, mode), &[804]);
+            do_mock_test(&format!(r#"GPIO_SETUP 8, "{}""#, mode), &[], &[804]);
+            do_mock_test(&format!(r#"GPIO_SETUP 8.2, "{}""#, mode), &[], &[804]);
         }
     }
 
     #[test]
     fn test_gpio_setup_multiple() {
-        do_mock_test(r#"GPIO_SETUP 18, "IN-PULL-UP": GPIO_SETUP 10, "OUT""#, &[1803, 1004]);
+        do_mock_test(r#"GPIO_SETUP 18, "IN-PULL-UP": GPIO_SETUP 10, "OUT""#, &[], &[1803, 1004]);
     }
 
     #[test]
@@ -504,13 +587,13 @@ mod tests {
 
     #[test]
     fn test_gpio_clear_all() {
-        do_mock_test("GPIO_CLEAR", &[-1]);
+        do_mock_test("GPIO_CLEAR", &[], &[-1]);
     }
 
     #[test]
     fn test_gpio_clear_one() {
-        do_mock_test("GPIO_CLEAR 4", &[405]);
-        do_mock_test("GPIO_CLEAR 4.1", &[405]);
+        do_mock_test("GPIO_CLEAR 4", &[], &[405]);
+        do_mock_test("GPIO_CLEAR 4.1", &[], &[405]);
     }
 
     #[test]
@@ -523,13 +606,12 @@ mod tests {
 
     #[test]
     fn test_gpio_read_ok() {
-        do_mock_test_with_vars(
-            "__GPIO_MOCK_DATA(0) = 310
-            __GPIO_MOCK_DATA(2) = 311
-            GPIO_WRITE 5, GPIO_READ(3.1)
-            GPIO_WRITE 7, GPIO_READ(pin)",
+        // Read pin 3 (low → GPIO_WRITE 5 low), then read pin 3 (high → GPIO_WRITE 7 high).
+        // GPIO_READ evaluates before GPIO_WRITE, so trace is: read3low, write5low, read3high, write7high.
+        do_mock_test(
+            "GPIO_WRITE 5, GPIO_READ(3.1): GPIO_WRITE 7, GPIO_READ(3)",
+            &[(3, false), (3, true)],
             &[310, 520, 311, 721],
-            [("pin", 3.into())],
         );
     }
 
@@ -543,7 +625,7 @@ mod tests {
 
     #[test]
     fn test_gpio_write_ok() {
-        do_mock_test("GPIO_WRITE 3, TRUE: GPIO_WRITE 3.1, FALSE", &[321, 320]);
+        do_mock_test("GPIO_WRITE 3, TRUE: GPIO_WRITE 3.1, FALSE", &[], &[321, 320]);
     }
 
     #[test]
