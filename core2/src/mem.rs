@@ -56,13 +56,14 @@ impl ArrayData {
     }
 }
 
-/// A single value in the EndBASIC language.
+/// A compile-time constant value stored in the constant pool.
+///
+/// Only scalar types that can be hashed are included here.  Arrays are never constants.
 #[derive(Clone, Debug)]
-pub(crate) enum Datum {
-    /// An array value.
-    Array(ArrayData),
-
-    /// A boolean value.
+pub(crate) enum ConstantDatum {
+    /// A boolean value.  Not currently produced by the compiler (booleans are always
+    /// immediate integers), but included for completeness and future use.
+    #[allow(dead_code)]
     Boolean(bool),
 
     /// A double-precision floating-point value.
@@ -75,7 +76,7 @@ pub(crate) enum Datum {
     Text(String),
 }
 
-impl PartialEq for Datum {
+impl PartialEq for ConstantDatum {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Boolean(a), Self::Boolean(b)) => a == b,
@@ -87,13 +88,12 @@ impl PartialEq for Datum {
     }
 }
 
-impl Eq for Datum {}
+impl Eq for ConstantDatum {}
 
-impl Hash for Datum {
+impl Hash for ConstantDatum {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         std::mem::discriminant(self).hash(state);
         match self {
-            Self::Array(_) => panic!("Arrays cannot be hashed"),
             Self::Boolean(b) => b.hash(state),
             Self::Double(d) => d.to_bits().hash(state),
             Self::Integer(i) => i.hash(state),
@@ -102,21 +102,10 @@ impl Hash for Datum {
     }
 }
 
-impl Datum {
-    /// Creates a new datum of `etype` with a default value.
-    pub(crate) fn new(etype: ExprType) -> Self {
-        match etype {
-            ExprType::Boolean => Datum::Boolean(false),
-            ExprType::Double => Datum::Double(0.0),
-            ExprType::Integer => Datum::Integer(0),
-            ExprType::Text => Datum::Text(String::new()),
-        }
-    }
-
-    /// Returns the type of the datum.
+impl ConstantDatum {
+    /// Returns the type of the constant datum.
     pub(crate) fn etype(&self) -> ExprType {
         match self {
-            Self::Array(..) => panic!("Arrays do not have a simple ExprType"),
             Self::Boolean(..) => ExprType::Boolean,
             Self::Double(..) => ExprType::Double,
             Self::Integer(..) => ExprType::Integer,
@@ -125,9 +114,22 @@ impl Datum {
     }
 }
 
+/// A heap-allocated value used at runtime.
+///
+/// Only types that require heap allocation are included here.  Scalars other than
+/// `Text` live directly in registers and never appear on the heap.
+#[derive(Clone, Debug)]
+pub(crate) enum HeapDatum {
+    /// An array value.
+    Array(ArrayData),
+
+    /// A string value.
+    Text(String),
+}
+
 /// Tagged pointers for constant and heap addresses.
 ///
-/// A `DatumPtr` indexes into the constant pool or the heap, where `Datum` values live.
+/// A `DatumPtr` indexes into the constant pool or the heap, where datum values live.
 /// The encoding uses the sign of the lower 32 bits of a `u64`: positive values are
 /// constant pool indices, and negative values (two's complement) are heap indices.
 ///
@@ -161,11 +163,23 @@ impl DatumPtr {
         raw as u64
     }
 
-    /// Gets the datum pointed to by this pointer from the `constants` and `heap`.
-    pub(crate) fn resolve<'b>(&self, constants: &'b [Datum], heap: &'b [Datum]) -> &'b Datum {
+    /// Resolves this pointer and returns the string it points to.
+    ///
+    /// Panics if the pointed-to datum is not a `Text` value.
+    pub(crate) fn resolve_string<'b>(
+        &self,
+        constants: &'b [ConstantDatum],
+        heap: &'b [HeapDatum],
+    ) -> &'b str {
         match self {
-            DatumPtr::Constant(index) => &constants[unchecked_u24_as_usize(*index)],
-            DatumPtr::Heap(index) => &heap[unchecked_u24_as_usize(*index)],
+            DatumPtr::Constant(index) => match &constants[unchecked_u24_as_usize(*index)] {
+                ConstantDatum::Text(s) => s,
+                _ => panic!("Constant pointer does not point to a Text value"),
+            },
+            DatumPtr::Heap(index) => match &heap[unchecked_u24_as_usize(*index)] {
+                HeapDatum::Text(s) => s,
+                _ => panic!("Heap pointer does not point to a Text value"),
+            },
         }
     }
 

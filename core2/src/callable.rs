@@ -20,7 +20,7 @@ use crate::ast::ArgSep;
 use crate::ast::ExprType;
 use crate::bytecode::TaggedRegisterRef;
 use crate::bytecode::VarArgTag;
-use crate::mem::{Datum, DatumPtr};
+use crate::mem::{ConstantDatum, DatumPtr, HeapDatum};
 use crate::num::unchecked_usize_as_u32;
 use async_trait::async_trait;
 use std::borrow::Cow;
@@ -593,15 +593,12 @@ fn deref_string<'a>(
     regs: &[u64],
     index: usize,
     vtype: ExprType,
-    constants: &'a [Datum],
-    heap: &'a [Datum],
+    constants: &'a [ConstantDatum],
+    heap: &'a [HeapDatum],
 ) -> &'a str {
     assert_eq!(ExprType::Text, vtype);
     let ptr = DatumPtr::from(regs[index]);
-    match ptr.resolve(constants, heap) {
-        Datum::Text(s) => s,
-        _ => panic!("Mismatched constant type"),
-    }
+    ptr.resolve_string(constants, heap)
 }
 
 /// An immutable reference to a variable (register) in the register file, carrying
@@ -701,7 +698,7 @@ impl<'a, 'vm> RegisterRefMut<'a, 'vm> {
     pub fn set_string<S: Into<String>>(&mut self, s: S) {
         assert_eq!(ExprType::Text, self.vtype);
         let index = self.scope.heap.len();
-        self.scope.heap.push(Datum::Text(s.into()));
+        self.scope.heap.push(HeapDatum::Text(s.into()));
         self.scope.regs[self.index] = DatumPtr::for_heap(unchecked_usize_as_u32(index));
     }
 }
@@ -718,10 +715,10 @@ pub struct Scope<'a> {
     pub(crate) regs: &'a mut [u64],
 
     /// Reference to the constants pool for resolving constant pointers.
-    pub(crate) constants: &'a [Datum],
+    pub(crate) constants: &'a [ConstantDatum],
 
     /// Reference to the heap for resolving heap pointers.
-    pub(crate) heap: &'a mut Vec<Datum>,
+    pub(crate) heap: &'a mut Vec<HeapDatum>,
 
     /// Start of the current frame (where the arguments to the upcall start).
     pub(crate) fp: usize,
@@ -766,10 +763,7 @@ impl<'a> Scope<'a> {
     pub fn get_string(&self, arg: u8) -> &str {
         let index = self.regs[self.fp + (arg as usize)];
         let ptr = DatumPtr::from(index);
-        match ptr.resolve(self.constants, self.heap) {
-            Datum::Text(s) => s,
-            _ => panic!("Mismatched constant type"),
-        }
+        ptr.resolve_string(self.constants, self.heap)
     }
 
     /// Sets the return value of the function to `b`.
@@ -790,7 +784,7 @@ impl<'a> Scope<'a> {
     /// Sets the return value of the function to `s`.
     pub fn return_string<S: Into<String>>(self, s: S) {
         let index = self.heap.len();
-        self.heap.push(Datum::Text(s.into()));
+        self.heap.push(HeapDatum::Text(s.into()));
         self.regs[self.fp] = DatumPtr::for_heap(unchecked_usize_as_u32(index));
     }
 }

@@ -21,7 +21,7 @@ use crate::bytecode::{self, Register};
 use crate::compiler::ids::HashMapWithIds;
 use crate::compiler::{Error, Result, SymbolKey};
 use crate::image::{DebugInfo, Image};
-use crate::mem::Datum;
+use crate::mem::ConstantDatum;
 use crate::reader::LineCol;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -52,7 +52,7 @@ pub(super) struct Codegen {
     code: Vec<u32>,
 
     /// The constants pool for the image being generated.
-    constants: HashMapWithIds<Datum, ExprType, u16>,
+    constants: HashMapWithIds<ConstantDatum, ExprType, u16>,
 
     /// Collection of fixups to apply after code generation.
     fixups: HashMap<Address, Fixup>,
@@ -101,7 +101,7 @@ impl Codegen {
     }
 
     /// Gets the ID of a `constant`, adding it to the constants table if it isn't yet there.
-    pub(super) fn get_constant(&mut self, constant: Datum, pos: LineCol) -> Result<u16> {
+    pub(super) fn get_constant(&mut self, constant: ConstantDatum, pos: LineCol) -> Result<u16> {
         match self.constants.get(&constant) {
             Some((_etype, id)) => Ok(id),
             None => {

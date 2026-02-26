@@ -22,7 +22,7 @@ use crate::compiler::args::compile_args;
 use crate::compiler::codegen::{Codegen, Fixup};
 use crate::compiler::syms::{self, SymbolKey, SymbolPrototype, TempScope, TempSymtable};
 use crate::compiler::{Error, Result};
-use crate::mem::Datum;
+use crate::mem::ConstantDatum;
 use std::convert::TryFrom;
 
 /// Compiles `exprs` into consecutive integer registers allocated from `scope` and returns the
@@ -205,7 +205,7 @@ pub(super) fn compile_expr(
         }
 
         Expr::Double(span) => {
-            let index = codegen.get_constant(Datum::Double(span.value), span.pos)?;
+            let index = codegen.get_constant(ConstantDatum::Double(span.value), span.pos)?;
             codegen.emit(bytecode::make_load_constant(reg, index), span.pos);
             Ok(ExprType::Double)
         }
@@ -216,7 +216,8 @@ pub(super) fn compile_expr(
                     codegen.emit(bytecode::make_load_integer(reg, i), span.pos);
                 }
                 Err(_) => {
-                    let index = codegen.get_constant(Datum::Integer(span.value), span.pos)?;
+                    let index =
+                        codegen.get_constant(ConstantDatum::Integer(span.value), span.pos)?;
                     codegen.emit(bytecode::make_load_constant(reg, index), span.pos);
                 }
             }
@@ -287,7 +288,7 @@ pub(super) fn compile_expr(
         },
 
         Expr::Text(span) => {
-            let index = codegen.get_constant(Datum::Text(span.value), span.pos)?;
+            let index = codegen.get_constant(ConstantDatum::Text(span.value), span.pos)?;
             codegen.emit(bytecode::make_load_integer(reg, index), span.pos);
             Ok(ExprType::Text)
         }

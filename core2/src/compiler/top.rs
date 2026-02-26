@@ -25,7 +25,7 @@ use crate::compiler::exprs::{compile_expr, compile_expr_as_type, compile_integer
 use crate::compiler::syms::{self, GlobalSymtable, LocalSymtable, SymbolKey, SymbolPrototype};
 use crate::compiler::{Error, Result};
 use crate::image::Image;
-use crate::mem::Datum;
+use crate::mem::ConstantDatum;
 use crate::reader::LineCol;
 use crate::{Callable, CallableMetadataBuilder, parser};
 use std::borrow::Cow;
@@ -381,15 +381,16 @@ fn compile_user_callables(ctx: &mut Context, symtable: &mut GlobalSymtable) -> R
             // at runtime by clearning the return register... but the problem is that we need
             // to handle non-primitive types like strings and the runtime doesn't know the type
             // of the result to properly allocate it.
-            match vtype {
-                ExprType::Boolean | ExprType::Integer => {
-                    ctx.codegen.emit(bytecode::make_load_integer(ret_reg, 0), key_pos);
+            let value = match vtype {
+                ExprType::Boolean | ExprType::Integer => 0,
+                ExprType::Double => {
+                    ctx.codegen.get_constant(ConstantDatum::Double(0.0), key_pos)?
                 }
-                ExprType::Double | ExprType::Text => {
-                    let index = ctx.codegen.get_constant(Datum::new(vtype), key_pos)?;
-                    ctx.codegen.emit(bytecode::make_load_integer(ret_reg, index), key_pos);
+                ExprType::Text => {
+                    ctx.codegen.get_constant(ConstantDatum::Text(String::new()), key_pos)?
                 }
-            }
+            };
+            ctx.codegen.emit(bytecode::make_load_integer(ret_reg, value), key_pos);
         }
         for param in callable.params {
             let key = SymbolKey::from(param.name);
