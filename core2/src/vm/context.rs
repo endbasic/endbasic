@@ -161,6 +161,8 @@ impl Context {
                 Opcode::LoadInteger => self.do_load_integer(instr),
                 Opcode::LoadRegisterPointer => self.do_load_register_ptr(instr),
                 Opcode::Move => self.do_move(instr),
+                Opcode::NegateDouble => self.do_negate_double(instr),
+                Opcode::NegateInteger => self.do_negate_integer(instr),
                 Opcode::Nop => self.do_nop(instr),
                 Opcode::Return => self.do_return(instr),
                 Opcode::Upcall => self.do_upcall(instr),
@@ -306,6 +308,29 @@ impl Context {
         let value = self.get_reg(src);
         self.set_reg(dest, value);
         self.pc += 1;
+    }
+
+    /// Implements the `NegateDouble` opcode.
+    pub(super) fn do_negate_double(&mut self, instr: u32) {
+        let reg = bytecode::parse_negate_double(instr);
+        let value = f64::from_bits(self.get_reg(reg));
+        self.set_reg(reg, (-value).to_bits());
+        self.pc += 1;
+    }
+
+    /// Implements the `NegateInteger` opcode.
+    pub(super) fn do_negate_integer(&mut self, instr: u32) {
+        let reg = bytecode::parse_negate_integer(instr);
+        let value = self.get_reg(reg) as i32;
+        match value.checked_neg() {
+            Some(result) => {
+                self.set_reg(reg, result as u64);
+                self.pc += 1;
+            }
+            None => {
+                self.set_exception("Integer overflow");
+            }
+        }
     }
 
     /// Implements the `Nop` opcode.

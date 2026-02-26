@@ -360,6 +360,12 @@ pub(crate) enum Opcode {
     /// Moves (copies) data between two registers.
     Move,
 
+    /// Negates a double value in place.
+    NegateDouble,
+
+    /// Negates an integer value in place.
+    NegateInteger,
+
     /// The "null" instruction, used by the compiler to pad the code for fixups.
     Nop,
 
@@ -490,6 +496,20 @@ instr!(
     make_move, parse_move, format_move,
     Register, 0x000000ff, 8,  // Destination register.
     Register, 0x000000ff, 0,  // Source register.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::NegateDouble, "NEGD",
+    make_negate_double, parse_negate_double, format_negate_double,
+    Register, 0x000000ff, 0,  // Register with the value to negate in place.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::NegateInteger, "NEGI",
+    make_negate_integer, parse_negate_integer, format_negate_integer,
+    Register, 0x000000ff, 0,  // Register with the value to negate in place.
 );
 
 #[rustfmt::skip]
@@ -719,6 +739,20 @@ mod tests {
         parse_move,
         Register::local(1).unwrap(),
         Register::local(2).unwrap()
+    );
+
+    test_instr!(
+        test_negate_double,
+        make_negate_double,
+        parse_negate_double,
+        Register::local(1).unwrap()
+    );
+
+    test_instr!(
+        test_negate_integer,
+        make_negate_integer,
+        parse_negate_integer,
+        Register::local(1).unwrap()
     );
 
     test_instr!(test_nop, make_nop, parse_nop);
