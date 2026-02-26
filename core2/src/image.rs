@@ -18,7 +18,7 @@
 
 use crate::bytecode::{self, Opcode, Register, opcode_of};
 use crate::compiler::SymbolKey;
-use crate::mem::Datum;
+use crate::mem::ConstantDatum;
 use crate::reader::LineCol;
 use std::collections::HashMap;
 
@@ -75,7 +75,7 @@ pub struct Image {
     pub(crate) upcalls: Vec<SymbolKey>,
 
     /// Pool of constant values used by the program.
-    pub(crate) constants: Vec<Datum>,
+    pub(crate) constants: Vec<ConstantDatum>,
 
     /// Debugging information for error reporting and disassembly.
     pub(crate) debug_info: DebugInfo,
@@ -107,7 +107,7 @@ impl Image {
     pub(crate) fn new(
         code: Vec<u32>,
         upcalls: Vec<SymbolKey>,
-        constants: Vec<Datum>,
+        constants: Vec<ConstantDatum>,
         debug_info: DebugInfo,
     ) -> Self {
         debug_assert!(!code.is_empty(), "Compiler must ensure the image is not empty");

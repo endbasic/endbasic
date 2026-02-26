@@ -21,7 +21,7 @@ use crate::bytecode::Register;
 use crate::callable::{Callable, Scope};
 use crate::compiler::SymbolKey;
 use crate::image::Image;
-use crate::mem::Datum;
+use crate::mem::HeapDatum;
 use crate::reader::LineCol;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -69,7 +69,7 @@ pub struct Vm {
     upcalls: Vec<Rc<dyn Callable>>,
 
     /// Heap memory for dynamic allocations.
-    heap: Vec<Datum>,
+    heap: Vec<HeapDatum>,
 
     /// Processor context for execution.
     context: Context,
