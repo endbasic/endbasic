@@ -167,6 +167,23 @@ pub(super) fn compile_expr(
             Ok(ExprType::Integer)
         }
 
+        Expr::Negate(span) => {
+            let pos = span.pos;
+            let etype = compile_expr(codegen, symtable, reg, span.expr)?;
+            match etype {
+                ExprType::Double => {
+                    codegen.emit(bytecode::make_negate_double(reg), pos);
+                }
+                ExprType::Integer => {
+                    codegen.emit(bytecode::make_negate_integer(reg), pos);
+                }
+                _ => {
+                    return Err(Error::NotANumber(pos, etype));
+                }
+            }
+            Ok(etype)
+        }
+
         Expr::Symbol(span) => match symtable.get_local_or_global(&span.vref) {
             Ok((local, etype)) => {
                 codegen.emit(bytecode::make_move(reg, local), span.pos);

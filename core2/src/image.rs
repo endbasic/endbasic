@@ -42,6 +42,8 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::LoadInteger => bytecode::format_load_integer(instr),
         Opcode::LoadRegisterPointer => bytecode::format_load_register_ptr(instr),
         Opcode::Move => bytecode::format_move(instr),
+        Opcode::NegateDouble => bytecode::format_negate_double(instr),
+        Opcode::NegateInteger => bytecode::format_negate_integer(instr),
         Opcode::Nop => bytecode::format_nop(instr),
         Opcode::Return => bytecode::format_return(instr),
         Opcode::Upcall => bytecode::format_upcall(instr),
