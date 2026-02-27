@@ -439,11 +439,16 @@ pub struct GlobalDef {
 
 /// Kind of a pre-defined global variable.
 pub enum GlobalDefKind {
-    /// A scalar (non-array) variable with the given element type.
-    ///
-    /// The variable is initialized to its default value: `0` for numeric types and an empty
-    /// string for `Text`.
-    Scalar(ExprType),
+    /// A scalar (non-array) variable.
+    Scalar {
+        /// Type of the scalar variable.
+        etype: ExprType,
+
+        /// Initial value for the variable.  If `None`, the variable is initialized to its default
+        /// value: `0` for numeric types and an empty string for `Text`.  The type of the datum
+        /// must match `etype`.
+        initial_value: Option<ConstantDatum>,
+    },
 
     /// A multidimensional array with the given element type and fixed dimension sizes.
     ///
@@ -489,11 +494,19 @@ fn prepare_globals(
                 array_globals.push((reg, def));
             }
 
-            GlobalDefKind::Scalar(etype) => {
+            GlobalDefKind::Scalar { etype, initial_value } => {
                 let reg = symtable
                     .put_global(key, SymbolPrototype::Scalar(*etype))
                     .map_err(|e| Error::from_syms(e, preamble_pos))?;
-                ctx.codegen.emit_default(reg, *etype, preamble_pos);
+                match initial_value {
+                    Some(datum) => {
+                        if datum.etype() != *etype {
+                            return Err(Error::TypeMismatch(preamble_pos, datum.etype(), *etype));
+                        }
+                        ctx.codegen.emit_value(reg, datum.clone(), preamble_pos)?;
+                    }
+                    None => ctx.codegen.emit_default(reg, *etype, preamble_pos),
+                }
             }
         }
     }
@@ -571,4 +584,99 @@ pub fn compile(
     upcalls: &HashMap<&SymbolKey, &CallableMetadata>,
 ) -> Result<Image> {
     compile_with_globals(input, upcalls, &[])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::ExprType;
+    use crate::mem::ConstantDatum;
+    use crate::vm::{StopReason, Vm};
+
+    fn compile_and_get_global(defs: &[GlobalDef], name: &str) -> ConstantDatum {
+        let image = compile_with_globals(&mut "".as_bytes(), &HashMap::default(), defs)
+            .expect("compilation should succeed");
+        let mut vm = Vm::new(HashMap::default());
+        vm.load(image);
+        match vm.exec() {
+            StopReason::End(0) => {}
+            StopReason::End(code) => panic!("unexpected exit code: {code}"),
+            StopReason::Exception(pos, msg) => panic!("exception at {pos}: {msg}"),
+            StopReason::Upcall(_) => panic!("unexpected upcall"),
+        }
+        vm.get_global(name).expect("get_global failed").expect("global not found")
+    }
+
+    #[test]
+    fn test_inject_boolean() {
+        let defs = vec![GlobalDef {
+            name: "b".to_owned(),
+            kind: GlobalDefKind::Scalar {
+                etype: ExprType::Boolean,
+                initial_value: Some(ConstantDatum::Boolean(true)),
+            },
+        }];
+        assert_eq!(ConstantDatum::Boolean(true), compile_and_get_global(&defs, "b"));
+    }
+
+    #[test]
+    fn test_inject_integer() {
+        let defs = vec![GlobalDef {
+            name: "n".to_owned(),
+            kind: GlobalDefKind::Scalar {
+                etype: ExprType::Integer,
+                initial_value: Some(ConstantDatum::Integer(42)),
+            },
+        }];
+        assert_eq!(ConstantDatum::Integer(42), compile_and_get_global(&defs, "n"));
+    }
+
+    #[test]
+    fn test_inject_integer_large() {
+        let defs = vec![GlobalDef {
+            name: "n".to_owned(),
+            kind: GlobalDefKind::Scalar {
+                etype: ExprType::Integer,
+                initial_value: Some(ConstantDatum::Integer(70000)),
+            },
+        }];
+        assert_eq!(ConstantDatum::Integer(70000), compile_and_get_global(&defs, "n"));
+    }
+
+    #[test]
+    fn test_inject_double() {
+        let defs = vec![GlobalDef {
+            name: "d".to_owned(),
+            kind: GlobalDefKind::Scalar {
+                etype: ExprType::Double,
+                initial_value: Some(ConstantDatum::Double(1.5)),
+            },
+        }];
+        assert_eq!(ConstantDatum::Double(1.5), compile_and_get_global(&defs, "d"));
+    }
+
+    #[test]
+    fn test_inject_text() {
+        let defs = vec![GlobalDef {
+            name: "s".to_owned(),
+            kind: GlobalDefKind::Scalar {
+                etype: ExprType::Text,
+                initial_value: Some(ConstantDatum::Text("hello".to_owned())),
+            },
+        }];
+        assert_eq!(ConstantDatum::Text("hello".to_owned()), compile_and_get_global(&defs, "s"),);
+    }
+
+    #[test]
+    fn test_inject_type_mismatch() {
+        let defs = vec![GlobalDef {
+            name: "n".to_owned(),
+            kind: GlobalDefKind::Scalar {
+                etype: ExprType::Integer,
+                initial_value: Some(ConstantDatum::Double(1.5)),
+            },
+        }];
+        let result = compile_with_globals(&mut "".as_bytes(), &HashMap::default(), &defs);
+        assert!(matches!(result, Err(Error::TypeMismatch(..))));
+    }
 }

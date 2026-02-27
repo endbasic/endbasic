@@ -23,7 +23,6 @@ use crate::compiler::codegen::{Codegen, Fixup};
 use crate::compiler::syms::{self, SymbolKey, SymbolPrototype, TempScope, TempSymtable};
 use crate::compiler::{Error, Result};
 use crate::mem::ConstantDatum;
-use std::convert::TryFrom;
 
 /// Compiles `exprs` into consecutive integer registers allocated from `scope` and returns the
 /// first register.  The caller must guarantee that `exprs` is non-empty.
@@ -141,8 +140,7 @@ pub(super) fn compile_expr(
         Expr::Add(span) => compile_arithmetic_binary_op(codegen, symtable, reg, *span, "+"),
 
         Expr::Boolean(span) => {
-            let value = if span.value { 1 } else { 0 };
-            codegen.emit(bytecode::make_load_integer(reg, value), span.pos);
+            codegen.emit_value(reg, ConstantDatum::Boolean(span.value), span.pos)?;
             Ok(ExprType::Boolean)
         }
 
@@ -207,22 +205,12 @@ pub(super) fn compile_expr(
         }
 
         Expr::Double(span) => {
-            let index = codegen.get_constant(ConstantDatum::Double(span.value), span.pos)?;
-            codegen.emit(bytecode::make_load_constant(reg, index), span.pos);
+            codegen.emit_value(reg, ConstantDatum::Double(span.value), span.pos)?;
             Ok(ExprType::Double)
         }
 
         Expr::Integer(span) => {
-            match u16::try_from(span.value) {
-                Ok(i) => {
-                    codegen.emit(bytecode::make_load_integer(reg, i), span.pos);
-                }
-                Err(_) => {
-                    let index =
-                        codegen.get_constant(ConstantDatum::Integer(span.value), span.pos)?;
-                    codegen.emit(bytecode::make_load_constant(reg, index), span.pos);
-                }
-            }
+            codegen.emit_value(reg, ConstantDatum::Integer(span.value), span.pos)?;
             Ok(ExprType::Integer)
         }
 
@@ -290,8 +278,7 @@ pub(super) fn compile_expr(
         },
 
         Expr::Text(span) => {
-            let index = codegen.get_constant(ConstantDatum::Text(span.value), span.pos)?;
-            codegen.emit(bytecode::make_load_integer(reg, index), span.pos);
+            codegen.emit_value(reg, ConstantDatum::Text(span.value), span.pos)?;
             Ok(ExprType::Text)
         }
 

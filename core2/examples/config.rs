@@ -38,26 +38,43 @@ results%(2) = 30
 
 DIM SHARED defined_within
 defined_within = 42
+
+injected_value% = injected_value% + 1
 "#;
 
 fn main() {
     // Describe the global variables the script is expected to read and write.
     // Note that "optional_flag" is declared so the script could set it, but the
     // script does not assign it.  Its value will be the zero default.
+    // "injected_value" is pre-initialized to a value that we expect the script
+    // to read and modify.
     let global_defs = vec![
-        GlobalDef { name: "foo_value".to_owned(), kind: GlobalDefKind::Scalar(ExprType::Integer) },
+        GlobalDef {
+            name: "foo_value".to_owned(),
+            kind: GlobalDefKind::Scalar { etype: ExprType::Integer, initial_value: None },
+        },
         GlobalDef {
             name: "result_total".to_owned(),
-            kind: GlobalDefKind::Scalar(ExprType::Integer),
+            kind: GlobalDefKind::Scalar { etype: ExprType::Integer, initial_value: None },
         },
-        GlobalDef { name: "status".to_owned(), kind: GlobalDefKind::Scalar(ExprType::Text) },
+        GlobalDef {
+            name: "status".to_owned(),
+            kind: GlobalDefKind::Scalar { etype: ExprType::Text, initial_value: None },
+        },
         GlobalDef {
             name: "results".to_owned(),
             kind: GlobalDefKind::Array { subtype: ExprType::Integer, dimensions: vec![3] },
         },
         GlobalDef {
             name: "optional_flag".to_owned(),
-            kind: GlobalDefKind::Scalar(ExprType::Boolean),
+            kind: GlobalDefKind::Scalar { etype: ExprType::Boolean, initial_value: None },
+        },
+        GlobalDef {
+            name: "injected_value".to_owned(),
+            kind: GlobalDefKind::Scalar {
+                etype: ExprType::Integer,
+                initial_value: Some(ConstantDatum::Integer(5)),
+            },
         },
     ];
 
@@ -120,6 +137,14 @@ fn main() {
         Ok(Some(other)) => println!("optional_flag? has unexpected type: {:?}", other),
         Ok(None) => println!("optional_flag? is not declared"),
         Err(e) => println!("optional_flag?: error: {}", e),
+    }
+    // injected_value was pre-initialized to 5 before compilation.  The script incremented
+    // it by 1, so we expect 6 here.
+    match vm.get_global("injected_value") {
+        Ok(Some(ConstantDatum::Integer(v))) => println!("injected_value% = {}", v),
+        Ok(Some(other)) => println!("injected_value% has unexpected type: {:?}", other),
+        Ok(None) => println!("injected_value% is not set"),
+        Err(e) => println!("injected_value%: error: {}", e),
     }
     // "unknown" was never declared at all, so get_global returns Ok(None).
     match vm.get_global("unknown") {
