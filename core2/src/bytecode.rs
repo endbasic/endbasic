@@ -382,6 +382,18 @@ pub(crate) enum Opcode {
     /// Allocates a multidimensional array on the heap.
     AllocArray,
 
+    /// Computes the bitwise AND of two integers and stores the result into a third one.
+    BitwiseAnd,
+
+    /// Computes the bitwise NOT of an integer value in place.
+    BitwiseNot,
+
+    /// Computes the bitwise OR of two integers and stores the result into a third one.
+    BitwiseOr,
+
+    /// Computes the bitwise XOR of two integers and stores the result into a third one.
+    BitwiseXor,
+
     /// Calls an address relative to the PC.
     Call,
 
@@ -457,6 +469,14 @@ pub(crate) enum Opcode {
     /// Returns from a previous `Call`.
     Return,
 
+    /// Shifts an integer left by a number of bits without rotation, storing the result into
+    /// a third register.
+    ShiftLeft,
+
+    /// Shifts an integer right by a number of bits without rotation, storing the result into
+    /// a third register.
+    ShiftRight,
+
     /// Stores a value into an array element.
     StoreArray,
 
@@ -507,6 +527,40 @@ instr!(
     Register, 0x000000ff, 16,  // Destination register to store the array pointer.
     PackedArrayType, 0x000000ff, 8,  // Packed element type and dimension count.
     Register, 0x000000ff, 0,  // First register containing dimension sizes.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::BitwiseAnd, "AND",
+    make_bitwise_and, parse_bitwise_and, format_bitwise_and,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::BitwiseNot, "NOT",
+    make_bitwise_not, parse_bitwise_not, format_bitwise_not,
+    Register, 0x000000ff, 0,  // Register with the value to NOT in place.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::BitwiseOr, "OR",
+    make_bitwise_or, parse_bitwise_or, format_bitwise_or,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::BitwiseXor, "XOR",
+    make_bitwise_xor, parse_bitwise_xor, format_bitwise_xor,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
 );
 
 #[rustfmt::skip]
@@ -721,6 +775,24 @@ instr!(
 
 #[rustfmt::skip]
 instr!(
+    Opcode::ShiftLeft, "SHL",
+    make_shift_left, parse_shift_left, format_shift_left,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Value to shift.
+    Register, 0x000000ff, 0,  // Number of bits to shift by.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::ShiftRight, "SHR",
+    make_shift_right, parse_shift_right, format_shift_right,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Value to shift.
+    Register, 0x000000ff, 0,  // Number of bits to shift by.
+);
+
+#[rustfmt::skip]
+instr!(
     Opcode::StoreArray, "STOREA",
     make_store_array, parse_store_array, format_store_array,
     Register, 0x000000ff, 16,  // Register containing the array pointer.
@@ -906,6 +978,35 @@ mod tests {
         Register::local(2).unwrap()
     );
 
+    test_instr!(
+        test_bitwise_and,
+        make_bitwise_and,
+        parse_bitwise_and,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(test_bitwise_not, make_bitwise_not, parse_bitwise_not, Register::local(1).unwrap());
+
+    test_instr!(
+        test_bitwise_or,
+        make_bitwise_or,
+        parse_bitwise_or,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_bitwise_xor,
+        make_bitwise_xor,
+        parse_bitwise_xor,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
     test_instr!(test_call, make_call, parse_call, Register::local(3).unwrap(), 12345);
 
     test_instr!(
@@ -1072,6 +1173,24 @@ mod tests {
     );
 
     test_instr!(test_return, make_return, parse_return);
+
+    test_instr!(
+        test_shift_left,
+        make_shift_left,
+        parse_shift_left,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_shift_right,
+        make_shift_right,
+        parse_shift_right,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
 
     test_instr!(
         test_store_array,
