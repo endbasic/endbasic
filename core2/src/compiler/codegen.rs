@@ -103,6 +103,37 @@ impl Codegen {
         self.emit(instr, pos);
     }
 
+    /// Emits code to set `reg` to the specific `datum` value.
+    pub(super) fn emit_value(
+        &mut self,
+        reg: Register,
+        datum: ConstantDatum,
+        pos: LineCol,
+    ) -> Result<()> {
+        match datum {
+            ConstantDatum::Boolean(b) => {
+                self.emit(bytecode::make_load_integer(reg, if b { 1 } else { 0 }), pos);
+            }
+            ConstantDatum::Integer(i) => {
+                if let Ok(v) = u16::try_from(i) {
+                    self.emit(bytecode::make_load_integer(reg, v), pos);
+                } else {
+                    let idx = self.get_constant(ConstantDatum::Integer(i), pos)?;
+                    self.emit(bytecode::make_load_constant(reg, idx), pos);
+                }
+            }
+            ConstantDatum::Double(d) => {
+                let idx = self.get_constant(ConstantDatum::Double(d), pos)?;
+                self.emit(bytecode::make_load_constant(reg, idx), pos);
+            }
+            ConstantDatum::Text(s) => {
+                let idx = self.get_constant(ConstantDatum::Text(s), pos)?;
+                self.emit(bytecode::make_load_integer(reg, idx), pos);
+            }
+        }
+        Ok(())
+    }
+
     /// Records a `fixup` that needs to be applied at `addr`.
     pub(super) fn add_fixup(&mut self, addr: usize, fixup: Fixup) {
         let previous = self.fixups.insert(addr, fixup);

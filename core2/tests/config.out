@@ -3,6 +3,7 @@ result_total% = 579
 status$ = "Processing complete"
 defined_within% = 42
 optional_flag? = false
+injected_value% = 6
 unknown is not declared
 results%(0) = 10
 results%(1) = 20
