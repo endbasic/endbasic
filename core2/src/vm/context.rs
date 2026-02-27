@@ -59,6 +59,12 @@ fn checked_add_integer(lhs: i32, rhs: i32) -> Result<i32, &'static str> {
     lhs.checked_add(rhs).ok_or("Integer overflow")
 }
 
+/// Custom implementation of checked bitwise AND for error reporting purposes.
+#[inline(always)]
+fn checked_and_integer(lhs: i32, rhs: i32) -> Result<i32, &'static str> {
+    Ok(lhs & rhs)
+}
+
 /// Custom implementation of checked integer divisions for error reporting purposes.
 #[inline(always)]
 fn checked_div_integer(lhs: i32, rhs: i32) -> Result<i32, &'static str> {
@@ -77,16 +83,49 @@ fn checked_mul_integer(lhs: i32, rhs: i32) -> Result<i32, &'static str> {
     lhs.checked_mul(rhs).ok_or("Integer overflow")
 }
 
+/// Custom implementation of checked bitwise OR for error reporting purposes.
+#[inline(always)]
+fn checked_or_integer(lhs: i32, rhs: i32) -> Result<i32, &'static str> {
+    Ok(lhs | rhs)
+}
+
 /// Custom implementation of checked integer powers for error reporting purposes.
 #[inline(always)]
 fn checked_pow_integer(lhs: i32, exp: u32) -> Result<i32, &'static str> {
     lhs.checked_pow(exp).ok_or("Integer overflow")
 }
 
+/// Custom implementation of checked left shift for error reporting purposes.
+#[inline(always)]
+fn checked_shl_integer(lhs: i32, rhs: i32) -> Result<i32, String> {
+    match u32::try_from(rhs) {
+        Err(_) => Err(format!("Number of bits to << ({}) must be positive", rhs)),
+        Ok(bits) => Ok(lhs.checked_shl(bits).unwrap_or(0)),
+    }
+}
+
+/// Custom implementation of checked right shift for error reporting purposes.
+#[inline(always)]
+fn checked_shr_integer(lhs: i32, rhs: i32) -> Result<i32, String> {
+    match u32::try_from(rhs) {
+        Err(_) => Err(format!("Number of bits to >> ({}) must be positive", rhs)),
+        Ok(bits) => Ok(match lhs.checked_shr(bits) {
+            Some(i) => i,
+            None if lhs < 0 => -1,
+            None => 0,
+        }),
+    }
+}
 /// Custom implementation of checked integer subtractions for error reporting purposes.
 #[inline(always)]
 fn checked_sub_integer(lhs: i32, rhs: i32) -> Result<i32, &'static str> {
     lhs.checked_sub(rhs).ok_or("Integer underflow")
+}
+
+/// Custom implementation of checked bitwise XOR for error reporting purposes.
+#[inline(always)]
+fn checked_xor_integer(lhs: i32, rhs: i32) -> Result<i32, &'static str> {
+    Ok(lhs ^ rhs)
 }
 
 /// Execution context for the virtual machine.
@@ -238,6 +277,10 @@ impl Context {
                 Opcode::AddInteger => self.do_add_integer(instr),
                 Opcode::Alloc => self.do_alloc(instr, heap),
                 Opcode::AllocArray => self.do_alloc_array(instr, heap),
+                Opcode::BitwiseAnd => self.do_bitwise_and(instr),
+                Opcode::BitwiseNot => self.do_bitwise_not(instr),
+                Opcode::BitwiseOr => self.do_bitwise_or(instr),
+                Opcode::BitwiseXor => self.do_bitwise_xor(instr),
                 Opcode::Call => self.do_call(instr),
                 Opcode::Concat => self.do_concat(instr, &image.constants, heap),
                 Opcode::DivideDouble => self.do_divide_double(instr),
@@ -264,6 +307,8 @@ impl Context {
                 Opcode::PowerDouble => self.do_power_double(instr),
                 Opcode::PowerInteger => self.do_power_integer(instr),
                 Opcode::Return => self.do_return(instr),
+                Opcode::ShiftLeft => self.do_shift_left(instr),
+                Opcode::ShiftRight => self.do_shift_right(instr),
                 Opcode::StoreArray => self.do_store_array(instr, heap),
                 Opcode::SubtractDouble => self.do_subtract_double(instr),
                 Opcode::SubtractInteger => self.do_subtract_integer(instr),
@@ -294,13 +339,14 @@ impl Context {
 
     /// Applies a binary integer operation using `parse` to decode the instruction and `op` to
     /// compute the result.  `op` returns `Err` with a message on failure.
-    fn do_binary_integer_op<F>(
+    fn do_binary_integer_op<F, E>(
         &mut self,
         instr: u32,
         parse: fn(u32) -> (Register, Register, Register),
         op: F,
     ) where
-        F: Fn(i32, i32) -> Result<i32, &'static str>,
+        F: Fn(i32, i32) -> Result<i32, E>,
+        E: ToString,
     {
         let (dest, src1, src2) = parse(instr);
         let lhs = self.get_reg(src1) as i32;
@@ -311,7 +357,7 @@ impl Context {
                 self.pc += 1;
             }
             Err(msg) => {
-                self.set_exception(msg);
+                self.set_exception(msg.to_string());
             }
         }
     }
@@ -376,6 +422,29 @@ impl Context {
         let ptr = DatumPtr::for_heap((heap.len() - 1) as u32);
         self.set_reg(dest, ptr);
         self.pc += 1;
+    }
+
+    /// Implements the `BitwiseAnd` opcode.
+    pub(super) fn do_bitwise_and(&mut self, instr: u32) {
+        self.do_binary_integer_op(instr, bytecode::parse_bitwise_and, checked_and_integer);
+    }
+
+    /// Implements the `BitwiseNot` opcode.
+    pub(super) fn do_bitwise_not(&mut self, instr: u32) {
+        let reg = bytecode::parse_bitwise_not(instr);
+        let value = self.get_reg(reg) as i32;
+        self.set_reg(reg, (!value) as u64);
+        self.pc += 1;
+    }
+
+    /// Implements the `BitwiseOr` opcode.
+    pub(super) fn do_bitwise_or(&mut self, instr: u32) {
+        self.do_binary_integer_op(instr, bytecode::parse_bitwise_or, checked_or_integer);
+    }
+
+    /// Implements the `BitwiseXor` opcode.
+    pub(super) fn do_bitwise_xor(&mut self, instr: u32) {
+        self.do_binary_integer_op(instr, bytecode::parse_bitwise_xor, checked_xor_integer);
     }
 
     /// Implements the `Call` opcode.
@@ -610,6 +679,16 @@ impl Context {
             self.pc = frame.old_pc + 1;
             self.fp = frame.old_fp;
         }
+    }
+
+    /// Implements the `ShiftLeft` opcode.
+    pub(super) fn do_shift_left(&mut self, instr: u32) {
+        self.do_binary_integer_op(instr, bytecode::parse_shift_left, checked_shl_integer);
+    }
+
+    /// Implements the `ShiftRight` opcode.
+    pub(super) fn do_shift_right(&mut self, instr: u32) {
+        self.do_binary_integer_op(instr, bytecode::parse_shift_right, checked_shr_integer);
     }
 
     /// Implements the `StoreArray` opcode.
