@@ -388,6 +388,12 @@ pub(crate) enum Opcode {
     /// Concatenates two strings and stores the pointer to the result into a third one.
     Concat,
 
+    /// Divides two doubles and stores the result into a third one.
+    DivideDouble,
+
+    /// Divides two integers and stores the result into a third one.
+    DivideInteger,
+
     /// Converts the double value in a register to an integer.
     DoubleToInteger,
 
@@ -418,8 +424,20 @@ pub(crate) enum Opcode {
     /// Loads a register pointer into a register.
     LoadRegisterPointer,
 
+    /// Computes the modulo of two doubles and stores the result into a third one.
+    ModuloDouble,
+
+    /// Computes the modulo of two integers and stores the result into a third one.
+    ModuloInteger,
+
     /// Moves (copies) data between two registers.
     Move,
+
+    /// Multiplies two doubles and stores the result into a third one.
+    MultiplyDouble,
+
+    /// Multiplies two integers and stores the result into a third one.
+    MultiplyInteger,
 
     /// Negates a double value in place.
     NegateDouble,
@@ -430,11 +448,23 @@ pub(crate) enum Opcode {
     /// The "null" instruction, used by the compiler to pad the code for fixups.
     Nop,
 
+    /// Computes the power of two doubles and stores the result into a third one.
+    PowerDouble,
+
+    /// Computes the power of two integers and stores the result into a third one.
+    PowerInteger,
+
     /// Returns from a previous `Call`.
     Return,
 
     /// Stores a value into an array element.
     StoreArray,
+
+    /// Subtracts two doubles and stores the result into a third one.
+    SubtractDouble,
+
+    /// Subtracts two integers and stores the result into a third one.
+    SubtractInteger,
 
     /// Requests the execution of an upcall, stopping VM execution.
     Upcall,
@@ -491,6 +521,24 @@ instr!(
 instr!(
     Opcode::Concat, "CONCAT",
     make_concat, parse_concat, format_concat,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::DivideDouble, "DIVD",
+    make_divide_double, parse_divide_double, format_divide_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::DivideInteger, "DIVI",
+    make_divide_integer, parse_divide_integer, format_divide_integer,
     Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
     Register, 0x000000ff, 8,  // Left hand side value.
     Register, 0x000000ff, 0,  // Right hand side value.
@@ -580,6 +628,24 @@ instr!(
 
 #[rustfmt::skip]
 instr!(
+    Opcode::ModuloDouble, "MODD",
+    make_modulo_double, parse_modulo_double, format_modulo_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::ModuloInteger, "MODI",
+    make_modulo_integer, parse_modulo_integer, format_modulo_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
     Opcode::Move, "MOVE",
     make_move, parse_move, format_move,
     Register, 0x000000ff, 8,  // Destination register.
@@ -588,9 +654,32 @@ instr!(
 
 #[rustfmt::skip]
 instr!(
-    Opcode::NegateDouble, "NEGD",
-    make_negate_double, parse_negate_double, format_negate_double,
-    Register, 0x000000ff, 0,  // Register with the value to negate in place.
+    Opcode::MultiplyDouble, "MULD",
+    make_multiply_double, parse_multiply_double, format_multiply_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::MultiplyInteger, "MULI",
+    make_multiply_integer, parse_multiply_integer, format_multiply_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::NegateDouble,
+    "NEGD",
+    make_negate_double,
+    parse_negate_double,
+    format_negate_double,
+    Register,
+    0x000000ff,
+    0, // Register with the value to negate in place.
 );
 
 #[rustfmt::skip]
@@ -608,6 +697,24 @@ instr!(
 
 #[rustfmt::skip]
 instr!(
+    Opcode::PowerDouble, "POWD",
+    make_power_double, parse_power_double, format_power_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::PowerInteger, "POWI",
+    make_power_integer, parse_power_integer, format_power_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
     Opcode::Return, "RETURN",
     make_return, parse_return, format_return,
 );
@@ -619,6 +726,24 @@ instr!(
     Register, 0x000000ff, 16,  // Register containing the array pointer.
     Register, 0x000000ff, 8,  // Register containing the value to store.
     Register, 0x000000ff, 0,  // First register containing subscript values.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::SubtractDouble, "SUBD",
+    make_subtract_double, parse_subtract_double, format_subtract_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::SubtractInteger, "SUBI",
+    make_subtract_integer, parse_subtract_integer, format_subtract_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
 );
 
 #[rustfmt::skip]
@@ -793,6 +918,24 @@ mod tests {
     );
 
     test_instr!(
+        test_divide_double,
+        make_divide_double,
+        parse_divide_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_divide_integer,
+        make_divide_integer,
+        parse_divide_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
         test_double_to_integer,
         make_double_to_integer,
         parse_double_to_integer,
@@ -851,11 +994,47 @@ mod tests {
     );
 
     test_instr!(
+        test_modulo_double,
+        make_modulo_double,
+        parse_modulo_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_modulo_integer,
+        make_modulo_integer,
+        parse_modulo_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
         test_move,
         make_move,
         parse_move,
         Register::local(1).unwrap(),
         Register::local(2).unwrap()
+    );
+
+    test_instr!(
+        test_multiply_double,
+        make_multiply_double,
+        parse_multiply_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_multiply_integer,
+        make_multiply_integer,
+        parse_multiply_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
     );
 
     test_instr!(
@@ -874,12 +1053,48 @@ mod tests {
 
     test_instr!(test_nop, make_nop, parse_nop);
 
+    test_instr!(
+        test_power_double,
+        make_power_double,
+        parse_power_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_power_integer,
+        make_power_integer,
+        parse_power_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
     test_instr!(test_return, make_return, parse_return);
 
     test_instr!(
         test_store_array,
         make_store_array,
         parse_store_array,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_subtract_double,
+        make_subtract_double,
+        parse_subtract_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_subtract_integer,
+        make_subtract_integer,
+        parse_subtract_integer,
         Register::local(1).unwrap(),
         Register::local(2).unwrap(),
         Register::local(3).unwrap()

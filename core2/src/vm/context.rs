@@ -53,6 +53,42 @@ struct Frame {
     ret_reg: Option<Register>,
 }
 
+/// Custom implementation of checked integer additions for error reporting purposes.
+#[inline(always)]
+fn checked_add_integer(lhs: i32, rhs: i32) -> Result<i32, &'static str> {
+    lhs.checked_add(rhs).ok_or("Integer overflow")
+}
+
+/// Custom implementation of checked integer divisions for error reporting purposes.
+#[inline(always)]
+fn checked_div_integer(lhs: i32, rhs: i32) -> Result<i32, &'static str> {
+    if rhs == 0 { Err("Division by zero") } else { lhs.checked_div(rhs).ok_or("Integer underflow") }
+}
+
+/// Custom implementation of checked integer modulos for error reporting purposes.
+#[inline(always)]
+fn checked_mod_integer(lhs: i32, rhs: i32) -> Result<i32, &'static str> {
+    if rhs == 0 { Err("Modulo by zero") } else { lhs.checked_rem(rhs).ok_or("Integer underflow") }
+}
+
+/// Custom implementation of checked integer multiplications for error reporting purposes.
+#[inline(always)]
+fn checked_mul_integer(lhs: i32, rhs: i32) -> Result<i32, &'static str> {
+    lhs.checked_mul(rhs).ok_or("Integer overflow")
+}
+
+/// Custom implementation of checked integer powers for error reporting purposes.
+#[inline(always)]
+fn checked_pow_integer(lhs: i32, exp: u32) -> Result<i32, &'static str> {
+    lhs.checked_pow(exp).ok_or("Integer overflow")
+}
+
+/// Custom implementation of checked integer subtractions for error reporting purposes.
+#[inline(always)]
+fn checked_sub_integer(lhs: i32, rhs: i32) -> Result<i32, &'static str> {
+    lhs.checked_sub(rhs).ok_or("Integer underflow")
+}
+
 /// Execution context for the virtual machine.
 ///
 /// This roughly corresponds to the concept of a "processor", making the VM the container of
@@ -204,6 +240,8 @@ impl Context {
                 Opcode::AllocArray => self.do_alloc_array(instr, heap),
                 Opcode::Call => self.do_call(instr),
                 Opcode::Concat => self.do_concat(instr, &image.constants, heap),
+                Opcode::DivideDouble => self.do_divide_double(instr),
+                Opcode::DivideInteger => self.do_divide_integer(instr),
                 Opcode::DoubleToInteger => self.do_double_to_integer(instr),
                 Opcode::End => self.do_end(instr),
                 Opcode::Enter => self.do_enter(instr),
@@ -215,12 +253,20 @@ impl Context {
                 Opcode::LoadConstant => self.do_load_constant(instr, &image.constants),
                 Opcode::LoadInteger => self.do_load_integer(instr),
                 Opcode::LoadRegisterPointer => self.do_load_register_ptr(instr),
+                Opcode::ModuloDouble => self.do_modulo_double(instr),
+                Opcode::ModuloInteger => self.do_modulo_integer(instr),
                 Opcode::Move => self.do_move(instr),
+                Opcode::MultiplyDouble => self.do_multiply_double(instr),
+                Opcode::MultiplyInteger => self.do_multiply_integer(instr),
                 Opcode::NegateDouble => self.do_negate_double(instr),
                 Opcode::NegateInteger => self.do_negate_integer(instr),
                 Opcode::Nop => self.do_nop(instr),
+                Opcode::PowerDouble => self.do_power_double(instr),
+                Opcode::PowerInteger => self.do_power_integer(instr),
                 Opcode::Return => self.do_return(instr),
                 Opcode::StoreArray => self.do_store_array(instr, heap),
+                Opcode::SubtractDouble => self.do_subtract_double(instr),
+                Opcode::SubtractInteger => self.do_subtract_integer(instr),
                 Opcode::Upcall => self.do_upcall(instr),
             }
         }
@@ -229,29 +275,55 @@ impl Context {
 }
 
 impl Context {
-    /// Implements the `AddDouble` opcode.
-    pub(super) fn do_add_double(&mut self, instr: u32) {
-        let (dest, src1, src2) = bytecode::parse_add_double(instr);
+    /// Applies a binary double operation using `parse` to decode the instruction and `op` to
+    /// compute the result.
+    fn do_binary_double_op<F>(
+        &mut self,
+        instr: u32,
+        parse: fn(u32) -> (Register, Register, Register),
+        op: F,
+    ) where
+        F: Fn(f64, f64) -> f64,
+    {
+        let (dest, src1, src2) = parse(instr);
         let lhs = f64::from_bits(self.get_reg(src1));
         let rhs = f64::from_bits(self.get_reg(src2));
-        self.set_reg(dest, (lhs + rhs).to_bits());
+        self.set_reg(dest, op(lhs, rhs).to_bits());
         self.pc += 1;
+    }
+
+    /// Applies a binary integer operation using `parse` to decode the instruction and `op` to
+    /// compute the result.  `op` returns `Err` with a message on failure.
+    fn do_binary_integer_op<F>(
+        &mut self,
+        instr: u32,
+        parse: fn(u32) -> (Register, Register, Register),
+        op: F,
+    ) where
+        F: Fn(i32, i32) -> Result<i32, &'static str>,
+    {
+        let (dest, src1, src2) = parse(instr);
+        let lhs = self.get_reg(src1) as i32;
+        let rhs = self.get_reg(src2) as i32;
+        match op(lhs, rhs) {
+            Ok(result) => {
+                self.set_reg(dest, result as u64);
+                self.pc += 1;
+            }
+            Err(msg) => {
+                self.set_exception(msg);
+            }
+        }
+    }
+
+    /// Implements the `AddDouble` opcode.
+    pub(super) fn do_add_double(&mut self, instr: u32) {
+        self.do_binary_double_op(instr, bytecode::parse_add_double, |l, r| l + r);
     }
 
     /// Implements the `AddInteger` opcode.
     pub(super) fn do_add_integer(&mut self, instr: u32) {
-        let (dest, src1, src2) = bytecode::parse_add_integer(instr);
-        let lhs = self.get_reg(src1) as i32;
-        let rhs = self.get_reg(src2) as i32;
-        match lhs.checked_add(rhs) {
-            Some(result) => {
-                self.set_reg(dest, result as u64);
-                self.pc += 1;
-            }
-            None => {
-                self.set_exception("Integer overflow");
-            }
-        }
+        self.do_binary_integer_op(instr, bytecode::parse_add_integer, checked_add_integer);
     }
 
     /// Implements the `Alloc` opcode.
@@ -331,6 +403,16 @@ impl Context {
         let ptr = DatumPtr::for_heap((heap.len() - 1) as u32);
         self.set_reg(dest, ptr);
         self.pc += 1;
+    }
+
+    /// Implements the `DivideDouble` opcode.
+    pub(super) fn do_divide_double(&mut self, instr: u32) {
+        self.do_binary_double_op(instr, bytecode::parse_divide_double, |l, r| l / r);
+    }
+
+    /// Implements the `DivideInteger` opcode.
+    pub(super) fn do_divide_integer(&mut self, instr: u32) {
+        self.do_binary_integer_op(instr, bytecode::parse_divide_integer, checked_div_integer);
     }
 
     /// Implements the `DoubleToInteger` opcode.
@@ -424,12 +506,32 @@ impl Context {
         self.pc += 1;
     }
 
+    /// Implements the `ModuloDouble` opcode.
+    pub(super) fn do_modulo_double(&mut self, instr: u32) {
+        self.do_binary_double_op(instr, bytecode::parse_modulo_double, |l, r| l % r);
+    }
+
+    /// Implements the `ModuloInteger` opcode.
+    pub(super) fn do_modulo_integer(&mut self, instr: u32) {
+        self.do_binary_integer_op(instr, bytecode::parse_modulo_integer, checked_mod_integer);
+    }
+
     /// Implements the `Move` opcode.
     pub(super) fn do_move(&mut self, instr: u32) {
         let (dest, src) = bytecode::parse_move(instr);
         let value = self.get_reg(src);
         self.set_reg(dest, value);
         self.pc += 1;
+    }
+
+    /// Implements the `MultiplyDouble` opcode.
+    pub(super) fn do_multiply_double(&mut self, instr: u32) {
+        self.do_binary_double_op(instr, bytecode::parse_multiply_double, |l, r| l * r);
+    }
+
+    /// Implements the `MultiplyInteger` opcode.
+    pub(super) fn do_multiply_integer(&mut self, instr: u32) {
+        self.do_binary_integer_op(instr, bytecode::parse_multiply_integer, checked_mul_integer);
     }
 
     /// Implements the `NegateDouble` opcode.
@@ -459,6 +561,34 @@ impl Context {
     pub(super) fn do_nop(&mut self, instr: u32) {
         bytecode::parse_nop(instr);
         self.pc += 1;
+    }
+
+    /// Implements the `PowerDouble` opcode.
+    pub(super) fn do_power_double(&mut self, instr: u32) {
+        self.do_binary_double_op(instr, bytecode::parse_power_double, |l, r| l.powf(r));
+    }
+
+    /// Implements the `PowerInteger` opcode.
+    pub(super) fn do_power_integer(&mut self, instr: u32) {
+        let (dest, src1, src2) = bytecode::parse_power_integer(instr);
+        let lhs = self.get_reg(src1) as i32;
+        let rhs = self.get_reg(src2) as i32;
+        let exp = match u32::try_from(rhs) {
+            Ok(exp) => exp,
+            Err(_) => {
+                self.set_exception(format!("Exponent {} cannot be negative", rhs));
+                return;
+            }
+        };
+        match checked_pow_integer(lhs, exp) {
+            Ok(result) => {
+                self.set_reg(dest, result as u64);
+                self.pc += 1;
+            }
+            Err(msg) => {
+                self.set_exception(msg);
+            }
+        }
     }
 
     /// Implements the `Return` opcode.
@@ -495,6 +625,16 @@ impl Context {
             array.values[flat_idx] = value;
             self.pc += 1;
         }
+    }
+
+    /// Implements the `SubtractDouble` opcode.
+    pub(super) fn do_subtract_double(&mut self, instr: u32) {
+        self.do_binary_double_op(instr, bytecode::parse_subtract_double, |l, r| l - r);
+    }
+
+    /// Implements the `SubtractInteger` opcode.
+    pub(super) fn do_subtract_integer(&mut self, instr: u32) {
+        self.do_binary_integer_op(instr, bytecode::parse_subtract_integer, checked_sub_integer);
     }
 
     /// Implements the `Upcall` opcode.

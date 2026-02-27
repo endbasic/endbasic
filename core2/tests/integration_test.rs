@@ -34,7 +34,12 @@ macro_rules! one_test {
 
 one_test!(test_args);
 one_test!(test_arithmetic_add);
+one_test!(test_arithmetic_div);
+one_test!(test_arithmetic_mod);
+one_test!(test_arithmetic_mul);
 one_test!(test_arithmetic_neg);
+one_test!(test_arithmetic_pow);
+one_test!(test_arithmetic_sub);
 one_test!(test_arrays);
 one_test!(test_assignments);
 one_test!(test_empty);

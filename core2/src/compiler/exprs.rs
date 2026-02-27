@@ -89,7 +89,6 @@ struct PendingBinaryOp {
 /// of pending ops.
 fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
     let mut pending: Vec<PendingBinaryOp> = vec![];
-    #[allow(clippy::while_let_loop)]
     loop {
         match expr {
             Expr::Add(span) => {
@@ -101,6 +100,71 @@ fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
                     make_double: bytecode::make_add_double,
                     make_integer: bytecode::make_add_integer,
                     make_text: Some(bytecode::make_concat),
+                });
+                expr = span.lhs;
+            }
+
+            Expr::Divide(span) => {
+                let span = *span;
+                pending.push(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "/",
+                    make_double: bytecode::make_divide_double,
+                    make_integer: bytecode::make_divide_integer,
+                    make_text: None,
+                });
+                expr = span.lhs;
+            }
+
+            Expr::Modulo(span) => {
+                let span = *span;
+                pending.push(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "MOD",
+                    make_double: bytecode::make_modulo_double,
+                    make_integer: bytecode::make_modulo_integer,
+                    make_text: None,
+                });
+                expr = span.lhs;
+            }
+
+            Expr::Multiply(span) => {
+                let span = *span;
+                pending.push(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "*",
+                    make_double: bytecode::make_multiply_double,
+                    make_integer: bytecode::make_multiply_integer,
+                    make_text: None,
+                });
+                expr = span.lhs;
+            }
+
+            Expr::Power(span) => {
+                let span = *span;
+                pending.push(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "^",
+                    make_double: bytecode::make_power_double,
+                    make_integer: bytecode::make_power_integer,
+                    make_text: None,
+                });
+                expr = span.lhs;
+            }
+
+            Expr::Subtract(span) => {
+                let span = *span;
+                pending.push(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "-",
+                    make_double: bytecode::make_subtract_double,
+                    make_integer: bytecode::make_subtract_integer,
+                    make_text: None,
                 });
                 expr = span.lhs;
             }
@@ -176,7 +240,12 @@ pub(super) fn compile_expr(
     let (expr, pending) = peel_binary_ops(expr);
 
     let etype = match expr {
-        Expr::Add(..) => unreachable!("Peeled by peel_binary_ops"),
+        Expr::Add(..)
+        | Expr::Divide(..)
+        | Expr::Modulo(..)
+        | Expr::Multiply(..)
+        | Expr::Power(..)
+        | Expr::Subtract(..) => unreachable!("Peeled by peel_binary_ops"),
 
         Expr::Boolean(span) => {
             codegen.emit_value(reg, ConstantDatum::Boolean(span.value), span.pos)?;
