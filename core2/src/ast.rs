@@ -157,38 +157,39 @@ pub enum Expr {
 impl Expr {
     /// Returns the start position of the expression.
     pub fn start_pos(&self) -> LineCol {
-        match self {
-            Expr::Boolean(span) => span.pos,
-            Expr::Double(span) => span.pos,
-            Expr::Integer(span) => span.pos,
-            Expr::Text(span) => span.pos,
+        let mut expr = self;
+        loop {
+            match expr {
+                Expr::Boolean(span) => return span.pos,
+                Expr::Double(span) => return span.pos,
+                Expr::Integer(span) => return span.pos,
+                Expr::Text(span) => return span.pos,
 
-            Expr::Symbol(span) => span.pos,
+                Expr::Symbol(span) => return span.pos,
 
-            Expr::And(span) => span.lhs.start_pos(),
-            Expr::Or(span) => span.lhs.start_pos(),
-            Expr::Xor(span) => span.lhs.start_pos(),
-            Expr::Not(span) => span.pos,
+                Expr::Not(span) => return span.pos,
+                Expr::Negate(span) => return span.pos,
 
-            Expr::ShiftLeft(span) => span.lhs.start_pos(),
-            Expr::ShiftRight(span) => span.lhs.start_pos(),
+                Expr::Call(span) => return span.vref_pos,
 
-            Expr::Equal(span) => span.lhs.start_pos(),
-            Expr::NotEqual(span) => span.lhs.start_pos(),
-            Expr::Less(span) => span.lhs.start_pos(),
-            Expr::LessEqual(span) => span.lhs.start_pos(),
-            Expr::Greater(span) => span.lhs.start_pos(),
-            Expr::GreaterEqual(span) => span.lhs.start_pos(),
-
-            Expr::Add(span) => span.lhs.start_pos(),
-            Expr::Subtract(span) => span.lhs.start_pos(),
-            Expr::Multiply(span) => span.lhs.start_pos(),
-            Expr::Divide(span) => span.lhs.start_pos(),
-            Expr::Modulo(span) => span.lhs.start_pos(),
-            Expr::Power(span) => span.lhs.start_pos(),
-            Expr::Negate(span) => span.pos,
-
-            Expr::Call(span) => span.vref_pos,
+                Expr::Add(span)
+                | Expr::And(span)
+                | Expr::Divide(span)
+                | Expr::Equal(span)
+                | Expr::Greater(span)
+                | Expr::GreaterEqual(span)
+                | Expr::Less(span)
+                | Expr::LessEqual(span)
+                | Expr::Modulo(span)
+                | Expr::Multiply(span)
+                | Expr::NotEqual(span)
+                | Expr::Or(span)
+                | Expr::Power(span)
+                | Expr::ShiftLeft(span)
+                | Expr::ShiftRight(span)
+                | Expr::Subtract(span)
+                | Expr::Xor(span) => expr = &span.lhs,
+            }
         }
     }
 }

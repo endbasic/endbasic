@@ -366,14 +366,14 @@ OUT add(3, 5) + add(10, 20)
 ## Disassembly
 
 ```asm
-0000:   ENTER       6                   # 0:0
-0001:   LOADI       R67, 3              # 5:9
-0002:   LOADI       R68, 5              # 5:12
-0003:   CALL        R66, 12             # 5:5, ADD
-0004:   LOADI       R68, 10             # 5:21
-0005:   LOADI       R69, 20             # 5:25
-0006:   CALL        R67, 12             # 5:17, ADD
-0007:   ADDI        R65, R66, R67       # 5:15
+0000:   ENTER       5                   # 0:0
+0001:   LOADI       R66, 3              # 5:9
+0002:   LOADI       R67, 5              # 5:12
+0003:   CALL        R65, 12             # 5:5, ADD
+0004:   LOADI       R67, 10             # 5:21
+0005:   LOADI       R68, 20             # 5:25
+0006:   CALL        R66, 12             # 5:17, ADD
+0007:   ADDI        R65, R65, R66       # 5:15
 0008:   LOADI       R64, 258            # 5:5
 0009:   UPCALL      0, R64              # 5:1, OUT
 0010:   LOADI       R64, 0              # 0:0
@@ -381,10 +381,10 @@ OUT add(3, 5) + add(10, 20)
 
 -- ADD 
 0012:   LOADI       R64, 0              # 1:10
-0013:   ENTER       5                   # 0:0
-0014:   MOVE        R67, R65            # 2:11
-0015:   MOVE        R68, R66            # 2:15
-0016:   ADDI        R64, R67, R68       # 2:13
+0013:   ENTER       4                   # 0:0
+0014:   MOVE        R64, R65            # 2:11
+0015:   MOVE        R67, R66            # 2:15
+0016:   ADDI        R64, R64, R67       # 2:13
 0017:   RETURN                          # 3:1
 ```
 
@@ -424,10 +424,10 @@ OUT ret
 
 -- FOO 
 0010:   LOADI       R64, 0              # 1:10
-0011:   ENTER       4                   # 0:0
-0012:   LOADI       R66, 42             # 2:11
-0013:   MOVE        R67, R65            # 2:16
-0014:   ADDI        R64, R66, R67       # 2:14
+0011:   ENTER       3                   # 0:0
+0012:   LOADI       R64, 42             # 2:11
+0013:   MOVE        R66, R65            # 2:16
+0014:   ADDI        R64, R64, R66       # 2:14
 0015:   RETURN                          # 3:1
 ```
 
@@ -723,18 +723,18 @@ OUT SUM_DOUBLES(1.0, 2.0) + SUM_DOUBLES(3.0, 4.0)
 ## Disassembly
 
 ```asm
-0000:   ENTER       8                   # 0:0
-0001:   LOADC       R68, 0              # 1:17
-0002:   LOADI       R67, 289            # 1:17
-0003:   LOADC       R70, 1              # 1:22
-0004:   LOADI       R69, 257            # 1:22
-0005:   UPCALL      0, R66              # 1:5, SUM_DOUBLES
-0006:   LOADC       R69, 2              # 1:41
-0007:   LOADI       R68, 289            # 1:41
-0008:   LOADC       R71, 3              # 1:46
-0009:   LOADI       R70, 257            # 1:46
-0010:   UPCALL      0, R67              # 1:29, SUM_DOUBLES
-0011:   ADDD        R65, R66, R67       # 1:27
+0000:   ENTER       7                   # 0:0
+0001:   LOADC       R67, 0              # 1:17
+0002:   LOADI       R66, 289            # 1:17
+0003:   LOADC       R69, 1              # 1:22
+0004:   LOADI       R68, 257            # 1:22
+0005:   UPCALL      0, R65              # 1:5, SUM_DOUBLES
+0006:   LOADC       R68, 2              # 1:41
+0007:   LOADI       R67, 289            # 1:41
+0008:   LOADC       R70, 3              # 1:46
+0009:   LOADI       R69, 257            # 1:46
+0010:   UPCALL      0, R66              # 1:29, SUM_DOUBLES
+0011:   ADDD        R65, R65, R66       # 1:27
 0012:   LOADI       R64, 257            # 1:5
 0013:   UPCALL      1, R64              # 1:1, OUT
 0014:   LOADI       R64, 0              # 0:0

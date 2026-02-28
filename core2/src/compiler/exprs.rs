@@ -16,13 +16,14 @@
 
 //! Functions to convert expressions into bytecode.
 
-use crate::ast::{BinaryOpSpan, Expr, ExprType};
+use crate::ast::{Expr, ExprType};
 use crate::bytecode::{self, Register, RegisterScope};
 use crate::compiler::args::compile_args;
 use crate::compiler::codegen::{Codegen, Fixup};
 use crate::compiler::syms::{self, SymbolKey, SymbolPrototype, TempScope, TempSymtable};
 use crate::compiler::{Error, Result};
 use crate::mem::ConstantDatum;
+use crate::reader::LineCol;
 
 /// Compiles `exprs` into consecutive integer registers allocated from `scope` and returns the
 /// first register.  The caller must guarantee that `exprs` is non-empty.
@@ -30,7 +31,7 @@ pub(super) fn compile_integer_exprs(
     codegen: &mut Codegen,
     symtable: &mut TempSymtable<'_, '_, '_, '_, '_>,
     scope: &mut TempScope,
-    pos: crate::reader::LineCol,
+    pos: LineCol,
     exprs: impl Iterator<Item = Expr>,
 ) -> Result<Register> {
     let mut first_reg = None;
@@ -49,7 +50,7 @@ fn compile_array_access(
     codegen: &mut Codegen,
     symtable: &mut TempSymtable<'_, '_, '_, '_, '_>,
     reg: Register,
-    key_pos: crate::reader::LineCol,
+    key_pos: LineCol,
     arr_reg: Register,
     info: &syms::ArrayInfo,
     args: Vec<crate::ast::ArgSpan>,
@@ -70,74 +71,112 @@ fn compile_array_access(
     Ok(info.subtype)
 }
 
-/// Compiles an arithmetic binary operation `span` that returns its value into `reg`.
-fn compile_arithmetic_binary_op(
+/// A pending arithmetic binary operation waiting to be applied, used to flatten
+/// expressions and avoid recursive calls during processing.
+struct PendingBinaryOp {
+    pos: LineCol,
+    rhs: Expr,
+    op_name: &'static str,
+    make_double: fn(Register, Register, Register) -> u32,
+    make_integer: fn(Register, Register, Register) -> u32,
+    make_text: Option<fn(Register, Register, Register) -> u32>,
+}
+
+/// Peels the left-recursive chain of arithmetic binary ops into a vector of pending
+/// binary ops to avoid deep recursion.
+///
+/// Returns the input `expr` holding the leftmost non-binary expression and the list
+/// of pending ops.
+fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
+    let mut pending: Vec<PendingBinaryOp> = vec![];
+    #[allow(clippy::while_let_loop)]
+    loop {
+        match expr {
+            Expr::Add(span) => {
+                let span = *span;
+                pending.push(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "+",
+                    make_double: bytecode::make_add_double,
+                    make_integer: bytecode::make_add_integer,
+                    make_text: Some(bytecode::make_concat),
+                });
+                expr = span.lhs;
+            }
+            _ => break,
+        }
+    }
+    (expr, pending)
+}
+
+/// Processes `pending` arithmetic binary ops from innermost to outermost, using
+/// `reg` as the accumulator.
+///
+/// This avoids the deep recursion that would arise if we compiled binary op chains
+/// by recursing on the lhs.
+fn compile_pending_ops(
     codegen: &mut Codegen,
     symtable: &mut TempSymtable<'_, '_, '_, '_, '_>,
     reg: Register,
-    span: BinaryOpSpan,
-    op_name: &'static str,
+    mut etype: ExprType,
+    mut pending: Vec<PendingBinaryOp>,
 ) -> Result<ExprType> {
-    let mut scope = symtable.temp_scope();
+    while let Some(op) = pending.pop() {
+        let rpos = op.rhs.start_pos();
+        let mut scope = symtable.temp_scope();
+        let rtemp = scope.alloc().map_err(|e| Error::from_syms(e, rpos))?;
+        let rtype = compile_expr(codegen, symtable, rtemp, op.rhs)?;
 
-    let lpos = span.lhs.start_pos();
-    let ltemp = scope.alloc().map_err(|e| Error::from_syms(e, lpos))?;
-    let ltype = compile_expr(codegen, symtable, ltemp, span.lhs)?;
+        let result_type = match (etype, rtype) {
+            (ExprType::Double, ExprType::Double) => ExprType::Double,
+            (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
+            (ExprType::Text, ExprType::Text) if op.make_text.is_some() => ExprType::Text,
+            (ExprType::Double, ExprType::Integer) => {
+                codegen.emit(bytecode::make_integer_to_double(rtemp), rpos);
+                ExprType::Double
+            }
+            (ExprType::Integer, ExprType::Double) => {
+                codegen.emit(bytecode::make_integer_to_double(reg), op.pos);
+                ExprType::Double
+            }
+            _ => return Err(Error::BinaryOpType(op.pos, op.op_name, etype, rtype)),
+        };
 
-    let rpos = span.rhs.start_pos();
-    let rtemp = scope.alloc().map_err(|e| Error::from_syms(e, rpos))?;
-    let rtype = compile_expr(codegen, symtable, rtemp, span.rhs)?;
-
-    let rtype = match (ltype, rtype) {
-        // Type-compatible operands.
-        (ExprType::Double, ExprType::Double) => ExprType::Double,
-        (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
-        (ExprType::Text, ExprType::Text) if op_name == "+" => ExprType::Text,
-
-        // Operands requiring type promotion.
-        (ExprType::Double, ExprType::Integer) => {
-            codegen.emit(bytecode::make_integer_to_double(rtemp), rpos);
-            ExprType::Double
-        }
-        (ExprType::Integer, ExprType::Double) => {
-            codegen.emit(bytecode::make_integer_to_double(ltemp), lpos);
-            ExprType::Double
-        }
-
-        // Unsupported operand types.
-        _ => {
-            return Err(Error::BinaryOpType(span.pos, "+", ltype, rtype));
-        }
-    };
-
-    match rtype {
-        ExprType::Boolean => unreachable!(),
-
-        ExprType::Double => {
-            codegen.emit(bytecode::make_add_double(reg, ltemp, rtemp), span.pos);
+        match result_type {
+            ExprType::Boolean => unreachable!(),
+            ExprType::Double => {
+                codegen.emit((op.make_double)(reg, reg, rtemp), op.pos);
+            }
+            ExprType::Integer => {
+                codegen.emit((op.make_integer)(reg, reg, rtemp), op.pos);
+            }
+            ExprType::Text => {
+                codegen.emit(op.make_text.unwrap()(reg, reg, rtemp), op.pos);
+            }
         }
 
-        ExprType::Integer => {
-            codegen.emit(bytecode::make_add_integer(reg, ltemp, rtemp), span.pos);
-        }
-
-        ExprType::Text => {
-            codegen.emit(bytecode::make_concat(reg, ltemp, rtemp), span.pos);
-        }
+        etype = result_type;
     }
 
-    Ok(rtype)
+    Ok(etype)
 }
 
 /// Compiles a single expression `expr` and leaves its value in `reg`.
+///
+/// For left-recursive arithmetic binary operations (like `a + b + c`), this function
+/// iterates rather than recurses so that very long expression chains do not overflow
+/// the call stack.
 pub(super) fn compile_expr(
     codegen: &mut Codegen,
     symtable: &mut TempSymtable<'_, '_, '_, '_, '_>,
     reg: Register,
     expr: Expr,
 ) -> Result<ExprType> {
-    match expr {
-        Expr::Add(span) => compile_arithmetic_binary_op(codegen, symtable, reg, *span, "+"),
+    let (expr, pending) = peel_binary_ops(expr);
+
+    let etype = match expr {
+        Expr::Add(..) => unreachable!("Peeled by peel_binary_ops"),
 
         Expr::Boolean(span) => {
             codegen.emit_value(reg, ConstantDatum::Boolean(span.value), span.pos)?;
@@ -148,13 +187,49 @@ pub(super) fn compile_expr(
             let key = SymbolKey::from(&span.vref.name);
             let key_pos = span.vref_pos;
 
-            let Some(md) = symtable.get_callable(&key) else {
+            if let Some(md) = symtable.get_callable(&key) {
+                let Some(etype) = md.return_type() else {
+                    return Err(Error::NotAFunction(span.vref_pos, span.vref));
+                };
+
+                if md.is_argless() {
+                    return Err(Error::CallableSyntax(span.vref_pos, md.clone()));
+                }
+
+                let is_user_defined = md.is_user_defined();
+                let (is_global, _index) = reg.to_parts();
+                let mut alloc = symtable.temp_scope();
+                let ret_reg = if is_global {
+                    // The call instruction can only carry one register, and this register
+                    // indicates where to store the result and where arguments start.  So,
+                    // if we are going to save the result to a global register, we must
+                    // allocate a temp register first so that argument passing can work.
+                    alloc.alloc().map_err(|e| Error::from_syms(e, key_pos))?
+                } else {
+                    reg
+                };
+                let (_first_temp, arg_linecols) =
+                    compile_args(span, md.clone(), symtable, codegen)?;
+
+                if is_user_defined {
+                    let addr = codegen.emit(bytecode::make_nop(), key_pos);
+                    codegen.set_arg_linecols(addr, arg_linecols);
+                    codegen.add_fixup(addr, Fixup::Call(ret_reg, key));
+                } else {
+                    let upcall = codegen.get_upcall(key, Some(etype), key_pos)?;
+                    let addr = codegen.emit(bytecode::make_upcall(upcall, ret_reg), key_pos);
+                    codegen.set_arg_linecols(addr, arg_linecols);
+                }
+                if is_global {
+                    codegen.emit(bytecode::make_move(reg, ret_reg), key_pos);
+                }
+
+                Ok(etype)
+            } else {
                 match symtable.get_local_or_global(&span.vref) {
-                    Ok((arr_reg, SymbolPrototype::Array(info))) => {
-                        return compile_array_access(
-                            codegen, symtable, reg, key_pos, arr_reg, &info, span.args,
-                        );
-                    }
+                    Ok((arr_reg, SymbolPrototype::Array(info))) => compile_array_access(
+                        codegen, symtable, reg, key_pos, arr_reg, &info, span.args,
+                    ),
                     Err(syms::Error::UndefinedSymbol(..)) | Ok((_, SymbolPrototype::Scalar(_))) => {
                         return Err(Error::UndefinedSymbol(
                             span.vref_pos,
@@ -164,44 +239,7 @@ pub(super) fn compile_expr(
                     }
                     Err(e) => return Err(Error::from_syms(e, key_pos)),
                 }
-            };
-
-            let Some(etype) = md.return_type() else {
-                return Err(Error::NotAFunction(span.vref_pos, span.vref));
-            };
-
-            if md.is_argless() {
-                return Err(Error::CallableSyntax(span.vref_pos, md.clone()));
             }
-
-            let is_user_defined = md.is_user_defined();
-            let (is_global, _index) = reg.to_parts();
-            let mut alloc = symtable.temp_scope();
-            let ret_reg = if is_global {
-                // The call instruction can only carry one register, and this register
-                // indicates where to store the result and where arguments start.  So,
-                // if we are going to save the result to a global register, we must
-                // allocate a temp register first so that argument passing can work.
-                alloc.alloc().map_err(|e| Error::from_syms(e, key_pos))?
-            } else {
-                reg
-            };
-            let (_first_temp, arg_linecols) = compile_args(span, md.clone(), symtable, codegen)?;
-
-            if is_user_defined {
-                let addr = codegen.emit(bytecode::make_nop(), key_pos);
-                codegen.set_arg_linecols(addr, arg_linecols);
-                codegen.add_fixup(addr, Fixup::Call(ret_reg, key));
-            } else {
-                let upcall = codegen.get_upcall(key, Some(etype), key_pos)?;
-                let addr = codegen.emit(bytecode::make_upcall(upcall, ret_reg), key_pos);
-                codegen.set_arg_linecols(addr, arg_linecols);
-            }
-            if is_global {
-                codegen.emit(bytecode::make_move(reg, ret_reg), key_pos);
-            }
-
-            Ok(etype)
         }
 
         Expr::Double(span) => {
@@ -283,7 +321,9 @@ pub(super) fn compile_expr(
         }
 
         _ => todo!(),
-    }
+    }?;
+
+    compile_pending_ops(codegen, symtable, reg, etype, pending)
 }
 
 /// Compiles a single expression, expecting it to be of a `target` type.  Applies casts if
