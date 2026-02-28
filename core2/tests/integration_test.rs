@@ -59,6 +59,8 @@ one_test!(test_out_of_registers);
 one_test!(test_strings);
 one_test!(test_subs);
 one_test!(test_types);
+one_test!(test_unary_neg_depth);
+one_test!(test_unary_not_depth);
 
 #[test]
 fn test_all_md_files_registered() -> io::Result<()> {

@@ -71,8 +71,22 @@ fn compile_array_access(
     Ok(info.subtype)
 }
 
-/// A pending binary operation waiting to be applied, used to flatten expressions and
-/// avoid recursive calls during processing.
+/// The type of unary operation waiting to be applied.
+enum PendingUnaryKind {
+    Negate,
+    Not,
+}
+
+/// A pending unary operation waiting to be applied.
+struct PendingUnaryOp {
+    pos: LineCol,
+    kind: PendingUnaryKind,
+    make_boolean: Option<fn(Register, Register, Register) -> u32>,
+    make_integer: fn(Register) -> u32,
+    make_double: Option<fn(Register) -> u32>,
+}
+
+/// A pending binary operation waiting to be applied.
 struct PendingBinaryOp {
     pos: LineCol,
     rhs: Expr,
@@ -83,18 +97,24 @@ struct PendingBinaryOp {
     make_text: Option<fn(Register, Register, Register) -> u32>,
 }
 
-/// Peels the left-recursive chain of binary ops into a vector of pending binary ops to avoid
-/// deep recursion.
+/// A pending expression operation waiting to be applied, used to flatten expression chains
+/// and avoid recursive calls during processing.
+enum PendingOp {
+    Unary(PendingUnaryOp),
+    Binary(PendingBinaryOp),
+}
+
+/// Peels the expression chain into a vector of pending ops to avoid deep recursion.
 ///
-/// Returns the input `expr` holding the leftmost non-binary expression and the list
-/// of pending ops.
-fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
-    let mut pending: Vec<PendingBinaryOp> = vec![];
+/// Returns the input `expr` holding the innermost non-op expression and the list of
+/// pending ops.
+fn peel_ops(mut expr: Expr) -> (Expr, Vec<PendingOp>) {
+    let mut pending: Vec<PendingOp> = vec![];
     loop {
         match expr {
             Expr::Add(span) => {
                 let span = *span;
-                pending.push(PendingBinaryOp {
+                pending.push(PendingOp::Binary(PendingBinaryOp {
                     pos: span.pos,
                     rhs: span.rhs,
                     op_name: "+",
@@ -102,13 +122,13 @@ fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
                     make_double: Some(bytecode::make_add_double),
                     make_integer: bytecode::make_add_integer,
                     make_text: Some(bytecode::make_concat),
-                });
+                }));
                 expr = span.lhs;
             }
 
             Expr::And(span) => {
                 let span = *span;
-                pending.push(PendingBinaryOp {
+                pending.push(PendingOp::Binary(PendingBinaryOp {
                     pos: span.pos,
                     rhs: span.rhs,
                     op_name: "AND",
@@ -116,13 +136,13 @@ fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
                     make_double: None,
                     make_integer: bytecode::make_bitwise_and,
                     make_text: None,
-                });
+                }));
                 expr = span.lhs;
             }
 
             Expr::Divide(span) => {
                 let span = *span;
-                pending.push(PendingBinaryOp {
+                pending.push(PendingOp::Binary(PendingBinaryOp {
                     pos: span.pos,
                     rhs: span.rhs,
                     op_name: "/",
@@ -130,13 +150,13 @@ fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
                     make_double: Some(bytecode::make_divide_double),
                     make_integer: bytecode::make_divide_integer,
                     make_text: None,
-                });
+                }));
                 expr = span.lhs;
             }
 
             Expr::Modulo(span) => {
                 let span = *span;
-                pending.push(PendingBinaryOp {
+                pending.push(PendingOp::Binary(PendingBinaryOp {
                     pos: span.pos,
                     rhs: span.rhs,
                     op_name: "MOD",
@@ -144,13 +164,13 @@ fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
                     make_double: Some(bytecode::make_modulo_double),
                     make_integer: bytecode::make_modulo_integer,
                     make_text: None,
-                });
+                }));
                 expr = span.lhs;
             }
 
             Expr::Multiply(span) => {
                 let span = *span;
-                pending.push(PendingBinaryOp {
+                pending.push(PendingOp::Binary(PendingBinaryOp {
                     pos: span.pos,
                     rhs: span.rhs,
                     op_name: "*",
@@ -158,13 +178,37 @@ fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
                     make_double: Some(bytecode::make_multiply_double),
                     make_integer: bytecode::make_multiply_integer,
                     make_text: None,
-                });
+                }));
                 expr = span.lhs;
+            }
+
+            Expr::Negate(span) => {
+                let span = *span;
+                pending.push(PendingOp::Unary(PendingUnaryOp {
+                    pos: span.pos,
+                    kind: PendingUnaryKind::Negate,
+                    make_boolean: None,
+                    make_integer: bytecode::make_negate_integer,
+                    make_double: Some(bytecode::make_negate_double),
+                }));
+                expr = span.expr;
+            }
+
+            Expr::Not(span) => {
+                let span = *span;
+                pending.push(PendingOp::Unary(PendingUnaryOp {
+                    pos: span.pos,
+                    kind: PendingUnaryKind::Not,
+                    make_boolean: Some(bytecode::make_bitwise_xor),
+                    make_integer: bytecode::make_bitwise_not,
+                    make_double: None,
+                }));
+                expr = span.expr;
             }
 
             Expr::Or(span) => {
                 let span = *span;
-                pending.push(PendingBinaryOp {
+                pending.push(PendingOp::Binary(PendingBinaryOp {
                     pos: span.pos,
                     rhs: span.rhs,
                     op_name: "OR",
@@ -172,13 +216,13 @@ fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
                     make_double: None,
                     make_integer: bytecode::make_bitwise_or,
                     make_text: None,
-                });
+                }));
                 expr = span.lhs;
             }
 
             Expr::Power(span) => {
                 let span = *span;
-                pending.push(PendingBinaryOp {
+                pending.push(PendingOp::Binary(PendingBinaryOp {
                     pos: span.pos,
                     rhs: span.rhs,
                     op_name: "^",
@@ -186,13 +230,13 @@ fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
                     make_double: Some(bytecode::make_power_double),
                     make_integer: bytecode::make_power_integer,
                     make_text: None,
-                });
+                }));
                 expr = span.lhs;
             }
 
             Expr::ShiftLeft(span) => {
                 let span = *span;
-                pending.push(PendingBinaryOp {
+                pending.push(PendingOp::Binary(PendingBinaryOp {
                     pos: span.pos,
                     rhs: span.rhs,
                     op_name: "<<",
@@ -200,13 +244,13 @@ fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
                     make_double: None,
                     make_integer: bytecode::make_shift_left,
                     make_text: None,
-                });
+                }));
                 expr = span.lhs;
             }
 
             Expr::ShiftRight(span) => {
                 let span = *span;
-                pending.push(PendingBinaryOp {
+                pending.push(PendingOp::Binary(PendingBinaryOp {
                     pos: span.pos,
                     rhs: span.rhs,
                     op_name: ">>",
@@ -214,12 +258,12 @@ fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
                     make_double: None,
                     make_integer: bytecode::make_shift_right,
                     make_text: None,
-                });
+                }));
                 expr = span.lhs;
             }
             Expr::Subtract(span) => {
                 let span = *span;
-                pending.push(PendingBinaryOp {
+                pending.push(PendingOp::Binary(PendingBinaryOp {
                     pos: span.pos,
                     rhs: span.rhs,
                     op_name: "-",
@@ -227,13 +271,13 @@ fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
                     make_double: Some(bytecode::make_subtract_double),
                     make_integer: bytecode::make_subtract_integer,
                     make_text: None,
-                });
+                }));
                 expr = span.lhs;
             }
 
             Expr::Xor(span) => {
                 let span = *span;
-                pending.push(PendingBinaryOp {
+                pending.push(PendingOp::Binary(PendingBinaryOp {
                     pos: span.pos,
                     rhs: span.rhs,
                     op_name: "XOR",
@@ -241,9 +285,10 @@ fn peel_binary_ops(mut expr: Expr) -> (Expr, Vec<PendingBinaryOp>) {
                     make_double: None,
                     make_integer: bytecode::make_bitwise_xor,
                     make_text: None,
-                });
+                }));
                 expr = span.lhs;
             }
+
             _ => break,
         }
     }
@@ -260,48 +305,82 @@ fn compile_pending_ops(
     symtable: &mut TempSymtable<'_, '_, '_, '_, '_>,
     reg: Register,
     mut etype: ExprType,
-    mut pending: Vec<PendingBinaryOp>,
+    mut pending: Vec<PendingOp>,
 ) -> Result<ExprType> {
     while let Some(op) = pending.pop() {
-        let rpos = op.rhs.start_pos();
-        let mut scope = symtable.temp_scope();
-        let rtemp = scope.alloc().map_err(|e| Error::from_syms(e, rpos))?;
-        let rtype = compile_expr(codegen, symtable, rtemp, op.rhs)?;
+        match op {
+            PendingOp::Unary(op) => {
+                let result_type = match etype {
+                    ExprType::Boolean if op.make_boolean.is_some() => ExprType::Boolean,
+                    ExprType::Double if op.make_double.is_some() => ExprType::Double,
+                    ExprType::Integer => ExprType::Integer,
+                    _ => match op.kind {
+                        PendingUnaryKind::Negate => return Err(Error::NotANumber(op.pos, etype)),
+                        PendingUnaryKind::Not => {
+                            return Err(Error::TypeMismatch(op.pos, etype, ExprType::Integer));
+                        }
+                    },
+                };
+                match result_type {
+                    ExprType::Boolean => {
+                        let mut scope = symtable.temp_scope();
+                        let temp = scope.alloc().map_err(|e| Error::from_syms(e, op.pos))?;
+                        codegen.emit_value(temp, ConstantDatum::Integer(1), op.pos)?;
+                        codegen.emit(op.make_boolean.unwrap()(reg, reg, temp), op.pos);
+                    }
+                    ExprType::Double => {
+                        codegen.emit(op.make_double.unwrap()(reg), op.pos);
+                    }
+                    ExprType::Integer => {
+                        codegen.emit((op.make_integer)(reg), op.pos);
+                    }
+                    ExprType::Text => unreachable!(),
+                }
+                etype = result_type;
+            }
+            PendingOp::Binary(op) => {
+                let rpos = op.rhs.start_pos();
+                let mut scope = symtable.temp_scope();
+                let rtemp = scope.alloc().map_err(|e| Error::from_syms(e, rpos))?;
+                let rtype = compile_expr(codegen, symtable, rtemp, op.rhs)?;
 
-        let result_type = match (etype, rtype) {
-            (ExprType::Double, ExprType::Double) if op.make_double.is_some() => ExprType::Double,
-            (ExprType::Boolean, ExprType::Boolean) if op.make_boolean.is_some() => {
-                ExprType::Boolean
-            }
-            (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
-            (ExprType::Text, ExprType::Text) if op.make_text.is_some() => ExprType::Text,
-            (ExprType::Double, ExprType::Integer) if op.make_double.is_some() => {
-                codegen.emit(bytecode::make_integer_to_double(rtemp), rpos);
-                ExprType::Double
-            }
-            (ExprType::Integer, ExprType::Double) if op.make_double.is_some() => {
-                codegen.emit(bytecode::make_integer_to_double(reg), op.pos);
-                ExprType::Double
-            }
-            _ => return Err(Error::BinaryOpType(op.pos, op.op_name, etype, rtype)),
-        };
+                let result_type = match (etype, rtype) {
+                    (ExprType::Boolean, ExprType::Boolean) if op.make_boolean.is_some() => {
+                        ExprType::Boolean
+                    }
+                    (ExprType::Double, ExprType::Double) if op.make_double.is_some() => {
+                        ExprType::Double
+                    }
+                    (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
+                    (ExprType::Text, ExprType::Text) if op.make_text.is_some() => ExprType::Text,
+                    (ExprType::Double, ExprType::Integer) if op.make_double.is_some() => {
+                        codegen.emit(bytecode::make_integer_to_double(rtemp), rpos);
+                        ExprType::Double
+                    }
+                    (ExprType::Integer, ExprType::Double) if op.make_double.is_some() => {
+                        codegen.emit(bytecode::make_integer_to_double(reg), op.pos);
+                        ExprType::Double
+                    }
+                    _ => return Err(Error::BinaryOpType(op.pos, op.op_name, etype, rtype)),
+                };
 
-        match result_type {
-            ExprType::Boolean => {
-                codegen.emit(op.make_boolean.unwrap()(reg, reg, rtemp), op.pos);
-            }
-            ExprType::Double => {
-                codegen.emit(op.make_double.unwrap()(reg, reg, rtemp), op.pos);
-            }
-            ExprType::Integer => {
-                codegen.emit((op.make_integer)(reg, reg, rtemp), op.pos);
-            }
-            ExprType::Text => {
-                codegen.emit(op.make_text.unwrap()(reg, reg, rtemp), op.pos);
+                match result_type {
+                    ExprType::Boolean => {
+                        codegen.emit(op.make_boolean.unwrap()(reg, reg, rtemp), op.pos);
+                    }
+                    ExprType::Double => {
+                        codegen.emit(op.make_double.unwrap()(reg, reg, rtemp), op.pos);
+                    }
+                    ExprType::Integer => {
+                        codegen.emit((op.make_integer)(reg, reg, rtemp), op.pos);
+                    }
+                    ExprType::Text => {
+                        codegen.emit(op.make_text.unwrap()(reg, reg, rtemp), op.pos);
+                    }
+                }
+                etype = result_type;
             }
         }
-
-        etype = result_type;
     }
 
     Ok(etype)
@@ -317,7 +396,7 @@ pub(super) fn compile_expr(
     reg: Register,
     expr: Expr,
 ) -> Result<ExprType> {
-    let (expr, pending) = peel_binary_ops(expr);
+    let (expr, pending) = peel_ops(expr);
 
     let etype = match expr {
         Expr::Add(..)
@@ -325,12 +404,14 @@ pub(super) fn compile_expr(
         | Expr::Divide(..)
         | Expr::Modulo(..)
         | Expr::Multiply(..)
+        | Expr::Negate(..)
+        | Expr::Not(..)
         | Expr::Or(..)
         | Expr::Power(..)
         | Expr::ShiftLeft(..)
         | Expr::ShiftRight(..)
         | Expr::Subtract(..)
-        | Expr::Xor(..) => unreachable!("Peeled by peel_binary_ops"),
+        | Expr::Xor(..) => unreachable!("Peeled by peel_ops"),
 
         Expr::Boolean(span) => {
             codegen.emit_value(reg, ConstantDatum::Boolean(span.value), span.pos)?;
@@ -404,42 +485,6 @@ pub(super) fn compile_expr(
         Expr::Integer(span) => {
             codegen.emit_value(reg, ConstantDatum::Integer(span.value), span.pos)?;
             Ok(ExprType::Integer)
-        }
-
-        Expr::Negate(span) => {
-            let pos = span.pos;
-            let etype = compile_expr(codegen, symtable, reg, span.expr)?;
-            match etype {
-                ExprType::Double => {
-                    codegen.emit(bytecode::make_negate_double(reg), pos);
-                }
-                ExprType::Integer => {
-                    codegen.emit(bytecode::make_negate_integer(reg), pos);
-                }
-                _ => {
-                    return Err(Error::NotANumber(pos, etype));
-                }
-            }
-            Ok(etype)
-        }
-
-        Expr::Not(span) => {
-            let pos = span.pos;
-            let etype = compile_expr(codegen, symtable, reg, span.expr)?;
-            match etype {
-                ExprType::Boolean => {
-                    let mut scope = symtable.temp_scope();
-                    let temp = scope.alloc().map_err(|e| Error::from_syms(e, pos))?;
-                    codegen.emit_value(temp, ConstantDatum::Integer(1), pos)?;
-                    codegen.emit(bytecode::make_bitwise_xor(reg, reg, temp), pos);
-                    Ok(ExprType::Boolean)
-                }
-                ExprType::Integer => {
-                    codegen.emit(bytecode::make_bitwise_not(reg), pos);
-                    Ok(ExprType::Integer)
-                }
-                _ => Err(Error::TypeMismatch(pos, etype, ExprType::Integer)),
-            }
         }
 
         Expr::Symbol(span) => match symtable.get_local_or_global(&span.vref) {
