@@ -16,7 +16,9 @@
 
 //! Entry point to the compilation, handling top-level definitions.
 
-use crate::ast::{ArgSep, AssignmentSpan, CallableSpan, EndSpan, ExprType, Statement, VarRef};
+use crate::ast::{
+    ArgSep, AssignmentSpan, CallableSpan, EndSpan, ExprType, IfSpan, Statement, VarRef,
+};
 use crate::bytecode::{self, PackedArrayType, Register, RegisterScope};
 use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, SingularArgSyntax};
 use crate::compiler::args::{compile_args, define_new_args};
@@ -102,6 +104,58 @@ fn compile_assignment(
     // expression's type to fix up the type in the symbols table.
     let etype = compile_expr(codegen, &mut symtable.frozen(), reg, span.expr)?;
     symtable.fixup_local_type(&span.vref, etype).map_err(|e| Error::from_syms(e, vref_pos))
+}
+
+/// Compiles an `IF` statement `span` into the `ctx`.
+fn compile_if(
+    ctx: &mut Context,
+    symtable: &mut LocalSymtable<'_, '_, '_, '_>,
+    span: IfSpan,
+) -> Result<()> {
+    let mut end_pcs: Vec<usize> = vec![];
+    let nbranches = span.branches.len();
+
+    for (i, branch) in span.branches.into_iter().enumerate() {
+        let is_last = i == nbranches - 1;
+        let guard_pos = branch.guard.start_pos();
+
+        let (jump_pc, cond_reg) = {
+            let mut frozen = symtable.frozen();
+            let mut scope = frozen.temp_scope();
+            let reg = scope.alloc().map_err(|e| Error::from_syms(e, guard_pos))?;
+            compile_expr_as_type(
+                &mut ctx.codegen,
+                &mut frozen,
+                reg,
+                branch.guard,
+                ExprType::Boolean,
+            )?;
+            (ctx.codegen.emit(bytecode::make_nop(), guard_pos), reg)
+        };
+
+        for stmt in branch.body {
+            compile_stmt(ctx, symtable, stmt)?;
+        }
+
+        if !is_last {
+            let end_pc = ctx.codegen.emit(bytecode::make_nop(), guard_pos);
+            end_pcs.push(end_pc);
+        }
+
+        let next_addr = ctx.codegen.next_pc();
+        let target =
+            u16::try_from(next_addr).map_err(|_| Error::TargetTooFar(guard_pos, next_addr))?;
+        ctx.codegen.patch(jump_pc, bytecode::make_jump_if_false(cond_reg, target));
+    }
+
+    let end_addr = ctx.codegen.next_pc();
+    for end_pc in end_pcs {
+        let end_target = u16::try_from(end_addr)
+            .map_err(|_| Error::TargetTooFar(LineCol { line: 0, col: 0 }, end_addr))?;
+        ctx.codegen.patch(end_pc, bytecode::make_jump(end_target));
+    }
+
+    Ok(())
 }
 
 /// Compiles a single `stmt` into the `ctx`.
@@ -334,6 +388,10 @@ fn compile_stmt(
 
         Statement::Return(span) => {
             ctx.codegen.emit(bytecode::make_return(), span.pos);
+        }
+
+        Statement::If(span) => {
+            compile_if(ctx, symtable, span)?;
         }
 
         _ => todo!(),

@@ -303,6 +303,7 @@ impl Context {
                 Opcode::GreaterText => self.do_greater_text(instr, &image.constants, heap),
                 Opcode::IntegerToDouble => self.do_integer_to_double(instr),
                 Opcode::Jump => self.do_jump(instr),
+                Opcode::JumpIfFalse => self.do_jump_if_false(instr),
                 Opcode::Leave => self.do_leave(instr),
                 Opcode::LessDouble => self.do_less_double(instr),
                 Opcode::LessEqualDouble => self.do_less_equal_double(instr),
@@ -694,6 +695,16 @@ impl Context {
     pub(super) fn do_jump(&mut self, instr: u32) {
         let offset = bytecode::parse_jump(instr);
         self.pc = Address::from(offset);
+    }
+
+    /// Implements the `JumpIfFalse` opcode.
+    pub(super) fn do_jump_if_false(&mut self, instr: u32) {
+        let (cond_reg, target) = bytecode::parse_jump_if_false(instr);
+        if self.get_reg(cond_reg) != 0 {
+            self.pc += 1;
+        } else {
+            self.pc = Address::from(target);
+        }
     }
 
     /// Implements the `Leave` opcode.

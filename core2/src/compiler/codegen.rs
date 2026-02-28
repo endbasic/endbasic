@@ -134,6 +134,13 @@ impl Codegen {
         Ok(())
     }
 
+    /// Overwrites the instruction at `addr` with `op`.
+    ///
+    /// Used by the compiler to back-patch placeholder instructions with resolved jump targets.
+    pub(super) fn patch(&mut self, addr: Address, op: u32) {
+        self.code[addr] = op;
+    }
+
     /// Records a `fixup` that needs to be applied at `addr`.
     pub(super) fn add_fixup(&mut self, addr: usize, fixup: Fixup) {
         let previous = self.fixups.insert(addr, fixup);
