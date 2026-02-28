@@ -56,6 +56,7 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::GreaterText => bytecode::format_greater_text(instr),
         Opcode::IntegerToDouble => bytecode::format_integer_to_double(instr),
         Opcode::Jump => bytecode::format_jump(instr),
+        Opcode::JumpIfFalse => bytecode::format_jump_if_false(instr),
         Opcode::Leave => bytecode::format_leave(instr),
         Opcode::LessDouble => bytecode::format_less_double(instr),
         Opcode::LessEqualDouble => bytecode::format_less_equal_double(instr),

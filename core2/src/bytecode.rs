@@ -451,6 +451,9 @@ pub(crate) enum Opcode {
     /// Jumps to an address relative to the PC.
     Jump,
 
+    /// Jumps to an address relative to the PC if the condition register is false (0).
+    JumpIfFalse,
+
     /// Deallocates the registers allocated by the preamble ENTER, unwinding to the FP.
     Leave,
 
@@ -787,6 +790,14 @@ instr!(
 instr!(
     Opcode::Jump, "JUMP",
     make_jump, parse_jump, format_jump,
+    u16, 0x0000ffff, 0,  // Target address.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::JumpIfFalse, "JMPF",
+    make_jump_if_false, parse_jump_if_false, format_jump_if_false,
+    Register, 0x000000ff, 16,  // Condition register; if 0 (false), jump to target.
     u16, 0x0000ffff, 0,  // Target address.
 );
 
@@ -1387,6 +1398,14 @@ mod tests {
     );
 
     test_instr!(test_jump, make_jump, parse_jump, 12345);
+
+    test_instr!(
+        test_jump_if_false,
+        make_jump_if_false,
+        parse_jump_if_false,
+        Register::local(1).unwrap(),
+        12345
+    );
 
     test_instr!(test_leave, make_leave, parse_leave);
 
