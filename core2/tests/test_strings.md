@@ -21,12 +21,12 @@ OUT c4
 0000:   ENTER       6                   # 0:0
 0001:   LOADI       R64, 0              # 1:6
 0002:   LOADI       R65, 1              # 2:6
-0003:   MOVE        R67, R64            # 4:6
-0004:   MOVE        R68, R65            # 4:11
-0005:   CONCAT      R66, R67, R68       # 4:9
-0006:   MOVE        R68, R66            # 5:6
-0007:   LOADI       R69, 2              # 5:11
-0008:   CONCAT      R67, R68, R69       # 5:9
+0003:   MOVE        R66, R64            # 4:6
+0004:   MOVE        R67, R65            # 4:11
+0005:   CONCAT      R66, R66, R67       # 4:9
+0006:   MOVE        R67, R66            # 5:6
+0007:   LOADI       R68, 2              # 5:11
+0008:   CONCAT      R67, R67, R68       # 5:9
 0009:   MOVE        R69, R64            # 7:5
 0010:   LOADI       R68, 259            # 7:5
 0011:   UPCALL      0, R68              # 7:1, OUT
