@@ -409,11 +409,41 @@ pub(crate) enum Opcode {
     /// Converts the double value in a register to an integer.
     DoubleToInteger,
 
+    /// Compares two booleans for equality and stores the result into a third one.
+    EqualBoolean,
+
+    /// Compares two doubles for equality and stores the result into a third one.
+    EqualDouble,
+
+    /// Compares two integers for equality and stores the result into a third one.
+    EqualInteger,
+
+    /// Compares two strings for equality and stores the result into a third one.
+    EqualText,
+
     /// Allocates local registers (locals and temporaries) when entering a scope.
     Enter,
 
     /// Jumps to a subroutine at an address relative to the PC.
     Gosub,
+
+    /// Compares two doubles for greater-than and stores the result into a third one.
+    GreaterDouble,
+
+    /// Compares two doubles for greater-than-or-equal and stores the result into a third one.
+    GreaterEqualDouble,
+
+    /// Compares two integers for greater-than-or-equal and stores the result into a third one.
+    GreaterEqualInteger,
+
+    /// Compares two strings for greater-than-or-equal and stores the result into a third one.
+    GreaterEqualText,
+
+    /// Compares two integers for greater-than and stores the result into a third one.
+    GreaterInteger,
+
+    /// Compares two strings for greater-than and stores the result into a third one.
+    GreaterText,
 
     /// Converts the integer value in a register to a double.
     IntegerToDouble,
@@ -423,6 +453,24 @@ pub(crate) enum Opcode {
 
     /// Deallocates the registers allocated by the preamble ENTER, unwinding to the FP.
     Leave,
+
+    /// Compares two doubles for less-than and stores the result into a third one.
+    LessDouble,
+
+    /// Compares two doubles for less-than-or-equal and stores the result into a third one.
+    LessEqualDouble,
+
+    /// Compares two integers for less-than-or-equal and stores the result into a third one.
+    LessEqualInteger,
+
+    /// Compares two strings for less-than-or-equal and stores the result into a third one.
+    LessEqualText,
+
+    /// Compares two integers for less-than and stores the result into a third one.
+    LessInteger,
+
+    /// Compares two strings for less-than and stores the result into a third one.
+    LessText,
 
     /// Loads an element from an array.
     LoadArray,
@@ -456,6 +504,18 @@ pub(crate) enum Opcode {
 
     /// Negates an integer value in place.
     NegateInteger,
+
+    /// Compares two booleans for inequality and stores the result into a third one.
+    NotEqualBoolean,
+
+    /// Compares two doubles for inequality and stores the result into a third one.
+    NotEqualDouble,
+
+    /// Compares two integers for inequality and stores the result into a third one.
+    NotEqualInteger,
+
+    /// Compares two strings for inequality and stores the result into a third one.
+    NotEqualText,
 
     /// The "null" instruction, used by the compiler to pad the code for fixups.
     Nop,
@@ -607,6 +667,42 @@ instr!(
 
 #[rustfmt::skip]
 instr!(
+    Opcode::EqualBoolean, "CMPEQB",
+    make_equal_boolean, parse_equal_boolean, format_equal_boolean,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::EqualDouble, "CMPEQD",
+    make_equal_double, parse_equal_double, format_equal_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::EqualInteger, "CMPEQI",
+    make_equal_integer, parse_equal_integer, format_equal_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::EqualText, "CMPEQS",
+    make_equal_text, parse_equal_text, format_equal_text,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
     Opcode::End, "END",
     make_end, parse_end, format_end,
     Register, 0x000000ff, 0,  // Register with the return code.
@@ -628,6 +724,60 @@ instr!(
 
 #[rustfmt::skip]
 instr!(
+    Opcode::GreaterDouble, "CMPGTD",
+    make_greater_double, parse_greater_double, format_greater_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::GreaterEqualDouble, "CMPGED",
+    make_greater_equal_double, parse_greater_equal_double, format_greater_equal_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::GreaterEqualInteger, "CMPGEI",
+    make_greater_equal_integer, parse_greater_equal_integer, format_greater_equal_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::GreaterEqualText, "CMPGES",
+    make_greater_equal_text, parse_greater_equal_text, format_greater_equal_text,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::GreaterInteger, "CMPGTI",
+    make_greater_integer, parse_greater_integer, format_greater_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::GreaterText, "CMPGTS",
+    make_greater_text, parse_greater_text, format_greater_text,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
     Opcode::IntegerToDouble, "ITOD",
     make_integer_to_double, parse_integer_to_double, format_integer_to_double,
     Register, 0x000000ff, 0,  // Register with the value to convert.
@@ -644,6 +794,60 @@ instr!(
 instr!(
     Opcode::Leave, "LEAVE",
     make_leave, parse_leave, format_leave,
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LessDouble, "CMPLTD",
+    make_less_double, parse_less_double, format_less_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LessEqualDouble, "CMPLED",
+    make_less_equal_double, parse_less_equal_double, format_less_equal_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LessEqualInteger, "CMPLEI",
+    make_less_equal_integer, parse_less_equal_integer, format_less_equal_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LessEqualText, "CMPLES",
+    make_less_equal_text, parse_less_equal_text, format_less_equal_text,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LessInteger, "CMPLTI",
+    make_less_integer, parse_less_integer, format_less_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LessText, "CMPLTS",
+    make_less_text, parse_less_text, format_less_text,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
 );
 
 #[rustfmt::skip]
@@ -741,6 +945,42 @@ instr!(
     Opcode::NegateInteger, "NEGI",
     make_negate_integer, parse_negate_integer, format_negate_integer,
     Register, 0x000000ff, 0,  // Register with the value to negate in place.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::NotEqualBoolean, "CMPNEB",
+    make_not_equal_boolean, parse_not_equal_boolean, format_not_equal_boolean,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::NotEqualDouble, "CMPNED",
+    make_not_equal_double, parse_not_equal_double, format_not_equal_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::NotEqualInteger, "CMPNEI",
+    make_not_equal_integer, parse_not_equal_integer, format_not_equal_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::NotEqualText, "CMPNES",
+    make_not_equal_text, parse_not_equal_text, format_not_equal_text,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
 );
 
 #[rustfmt::skip]
@@ -1043,11 +1283,101 @@ mod tests {
         Register::local(1).unwrap()
     );
 
+    test_instr!(
+        test_equal_boolean,
+        make_equal_boolean,
+        parse_equal_boolean,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_equal_double,
+        make_equal_double,
+        parse_equal_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_equal_integer,
+        make_equal_integer,
+        parse_equal_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_equal_text,
+        make_equal_text,
+        parse_equal_text,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
     test_instr!(test_end, make_end, parse_end, Register::local(1).unwrap());
 
     test_instr!(test_enter, make_enter, parse_enter, 10);
 
     test_instr!(test_gosub, make_gosub, parse_gosub, 12345);
+
+    test_instr!(
+        test_greater_double,
+        make_greater_double,
+        parse_greater_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_greater_equal_double,
+        make_greater_equal_double,
+        parse_greater_equal_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_greater_equal_integer,
+        make_greater_equal_integer,
+        parse_greater_equal_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_greater_equal_text,
+        make_greater_equal_text,
+        parse_greater_equal_text,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_greater_integer,
+        make_greater_integer,
+        parse_greater_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_greater_text,
+        make_greater_text,
+        parse_greater_text,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
 
     test_instr!(
         test_integer_to_double,
@@ -1059,6 +1389,60 @@ mod tests {
     test_instr!(test_jump, make_jump, parse_jump, 12345);
 
     test_instr!(test_leave, make_leave, parse_leave);
+
+    test_instr!(
+        test_less_double,
+        make_less_double,
+        parse_less_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_less_equal_double,
+        make_less_equal_double,
+        parse_less_equal_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_less_equal_integer,
+        make_less_equal_integer,
+        parse_less_equal_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_less_equal_text,
+        make_less_equal_text,
+        parse_less_equal_text,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_less_integer,
+        make_less_integer,
+        parse_less_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_less_text,
+        make_less_text,
+        parse_less_text,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
 
     test_instr!(
         test_load_array,
@@ -1150,6 +1534,42 @@ mod tests {
         make_negate_integer,
         parse_negate_integer,
         Register::local(1).unwrap()
+    );
+
+    test_instr!(
+        test_not_equal_boolean,
+        make_not_equal_boolean,
+        parse_not_equal_boolean,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_not_equal_double,
+        make_not_equal_double,
+        parse_not_equal_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_not_equal_integer,
+        make_not_equal_integer,
+        parse_not_equal_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_not_equal_text,
+        make_not_equal_text,
+        parse_not_equal_text,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
     );
 
     test_instr!(test_nop, make_nop, parse_nop);
