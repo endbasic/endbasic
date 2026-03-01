@@ -286,12 +286,30 @@ impl Context {
                 Opcode::DivideDouble => self.do_divide_double(instr),
                 Opcode::DivideInteger => self.do_divide_integer(instr),
                 Opcode::DoubleToInteger => self.do_double_to_integer(instr),
+                Opcode::EqualBoolean => self.do_equal_boolean(instr),
+                Opcode::EqualDouble => self.do_equal_double(instr),
+                Opcode::EqualInteger => self.do_equal_integer(instr),
+                Opcode::EqualText => self.do_equal_text(instr, &image.constants, heap),
                 Opcode::End => self.do_end(instr),
                 Opcode::Enter => self.do_enter(instr),
                 Opcode::Gosub => self.do_gosub(instr),
+                Opcode::GreaterDouble => self.do_greater_double(instr),
+                Opcode::GreaterEqualDouble => self.do_greater_equal_double(instr),
+                Opcode::GreaterEqualInteger => self.do_greater_equal_integer(instr),
+                Opcode::GreaterEqualText => {
+                    self.do_greater_equal_text(instr, &image.constants, heap)
+                }
+                Opcode::GreaterInteger => self.do_greater_integer(instr),
+                Opcode::GreaterText => self.do_greater_text(instr, &image.constants, heap),
                 Opcode::IntegerToDouble => self.do_integer_to_double(instr),
                 Opcode::Jump => self.do_jump(instr),
                 Opcode::Leave => self.do_leave(instr),
+                Opcode::LessDouble => self.do_less_double(instr),
+                Opcode::LessEqualDouble => self.do_less_equal_double(instr),
+                Opcode::LessEqualInteger => self.do_less_equal_integer(instr),
+                Opcode::LessEqualText => self.do_less_equal_text(instr, &image.constants, heap),
+                Opcode::LessInteger => self.do_less_integer(instr),
+                Opcode::LessText => self.do_less_text(instr, &image.constants, heap),
                 Opcode::LoadArray => self.do_load_array(instr, heap),
                 Opcode::LoadConstant => self.do_load_constant(instr, &image.constants),
                 Opcode::LoadInteger => self.do_load_integer(instr),
@@ -303,6 +321,10 @@ impl Context {
                 Opcode::MultiplyInteger => self.do_multiply_integer(instr),
                 Opcode::NegateDouble => self.do_negate_double(instr),
                 Opcode::NegateInteger => self.do_negate_integer(instr),
+                Opcode::NotEqualBoolean => self.do_not_equal_boolean(instr),
+                Opcode::NotEqualDouble => self.do_not_equal_double(instr),
+                Opcode::NotEqualInteger => self.do_not_equal_integer(instr),
+                Opcode::NotEqualText => self.do_not_equal_text(instr, &image.constants, heap),
                 Opcode::Nop => self.do_nop(instr),
                 Opcode::PowerDouble => self.do_power_double(instr),
                 Opcode::PowerInteger => self.do_power_integer(instr),
@@ -337,6 +359,23 @@ impl Context {
         self.pc += 1;
     }
 
+    /// Applies a binary double predicate using `parse` to decode the instruction and `op` to
+    /// compute the result.
+    fn do_binary_double_predicate_op<F>(
+        &mut self,
+        instr: u32,
+        parse: fn(u32) -> (Register, Register, Register),
+        op: F,
+    ) where
+        F: Fn(f64, f64) -> bool,
+    {
+        let (dest, src1, src2) = parse(instr);
+        let lhs = f64::from_bits(self.get_reg(src1));
+        let rhs = f64::from_bits(self.get_reg(src2));
+        self.set_reg(dest, if op(lhs, rhs) { 1 } else { 0 });
+        self.pc += 1;
+    }
+
     /// Applies a binary integer operation using `parse` to decode the instruction and `op` to
     /// compute the result.  `op` returns `Err` with a message on failure.
     fn do_binary_integer_op<F, E>(
@@ -360,6 +399,59 @@ impl Context {
                 self.set_exception(msg.to_string());
             }
         }
+    }
+
+    /// Applies a binary integer predicate using `parse` to decode the instruction and `op` to
+    /// compute the result.
+    fn do_binary_integer_predicate_op<F>(
+        &mut self,
+        instr: u32,
+        parse: fn(u32) -> (Register, Register, Register),
+        op: F,
+    ) where
+        F: Fn(i32, i32) -> bool,
+    {
+        let (dest, src1, src2) = parse(instr);
+        let lhs = self.get_reg(src1) as i32;
+        let rhs = self.get_reg(src2) as i32;
+        self.set_reg(dest, if op(lhs, rhs) { 1 } else { 0 });
+        self.pc += 1;
+    }
+
+    /// Applies a binary boolean operation using `parse` to decode the instruction and `op` to
+    /// compute the result.
+    fn do_binary_boolean_op<F>(
+        &mut self,
+        instr: u32,
+        parse: fn(u32) -> (Register, Register, Register),
+        op: F,
+    ) where
+        F: Fn(bool, bool) -> bool,
+    {
+        let (dest, src1, src2) = parse(instr);
+        let lhs = self.get_reg(src1) != 0;
+        let rhs = self.get_reg(src2) != 0;
+        self.set_reg(dest, if op(lhs, rhs) { 1 } else { 0 });
+        self.pc += 1;
+    }
+
+    /// Applies a binary text operation using `parse` to decode the instruction and `op` to
+    /// compute the result.
+    fn do_binary_text_op<F>(
+        &mut self,
+        instr: u32,
+        constants: &[ConstantDatum],
+        heap: &[HeapDatum],
+        parse: fn(u32) -> (Register, Register, Register),
+        op: F,
+    ) where
+        F: Fn(&str, &str) -> bool,
+    {
+        let (dest, src1, src2) = parse(instr);
+        let lhs = self.deref_string(src1, constants, heap);
+        let rhs = self.deref_string(src2, constants, heap);
+        self.set_reg(dest, if op(lhs, rhs) { 1 } else { 0 });
+        self.pc += 1;
     }
 
     /// Implements the `AddDouble` opcode.
@@ -492,6 +584,31 @@ impl Context {
         self.pc += 1;
     }
 
+    /// Implements the `EqualBoolean` opcode.
+    pub(super) fn do_equal_boolean(&mut self, instr: u32) {
+        self.do_binary_boolean_op(instr, bytecode::parse_equal_boolean, |l, r| l == r);
+    }
+
+    /// Implements the `EqualDouble` opcode.
+    pub(super) fn do_equal_double(&mut self, instr: u32) {
+        self.do_binary_double_predicate_op(instr, bytecode::parse_equal_double, |l, r| l == r);
+    }
+
+    /// Implements the `EqualInteger` opcode.
+    pub(super) fn do_equal_integer(&mut self, instr: u32) {
+        self.do_binary_integer_predicate_op(instr, bytecode::parse_equal_integer, |l, r| l == r);
+    }
+
+    /// Implements the `EqualText` opcode.
+    pub(super) fn do_equal_text(
+        &mut self,
+        instr: u32,
+        constants: &[ConstantDatum],
+        heap: &[HeapDatum],
+    ) {
+        self.do_binary_text_op(instr, constants, heap, bytecode::parse_equal_text, |l, r| l == r);
+    }
+
     /// Implements the `End` opcode.
     pub(super) fn do_end(&mut self, instr: u32) {
         let reg = bytecode::parse_end(instr);
@@ -513,6 +630,58 @@ impl Context {
         self.pc = Address::from(offset);
     }
 
+    /// Implements the `GreaterDouble` opcode.
+    pub(super) fn do_greater_double(&mut self, instr: u32) {
+        self.do_binary_double_predicate_op(instr, bytecode::parse_greater_double, |l, r| l > r);
+    }
+
+    /// Implements the `GreaterEqualDouble` opcode.
+    pub(super) fn do_greater_equal_double(&mut self, instr: u32) {
+        self.do_binary_double_predicate_op(instr, bytecode::parse_greater_equal_double, |l, r| {
+            l >= r
+        });
+    }
+
+    /// Implements the `GreaterEqualInteger` opcode.
+    pub(super) fn do_greater_equal_integer(&mut self, instr: u32) {
+        self.do_binary_integer_predicate_op(
+            instr,
+            bytecode::parse_greater_equal_integer,
+            |l, r| l >= r,
+        );
+    }
+
+    /// Implements the `GreaterEqualText` opcode.
+    pub(super) fn do_greater_equal_text(
+        &mut self,
+        instr: u32,
+        constants: &[ConstantDatum],
+        heap: &[HeapDatum],
+    ) {
+        self.do_binary_text_op(
+            instr,
+            constants,
+            heap,
+            bytecode::parse_greater_equal_text,
+            |l, r| l >= r,
+        );
+    }
+
+    /// Implements the `GreaterInteger` opcode.
+    pub(super) fn do_greater_integer(&mut self, instr: u32) {
+        self.do_binary_integer_predicate_op(instr, bytecode::parse_greater_integer, |l, r| l > r);
+    }
+
+    /// Implements the `GreaterText` opcode.
+    pub(super) fn do_greater_text(
+        &mut self,
+        instr: u32,
+        constants: &[ConstantDatum],
+        heap: &[HeapDatum],
+    ) {
+        self.do_binary_text_op(instr, constants, heap, bytecode::parse_greater_text, |l, r| l > r);
+    }
+
     /// Implements the `IntegerToDouble` opcode.
     pub(super) fn do_integer_to_double(&mut self, instr: u32) {
         let reg = bytecode::parse_integer_to_double(instr);
@@ -532,6 +701,50 @@ impl Context {
         bytecode::parse_leave(instr);
         self.regs.truncate(self.fp);
         self.pc += 1;
+    }
+
+    /// Implements the `LessDouble` opcode.
+    pub(super) fn do_less_double(&mut self, instr: u32) {
+        self.do_binary_double_predicate_op(instr, bytecode::parse_less_double, |l, r| l < r);
+    }
+
+    /// Implements the `LessEqualDouble` opcode.
+    pub(super) fn do_less_equal_double(&mut self, instr: u32) {
+        self.do_binary_double_predicate_op(instr, bytecode::parse_less_equal_double, |l, r| l <= r);
+    }
+
+    /// Implements the `LessEqualInteger` opcode.
+    pub(super) fn do_less_equal_integer(&mut self, instr: u32) {
+        self.do_binary_integer_predicate_op(instr, bytecode::parse_less_equal_integer, |l, r| {
+            l <= r
+        });
+    }
+
+    /// Implements the `LessEqualText` opcode.
+    pub(super) fn do_less_equal_text(
+        &mut self,
+        instr: u32,
+        constants: &[ConstantDatum],
+        heap: &[HeapDatum],
+    ) {
+        self.do_binary_text_op(instr, constants, heap, bytecode::parse_less_equal_text, |l, r| {
+            l <= r
+        });
+    }
+
+    /// Implements the `LessInteger` opcode.
+    pub(super) fn do_less_integer(&mut self, instr: u32) {
+        self.do_binary_integer_predicate_op(instr, bytecode::parse_less_integer, |l, r| l < r);
+    }
+
+    /// Implements the `LessText` opcode.
+    pub(super) fn do_less_text(
+        &mut self,
+        instr: u32,
+        constants: &[ConstantDatum],
+        heap: &[HeapDatum],
+    ) {
+        self.do_binary_text_op(instr, constants, heap, bytecode::parse_less_text, |l, r| l < r);
     }
 
     /// Implements the `LoadArray` opcode.
@@ -624,6 +837,35 @@ impl Context {
                 self.set_exception("Integer overflow");
             }
         }
+    }
+
+    /// Implements the `NotEqualBoolean` opcode.
+    pub(super) fn do_not_equal_boolean(&mut self, instr: u32) {
+        self.do_binary_boolean_op(instr, bytecode::parse_not_equal_boolean, |l, r| l != r);
+    }
+
+    /// Implements the `NotEqualDouble` opcode.
+    pub(super) fn do_not_equal_double(&mut self, instr: u32) {
+        self.do_binary_double_predicate_op(instr, bytecode::parse_not_equal_double, |l, r| l != r);
+    }
+
+    /// Implements the `NotEqualInteger` opcode.
+    pub(super) fn do_not_equal_integer(&mut self, instr: u32) {
+        self.do_binary_integer_predicate_op(instr, bytecode::parse_not_equal_integer, |l, r| {
+            l != r
+        });
+    }
+
+    /// Implements the `NotEqualText` opcode.
+    pub(super) fn do_not_equal_text(
+        &mut self,
+        instr: u32,
+        constants: &[ConstantDatum],
+        heap: &[HeapDatum],
+    ) {
+        self.do_binary_text_op(instr, constants, heap, bytecode::parse_not_equal_text, |l, r| {
+            l != r
+        });
     }
 
     /// Implements the `Nop` opcode.

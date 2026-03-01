@@ -97,11 +97,23 @@ struct PendingBinaryOp {
     make_text: Option<fn(Register, Register, Register) -> u32>,
 }
 
+/// A pending relational operation waiting to be applied.
+struct PendingRelationalOp {
+    pos: LineCol,
+    rhs: Expr,
+    op_name: &'static str,
+    make_boolean: Option<fn(Register, Register, Register) -> u32>,
+    make_double: Option<fn(Register, Register, Register) -> u32>,
+    make_integer: Option<fn(Register, Register, Register) -> u32>,
+    make_text: Option<fn(Register, Register, Register) -> u32>,
+}
+
 /// A pending expression operation waiting to be applied, used to flatten expression chains
 /// and avoid recursive calls during processing.
 enum PendingOp {
     Unary(PendingUnaryOp),
     Binary(PendingBinaryOp),
+    Relational(PendingRelationalOp),
 }
 
 /// Peels the expression chain into a vector of pending ops to avoid deep recursion.
@@ -150,6 +162,76 @@ fn peel_ops(mut expr: Expr) -> (Expr, Vec<PendingOp>) {
                     make_double: Some(bytecode::make_divide_double),
                     make_integer: bytecode::make_divide_integer,
                     make_text: None,
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::Equal(span) => {
+                let span = *span;
+                pending.push(PendingOp::Relational(PendingRelationalOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "=",
+                    make_boolean: Some(bytecode::make_equal_boolean),
+                    make_double: Some(bytecode::make_equal_double),
+                    make_integer: Some(bytecode::make_equal_integer),
+                    make_text: Some(bytecode::make_equal_text),
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::Greater(span) => {
+                let span = *span;
+                pending.push(PendingOp::Relational(PendingRelationalOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: ">",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_greater_double),
+                    make_integer: Some(bytecode::make_greater_integer),
+                    make_text: Some(bytecode::make_greater_text),
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::GreaterEqual(span) => {
+                let span = *span;
+                pending.push(PendingOp::Relational(PendingRelationalOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: ">=",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_greater_equal_double),
+                    make_integer: Some(bytecode::make_greater_equal_integer),
+                    make_text: Some(bytecode::make_greater_equal_text),
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::Less(span) => {
+                let span = *span;
+                pending.push(PendingOp::Relational(PendingRelationalOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "<",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_less_double),
+                    make_integer: Some(bytecode::make_less_integer),
+                    make_text: Some(bytecode::make_less_text),
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::LessEqual(span) => {
+                let span = *span;
+                pending.push(PendingOp::Relational(PendingRelationalOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "<=",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_less_equal_double),
+                    make_integer: Some(bytecode::make_less_equal_integer),
+                    make_text: Some(bytecode::make_less_equal_text),
                 }));
                 expr = span.lhs;
             }
@@ -204,6 +286,20 @@ fn peel_ops(mut expr: Expr) -> (Expr, Vec<PendingOp>) {
                     make_double: None,
                 }));
                 expr = span.expr;
+            }
+
+            Expr::NotEqual(span) => {
+                let span = *span;
+                pending.push(PendingOp::Relational(PendingRelationalOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "<>",
+                    make_boolean: Some(bytecode::make_not_equal_boolean),
+                    make_double: Some(bytecode::make_not_equal_double),
+                    make_integer: Some(bytecode::make_not_equal_integer),
+                    make_text: Some(bytecode::make_not_equal_text),
+                }));
+                expr = span.lhs;
             }
 
             Expr::Or(span) => {
@@ -295,6 +391,59 @@ fn peel_ops(mut expr: Expr) -> (Expr, Vec<PendingOp>) {
     (expr, pending)
 }
 
+/// Emits a cast in `reg` to convert from `from` to `to` if these are numerical types.
+///
+/// Returns true if the conversion is valid, regardless of whether a cast was needed.
+fn cast_numerical_type(
+    codegen: &mut Codegen,
+    reg: Register,
+    from: ExprType,
+    to: ExprType,
+    pos: LineCol,
+) -> bool {
+    match (from, to) {
+        (ExprType::Double, ExprType::Integer) => {
+            codegen.emit(bytecode::make_double_to_integer(reg), pos);
+            true
+        }
+        (ExprType::Integer, ExprType::Double) => {
+            codegen.emit(bytecode::make_integer_to_double(reg), pos);
+            true
+        }
+        (ExprType::Double, ExprType::Double) | (ExprType::Integer, ExprType::Integer) => true,
+        _ => false,
+    }
+}
+
+/// Resolves the numeric operand type for a binary operation and emits any required casts.
+fn resolve_numeric_binary_type(
+    codegen: &mut Codegen,
+    reg: Register,
+    etype: ExprType,
+    rtemp: Register,
+    rtype: ExprType,
+    rpos: LineCol,
+    op_pos: LineCol,
+) -> Option<ExprType> {
+    match (etype, rtype) {
+        (ExprType::Double, ExprType::Double) => Some(ExprType::Double),
+        (ExprType::Integer, ExprType::Integer) => Some(ExprType::Integer),
+        (ExprType::Double, ExprType::Integer) => {
+            let cast_ok =
+                cast_numerical_type(codegen, rtemp, ExprType::Integer, ExprType::Double, rpos);
+            debug_assert!(cast_ok);
+            Some(ExprType::Double)
+        }
+        (ExprType::Integer, ExprType::Double) => {
+            let cast_ok =
+                cast_numerical_type(codegen, reg, ExprType::Integer, ExprType::Double, op_pos);
+            debug_assert!(cast_ok);
+            Some(ExprType::Double)
+        }
+        _ => None,
+    }
+}
+
 /// Processes `pending` binary ops from innermost to outermost, using `reg` as the
 /// accumulator.
 ///
@@ -348,19 +497,18 @@ fn compile_pending_ops(
                     (ExprType::Boolean, ExprType::Boolean) if op.make_boolean.is_some() => {
                         ExprType::Boolean
                     }
-                    (ExprType::Double, ExprType::Double) if op.make_double.is_some() => {
-                        ExprType::Double
+                    (ExprType::Text, ExprType::Text) if op.make_text.is_some() => ExprType::Text,
+                    (_, _) if op.make_double.is_some() => {
+                        match resolve_numeric_binary_type(
+                            codegen, reg, etype, rtemp, rtype, rpos, op.pos,
+                        ) {
+                            Some(v) => v,
+                            None => {
+                                return Err(Error::BinaryOpType(op.pos, op.op_name, etype, rtype));
+                            }
+                        }
                     }
                     (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
-                    (ExprType::Text, ExprType::Text) if op.make_text.is_some() => ExprType::Text,
-                    (ExprType::Double, ExprType::Integer) if op.make_double.is_some() => {
-                        codegen.emit(bytecode::make_integer_to_double(rtemp), rpos);
-                        ExprType::Double
-                    }
-                    (ExprType::Integer, ExprType::Double) if op.make_double.is_some() => {
-                        codegen.emit(bytecode::make_integer_to_double(reg), op.pos);
-                        ExprType::Double
-                    }
                     _ => return Err(Error::BinaryOpType(op.pos, op.op_name, etype, rtype)),
                 };
 
@@ -379,6 +527,40 @@ fn compile_pending_ops(
                     }
                 }
                 etype = result_type;
+            }
+
+            PendingOp::Relational(op) => {
+                let rpos = op.rhs.start_pos();
+                let mut scope = symtable.temp_scope();
+                let rtemp = scope.alloc().map_err(|e| Error::from_syms(e, rpos))?;
+                let rtype = compile_expr(codegen, symtable, rtemp, op.rhs)?;
+
+                let make_opcode = match (etype, rtype) {
+                    (ExprType::Boolean, ExprType::Boolean) if op.make_boolean.is_some() => {
+                        op.make_boolean.unwrap()
+                    }
+
+                    (ExprType::Text, ExprType::Text) if op.make_text.is_some() => {
+                        op.make_text.unwrap()
+                    }
+
+                    (_, _) if op.make_double.is_some() || op.make_integer.is_some() => {
+                        match resolve_numeric_binary_type(
+                            codegen, reg, etype, rtemp, rtype, rpos, op.pos,
+                        ) {
+                            Some(ExprType::Double) => op.make_double.expect("Must exist"),
+                            Some(ExprType::Integer) => op.make_integer.expect("Must exist"),
+                            _ => {
+                                return Err(Error::BinaryOpType(op.pos, op.op_name, etype, rtype));
+                            }
+                        }
+                    }
+
+                    _ => return Err(Error::BinaryOpType(op.pos, op.op_name, etype, rtype)),
+                };
+
+                codegen.emit(make_opcode(reg, reg, rtemp), op.pos);
+                etype = ExprType::Boolean;
             }
         }
     }
@@ -402,10 +584,16 @@ pub(super) fn compile_expr(
         Expr::Add(..)
         | Expr::And(..)
         | Expr::Divide(..)
+        | Expr::Equal(..)
+        | Expr::Greater(..)
+        | Expr::GreaterEqual(..)
+        | Expr::Less(..)
+        | Expr::LessEqual(..)
         | Expr::Modulo(..)
         | Expr::Multiply(..)
         | Expr::Negate(..)
         | Expr::Not(..)
+        | Expr::NotEqual(..)
         | Expr::Or(..)
         | Expr::Power(..)
         | Expr::ShiftLeft(..)
@@ -537,8 +725,6 @@ pub(super) fn compile_expr(
             codegen.emit_value(reg, ConstantDatum::Text(span.value), span.pos)?;
             Ok(ExprType::Text)
         }
-
-        _ => todo!(),
     }?;
 
     compile_pending_ops(codegen, symtable, reg, etype, pending)
@@ -555,17 +741,7 @@ pub(super) fn compile_expr_as_type(
 ) -> Result<()> {
     let epos = expr.start_pos();
     let etype = compile_expr(codegen, symtable, reg, expr)?;
-    if etype == ExprType::Double && target.is_numerical() {
-        if target == ExprType::Integer {
-            codegen.emit(bytecode::make_double_to_integer(reg), epos);
-        }
-        Ok(())
-    } else if etype == ExprType::Integer && target.is_numerical() {
-        if target == ExprType::Double {
-            codegen.emit(bytecode::make_integer_to_double(reg), epos);
-        }
-        Ok(())
-    } else if etype == target {
+    if etype == target || cast_numerical_type(codegen, reg, etype, target, epos) {
         Ok(())
     } else {
         if target.is_numerical() {
