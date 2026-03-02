@@ -20,6 +20,7 @@ use crate::ast::{ExprType, VarRef};
 use crate::bytecode::{Register, RegisterScope};
 use crate::compiler::ids::HashMapWithIds;
 use crate::{CallableMetadata, bytecode};
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::cmp::max;
 use std::collections::HashMap;
@@ -229,12 +230,20 @@ pub(crate) struct LocalSymtable<'uref, 'ukey, 'umd, 'a> {
     /// by this local symtable.  This is used to determine the size of the scope for register
     /// allocation purposes at runtime.
     count_temps: u8,
+
+    /// Number of reserved temporary registers that are active outside of `TempScope`.
+    active_temps: Rc<Cell<u8>>,
 }
 
 impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
     /// Creates a new local symbol table within the context of a global `symtable`.
     fn new(symtable: &'a mut GlobalSymtable<'uref, 'ukey, 'umd>) -> Self {
-        Self { symtable, locals: HashMapWithIds::default(), count_temps: 0 }
+        Self {
+            symtable,
+            locals: HashMapWithIds::default(),
+            count_temps: 0,
+            active_temps: Rc::from(Cell::new(0)),
+        }
     }
 
     /// Consumes the local scope and returns the number of local variables defined, which includes
@@ -258,6 +267,50 @@ impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
     /// Freezes this table to get a `TempSymtable` that can be used to compile expressions.
     pub(crate) fn frozen(&mut self) -> TempSymtable<'uref, 'ukey, 'umd, '_, 'a> {
         TempSymtable::new(self)
+    }
+
+    /// Reserves one temporary register for the duration of `f`.
+    pub(crate) fn with_reserved_temp<T, E, ME, F>(
+        &mut self,
+        map_error: ME,
+        f: F,
+    ) -> std::result::Result<T, E>
+    where
+        ME: Fn(Error) -> E,
+        F: FnOnce(
+            Register,
+            &mut TempSymtable<'uref, 'ukey, 'umd, '_, 'a>,
+        ) -> std::result::Result<T, E>,
+    {
+        struct TempReservationGuard {
+            active_temps: Rc<Cell<u8>>,
+        }
+
+        impl Drop for TempReservationGuard {
+            fn drop(&mut self) {
+                let active_temps = self.active_temps.get();
+                debug_assert!(active_temps > 0);
+                self.active_temps.set(active_temps - 1);
+            }
+        }
+
+        let nlocals = u8::try_from(self.locals.len())
+            .map_err(|_| map_error(Error::OutOfRegisters(RegisterScope::Local)))?;
+        let first_temp = self.active_temps.get();
+        let new_active_temps = first_temp
+            .checked_add(1)
+            .ok_or(map_error(Error::OutOfRegisters(RegisterScope::Temp)))?;
+        self.active_temps.set(new_active_temps);
+        self.count_temps = max(self.count_temps, new_active_temps);
+        let _guard = TempReservationGuard { active_temps: self.active_temps.clone() };
+
+        let reg_idx = u8::try_from(usize::from(nlocals) + usize::from(first_temp))
+            .map_err(|_| map_error(Error::OutOfRegisters(RegisterScope::Temp)))?;
+        let reg = Register::local(reg_idx)
+            .map_err(|_| map_error(Error::OutOfRegisters(RegisterScope::Temp)))?;
+
+        let mut temp = self.frozen();
+        f(reg, &mut temp)
     }
 
     /// Creates a new global symbol `key` with `proto` via the parent global symbol table.
@@ -328,6 +381,9 @@ pub(crate) struct TempSymtable<'uref, 'ukey, 'umd, 'temp, 'local> {
     /// Reference to the underlying local symbol table.
     symtable: &'temp mut LocalSymtable<'uref, 'ukey, 'umd, 'local>,
 
+    /// Number of temporary registers that were already reserved on creation.
+    base_temp: u8,
+
     /// Index of the next temporary register to allocate.
     next_temp: Rc<RefCell<u8>>,
 
@@ -337,7 +393,7 @@ pub(crate) struct TempSymtable<'uref, 'ukey, 'umd, 'temp, 'local> {
 
 impl<'uref, 'ukey, 'umd, 'temp, 'local> Drop for TempSymtable<'uref, 'ukey, 'umd, 'temp, 'local> {
     fn drop(&mut self) {
-        debug_assert_eq!(0, *self.next_temp.borrow(), "Unbalanced temp drops");
+        debug_assert_eq!(self.base_temp, *self.next_temp.borrow(), "Unbalanced temp drops");
         self.symtable.count_temps = max(self.symtable.count_temps, *self.count_temps.borrow());
     }
 }
@@ -345,10 +401,12 @@ impl<'uref, 'ukey, 'umd, 'temp, 'local> Drop for TempSymtable<'uref, 'ukey, 'umd
 impl<'uref, 'ukey, 'umd, 'temp, 'local> TempSymtable<'uref, 'ukey, 'umd, 'temp, 'local> {
     /// Creates a new temporary symbol table from a `local` table.
     fn new(symtable: &'temp mut LocalSymtable<'uref, 'ukey, 'umd, 'local>) -> Self {
+        let base_temp = symtable.active_temps.get();
         Self {
             symtable,
-            next_temp: Rc::from(RefCell::from(0)),
-            count_temps: Rc::from(RefCell::from(0)),
+            base_temp,
+            next_temp: Rc::from(RefCell::from(base_temp)),
+            count_temps: Rc::from(RefCell::from(base_temp)),
         }
     }
 
@@ -803,6 +861,72 @@ mod tests {
         }
         assert_eq!(5, local.leave_scope()?);
         Ok(())
+    }
+
+    #[test]
+    fn test_with_reserved_temp_register_index() -> Result<()> {
+        let upcalls = HashMap::default();
+        let mut global = GlobalSymtable::new(&upcalls);
+        let mut local = global.enter_scope();
+        local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
+        local.put_local(SymbolKey::from("b"), SymbolPrototype::Scalar(ExprType::Integer))?;
+
+        local.with_reserved_temp(
+            |e| e,
+            |reg, _| {
+                assert_eq!(Register::local(2).unwrap(), reg);
+                Ok(())
+            },
+        )?;
+
+        assert_eq!(3, local.leave_scope()?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_reserved_temp_shifts_temp_scope_base() -> Result<()> {
+        let upcalls = HashMap::default();
+        let mut global = GlobalSymtable::new(&upcalls);
+        let mut local = global.enter_scope();
+        local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
+
+        local.with_reserved_temp(
+            |e| e,
+            |reserved, temp| {
+                assert_eq!(Register::local(1).unwrap(), reserved);
+                let mut scope = temp.temp_scope();
+                assert_eq!(Register::local(2).unwrap(), scope.alloc()?);
+                Ok(())
+            },
+        )?;
+
+        assert_eq!(3, local.leave_scope()?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_reserved_temp_released_after_error() {
+        let upcalls = HashMap::default();
+        let mut global = GlobalSymtable::new(&upcalls);
+        let mut local = global.enter_scope();
+
+        let err = local
+            .with_reserved_temp(
+                |e| e,
+                |_, _| Err::<(), Error>(Error::OutOfRegisters(RegisterScope::Temp)),
+            )
+            .unwrap_err();
+        assert_eq!("Out of temp registers", err.to_string());
+
+        local
+            .with_reserved_temp(
+                |e| e,
+                |reg, _| {
+                    assert_eq!(Register::local(0).unwrap(), reg);
+                    Ok(())
+                },
+            )
+            .unwrap();
     }
 
     #[test]
