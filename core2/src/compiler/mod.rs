@@ -76,6 +76,10 @@ pub enum Error {
     #[error("{0}: Cannot call {1} (not a function)")]
     NotAFunction(LineCol, VarRef),
 
+    /// `EXIT` statement found outside its expected block.
+    #[error("{0}: EXIT {1} outside of {1}")]
+    MisplacedExit(LineCol, &'static str),
+
     /// Attempt to index something that is not an array.
     #[error("{0}: {1} is not an array")]
     NotAnArray(LineCol, VarRef),
