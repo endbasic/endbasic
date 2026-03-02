@@ -17,15 +17,17 @@
 //! Entry point to the compilation, handling top-level definitions.
 
 use crate::ast::{
-    ArgSep, AssignmentSpan, CallableSpan, DoGuard, DoSpan, EndSpan, Expr, ExprType, ForSpan,
-    IfSpan, Statement, VarRef, WhileSpan,
+    ArgSep, AssignmentSpan, CallableSpan, CaseGuardSpan, CaseRelOp, DoGuard, DoSpan, EndSpan, Expr,
+    ExprType, ForSpan, IfSpan, SelectSpan, Statement, VarRef, WhileSpan,
 };
 use crate::bytecode::{self, PackedArrayType, Register, RegisterScope};
 use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, SingularArgSyntax};
 use crate::compiler::args::{compile_args, define_new_args};
 use crate::compiler::codegen::{Codegen, Fixup};
 use crate::compiler::exprs::{compile_expr, compile_expr_as_type, compile_integer_exprs};
-use crate::compiler::syms::{self, GlobalSymtable, LocalSymtable, SymbolKey, SymbolPrototype};
+use crate::compiler::syms::{
+    self, GlobalSymtable, LocalSymtable, SymbolKey, SymbolPrototype, TempSymtable,
+};
 use crate::compiler::{Error, Result};
 use crate::image::{GlobalVarInfo, Image};
 use crate::mem::ConstantDatum;
@@ -111,6 +113,274 @@ fn compile_assignment(
     // expression's type to fix up the type in the symbols table.
     let etype = compile_expr(codegen, &mut symtable.frozen(), reg, span.expr)?;
     symtable.fixup_local_type(&span.vref, etype).map_err(|e| Error::from_syms(e, vref_pos))
+}
+
+/// Returns the textual name of `relop` for diagnostics.
+fn case_relop_name(relop: &CaseRelOp) -> &'static str {
+    match relop {
+        CaseRelOp::Equal => "=",
+        CaseRelOp::NotEqual => "<>",
+        CaseRelOp::Less => "<",
+        CaseRelOp::LessEqual => "<=",
+        CaseRelOp::Greater => ">",
+        CaseRelOp::GreaterEqual => ">=",
+    }
+}
+
+/// Returns the bytecode opcode constructor for `relop` and operands of type `etype`.
+fn case_relop_instr(
+    relop: &CaseRelOp,
+    etype: ExprType,
+) -> Option<fn(Register, Register, Register) -> u32> {
+    match etype {
+        ExprType::Boolean => match relop {
+            CaseRelOp::Equal => Some(bytecode::make_equal_boolean),
+            CaseRelOp::NotEqual => Some(bytecode::make_not_equal_boolean),
+            CaseRelOp::Less
+            | CaseRelOp::LessEqual
+            | CaseRelOp::Greater
+            | CaseRelOp::GreaterEqual => None,
+        },
+
+        ExprType::Double => match relop {
+            CaseRelOp::Equal => Some(bytecode::make_equal_double),
+            CaseRelOp::NotEqual => Some(bytecode::make_not_equal_double),
+            CaseRelOp::Less => Some(bytecode::make_less_double),
+            CaseRelOp::LessEqual => Some(bytecode::make_less_equal_double),
+            CaseRelOp::Greater => Some(bytecode::make_greater_double),
+            CaseRelOp::GreaterEqual => Some(bytecode::make_greater_equal_double),
+        },
+
+        ExprType::Integer => match relop {
+            CaseRelOp::Equal => Some(bytecode::make_equal_integer),
+            CaseRelOp::NotEqual => Some(bytecode::make_not_equal_integer),
+            CaseRelOp::Less => Some(bytecode::make_less_integer),
+            CaseRelOp::LessEqual => Some(bytecode::make_less_equal_integer),
+            CaseRelOp::Greater => Some(bytecode::make_greater_integer),
+            CaseRelOp::GreaterEqual => Some(bytecode::make_greater_equal_integer),
+        },
+
+        ExprType::Text => match relop {
+            CaseRelOp::Equal => Some(bytecode::make_equal_text),
+            CaseRelOp::NotEqual => Some(bytecode::make_not_equal_text),
+            CaseRelOp::Less => Some(bytecode::make_less_text),
+            CaseRelOp::LessEqual => Some(bytecode::make_less_equal_text),
+            CaseRelOp::Greater => Some(bytecode::make_greater_text),
+            CaseRelOp::GreaterEqual => Some(bytecode::make_greater_equal_text),
+        },
+    }
+}
+
+/// Compiles a comparison between `test` and `rhs`, leaving the boolean result in `dest`.
+fn compile_case_relop(
+    ctx: &mut Context,
+    pos: LineCol,
+    test: (Register, ExprType),
+    rhs: (Register, ExprType),
+    relop: CaseRelOp,
+    dest: Register,
+) -> Result<()> {
+    let (test_reg, test_type) = test;
+    let (rhs_reg, rhs_type) = rhs;
+    let op_name = case_relop_name(&relop);
+    let opcode = match (test_type, rhs_type) {
+        (ExprType::Double, ExprType::Integer) => {
+            ctx.codegen.emit(bytecode::make_integer_to_double(rhs_reg), pos);
+            case_relop_instr(&relop, ExprType::Double)
+        }
+
+        (ExprType::Integer, ExprType::Double) => {
+            ctx.codegen.emit(bytecode::make_integer_to_double(test_reg), pos);
+            case_relop_instr(&relop, ExprType::Double)
+        }
+
+        (lhs, rhs) if lhs == rhs => case_relop_instr(&relop, lhs),
+        _ => None,
+    };
+
+    match opcode {
+        Some(opcode) => {
+            ctx.codegen.emit(opcode(dest, test_reg, rhs_reg), pos);
+            Ok(())
+        }
+        None => Err(Error::BinaryOpType(pos, op_name, test_type, rhs_type)),
+    }
+}
+
+/// Compiles one `CASE` guard and returns the register and source position of its boolean result.
+fn compile_case_guard(
+    ctx: &mut Context,
+    symtable: &mut TempSymtable<'_, '_, '_, '_, '_>,
+    test_reg: Register,
+    test_type: ExprType,
+    guard: CaseGuardSpan,
+) -> Result<(Register, LineCol)> {
+    match guard {
+        CaseGuardSpan::Is(relop, expr) => {
+            let pos = expr.start_pos();
+
+            let mut scope = symtable.temp_scope();
+            let lhs_reg = scope.alloc().map_err(|e| Error::from_syms(e, pos))?;
+            let rhs_reg = scope.alloc().map_err(|e| Error::from_syms(e, pos))?;
+            let cond_reg = scope.alloc().map_err(|e| Error::from_syms(e, pos))?;
+
+            ctx.codegen.emit(bytecode::make_move(lhs_reg, test_reg), pos);
+            let rhs_type = compile_expr(&mut ctx.codegen, symtable, rhs_reg, expr)?;
+            compile_case_relop(
+                ctx,
+                pos,
+                (lhs_reg, test_type),
+                (rhs_reg, rhs_type),
+                relop,
+                cond_reg,
+            )?;
+
+            Ok((cond_reg, pos))
+        }
+
+        CaseGuardSpan::To(from_expr, to_expr) => {
+            let pos = from_expr.start_pos();
+
+            let mut scope = symtable.temp_scope();
+            let lhs_from_reg = scope.alloc().map_err(|e| Error::from_syms(e, pos))?;
+            let rhs_from_reg = scope.alloc().map_err(|e| Error::from_syms(e, pos))?;
+            let cond_from_reg = scope.alloc().map_err(|e| Error::from_syms(e, pos))?;
+
+            let lhs_to_reg = scope.alloc().map_err(|e| Error::from_syms(e, pos))?;
+            let rhs_to_reg = scope.alloc().map_err(|e| Error::from_syms(e, pos))?;
+            let cond_to_reg = scope.alloc().map_err(|e| Error::from_syms(e, pos))?;
+
+            let cond_reg = scope.alloc().map_err(|e| Error::from_syms(e, pos))?;
+
+            ctx.codegen.emit(bytecode::make_move(lhs_from_reg, test_reg), pos);
+            let rhs_from_type = compile_expr(&mut ctx.codegen, symtable, rhs_from_reg, from_expr)?;
+            compile_case_relop(
+                ctx,
+                pos,
+                (lhs_from_reg, test_type),
+                (rhs_from_reg, rhs_from_type),
+                CaseRelOp::GreaterEqual,
+                cond_from_reg,
+            )?;
+
+            ctx.codegen.emit(bytecode::make_move(lhs_to_reg, test_reg), pos);
+            let rhs_to_type = compile_expr(&mut ctx.codegen, symtable, rhs_to_reg, to_expr)?;
+            compile_case_relop(
+                ctx,
+                pos,
+                (lhs_to_reg, test_type),
+                (rhs_to_reg, rhs_to_type),
+                CaseRelOp::LessEqual,
+                cond_to_reg,
+            )?;
+
+            ctx.codegen.emit(bytecode::make_bitwise_and(cond_reg, cond_from_reg, cond_to_reg), pos);
+            Ok((cond_reg, pos))
+        }
+    }
+}
+
+/// Compiles a `SELECT` statement and emits bytecode into `ctx`.
+fn compile_select(
+    ctx: &mut Context,
+    symtable: &mut LocalSymtable<'_, '_, '_, '_>,
+    span: SelectSpan,
+) -> Result<()> {
+    let end_pos = span.end_pos;
+    let ncases = span.cases.len();
+    let select_cases = span.cases;
+    let select_expr = span.expr;
+    let select_expr_pos = select_expr.start_pos();
+
+    /// Captures the data needed to materialize a `CASE` body after dispatch generation.
+    struct PendingCase {
+        body: Vec<Statement>,
+        body_jump_pcs: Vec<(usize, LineCol)>,
+        has_next_case: bool,
+    }
+
+    let mut pending_cases = Vec::with_capacity(ncases);
+    let mut pending_next_case_jump: Option<(usize, LineCol)> = None;
+
+    symtable.with_reserved_temp(
+        |e| Error::from_syms(e, select_expr_pos),
+        |test_reg, frozen| {
+            let test_type = compile_expr(&mut ctx.codegen, frozen, test_reg, select_expr)?;
+
+            for (i, case) in select_cases.into_iter().enumerate() {
+                let has_next_case = i < ncases - 1;
+                let mut body_jump_pcs = vec![];
+                let case_dispatch_addr = ctx.codegen.next_pc();
+                if let Some((jump_pc, pos)) = pending_next_case_jump.take() {
+                    let target = u16::try_from(case_dispatch_addr)
+                        .map_err(|_| Error::TargetTooFar(pos, case_dispatch_addr))?;
+                    ctx.codegen.patch(jump_pc, bytecode::make_jump(target));
+                }
+
+                if case.guards.is_empty() {
+                    let jump_body_pc = ctx.codegen.emit(bytecode::make_nop(), end_pos);
+                    body_jump_pcs.push((jump_body_pc, end_pos));
+                } else {
+                    for guard in case.guards {
+                        let (cond_reg, pos) =
+                            compile_case_guard(ctx, frozen, test_reg, test_type, guard)?;
+                        let jump_next_guard_pc = ctx.codegen.emit(bytecode::make_nop(), pos);
+                        let jump_body_pc = ctx.codegen.emit(bytecode::make_nop(), pos);
+                        body_jump_pcs.push((jump_body_pc, pos));
+
+                        let next_addr = ctx.codegen.next_pc();
+                        let target = u16::try_from(next_addr)
+                            .map_err(|_| Error::TargetTooFar(pos, next_addr))?;
+                        ctx.codegen.patch(
+                            jump_next_guard_pc,
+                            bytecode::make_jump_if_false(cond_reg, target),
+                        );
+                    }
+
+                    let jump_next_case_pc = ctx.codegen.emit(bytecode::make_nop(), end_pos);
+                    pending_next_case_jump = Some((jump_next_case_pc, end_pos));
+                }
+
+                pending_cases.push(PendingCase { body: case.body, body_jump_pcs, has_next_case });
+            }
+
+            Ok(())
+        },
+    )?;
+
+    let dispatch_end_jump_pc = ctx.codegen.emit(bytecode::make_nop(), end_pos);
+    if let Some((jump_pc, pos)) = pending_next_case_jump {
+        let target = u16::try_from(dispatch_end_jump_pc)
+            .map_err(|_| Error::TargetTooFar(pos, dispatch_end_jump_pc))?;
+        ctx.codegen.patch(jump_pc, bytecode::make_jump(target));
+    }
+
+    let mut end_jumps = vec![];
+    for case in pending_cases {
+        let body_addr = ctx.codegen.next_pc();
+        for (jump_body_pc, pos) in case.body_jump_pcs {
+            let target =
+                u16::try_from(body_addr).map_err(|_| Error::TargetTooFar(pos, body_addr))?;
+            ctx.codegen.patch(jump_body_pc, bytecode::make_jump(target));
+        }
+
+        for stmt in case.body {
+            compile_stmt(ctx, symtable, stmt)?;
+        }
+
+        if case.has_next_case {
+            end_jumps.push(ctx.codegen.emit(bytecode::make_nop(), end_pos));
+        }
+    }
+
+    let end_addr = ctx.codegen.next_pc();
+    let end_target = u16::try_from(end_addr).map_err(|_| Error::TargetTooFar(end_pos, end_addr))?;
+    ctx.codegen.patch(dispatch_end_jump_pc, bytecode::make_jump(end_target));
+    for end_jump in end_jumps {
+        ctx.codegen.patch(end_jump, bytecode::make_jump(end_target));
+    }
+
+    Ok(())
 }
 
 /// Compiles a `DO` loop and emits bytecode into `ctx`.
@@ -647,6 +917,10 @@ fn compile_stmt(
 
         Statement::If(span) => {
             compile_if(ctx, symtable, span)?;
+        }
+
+        Statement::Select(span) => {
+            compile_select(ctx, symtable, span)?;
         }
 
         Statement::While(span) => {
