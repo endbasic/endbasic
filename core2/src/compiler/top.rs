@@ -18,7 +18,7 @@
 
 use crate::ast::{
     ArgSep, AssignmentSpan, CallableSpan, DoGuard, DoSpan, EndSpan, Expr, ExprType, IfSpan,
-    Statement, VarRef,
+    Statement, VarRef, WhileSpan,
 };
 use crate::bytecode::{self, PackedArrayType, Register, RegisterScope};
 use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, SingularArgSyntax};
@@ -277,6 +277,39 @@ fn compile_if(
     Ok(())
 }
 
+/// Compiles a `WHILE` loop and emits bytecode into `ctx`.
+fn compile_while(
+    ctx: &mut Context,
+    symtable: &mut LocalSymtable<'_, '_, '_, '_>,
+    span: WhileSpan,
+) -> Result<()> {
+    let start_pc = ctx.codegen.next_pc();
+
+    let (jump_end_pc, cond_reg, guard_pos) = {
+        let guard_pos = span.expr.start_pos();
+        let mut frozen = symtable.frozen();
+        let mut scope = frozen.temp_scope();
+        let reg = scope.alloc().map_err(|e| Error::from_syms(e, guard_pos))?;
+        compile_expr_as_type(&mut ctx.codegen, &mut frozen, reg, span.expr, ExprType::Boolean)?;
+        (ctx.codegen.emit(bytecode::make_nop(), guard_pos), reg, guard_pos)
+    };
+
+    for stmt in span.body {
+        compile_stmt(ctx, symtable, stmt)?;
+    }
+
+    let start_target =
+        u16::try_from(start_pc).map_err(|_| Error::TargetTooFar(guard_pos, start_pc))?;
+    ctx.codegen.emit(bytecode::make_jump(start_target), guard_pos);
+
+    let end_addr = ctx.codegen.next_pc();
+    let end_target =
+        u16::try_from(end_addr).map_err(|_| Error::TargetTooFar(guard_pos, end_addr))?;
+    ctx.codegen.patch(jump_end_pc, bytecode::make_jump_if_false(cond_reg, end_target));
+
+    Ok(())
+}
+
 /// Compiles a single `stmt` into the `ctx`.
 fn compile_stmt(
     ctx: &mut Context,
@@ -523,6 +556,10 @@ fn compile_stmt(
 
         Statement::If(span) => {
             compile_if(ctx, symtable, span)?;
+        }
+
+        Statement::While(span) => {
+            compile_while(ctx, symtable, span)?;
         }
 
         _ => todo!(),
