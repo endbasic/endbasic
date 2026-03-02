@@ -40,6 +40,16 @@ use std::io;
 use std::iter::Iterator;
 use std::rc::Rc;
 
+/// Kind of a user-defined callable.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CallableKind {
+    /// A function definition.
+    Function,
+
+    /// A subroutine definition.
+    Sub,
+}
+
 /// Bag of state required by various top-level compilation functions.
 ///
 /// This type exists to minimize the number of complex arguments passed across functions.
@@ -57,6 +67,12 @@ struct Context {
 
     /// Stack of pending `EXIT FOR` jumps for each nested `FOR` loop.
     for_exit_stack: Vec<Vec<(usize, LineCol)>>,
+
+    /// Kind of the callable currently being compiled, if any.
+    current_callable: Option<CallableKind>,
+
+    /// List of pending `EXIT FUNCTION` or `EXIT SUB` jumps in the current callable.
+    callable_exit_jumps: Vec<(usize, LineCol)>,
 }
 
 /// Compiles an assignment statement `span` into the `codegen` block.
@@ -893,6 +909,22 @@ fn compile_stmt(
             exit_stack.push((addr, span.pos));
         }
 
+        Statement::ExitFunction(span) => {
+            if ctx.current_callable != Some(CallableKind::Function) {
+                return Err(Error::MisplacedExit(span.pos, "FUNCTION"));
+            }
+            let addr = ctx.codegen.emit(bytecode::make_nop(), span.pos);
+            ctx.callable_exit_jumps.push((addr, span.pos));
+        }
+
+        Statement::ExitSub(span) => {
+            if ctx.current_callable != Some(CallableKind::Sub) {
+                return Err(Error::MisplacedExit(span.pos, "SUB"));
+            }
+            let addr = ctx.codegen.emit(bytecode::make_nop(), span.pos);
+            ctx.callable_exit_jumps.push((addr, span.pos));
+        }
+
         Statement::For(span) => {
             compile_for(ctx, symtable, span)?;
         }
@@ -961,6 +993,12 @@ fn compile_user_callables(ctx: &mut Context, symtable: &mut GlobalSymtable) -> R
 
         let key_pos = callable.name_pos;
         let key = SymbolKey::from(callable.name.name);
+        ctx.current_callable = Some(if callable.name.ref_type.is_some() {
+            CallableKind::Function
+        } else {
+            CallableKind::Sub
+        });
+        debug_assert!(ctx.callable_exit_jumps.is_empty());
 
         let mut symtable = symtable.enter_scope();
 
@@ -1001,7 +1039,14 @@ fn compile_user_callables(ctx: &mut Context, symtable: &mut GlobalSymtable) -> R
             return Err(Error::CannotNestUserCallables(span.name_pos));
         }
 
+        let return_addr = ctx.codegen.next_pc();
         ctx.codegen.emit(bytecode::make_return(), callable.end_pos);
+        for (addr, pos) in ctx.callable_exit_jumps.drain(..) {
+            let target =
+                u16::try_from(return_addr).map_err(|_| Error::TargetTooFar(pos, return_addr))?;
+            ctx.codegen.patch(addr, bytecode::make_jump(target));
+        }
+        ctx.current_callable = None;
         ctx.codegen.define_user_callable(key, start_pc);
     }
 

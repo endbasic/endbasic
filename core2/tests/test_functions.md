@@ -820,3 +820,95 @@ END FUNCTION
 ```plain
 2:10: Cannot redefine g%
 ```
+
+# Test: Early function exit
+
+## Source
+
+```basic
+FUNCTION maybe_exit(i%)
+    maybe_exit = 1
+    IF i > 2 THEN EXIT FUNCTION
+    maybe_exit = 2
+END FUNCTION
+
+FOR i = 0 TO 5
+    OUT maybe_exit(i)
+NEXT
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       4                   # 0:0
+0001:   LOADI       R64, 0              # 7:9
+0002:   MOVE        R65, R64            # 7:5
+0003:   LOADI       R66, 5              # 7:14
+0004:   CMPLEI      R65, R65, R66       # 7:11
+0005:   JMPF        R65, 14             # 7:5
+0006:   MOVE        R67, R64            # 8:20
+0007:   CALL        R66, 16             # 8:9, MAYBE_EXIT
+0008:   LOADI       R65, 258            # 8:9
+0009:   UPCALL      0, R65              # 8:5, OUT
+0010:   MOVE        R64, R64            # 7:5
+0011:   LOADI       R65, 1              # 7:15
+0012:   ADDI        R64, R64, R65       # 7:11
+0013:   JUMP        2                   # 7:5
+0014:   LOADI       R65, 0              # 0:0
+0015:   END         R65                 # 0:0
+
+-- MAYBE_EXIT 
+0016:   LOADI       R64, 0              # 1:10
+0017:   ENTER       4                   # 0:0
+0018:   LOADI       R64, 1              # 2:18
+0019:   MOVE        R66, R65            # 3:8
+0020:   LOADI       R67, 2              # 3:12
+0021:   CMPGTI      R66, R66, R67       # 3:10
+0022:   JMPF        R66, 24             # 3:8
+0023:   JUMP        25                  # 3:19
+0024:   LOADI       R64, 2              # 4:18
+0025:   RETURN                          # 5:1
+```
+
+## Output
+
+```plain
+0=2%
+0=2%
+0=2%
+0=1%
+0=1%
+0=1%
+```
+
+# Test: EXIT FUNCTION outside FUNCTION
+
+## Source
+
+```basic
+FUNCTION a
+END FUNCTION
+EXIT FUNCTION
+```
+
+## Compilation errors
+
+```plain
+3:1: EXIT FUNCTION outside of FUNCTION
+```
+
+# Test: EXIT SUB in FUNCTION
+
+## Source
+
+```basic
+FUNCTION a
+    EXIT SUB
+END FUNCTION
+```
+
+## Compilation errors
+
+```plain
+2:5: EXIT SUB outside of SUB
+```
