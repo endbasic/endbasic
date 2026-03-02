@@ -51,6 +51,7 @@ one_test!(test_bitwise_xor);
 one_test!(test_do);
 one_test!(test_empty);
 one_test!(test_end);
+one_test!(test_for);
 one_test!(test_functions);
 one_test!(test_globals);
 one_test!(test_gosub);

@@ -17,8 +17,8 @@
 //! Entry point to the compilation, handling top-level definitions.
 
 use crate::ast::{
-    ArgSep, AssignmentSpan, CallableSpan, DoGuard, DoSpan, EndSpan, Expr, ExprType, IfSpan,
-    Statement, VarRef, WhileSpan,
+    ArgSep, AssignmentSpan, CallableSpan, DoGuard, DoSpan, EndSpan, Expr, ExprType, ForSpan,
+    IfSpan, Statement, VarRef, WhileSpan,
 };
 use crate::bytecode::{self, PackedArrayType, Register, RegisterScope};
 use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, SingularArgSyntax};
@@ -52,6 +52,9 @@ struct Context {
 
     /// Stack of pending `EXIT DO` jumps for each nested `DO` loop.
     do_exit_stack: Vec<Vec<(usize, LineCol)>>,
+
+    /// Stack of pending `EXIT FOR` jumps for each nested `FOR` loop.
+    for_exit_stack: Vec<Vec<(usize, LineCol)>>,
 }
 
 /// Compiles an assignment statement `span` into the `codegen` block.
@@ -217,6 +220,82 @@ fn compile_do(
     };
 
     let exit_jumps = ctx.do_exit_stack.pop().expect("Must have a matching DO scope");
+    for (addr, pos) in exit_jumps {
+        let end_target = u16::try_from(end_addr).map_err(|_| Error::TargetTooFar(pos, end_addr))?;
+        ctx.codegen.patch(addr, bytecode::make_jump(end_target));
+    }
+
+    Ok(())
+}
+
+/// Compiles a `FOR` loop and emits bytecode into `ctx`.
+fn compile_for(
+    ctx: &mut Context,
+    symtable: &mut LocalSymtable<'_, '_, '_, '_>,
+    span: ForSpan,
+) -> Result<()> {
+    if span.iter_double && span.iter.ref_type.is_none() {
+        match symtable.get_local_or_global(&span.iter) {
+            Ok(..) => {
+                // Keep existing iterators as-is.  This mirrors core behavior where implicit
+                // widening to DOUBLE only happens when the iterator does not exist yet.
+            }
+
+            Err(syms::Error::UndefinedSymbol(..)) => {
+                let key = SymbolKey::from(&span.iter.name);
+                if symtable.get_callable(&key).is_some() {
+                    return Err(Error::from_syms(
+                        syms::Error::AlreadyDefined(span.iter.clone()),
+                        span.iter_pos,
+                    ));
+                }
+                symtable
+                    .put_local(key, SymbolPrototype::Scalar(ExprType::Double))
+                    .map_err(|e| Error::from_syms(e, span.iter_pos))?;
+            }
+
+            Err(e) => return Err(Error::from_syms(e, span.iter_pos)),
+        }
+    }
+
+    compile_assignment(
+        &mut ctx.codegen,
+        symtable,
+        AssignmentSpan { vref: span.iter.clone(), vref_pos: span.iter_pos, expr: span.start },
+    )?;
+
+    let start_pc = ctx.codegen.next_pc();
+    let (jump_end_pc, cond_reg, cond_pos) = {
+        let cond_pos = span.end.start_pos();
+        let mut frozen = symtable.frozen();
+        let mut scope = frozen.temp_scope();
+        let reg = scope.alloc().map_err(|e| Error::from_syms(e, cond_pos))?;
+        compile_expr_as_type(&mut ctx.codegen, &mut frozen, reg, span.end, ExprType::Boolean)?;
+        (ctx.codegen.emit(bytecode::make_nop(), cond_pos), reg, cond_pos)
+    };
+
+    ctx.for_exit_stack.push(vec![]);
+
+    for stmt in span.body {
+        compile_stmt(ctx, symtable, stmt)?;
+    }
+
+    compile_assignment(
+        &mut ctx.codegen,
+        symtable,
+        AssignmentSpan { vref: span.iter, vref_pos: span.iter_pos, expr: span.next },
+    )?;
+
+    let start_target =
+        u16::try_from(start_pc).map_err(|_| Error::TargetTooFar(cond_pos, start_pc))?;
+    ctx.codegen.emit(bytecode::make_jump(start_target), cond_pos);
+
+    let end_addr = ctx.codegen.next_pc();
+    let end_target =
+        u16::try_from(end_addr).map_err(|_| Error::TargetTooFar(cond_pos, end_addr))?;
+    ctx.codegen.patch(jump_end_pc, bytecode::make_jump_if_false(cond_reg, end_target));
+
+    let exit_jumps = ctx.for_exit_stack.pop().expect("Must have a matching FOR scope");
     for (addr, pos) in exit_jumps {
         let end_target = u16::try_from(end_addr).map_err(|_| Error::TargetTooFar(pos, end_addr))?;
         ctx.codegen.patch(addr, bytecode::make_jump(end_target));
@@ -534,6 +613,18 @@ fn compile_stmt(
             };
             let addr = ctx.codegen.emit(bytecode::make_nop(), span.pos);
             exit_stack.push((addr, span.pos));
+        }
+
+        Statement::ExitFor(span) => {
+            let Some(exit_stack) = ctx.for_exit_stack.last_mut() else {
+                return Err(Error::MisplacedExit(span.pos, "FOR"));
+            };
+            let addr = ctx.codegen.emit(bytecode::make_nop(), span.pos);
+            exit_stack.push((addr, span.pos));
+        }
+
+        Statement::For(span) => {
+            compile_for(ctx, symtable, span)?;
         }
 
         Statement::Gosub(span) => {
