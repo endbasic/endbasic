@@ -17,7 +17,8 @@
 //! Entry point to the compilation, handling top-level definitions.
 
 use crate::ast::{
-    ArgSep, AssignmentSpan, CallableSpan, EndSpan, ExprType, IfSpan, Statement, VarRef,
+    ArgSep, AssignmentSpan, CallableSpan, DoGuard, DoSpan, EndSpan, Expr, ExprType, IfSpan,
+    Statement, VarRef,
 };
 use crate::bytecode::{self, PackedArrayType, Register, RegisterScope};
 use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, SingularArgSyntax};
@@ -48,6 +49,9 @@ struct Context {
 
     /// Collection of user-defined callable definitions to be compiled after the main scope.
     user_callables: Vec<CallableSpan>,
+
+    /// Stack of pending `EXIT DO` jumps for each nested `DO` loop.
+    do_exit_stack: Vec<Vec<(usize, LineCol)>>,
 }
 
 /// Compiles an assignment statement `span` into the `codegen` block.
@@ -104,6 +108,121 @@ fn compile_assignment(
     // expression's type to fix up the type in the symbols table.
     let etype = compile_expr(codegen, &mut symtable.frozen(), reg, span.expr)?;
     symtable.fixup_local_type(&span.vref, etype).map_err(|e| Error::from_syms(e, vref_pos))
+}
+
+/// Compiles a `DO` loop and emits bytecode into `ctx`.
+fn compile_do(
+    ctx: &mut Context,
+    symtable: &mut LocalSymtable<'_, '_, '_, '_>,
+    span: DoSpan,
+) -> Result<()> {
+    /// Compiles one loop guard expression to a temporary boolean register.
+    fn compile_guard(
+        ctx: &mut Context,
+        symtable: &mut LocalSymtable<'_, '_, '_, '_>,
+        guard: Expr,
+    ) -> Result<(Register, LineCol)> {
+        let guard_pos = guard.start_pos();
+        let mut frozen = symtable.frozen();
+        let mut scope = frozen.temp_scope();
+        let reg = scope.alloc().map_err(|e| Error::from_syms(e, guard_pos))?;
+        compile_expr_as_type(&mut ctx.codegen, &mut frozen, reg, guard, ExprType::Boolean)?;
+        Ok((reg, guard_pos))
+    }
+
+    ctx.do_exit_stack.push(vec![]);
+
+    let end_addr = match span.guard {
+        DoGuard::Infinite => {
+            let start_pc = ctx.codegen.next_pc();
+            for stmt in span.body {
+                compile_stmt(ctx, symtable, stmt)?;
+            }
+            let end_pos = LineCol { line: 0, col: 0 };
+            let target =
+                u16::try_from(start_pc).map_err(|_| Error::TargetTooFar(end_pos, start_pc))?;
+            ctx.codegen.emit(bytecode::make_jump(target), end_pos);
+            ctx.codegen.next_pc()
+        }
+
+        DoGuard::PreUntil(guard) => {
+            let start_pc = ctx.codegen.next_pc();
+            let (cond_reg, guard_pos) = compile_guard(ctx, symtable, guard)?;
+            let jump_body_pc = ctx.codegen.emit(bytecode::make_nop(), guard_pos);
+            let jump_end_pc = ctx.codegen.emit(bytecode::make_nop(), guard_pos);
+            let body_addr = ctx.codegen.next_pc();
+            let body_target =
+                u16::try_from(body_addr).map_err(|_| Error::TargetTooFar(guard_pos, body_addr))?;
+            ctx.codegen.patch(jump_body_pc, bytecode::make_jump_if_false(cond_reg, body_target));
+
+            for stmt in span.body {
+                compile_stmt(ctx, symtable, stmt)?;
+            }
+            let start_target =
+                u16::try_from(start_pc).map_err(|_| Error::TargetTooFar(guard_pos, start_pc))?;
+            ctx.codegen.emit(bytecode::make_jump(start_target), guard_pos);
+            let end_addr = ctx.codegen.next_pc();
+            let end_target =
+                u16::try_from(end_addr).map_err(|_| Error::TargetTooFar(guard_pos, end_addr))?;
+            ctx.codegen.patch(jump_end_pc, bytecode::make_jump(end_target));
+            end_addr
+        }
+
+        DoGuard::PreWhile(guard) => {
+            let start_pc = ctx.codegen.next_pc();
+            let (cond_reg, guard_pos) = compile_guard(ctx, symtable, guard)?;
+            let jump_end_pc = ctx.codegen.emit(bytecode::make_nop(), guard_pos);
+
+            for stmt in span.body {
+                compile_stmt(ctx, symtable, stmt)?;
+            }
+            let start_target =
+                u16::try_from(start_pc).map_err(|_| Error::TargetTooFar(guard_pos, start_pc))?;
+            ctx.codegen.emit(bytecode::make_jump(start_target), guard_pos);
+            let end_addr = ctx.codegen.next_pc();
+            let end_target =
+                u16::try_from(end_addr).map_err(|_| Error::TargetTooFar(guard_pos, end_addr))?;
+            ctx.codegen.patch(jump_end_pc, bytecode::make_jump_if_false(cond_reg, end_target));
+            end_addr
+        }
+
+        DoGuard::PostUntil(guard) => {
+            let start_pc = ctx.codegen.next_pc();
+            for stmt in span.body {
+                compile_stmt(ctx, symtable, stmt)?;
+            }
+            let (cond_reg, guard_pos) = compile_guard(ctx, symtable, guard)?;
+            let start_target =
+                u16::try_from(start_pc).map_err(|_| Error::TargetTooFar(guard_pos, start_pc))?;
+            ctx.codegen.emit(bytecode::make_jump_if_false(cond_reg, start_target), guard_pos);
+            ctx.codegen.next_pc()
+        }
+
+        DoGuard::PostWhile(guard) => {
+            let start_pc = ctx.codegen.next_pc();
+            for stmt in span.body {
+                compile_stmt(ctx, symtable, stmt)?;
+            }
+            let (cond_reg, guard_pos) = compile_guard(ctx, symtable, guard)?;
+            let jump_end_pc = ctx.codegen.emit(bytecode::make_nop(), guard_pos);
+            let start_target =
+                u16::try_from(start_pc).map_err(|_| Error::TargetTooFar(guard_pos, start_pc))?;
+            ctx.codegen.emit(bytecode::make_jump(start_target), guard_pos);
+            let end_addr = ctx.codegen.next_pc();
+            let end_target =
+                u16::try_from(end_addr).map_err(|_| Error::TargetTooFar(guard_pos, end_addr))?;
+            ctx.codegen.patch(jump_end_pc, bytecode::make_jump_if_false(cond_reg, end_target));
+            end_addr
+        }
+    };
+
+    let exit_jumps = ctx.do_exit_stack.pop().expect("Must have a matching DO scope");
+    for (addr, pos) in exit_jumps {
+        let end_target = u16::try_from(end_addr).map_err(|_| Error::TargetTooFar(pos, end_addr))?;
+        ctx.codegen.patch(addr, bytecode::make_jump(end_target));
+    }
+
+    Ok(())
 }
 
 /// Compiles an `IF` statement `span` into the `ctx`.
@@ -351,6 +470,10 @@ fn compile_stmt(
             ctx.codegen.emit(bytecode::make_alloc_array(reg, packed, first_dim_reg), name_pos);
         }
 
+        Statement::Do(span) => {
+            compile_do(ctx, symtable, span)?;
+        }
+
         Statement::End(span) => {
             let mut symtable = symtable.frozen();
             let mut scope = symtable.temp_scope();
@@ -370,6 +493,14 @@ fn compile_stmt(
                 }
             }
             ctx.codegen.emit(bytecode::make_end(reg), span.pos);
+        }
+
+        Statement::ExitDo(span) => {
+            let Some(exit_stack) = ctx.do_exit_stack.last_mut() else {
+                return Err(Error::MisplacedExit(span.pos, "DO"));
+            };
+            let addr = ctx.codegen.emit(bytecode::make_nop(), span.pos);
+            exit_stack.push((addr, span.pos));
         }
 
         Statement::Gosub(span) => {
