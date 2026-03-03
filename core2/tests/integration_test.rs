@@ -58,6 +58,7 @@ one_test!(test_gosub);
 one_test!(test_goto);
 one_test!(test_if);
 one_test!(test_locals);
+one_test!(test_on_error);
 one_test!(test_out_of_registers);
 one_test!(test_relational_eq);
 one_test!(test_relational_ge);

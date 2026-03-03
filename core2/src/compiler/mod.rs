@@ -120,6 +120,10 @@ pub enum Error {
     #[error("{0}: Undefined {2} symbol {1}")]
     UndefinedSymbol(LineCol, VarRef, RegisterScope),
 
+    /// Reference to an unknown label.
+    #[error("{0}: Unknown label {1}")]
+    UnknownLabel(LineCol, String),
+
     /// Wrong number of subscripts for an array access.
     #[error("{0}: Array requires {1} subscripts but got {2}")]
     WrongNumberOfSubscripts(LineCol, usize, usize),

@@ -83,6 +83,7 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::PowerDouble => bytecode::format_power_double(instr),
         Opcode::PowerInteger => bytecode::format_power_integer(instr),
         Opcode::Return => bytecode::format_return(instr),
+        Opcode::SetErrorHandler => bytecode::format_set_error_handler(instr),
         Opcode::ShiftLeft => bytecode::format_shift_left(instr),
         Opcode::ShiftRight => bytecode::format_shift_right(instr),
         Opcode::StoreArray => bytecode::format_store_array(instr),
@@ -108,6 +109,9 @@ pub(crate) struct GlobalVarInfo {
 pub(crate) struct InstrMetadata {
     /// Source location that generated this instruction.
     pub(crate) linecol: LineCol,
+
+    /// True if this instruction is the start of a statement.
+    pub(crate) is_stmt_start: bool,
 
     /// Source locations of the call arguments, if this is a UPCALL instruction.
     ///
@@ -167,6 +171,7 @@ impl Default for Image {
             DebugInfo {
                 instrs: vec![InstrMetadata {
                     linecol: LineCol { line: 0, col: 0 },
+                    is_stmt_start: true,
                     arg_linecols: vec![],
                 }],
                 callables: HashMap::default(),

@@ -36,6 +36,9 @@ use increment_required_int_cmd::IncrementRequiredIntCommand;
 mod is_positive_fn;
 use is_positive_fn::IsPositiveFunction;
 
+mod last_error_fn;
+use last_error_fn::LastErrorFunction;
+
 mod meaning_of_life_fn;
 use meaning_of_life_fn::MeaningOfLifeFunction;
 
@@ -56,6 +59,12 @@ use out_positional_cmd::OutPositionalCommand;
 
 mod out_required_value_cmd;
 use out_required_value_cmd::OutRequiredValueCommand;
+
+mod raise_cmd;
+use raise_cmd::RaiseCommand;
+
+mod raisef_fn;
+use raisef_fn::RaisefFunction;
 
 mod sum_doubles_fn;
 use sum_doubles_fn::SumDoublesFunction;
@@ -100,6 +109,7 @@ pub(super) fn register_all(
         DefineArgCommand::new() as Rc<dyn Callable>,
         IncrementRequiredIntCommand::new() as Rc<dyn Callable>,
         IsPositiveFunction::new() as Rc<dyn Callable>,
+        LastErrorFunction::new() as Rc<dyn Callable>,
         MeaningOfLifeFunction::new() as Rc<dyn Callable>,
         OutAnyValueCommand::new(console.clone()) as Rc<dyn Callable>,
         OutAnyValueOptionalCommand::new(console.clone()) as Rc<dyn Callable>,
@@ -107,6 +117,8 @@ pub(super) fn register_all(
         OutOptionalCommand::new(console.clone()) as Rc<dyn Callable>,
         OutPositionalCommand::new(console.clone()) as Rc<dyn Callable>,
         OutRequiredValueCommand::new(console) as Rc<dyn Callable>,
+        RaiseCommand::new() as Rc<dyn Callable>,
+        RaisefFunction::new() as Rc<dyn Callable>,
         SumDoublesFunction::new() as Rc<dyn Callable>,
         SumIntegersFunction::new() as Rc<dyn Callable>,
     ];

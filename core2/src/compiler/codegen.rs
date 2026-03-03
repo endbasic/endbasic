@@ -17,7 +17,7 @@
 //! Code generation for the EndBASIC compiler.
 
 use crate::ast::ExprType;
-use crate::bytecode::{self, Register};
+use crate::bytecode::{self, ErrorHandlerMode, Register};
 use crate::compiler::ids::HashMapWithIds;
 use crate::compiler::{Error, Result, SymbolKey};
 use crate::image::{DebugInfo, GlobalVarInfo, Image, InstrMetadata};
@@ -39,10 +39,13 @@ pub(super) enum Fixup {
     Enter(u8),
 
     /// Fixup to resolve a label target address into a `GOSUB` instruction.
-    Gosub(SymbolKey),
+    Gosub(String),
 
     /// Fixup to resolve a label target address into a `GOTO` (jump) instruction.
-    Goto(SymbolKey),
+    Goto(String),
+
+    /// Fixup to resolve a label target address into a `SET_ERROR_HANDLER` instruction.
+    OnErrorGoto(String),
 }
 
 /// The code generator.
@@ -79,8 +82,17 @@ impl Codegen {
     /// Appends a new instruction `op` generated at `pos` to the code and returns its address.
     pub(super) fn emit(&mut self, op: u32, pos: LineCol) -> Address {
         self.code.push(op);
-        self.instrs.push(InstrMetadata { linecol: pos, arg_linecols: vec![] });
+        self.instrs.push(InstrMetadata {
+            linecol: pos,
+            is_stmt_start: false,
+            arg_linecols: vec![],
+        });
         self.code.len() - 1
+    }
+
+    /// Marks the instruction at `addr` as the start of a statement.
+    pub(super) fn mark_statement_start(&mut self, addr: Address) {
+        self.instrs[addr].is_stmt_start = true;
     }
 
     /// Attaches argument source locations to the instruction at `addr`.
@@ -189,13 +201,29 @@ impl Codegen {
                     bytecode::make_call(reg, Self::make_target(*target, pos)?)
                 }
                 Fixup::Enter(nargs) => bytecode::make_enter(nargs),
-                Fixup::Gosub(key) => {
-                    let target = self.labels.get(&key).expect("Must be present");
+                Fixup::Gosub(label) => {
+                    let key = SymbolKey::from(&label);
+                    let Some(target) = self.labels.get(&key) else {
+                        return Err(Error::UnknownLabel(pos, label));
+                    };
                     bytecode::make_gosub(Self::make_target(*target, pos)?)
                 }
-                Fixup::Goto(key) => {
-                    let target = self.labels.get(&key).expect("Must be present");
+                Fixup::Goto(label) => {
+                    let key = SymbolKey::from(&label);
+                    let Some(target) = self.labels.get(&key) else {
+                        return Err(Error::UnknownLabel(pos, label));
+                    };
                     bytecode::make_jump(Self::make_target(*target, pos)?)
+                }
+                Fixup::OnErrorGoto(label) => {
+                    let key = SymbolKey::from(&label);
+                    let Some(target) = self.labels.get(&key) else {
+                        return Err(Error::UnknownLabel(pos, label));
+                    };
+                    bytecode::make_set_error_handler(
+                        ErrorHandlerMode::Jump,
+                        Self::make_target(*target, pos)?,
+                    )
                 }
             };
             self.code[addr] = instr;

@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 mod context;
-use context::{Context, InternalStopReason};
+use context::{Context, ErrorHandler, InternalStopReason};
 
 /// Error returned when a global variable access encounters a type or shape mismatch.
 ///
@@ -64,7 +64,16 @@ impl<'a> UpcallHandler<'a> {
             .take()
             .expect("This is only reachable when the VM has a pending upcall");
         let upcall = vm.upcalls[usize::from(index)].clone();
-        upcall.exec(vm.upcall_scope(first_reg, upcall_pc)).await
+        match upcall.exec(vm.upcall_scope(first_reg, upcall_pc)).await {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                let pos_override = vm.image.as_ref().and_then(|image| {
+                    image.debug_info.instrs[upcall_pc].arg_linecols.first().copied()
+                });
+                vm.handle_exception(upcall_pc, e.to_string(), pos_override);
+                Ok(())
+            }
+        }
     }
 }
 
@@ -97,6 +106,12 @@ pub struct Vm {
     /// Processor context for execution.
     context: Context,
 
+    /// Last error seen by the VM, if any.
+    last_error: Option<String>,
+
+    /// Pending exception to report to the caller.
+    pending_exception: Option<(LineCol, String)>,
+
     /// Details about the pending upcall that has to be handled by the caller.
     ///
     /// The tuple contains the upcall index, the first argument register, and the PC of the
@@ -113,6 +128,8 @@ impl Vm {
             upcalls: vec![],
             heap: vec![],
             context: Context::default(),
+            last_error: None,
+            pending_exception: None,
             pending_upcall: None,
         }
     }
@@ -132,6 +149,10 @@ impl Vm {
         self.image = Some(image);
 
         self.heap.clear();
+        self.context = Context::default();
+        self.last_error = None;
+        self.pending_exception = None;
+        self.pending_upcall = None;
     }
 
     /// Constructs a `Scope` for an upcall with arguments starting at `reg`.
@@ -151,7 +172,47 @@ impl Vm {
             ),
             None => (&[][..], &[][..]),
         };
-        self.context.upcall_scope(reg, constants, &mut self.heap, arg_linecols)
+        self.context.upcall_scope(reg, constants, &mut self.heap, arg_linecols, &self.last_error)
+    }
+
+    /// Handles an exception raised at `pc` with `message`.  Returns true if the error was handled.
+    fn handle_exception(
+        &mut self,
+        pc: usize,
+        message: String,
+        pos_override: Option<LineCol>,
+    ) -> bool {
+        let Some(image) = self.image.as_ref() else {
+            let pos = pos_override.unwrap_or(LineCol { line: 0, col: 0 });
+            self.pending_exception = Some((pos, message));
+            return false;
+        };
+
+        let pos = pos_override.unwrap_or(image.debug_info.instrs[pc].linecol);
+        self.last_error = Some(format!("{}: {}", pos, message));
+        self.pending_exception = None;
+
+        match self.context.error_handler() {
+            ErrorHandler::None => {
+                self.pending_exception = Some((pos, message));
+                false
+            }
+            ErrorHandler::Jump(addr) => {
+                self.context.set_pc(addr);
+                true
+            }
+            ErrorHandler::ResumeNext => {
+                let mut next_pc = image.code.len();
+                for (idx, meta) in image.debug_info.instrs.iter().enumerate().skip(pc + 1) {
+                    if meta.is_stmt_start {
+                        next_pc = idx;
+                        break;
+                    }
+                }
+                self.context.set_pc(next_pc);
+                true
+            }
+        }
     }
 
     /// Returns the value of the global scalar variable `name` as a `ConstantDatum`.
@@ -229,23 +290,32 @@ impl Vm {
     /// Returns a `StopReason` indicating why execution stopped, which may be due to program
     /// termination, an exception, or a pending upcall that requires caller handling.
     pub fn exec(&mut self) -> StopReason<'_> {
-        let Some(image) = self.image.as_ref() else {
-            return StopReason::End(0);
-        };
-
-        if self.pending_upcall.is_some() {
-            return StopReason::Upcall(UpcallHandler(self));
-        };
-
-        match self.context.exec(image, &mut self.heap) {
-            InternalStopReason::End(code) => StopReason::End(code),
-            InternalStopReason::Exception(pc, e) => {
-                let pos = image.debug_info.instrs[pc].linecol;
-                StopReason::Exception(pos, e)
+        loop {
+            if let Some((pos, message)) = self.pending_exception.take() {
+                return StopReason::Exception(pos, message);
             }
-            InternalStopReason::Upcall(index, first_reg, upcall_pc) => {
-                self.pending_upcall = Some((index, first_reg, upcall_pc));
-                StopReason::Upcall(UpcallHandler(self))
+
+            let Some(image) = self.image.as_ref() else {
+                return StopReason::End(0);
+            };
+
+            if self.pending_upcall.is_some() {
+                return StopReason::Upcall(UpcallHandler(self));
+            }
+
+            match self.context.exec(image, &mut self.heap) {
+                InternalStopReason::End(code) => return StopReason::End(code),
+                InternalStopReason::Exception(pc, e) => {
+                    if !self.handle_exception(pc, e, None)
+                        && let Some((pos, message)) = self.pending_exception.take()
+                    {
+                        return StopReason::Exception(pos, message);
+                    }
+                }
+                InternalStopReason::Upcall(index, first_reg, upcall_pc) => {
+                    self.pending_upcall = Some((index, first_reg, upcall_pc));
+                    return StopReason::Upcall(UpcallHandler(self));
+                }
             }
         }
     }
