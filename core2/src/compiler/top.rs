@@ -18,9 +18,9 @@
 
 use crate::ast::{
     ArgSep, AssignmentSpan, CallableSpan, CaseGuardSpan, CaseRelOp, DoGuard, DoSpan, EndSpan, Expr,
-    ExprType, ForSpan, IfSpan, SelectSpan, Statement, VarRef, WhileSpan,
+    ExprType, ForSpan, IfSpan, OnErrorSpan, SelectSpan, Statement, VarRef, WhileSpan,
 };
-use crate::bytecode::{self, PackedArrayType, Register, RegisterScope};
+use crate::bytecode::{self, ErrorHandlerMode, PackedArrayType, Register, RegisterScope};
 use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, SingularArgSyntax};
 use crate::compiler::args::{compile_args, define_new_args};
 use crate::compiler::codegen::{Codegen, Fixup};
@@ -681,6 +681,8 @@ fn compile_stmt(
     symtable: &mut LocalSymtable<'_, '_, '_, '_>,
     stmt: Statement,
 ) -> Result<()> {
+    let start_pc = ctx.codegen.next_pc();
+    let mut mark_start = true;
     match stmt {
         Statement::ArrayAssignment(span) => {
             let key_pos = span.vref_pos;
@@ -761,6 +763,7 @@ fn compile_stmt(
         }
 
         Statement::Callable(span) => {
+            mark_start = false;
             let mut syntax = vec![];
             for (i, param) in span.params.iter().enumerate() {
                 let sep = if i == span.params.len() - 1 {
@@ -931,15 +934,16 @@ fn compile_stmt(
 
         Statement::Gosub(span) => {
             let addr = ctx.codegen.emit(bytecode::make_nop(), span.target_pos);
-            ctx.codegen.add_fixup(addr, Fixup::Gosub(SymbolKey::from(span.target)));
+            ctx.codegen.add_fixup(addr, Fixup::Gosub(span.target));
         }
 
         Statement::Goto(span) => {
             let addr = ctx.codegen.emit(bytecode::make_nop(), span.target_pos);
-            ctx.codegen.add_fixup(addr, Fixup::Goto(SymbolKey::from(span.target)));
+            ctx.codegen.add_fixup(addr, Fixup::Goto(span.target));
         }
 
         Statement::Label(span) => {
+            mark_start = false;
             ctx.codegen.define_label(SymbolKey::from(span.name), ctx.codegen.next_pc());
         }
 
@@ -951,6 +955,25 @@ fn compile_stmt(
             compile_if(ctx, symtable, span)?;
         }
 
+        Statement::OnError(span) => {
+            match span {
+                OnErrorSpan::Goto(span, pos) => {
+                    let addr = ctx.codegen.emit(bytecode::make_nop(), pos);
+                    ctx.codegen.add_fixup(addr, Fixup::OnErrorGoto(span.target));
+                }
+                OnErrorSpan::Reset(pos) => {
+                    ctx.codegen
+                        .emit(bytecode::make_set_error_handler(ErrorHandlerMode::None, 0), pos);
+                }
+                OnErrorSpan::ResumeNext(pos) => {
+                    ctx.codegen.emit(
+                        bytecode::make_set_error_handler(ErrorHandlerMode::ResumeNext, 0),
+                        pos,
+                    );
+                }
+            };
+        }
+
         Statement::Select(span) => {
             compile_select(ctx, symtable, span)?;
         }
@@ -960,6 +983,9 @@ fn compile_stmt(
         }
 
         _ => todo!(),
+    }
+    if mark_start && start_pc != ctx.codegen.next_pc() {
+        ctx.codegen.mark_statement_start(start_pc);
     }
     Ok(())
 }

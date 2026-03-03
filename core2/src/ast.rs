@@ -623,13 +623,13 @@ pub struct LabelSpan {
 #[derive(Debug, Eq, PartialEq)]
 pub enum OnErrorSpan {
     /// Components of an `ON ERROR GOTO @label` statement.
-    Goto(GotoSpan),
+    Goto(GotoSpan, LineCol),
 
     /// Components of an `ON ERROR GOTO 0` statement.
-    Reset,
+    Reset(LineCol),
 
     /// Components of an `ON ERROR RESUME NEXT` statement.
-    ResumeNext,
+    ResumeNext(LineCol),
 }
 
 /// Components of a `RETURN` statement.

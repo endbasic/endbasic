@@ -270,6 +270,44 @@ impl RawValue for ExprType {
     }
 }
 
+/// Modes for the error handler configured by `ON ERROR`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ErrorHandlerMode {
+    /// Disable error handling.
+    None,
+
+    /// Resume execution at the next statement after an error.
+    ResumeNext,
+
+    /// Jump to a specific handler address after an error.
+    Jump,
+}
+
+impl RawValue for ErrorHandlerMode {
+    fn from_u32(v: u32) -> Self {
+        #[allow(unsafe_code)]
+        unsafe {
+            let v = unchecked_u32_as_u8(v);
+            assert!(v <= ErrorHandlerMode::Jump as u8);
+            std::mem::transmute(v)
+        }
+    }
+
+    fn to_u32(self) -> u32 {
+        u32::from(self as u8)
+    }
+}
+
+impl fmt::Display for ErrorHandlerMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::None => write!(f, "NONE"),
+            Self::ResumeNext => write!(f, "RESUME_NEXT"),
+            Self::Jump => write!(f, "JUMP"),
+        }
+    }
+}
+
 /// Generates functions to construct an instruction's bytecode representation for the compiler's
 /// benefit, to parse it for the VM's benefit, and to format it for debugging purposes.
 macro_rules! instr {
@@ -531,6 +569,9 @@ pub(crate) enum Opcode {
 
     /// Returns from a previous `Call`.
     Return,
+
+    /// Sets the error handler mode and target address.
+    SetErrorHandler,
 
     /// Shifts an integer left by a number of bits without rotation, storing the result into
     /// a third register.
@@ -1022,6 +1063,14 @@ instr!(
 instr!(
     Opcode::Return, "RETURN",
     make_return, parse_return, format_return,
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::SetErrorHandler, "SETEH",
+    make_set_error_handler, parse_set_error_handler, format_set_error_handler,
+    ErrorHandlerMode, 0x000000ff, 16,  // Error handler mode.
+    u16, 0x0000ffff, 0,  // Target address for Jump mode.
 );
 
 #[rustfmt::skip]

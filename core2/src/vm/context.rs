@@ -18,7 +18,7 @@
 
 use crate::ExprType;
 use crate::Scope;
-use crate::bytecode::{self, Opcode, Register, TaggedRegisterRef, opcode_of};
+use crate::bytecode::{self, ErrorHandlerMode, Opcode, Register, TaggedRegisterRef, opcode_of};
 use crate::image::Image;
 use crate::mem::{ArrayData, ConstantDatum, DatumPtr, HeapDatum};
 use crate::num::unchecked_usize_as_u8;
@@ -39,6 +39,19 @@ pub(super) enum InternalStopReason {
     ///
     /// The fields are: upcall index, first argument register, and the PC of the UPCALL instruction.
     Upcall(u16, Register, Address),
+}
+
+/// Error handler configuration set by `ON ERROR`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ErrorHandler {
+    /// Errors are not handled.
+    None,
+
+    /// Errors resume execution at the next statement.
+    ResumeNext,
+
+    /// Errors jump to a handler address.
+    Jump(Address),
 }
 
 /// Represents a call frame in the stack.
@@ -143,6 +156,9 @@ pub(super) struct Context {
     /// Stop signal.  If set, indicates why the execution stopped during instruction processing.
     stop: Option<InternalStopReason>,
 
+    /// Current error handler configuration.
+    err_handler: ErrorHandler,
+
     /// Register values.  The first N registers hold global variables.  After those, we find
     /// the registers for all local variables and for all scopes.
     regs: Vec<u64>,
@@ -157,6 +173,7 @@ impl Default for Context {
             pc: 0,
             fp: usize::from(Register::MAX_GLOBAL),
             stop: None,
+            err_handler: ErrorHandler::None,
             regs: vec![0; usize::from(Register::MAX_GLOBAL)],
             call_stack: vec![],
         }
@@ -186,6 +203,16 @@ impl Context {
             index += self.fp;
         }
         self.regs[index] = value;
+    }
+
+    /// Sets the program counter to `pc`.
+    pub(super) fn set_pc(&mut self, pc: Address) {
+        self.pc = pc;
+    }
+
+    /// Returns the current error handler configuration.
+    pub(super) fn error_handler(&self) -> ErrorHandler {
+        self.err_handler
     }
 
     /// Dereferences a pointer register as a string.
@@ -255,12 +282,20 @@ impl Context {
         constants: &'a [ConstantDatum],
         heap: &'a mut Vec<HeapDatum>,
         arg_linecols: &'a [LineCol],
+        last_error: &'a Option<String>,
     ) -> Scope<'a> {
         let (is_global, index) = reg.to_parts();
         assert!(!is_global);
         let index = usize::from(index);
 
-        Scope { regs: &mut self.regs, constants, heap, fp: self.fp + index, arg_linecols }
+        Scope {
+            regs: &mut self.regs,
+            constants,
+            heap,
+            fp: self.fp + index,
+            arg_linecols,
+            last_error,
+        }
     }
 
     /// Starts or resumes execution of `image`.
@@ -330,6 +365,7 @@ impl Context {
                 Opcode::PowerDouble => self.do_power_double(instr),
                 Opcode::PowerInteger => self.do_power_integer(instr),
                 Opcode::Return => self.do_return(instr),
+                Opcode::SetErrorHandler => self.do_set_error_handler(instr),
                 Opcode::ShiftLeft => self.do_shift_left(instr),
                 Opcode::ShiftRight => self.do_shift_right(instr),
                 Opcode::StoreArray => self.do_store_array(instr, heap),
@@ -932,6 +968,17 @@ impl Context {
             self.pc = frame.old_pc + 1;
             self.fp = frame.old_fp;
         }
+    }
+
+    /// Implements the `SetErrorHandler` opcode.
+    pub(super) fn do_set_error_handler(&mut self, instr: u32) {
+        let (mode, target) = bytecode::parse_set_error_handler(instr);
+        self.err_handler = match mode {
+            ErrorHandlerMode::None => ErrorHandler::None,
+            ErrorHandlerMode::ResumeNext => ErrorHandler::ResumeNext,
+            ErrorHandlerMode::Jump => ErrorHandler::Jump(usize::from(target)),
+        };
+        self.pc += 1;
     }
 
     /// Implements the `ShiftLeft` opcode.

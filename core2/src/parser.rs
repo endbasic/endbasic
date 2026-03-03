@@ -1531,7 +1531,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses an `ON ERROR` statement.  Only `ON` has been consumed so far.
-    fn parse_on(&mut self) -> Result<Statement> {
+    fn parse_on(&mut self, pos: LineCol) -> Result<Statement> {
         self.expect_and_consume(Token::Error, "Expected ERROR after ON")?;
 
         let token_span = self.lexer.read()?;
@@ -1539,15 +1539,15 @@ impl<'a> Parser<'a> {
             Token::Goto => {
                 let token_span = self.lexer.read()?;
                 match token_span.token {
-                    Token::Integer(0) => Ok(Statement::OnError(OnErrorSpan::Reset)),
-                    Token::Integer(i) => Ok(Statement::OnError(OnErrorSpan::Goto(GotoSpan {
-                        target: format!("{}", i),
-                        target_pos: token_span.pos,
-                    }))),
-                    Token::Label(target) => Ok(Statement::OnError(OnErrorSpan::Goto(GotoSpan {
-                        target,
-                        target_pos: token_span.pos,
-                    }))),
+                    Token::Integer(0) => Ok(Statement::OnError(OnErrorSpan::Reset(pos))),
+                    Token::Integer(i) => Ok(Statement::OnError(OnErrorSpan::Goto(
+                        GotoSpan { target: format!("{}", i), target_pos: token_span.pos },
+                        pos,
+                    ))),
+                    Token::Label(target) => Ok(Statement::OnError(OnErrorSpan::Goto(
+                        GotoSpan { target, target_pos: token_span.pos },
+                        pos,
+                    ))),
                     _ => Err(Error::Bad(
                         token_span.pos,
                         "Expected label name or 0 after ON ERROR GOTO".to_owned(),
@@ -1556,7 +1556,7 @@ impl<'a> Parser<'a> {
             }
             Token::Resume => {
                 self.expect_and_consume(Token::Next, "Expected NEXT after ON ERROR RESUME")?;
-                Ok(Statement::OnError(OnErrorSpan::ResumeNext))
+                Ok(Statement::OnError(OnErrorSpan::ResumeNext(pos)))
             }
             _ => {
                 Err(Error::Bad(token_span.pos, "Expected GOTO or RESUME after ON ERROR".to_owned()))
@@ -1830,7 +1830,7 @@ impl<'a> Parser<'a> {
             Token::Exit => Ok(Some(self.parse_exit(token_span.pos)?)),
             Token::Gosub => Ok(Some(self.parse_gosub()?)),
             Token::Goto => Ok(Some(self.parse_goto()?)),
-            Token::On => Ok(Some(self.parse_on()?)),
+            Token::On => Ok(Some(self.parse_on(token_span.pos)?)),
             Token::Return => Ok(Some(Statement::Return(ReturnSpan { pos: token_span.pos }))),
             Token::Symbol(vref) => {
                 let peeked = self.lexer.peek()?;
@@ -1915,7 +1915,7 @@ impl<'a> Parser<'a> {
                 // ending given that the next statement may start after the label we found.
                 return Ok(Some(Statement::Label(LabelSpan { name, name_pos: token_span.pos })));
             }
-            Token::On => Ok(Some(self.parse_on()?)),
+            Token::On => Ok(Some(self.parse_on(token_span.pos)?)),
             Token::Return => Ok(Some(Statement::Return(ReturnSpan { pos: token_span.pos }))),
             Token::Select => {
                 let result = self.parse_select(token_span.pos);
@@ -3930,7 +3930,7 @@ mod tests {
     fn test_if_uniline_allowed_on_error() {
         do_if_uniline_allowed_test(
             "ON ERROR RESUME NEXT",
-            Statement::OnError(OnErrorSpan::ResumeNext),
+            Statement::OnError(OnErrorSpan::ResumeNext(lc(1, 11))),
         );
 
         do_error_test("IF 1 THEN ON", "1:13: Expected ERROR after ON");
@@ -4377,25 +4377,28 @@ mod tests {
 
     #[test]
     fn test_parse_on_error_ok() {
-        do_ok_test("ON ERROR GOTO 0", &[Statement::OnError(OnErrorSpan::Reset)]);
+        do_ok_test("ON ERROR GOTO 0", &[Statement::OnError(OnErrorSpan::Reset(lc(1, 1)))]);
 
         do_ok_test(
             "ON ERROR GOTO 10",
-            &[Statement::OnError(OnErrorSpan::Goto(GotoSpan {
-                target: "10".to_owned(),
-                target_pos: lc(1, 15),
-            }))],
+            &[Statement::OnError(OnErrorSpan::Goto(
+                GotoSpan { target: "10".to_owned(), target_pos: lc(1, 15) },
+                lc(1, 1),
+            ))],
         );
 
         do_ok_test(
             "ON ERROR GOTO @foo",
-            &[Statement::OnError(OnErrorSpan::Goto(GotoSpan {
-                target: "foo".to_owned(),
-                target_pos: lc(1, 15),
-            }))],
+            &[Statement::OnError(OnErrorSpan::Goto(
+                GotoSpan { target: "foo".to_owned(), target_pos: lc(1, 15) },
+                lc(1, 1),
+            ))],
         );
 
-        do_ok_test("ON ERROR RESUME NEXT", &[Statement::OnError(OnErrorSpan::ResumeNext)]);
+        do_ok_test(
+            "ON ERROR RESUME NEXT",
+            &[Statement::OnError(OnErrorSpan::ResumeNext(lc(1, 1)))],
+        );
     }
 
     #[test]

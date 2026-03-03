@@ -730,6 +730,9 @@ pub struct Scope<'a> {
     /// position of the expression that was compiled into register slot `N`.  May be shorter
     /// than the actual argument register count if debug information is unavailable.
     pub(crate) arg_linecols: &'a [LineCol],
+
+    /// Last error raised in the VM, if any.
+    pub(crate) last_error: &'a Option<String>,
 }
 
 impl<'a> Scope<'a> {
@@ -779,6 +782,11 @@ impl<'a> Scope<'a> {
         let index = self.regs[self.fp + (arg as usize)];
         let ptr = DatumPtr::from(index);
         ptr.resolve_string(self.constants, self.heap)
+    }
+
+    /// Returns the last error stored in the VM, if any.
+    pub fn last_error(&self) -> Option<&str> {
+        self.last_error.as_deref()
     }
 
     /// Sets the return value of the function to `b`.
