@@ -62,6 +62,9 @@ struct Context {
     /// Collection of user-defined callable definitions to be compiled after the main scope.
     user_callables: Vec<CallableSpan>,
 
+    /// Collection of `DATA` values captured while compiling all statements.
+    data: Vec<Option<ConstantDatum>>,
+
     /// Stack of pending `EXIT DO` jumps for each nested `DO` loop.
     do_exit_stack: Vec<Vec<(usize, LineCol)>>,
 
@@ -73,6 +76,17 @@ struct Context {
 
     /// List of pending `EXIT FUNCTION` or `EXIT SUB` jumps in the current callable.
     callable_exit_jumps: Vec<(usize, LineCol)>,
+}
+
+/// Converts parser-validated `DATA` expressions into image data constants.
+fn data_expr_to_constant(expr: Expr) -> ConstantDatum {
+    match expr {
+        Expr::Boolean(span) => ConstantDatum::Boolean(span.value),
+        Expr::Double(span) => ConstantDatum::Double(span.value),
+        Expr::Integer(span) => ConstantDatum::Integer(span.value),
+        Expr::Text(span) => ConstantDatum::Text(span.value),
+        _ => unreachable!("Parser guarantees DATA only contains literal values"),
+    }
 }
 
 /// Compiles an assignment statement `span` into the `codegen` block.
@@ -792,6 +806,10 @@ fn compile_stmt(
             ctx.user_callables.push(span);
         }
 
+        Statement::Data(span) => {
+            ctx.data.extend(span.values.into_iter().map(|expr| expr.map(data_expr_to_constant)));
+        }
+
         Statement::Dim(span) => {
             let name_pos = span.name_pos;
             let key = SymbolKey::from(&span.name);
@@ -981,8 +999,6 @@ fn compile_stmt(
         Statement::While(span) => {
             compile_while(ctx, symtable, span)?;
         }
-
-        _ => todo!(),
     }
     if mark_start && start_pc != ctx.codegen.next_pc() {
         ctx.codegen.mark_statement_start(start_pc);
@@ -1235,7 +1251,7 @@ pub fn compile_with_globals(
             (key.clone(), GlobalVarInfo { reg, subtype, ndims })
         })
         .collect();
-    ctx.codegen.build_image(global_vars)
+    ctx.codegen.build_image(global_vars, ctx.data)
 }
 
 /// Compiles the `input` into an `Image` that can be executed by the VM.

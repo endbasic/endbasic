@@ -160,7 +160,7 @@ impl Vm {
     /// `upcall_pc` is the address of the UPCALL instruction in the image, used to look up
     /// per-argument source locations from `DebugInfo`.
     fn upcall_scope<'a>(&'a mut self, reg: Register, upcall_pc: usize) -> Scope<'a> {
-        let (constants, arg_linecols) = match self.image.as_ref() {
+        let (constants, arg_linecols, data) = match self.image.as_ref() {
             Some(image) => (
                 image.constants.as_slice(),
                 image
@@ -169,10 +169,18 @@ impl Vm {
                     .get(upcall_pc)
                     .map(|m| m.arg_linecols.as_slice())
                     .unwrap_or(&[]),
+                image.data.as_slice(),
             ),
-            None => (&[][..], &[][..]),
+            None => (&[][..], &[][..], &[][..]),
         };
-        self.context.upcall_scope(reg, constants, &mut self.heap, arg_linecols, &self.last_error)
+        self.context.upcall_scope(
+            reg,
+            constants,
+            &mut self.heap,
+            arg_linecols,
+            &self.last_error,
+            data,
+        )
     }
 
     /// Handles an exception raised at `pc` with `message`.  Returns true if the error was handled.

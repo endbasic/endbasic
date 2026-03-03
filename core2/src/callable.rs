@@ -733,9 +733,17 @@ pub struct Scope<'a> {
 
     /// Last error raised in the VM, if any.
     pub(crate) last_error: &'a Option<String>,
+
+    /// `DATA` values captured from the compiled source.
+    pub(crate) data: &'a [Option<ConstantDatum>],
 }
 
 impl<'a> Scope<'a> {
+    /// Returns `DATA` values captured from the compiled source in encounter order.
+    pub fn data(&self) -> &[Option<ConstantDatum>] {
+        self.data
+    }
+
     /// Returns the source position of the argument at `arg`, or `None` if unavailable.
     ///
     /// `arg` is the register-slot index of the argument, matching the `N` in `scope.get_*(N)`.

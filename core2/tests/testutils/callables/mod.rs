@@ -30,6 +30,9 @@ use define_arg_cmd::DefineArgCommand;
 mod define_and_change_args_cmd;
 use define_and_change_args_cmd::DefineAndChangeArgsCommand;
 
+mod get_data_cmd;
+use get_data_cmd::GetDataCommand;
+
 mod increment_required_int_cmd;
 use increment_required_int_cmd::IncrementRequiredIntCommand;
 
@@ -107,6 +110,7 @@ pub(super) fn register_all(
         ConcatFunction::new() as Rc<dyn Callable>,
         DefineAndChangeArgsCommand::new() as Rc<dyn Callable>,
         DefineArgCommand::new() as Rc<dyn Callable>,
+        GetDataCommand::new(console.clone()) as Rc<dyn Callable>,
         IncrementRequiredIntCommand::new() as Rc<dyn Callable>,
         IsPositiveFunction::new() as Rc<dyn Callable>,
         LastErrorFunction::new() as Rc<dyn Callable>,
