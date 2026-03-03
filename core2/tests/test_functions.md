@@ -912,3 +912,129 @@ END FUNCTION
 ```plain
 2:5: EXIT SUB outside of SUB
 ```
+
+# Test: Recursive function
+
+## Source
+
+```basic
+DIM SHARED calls AS INTEGER
+FUNCTION factorial(n%)
+    IF n = 1 THEN factorial = 1 ELSE factorial = n * factorial(n - 1)
+    calls = calls + 1
+END FUNCTION
+OUT calls; factorial(5)
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       5                   # 0:0
+0001:   LOADI       R0, 0               # 1:12
+0002:   MOVE        R65, R0             # 6:5
+0003:   LOADI       R64, 274            # 6:5
+0004:   LOADI       R68, 5              # 6:22
+0005:   CALL        R67, 10             # 6:12, FACTORIAL
+0006:   LOADI       R66, 258            # 6:12
+0007:   UPCALL      0, R64              # 6:1, OUT
+0008:   LOADI       R64, 0              # 0:0
+0009:   END         R64                 # 0:0
+
+-- FACTORIAL 
+0010:   LOADI       R64, 0              # 2:10
+0011:   ENTER       5                   # 0:0
+0012:   MOVE        R66, R65            # 3:8
+0013:   LOADI       R67, 1              # 3:12
+0014:   CMPEQI      R66, R66, R67       # 3:10
+0015:   JMPF        R66, 18             # 3:8
+0016:   LOADI       R64, 1              # 3:31
+0017:   JUMP        26                  # 3:8
+0018:   LOADI       R66, 1              # 3:33
+0019:   JMPF        R66, 26             # 3:33
+0020:   MOVE        R64, R65            # 3:50
+0021:   MOVE        R67, R65            # 3:64
+0022:   LOADI       R68, 1              # 3:68
+0023:   SUBI        R67, R67, R68       # 3:66
+0024:   CALL        R66, 10             # 3:54, FACTORIAL
+0025:   MULI        R64, R64, R66       # 3:52
+0026:   MOVE        R0, R0              # 4:13
+0027:   LOADI       R66, 1              # 4:21
+0028:   ADDI        R0, R0, R66         # 4:19
+0029:   RETURN                          # 5:1
+```
+
+## Output
+
+```plain
+0=0% ; 1=120%
+```
+
+# Test: Calling a function as a command is an error
+
+## Source
+
+```basic
+FUNCTION f
+    OUT "foo"
+END FUNCTION
+f
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       1                   # 0:0
+0001:   CALL        R64, 4              # 4:1, F
+0002:   LOADI       R64, 0              # 0:0
+0003:   END         R64                 # 0:0
+
+-- F 
+0004:   LOADI       R64, 0              # 1:10
+0005:   ENTER       3                   # 0:0
+0006:   LOADI       R66, 0              # 2:9
+0007:   LOADI       R65, 259            # 2:9
+0008:   UPCALL      0, R65              # 2:5, OUT
+0009:   RETURN                          # 3:1
+```
+
+## Output
+
+```plain
+0=foo$
+```
+
+# Test: Function redefines existing function
+
+## Source
+
+```basic
+FUNCTION foo
+END FUNCTION
+
+FUNCTION foo
+END FUNCTION
+```
+
+## Compilation errors
+
+```plain
+4:10: Cannot redefine foo%
+```
+
+# Test: Function redefines existing sub
+
+## Source
+
+```basic
+SUB foo
+END SUB
+
+FUNCTION foo
+END FUNCTION
+```
+
+## Compilation errors
+
+```plain
+4:10: Cannot redefine foo%
+```

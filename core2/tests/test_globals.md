@@ -308,3 +308,45 @@ DIM SHARED x AS INTEGER
 ```plain
 2:12: Cannot redefine x
 ```
+
+# Test: DIM SHARED when local variable of same name exists
+
+## Source
+
+```basic
+FUNCTION foo
+    x = 5
+    DIM SHARED x
+    OUT x
+END FUNCTION
+
+OUT foo
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       2                   # 0:0
+0001:   CALL        R65, 6              # 7:5, FOO
+0002:   LOADI       R64, 258            # 7:5
+0003:   UPCALL      0, R64              # 7:1, OUT
+0004:   LOADI       R64, 0              # 0:0
+0005:   END         R64                 # 0:0
+
+-- FOO 
+0006:   LOADI       R64, 0              # 1:10
+0007:   ENTER       4                   # 0:0
+0008:   LOADI       R65, 5              # 2:9
+0009:   LOADI       R0, 0               # 3:16
+0010:   MOVE        R67, R65            # 4:9
+0011:   LOADI       R66, 258            # 4:9
+0012:   UPCALL      0, R66              # 4:5, OUT
+0013:   RETURN                          # 5:1
+```
+
+## Output
+
+```plain
+0=5%
+0=0%
+```

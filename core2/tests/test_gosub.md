@@ -42,6 +42,38 @@ RETURN
 0=c$
 ```
 
+# Test: GOSUB with numeric label
+
+## Source
+
+```basic
+GOSUB 100
+END
+100 OUT "in gosub"
+RETURN
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       2                   # 0:0
+0001:   GOSUB       4                   # 1:7
+0002:   LOADI       R64, 0              # 2:1
+0003:   END         R64                 # 2:1
+0004:   LOADI       R65, 0              # 3:9
+0005:   LOADI       R64, 259            # 3:9
+0006:   UPCALL      0, R64              # 3:5, OUT
+0007:   RETURN                          # 4:1
+0008:   LOADI       R64, 0              # 0:0
+0009:   END         R64                 # 0:0
+```
+
+## Output
+
+```plain
+0=in gosub$
+```
+
 # Test: Nested GOSUB calls and returns
 
 ## Source
@@ -174,4 +206,56 @@ GOSUB @s
 
 ```plain
 0=In target$
+```
+
+# Test: GOSUB without RETURN still runs target
+
+## Source
+
+```basic
+GOSUB @sub: @sub: OUT 1
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       2                   # 0:0
+0001:   GOSUB       2                   # 1:7
+0002:   LOADI       R65, 1              # 1:23
+0003:   LOADI       R64, 258            # 1:23
+0004:   UPCALL      0, R64              # 1:19, OUT
+0005:   LOADI       R64, 0              # 0:0
+0006:   END         R64                 # 0:0
+```
+
+## Output
+
+```plain
+0=1%
+```
+
+# Test: RETURN reached by GOTO fails
+
+## Source
+
+```basic
+GOTO @foo
+@foo:
+RETURN
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       1                   # 0:0
+0001:   JUMP        2                   # 1:6
+0002:   RETURN                          # 3:1
+0003:   LOADI       R64, 0              # 0:0
+0004:   END         R64                 # 0:0
+```
+
+## Runtime errors
+
+```plain
+3:1: RETURN without GOSUB or FUNCTION call
 ```
