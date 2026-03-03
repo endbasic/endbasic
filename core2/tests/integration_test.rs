@@ -48,6 +48,7 @@ one_test!(test_bitwise_or);
 one_test!(test_bitwise_shl);
 one_test!(test_bitwise_shr);
 one_test!(test_bitwise_xor);
+one_test!(test_data);
 one_test!(test_do);
 one_test!(test_empty);
 one_test!(test_end);

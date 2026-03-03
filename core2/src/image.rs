@@ -150,6 +150,9 @@ pub struct Image {
     /// Pool of constant values used by the program.
     pub(crate) constants: Vec<ConstantDatum>,
 
+    /// Values captured from all `DATA` statements in source order.
+    pub(crate) data: Vec<Option<ConstantDatum>>,
+
     /// Debugging information for error reporting and disassembly.
     pub(crate) debug_info: DebugInfo,
 
@@ -166,6 +169,7 @@ impl Default for Image {
                 // been cleared and accessing them would result in their default values.
                 bytecode::make_end(Register::global(0).expect("Global 0 register be valid")),
             ],
+            vec![],
             vec![],
             vec![],
             DebugInfo {
@@ -186,11 +190,12 @@ impl Image {
         code: Vec<u32>,
         upcalls: Vec<SymbolKey>,
         constants: Vec<ConstantDatum>,
+        data: Vec<Option<ConstantDatum>>,
         debug_info: DebugInfo,
     ) -> Self {
         debug_assert!(!code.is_empty(), "Compiler must ensure the image is not empty");
         debug_assert_eq!(code.len(), debug_info.instrs.len());
-        Self { code, upcalls, constants, debug_info, _internal: () }
+        Self { code, upcalls, constants, data, debug_info, _internal: () }
     }
 
     /// Disassembles the image into a textual representation for debugging.

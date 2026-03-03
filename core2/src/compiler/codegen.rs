@@ -252,6 +252,7 @@ impl Codegen {
     pub(super) fn build_image(
         mut self,
         global_vars: HashMap<SymbolKey, GlobalVarInfo>,
+        data: Vec<Option<ConstantDatum>>,
     ) -> Result<Image> {
         self.apply_fixups()?;
 
@@ -265,6 +266,7 @@ impl Codegen {
             self.code,
             self.upcalls.keys_to_vec(),
             self.constants.keys_to_vec(),
+            data,
             DebugInfo { instrs: self.instrs, callables, global_vars },
         ))
     }
