@@ -363,3 +363,110 @@ END SUB
 ```plain
 2:5: EXIT FUNCTION outside of FUNCTION
 ```
+
+# Test: Recursive subroutine
+
+## Source
+
+```basic
+DIM SHARED counter AS INTEGER
+SUB count_down(prefix$)
+    OUT prefix; counter
+    IF counter > 1 THEN
+        counter = counter - 1
+        count_down prefix
+    END IF
+END SUB
+counter = 3
+count_down "counter is"
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       1                   # 0:0
+0001:   LOADI       R0, 0               # 1:12
+0002:   LOADI       R0, 3               # 9:11
+0003:   LOADI       R64, 0              # 10:12
+0004:   CALL        R64, 7              # 10:1, COUNT_DOWN
+0005:   LOADI       R64, 0              # 0:0
+0006:   END         R64                 # 0:0
+
+-- COUNT_DOWN 
+0007:   ENTER       5                   # 0:0
+0008:   MOVE        R66, R64            # 3:9
+0009:   LOADI       R65, 275            # 3:9
+0010:   MOVE        R68, R0             # 3:17
+0011:   LOADI       R67, 258            # 3:17
+0012:   UPCALL      0, R65              # 3:5, OUT
+0013:   MOVE        R65, R0             # 4:8
+0014:   LOADI       R66, 1              # 4:18
+0015:   CMPGTI      R65, R65, R66       # 4:16
+0016:   JMPF        R65, 22             # 4:8
+0017:   MOVE        R0, R0              # 5:19
+0018:   LOADI       R65, 1              # 5:29
+0019:   SUBI        R0, R0, R65         # 5:27
+0020:   MOVE        R65, R64            # 6:20
+0021:   CALL        R65, 7              # 6:9, COUNT_DOWN
+0022:   RETURN                          # 8:1
+```
+
+## Output
+
+```plain
+0=counter is$ ; 1=3%
+0=counter is$ ; 1=2%
+0=counter is$ ; 1=1%
+```
+
+# Test: Calling a subroutine as a function is an error
+
+## Source
+
+```basic
+SUB f
+END SUB
+OUT f
+```
+
+## Compilation errors
+
+```plain
+3:5: Cannot call f (not a function)
+```
+
+# Test: Sub redefines existing function
+
+## Source
+
+```basic
+FUNCTION foo
+END FUNCTION
+
+SUB foo
+END SUB
+```
+
+## Compilation errors
+
+```plain
+4:5: Cannot redefine foo
+```
+
+# Test: Sub redefines existing sub
+
+## Source
+
+```basic
+SUB foo
+END SUB
+
+SUB foo
+END SUB
+```
+
+## Compilation errors
+
+```plain
+4:5: Cannot redefine foo
+```

@@ -593,3 +593,51 @@ END SELECT
 ```plain
 2:10: Cannot = INTEGER and BOOLEAN
 ```
+
+# Test: SELECT with no matching CASE
+
+## Source
+
+```basic
+SELECT CASE 42
+    CASE 1
+        OUT "unexpected"
+    CASE 2
+END SELECT
+OUT "done"
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       4                   # 0:0
+0001:   LOADI       R64, 42             # 1:13
+0002:   MOVE        R65, R64            # 2:10
+0003:   LOADI       R66, 1              # 2:10
+0004:   CMPEQI      R67, R65, R66       # 2:10
+0005:   JMPF        R67, 7              # 2:10
+0006:   JUMP        15                  # 2:10
+0007:   JUMP        8                   # 5:1
+0008:   MOVE        R65, R64            # 4:10
+0009:   LOADI       R66, 2              # 4:10
+0010:   CMPEQI      R67, R65, R66       # 4:10
+0011:   JMPF        R67, 13             # 4:10
+0012:   JUMP        19                  # 4:10
+0013:   JUMP        14                  # 5:1
+0014:   JUMP        19                  # 5:1
+0015:   LOADI       R65, 0              # 3:13
+0016:   LOADI       R64, 259            # 3:13
+0017:   UPCALL      0, R64              # 3:9, OUT
+0018:   JUMP        19                  # 5:1
+0019:   LOADI       R65, 1              # 6:5
+0020:   LOADI       R64, 259            # 6:5
+0021:   UPCALL      0, R64              # 6:1, OUT
+0022:   LOADI       R64, 0              # 0:0
+0023:   END         R64                 # 0:0
+```
+
+## Output
+
+```plain
+0=done$
+```
