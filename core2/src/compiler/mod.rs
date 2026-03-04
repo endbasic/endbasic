@@ -60,6 +60,10 @@ pub enum Error {
     #[error("{0}: Cannot nest FUNCTION or SUB definitions")]
     CannotNestUserCallables(LineCol),
 
+    /// Attempt to redefine an already-defined label.
+    #[error("{0}: Duplicate label {1}")]
+    DuplicateLabel(LineCol, String),
+
     /// Type annotation in a reference doesn't match the variable's type.
     #[error("{0}: Incompatible type annotation in {1} reference")]
     IncompatibleTypeAnnotationInReference(LineCol, VarRef),

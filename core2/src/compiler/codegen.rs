@@ -178,9 +178,9 @@ impl Codegen {
         self.user_callables_addresses.insert(key, address);
     }
 
-    /// Records the location of a label.
-    pub(super) fn define_label(&mut self, key: SymbolKey, address: Address) {
-        self.labels.insert(key, address);
+    /// Records the location of a label.  Returns false on failure (if the label already existed).
+    pub(super) fn define_label(&mut self, key: SymbolKey, address: Address) -> bool {
+        self.labels.insert(key, address).is_none()
     }
 
     /// Converts a symbolic `target` address into a 16-bit relative address from `pos`.

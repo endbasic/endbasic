@@ -193,12 +193,33 @@ GOTO 10
 @foo:
 ```
 
-## Disassembly
+## Compilation errors
 
-```asm
-0000:   ENTER       1                   # 0:0
-0001:   LOADI       R64, 0              # 0:0
-0002:   END         R64                 # 0:0
+```plain
+2:1: Duplicate label foo
+```
+
+# Test: Duplicate label in nested control flow
+
+## Source
+
+```basic
+i = 0
+@a
+    @b
+        @c
+            i = i + 1
+            IF i = 1 THEN: GOTO @b: END IF
+            @a
+            IF i = 2 THEN: GOTO @c: END IF
+            IF i = 3 THEN: GOTO @out: END IF
+@out
+```
+
+## Compilation errors
+
+```plain
+7:13: Duplicate label a
 ```
 
 # Test: GOTO as the last statement in a loop
