@@ -89,6 +89,20 @@ fn data_expr_to_constant(expr: Expr) -> ConstantDatum {
     }
 }
 
+/// Returns a statically-known `END` exit code and its source position, if any.
+fn static_end_code(expr: &Expr) -> Option<(i32, LineCol)> {
+    match expr {
+        Expr::Integer(span) => Some((span.value, span.pos)),
+        Expr::Negate(span) => {
+            let Expr::Integer(inner) = &span.expr else {
+                return None;
+            };
+            inner.value.checked_neg().map(|value| (value, span.pos))
+        }
+        _ => None,
+    }
+}
+
 /// Compiles an assignment statement `span` into the `codegen` block.
 fn compile_assignment(
     codegen: &mut Codegen,
@@ -897,6 +911,13 @@ fn compile_stmt(
         }
 
         Statement::End(span) => {
+            if let Some(expr) = span.code.as_ref()
+                && let Some((code, code_pos)) = static_end_code(expr)
+                && let Err(e) = bytecode::ExitCode::try_from(code)
+            {
+                return Err(Error::from_bytecode_invalid_exit_code(e, code_pos));
+            }
+
             let mut symtable = symtable.frozen();
             let mut scope = symtable.temp_scope();
             let reg = scope.alloc().map_err(|e| Error::from_syms(e, span.pos))?;
@@ -1282,8 +1303,8 @@ mod tests {
         let mut vm = Vm::new(HashMap::default());
         vm.load(image);
         match vm.exec() {
-            StopReason::End(0) => {}
-            StopReason::End(code) => panic!("unexpected exit code: {code}"),
+            StopReason::End(code) if code.is_success() => {}
+            StopReason::End(code) => panic!("unexpected exit code: {}", code.to_i32()),
             StopReason::Exception(pos, msg) => panic!("exception at {pos}: {msg}"),
             StopReason::Upcall(_) => panic!("unexpected upcall"),
         }

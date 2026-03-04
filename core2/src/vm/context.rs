@@ -18,7 +18,9 @@
 
 use crate::ExprType;
 use crate::Scope;
-use crate::bytecode::{self, ErrorHandlerMode, Opcode, Register, TaggedRegisterRef, opcode_of};
+use crate::bytecode::{
+    self, ErrorHandlerMode, ExitCode, Opcode, Register, TaggedRegisterRef, opcode_of,
+};
 use crate::image::Image;
 use crate::mem::{ArrayData, ConstantDatum, DatumPtr, HeapDatum};
 use crate::num::unchecked_usize_as_u8;
@@ -30,7 +32,7 @@ type Address = usize;
 /// Internal representation of a `StopReason` that requires further annotation by the caller.
 pub(super) enum InternalStopReason {
     /// Execution terminated due to an `END` instruction.
-    End(i32),
+    End(ExitCode),
 
     /// Execution stopped due to an instruction-level exception.
     Exception(Address, String),
@@ -652,6 +654,13 @@ impl Context {
     pub(super) fn do_end(&mut self, instr: u32) {
         let reg = bytecode::parse_end(instr);
         let code = self.get_reg(reg) as i32;
+        let code = match ExitCode::try_from(code) {
+            Ok(code) => code,
+            Err(e) => {
+                self.set_exception(e.to_string());
+                return;
+            }
+        };
         self.stop = Some(InternalStopReason::End(code));
     }
 

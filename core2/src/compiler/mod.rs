@@ -17,7 +17,7 @@
 //! Compiler for the EndBASIC language into bytecode.
 
 use crate::ast::{ExprType, VarRef};
-use crate::bytecode::RegisterScope;
+use crate::bytecode::{InvalidExitCodeError, RegisterScope};
 use crate::callable::CallableMetadata;
 use crate::parser;
 use crate::reader::LineCol;
@@ -71,6 +71,10 @@ pub enum Error {
     /// Type mismatch in an assignment.
     #[error("{0}: Cannot assign value of type {1} to variable of type {2}")]
     IncompatibleTypesInAssignment(LineCol, ExprType, ExprType),
+
+    /// `END` code is out of range.
+    #[error("{0}: {1}")]
+    InvalidEndCode(LineCol, String),
 
     /// I/O error while reading the source.
     #[error("{0}: I/O error during compilation: {1}")]
@@ -134,6 +138,11 @@ pub enum Error {
 }
 
 impl Error {
+    /// Annotates an invalid `END` exit code error with a source position.
+    fn from_bytecode_invalid_exit_code(value: InvalidExitCodeError, pos: LineCol) -> Self {
+        Self::InvalidEndCode(pos, value.to_string())
+    }
+
     /// Annotates an error from the symbol table with the position it arised from.
     fn from_syms(value: syms::Error, pos: LineCol) -> Self {
         match value {

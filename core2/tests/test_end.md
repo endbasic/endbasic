@@ -141,21 +141,10 @@ END "foo"
 END -3
 ```
 
-## Disassembly
-
-```asm
-0000:   ENTER       1                   # 0:0
-0001:   LOADI       R64, 3              # 1:6
-0002:   NEGI        R64                 # 1:5
-0003:   END         R64                 # 1:1
-0004:   LOADI       R64, 0              # 0:0
-0005:   END         R64                 # 0:0
-```
-
-## Exit code
+## Compilation errors
 
 ```plain
--3
+1:5: Exit code must be in the 0..127 range
 ```
 
 # Test: Exit code cannot be larger than 127
@@ -166,20 +155,63 @@ END -3
 END 128
 ```
 
+## Compilation errors
+
+```plain
+1:5: Exit code must be in the 0..127 range
+```
+
+# Test: Dynamic exit code cannot be negative
+
+## Source
+
+```basic
+i = -3
+END i
+```
+
 ## Disassembly
 
 ```asm
-0000:   ENTER       1                   # 0:0
-0001:   LOADI       R64, 128            # 1:5
-0002:   END         R64                 # 1:1
-0003:   LOADI       R64, 0              # 0:0
-0004:   END         R64                 # 0:0
+0000:   ENTER       2                   # 0:0
+0001:   LOADI       R64, 3              # 1:6
+0002:   NEGI        R64                 # 1:5
+0003:   MOVE        R65, R64            # 2:5
+0004:   END         R65                 # 2:1
+0005:   LOADI       R65, 0              # 0:0
+0006:   END         R65                 # 0:0
 ```
 
-## Exit code
+## Runtime errors
 
 ```plain
-128
+2:1: Exit code must be in the 0..127 range
+```
+
+# Test: Dynamic exit code cannot be larger than 127
+
+## Source
+
+```basic
+i = 128
+END i
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       2                   # 0:0
+0001:   LOADI       R64, 128            # 1:5
+0002:   MOVE        R65, R64            # 2:5
+0003:   END         R65                 # 2:1
+0004:   LOADI       R65, 0              # 0:0
+0005:   END         R65                 # 0:0
+```
+
+## Runtime errors
+
+```plain
+2:1: Exit code must be in the 0..127 range
 ```
 
 # Test: END exits from inside FOR loop
