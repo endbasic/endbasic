@@ -89,8 +89,8 @@ fn main() {
     vm.load(image);
     match vm.exec() {
         StopReason::End(code) => {
-            if code != 0 {
-                eprintln!("Script exited with code {}", code);
+            if !code.is_success() {
+                eprintln!("Script exited with code {}", code.to_i32());
             }
         }
         StopReason::Exception(pos, msg) => {

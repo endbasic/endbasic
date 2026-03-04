@@ -46,6 +46,11 @@ impl fmt::Display for RegisterScope {
     }
 }
 
+/// Error to indicate an invalid `END` exit code.
+#[derive(Debug, thiserror::Error)]
+#[error("Exit code must be in the 0..127 range")]
+pub struct InvalidExitCodeError(());
+
 /// Error to indicate that we have run out of registers.
 #[derive(Debug, thiserror::Error)]
 #[error("Out of registers")]
@@ -66,6 +71,39 @@ pub(crate) enum ParseError {
 
 /// Result type for bytecode parsing operations.
 pub(crate) type ParseResult<T> = Result<T, ParseError>;
+
+/// Program exit code carried by the `END` instruction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ExitCode(u8);
+
+impl ExitCode {
+    /// Returns true if this code represents successful execution.
+    pub fn is_success(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Creates an `ExitCode` from an integer.
+    pub fn try_new(value: i32) -> Result<Self, InvalidExitCodeError> {
+        if (0..128).contains(&value) {
+            Ok(Self(value as u8))
+        } else {
+            Err(InvalidExitCodeError(()))
+        }
+    }
+
+    /// Converts this exit code to an integer.
+    pub fn to_i32(self) -> i32 {
+        i32::from(self.0)
+    }
+}
+
+impl TryFrom<i32> for ExitCode {
+    type Error = InvalidExitCodeError;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        Self::try_new(value)
+    }
+}
 
 /// Conversions between a primitive type and a `u32` for insertion into an instruction.
 trait RawValue: Sized {
@@ -1708,6 +1746,20 @@ mod tests {
     );
 
     test_instr!(test_upcall, make_upcall, parse_upcall, 12345, Register::local(3).unwrap());
+
+    #[test]
+    fn test_exit_code_try_ok() {
+        assert_eq!(ExitCode(0), ExitCode::try_from(0).unwrap());
+        assert_eq!(ExitCode(127), ExitCode::try_from(127).unwrap());
+        assert!(ExitCode::try_from(0).unwrap().is_success());
+        assert!(!ExitCode::try_from(127).unwrap().is_success());
+    }
+
+    #[test]
+    fn test_exit_code_try_errors() {
+        assert!(ExitCode::try_from(-1).is_err());
+        assert!(ExitCode::try_from(128).is_err());
+    }
 
     #[test]
     fn test_packed_array_type_round_trip() {

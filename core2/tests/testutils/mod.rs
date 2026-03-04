@@ -347,7 +347,7 @@ async fn regenerate<W: Write>(golden: &Path, generated: &mut W) -> io::Result<()
         let mut stop: Option<Result<i32, String>> = None;
         while stop.is_none() {
             match vm.exec() {
-                StopReason::End(code) => stop = Some(Ok(code)),
+                StopReason::End(code) => stop = Some(Ok(code.to_i32())),
                 StopReason::Upcall(handle) => {
                     if let Err(e) = handle.invoke().await {
                         stop = Some(Err(e.to_string()));

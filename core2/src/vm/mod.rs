@@ -18,7 +18,7 @@
 
 use crate::CallResult;
 use crate::ast::ExprType;
-use crate::bytecode::Register;
+use crate::bytecode::{ExitCode, Register};
 use crate::callable::{Callable, Scope};
 use crate::compiler::SymbolKey;
 use crate::image::Image;
@@ -80,7 +80,7 @@ impl<'a> UpcallHandler<'a> {
 /// Representation of termination states from program execution.
 pub enum StopReason<'a> {
     /// Execution terminated due to an `END` instruction.
-    End(i32),
+    End(ExitCode),
 
     /// Execution stopped due to an instruction-level exception.
     Exception(LineCol, String),
@@ -304,7 +304,9 @@ impl Vm {
             }
 
             let Some(image) = self.image.as_ref() else {
-                return StopReason::End(0);
+                return StopReason::End(
+                    ExitCode::try_from(0).expect("Zero must be a valid exit code"),
+                );
             };
 
             if self.pending_upcall.is_some() {
@@ -414,7 +416,7 @@ mod tests {
     fn test_exec_without_load_is_eof() {
         let mut vm = Vm::new(HashMap::default());
         match vm.exec() {
-            StopReason::End(0) => (),
+            StopReason::End(code) if code.is_success() => (),
             _ => panic!("Unexpected stop reason"),
         }
     }
@@ -424,7 +426,7 @@ mod tests {
         let mut vm = Vm::new(HashMap::default());
         vm.load(Image::default());
         match vm.exec() {
-            StopReason::End(0) => (),
+            StopReason::End(code) if code.is_success() => (),
             _ => panic!("Unexpected stop reason"),
         }
     }
@@ -435,7 +437,7 @@ mod tests {
         let image = compile(&mut b"".as_slice(), &HashMap::default()).unwrap();
         vm.load(image);
         match vm.exec() {
-            StopReason::End(0) => (),
+            StopReason::End(code) if code.is_success() => (),
             _ => panic!("Unexpected stop reason"),
         }
     }
@@ -471,7 +473,7 @@ mod tests {
         assert_eq!(["30", "20"], *data.borrow().as_slice());
 
         match vm.exec() {
-            StopReason::End(0) => (),
+            StopReason::End(code) if code.is_success() => (),
             _ => panic!("Fourth exec should stop at EOF"),
         }
         assert_eq!(["30", "20"], *data.borrow().as_slice());
@@ -483,7 +485,7 @@ mod tests {
         let image = compile(&mut b"END".as_slice(), &HashMap::default()).unwrap();
         vm.load(image);
         match vm.exec() {
-            StopReason::End(0) => (),
+            StopReason::End(code) if code.is_success() => (),
             _ => panic!("Unexpected stop reason"),
         }
     }
@@ -494,7 +496,7 @@ mod tests {
         let image = compile(&mut b"END 3".as_slice(), &HashMap::default()).unwrap();
         vm.load(image);
         match vm.exec() {
-            StopReason::End(3) => (),
+            StopReason::End(code) if code.to_i32() == 3 => (),
             _ => panic!("Unexpected stop reason"),
         }
     }
