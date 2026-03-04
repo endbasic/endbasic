@@ -980,27 +980,38 @@ END FUNCTION
 f
 ```
 
-## Disassembly
-
-```asm
-0000:   ENTER       1                   # 0:0
-0001:   CALL        R64, 4              # 4:1, F
-0002:   LOADI       R64, 0              # 0:0
-0003:   END         R64                 # 0:0
-
--- F 
-0004:   LOADI       R64, 0              # 1:10
-0005:   ENTER       3                   # 0:0
-0006:   LOADI       R66, 0              # 2:9
-0007:   LOADI       R65, 259            # 2:9
-0008:   UPCALL      0, R65              # 2:5, OUT
-0009:   RETURN                          # 3:1
-```
-
-## Output
+## Compilation errors
 
 ```plain
-0=foo$
+4:1: Cannot call F (not a function)
+```
+
+# Test: Calling an argless function upcall as a command is an error
+
+## Source
+
+```basic
+MEANING_OF_LIFE
+```
+
+## Compilation errors
+
+```plain
+1:1: Cannot call MEANING_OF_LIFE (not a function)
+```
+
+# Test: Calling a function upcall with arguments as a command is an error
+
+## Source
+
+```basic
+SUM_DOUBLES 1.0, 2.0
+```
+
+## Compilation errors
+
+```plain
+1:1: Cannot call SUM_DOUBLES (not a function)
 ```
 
 # Test: Function redefines existing function

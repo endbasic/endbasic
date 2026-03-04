@@ -756,6 +756,9 @@ fn compile_stmt(
                     RegisterScope::Global,
                 ));
             };
+            if md.return_type().is_some() {
+                return Err(Error::NotAFunction(span.vref_pos, span.vref));
+            }
             let is_user_defined = md.is_user_defined();
             let md = md.clone();
 
