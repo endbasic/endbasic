@@ -965,7 +965,9 @@ fn compile_stmt(
 
         Statement::Label(span) => {
             mark_start = false;
-            ctx.codegen.define_label(SymbolKey::from(span.name), ctx.codegen.next_pc());
+            if !ctx.codegen.define_label(SymbolKey::from(&span.name), ctx.codegen.next_pc()) {
+                return Err(Error::DuplicateLabel(span.name_pos, span.name));
+            }
         }
 
         Statement::Return(span) => {
