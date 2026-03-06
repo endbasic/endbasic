@@ -366,26 +366,28 @@ OUT add(3, 5) + add(10, 20)
 ## Disassembly
 
 ```asm
-0000:   ENTER       5                   # 0:0
-0001:   LOADI       R66, 3              # 5:9
-0002:   LOADI       R67, 5              # 5:12
-0003:   CALL        R65, 12             # 5:5, ADD
-0004:   LOADI       R67, 10             # 5:21
-0005:   LOADI       R68, 20             # 5:25
-0006:   CALL        R66, 12             # 5:17, ADD
-0007:   ADDI        R65, R65, R66       # 5:15
-0008:   LOADI       R64, 258            # 5:5
-0009:   UPCALL      0, R64              # 5:1, OUT
-0010:   LOADI       R64, 0              # 0:0
-0011:   END         R64                 # 0:0
+0000:   ENTER       6                   # 0:0
+0001:   LOADI       R67, 3              # 5:9
+0002:   LOADI       R68, 5              # 5:12
+0003:   CALL        R66, 14             # 5:5, ADD
+0004:   MOVE        R65, R66            # 5:5
+0005:   LOADI       R68, 10             # 5:21
+0006:   LOADI       R69, 20             # 5:25
+0007:   CALL        R67, 14             # 5:17, ADD
+0008:   MOVE        R66, R67            # 5:17
+0009:   ADDI        R65, R65, R66       # 5:15
+0010:   LOADI       R64, 258            # 5:5
+0011:   UPCALL      0, R64              # 5:1, OUT
+0012:   LOADI       R64, 0              # 0:0
+0013:   END         R64                 # 0:0
 
 -- ADD 
-0012:   LOADI       R64, 0              # 1:10
-0013:   ENTER       4                   # 0:0
-0014:   MOVE        R64, R65            # 2:11
-0015:   MOVE        R67, R66            # 2:15
-0016:   ADDI        R64, R64, R67       # 2:13
-0017:   RETURN                          # 3:1
+0014:   LOADI       R64, 0              # 1:10
+0015:   ENTER       4                   # 0:0
+0016:   MOVE        R64, R65            # 2:11
+0017:   MOVE        R67, R66            # 2:15
+0018:   ADDI        R64, R64, R67       # 2:13
+0019:   RETURN                          # 3:1
 ```
 
 ## Output
@@ -462,37 +464,39 @@ OUT s
 ## Disassembly
 
 ```asm
-0000:   ENTER       5                   # 0:0
+0000:   ENTER       6                   # 0:0
 0001:   LOADI       R64, 5              # 9:5
-0002:   MOVE        R67, R64            # 10:20
-0003:   CALL        R66, 19             # 10:5, CHANGE_INTEGER
-0004:   LOADI       R65, 258            # 10:5
-0005:   UPCALL      0, R65              # 10:1, OUT
-0006:   MOVE        R66, R64            # 11:5
-0007:   LOADI       R65, 258            # 11:5
-0008:   UPCALL      0, R65              # 11:1, OUT
-0009:   LOADI       R65, 0              # 13:5
-0010:   MOVE        R68, R65            # 14:19
-0011:   CALL        R67, 23             # 14:5, CHANGE_STRING
-0012:   LOADI       R66, 258            # 14:5
-0013:   UPCALL      0, R66              # 14:1, OUT
-0014:   MOVE        R67, R65            # 15:5
-0015:   LOADI       R66, 259            # 15:5
-0016:   UPCALL      0, R66              # 15:1, OUT
-0017:   LOADI       R66, 0              # 0:0
-0018:   END         R66                 # 0:0
+0002:   MOVE        R68, R64            # 10:20
+0003:   CALL        R67, 21             # 10:5, CHANGE_INTEGER
+0004:   MOVE        R66, R67            # 10:5
+0005:   LOADI       R65, 258            # 10:5
+0006:   UPCALL      0, R65              # 10:1, OUT
+0007:   MOVE        R66, R64            # 11:5
+0008:   LOADI       R65, 258            # 11:5
+0009:   UPCALL      0, R65              # 11:1, OUT
+0010:   LOADI       R65, 0              # 13:5
+0011:   MOVE        R69, R65            # 14:19
+0012:   CALL        R68, 25             # 14:5, CHANGE_STRING
+0013:   MOVE        R67, R68            # 14:5
+0014:   LOADI       R66, 258            # 14:5
+0015:   UPCALL      0, R66              # 14:1, OUT
+0016:   MOVE        R67, R65            # 15:5
+0017:   LOADI       R66, 259            # 15:5
+0018:   UPCALL      0, R66              # 15:1, OUT
+0019:   LOADI       R66, 0              # 0:0
+0020:   END         R66                 # 0:0
 
 -- CHANGE_INTEGER 
-0019:   LOADI       R64, 0              # 1:10
-0020:   ENTER       2                   # 0:0
-0021:   LOADI       R65, 3              # 2:9
-0022:   RETURN                          # 3:1
+0021:   LOADI       R64, 0              # 1:10
+0022:   ENTER       2                   # 0:0
+0023:   LOADI       R65, 3              # 2:9
+0024:   RETURN                          # 3:1
 
 -- CHANGE_STRING 
-0023:   LOADI       R64, 0              # 5:10
-0024:   ENTER       2                   # 0:0
-0025:   LOADI       R65, 1              # 6:9
-0026:   RETURN                          # 7:1
+0025:   LOADI       R64, 0              # 5:10
+0026:   ENTER       2                   # 0:0
+0027:   LOADI       R65, 1              # 6:9
+0028:   RETURN                          # 7:1
 ```
 
 ## Output
@@ -515,18 +519,19 @@ OUT SUM_DOUBLES(3.4, 2, 7.1)
 ## Disassembly
 
 ```asm
-0000:   ENTER       8                   # 0:0
-0001:   LOADC       R67, 0              # 1:17
-0002:   LOADI       R66, 289            # 1:17
-0003:   LOADI       R69, 2              # 1:22
-0004:   LOADI       R68, 290            # 1:22
-0005:   LOADC       R71, 1              # 1:25
-0006:   LOADI       R70, 257            # 1:25
-0007:   UPCALL      0, R65              # 1:5, SUM_DOUBLES
-0008:   LOADI       R64, 257            # 1:5
-0009:   UPCALL      1, R64              # 1:1, OUT
-0010:   LOADI       R64, 0              # 0:0
-0011:   END         R64                 # 0:0
+0000:   ENTER       9                   # 0:0
+0001:   LOADC       R68, 0              # 1:17
+0002:   LOADI       R67, 289            # 1:17
+0003:   LOADI       R70, 2              # 1:22
+0004:   LOADI       R69, 290            # 1:22
+0005:   LOADC       R72, 1              # 1:25
+0006:   LOADI       R71, 257            # 1:25
+0007:   UPCALL      0, R66              # 1:5, SUM_DOUBLES
+0008:   MOVE        R65, R66            # 1:5
+0009:   LOADI       R64, 257            # 1:5
+0010:   UPCALL      1, R64              # 1:1, OUT
+0011:   LOADI       R64, 0              # 0:0
+0012:   END         R64                 # 0:0
 ```
 
 ## Output
@@ -546,18 +551,19 @@ OUT SUM_INTEGERS(3, 2, 7)
 ## Disassembly
 
 ```asm
-0000:   ENTER       8                   # 0:0
-0001:   LOADI       R67, 3              # 1:18
-0002:   LOADI       R66, 290            # 1:18
-0003:   LOADI       R69, 2              # 1:21
-0004:   LOADI       R68, 290            # 1:21
-0005:   LOADI       R71, 7              # 1:24
-0006:   LOADI       R70, 258            # 1:24
-0007:   UPCALL      0, R65              # 1:5, SUM_INTEGERS
-0008:   LOADI       R64, 258            # 1:5
-0009:   UPCALL      1, R64              # 1:1, OUT
-0010:   LOADI       R64, 0              # 0:0
-0011:   END         R64                 # 0:0
+0000:   ENTER       9                   # 0:0
+0001:   LOADI       R68, 3              # 1:18
+0002:   LOADI       R67, 290            # 1:18
+0003:   LOADI       R70, 2              # 1:21
+0004:   LOADI       R69, 290            # 1:21
+0005:   LOADI       R72, 7              # 1:24
+0006:   LOADI       R71, 258            # 1:24
+0007:   UPCALL      0, R66              # 1:5, SUM_INTEGERS
+0008:   MOVE        R65, R66            # 1:5
+0009:   LOADI       R64, 258            # 1:5
+0010:   UPCALL      1, R64              # 1:1, OUT
+0011:   LOADI       R64, 0              # 0:0
+0012:   END         R64                 # 0:0
 ```
 
 ## Output
@@ -577,18 +583,19 @@ OUT CONCAT$("hello", " ", "world")
 ## Disassembly
 
 ```asm
-0000:   ENTER       8                   # 0:0
-0001:   LOADI       R67, 0              # 1:13
-0002:   LOADI       R66, 291            # 1:13
-0003:   LOADI       R69, 1              # 1:22
-0004:   LOADI       R68, 291            # 1:22
-0005:   LOADI       R71, 2              # 1:27
-0006:   LOADI       R70, 259            # 1:27
-0007:   UPCALL      0, R65              # 1:5, CONCAT
-0008:   LOADI       R64, 259            # 1:5
-0009:   UPCALL      1, R64              # 1:1, OUT
-0010:   LOADI       R64, 0              # 0:0
-0011:   END         R64                 # 0:0
+0000:   ENTER       9                   # 0:0
+0001:   LOADI       R68, 0              # 1:13
+0002:   LOADI       R67, 291            # 1:13
+0003:   LOADI       R70, 1              # 1:22
+0004:   LOADI       R69, 291            # 1:22
+0005:   LOADI       R72, 2              # 1:27
+0006:   LOADI       R71, 259            # 1:27
+0007:   UPCALL      0, R66              # 1:5, CONCAT
+0008:   MOVE        R65, R66            # 1:5
+0009:   LOADI       R64, 259            # 1:5
+0010:   UPCALL      1, R64              # 1:1, OUT
+0011:   LOADI       R64, 0              # 0:0
+0012:   END         R64                 # 0:0
 ```
 
 ## Output
@@ -608,13 +615,14 @@ OUT IS_POSITIVE?(42)
 ## Disassembly
 
 ```asm
-0000:   ENTER       3                   # 0:0
-0001:   LOADI       R66, 42             # 1:18
-0002:   UPCALL      0, R65              # 1:5, IS_POSITIVE
-0003:   LOADI       R64, 256            # 1:5
-0004:   UPCALL      1, R64              # 1:1, OUT
-0005:   LOADI       R64, 0              # 0:0
-0006:   END         R64                 # 0:0
+0000:   ENTER       4                   # 0:0
+0001:   LOADI       R67, 42             # 1:18
+0002:   UPCALL      0, R66              # 1:5, IS_POSITIVE
+0003:   MOVE        R65, R66            # 1:5
+0004:   LOADI       R64, 256            # 1:5
+0005:   UPCALL      1, R64              # 1:1, OUT
+0006:   LOADI       R64, 0              # 0:0
+0007:   END         R64                 # 0:0
 ```
 
 ## Output
@@ -723,22 +731,24 @@ OUT SUM_DOUBLES(1.0, 2.0) + SUM_DOUBLES(3.0, 4.0)
 ## Disassembly
 
 ```asm
-0000:   ENTER       7                   # 0:0
-0001:   LOADC       R67, 0              # 1:17
-0002:   LOADI       R66, 289            # 1:17
-0003:   LOADC       R69, 1              # 1:22
-0004:   LOADI       R68, 257            # 1:22
-0005:   UPCALL      0, R65              # 1:5, SUM_DOUBLES
-0006:   LOADC       R68, 2              # 1:41
-0007:   LOADI       R67, 289            # 1:41
-0008:   LOADC       R70, 3              # 1:46
-0009:   LOADI       R69, 257            # 1:46
-0010:   UPCALL      0, R66              # 1:29, SUM_DOUBLES
-0011:   ADDD        R65, R65, R66       # 1:27
-0012:   LOADI       R64, 257            # 1:5
-0013:   UPCALL      1, R64              # 1:1, OUT
-0014:   LOADI       R64, 0              # 0:0
-0015:   END         R64                 # 0:0
+0000:   ENTER       8                   # 0:0
+0001:   LOADC       R68, 0              # 1:17
+0002:   LOADI       R67, 289            # 1:17
+0003:   LOADC       R70, 1              # 1:22
+0004:   LOADI       R69, 257            # 1:22
+0005:   UPCALL      0, R66              # 1:5, SUM_DOUBLES
+0006:   MOVE        R65, R66            # 1:5
+0007:   LOADC       R69, 2              # 1:41
+0008:   LOADI       R68, 289            # 1:41
+0009:   LOADC       R71, 3              # 1:46
+0010:   LOADI       R70, 257            # 1:46
+0011:   UPCALL      0, R67              # 1:29, SUM_DOUBLES
+0012:   MOVE        R66, R67            # 1:29
+0013:   ADDD        R65, R65, R66       # 1:27
+0014:   LOADI       R64, 257            # 1:5
+0015:   UPCALL      1, R64              # 1:1, OUT
+0016:   LOADI       R64, 0              # 0:0
+0017:   END         R64                 # 0:0
 ```
 
 ## Output
@@ -840,34 +850,35 @@ NEXT
 ## Disassembly
 
 ```asm
-0000:   ENTER       4                   # 0:0
+0000:   ENTER       5                   # 0:0
 0001:   LOADI       R64, 0              # 7:9
 0002:   MOVE        R65, R64            # 7:5
 0003:   LOADI       R66, 5              # 7:14
 0004:   CMPLEI      R65, R65, R66       # 7:11
-0005:   JMPF        R65, 14             # 7:5
-0006:   MOVE        R67, R64            # 8:20
-0007:   CALL        R66, 16             # 8:9, MAYBE_EXIT
-0008:   LOADI       R65, 258            # 8:9
-0009:   UPCALL      0, R65              # 8:5, OUT
-0010:   MOVE        R64, R64            # 7:5
-0011:   LOADI       R65, 1              # 7:15
-0012:   ADDI        R64, R64, R65       # 7:11
-0013:   JUMP        2                   # 7:5
-0014:   LOADI       R65, 0              # 0:0
-0015:   END         R65                 # 0:0
+0005:   JMPF        R65, 15             # 7:5
+0006:   MOVE        R68, R64            # 8:20
+0007:   CALL        R67, 17             # 8:9, MAYBE_EXIT
+0008:   MOVE        R66, R67            # 8:9
+0009:   LOADI       R65, 258            # 8:9
+0010:   UPCALL      0, R65              # 8:5, OUT
+0011:   MOVE        R64, R64            # 7:5
+0012:   LOADI       R65, 1              # 7:15
+0013:   ADDI        R64, R64, R65       # 7:11
+0014:   JUMP        2                   # 7:5
+0015:   LOADI       R65, 0              # 0:0
+0016:   END         R65                 # 0:0
 
 -- MAYBE_EXIT 
-0016:   LOADI       R64, 0              # 1:10
-0017:   ENTER       4                   # 0:0
-0018:   LOADI       R64, 1              # 2:18
-0019:   MOVE        R66, R65            # 3:8
-0020:   LOADI       R67, 2              # 3:12
-0021:   CMPGTI      R66, R66, R67       # 3:10
-0022:   JMPF        R66, 24             # 3:8
-0023:   JUMP        25                  # 3:19
-0024:   LOADI       R64, 2              # 4:18
-0025:   RETURN                          # 5:1
+0017:   LOADI       R64, 0              # 1:10
+0018:   ENTER       4                   # 0:0
+0019:   LOADI       R64, 1              # 2:18
+0020:   MOVE        R66, R65            # 3:8
+0021:   LOADI       R67, 2              # 3:12
+0022:   CMPGTI      R66, R66, R67       # 3:10
+0023:   JMPF        R66, 25             # 3:8
+0024:   JUMP        26                  # 3:19
+0025:   LOADI       R64, 2              # 4:18
+0026:   RETURN                          # 5:1
 ```
 
 ## Output
@@ -929,44 +940,145 @@ OUT calls; factorial(5)
 ## Disassembly
 
 ```asm
-0000:   ENTER       5                   # 0:0
+0000:   ENTER       6                   # 0:0
 0001:   LOADI       R0, 0               # 1:12
 0002:   MOVE        R65, R0             # 6:5
 0003:   LOADI       R64, 274            # 6:5
-0004:   LOADI       R68, 5              # 6:22
-0005:   CALL        R67, 10             # 6:12, FACTORIAL
-0006:   LOADI       R66, 258            # 6:12
-0007:   UPCALL      0, R64              # 6:1, OUT
-0008:   LOADI       R64, 0              # 0:0
-0009:   END         R64                 # 0:0
+0004:   LOADI       R69, 5              # 6:22
+0005:   CALL        R68, 11             # 6:12, FACTORIAL
+0006:   MOVE        R67, R68            # 6:12
+0007:   LOADI       R66, 258            # 6:12
+0008:   UPCALL      0, R64              # 6:1, OUT
+0009:   LOADI       R64, 0              # 0:0
+0010:   END         R64                 # 0:0
 
 -- FACTORIAL 
-0010:   LOADI       R64, 0              # 2:10
-0011:   ENTER       5                   # 0:0
-0012:   MOVE        R66, R65            # 3:8
-0013:   LOADI       R67, 1              # 3:12
-0014:   CMPEQI      R66, R66, R67       # 3:10
-0015:   JMPF        R66, 18             # 3:8
-0016:   LOADI       R64, 1              # 3:31
-0017:   JUMP        26                  # 3:8
-0018:   LOADI       R66, 1              # 3:33
-0019:   JMPF        R66, 26             # 3:33
-0020:   MOVE        R64, R65            # 3:50
-0021:   MOVE        R67, R65            # 3:64
-0022:   LOADI       R68, 1              # 3:68
-0023:   SUBI        R67, R67, R68       # 3:66
-0024:   CALL        R66, 10             # 3:54, FACTORIAL
-0025:   MULI        R64, R64, R66       # 3:52
-0026:   MOVE        R0, R0              # 4:13
-0027:   LOADI       R66, 1              # 4:21
-0028:   ADDI        R0, R0, R66         # 4:19
-0029:   RETURN                          # 5:1
+0011:   LOADI       R64, 0              # 2:10
+0012:   ENTER       6                   # 0:0
+0013:   MOVE        R66, R65            # 3:8
+0014:   LOADI       R67, 1              # 3:12
+0015:   CMPEQI      R66, R66, R67       # 3:10
+0016:   JMPF        R66, 19             # 3:8
+0017:   LOADI       R64, 1              # 3:31
+0018:   JUMP        28                  # 3:8
+0019:   LOADI       R66, 1              # 3:33
+0020:   JMPF        R66, 28             # 3:33
+0021:   MOVE        R64, R65            # 3:50
+0022:   MOVE        R68, R65            # 3:64
+0023:   LOADI       R69, 1              # 3:68
+0024:   SUBI        R68, R68, R69       # 3:66
+0025:   CALL        R67, 11             # 3:54, FACTORIAL
+0026:   MOVE        R66, R67            # 3:54
+0027:   MULI        R64, R64, R66       # 3:52
+0028:   MOVE        R0, R0              # 4:13
+0029:   LOADI       R66, 1              # 4:21
+0030:   ADDI        R0, R0, R66         # 4:19
+0031:   RETURN                          # 5:1
 ```
 
 ## Output
 
 ```plain
 0=0% ; 1=120%
+```
+
+# Test: Mutually recursive functions
+
+## Source
+
+```basic
+FUNCTION ping(n%)
+    OUT "ping"; n
+    IF n = 0 THEN
+        ping = 100
+    ELSE
+        ping = pong(n - 1) + 1
+    END IF
+END FUNCTION
+
+FUNCTION pong(n%)
+    OUT "pong"; n
+    IF n = 0 THEN
+        pong = 200
+    ELSE
+        pong = ping(n - 1) + 10
+    END IF
+END FUNCTION
+
+OUT ping(3)
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       4                   # 0:0
+0001:   LOADI       R67, 3              # 19:10
+0002:   CALL        R66, 8              # 19:5, PING
+0003:   MOVE        R65, R66            # 19:5
+0004:   LOADI       R64, 258            # 19:5
+0005:   UPCALL      0, R64              # 19:1, OUT
+0006:   LOADI       R64, 0              # 0:0
+0007:   END         R64                 # 0:0
+
+-- PING 
+0008:   LOADI       R64, 0              # 1:10
+0009:   ENTER       6                   # 0:0
+0010:   LOADI       R67, 0              # 2:9
+0011:   LOADI       R66, 275            # 2:9
+0012:   MOVE        R69, R65            # 2:17
+0013:   LOADI       R68, 258            # 2:17
+0014:   UPCALL      0, R66              # 2:5, OUT
+0015:   MOVE        R66, R65            # 3:8
+0016:   LOADI       R67, 0              # 3:12
+0017:   CMPEQI      R66, R66, R67       # 3:10
+0018:   JMPF        R66, 21             # 3:8
+0019:   LOADI       R64, 100            # 4:16
+0020:   JUMP        30                  # 3:8
+0021:   LOADI       R66, 1              # 5:5
+0022:   JMPF        R66, 30             # 5:5
+0023:   MOVE        R67, R65            # 6:21
+0024:   LOADI       R68, 1              # 6:25
+0025:   SUBI        R67, R67, R68       # 6:23
+0026:   CALL        R66, 31             # 6:16, PONG
+0027:   MOVE        R64, R66            # 6:16
+0028:   LOADI       R66, 1              # 6:30
+0029:   ADDI        R64, R64, R66       # 6:28
+0030:   RETURN                          # 8:1
+
+-- PONG 
+0031:   LOADI       R64, 0              # 10:10
+0032:   ENTER       6                   # 0:0
+0033:   LOADI       R67, 1              # 11:9
+0034:   LOADI       R66, 275            # 11:9
+0035:   MOVE        R69, R65            # 11:17
+0036:   LOADI       R68, 258            # 11:17
+0037:   UPCALL      0, R66              # 11:5, OUT
+0038:   MOVE        R66, R65            # 12:8
+0039:   LOADI       R67, 0              # 12:12
+0040:   CMPEQI      R66, R66, R67       # 12:10
+0041:   JMPF        R66, 44             # 12:8
+0042:   LOADI       R64, 200            # 13:16
+0043:   JUMP        53                  # 12:8
+0044:   LOADI       R66, 1              # 14:5
+0045:   JMPF        R66, 53             # 14:5
+0046:   MOVE        R67, R65            # 15:21
+0047:   LOADI       R68, 1              # 15:25
+0048:   SUBI        R67, R67, R68       # 15:23
+0049:   CALL        R66, 8              # 15:16, PING
+0050:   MOVE        R64, R66            # 15:16
+0051:   LOADI       R66, 10             # 15:30
+0052:   ADDI        R64, R64, R66       # 15:28
+0053:   RETURN                          # 17:1
+```
+
+## Output
+
+```plain
+0=ping$ ; 1=3%
+0=pong$ ; 1=2%
+0=ping$ ; 1=1%
+0=pong$ ; 1=0%
+0=212%
 ```
 
 # Test: Calling a function as a command is an error
