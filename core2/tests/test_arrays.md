@@ -735,37 +735,38 @@ OUT sum(0)
 ## Disassembly
 
 ```asm
-0000:   ENTER       3                   # 0:0
-0001:   LOADI       R66, 0              # 9:9
-0002:   CALL        R65, 7              # 9:5, SUM
-0003:   LOADI       R64, 258            # 9:5
-0004:   UPCALL      0, R64              # 9:1, OUT
-0005:   LOADI       R64, 0              # 0:0
-0006:   END         R64                 # 0:0
+0000:   ENTER       4                   # 0:0
+0001:   LOADI       R67, 0              # 9:9
+0002:   CALL        R66, 8              # 9:5, SUM
+0003:   MOVE        R65, R66            # 9:5
+0004:   LOADI       R64, 258            # 9:5
+0005:   UPCALL      0, R64              # 9:1, OUT
+0006:   LOADI       R64, 0              # 0:0
+0007:   END         R64                 # 0:0
 
 -- SUM 
-0007:   LOADI       R64, 0              # 1:10
-0008:   ENTER       5                   # 0:0
-0009:   LOADI       R67, 3              # 2:11
-0010:   ALLOCA      R66, [1]%, R67      # 2:9
-0011:   LOADI       R67, 10             # 3:12
-0012:   LOADI       R68, 0              # 3:7
-0013:   STOREA      R66, R67, R68       # 3:5
-0014:   LOADI       R67, 20             # 4:12
-0015:   LOADI       R68, 1              # 4:7
-0016:   STOREA      R66, R67, R68       # 4:5
-0017:   LOADI       R67, 30             # 5:12
-0018:   LOADI       R68, 2              # 5:7
-0019:   STOREA      R66, R67, R68       # 5:5
-0020:   LOADI       R67, 0              # 6:13
-0021:   LOADA       R64, R66, R67       # 6:11
-0022:   LOADI       R68, 1              # 6:20
-0023:   LOADA       R67, R66, R68       # 6:18
-0024:   ADDI        R64, R64, R67       # 6:16
-0025:   LOADI       R68, 2              # 6:27
-0026:   LOADA       R67, R66, R68       # 6:25
-0027:   ADDI        R64, R64, R67       # 6:23
-0028:   RETURN                          # 7:1
+0008:   LOADI       R64, 0              # 1:10
+0009:   ENTER       5                   # 0:0
+0010:   LOADI       R67, 3              # 2:11
+0011:   ALLOCA      R66, [1]%, R67      # 2:9
+0012:   LOADI       R67, 10             # 3:12
+0013:   LOADI       R68, 0              # 3:7
+0014:   STOREA      R66, R67, R68       # 3:5
+0015:   LOADI       R67, 20             # 4:12
+0016:   LOADI       R68, 1              # 4:7
+0017:   STOREA      R66, R67, R68       # 4:5
+0018:   LOADI       R67, 30             # 5:12
+0019:   LOADI       R68, 2              # 5:7
+0020:   STOREA      R66, R67, R68       # 5:5
+0021:   LOADI       R67, 0              # 6:13
+0022:   LOADA       R64, R66, R67       # 6:11
+0023:   LOADI       R68, 1              # 6:20
+0024:   LOADA       R67, R66, R68       # 6:18
+0025:   ADDI        R64, R64, R67       # 6:16
+0026:   LOADI       R68, 2              # 6:27
+0027:   LOADA       R67, R66, R68       # 6:25
+0028:   ADDI        R64, R64, R67       # 6:23
+0029:   RETURN                          # 7:1
 ```
 
 ## Output

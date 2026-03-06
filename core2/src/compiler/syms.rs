@@ -425,6 +425,7 @@ impl<'uref, 'ukey, 'umd, 'temp, 'local> TempSymtable<'uref, 'ukey, 'umd, 'temp, 
         let nlocals = u8::try_from(self.symtable.locals.len())
             .expect("Cannot have allocated more locals than u8");
         TempScope {
+            base_temp: *self.next_temp.borrow(),
             nlocals,
             ntemps: 0,
             next_temp: self.next_temp.clone(),
@@ -437,6 +438,9 @@ impl<'uref, 'ukey, 'umd, 'temp, 'local> TempSymtable<'uref, 'ukey, 'umd, 'temp, 
 ///
 /// Temporaries are allocated on demand and are cleaned up when the scope is dropped.
 pub(crate) struct TempScope {
+    /// Number of temporary registers that were already active on scope creation.
+    base_temp: u8,
+
     /// Number of local variables in the enclosing scope, used as the base for temporary registers.
     nlocals: u8,
 
@@ -461,7 +465,9 @@ impl Drop for TempScope {
 impl TempScope {
     /// Returns the first register available for this scope.
     pub(crate) fn first(&mut self) -> Result<Register> {
-        Register::local(self.nlocals).map_err(|_| Error::OutOfRegisters(RegisterScope::Temp))
+        let reg = u8::try_from(usize::from(self.nlocals) + usize::from(self.base_temp))
+            .map_err(|_| Error::OutOfRegisters(RegisterScope::Temp))?;
+        Register::local(reg).map_err(|_| Error::OutOfRegisters(RegisterScope::Temp))
     }
 
     /// Allocates a new temporary register.
@@ -820,6 +826,23 @@ mod tests {
             let temp = local.frozen();
             let mut scope = temp.temp_scope();
             assert_eq!(Register::local(0).unwrap(), scope.first()?);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_temp_scope_first_with_outer_allocation() -> Result<()> {
+        let upcalls = HashMap::default();
+        let mut global = GlobalSymtable::new(&upcalls);
+        let mut local = global.enter_scope();
+        local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
+        {
+            let temp = local.frozen();
+            let mut outer = temp.temp_scope();
+            assert_eq!(Register::local(1).unwrap(), outer.alloc()?);
+
+            let mut inner = temp.temp_scope();
+            assert_eq!(Register::local(2).unwrap(), inner.first()?);
         }
         Ok(())
     }

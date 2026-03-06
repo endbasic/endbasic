@@ -611,26 +611,19 @@ pub(super) fn compile_expr(
             let key_pos = span.vref_pos;
 
             if let Some(md) = symtable.get_callable(&key) {
+                let md = md.clone();
+
                 let Some(etype) = md.return_type() else {
                     return Err(Error::NotAFunction(span.vref_pos, span.vref));
                 };
 
                 if md.is_argless() {
-                    return Err(Error::CallableSyntax(span.vref_pos, md.clone()));
+                    return Err(Error::CallableSyntax(span.vref_pos, md));
                 }
 
                 let is_user_defined = md.is_user_defined();
-                let (is_global, _index) = reg.to_parts();
-                let mut alloc = symtable.temp_scope();
-                let ret_reg = if is_global {
-                    // The call instruction can only carry one register, and this register
-                    // indicates where to store the result and where arguments start.  So,
-                    // if we are going to save the result to a global register, we must
-                    // allocate a temp register first so that argument passing can work.
-                    alloc.alloc().map_err(|e| Error::from_syms(e, key_pos))?
-                } else {
-                    reg
-                };
+                let mut call_scope = symtable.temp_scope();
+                let ret_reg = call_scope.alloc().map_err(|e| Error::from_syms(e, key_pos))?;
                 let (_first_temp, arg_linecols) =
                     compile_args(span, md.clone(), symtable, codegen)?;
 
@@ -643,7 +636,7 @@ pub(super) fn compile_expr(
                     let addr = codegen.emit(bytecode::make_upcall(upcall, ret_reg), key_pos);
                     codegen.set_arg_linecols(addr, arg_linecols);
                 }
-                if is_global {
+                if reg != ret_reg {
                     codegen.emit(bytecode::make_move(reg, ret_reg), key_pos);
                 }
 

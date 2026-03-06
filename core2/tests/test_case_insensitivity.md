@@ -284,21 +284,22 @@ OUT foo(5)
 ## Disassembly
 
 ```asm
-0000:   ENTER       3                   # 0:0
-0001:   LOADI       R66, 5              # 5:9
-0002:   CALL        R65, 7              # 5:5, FOO
-0003:   LOADI       R64, 258            # 5:5
-0004:   UPCALL      0, R64              # 5:1, OUT
-0005:   LOADI       R64, 0              # 0:0
-0006:   END         R64                 # 0:0
+0000:   ENTER       4                   # 0:0
+0001:   LOADI       R67, 5              # 5:9
+0002:   CALL        R66, 8              # 5:5, FOO
+0003:   MOVE        R65, R66            # 5:5
+0004:   LOADI       R64, 258            # 5:5
+0005:   UPCALL      0, R64              # 5:1, OUT
+0006:   LOADI       R64, 0              # 0:0
+0007:   END         R64                 # 0:0
 
 -- FOO 
-0007:   LOADI       R64, 0              # 1:10
-0008:   ENTER       3                   # 0:0
-0009:   MOVE        R64, R65            # 2:11
-0010:   LOADI       R66, 1              # 2:15
-0011:   ADDI        R64, R64, R66       # 2:13
-0012:   RETURN                          # 3:1
+0008:   LOADI       R64, 0              # 1:10
+0009:   ENTER       3                   # 0:0
+0010:   MOVE        R64, R65            # 2:11
+0011:   LOADI       R66, 1              # 2:15
+0012:   ADDI        R64, R64, R66       # 2:13
+0013:   RETURN                          # 3:1
 ```
 
 ## Output

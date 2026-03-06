@@ -419,6 +419,87 @@ count_down "counter is"
 0=counter is$ ; 1=1%
 ```
 
+# Test: Function and subroutine call one another
+
+## Source
+
+```basic
+DIM SHARED value AS INTEGER
+
+FUNCTION count_value(n%)
+    value = value + 1
+    IF n = 0 THEN
+        count_value = value
+    ELSE
+        bump_value(n - 1)
+        count_value = value
+    END IF
+END FUNCTION
+
+SUB bump_value(n%)
+    value = value + 10
+    value = count_value(n)
+END SUB
+
+OUT count_value(2)
+OUT value
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       4                   # 0:0
+0001:   LOADI       R0, 0               # 1:12
+0002:   LOADI       R67, 2              # 18:17
+0003:   CALL        R66, 12             # 18:5, COUNT_VALUE
+0004:   MOVE        R65, R66            # 18:5
+0005:   LOADI       R64, 258            # 18:5
+0006:   UPCALL      0, R64              # 18:1, OUT
+0007:   MOVE        R65, R0             # 19:5
+0008:   LOADI       R64, 258            # 19:5
+0009:   UPCALL      0, R64              # 19:1, OUT
+0010:   LOADI       R64, 0              # 0:0
+0011:   END         R64                 # 0:0
+
+-- COUNT_VALUE 
+0012:   LOADI       R64, 0              # 3:10
+0013:   ENTER       4                   # 0:0
+0014:   MOVE        R0, R0              # 4:13
+0015:   LOADI       R66, 1              # 4:21
+0016:   ADDI        R0, R0, R66         # 4:19
+0017:   MOVE        R66, R65            # 5:8
+0018:   LOADI       R67, 0              # 5:12
+0019:   CMPEQI      R66, R66, R67       # 5:10
+0020:   JMPF        R66, 23             # 5:8
+0021:   MOVE        R64, R0             # 6:23
+0022:   JUMP        30                  # 5:8
+0023:   LOADI       R66, 1              # 7:5
+0024:   JMPF        R66, 30             # 7:5
+0025:   MOVE        R66, R65            # 8:20
+0026:   LOADI       R67, 1              # 8:24
+0027:   SUBI        R66, R66, R67       # 8:22
+0028:   CALL        R66, 31             # 8:9, BUMP_VALUE
+0029:   MOVE        R64, R0             # 9:23
+0030:   RETURN                          # 11:1
+
+-- BUMP_VALUE 
+0031:   ENTER       3                   # 0:0
+0032:   MOVE        R0, R0              # 14:13
+0033:   LOADI       R65, 10             # 14:21
+0034:   ADDI        R0, R0, R65         # 14:19
+0035:   MOVE        R66, R64            # 15:25
+0036:   CALL        R65, 12             # 15:13, COUNT_VALUE
+0037:   MOVE        R0, R65             # 15:13
+0038:   RETURN                          # 16:1
+```
+
+## Output
+
+```plain
+0=23%
+0=23%
+```
+
 # Test: Calling a subroutine as a function is an error
 
 ## Source
